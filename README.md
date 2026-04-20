@@ -2,6 +2,11 @@
 
 `dc-quant-deploy` is the open deployment repository for the DC quantitative trading stack.
 
+Language:
+
+- English: [README.md](./README.md)
+- 简体中文: [README.zh-CN.md](./README.zh-CN.md)
+
 It is designed as a single-host Docker Compose delivery that lets external users bring up the full runtime skeleton without touching the original production machine layout:
 
 - `zookeeper`
@@ -109,3 +114,5 @@ Do not commit these back into Git:
 - [Architecture](./docs/architecture.md)
 - [Database](./docs/database.md)
 - [Release Flow](./docs/release-flow.md)
+- [Docs Index](./docs/README.md)
+- [文档索引](./docs/README.zh-CN.md)
