@@ -84,7 +84,6 @@ prepare_runtime_dirs() {
   mkdir -p "${DEPLOY_ROOT}/control"
   mkdir -p "${DEPLOY_ROOT}/data"
   mkdir -p "${DEPLOY_ROOT}/log"
-  mkdir -p "${DEPLOY_ROOT}/tpc/tpc"
   mkdir -p "${DEPLOY_ROOT}/tpc/zookeeper/conf"
   mkdir -p "${DEPLOY_ROOT}/tpc/zookeeper/data"
   mkdir -p "${DEPLOY_ROOT}/clickhouse/data"

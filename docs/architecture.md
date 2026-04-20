@@ -54,9 +54,8 @@ Java services keep the existing internal runtime layout:
 - `${DEPLOY_ROOT}/control -> /srv/dc/control`
 - `${DEPLOY_ROOT}/data -> /srv/dc/data`
 - `${DEPLOY_ROOT}/log -> /srv/dc/log`
-- `${DEPLOY_ROOT}/tpc/tpc -> /srv/dc/tpc/tpc`
 
-ZooKeeper keeps consuming host-side runtime config and data:
+ZooKeeper reads its own runtime config and data directly:
 
 - `${DEPLOY_ROOT}/tpc/zookeeper/conf/zoo.cfg`
 - `${DEPLOY_ROOT}/tpc/zookeeper/conf/jaas.conf`

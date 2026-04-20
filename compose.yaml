@@ -10,7 +10,6 @@ x-java-service-base: &java-service-base
     - ${DEPLOY_ROOT}/control:/srv/dc/control:ro
     - ${DEPLOY_ROOT}/data:/srv/dc/data
     - ${DEPLOY_ROOT}/log:/srv/dc/log
-    - ${DEPLOY_ROOT}/tpc/tpc:/srv/dc/tpc/tpc
 
 services:
   clickhouse:
