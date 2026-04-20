@@ -15,6 +15,7 @@ services:
   clickhouse:
     image: clickhouse/clickhouse-server:${CLICKHOUSE_IMAGE_TAG}
     container_name: dc-clickhouse
+    profiles: ["embedded-clickhouse"]
     restart: unless-stopped
     environment:
       TZ: Asia/Shanghai
@@ -56,8 +57,6 @@ services:
     image: ghcr.io/bliplink/gw:${GW_TAG}
     container_name: dc-gateway
     depends_on:
-      clickhouse:
-        condition: service_healthy
       zookeeper:
         condition: service_started
     environment:
@@ -72,8 +71,6 @@ services:
     image: ghcr.io/bliplink/mdsvr:${MDSVR_TAG}
     container_name: dc-mdsvr
     depends_on:
-      clickhouse:
-        condition: service_healthy
       zookeeper:
         condition: service_started
     environment:
@@ -88,8 +85,6 @@ services:
     image: ghcr.io/bliplink/apssvr:${APSSVR_TAG}
     container_name: dc-apssvr
     depends_on:
-      clickhouse:
-        condition: service_healthy
       zookeeper:
         condition: service_started
     environment:
@@ -104,8 +99,6 @@ services:
     image: ghcr.io/bliplink/quantsvr:${QUANTSVR_TAG}
     container_name: dc-quantsvr
     depends_on:
-      clickhouse:
-        condition: service_healthy
       zookeeper:
         condition: service_started
     environment:
@@ -120,8 +113,6 @@ services:
     image: ghcr.io/bliplink/indsvr:${INDSVR_TAG}
     container_name: dc-indsvr
     depends_on:
-      clickhouse:
-        condition: service_healthy
       zookeeper:
         condition: service_started
     environment:
@@ -136,8 +127,6 @@ services:
     image: ghcr.io/SKT-Walter/simsvr:${SIMSVR_TAG}
     container_name: dc-simsvr
     depends_on:
-      clickhouse:
-        condition: service_healthy
       zookeeper:
         condition: service_started
     environment:
@@ -152,8 +141,6 @@ services:
     image: ghcr.io/bliplink/batchsvr:${BATCHSVR_TAG}
     container_name: dc-batchsvr
     depends_on:
-      clickhouse:
-        condition: service_healthy
       zookeeper:
         condition: service_started
     environment:

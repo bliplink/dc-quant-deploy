@@ -60,7 +60,17 @@ if [[ -z "${DEPLOY_ROOT:-}" ]]; then
   exit 1
 fi
 
-for tag_var in CLICKHOUSE_IMAGE_TAG CLICKHOUSE_DB_NAME CLICKHOUSE_HTTP_PORT CLICKHOUSE_NATIVE_PORT ZOOKEEPER_TAG GW_TAG MDSVR_TAG APSSVR_TAG QUANTSVR_TAG INDSVR_TAG SIMSVR_TAG BATCHSVR_TAG WEB_TAG; do
+if [[ -z "${CLICKHOUSE_MODE:-}" ]]; then
+  echo "CLICKHOUSE_MODE is required in .env.prod" >&2
+  exit 1
+fi
+
+if [[ "${CLICKHOUSE_MODE}" != "embedded" && "${CLICKHOUSE_MODE}" != "external" ]]; then
+  echo "CLICKHOUSE_MODE must be embedded or external" >&2
+  exit 1
+fi
+
+for tag_var in CLICKHOUSE_IMAGE_TAG CLICKHOUSE_DB_NAME CLICKHOUSE_HOST CLICKHOUSE_HTTP_PORT CLICKHOUSE_NATIVE_PORT CLICKHOUSE_USERNAME ZOOKEEPER_TAG GW_TAG MDSVR_TAG APSSVR_TAG QUANTSVR_TAG INDSVR_TAG SIMSVR_TAG BATCHSVR_TAG WEB_TAG; do
   if [[ -z "${!tag_var:-}" ]]; then
     echo "${tag_var} is required in .env.prod" >&2
     exit 1
@@ -81,6 +91,7 @@ fi
 
 require_file "${SCRIPT_DIR}/clickhouse/init/00-create-db.sql"
 require_file "${SCRIPT_DIR}/clickhouse/init/01-run-all.sh"
+require_file "${SCRIPT_DIR}/clickhouse/apply-init.sh"
 require_dir "${SCRIPT_DIR}/clickhouse/init/10-schema"
 require_dir "${SCRIPT_DIR}/clickhouse/init/20-view"
 require_dir "${SCRIPT_DIR}/clickhouse/init/90-optional-seed"

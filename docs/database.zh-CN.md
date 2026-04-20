@@ -8,8 +8,26 @@
 - Java 服务只应连接 ClickHouse
 - 两套 `DBPoolConfig.ini` 模板都只保留 ClickHouse 配置
 
+## 部署模式
+
+仓库支持两种 ClickHouse 模式：
+
+1. `embedded`
+   用户没有现成 ClickHouse 时，直接使用 `compose.yaml` 里的 `clickhouse` 服务，部署脚本会自动执行初始化。
+2. `external`
+   用户已经有 ClickHouse 时，数据库初始化由用户自己手动处理，部署脚本不会改动现有数据库。
+
+模式由 `.env.prod` 控制：
+
+- `CLICKHOUSE_MODE`
+- `CLICKHOUSE_HOST`
+- `CLICKHOUSE_HTTP_PORT`
+- `CLICKHOUSE_USERNAME`
+- `CLICKHOUSE_PASSWORD`
+
 ## 初始化目录
 
+- `clickhouse/apply-init.sh`
 - `clickhouse/init/00-create-db.sql`
 - `clickhouse/init/01-run-all.sh`
 - `clickhouse/init/10-schema/`
@@ -18,15 +36,25 @@
 
 ## 默认初始化行为
 
-首次启动时，官方 ClickHouse 镜像会执行 `docker-entrypoint-initdb.d`。
+只有 `embedded` 模式会自动初始化。
 
-这个仓库利用该入口完成：
+在这个模式下，`deploy.sh` 会调用：
+
+- `clickhouse/apply-init.sh`
+
+这个入口再执行：
+
+- `clickhouse/init/01-run-all.sh`
+
+初始化顺序是：
 
 1. 如有需要创建 `dc` 数据库
 2. 执行 `10-schema/` 下全部 SQL
 3. 执行 `20-view/` 下全部 SQL
 
 `90-optional-seed/` 下的文件不会自动执行。
+
+如果是 `external` 模式，则需要用户在部署前手工完成初始化。
 
 ## 核心 Schema
 
@@ -75,5 +103,5 @@
 如果需要手工重跑默认 schema 初始化：
 
 ```bash
-docker compose exec -T clickhouse /docker-entrypoint-initdb.d/01-run-all.sh
+./clickhouse/apply-init.sh
 ```

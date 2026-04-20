@@ -29,6 +29,7 @@ APP_SERVICES=(
   batchsvr
   web
 )
+CLICKHOUSE_INIT_SCRIPT="${ROOT_DIR}/clickhouse/apply-init.sh"
 
 check_cmd() {
   command -v "$1" >/dev/null 2>&1 || {
@@ -56,8 +57,20 @@ load_env() {
   # shellcheck disable=SC1090
   set -a && . "${ENV_FILE}" && set +a
   : "${DEPLOY_ROOT:?DEPLOY_ROOT is required}"
+  : "${CLICKHOUSE_MODE:?CLICKHOUSE_MODE is required}"
   : "${CLICKHOUSE_DB_NAME:?CLICKHOUSE_DB_NAME is required}"
+  : "${CLICKHOUSE_HOST:?CLICKHOUSE_HOST is required}"
   : "${CLICKHOUSE_HTTP_PORT:?CLICKHOUSE_HTTP_PORT is required}"
+  : "${CLICKHOUSE_IMAGE_TAG:?CLICKHOUSE_IMAGE_TAG is required}"
+  : "${CLICKHOUSE_USERNAME:=default}"
+  : "${CLICKHOUSE_PASSWORD:=}"
+  case "${CLICKHOUSE_MODE}" in
+    embedded|external) ;;
+    *)
+      echo "CLICKHOUSE_MODE must be embedded or external" >&2
+      exit 1
+      ;;
+  esac
 }
 
 validate_ghcr_login() {
@@ -86,8 +99,10 @@ prepare_runtime_dirs() {
   mkdir -p "${DEPLOY_ROOT}/log"
   mkdir -p "${DEPLOY_ROOT}/tpc/zookeeper/conf"
   mkdir -p "${DEPLOY_ROOT}/tpc/zookeeper/data"
-  mkdir -p "${DEPLOY_ROOT}/clickhouse/data"
-  mkdir -p "${DEPLOY_ROOT}/clickhouse/log"
+  if [[ "${CLICKHOUSE_MODE}" == "embedded" ]]; then
+    mkdir -p "${DEPLOY_ROOT}/clickhouse/data"
+    mkdir -p "${DEPLOY_ROOT}/clickhouse/log"
+  fi
 }
 
 seed_zookeeper_runtime() {
@@ -144,19 +159,48 @@ stop_legacy_services() {
 
 validate_port() {
   local label="$1"
-  local port="$2"
-  local retries="${3:-30}"
-  local delay="${4:-2}"
+  local host="$2"
+  local port="$3"
+  local retries="${4:-30}"
+  local delay="${5:-2}"
 
   for _ in $(seq 1 "${retries}"); do
-    if bash -c "exec 3<>/dev/tcp/127.0.0.1/${port}" >/dev/null 2>&1; then
+    if bash -c "exec 3<>/dev/tcp/${host}/${port}" >/dev/null 2>&1; then
       return 0
     fi
     sleep "${delay}"
   done
 
-  echo "Port check failed for ${label} on 127.0.0.1:${port}" >&2
+  echo "Port check failed for ${label} on ${host}:${port}" >&2
   return 1
+}
+
+clickhouse_http_query() {
+  local sql="$1"
+  curl --silent --show-error --fail \
+    --user "${CLICKHOUSE_USERNAME}:${CLICKHOUSE_PASSWORD}" \
+    --data-binary "${sql}" \
+    "http://${CLICKHOUSE_HOST}:${CLICKHOUSE_HTTP_PORT}/?database=${CLICKHOUSE_DB_NAME}"
+}
+
+wait_for_clickhouse_ready() {
+  local retries="${1:-45}"
+  local delay="${2:-2}"
+
+  for _ in $(seq 1 "${retries}"); do
+    if clickhouse_http_query "SELECT 1 FORMAT TSV" 2>/dev/null | grep -qx "1"; then
+      return 0
+    fi
+    sleep "${delay}"
+  done
+
+  echo "ClickHouse readiness check failed." >&2
+  return 1
+}
+
+apply_clickhouse_init() {
+  check_file "${CLICKHOUSE_INIT_SCRIPT}"
+  "${CLICKHOUSE_INIT_SCRIPT}"
 }
 
 wait_for_clickhouse_schema() {
@@ -167,12 +211,12 @@ wait_for_clickhouse_schema() {
     SELECT count()
     FROM system.tables
     WHERE database = '${CLICKHOUSE_DB_NAME}'
-      AND name IN ('signal', 'quant_order', 'strategy_candidate');
+      AND name IN ('signal', 'quant_order', 'strategy_candidate')
+    FORMAT TSV
   "
 
   for _ in $(seq 1 "${retries}"); do
-    if docker compose --env-file "${ENV_FILE}" -f "${COMPOSE_FILE}" exec -T clickhouse \
-      clickhouse-client --query "${sql}" 2>/dev/null | grep -qx "${expected_tables}"; then
+    if clickhouse_http_query "${sql}" 2>/dev/null | grep -qx "${expected_tables}"; then
       return 0
     fi
     sleep "${delay}"
@@ -183,20 +227,21 @@ wait_for_clickhouse_schema() {
 }
 
 validate_runtime() {
-  validate_port "ClickHouse HTTP" "${CLICKHOUSE_HTTP_PORT}"
-  validate_port "ZooKeeper" 2181
-  validate_port "gateway" 3002
-  validate_port "MDSvr" 30028
-  validate_port "APSSvr" 30035
-  validate_port "QuantSvr" 30042
-  validate_port "INDSvr" 30044
-  validate_port "SIMSvr" 30045
-  validate_port "BatchSvr" 30046
-  validate_port "web" 80
+  validate_port "ClickHouse HTTP" "${CLICKHOUSE_HOST}" "${CLICKHOUSE_HTTP_PORT}"
+  validate_port "ZooKeeper" 127.0.0.1 2181
+  validate_port "gateway" 127.0.0.1 3002
+  validate_port "MDSvr" 127.0.0.1 30028
+  validate_port "APSSvr" 127.0.0.1 30035
+  validate_port "QuantSvr" 127.0.0.1 30042
+  validate_port "INDSvr" 127.0.0.1 30044
+  validate_port "SIMSvr" 127.0.0.1 30045
+  validate_port "BatchSvr" 127.0.0.1 30046
+  validate_port "web" 127.0.0.1 80
 }
 
 main() {
   check_cmd docker
+  check_cmd curl
   docker compose version >/dev/null
   load_env
   validate_ghcr_login
@@ -210,16 +255,43 @@ main() {
   sync_control
   stop_legacy_services
 
-  docker compose --env-file "${ENV_FILE}" -f "${COMPOSE_FILE}" pull
-  docker compose --env-file "${ENV_FILE}" -f "${COMPOSE_FILE}" up -d clickhouse zookeeper
+  if [[ "${CLICKHOUSE_MODE}" == "embedded" ]]; then
+    docker compose --env-file "${ENV_FILE}" -f "${COMPOSE_FILE}" --profile embedded-clickhouse pull clickhouse zookeeper "${APP_SERVICES[@]}"
+    docker compose --env-file "${ENV_FILE}" -f "${COMPOSE_FILE}" --profile embedded-clickhouse up -d clickhouse zookeeper
+  else
+    docker compose --env-file "${ENV_FILE}" -f "${COMPOSE_FILE}" pull zookeeper "${APP_SERVICES[@]}"
+    docker compose --env-file "${ENV_FILE}" -f "${COMPOSE_FILE}" up -d zookeeper
+  fi
 
-  if ! wait_for_clickhouse_schema; then
-    echo "ClickHouse bootstrap did not complete. Running rollback..." >&2
+  if ! wait_for_clickhouse_ready; then
+    echo "ClickHouse is not reachable. Running rollback..." >&2
     "${ROOT_DIR}/rollback.sh"
     exit 1
   fi
 
-  docker compose --env-file "${ENV_FILE}" -f "${COMPOSE_FILE}" up -d "${APP_SERVICES[@]}"
+  if [[ "${CLICKHOUSE_MODE}" == "embedded" ]]; then
+    if ! apply_clickhouse_init; then
+      echo "ClickHouse initialization failed. Running rollback..." >&2
+      "${ROOT_DIR}/rollback.sh"
+      exit 1
+    fi
+  fi
+
+  if ! wait_for_clickhouse_schema; then
+    if [[ "${CLICKHOUSE_MODE}" == "external" ]]; then
+      echo "External ClickHouse schema is not ready. Initialize it manually first, then redeploy." >&2
+    else
+      echo "ClickHouse bootstrap did not complete. Running rollback..." >&2
+    fi
+    "${ROOT_DIR}/rollback.sh"
+    exit 1
+  fi
+
+  if [[ "${CLICKHOUSE_MODE}" == "embedded" ]]; then
+    docker compose --env-file "${ENV_FILE}" -f "${COMPOSE_FILE}" --profile embedded-clickhouse up -d "${APP_SERVICES[@]}"
+  else
+    docker compose --env-file "${ENV_FILE}" -f "${COMPOSE_FILE}" up -d "${APP_SERVICES[@]}"
+  fi
 
   if ! validate_runtime; then
     echo "Validation failed. Running rollback..." >&2

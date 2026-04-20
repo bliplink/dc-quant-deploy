@@ -8,6 +8,23 @@ The public deployment only uses ClickHouse.
 - Java services should point only to ClickHouse
 - `DBPoolConfig.ini` in both template sets only contains ClickHouse settings
 
+## Deployment Modes
+
+The repository supports two ClickHouse modes:
+
+1. `embedded`
+   Use the `clickhouse` service from `compose.yaml`. Deployment runs the initialization scripts automatically.
+2. `external`
+   Use an existing ClickHouse instance. Database initialization is handled manually by the user.
+
+The mode is controlled by `.env.prod`:
+
+- `CLICKHOUSE_MODE`
+- `CLICKHOUSE_HOST`
+- `CLICKHOUSE_HTTP_PORT`
+- `CLICKHOUSE_USERNAME`
+- `CLICKHOUSE_PASSWORD`
+
 ## Bootstrap Layout
 
 - `clickhouse/init/00-create-db.sql`
@@ -18,15 +35,25 @@ The public deployment only uses ClickHouse.
 
 ## Default Bootstrap Behavior
 
-On first startup, the official ClickHouse image runs `docker-entrypoint-initdb.d`.
+Automatic initialization only happens in `embedded` mode.
 
-This repository uses that hook to:
+In that mode, `deploy.sh` calls:
+
+- `clickhouse/apply-init.sh`
+
+That helper then runs:
+
+- `clickhouse/init/01-run-all.sh`
+
+The initialization flow:
 
 1. create database `dc` if needed
 2. apply all SQL in `10-schema/`
 3. apply all SQL in `20-view/`
 
 Files under `90-optional-seed/` are intentionally excluded from automatic bootstrap.
+
+In `external` mode, the user is responsible for running initialization manually before deployment.
 
 ## Core Schema
 
@@ -75,5 +102,5 @@ If you add new DDL later, keep the same rule so the init sequence remains rerunn
 If you need to rerun the default schema bootstrap manually:
 
 ```bash
-docker compose exec -T clickhouse /docker-entrypoint-initdb.d/01-run-all.sh
+./clickhouse/apply-init.sh
 ```

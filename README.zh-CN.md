@@ -58,16 +58,38 @@
 4. 执行 `./validate.sh`
 5. 执行 `./deploy.sh`
 
+## ClickHouse 模式
+
+仓库支持两种 ClickHouse 模式。
+
+1. `embedded`
+   用户没有现成 ClickHouse 时，`deploy.sh` 会从 `compose.yaml` 启动 ClickHouse 容器，并自动执行初始化脚本。
+2. `external`
+   用户已经有 ClickHouse 时，数据库初始化由用户自己手动处理。`deploy.sh` 不会启动 ClickHouse 容器，也不会改动现有数据库。
+
+请在 `.env.prod` 中设置：
+
+- `CLICKHOUSE_MODE=embedded` 或 `CLICKHOUSE_MODE=external`
+- `CLICKHOUSE_HOST`
+- `CLICKHOUSE_HTTP_PORT`
+- `CLICKHOUSE_USERNAME`
+- `CLICKHOUSE_PASSWORD`
+
 部署脚本会：
 
 1. 校验 Docker 与配置输入
 2. 备份当前 `control/`
 3. 将 `control.prod/` 同步到 `${DEPLOY_ROOT}/control`
 4. 如果旧 `scripts/stop` 存在，则先停旧进程
-5. 拉取镜像
-6. 启动 `clickhouse` 与 `zookeeper`
-7. 等待 ClickHouse schema 就绪
-8. 启动 Java 服务与 `web`
+5. 启动 `zookeeper`
+6. 只有在 `CLICKHOUSE_MODE=embedded` 时才启动 `clickhouse`
+7. 只有在 `CLICKHOUSE_MODE=embedded` 时才自动执行 ClickHouse 初始化脚本
+8. 等待 ClickHouse schema 就绪
+9. 启动 Java 服务与 `web`
+
+如果使用 `CLICKHOUSE_MODE=external`，请先手工完成数据库初始化，再执行部署。仓库提供的手工入口是：
+
+- `./clickhouse/apply-init.sh`
 
 ## ClickHouse 约定
 

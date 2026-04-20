@@ -55,16 +55,38 @@ This repository does not include:
 4. Run `./validate.sh`.
 5. Run `./deploy.sh`.
 
+## ClickHouse Modes
+
+The repository supports two ClickHouse deployment modes.
+
+1. `embedded`
+   The user does not already have ClickHouse. `deploy.sh` starts the ClickHouse container from `compose.yaml` and runs the initialization scripts automatically.
+2. `external`
+   The user already has ClickHouse. The user handles database initialization manually. `deploy.sh` does not start a ClickHouse container and does not modify the existing database.
+
+Set these values in `.env.prod`:
+
+- `CLICKHOUSE_MODE=embedded` or `CLICKHOUSE_MODE=external`
+- `CLICKHOUSE_HOST`
+- `CLICKHOUSE_HTTP_PORT`
+- `CLICKHOUSE_USERNAME`
+- `CLICKHOUSE_PASSWORD`
+
 The deployment script will:
 
 1. validate Docker and config inputs
 2. back up the current `control/`
 3. sync `control.prod/` into `${DEPLOY_ROOT}/control`
 4. stop legacy services if the old `scripts/stop` entry exists
-5. pull images
-6. start `clickhouse` and `zookeeper`
-7. wait for ClickHouse schema readiness
-8. start the Java services and `web`
+5. start `zookeeper`
+6. start `clickhouse` only when `CLICKHOUSE_MODE=embedded`
+7. run the ClickHouse initialization scripts only when `CLICKHOUSE_MODE=embedded`
+8. wait for ClickHouse schema readiness
+9. start the Java services and `web`
+
+If `CLICKHOUSE_MODE=external`, initialize the database yourself before deployment. The provided helper is:
+
+- `./clickhouse/apply-init.sh`
 
 ## ClickHouse Contract
 
