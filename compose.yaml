@@ -1,0 +1,176 @@
+name: ${COMPOSE_PROJECT_NAME}
+
+x-java-service-base: &java-service-base
+  network_mode: host
+  restart: unless-stopped
+  environment:
+    TZ: Asia/Shanghai
+    DEPLOY_ROOT: /srv/dc
+  volumes:
+    - ${DEPLOY_ROOT}/control:/srv/dc/control:ro
+    - ${DEPLOY_ROOT}/data:/srv/dc/data
+    - ${DEPLOY_ROOT}/log:/srv/dc/log
+    - ${DEPLOY_ROOT}/tpc/tpc:/srv/dc/tpc/tpc
+
+services:
+  clickhouse:
+    image: clickhouse/clickhouse-server:${CLICKHOUSE_IMAGE_TAG}
+    container_name: dc-clickhouse
+    restart: unless-stopped
+    environment:
+      TZ: Asia/Shanghai
+      CLICKHOUSE_DB: ${CLICKHOUSE_DB_NAME}
+      CLICKHOUSE_RUN_AS_ROOT: "1"
+    ports:
+      - "${CLICKHOUSE_HTTP_PORT}:8123"
+      - "${CLICKHOUSE_NATIVE_PORT}:9000"
+    volumes:
+      - ${DEPLOY_ROOT}/clickhouse/data:/var/lib/clickhouse
+      - ${DEPLOY_ROOT}/clickhouse/log:/var/log/clickhouse-server
+      - ./clickhouse/init:/docker-entrypoint-initdb.d:ro
+    healthcheck:
+      test: ["CMD-SHELL", "clickhouse-client --query 'SELECT 1' >/dev/null 2>&1"]
+      interval: 10s
+      timeout: 5s
+      retries: 30
+      start_period: 20s
+
+  zookeeper:
+    image: ghcr.io/bliplink/zookeeper:${ZOOKEEPER_TAG}
+    container_name: dc-zookeeper
+    network_mode: host
+    restart: unless-stopped
+    environment:
+      TZ: Asia/Shanghai
+      ATS_ROOT: /opt/zookeeper/runtime
+      ZOOKEEPER_CLIENT_PORT: 2181
+      ZOOKEEPER_DATA_DIR: /opt/zookeeper/data
+      ZOOKEEPER_JMX_PORT: 8888
+    volumes:
+      - ${DEPLOY_ROOT}/tpc/zookeeper/conf/zoo.cfg:/opt/zookeeper/conf/zoo.cfg:ro
+      - ${DEPLOY_ROOT}/tpc/zookeeper/conf/jaas.conf:/opt/zookeeper/conf/jaas.conf:ro
+      - ${DEPLOY_ROOT}/tpc/zookeeper/data:/opt/zookeeper/data
+      - ${DEPLOY_ROOT}/log:/opt/zookeeper/runtime/log
+
+  gateway:
+    <<: *java-service-base
+    image: ghcr.io/bliplink/gw:${GW_TAG}
+    container_name: dc-gateway
+    depends_on:
+      clickhouse:
+        condition: service_healthy
+      zookeeper:
+        condition: service_started
+    environment:
+      TZ: Asia/Shanghai
+      DEPLOY_ROOT: /srv/dc
+      SERVICE_NAME: GW
+      MAIN_CLASS: GW
+      JAVA_OPTS: -server -Xmx2048m -Xms2048m -Xmn512m -Djava.security.auth.login.config=../../control/jaas.ini
+
+  mdsvr:
+    <<: *java-service-base
+    image: ghcr.io/bliplink/mdsvr:${MDSVR_TAG}
+    container_name: dc-mdsvr
+    depends_on:
+      clickhouse:
+        condition: service_healthy
+      zookeeper:
+        condition: service_started
+    environment:
+      TZ: Asia/Shanghai
+      DEPLOY_ROOT: /srv/dc
+      SERVICE_NAME: MDSvr
+      MAIN_CLASS: MDSvr
+      JAVA_OPTS: -server -Xmx2048m -Xms2048m -Xmn512m -Djava.security.auth.login.config=../../control/jaas.ini
+
+  apssvr:
+    <<: *java-service-base
+    image: ghcr.io/bliplink/apssvr:${APSSVR_TAG}
+    container_name: dc-apssvr
+    depends_on:
+      clickhouse:
+        condition: service_healthy
+      zookeeper:
+        condition: service_started
+    environment:
+      TZ: Asia/Shanghai
+      DEPLOY_ROOT: /srv/dc
+      SERVICE_NAME: APSSvr
+      MAIN_CLASS: APSSvr
+      JAVA_OPTS: -server -Xmx2048m -Xms2048m -Xmn512m -Djava.security.auth.login.config=../../control/jaas.ini
+
+  quantsvr:
+    <<: *java-service-base
+    image: ghcr.io/bliplink/quantsvr:${QUANTSVR_TAG}
+    container_name: dc-quantsvr
+    depends_on:
+      clickhouse:
+        condition: service_healthy
+      zookeeper:
+        condition: service_started
+    environment:
+      TZ: Asia/Shanghai
+      DEPLOY_ROOT: /srv/dc
+      SERVICE_NAME: QuantSvr
+      MAIN_CLASS: QuantSvr
+      JAVA_OPTS: -server -Xmx2048m -Xms2048m -Xmn512m -Djava.security.auth.login.config=../../control/jaas.ini
+
+  indsvr:
+    <<: *java-service-base
+    image: ghcr.io/bliplink/indsvr:${INDSVR_TAG}
+    container_name: dc-indsvr
+    depends_on:
+      clickhouse:
+        condition: service_healthy
+      zookeeper:
+        condition: service_started
+    environment:
+      TZ: Asia/Shanghai
+      DEPLOY_ROOT: /srv/dc
+      SERVICE_NAME: INDSvr
+      MAIN_CLASS: INDSvr
+      JAVA_OPTS: -server -Xmx2048m -Xms2048m -Xmn512m -Djava.security.auth.login.config=../../control/jaas.ini
+
+  simsvr:
+    <<: *java-service-base
+    image: ghcr.io/SKT-Walter/simsvr:${SIMSVR_TAG}
+    container_name: dc-simsvr
+    depends_on:
+      clickhouse:
+        condition: service_healthy
+      zookeeper:
+        condition: service_started
+    environment:
+      TZ: Asia/Shanghai
+      DEPLOY_ROOT: /srv/dc
+      SERVICE_NAME: SIMSvr
+      MAIN_CLASS: SIMSvr
+      JAVA_OPTS: -server -Xmx2048m -Xms2048m -Xmn512m -Djava.security.auth.login.config=../../control/jaas.ini
+
+  batchsvr:
+    <<: *java-service-base
+    image: ghcr.io/bliplink/batchsvr:${BATCHSVR_TAG}
+    container_name: dc-batchsvr
+    depends_on:
+      clickhouse:
+        condition: service_healthy
+      zookeeper:
+        condition: service_started
+    environment:
+      TZ: Asia/Shanghai
+      DEPLOY_ROOT: /srv/dc
+      SERVICE_NAME: BatchSvr
+      MAIN_CLASS: BatchSvr
+      JAVA_OPTS: -server -Xmx5048m -Xms5048m -Xmn512m -Djava.security.auth.login.config=../../control/jaas.ini
+
+  web:
+    image: ghcr.io/SKT-Walter/web:${WEB_TAG}
+    container_name: dc-web
+    network_mode: host
+    restart: unless-stopped
+    depends_on:
+      gateway:
+        condition: service_started
+    environment:
+      TZ: Asia/Shanghai

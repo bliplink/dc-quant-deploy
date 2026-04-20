@@ -1,0 +1,6 @@
+.env.prod
+.last_backup
+control.prod/
+backups/
+clickhouse/data/
+clickhouse/log/

@@ -1,0 +1,97 @@
+#!/usr/bin/env bash
+
+set -euo pipefail
+
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+ENV_FILE="${SCRIPT_DIR}/.env.prod"
+CONTROL_DIR="${SCRIPT_DIR}/control.prod"
+COMPOSE_FILE="${SCRIPT_DIR}/compose.yaml"
+
+require_command() {
+  local cmd="$1"
+  if ! command -v "${cmd}" >/dev/null 2>&1; then
+    echo "missing required command: ${cmd}" >&2
+    exit 1
+  fi
+}
+
+require_file() {
+  local file="$1"
+  if [[ ! -f "${file}" ]]; then
+    echo "missing required file: ${file}" >&2
+    exit 1
+  fi
+}
+
+require_dir() {
+  local dir="$1"
+  if [[ ! -d "${dir}" ]]; then
+    echo "missing required directory: ${dir}" >&2
+    exit 1
+  fi
+}
+
+check_no_placeholders() {
+  local file="$1"
+  if grep -q '{{' "${file}"; then
+    echo "placeholder still present in ${file}" >&2
+    exit 1
+  fi
+}
+
+require_command docker
+require_file "${ENV_FILE}"
+require_dir "${CONTROL_DIR}"
+
+# shellcheck disable=SC1090
+source "${ENV_FILE}"
+
+require_file "${CONTROL_DIR}/ATSConfig.ini"
+require_file "${CONTROL_DIR}/DBPoolConfig.ini"
+require_file "${CONTROL_DIR}/jaas.ini"
+require_file "${CONTROL_DIR}/dc.dat"
+
+check_no_placeholders "${CONTROL_DIR}/ATSConfig.ini"
+check_no_placeholders "${CONTROL_DIR}/DBPoolConfig.ini"
+check_no_placeholders "${CONTROL_DIR}/jaas.ini"
+
+if [[ -z "${DEPLOY_ROOT:-}" ]]; then
+  echo "DEPLOY_ROOT is required in .env.prod" >&2
+  exit 1
+fi
+
+for tag_var in CLICKHOUSE_IMAGE_TAG CLICKHOUSE_DB_NAME CLICKHOUSE_HTTP_PORT CLICKHOUSE_NATIVE_PORT ZOOKEEPER_TAG GW_TAG MDSVR_TAG APSSVR_TAG QUANTSVR_TAG INDSVR_TAG SIMSVR_TAG BATCHSVR_TAG WEB_TAG; do
+  if [[ -z "${!tag_var:-}" ]]; then
+    echo "${tag_var} is required in .env.prod" >&2
+    exit 1
+  fi
+done
+
+if [[ ! -d "${DEPLOY_ROOT}" ]]; then
+  mkdir -p "${DEPLOY_ROOT}" || {
+    echo "DEPLOY_ROOT cannot be created: ${DEPLOY_ROOT}" >&2
+    exit 1
+  }
+fi
+
+if cmp -s "${CONTROL_DIR}/dc.dat" "${SCRIPT_DIR}/control.prod.example/dc.dat"; then
+  echo "control.prod/dc.dat is still the example placeholder. Replace it with the real runtime content." >&2
+  exit 1
+fi
+
+require_file "${SCRIPT_DIR}/clickhouse/init/00-create-db.sql"
+require_file "${SCRIPT_DIR}/clickhouse/init/01-run-all.sh"
+require_dir "${SCRIPT_DIR}/clickhouse/init/10-schema"
+require_dir "${SCRIPT_DIR}/clickhouse/init/20-view"
+require_dir "${SCRIPT_DIR}/clickhouse/init/90-optional-seed"
+require_file "${SCRIPT_DIR}/zookeeper.example/conf/zoo.cfg"
+require_file "${SCRIPT_DIR}/zookeeper.example/conf/jaas.conf"
+
+if [[ ! -f "${HOME}/.docker/config.json" ]]; then
+  echo "docker login not found: ${HOME}/.docker/config.json missing" >&2
+  exit 1
+fi
+
+docker compose --env-file "${ENV_FILE}" -f "${COMPOSE_FILE}" config >/dev/null
+
+echo "Validation passed."
