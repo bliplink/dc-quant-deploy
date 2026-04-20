@@ -31,13 +31,6 @@
 
 - 真实生产密钥
 - 真实生产 `control.prod/`
-- 真实生产 `dc.dat`
-- ZooKeeper 源码树本体
-
-ZooKeeper 的源码与镜像流水线在独立仓库中维护：
-
-- `https://github.com/bliplink/zookeeper`
-- 镜像：`ghcr.io/bliplink/zookeeper`
 
 ## 仓库结构
 
@@ -61,7 +54,7 @@ ZooKeeper 的源码与镜像流水线在独立仓库中维护：
 
 1. 将 `.env.example` 复制为 `.env.prod`
 2. 将 `control.prod.example/` 复制为 `control.prod/`
-3. 替换 `control.prod/` 里的占位符，并放入真实 `dc.dat`
+3. 替换 `control.prod/` 里的占位符
 4. 执行 `./validate.sh`
 5. 执行 `./deploy.sh`
 

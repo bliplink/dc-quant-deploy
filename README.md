@@ -31,13 +31,6 @@ This repository does not include:
 
 - real production secrets
 - real production `control.prod/`
-- real production `dc.dat`
-- the ZooKeeper source tree itself
-
-The ZooKeeper source and image pipeline live in the separate repository:
-
-- `https://github.com/bliplink/zookeeper`
-- image: `ghcr.io/bliplink/zookeeper`
 
 ## Repository Layout
 
@@ -58,7 +51,7 @@ The ZooKeeper source and image pipeline live in the separate repository:
 
 1. Copy `.env.example` to `.env.prod`.
 2. Copy `control.prod.example/` to `control.prod/`.
-3. Replace placeholders in `control.prod/` and provide the real `dc.dat` content.
+3. Replace placeholders in `control.prod/`.
 4. Run `./validate.sh`.
 5. Run `./deploy.sh`.
 

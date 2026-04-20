@@ -47,16 +47,6 @@ Service scope:
 - all Java services depend on both `zookeeper` and `clickhouse`
 - `web` depends on `gateway`
 
-## ZooKeeper Source Of Truth
-
-This repository consumes the published ZooKeeper image only.
-
-- source repo: `https://github.com/bliplink/zookeeper`
-- published image: `ghcr.io/bliplink/zookeeper`
-- validated standalone image result: `ghcr.io/bliplink/zookeeper:v0.0.2-test`
-
-The older "thin wrapper only" wording no longer applies to the published image. The current ZooKeeper repository vendors the runnable ZooKeeper source tree and produces a standalone image.
-
 ## Runtime Mount Contract
 
 Java services keep the existing internal runtime layout:

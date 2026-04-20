@@ -47,16 +47,6 @@
 - 所有 Java 服务同时依赖 `zookeeper` 和 `clickhouse`
 - `web` 依赖 `gateway`
 
-## ZooKeeper 事实来源
-
-这个仓库只消费已发布的 ZooKeeper 镜像。
-
-- 源码仓库：`https://github.com/bliplink/zookeeper`
-- 发布镜像：`ghcr.io/bliplink/zookeeper`
-- 已验证的独立运行镜像：`ghcr.io/bliplink/zookeeper:v0.0.2-test`
-
-此前“只有薄包装”的说法已经不再适用于当前已发布镜像。现在的 ZooKeeper 仓库已经内置可运行源码树，并产出可独立运行的镜像。
-
 ## 运行时挂载契约
 
 Java 服务保持现有内部目录约定：
