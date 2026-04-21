@@ -35,9 +35,9 @@
 - `ghcr.io/bliplink/apssvr:${APSSVR_TAG}`
 - `ghcr.io/bliplink/quantsvr:${QUANTSVR_TAG}`
 - `ghcr.io/bliplink/indsvr:${INDSVR_TAG}`
-- `ghcr.io/SKT-Walter/simsvr:${SIMSVR_TAG}`
+- `ghcr.io/skt-walter/simsvr:${SIMSVR_TAG}`
 - `ghcr.io/bliplink/batchsvr:${BATCHSVR_TAG}`
-- `ghcr.io/SKT-Walter/web:${WEB_TAG}`
+- `ghcr.io/skt-walter/web:${WEB_TAG}`
 - `clickhouse/clickhouse-server:${CLICKHOUSE_IMAGE_TAG}`
 
 ## 依赖关系

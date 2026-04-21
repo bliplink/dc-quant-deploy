@@ -13,7 +13,7 @@
 - 旧服务：`SIMSvr`
 - 容器：`dc-simsvr`
 - 端口：`30045`
-- 镜像：`ghcr.io/SKT-Walter/simsvr:${SIMSVR_TAG}`
+- 镜像：`ghcr.io/skt-walter/simsvr:${SIMSVR_TAG}`
 
 ## 生产默认值
 

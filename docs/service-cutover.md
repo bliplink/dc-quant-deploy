@@ -13,7 +13,7 @@ The first supported targets are `batchsvr` and `simsvr`.
 - legacy service: `SIMSvr`
 - container: `dc-simsvr`
 - port: `30045`
-- image: `ghcr.io/SKT-Walter/simsvr:${SIMSVR_TAG}`
+- image: `ghcr.io/skt-walter/simsvr:${SIMSVR_TAG}`
 
 ## Production Defaults
 
