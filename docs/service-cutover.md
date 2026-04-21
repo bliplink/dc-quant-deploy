@@ -38,6 +38,29 @@ Run a dry run before touching the service:
 
 The dry run must show only the `batchsvr` service target. It must not call the full `deploy.sh`.
 
+## Docker Prerequisite
+
+For Ubuntu 22.04 production hosts without Docker, install Docker Engine and the Compose plugin first. This step only prepares Docker; it must not start any DC service container yet.
+
+```bash
+apt-get update
+apt-get install -y ca-certificates curl gnupg
+install -m 0755 -d /etc/apt/keyrings
+curl -fsSL https://download.docker.com/linux/ubuntu/gpg -o /etc/apt/keyrings/docker.asc
+chmod a+r /etc/apt/keyrings/docker.asc
+. /etc/os-release
+echo "deb [arch=$(dpkg --print-architecture) signed-by=/etc/apt/keyrings/docker.asc] https://download.docker.com/linux/ubuntu ${VERSION_CODENAME} stable" > /etc/apt/sources.list.d/docker.list
+apt-get update
+apt-get install -y docker-ce docker-ce-cli containerd.io docker-buildx-plugin docker-compose-plugin
+systemctl enable --now docker
+usermod -aG docker dc
+docker --version
+docker compose version
+systemctl is-active docker
+```
+
+After adding `dc` to the `docker` group, start a fresh SSH session for the group change to take effect. If the current automation session still cannot access Docker as `dc`, use `newgrp docker` or reconnect before running the cutover script.
+
 ## BatchSvr Cutover
 
 1. Copy `.env.prod.batchsvr.example` to `.env.prod` and adjust tags if needed.

@@ -38,6 +38,29 @@
 
 dry run 输出中只能出现 `batchsvr` 目标，不能调用全量 `deploy.sh`。
 
+## Docker 前置安装
+
+如果 Ubuntu 22.04 生产机还没有 Docker，先安装 Docker Engine 和 Compose plugin。这个步骤只准备 Docker，不启动任何 DC 业务容器。
+
+```bash
+apt-get update
+apt-get install -y ca-certificates curl gnupg
+install -m 0755 -d /etc/apt/keyrings
+curl -fsSL https://download.docker.com/linux/ubuntu/gpg -o /etc/apt/keyrings/docker.asc
+chmod a+r /etc/apt/keyrings/docker.asc
+. /etc/os-release
+echo "deb [arch=$(dpkg --print-architecture) signed-by=/etc/apt/keyrings/docker.asc] https://download.docker.com/linux/ubuntu ${VERSION_CODENAME} stable" > /etc/apt/sources.list.d/docker.list
+apt-get update
+apt-get install -y docker-ce docker-ce-cli containerd.io docker-buildx-plugin docker-compose-plugin
+systemctl enable --now docker
+usermod -aG docker dc
+docker --version
+docker compose version
+systemctl is-active docker
+```
+
+把 `dc` 加入 `docker` 组之后，需要重新登录一次 SSH，让组权限生效。如果当前自动化会话仍然不能用 `dc` 访问 Docker，就先 `newgrp docker` 或重新连接后再执行切换脚本。
+
 ## BatchSvr 切换流程
 
 1. 将 `.env.prod.batchsvr.example` 复制为 `.env.prod`，必要时调整 tag。
