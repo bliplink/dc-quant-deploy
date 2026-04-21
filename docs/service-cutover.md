@@ -93,6 +93,28 @@ Rollback only BatchSvr:
 
 Rollback stops only the `batchsvr` container and starts only the legacy `BatchSvr`.
 
+## Single-Service Restart
+
+After a service has been fully switched to containers, use `restart-service.sh` for a one-service restart:
+
+```bash
+./restart-service.sh apssvr --dry-run
+./restart-service.sh apssvr
+```
+
+The restart path is intentionally different from cutover:
+
+- it does not call legacy `scripts/start` or `scripts/stop`
+- it does not pull a newer image
+- it uses `docker compose up -d --no-deps --force-recreate <service>`
+- it regenerates `compose.override.generated.yaml` before restarting so optional config overrides remain current
+
+Production APSSvr follows the legacy timing pattern from the old `restartjob.sh`: daily at `00:05`, with logs redirected to `/data/strategy/log/cron-apssvr-restart.log`.
+
+```cron
+5 0 * * * cd /data/strategy/dc-quant-deploy && ./restart-service.sh apssvr >> /data/strategy/log/cron-apssvr-restart.log 2>&1
+```
+
 ## Per-Service Runtime Mounts
 
 Java services run as `1000:1000` in the container to keep host log/data files compatible with legacy rollback. Current service images may have root-owned application directories, so Compose mounts these paths directly and prevents the entrypoint from creating symlinks inside the image:

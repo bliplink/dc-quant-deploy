@@ -137,3 +137,25 @@ BatchSvr 稳定后，建议顺序：
 8. `zookeeper`
 
 不要提前切 `zookeeper`。它是注册中心，应在应用服务验证稳定之后再切。
+
+## 单服务重启
+
+服务已经切到容器后，日常重启不再走旧的 `scripts/start` / `scripts/stop`，统一使用：
+
+```bash
+./restart-service.sh apssvr --dry-run
+./restart-service.sh apssvr
+```
+
+该脚本只重建目标容器：
+
+- 不拉取新镜像
+- 不启动依赖服务
+- 使用 `docker compose up -d --no-deps --force-recreate <service>`
+- 每次执行前都会重新生成 `compose.override.generated.yaml`
+
+生产 APSSvr 参考旧系统 `restartjob.sh`，每天 `00:05` 定时重启：
+
+```cron
+5 0 * * * cd /data/strategy/dc-quant-deploy && ./restart-service.sh apssvr >> /data/strategy/log/cron-apssvr-restart.log 2>&1
+```

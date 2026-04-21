@@ -37,6 +37,7 @@ This repository does not include:
 - [compose.yaml](./compose.yaml): main deployment topology
 - [.env.example](./.env.example): public deployment variables template
 - [deploy.sh](./deploy.sh): one-click deployment entry
+- [restart-service.sh](./restart-service.sh): restart exactly one containerized service
 - [validate.sh](./validate.sh): preflight validation
 - [rollback.sh](./rollback.sh): rollback entry
 - [control.template](./control.template): placeholder-based control templates
@@ -143,6 +144,23 @@ Supported overrides:
 `deploy.sh`, `deploy-service.sh`, `rollback.sh`, `rollback-service.sh`, and `validate.sh` generate `compose.override.generated.yaml` automatically. Do not edit or commit that file.
 
 `log4j.ini`, `mcpTools.tsv`, and `apiKeyList.csv` are reloaded by the running service. `spring-gw-client.xml` is a Spring startup file and requires a `gateway` restart.
+
+## Single-Service Restart
+
+After the stack is fully containerized, restart one service without touching its dependencies:
+
+```bash
+./restart-service.sh apssvr --dry-run
+./restart-service.sh apssvr
+```
+
+Production APSSvr can be restarted by cron using the same entry:
+
+```cron
+5 0 * * * cd /data/strategy/dc-quant-deploy && ./restart-service.sh apssvr >> /data/strategy/log/cron-apssvr-restart.log 2>&1
+```
+
+The script uses `docker compose up -d --no-deps --force-recreate <service>`. It does not pull a new image and does not start dependency services.
 
 ## More Docs
 

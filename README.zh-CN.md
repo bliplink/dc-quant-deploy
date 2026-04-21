@@ -152,3 +152,20 @@
 `log4j.ini` 通常约 1 秒热生效；`mcpTools.tsv` 与 `apiKeyList.csv` 约 1 分钟内由 GW 自动重载；`spring-gw-client.xml` 修改后需要重启 `gateway` 容器。
 
 初始化后的宿主机运行根目录只需要保留 `control/`、`data/`、`log/`，不要再挂载整个 `${DEPLOY_ROOT}/dc/GW/config`。
+
+## 单服务重启
+
+服务已经完成容器化切换后，可以用同一个入口只重启一个服务，不影响其它容器：
+
+```bash
+./restart-service.sh apssvr --dry-run
+./restart-service.sh apssvr
+```
+
+生产上的 APSSvr 定时重启沿用旧系统 `restartjob.sh` 的时间点：每天 `00:05`。
+
+```cron
+5 0 * * * cd /data/strategy/dc-quant-deploy && ./restart-service.sh apssvr >> /data/strategy/log/cron-apssvr-restart.log 2>&1
+```
+
+这个脚本使用 `docker compose up -d --no-deps --force-recreate <service>`，不会拉新镜像，也不会启动依赖服务。
