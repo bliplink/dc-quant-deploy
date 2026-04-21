@@ -29,6 +29,7 @@ This entry:
 - sets `CLICKHOUSE_MODE=embedded`
 - sets `CLICKHOUSE_HOST=127.0.0.1`
 - starts the `dc-clickhouse` container
+- initializes the container user from `CLICKHOUSE_USERNAME` / `CLICKHOUSE_PASSWORD`
 - runs ClickHouse initialization scripts
 - starts ZooKeeper, Java services, and web
 
