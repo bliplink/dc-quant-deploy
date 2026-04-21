@@ -46,6 +46,7 @@ This repository does not include:
 - [docs/architecture.md](./docs/architecture.md): service and image map
 - [docs/database.md](./docs/database.md): ClickHouse initialization contract
 - [docs/release-flow.md](./docs/release-flow.md): image-based release flow
+- [docs/service-cutover.md](./docs/service-cutover.md): one-service-at-a-time production cutover
 
 ## Quick Start
 
@@ -129,5 +130,6 @@ Do not commit these back into Git:
 - [Architecture](./docs/architecture.md)
 - [Database](./docs/database.md)
 - [Release Flow](./docs/release-flow.md)
+- [Service Cutover](./docs/service-cutover.md)
 - [Docs Index](./docs/README.md)
 - [文档索引](./docs/README.zh-CN.md)

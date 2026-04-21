@@ -3,6 +3,7 @@ name: ${COMPOSE_PROJECT_NAME}
 x-java-service-base: &java-service-base
   network_mode: host
   restart: unless-stopped
+  user: "${RUNTIME_UID}:${RUNTIME_GID}"
   environment:
     TZ: Asia/Shanghai
     DEPLOY_ROOT: /srv/dc

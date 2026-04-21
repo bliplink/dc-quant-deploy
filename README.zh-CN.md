@@ -49,6 +49,8 @@
 - [docs/database.zh-CN.md](./docs/database.zh-CN.md)：中文数据库说明
 - [docs/release-flow.md](./docs/release-flow.md)：英文发布流程
 - [docs/release-flow.zh-CN.md](./docs/release-flow.zh-CN.md)：中文发布流程
+- [docs/service-cutover.md](./docs/service-cutover.md)：英文逐服务切换说明
+- [docs/service-cutover.zh-CN.md](./docs/service-cutover.zh-CN.md)：中文逐服务切换说明
 
 ## 快速开始
 
@@ -132,4 +134,5 @@
 - [架构说明](./docs/architecture.zh-CN.md)
 - [数据库说明](./docs/database.zh-CN.md)
 - [发布流程](./docs/release-flow.zh-CN.md)
+- [逐服务切换](./docs/service-cutover.zh-CN.md)
 - [文档索引](./docs/README.zh-CN.md)
