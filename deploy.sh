@@ -4,10 +4,11 @@ set -euo pipefail
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 ENV_FILE="${ROOT_DIR}/.env.prod"
 COMPOSE_FILE="${ROOT_DIR}/compose.yaml"
+OVERRIDE_FILE="${ROOT_DIR}/compose.override.generated.yaml"
+GENERATE_OVERRIDES_SCRIPT="${ROOT_DIR}/generate-compose-overrides.sh"
 CONTROL_SRC="${ROOT_DIR}/control.prod"
 LAST_BACKUP_FILE="${ROOT_DIR}/.last_backup"
 BACKUP_ROOT="${ROOT_DIR}/backups"
-ZOOKEEPER_EXAMPLE_DIR="${ROOT_DIR}/zookeeper.example"
 
 SERVICE_NAMES=(
   "tpc/Registry"
@@ -30,6 +31,10 @@ APP_SERVICES=(
   web
 )
 CLICKHOUSE_INIT_SCRIPT="${ROOT_DIR}/clickhouse/apply-init.sh"
+
+compose() {
+  docker compose --env-file "${ENV_FILE}" -f "${COMPOSE_FILE}" -f "${OVERRIDE_FILE}" "$@"
+}
 
 check_cmd() {
   command -v "$1" >/dev/null 2>&1 || {
@@ -95,27 +100,20 @@ validate_control_prod() {
 prepare_runtime_dirs() {
   mkdir -p "${DEPLOY_ROOT}"
   mkdir -p "${DEPLOY_ROOT}/control"
+  mkdir -p "${DEPLOY_ROOT}/control/overrides"
   mkdir -p "${DEPLOY_ROOT}/data"
+  mkdir -p "${DEPLOY_ROOT}/data/zookeeper"
+  mkdir -p "${DEPLOY_ROOT}/data/java-prefs/GW"
+  mkdir -p "${DEPLOY_ROOT}/data/java-prefs/MDSvr"
+  mkdir -p "${DEPLOY_ROOT}/data/java-prefs/APSSvr"
+  mkdir -p "${DEPLOY_ROOT}/data/java-prefs/QuantSvr"
+  mkdir -p "${DEPLOY_ROOT}/data/java-prefs/INDSvr"
+  mkdir -p "${DEPLOY_ROOT}/data/java-prefs/SIMSvr"
+  mkdir -p "${DEPLOY_ROOT}/data/java-prefs/BatchSvr"
   mkdir -p "${DEPLOY_ROOT}/log"
-  mkdir -p "${DEPLOY_ROOT}/tpc/zookeeper/conf"
-  mkdir -p "${DEPLOY_ROOT}/tpc/zookeeper/data"
   if [[ "${CLICKHOUSE_MODE}" == "embedded" ]]; then
-    mkdir -p "${DEPLOY_ROOT}/clickhouse/data"
-    mkdir -p "${DEPLOY_ROOT}/clickhouse/log"
-  fi
-}
-
-seed_zookeeper_runtime() {
-  check_dir "${ZOOKEEPER_EXAMPLE_DIR}"
-  check_file "${ZOOKEEPER_EXAMPLE_DIR}/conf/zoo.cfg"
-  check_file "${ZOOKEEPER_EXAMPLE_DIR}/conf/jaas.conf"
-
-  if [ ! -f "${DEPLOY_ROOT}/tpc/zookeeper/conf/zoo.cfg" ]; then
-    cp "${ZOOKEEPER_EXAMPLE_DIR}/conf/zoo.cfg" "${DEPLOY_ROOT}/tpc/zookeeper/conf/zoo.cfg"
-  fi
-
-  if [ ! -f "${DEPLOY_ROOT}/tpc/zookeeper/conf/jaas.conf" ]; then
-    cp "${ZOOKEEPER_EXAMPLE_DIR}/conf/jaas.conf" "${DEPLOY_ROOT}/tpc/zookeeper/conf/jaas.conf"
+    mkdir -p "${DEPLOY_ROOT}/data/clickhouse"
+    mkdir -p "${DEPLOY_ROOT}/log/clickhouse"
   fi
 }
 
@@ -145,10 +143,31 @@ record_status() {
 }
 
 sync_control() {
+  local preserved_overrides
+  preserved_overrides="$(mktemp -d)"
+
+  if [ -d "${DEPLOY_ROOT}/control/overrides" ]; then
+    cp -a "${DEPLOY_ROOT}/control/overrides" "${preserved_overrides}/overrides"
+  fi
+
   mkdir -p "${DEPLOY_ROOT}"
   rm -rf "${DEPLOY_ROOT}/control"
   mkdir -p "${DEPLOY_ROOT}/control"
-  cp -a "${CONTROL_SRC}/." "${DEPLOY_ROOT}/control/"
+
+  find "${CONTROL_SRC}" -mindepth 1 -maxdepth 1 ! -name overrides -exec cp -a {} "${DEPLOY_ROOT}/control/" \;
+
+  if [ -d "${preserved_overrides}/overrides" ]; then
+    cp -a "${preserved_overrides}/overrides" "${DEPLOY_ROOT}/control/overrides"
+  else
+    mkdir -p "${DEPLOY_ROOT}/control/overrides"
+  fi
+
+  rm -rf "${preserved_overrides}"
+}
+
+generate_compose_overrides() {
+  check_file "${GENERATE_OVERRIDES_SCRIPT}"
+  bash "${GENERATE_OVERRIDES_SCRIPT}" "${ENV_FILE}" "${OVERRIDE_FILE}"
 }
 
 stop_legacy_services() {
@@ -248,19 +267,19 @@ main() {
   validate_control_prod
   check_file "${COMPOSE_FILE}"
   prepare_runtime_dirs
-  seed_zookeeper_runtime
 
   backup_control
   record_status
   sync_control
+  generate_compose_overrides
   stop_legacy_services
 
   if [[ "${CLICKHOUSE_MODE}" == "embedded" ]]; then
-    docker compose --env-file "${ENV_FILE}" -f "${COMPOSE_FILE}" --profile embedded-clickhouse pull clickhouse zookeeper "${APP_SERVICES[@]}"
-    docker compose --env-file "${ENV_FILE}" -f "${COMPOSE_FILE}" --profile embedded-clickhouse up -d clickhouse zookeeper
+    compose --profile embedded-clickhouse pull clickhouse zookeeper "${APP_SERVICES[@]}"
+    compose --profile embedded-clickhouse up -d clickhouse zookeeper
   else
-    docker compose --env-file "${ENV_FILE}" -f "${COMPOSE_FILE}" pull zookeeper "${APP_SERVICES[@]}"
-    docker compose --env-file "${ENV_FILE}" -f "${COMPOSE_FILE}" up -d zookeeper
+    compose pull zookeeper "${APP_SERVICES[@]}"
+    compose up -d zookeeper
   fi
 
   if ! wait_for_clickhouse_ready; then
@@ -288,9 +307,9 @@ main() {
   fi
 
   if [[ "${CLICKHOUSE_MODE}" == "embedded" ]]; then
-    docker compose --env-file "${ENV_FILE}" -f "${COMPOSE_FILE}" --profile embedded-clickhouse up -d "${APP_SERVICES[@]}"
+    compose --profile embedded-clickhouse up -d "${APP_SERVICES[@]}"
   else
-    docker compose --env-file "${ENV_FILE}" -f "${COMPOSE_FILE}" up -d "${APP_SERVICES[@]}"
+    compose up -d "${APP_SERVICES[@]}"
   fi
 
   if ! validate_runtime; then

@@ -42,7 +42,6 @@
 - [control.template](./control.template)：占位符版控制模板
 - [control.prod.example](./control.prod.example)：去敏的示例控制文件
 - [clickhouse](./clickhouse)：ClickHouse 初始化 SQL 与辅助文件
-- [zookeeper.example](./zookeeper.example)：去敏的 ZooKeeper 运行时配置示例
 - [docs/architecture.md](./docs/architecture.md)：英文架构说明
 - [docs/architecture.zh-CN.md](./docs/architecture.zh-CN.md)：中文架构说明
 - [docs/database.md](./docs/database.md)：英文数据库说明
@@ -126,13 +125,30 @@
 - `.env.prod`
 - `control.prod/`
 - `${DEPLOY_ROOT}/control`
-- `${DEPLOY_ROOT}/clickhouse/data`
-- `${DEPLOY_ROOT}/clickhouse/log`
+- `${DEPLOY_ROOT}/data`
+- `${DEPLOY_ROOT}/log`
 
 ## 更多文档
 
 - [架构说明](./docs/architecture.zh-CN.md)
 - [数据库说明](./docs/database.zh-CN.md)
+- [运行时可选覆盖配置](./docs/runtime-overrides.zh-CN.md)
 - [发布流程](./docs/release-flow.zh-CN.md)
 - [逐服务切换](./docs/service-cutover.zh-CN.md)
 - [文档索引](./docs/README.zh-CN.md)
+
+## 运行时可选覆盖配置
+
+默认使用镜像内置配置。只有当宿主机 `${DEPLOY_ROOT}/control/overrides` 下存在指定文件时，部署脚本才会生成 `compose.override.generated.yaml` 并挂载该文件。
+
+支持的覆盖文件：
+
+- `GW/config/mcpTools.tsv`
+- `GW/config/apiKeyList.csv`
+- `GW/config/spring-gw-client.xml`
+- `GW/config/log4j.ini`
+- `MDSvr|APSSvr|QuantSvr|INDSvr|SIMSvr|BatchSvr/config/log4j.ini`
+
+`log4j.ini` 通常约 1 秒热生效；`mcpTools.tsv` 与 `apiKeyList.csv` 约 1 分钟内由 GW 自动重载；`spring-gw-client.xml` 修改后需要重启 `gateway` 容器。
+
+初始化后的宿主机运行根目录只需要保留 `control/`、`data/`、`log/`，不要再挂载整个 `${DEPLOY_ROOT}/dc/GW/config`。

@@ -1,0 +1,48 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<beans xmlns="http://www.springframework.org/schema/beans"
+	xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+	xsi:schemaLocation="http://www.springframework.org/schema/beans
+                           http://www.springframework.org/schema/beans/spring-beans-3.0.xsd">
+	<bean id="proxy" class="com.gateway.invoke.gw.GWProxy"
+		init-method="init">
+		<property name="topicManager" ref="topicManager" />
+		<property name="notifyProxy" ref="notify" />
+		<property name="tcpConnector" ref="tcpConnector" />
+		<property name="SessionService" value="" />
+		<property name="RequestService" value="APSSvr,MDSvr,APSSvr,INDSvr,BatchSvr,QuantSvr" />
+		<property name="Subscribes">
+			<map>
+				<entry key="MDSvr" value="dc.md.kline.**|dc.md.trade.**" />
+				<entry key="APSSvr" value="dc.aps" />
+			</map>
+		</property>
+		<property name="securityChecks">
+			<list>
+				<ref bean="apiKeySecurityCheck" />
+			</list>
+		</property>
+		<property name="filterTopics">
+			<list>
+				<ref bean="apiKeyService" />
+			</list>
+		</property>
+		<property name="ApiKeyService" ref="apiKeyService" />
+	</bean>
+	<bean id="apiKeyService"
+		class="com.gateway.invoke.filter.apikey.ApiKeyService" />
+	<bean id="limitSecurityCheck"
+		class="com.gateway.invoke.security.LimitSecurityCheck"
+		init-method="init">
+		<property name="tcpSessionManager" ref="tcpSessionManager" />
+		<property name="limitQps" value="100" />
+	</bean>
+	<bean id="sqlInjSecurityCheck"
+		class="com.gateway.invoke.security.SqlInjSecurityCheck"
+		init-method="init" />
+	<bean id="apiKeySecurityCheck"
+		class="com.gateway.invoke.security.APIKeySecurityCheck"
+		init-method="init">
+		<property name="apiKeyListPath" value="./config/apiKeyList.csv" />
+		<property name="period" value="1" />
+	</bean>
+</beans>

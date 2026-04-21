@@ -4,6 +4,8 @@ set -euo pipefail
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 ENV_FILE="${ROOT_DIR}/.env.prod"
 COMPOSE_FILE="${ROOT_DIR}/compose.yaml"
+OVERRIDE_FILE="${ROOT_DIR}/compose.override.generated.yaml"
+GENERATE_OVERRIDES_SCRIPT="${ROOT_DIR}/generate-compose-overrides.sh"
 LAST_BACKUP_FILE="${ROOT_DIR}/.last_backup"
 
 SERVICE_NAMES=(
@@ -25,6 +27,14 @@ load_env() {
   # shellcheck disable=SC1090
   set -a && . "${ENV_FILE}" && set +a
   : "${DEPLOY_ROOT:?DEPLOY_ROOT is required}"
+}
+
+generate_compose_overrides() {
+  [ -f "${GENERATE_OVERRIDES_SCRIPT}" ] || {
+    echo "Missing ${GENERATE_OVERRIDES_SCRIPT}" >&2
+    exit 1
+  }
+  bash "${GENERATE_OVERRIDES_SCRIPT}" "${ENV_FILE}" "${OVERRIDE_FILE}"
 }
 
 restore_control() {
@@ -52,10 +62,11 @@ restart_legacy_services() {
 
 main() {
   load_env
-  docker compose --env-file "${ENV_FILE}" -f "${COMPOSE_FILE}" down || true
+  generate_compose_overrides
+  docker compose --env-file "${ENV_FILE}" -f "${COMPOSE_FILE}" -f "${OVERRIDE_FILE}" down || true
   restore_control
   restart_legacy_services
-  echo "Rollback completed. ClickHouse data in ${DEPLOY_ROOT}/clickhouse/data was preserved."
+  echo "Rollback completed. ClickHouse data in ${DEPLOY_ROOT}/data/clickhouse was preserved."
 }
 
 main "$@"

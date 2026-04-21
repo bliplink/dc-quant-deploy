@@ -1,5 +1,7 @@
 .env.prod
 .last_backup
+.compose.config.check.yaml
+compose.override.generated.yaml
 control.prod/
 backups/
 clickhouse/data/

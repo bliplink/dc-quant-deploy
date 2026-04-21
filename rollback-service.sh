@@ -4,6 +4,8 @@ set -euo pipefail
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 ENV_FILE="${ROOT_DIR}/.env.prod"
 COMPOSE_FILE="${ROOT_DIR}/compose.yaml"
+OVERRIDE_FILE="${ROOT_DIR}/compose.override.generated.yaml"
+GENERATE_OVERRIDES_SCRIPT="${ROOT_DIR}/generate-compose-overrides.sh"
 
 DRY_RUN=false
 SERVICE=""
@@ -128,7 +130,12 @@ load_env() {
 }
 
 compose() {
-  docker compose --env-file "${ENV_FILE}" -f "${COMPOSE_FILE}" "$@"
+  docker compose --env-file "${ENV_FILE}" -f "${COMPOSE_FILE}" -f "${OVERRIDE_FILE}" "$@"
+}
+
+generate_compose_overrides() {
+  require_file "${GENERATE_OVERRIDES_SCRIPT}"
+  run bash "${GENERATE_OVERRIDES_SCRIPT}" "${ENV_FILE}" "${OVERRIDE_FILE}"
 }
 
 is_port_open() {
@@ -157,6 +164,7 @@ wait_for_port_open() {
 main() {
   load_env
   require_file "${COMPOSE_FILE}"
+  generate_compose_overrides
 
   echo "Rollback target: ${SERVICE}"
   echo "Container: ${CONTAINER_NAME}"

@@ -55,13 +55,24 @@ Java services keep the existing internal runtime layout:
 - `${DEPLOY_ROOT}/data -> /srv/dc/data`
 - `${DEPLOY_ROOT}/log -> /srv/dc/log`
 
-ZooKeeper reads its own runtime config and data directly:
+The host runtime root should only need these top-level directories after initialization:
 
-- `${DEPLOY_ROOT}/tpc/zookeeper/conf/zoo.cfg`
-- `${DEPLOY_ROOT}/tpc/zookeeper/conf/jaas.conf`
-- `${DEPLOY_ROOT}/tpc/zookeeper/data`
+- `${DEPLOY_ROOT}/control`
+- `${DEPLOY_ROOT}/data`
+- `${DEPLOY_ROOT}/log`
+
+ZooKeeper uses image-bundled config and persists only runtime data on the host:
+
+- `${DEPLOY_ROOT}/data/zookeeper -> /opt/zookeeper/data`
+- `${DEPLOY_ROOT}/log -> /opt/zookeeper/runtime/log`
 
 ClickHouse persists data under:
 
-- `${DEPLOY_ROOT}/clickhouse/data`
-- `${DEPLOY_ROOT}/clickhouse/log`
+- `${DEPLOY_ROOT}/data/clickhouse`
+- `${DEPLOY_ROOT}/log/clickhouse`
+
+Optional runtime config overrides live under:
+
+- `${DEPLOY_ROOT}/control/overrides/<Service>/config/<file>`
+
+Only existing override files are mounted. Missing files keep the image-bundled defaults.

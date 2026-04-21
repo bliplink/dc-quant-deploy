@@ -4,6 +4,8 @@ set -euo pipefail
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 ENV_FILE="${ROOT_DIR}/.env.prod"
 COMPOSE_FILE="${ROOT_DIR}/compose.yaml"
+OVERRIDE_FILE="${ROOT_DIR}/compose.override.generated.yaml"
+GENERATE_OVERRIDES_SCRIPT="${ROOT_DIR}/generate-compose-overrides.sh"
 BACKUP_ROOT="${ROOT_DIR}/backups/service-cutover"
 
 DRY_RUN=false
@@ -170,7 +172,12 @@ load_env() {
 }
 
 compose() {
-  docker compose --env-file "${ENV_FILE}" -f "${COMPOSE_FILE}" "$@"
+  docker compose --env-file "${ENV_FILE}" -f "${COMPOSE_FILE}" -f "${OVERRIDE_FILE}" "$@"
+}
+
+generate_compose_overrides() {
+  require_file "${GENERATE_OVERRIDES_SCRIPT}"
+  run bash "${GENERATE_OVERRIDES_SCRIPT}" "${ENV_FILE}" "${OVERRIDE_FILE}"
 }
 
 clickhouse_query() {
@@ -369,6 +376,7 @@ main() {
   fi
   load_env
   require_file "${COMPOSE_FILE}"
+  generate_compose_overrides
 
   echo "Single-service cutover target: ${SERVICE}"
   echo "Legacy service: ${LEGACY_SERVICE}"

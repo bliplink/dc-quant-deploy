@@ -55,13 +55,24 @@ Java 服务保持现有内部目录约定：
 - `${DEPLOY_ROOT}/data -> /srv/dc/data`
 - `${DEPLOY_ROOT}/log -> /srv/dc/log`
 
-ZooKeeper 直接读取自身运行时配置与数据：
+ZooKeeper 使用镜像内置配置，宿主机只持久化运行数据与日志：
 
-- `${DEPLOY_ROOT}/tpc/zookeeper/conf/zoo.cfg`
-- `${DEPLOY_ROOT}/tpc/zookeeper/conf/jaas.conf`
-- `${DEPLOY_ROOT}/tpc/zookeeper/data`
+- `${DEPLOY_ROOT}/data/zookeeper -> /opt/zookeeper/data`
+- `${DEPLOY_ROOT}/log -> /opt/zookeeper/runtime/log`
 
 ClickHouse 数据持久化目录：
 
-- `${DEPLOY_ROOT}/clickhouse/data`
-- `${DEPLOY_ROOT}/clickhouse/log`
+- `${DEPLOY_ROOT}/data/clickhouse`
+- `${DEPLOY_ROOT}/log/clickhouse`
+
+初始化后的宿主机运行根目录只需要保留：
+
+- `${DEPLOY_ROOT}/control`
+- `${DEPLOY_ROOT}/data`
+- `${DEPLOY_ROOT}/log`
+
+运行时可选覆盖文件放在：
+
+- `${DEPLOY_ROOT}/control/overrides/<Service>/config/<file>`
+
+只有已经存在的覆盖文件才会挂载；不存在时继续使用镜像内置默认配置。

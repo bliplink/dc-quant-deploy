@@ -42,9 +42,9 @@ This repository does not include:
 - [control.template](./control.template): placeholder-based control templates
 - [control.prod.example](./control.prod.example): sanitized example control files
 - [clickhouse](./clickhouse): ClickHouse bootstrap SQL and helper scripts
-- [zookeeper.example](./zookeeper.example): sanitized ZooKeeper runtime config example
 - [docs/architecture.md](./docs/architecture.md): service and image map
 - [docs/database.md](./docs/database.md): ClickHouse initialization contract
+- [docs/runtime-overrides.md](./docs/runtime-overrides.md): optional config overrides and log level changes
 - [docs/release-flow.md](./docs/release-flow.md): image-based release flow
 - [docs/service-cutover.md](./docs/service-cutover.md): one-service-at-a-time production cutover
 
@@ -55,6 +55,8 @@ This repository does not include:
 3. Replace placeholders in `control.prod/`.
 4. Run `./validate.sh`.
 5. Run `./deploy.sh`.
+
+Keep the Git checkout outside `DEPLOY_ROOT`. The runtime root is intended to contain only `control/`, `data/`, and `log/` after initialization.
 
 ## ClickHouse Modes
 
@@ -122,13 +124,30 @@ Do not commit these back into Git:
 - `.env.prod`
 - `control.prod/`
 - `${DEPLOY_ROOT}/control`
-- `${DEPLOY_ROOT}/clickhouse/data`
-- `${DEPLOY_ROOT}/clickhouse/log`
+- `${DEPLOY_ROOT}/data`
+- `${DEPLOY_ROOT}/log`
+
+## Runtime Overrides
+
+Image-bundled config is the default. A host file is mounted only when it exists under `${DEPLOY_ROOT}/control/overrides`.
+
+Supported overrides:
+
+- `GW/config/mcpTools.tsv`
+- `GW/config/apiKeyList.csv`
+- `GW/config/spring-gw-client.xml`
+- `GW/config/log4j.ini`
+- `<Service>/config/log4j.ini` for `MDSvr`, `APSSvr`, `QuantSvr`, `INDSvr`, `SIMSvr`, and `BatchSvr`
+
+`deploy.sh`, `deploy-service.sh`, `rollback.sh`, `rollback-service.sh`, and `validate.sh` generate `compose.override.generated.yaml` automatically. Do not edit or commit that file.
+
+`log4j.ini`, `mcpTools.tsv`, and `apiKeyList.csv` are reloaded by the running service. `spring-gw-client.xml` is a Spring startup file and requires a `gateway` restart.
 
 ## More Docs
 
 - [Architecture](./docs/architecture.md)
 - [Database](./docs/database.md)
+- [Runtime Overrides](./docs/runtime-overrides.md)
 - [Release Flow](./docs/release-flow.md)
 - [Service Cutover](./docs/service-cutover.md)
 - [Docs Index](./docs/README.md)

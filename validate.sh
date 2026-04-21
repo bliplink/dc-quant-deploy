@@ -6,6 +6,8 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 ENV_FILE="${SCRIPT_DIR}/.env.prod"
 CONTROL_DIR="${SCRIPT_DIR}/control.prod"
 COMPOSE_FILE="${SCRIPT_DIR}/compose.yaml"
+OVERRIDE_FILE="${SCRIPT_DIR}/compose.override.generated.yaml"
+GENERATE_OVERRIDES_SCRIPT="${SCRIPT_DIR}/generate-compose-overrides.sh"
 
 require_command() {
   local cmd="$1"
@@ -95,14 +97,22 @@ require_file "${SCRIPT_DIR}/clickhouse/apply-init.sh"
 require_dir "${SCRIPT_DIR}/clickhouse/init/10-schema"
 require_dir "${SCRIPT_DIR}/clickhouse/init/20-view"
 require_dir "${SCRIPT_DIR}/clickhouse/init/90-optional-seed"
-require_file "${SCRIPT_DIR}/zookeeper.example/conf/zoo.cfg"
-require_file "${SCRIPT_DIR}/zookeeper.example/conf/jaas.conf"
+require_file "${GENERATE_OVERRIDES_SCRIPT}"
 
 if [[ ! -f "${HOME}/.docker/config.json" ]]; then
   echo "docker login not found: ${HOME}/.docker/config.json missing" >&2
   exit 1
 fi
 
-docker compose --env-file "${ENV_FILE}" -f "${COMPOSE_FILE}" config >/dev/null
+bash "${GENERATE_OVERRIDES_SCRIPT}" "${ENV_FILE}" "${OVERRIDE_FILE}"
+docker compose --env-file "${ENV_FILE}" -f "${COMPOSE_FILE}" -f "${OVERRIDE_FILE}" config > "${SCRIPT_DIR}/.compose.config.check.yaml"
+
+if grep -Eq 'source: .*/tpc/zookeeper|source: .*/dc/GW/config' "${SCRIPT_DIR}/.compose.config.check.yaml"; then
+  echo "compose config still contains a deprecated tpc/zookeeper or dc/GW/config mount" >&2
+  rm -f "${SCRIPT_DIR}/.compose.config.check.yaml"
+  exit 1
+fi
+
+rm -f "${SCRIPT_DIR}/.compose.config.check.yaml"
 
 echo "Validation passed."
