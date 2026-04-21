@@ -102,6 +102,7 @@ load_env() {
   : "${DEPLOY_ROOT:?DEPLOY_ROOT is required}"
   : "${RUNTIME_UID:?RUNTIME_UID is required}"
   : "${RUNTIME_GID:?RUNTIME_GID is required}"
+  SERVICE_HOST="${SERVICE_HOST:-127.0.0.1}"
   : "${CLICKHOUSE_MODE:?CLICKHOUSE_MODE is required}"
   : "${CLICKHOUSE_DB_NAME:?CLICKHOUSE_DB_NAME is required}"
   : "${CLICKHOUSE_HOST:?CLICKHOUSE_HOST is required}"
@@ -231,7 +232,7 @@ stop_legacy_service() {
   run_shell "cd '${DEPLOY_ROOT}/scripts' && ./stop '${LEGACY_SERVICE}' || true"
 
   if [[ "${DRY_RUN}" != "true" ]]; then
-    wait_for_port_closed 127.0.0.1 "${SERVICE_PORT}"
+    wait_for_port_closed "${SERVICE_HOST}" "${SERVICE_PORT}"
   fi
 }
 
@@ -257,7 +258,7 @@ validate_container_service() {
     exit 1
   fi
 
-  wait_for_port_open 127.0.0.1 "${SERVICE_PORT}"
+  wait_for_port_open "${SERVICE_HOST}" "${SERVICE_PORT}"
 
   docker logs "${CONTAINER_NAME}" --tail 200
 
@@ -285,6 +286,7 @@ main() {
   echo "Legacy service: ${LEGACY_SERVICE}"
   echo "Container: ${CONTAINER_NAME}"
   echo "Port: ${SERVICE_PORT}"
+  echo "Port check host: ${SERVICE_HOST}"
   echo "Image tag variable: ${IMAGE_VAR}=${!IMAGE_VAR}"
   echo "Docker command will use --no-deps."
 

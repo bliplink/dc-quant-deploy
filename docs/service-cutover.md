@@ -20,6 +20,7 @@ Important defaults:
 - `DEPLOY_ROOT=/data/strategy`
 - `RUNTIME_UID=1000`
 - `RUNTIME_GID=1000`
+- `SERVICE_HOST=14.0.47.20`
 - `CLICKHOUSE_MODE=external`
 - `CLICKHOUSE_HOST=14.0.47.20`
 - `CLICKHOUSE_USERNAME=default`
@@ -37,6 +38,8 @@ Run a dry run before touching the service:
 ```
 
 The dry run must show only the `batchsvr` service target. It must not call the full `deploy.sh`.
+
+`SERVICE_HOST` is the host used by the cutover scripts when checking whether the service port is open or closed. Use the production bind address, not always `127.0.0.1`, because existing DC services may bind directly to the server IP.
 
 ## Docker Prerequisite
 
@@ -83,6 +86,15 @@ Rollback only BatchSvr:
 ```
 
 Rollback stops only the `batchsvr` container and starts only the legacy `BatchSvr`.
+
+## BatchSvr Container Mounts
+
+BatchSvr runs as `1000:1000` in the container to keep host log/data files compatible with legacy rollback. The current BatchSvr image has a root-owned application directory, so Compose mounts these paths directly and prevents the entrypoint from creating symlinks inside the image:
+
+- `${DEPLOY_ROOT}/data -> /srv/dc/dc/BatchSvr/data`
+- `${DEPLOY_ROOT}/log -> /srv/dc/dc/BatchSvr/log`
+
+Keep these BatchSvr-specific mounts until the service image itself owns `/srv/dc/dc/BatchSvr` as the runtime user.
 
 ## ClickHouse Checks
 

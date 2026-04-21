@@ -20,6 +20,7 @@
 - `DEPLOY_ROOT=/data/strategy`
 - `RUNTIME_UID=1000`
 - `RUNTIME_GID=1000`
+- `SERVICE_HOST=14.0.47.20`
 - `CLICKHOUSE_MODE=external`
 - `CLICKHOUSE_HOST=14.0.47.20`
 - `CLICKHOUSE_USERNAME=default`
@@ -37,6 +38,8 @@
 ```
 
 dry run 输出中只能出现 `batchsvr` 目标，不能调用全量 `deploy.sh`。
+
+`SERVICE_HOST` 是切换脚本检查服务端口打开/关闭时使用的主机地址。生产上要使用真实绑定地址，不要固定写死 `127.0.0.1`，因为现有 DC 服务可能直接绑定服务器 IP。
 
 ## Docker 前置安装
 
@@ -83,6 +86,15 @@ systemctl is-active docker
 ```
 
 回滚脚本只会停止 `batchsvr` 容器，并只恢复旧 `BatchSvr`。
+
+## BatchSvr 容器挂载
+
+BatchSvr 容器使用 `1000:1000` 运行，避免容器写出的日志/数据破坏旧脚本回滚。但当前 BatchSvr 镜像里的应用目录是 root-owned，所以 Compose 会直接挂载这些路径，避免入口脚本在镜像目录里创建软链：
+
+- `${DEPLOY_ROOT}/data -> /srv/dc/dc/BatchSvr/data`
+- `${DEPLOY_ROOT}/log -> /srv/dc/dc/BatchSvr/log`
+
+在服务镜像本身把 `/srv/dc/dc/BatchSvr` 调整为运行用户可写之前，保留这两个 BatchSvr 专用挂载。
 
 ## ClickHouse 校验
 

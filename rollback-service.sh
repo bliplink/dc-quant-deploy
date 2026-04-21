@@ -88,6 +88,7 @@ load_env() {
   # shellcheck disable=SC1090
   set -a && . "${ENV_FILE}" && set +a
   : "${DEPLOY_ROOT:?DEPLOY_ROOT is required}"
+  SERVICE_HOST="${SERVICE_HOST:-127.0.0.1}"
 }
 
 compose() {
@@ -124,6 +125,7 @@ main() {
   echo "Rollback target: ${SERVICE}"
   echo "Container: ${CONTAINER_NAME}"
   echo "Legacy service: ${LEGACY_SERVICE}"
+  echo "Port check host: ${SERVICE_HOST}"
 
   run compose stop "${SERVICE}"
 
@@ -135,7 +137,7 @@ main() {
   run_shell "cd '${DEPLOY_ROOT}/scripts' && ./start '${LEGACY_SERVICE}'"
 
   if [[ "${DRY_RUN}" != "true" ]]; then
-    wait_for_port_open 127.0.0.1 "${SERVICE_PORT}"
+    wait_for_port_open "${SERVICE_HOST}" "${SERVICE_PORT}"
     ps -ef | grep "${LEGACY_SERVICE}" | grep -v grep || true
   fi
 
