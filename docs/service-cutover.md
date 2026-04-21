@@ -4,12 +4,16 @@ This document describes the production migration pattern for switching one servi
 
 ## Current First Target
 
-The first supported target is `batchsvr`.
+The first supported targets are `batchsvr` and `simsvr`.
 
 - legacy service: `BatchSvr`
 - container: `dc-batchsvr`
 - port: `30046`
 - image: `ghcr.io/bliplink/batchsvr:${BATCHSVR_TAG}`
+- legacy service: `SIMSvr`
+- container: `dc-simsvr`
+- port: `30045`
+- image: `ghcr.io/SKT-Walter/simsvr:${SIMSVR_TAG}`
 
 ## Production Defaults
 
@@ -35,6 +39,8 @@ Run a dry run before touching the service:
 ```bash
 ./deploy-service.sh batchsvr --dry-run
 ./rollback-service.sh batchsvr --dry-run
+./deploy-service.sh simsvr --dry-run
+./rollback-service.sh simsvr --dry-run
 ```
 
 The dry run must show only the `batchsvr` service target. It must not call the full `deploy.sh`.
@@ -64,17 +70,17 @@ systemctl is-active docker
 
 After adding `dc` to the `docker` group, start a fresh SSH session for the group change to take effect. If the current automation session still cannot access Docker as `dc`, use `newgrp docker` or reconnect before running the cutover script.
 
-## BatchSvr Cutover
+## Service Cutover
 
 1. Copy `.env.prod.batchsvr.example` to `.env.prod` and adjust tags if needed.
 2. Confirm Docker and Compose are ready.
 3. Confirm GHCR login is ready.
-4. Run `./deploy-service.sh batchsvr --dry-run`.
-5. Run `./deploy-service.sh batchsvr`.
-6. Verify `dc-batchsvr` is running.
-7. Verify port `30046` is reachable.
-8. Review `docker logs dc-batchsvr --tail 200`.
-9. Review `/data/strategy/log/BatchSvr.log`.
+4. Run `./deploy-service.sh <service> --dry-run`.
+5. Run `./deploy-service.sh <service>`.
+6. Verify the target container is running.
+7. Verify the target port is reachable.
+8. Review `docker logs <container> --tail 200`.
+9. Review the target service log under `/data/strategy/log/`.
 10. Confirm the other legacy service PIDs did not change.
 
 ## Rollback
@@ -87,14 +93,22 @@ Rollback only BatchSvr:
 
 Rollback stops only the `batchsvr` container and starts only the legacy `BatchSvr`.
 
-## BatchSvr Container Mounts
+## Per-Service Runtime Mounts
 
-BatchSvr runs as `1000:1000` in the container to keep host log/data files compatible with legacy rollback. The current BatchSvr image has a root-owned application directory, so Compose mounts these paths directly and prevents the entrypoint from creating symlinks inside the image:
+Java services run as `1000:1000` in the container to keep host log/data files compatible with legacy rollback. Current service images may have root-owned application directories, so Compose mounts these paths directly and prevents the entrypoint from creating symlinks inside the image:
 
 - `${DEPLOY_ROOT}/data -> /srv/dc/dc/BatchSvr/data`
 - `${DEPLOY_ROOT}/log -> /srv/dc/dc/BatchSvr/log`
+- `${DEPLOY_ROOT}/data -> /srv/dc/dc/SIMSvr/data`
+- `${DEPLOY_ROOT}/log -> /srv/dc/dc/SIMSvr/log`
 
-Keep these BatchSvr-specific mounts until the service image itself owns `/srv/dc/dc/BatchSvr` as the runtime user.
+When a service declares service-specific mounts, keep the common mounts explicit as well:
+
+- `${DEPLOY_ROOT}/control -> /srv/dc/control:ro`
+- `${DEPLOY_ROOT}/data -> /srv/dc/data`
+- `${DEPLOY_ROOT}/log -> /srv/dc/log`
+
+Compose does not merge list values from the YAML anchor; a service-level `volumes` list replaces the base list.
 
 ## ClickHouse Checks
 
@@ -106,6 +120,8 @@ This first production cutover is external-ClickHouse only. `deploy-service.sh ba
 - at least one `dc.strategy_system_daily_report*` table exists
 
 The script does not initialize or mutate production ClickHouse during single-service cutover.
+
+For `simsvr`, `deploy-service.sh simsvr` checks that `strategy_backtest_task` and `backtest_result` exist.
 
 ## Later Order
 

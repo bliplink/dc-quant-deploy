@@ -16,6 +16,7 @@ Usage:
 
 Supported services:
   batchsvr
+  simsvr
 
 This script performs a single-service cutover:
   1. record baseline
@@ -59,6 +60,13 @@ case "${SERVICE}" in
     SERVICE_PORT="30046"
     LOG_FILE="BatchSvr.log"
     IMAGE_VAR="BATCHSVR_TAG"
+    ;;
+  simsvr)
+    LEGACY_SERVICE="SIMSvr"
+    CONTAINER_NAME="dc-simsvr"
+    SERVICE_PORT="30045"
+    LOG_FILE="SIMSvr.log"
+    IMAGE_VAR="SIMSVR_TAG"
     ;;
   *)
     echo "Unsupported service: ${SERVICE}" >&2
@@ -206,21 +214,36 @@ validate_clickhouse_external() {
   echo "Checking external ClickHouse at ${CLICKHOUSE_HOST}:${CLICKHOUSE_HTTP_PORT}/${CLICKHOUSE_DB_NAME}..."
   clickhouse_query "SELECT 1" >/dev/null
 
-  local signal_count report_count
-  signal_count="$(clickhouse_query "SELECT count() FROM system.tables WHERE database='${CLICKHOUSE_DB_NAME}' AND name='signal'")"
-  report_count="$(clickhouse_query "SELECT count() FROM system.tables WHERE database='${CLICKHOUSE_DB_NAME}' AND name LIKE 'strategy_system_daily_report%'")"
+  case "${SERVICE}" in
+    batchsvr)
+      local signal_count report_count
+      signal_count="$(clickhouse_query "SELECT count() FROM system.tables WHERE database='${CLICKHOUSE_DB_NAME}' AND name='signal'")"
+      report_count="$(clickhouse_query "SELECT count() FROM system.tables WHERE database='${CLICKHOUSE_DB_NAME}' AND name LIKE 'strategy_system_daily_report%'")"
 
-  if [[ "${signal_count}" -lt 1 ]]; then
-    echo "Missing required ClickHouse table: ${CLICKHOUSE_DB_NAME}.signal" >&2
-    exit 1
-  fi
+      if [[ "${signal_count}" -lt 1 ]]; then
+        echo "Missing required ClickHouse table: ${CLICKHOUSE_DB_NAME}.signal" >&2
+        exit 1
+      fi
 
-  if [[ "${report_count}" -lt 1 ]]; then
-    echo "Missing required ClickHouse report tables: ${CLICKHOUSE_DB_NAME}.strategy_system_daily_report*" >&2
-    exit 1
-  fi
+      if [[ "${report_count}" -lt 1 ]]; then
+        echo "Missing required ClickHouse report tables: ${CLICKHOUSE_DB_NAME}.strategy_system_daily_report*" >&2
+        exit 1
+      fi
 
-  echo "External ClickHouse connectivity and BatchSvr schema check passed."
+      echo "External ClickHouse connectivity and BatchSvr schema check passed."
+      ;;
+    simsvr)
+      local backtest_table_count
+      backtest_table_count="$(clickhouse_query "SELECT count() FROM system.tables WHERE database='${CLICKHOUSE_DB_NAME}' AND name IN ('strategy_backtest_task','backtest_result')")"
+
+      if [[ "${backtest_table_count}" -lt 2 ]]; then
+        echo "Missing required ClickHouse tables for SIMSvr: ${CLICKHOUSE_DB_NAME}.strategy_backtest_task and/or ${CLICKHOUSE_DB_NAME}.backtest_result" >&2
+        exit 1
+      fi
+
+      echo "External ClickHouse connectivity and SIMSvr schema check passed."
+      ;;
+  esac
 }
 
 stop_legacy_service() {

@@ -127,6 +127,12 @@ services:
     <<: *java-service-base
     image: ghcr.io/SKT-Walter/simsvr:${SIMSVR_TAG}
     container_name: dc-simsvr
+    volumes:
+      - ${DEPLOY_ROOT}/control:/srv/dc/control:ro
+      - ${DEPLOY_ROOT}/data:/srv/dc/data
+      - ${DEPLOY_ROOT}/log:/srv/dc/log
+      - ${DEPLOY_ROOT}/data:/srv/dc/dc/SIMSvr/data
+      - ${DEPLOY_ROOT}/log:/srv/dc/dc/SIMSvr/log
     depends_on:
       zookeeper:
         condition: service_started

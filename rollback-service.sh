@@ -15,6 +15,7 @@ Usage:
 
 Supported services:
   batchsvr
+  simsvr
 
 This script rolls back one service:
   1. stop only the target container
@@ -54,6 +55,11 @@ case "${SERVICE}" in
     LEGACY_SERVICE="BatchSvr"
     CONTAINER_NAME="dc-batchsvr"
     SERVICE_PORT="30046"
+    ;;
+  simsvr)
+    LEGACY_SERVICE="SIMSvr"
+    CONTAINER_NAME="dc-simsvr"
+    SERVICE_PORT="30045"
     ;;
   *)
     echo "Unsupported service: ${SERVICE}" >&2

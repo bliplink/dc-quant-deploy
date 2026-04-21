@@ -4,12 +4,16 @@
 
 ## 当前第一批目标
 
-第一批只支持 `batchsvr`。
+第一批支持 `batchsvr` 和 `simsvr`。
 
 - 旧服务：`BatchSvr`
 - 容器：`dc-batchsvr`
 - 端口：`30046`
 - 镜像：`ghcr.io/bliplink/batchsvr:${BATCHSVR_TAG}`
+- 旧服务：`SIMSvr`
+- 容器：`dc-simsvr`
+- 端口：`30045`
+- 镜像：`ghcr.io/SKT-Walter/simsvr:${SIMSVR_TAG}`
 
 ## 生产默认值
 
@@ -35,6 +39,8 @@
 ```bash
 ./deploy-service.sh batchsvr --dry-run
 ./rollback-service.sh batchsvr --dry-run
+./deploy-service.sh simsvr --dry-run
+./rollback-service.sh simsvr --dry-run
 ```
 
 dry run 输出中只能出现 `batchsvr` 目标，不能调用全量 `deploy.sh`。
@@ -64,17 +70,17 @@ systemctl is-active docker
 
 把 `dc` 加入 `docker` 组之后，需要重新登录一次 SSH，让组权限生效。如果当前自动化会话仍然不能用 `dc` 访问 Docker，就先 `newgrp docker` 或重新连接后再执行切换脚本。
 
-## BatchSvr 切换流程
+## 服务切换流程
 
 1. 将 `.env.prod.batchsvr.example` 复制为 `.env.prod`，必要时调整 tag。
 2. 确认 Docker 与 Compose 可用。
 3. 确认 GHCR 登录可用。
-4. 执行 `./deploy-service.sh batchsvr --dry-run`。
-5. 执行 `./deploy-service.sh batchsvr`。
-6. 确认 `dc-batchsvr` 正在运行。
-7. 确认端口 `30046` 可达。
-8. 检查 `docker logs dc-batchsvr --tail 200`。
-9. 检查 `/data/strategy/log/BatchSvr.log`。
+4. 执行 `./deploy-service.sh <service> --dry-run`。
+5. 执行 `./deploy-service.sh <service>`。
+6. 确认目标容器正在运行。
+7. 确认目标端口可达。
+8. 检查 `docker logs <container> --tail 200`。
+9. 检查 `/data/strategy/log/` 下对应服务日志。
 10. 确认其它旧服务 PID 没有变化。
 
 ## 回滚
@@ -87,14 +93,22 @@ systemctl is-active docker
 
 回滚脚本只会停止 `batchsvr` 容器，并只恢复旧 `BatchSvr`。
 
-## BatchSvr 容器挂载
+## 单服务运行挂载
 
-BatchSvr 容器使用 `1000:1000` 运行，避免容器写出的日志/数据破坏旧脚本回滚。但当前 BatchSvr 镜像里的应用目录是 root-owned，所以 Compose 会直接挂载这些路径，避免入口脚本在镜像目录里创建软链：
+Java 服务容器使用 `1000:1000` 运行，避免容器写出的日志/数据破坏旧脚本回滚。但当前部分服务镜像里的应用目录是 root-owned，所以 Compose 会直接挂载这些路径，避免入口脚本在镜像目录里创建软链：
 
 - `${DEPLOY_ROOT}/data -> /srv/dc/dc/BatchSvr/data`
 - `${DEPLOY_ROOT}/log -> /srv/dc/dc/BatchSvr/log`
+- `${DEPLOY_ROOT}/data -> /srv/dc/dc/SIMSvr/data`
+- `${DEPLOY_ROOT}/log -> /srv/dc/dc/SIMSvr/log`
 
-在服务镜像本身把 `/srv/dc/dc/BatchSvr` 调整为运行用户可写之前，保留这两个 BatchSvr 专用挂载。
+一旦某个服务单独声明 `volumes`，也要显式保留公共挂载：
+
+- `${DEPLOY_ROOT}/control -> /srv/dc/control:ro`
+- `${DEPLOY_ROOT}/data -> /srv/dc/data`
+- `${DEPLOY_ROOT}/log -> /srv/dc/log`
+
+原因是 Compose 不会合并 YAML anchor 里的列表；服务级 `volumes` 会替换基础模板里的 `volumes`。
 
 ## ClickHouse 校验
 
@@ -106,6 +120,8 @@ BatchSvr 容器使用 `1000:1000` 运行，避免容器写出的日志/数据破
 - 至少存在一张 `dc.strategy_system_daily_report*` 表
 
 单服务切换脚本不会初始化或修改生产 ClickHouse。
+
+对于 `simsvr`，`deploy-service.sh simsvr` 会校验 `strategy_backtest_task` 和 `backtest_result` 两张表存在。
 
 ## 后续顺序
 
