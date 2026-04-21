@@ -81,12 +81,17 @@ load_env() {
 validate_ghcr_login() {
   local docker_config
   docker_config="${HOME}/.docker/config.json"
-  check_file "${docker_config}"
-  grep -q "ghcr.io" "${docker_config}" || {
+  if [ -f "${docker_config}" ] && grep -q "ghcr.io" "${docker_config}"; then
+    return 0
+  fi
+
+  if [[ "${REQUIRE_GHCR_LOGIN:-false}" == "true" ]]; then
     echo "GHCR login not found in ${docker_config}" >&2
     echo "Run: docker login ghcr.io" >&2
     exit 1
-  }
+  fi
+
+  echo "Warning: GHCR login not found in ${docker_config}; continuing because REQUIRE_GHCR_LOGIN is not true." >&2
 }
 
 validate_control_prod() {

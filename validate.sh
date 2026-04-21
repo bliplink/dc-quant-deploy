@@ -100,8 +100,17 @@ require_dir "${SCRIPT_DIR}/clickhouse/init/90-optional-seed"
 require_file "${GENERATE_OVERRIDES_SCRIPT}"
 
 if [[ ! -f "${HOME}/.docker/config.json" ]]; then
-  echo "docker login not found: ${HOME}/.docker/config.json missing" >&2
-  exit 1
+  if [[ "${REQUIRE_GHCR_LOGIN:-false}" == "true" ]]; then
+    echo "docker login not found: ${HOME}/.docker/config.json missing" >&2
+    exit 1
+  fi
+  echo "Warning: docker login not found: ${HOME}/.docker/config.json missing; continuing because REQUIRE_GHCR_LOGIN is not true." >&2
+elif ! grep -q "ghcr.io" "${HOME}/.docker/config.json"; then
+  if [[ "${REQUIRE_GHCR_LOGIN:-false}" == "true" ]]; then
+    echo "GHCR login not found in ${HOME}/.docker/config.json" >&2
+    exit 1
+  fi
+  echo "Warning: GHCR login not found in ${HOME}/.docker/config.json; continuing because REQUIRE_GHCR_LOGIN is not true." >&2
 fi
 
 bash "${GENERATE_OVERRIDES_SCRIPT}" "${ENV_FILE}" "${OVERRIDE_FILE}"

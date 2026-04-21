@@ -74,6 +74,7 @@ Set these values in `.env.prod`:
 - `CLICKHOUSE_HTTP_PORT`
 - `CLICKHOUSE_USERNAME`
 - `CLICKHOUSE_PASSWORD`
+- `REQUIRE_GHCR_LOGIN=true` only if your GHCR images are private or your environment requires authenticated pulls.
 
 The deployment script will:
 
