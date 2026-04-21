@@ -104,6 +104,7 @@ services:
       - ${DEPLOY_ROOT}/control:/srv/dc/control:ro
       - ${DEPLOY_ROOT}/data:/srv/dc/data
       - ${DEPLOY_ROOT}/log:/srv/dc/log
+      - ${DEPLOY_ROOT}/log:/srv/dc/logs
       - ${DEPLOY_ROOT}/data/java-prefs/APSSvr:/srv/dc/.java
       - ${DEPLOY_ROOT}/data:/srv/dc/dc/APSSvr/data
       - ${DEPLOY_ROOT}/log:/srv/dc/dc/APSSvr/log
