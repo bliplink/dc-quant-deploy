@@ -50,7 +50,7 @@ services:
     volumes:
       - ${DEPLOY_ROOT}/tpc/zookeeper/conf/zoo.cfg:/opt/zookeeper/conf/zoo.cfg:ro
       - ${DEPLOY_ROOT}/tpc/zookeeper/conf/jaas.conf:/opt/zookeeper/conf/jaas.conf:ro
-      - ${DEPLOY_ROOT}/scripts/data:/opt/zookeeper/data
+      - ${DEPLOY_ROOT}/tpc/zookeeper/data:/opt/zookeeper/data
       - ${DEPLOY_ROOT}/log:/opt/zookeeper/runtime/log
 
   gateway:
