@@ -62,6 +62,7 @@ services:
       - ${DEPLOY_ROOT}/data:/srv/dc/data
       - ${DEPLOY_ROOT}/log:/srv/dc/log
       - ${DEPLOY_ROOT}/dc/GW/config:/srv/dc/dc/GW/config:ro
+      - ${DEPLOY_ROOT}/data/java-prefs/GW:/srv/dc/.java
       - ${DEPLOY_ROOT}/data:/srv/dc/dc/GW/data
       - ${DEPLOY_ROOT}/log:/srv/dc/dc/GW/log
     depends_on:
@@ -82,6 +83,7 @@ services:
       - ${DEPLOY_ROOT}/control:/srv/dc/control:ro
       - ${DEPLOY_ROOT}/data:/srv/dc/data
       - ${DEPLOY_ROOT}/log:/srv/dc/log
+      - ${DEPLOY_ROOT}/data/java-prefs/MDSvr:/srv/dc/.java
       - ${DEPLOY_ROOT}/data:/srv/dc/dc/MDSvr/data
       - ${DEPLOY_ROOT}/log:/srv/dc/dc/MDSvr/log
     depends_on:
@@ -102,6 +104,7 @@ services:
       - ${DEPLOY_ROOT}/control:/srv/dc/control:ro
       - ${DEPLOY_ROOT}/data:/srv/dc/data
       - ${DEPLOY_ROOT}/log:/srv/dc/log
+      - ${DEPLOY_ROOT}/data/java-prefs/APSSvr:/srv/dc/.java
       - ${DEPLOY_ROOT}/data:/srv/dc/dc/APSSvr/data
       - ${DEPLOY_ROOT}/log:/srv/dc/dc/APSSvr/log
     depends_on:
@@ -122,6 +125,7 @@ services:
       - ${DEPLOY_ROOT}/control:/srv/dc/control:ro
       - ${DEPLOY_ROOT}/data:/srv/dc/data
       - ${DEPLOY_ROOT}/log:/srv/dc/log
+      - ${DEPLOY_ROOT}/data/java-prefs/QuantSvr:/srv/dc/.java
       - ${DEPLOY_ROOT}/data:/srv/dc/dc/QuantSvr/data
       - ${DEPLOY_ROOT}/log:/srv/dc/dc/QuantSvr/log
     depends_on:
@@ -142,6 +146,7 @@ services:
       - ${DEPLOY_ROOT}/control:/srv/dc/control:ro
       - ${DEPLOY_ROOT}/data:/srv/dc/data
       - ${DEPLOY_ROOT}/log:/srv/dc/log
+      - ${DEPLOY_ROOT}/data/java-prefs/INDSvr:/srv/dc/.java
       - ${DEPLOY_ROOT}/data:/srv/dc/dc/INDSvr/data
       - ${DEPLOY_ROOT}/log:/srv/dc/dc/INDSvr/log
     depends_on:
@@ -162,6 +167,7 @@ services:
       - ${DEPLOY_ROOT}/control:/srv/dc/control:ro
       - ${DEPLOY_ROOT}/data:/srv/dc/data
       - ${DEPLOY_ROOT}/log:/srv/dc/log
+      - ${DEPLOY_ROOT}/data/java-prefs/SIMSvr:/srv/dc/.java
       - ${DEPLOY_ROOT}/data:/srv/dc/dc/SIMSvr/data
       - ${DEPLOY_ROOT}/log:/srv/dc/dc/SIMSvr/log
     depends_on:
@@ -182,6 +188,7 @@ services:
       - ${DEPLOY_ROOT}/control:/srv/dc/control:ro
       - ${DEPLOY_ROOT}/data:/srv/dc/data
       - ${DEPLOY_ROOT}/log:/srv/dc/log
+      - ${DEPLOY_ROOT}/data/java-prefs/BatchSvr:/srv/dc/.java
       - ${DEPLOY_ROOT}/data:/srv/dc/dc/BatchSvr/data
       - ${DEPLOY_ROOT}/log:/srv/dc/dc/BatchSvr/log
     depends_on:
