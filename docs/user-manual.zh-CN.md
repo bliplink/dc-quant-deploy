@@ -93,7 +93,7 @@ cd dc-quant-deploy
 复制示例文件：
 
 ```bash
-cp .env.example .env.prod
+cp .env.standalone.example .env.prod
 cp -a control.prod.example control.prod
 ```
 
@@ -194,19 +194,21 @@ CLICKHOUSE_PASSWORD=<your-password>
 
 ## 8. 一键部署
 
-部署前先校验：
+仓库提供两种一键部署入口。
+
+新机器、没有 ClickHouse 时：
 
 ```bash
-./validate.sh
+./deploy-standalone.sh
 ```
 
-确认无误后执行：
+已有 ClickHouse 时：
 
 ```bash
-./deploy.sh
+./deploy-with-external-clickhouse.sh
 ```
 
-部署流程会自动完成：
+两个入口都会自动完成：
 
 - 校验 Docker、Compose、配置文件。
 - 创建 `${DEPLOY_ROOT}/control`、`${DEPLOY_ROOT}/data`、`${DEPLOY_ROOT}/log`。
@@ -218,6 +220,8 @@ CLICKHOUSE_PASSWORD=<your-password>
 - 按模式启动或连接 ClickHouse。
 - 启动 Java 服务和 web。
 - 校验端口与基础运行状态。
+
+底层仍然保留 `deploy.sh`，但普通用户建议优先使用这两个模式明确的一键入口。
 
 ## 9. 验证系统
 
@@ -512,15 +516,14 @@ ls -la ${DEPLOY_ROOT}/log
 ```bash
 git clone https://github.com/bliplink/dc-quant-deploy.git
 cd dc-quant-deploy
-cp .env.example .env.prod
+cp .env.standalone.example .env.prod
 cp -a control.prod.example control.prod
 vi .env.prod
 vi control.prod/ATSConfig.ini
 vi control.prod/DBPoolConfig.ini
 vi control.prod/jaas.ini
 cp /path/to/dc.dat control.prod/dc.dat
-./validate.sh
-./deploy.sh
+./deploy-standalone.sh
 docker compose --env-file .env.prod -f compose.yaml -f compose.override.generated.yaml ps
 ```
 

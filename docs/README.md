@@ -8,6 +8,7 @@ Language:
 ## English
 
 - [User Manual](./user-manual.md)
+- [Deployment Modes](./deployment-modes.md)
 - [Architecture](./architecture.md)
 - [Database](./database.md)
 - [Runtime Overrides](./runtime-overrides.md)
@@ -18,6 +19,7 @@ Language:
 ## Chinese
 
 - [用户手册](./user-manual.zh-CN.md)
+- [两种一键部署模式](./deployment-modes.zh-CN.md)
 - [架构说明](./architecture.zh-CN.md)
 - [数据库说明](./database.zh-CN.md)
 - [运行时可选覆盖配置](./runtime-overrides.zh-CN.md)

@@ -41,15 +41,27 @@ Minimal path:
 ```bash
 git clone https://github.com/bliplink/dc-quant-deploy.git
 cd dc-quant-deploy
-cp .env.example .env.prod
+cp .env.standalone.example .env.prod
 cp -a control.prod.example control.prod
 vi .env.prod
 vi control.prod/ATSConfig.ini
 vi control.prod/DBPoolConfig.ini
 vi control.prod/jaas.ini
 cp /path/to/dc.dat control.prod/dc.dat
-./validate.sh
-./deploy.sh
+./deploy-standalone.sh
+```
+
+If ClickHouse already exists, use:
+
+```bash
+cp .env.external-clickhouse.example .env.prod
+cp -a control.prod.example control.prod
+vi .env.prod
+vi control.prod/ATSConfig.ini
+vi control.prod/DBPoolConfig.ini
+vi control.prod/jaas.ini
+cp /path/to/dc.dat control.prod/dc.dat
+./deploy-with-external-clickhouse.sh
 ```
 
 Check status after deployment:
@@ -62,7 +74,11 @@ docker compose --env-file .env.prod -f compose.yaml -f compose.override.generate
 
 - [compose.yaml](./compose.yaml): main deployment topology.
 - [.env.example](./.env.example): public deployment variables template.
+- [.env.standalone.example](./.env.standalone.example): template for a new server with embedded ClickHouse.
+- [.env.external-clickhouse.example](./.env.external-clickhouse.example): template for an existing ClickHouse deployment.
 - [deploy.sh](./deploy.sh): one-command deployment entry.
+- [deploy-standalone.sh](./deploy-standalone.sh): one-command deployment from scratch, including ClickHouse.
+- [deploy-with-external-clickhouse.sh](./deploy-with-external-clickhouse.sh): one-command deployment with an existing ClickHouse.
 - [validate.sh](./validate.sh): preflight validation.
 - [rollback.sh](./rollback.sh): full rollback entry.
 - [deploy-service.sh](./deploy-service.sh): one-service cutover entry.
@@ -72,6 +88,7 @@ docker compose --env-file .env.prod -f compose.yaml -f compose.override.generate
 - [control.prod.example](./control.prod.example): sanitized example control files.
 - [clickhouse](./clickhouse): ClickHouse bootstrap SQL and helper scripts.
 - [docs/user-manual.md](./docs/user-manual.md): full installation and operations manual.
+- [docs/deployment-modes.md](./docs/deployment-modes.md): standalone vs existing-ClickHouse deployment modes.
 - [docs/architecture.md](./docs/architecture.md): service and image map.
 - [docs/database.md](./docs/database.md): ClickHouse initialization contract.
 - [docs/runtime-overrides.md](./docs/runtime-overrides.md): optional config overrides and log level changes.
@@ -83,9 +100,9 @@ docker compose --env-file .env.prod -f compose.yaml -f compose.override.generate
 The repository supports two ClickHouse modes.
 
 1. `embedded`
-   Use this when you do not already have ClickHouse. `deploy.sh` starts the ClickHouse container and runs initialization scripts.
+   Use this when you do not already have ClickHouse. Run `./deploy-standalone.sh`.
 2. `external`
-   Use this when ClickHouse already exists. The deployment script does not start or mutate ClickHouse; initialize it yourself.
+   Use this when ClickHouse already exists. Run `./deploy-with-external-clickhouse.sh`.
 
 Configure `.env.prod`:
 
@@ -107,6 +124,8 @@ For external ClickHouse, initialize manually when needed:
 ```
 
 Default initialization creates the database, tables, and views. Optional seed scripts are not executed automatically.
+
+`deploy.sh` remains the shared lower-level entry. The two mode-specific scripts set the safe `CLICKHOUSE_MODE` value, back up `.env.prod`, and then call `deploy.sh`.
 
 ## Images
 
@@ -198,6 +217,7 @@ After adding a new override file, restart the target service once:
 ## Documentation
 
 - [User Manual](./docs/user-manual.md)
+- [Deployment Modes](./docs/deployment-modes.md)
 - [Architecture](./docs/architecture.md)
 - [Database](./docs/database.md)
 - [Runtime Overrides](./docs/runtime-overrides.md)

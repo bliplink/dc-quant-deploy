@@ -32,25 +32,47 @@
 
 这个仓库不包含真实生产密钥，也不包含真实生产 `control.prod/`。
 
-## 快速开始
+## 两种一键部署
 
-完整安装、验证和运维说明请先阅读：[用户手册](./docs/user-manual.zh-CN.md)。
+### 1. 从无到有部署
 
-最短路径：
+适用于新机器、没有现成 ClickHouse 的场景：
 
 ```bash
 git clone https://github.com/bliplink/dc-quant-deploy.git
 cd dc-quant-deploy
-cp .env.example .env.prod
+cp .env.standalone.example .env.prod
 cp -a control.prod.example control.prod
 vi .env.prod
 vi control.prod/ATSConfig.ini
 vi control.prod/DBPoolConfig.ini
 vi control.prod/jaas.ini
 cp /path/to/dc.dat control.prod/dc.dat
-./validate.sh
-./deploy.sh
+./deploy-standalone.sh
 ```
+
+这个入口会启动 `dc-clickhouse` 容器并自动初始化数据库。
+
+### 2. 已有 ClickHouse 后部署
+
+适用于生产机已有 ClickHouse、不做数据迁移的场景：
+
+```bash
+git clone https://github.com/bliplink/dc-quant-deploy.git
+cd dc-quant-deploy
+cp .env.external-clickhouse.example .env.prod
+cp -a control.prod.example control.prod
+vi .env.prod
+vi control.prod/ATSConfig.ini
+vi control.prod/DBPoolConfig.ini
+vi control.prod/jaas.ini
+cp /path/to/dc.dat control.prod/dc.dat
+./deploy-with-external-clickhouse.sh
+```
+
+这个入口不会启动 `dc-clickhouse`，也不会自动修改现有 ClickHouse。
+
+详细说明见：[两种一键部署模式](./docs/deployment-modes.zh-CN.md)。
 
 部署后查看状态：
 
@@ -61,8 +83,12 @@ docker compose --env-file .env.prod -f compose.yaml -f compose.override.generate
 ## 仓库结构
 
 - [compose.yaml](./compose.yaml)：主部署拓扑。
-- [.env.example](./.env.example)：公开部署变量模板。
-- [deploy.sh](./deploy.sh)：一键部署入口。
+- [.env.example](./.env.example)：通用部署变量模板。
+- [.env.standalone.example](./.env.standalone.example)：从无到有部署模板。
+- [.env.external-clickhouse.example](./.env.external-clickhouse.example)：已有 ClickHouse 部署模板。
+- [deploy.sh](./deploy.sh)：底层统一部署入口。
+- [deploy-standalone.sh](./deploy-standalone.sh)：从无到有一键部署。
+- [deploy-with-external-clickhouse.sh](./deploy-with-external-clickhouse.sh)：已有 ClickHouse 后一键部署。
 - [validate.sh](./validate.sh)：部署前校验。
 - [rollback.sh](./rollback.sh)：全量回滚入口。
 - [deploy-service.sh](./deploy-service.sh)：逐服务切换入口。
@@ -71,35 +97,13 @@ docker compose --env-file .env.prod -f compose.yaml -f compose.override.generate
 - [control.template](./control.template)：占位符版控制模板。
 - [control.prod.example](./control.prod.example)：脱敏示例控制文件。
 - [clickhouse](./clickhouse)：ClickHouse 初始化 SQL 与辅助脚本。
-- [docs/user-manual.zh-CN.md](./docs/user-manual.zh-CN.md)：完整用户手册。
-- [docs/architecture.zh-CN.md](./docs/architecture.zh-CN.md)：架构说明。
-- [docs/database.zh-CN.md](./docs/database.zh-CN.md)：数据库说明。
-- [docs/runtime-overrides.zh-CN.md](./docs/runtime-overrides.zh-CN.md)：运行时可选覆盖配置。
-- [docs/release-flow.zh-CN.md](./docs/release-flow.zh-CN.md)：发布流程。
-- [docs/codex-dev-release.zh-CN.md](./docs/codex-dev-release.zh-CN.md)：Codex 开发、发布与自动部署协作手册。
-- [docs/service-cutover.zh-CN.md](./docs/service-cutover.zh-CN.md)：逐服务切换。
 
 ## ClickHouse 模式
 
-仓库支持两种 ClickHouse 模式。
+仓库支持两种 ClickHouse 模式：
 
-1. `embedded`
-   用户没有现成 ClickHouse 时，`deploy.sh` 会启动 ClickHouse 容器，并自动执行初始化脚本。
-2. `external`
-   用户已有 ClickHouse 时，部署脚本不会启动 ClickHouse，也不会自动改库；用户自行初始化。
-
-配置入口在 `.env.prod`：
-
-```dotenv
-CLICKHOUSE_MODE=embedded
-CLICKHOUSE_IMAGE_TAG=25.9.3.48
-CLICKHOUSE_DB_NAME=dc
-CLICKHOUSE_HOST=127.0.0.1
-CLICKHOUSE_HTTP_PORT=8123
-CLICKHOUSE_NATIVE_PORT=9000
-CLICKHOUSE_USERNAME=default
-CLICKHOUSE_PASSWORD=
-```
+- `embedded`：没有现成 ClickHouse，使用 `./deploy-standalone.sh`。
+- `external`：已有 ClickHouse，使用 `./deploy-with-external-clickhouse.sh`。
 
 如果使用外置 ClickHouse，可以手动执行初始化：
 
@@ -173,32 +177,10 @@ docker logs dc-apssvr --tail 200
 tail -n 100 ${DEPLOY_ROOT}/log/APSSvr.log
 ```
 
-## 运行时可选覆盖配置
-
-默认使用镜像内置配置。只有当宿主机 `${DEPLOY_ROOT}/control/overrides` 下存在指定文件时，部署脚本才会生成单文件挂载。
-
-支持的覆盖文件：
-
-- `GW/config/mcpTools.tsv`
-- `GW/config/apiKeyList.csv`
-- `GW/config/spring-gw-client.xml`
-- `GW/config/log4j.ini`
-- `MDSvr/config/log4j.ini`
-- `APSSvr/config/log4j.ini`
-- `QuantSvr/config/log4j.ini`
-- `INDSvr/config/log4j.ini`
-- `SIMSvr/config/log4j.ini`
-- `BatchSvr/config/log4j.ini`
-
-新增覆盖文件后，重启对应服务一次：
-
-```bash
-./restart-service.sh apssvr
-```
-
 ## 文档
 
 - [用户手册](./docs/user-manual.zh-CN.md)
+- [两种一键部署模式](./docs/deployment-modes.zh-CN.md)
 - [架构说明](./docs/architecture.zh-CN.md)
 - [数据库说明](./docs/database.zh-CN.md)
 - [运行时可选覆盖配置](./docs/runtime-overrides.zh-CN.md)

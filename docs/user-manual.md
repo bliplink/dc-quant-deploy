@@ -88,7 +88,7 @@ The runtime root is controlled by `DEPLOY_ROOT`. After initialization it should 
 ## 5. Prepare Configuration
 
 ```bash
-cp .env.example .env.prod
+cp .env.standalone.example .env.prod
 cp -a control.prod.example control.prod
 ```
 
@@ -184,19 +184,23 @@ The deployment script will not start or mutate ClickHouse. Initialize manually w
 
 ## 8. One-Command Deployment
 
-Validate first:
+There are two one-command entries.
+
+For a new server without ClickHouse:
 
 ```bash
-./validate.sh
+./deploy-standalone.sh
 ```
 
-Deploy:
+For a server that already has ClickHouse:
 
 ```bash
-./deploy.sh
+./deploy-with-external-clickhouse.sh
 ```
 
-The script validates inputs, prepares runtime directories, syncs `control.prod/`, generates optional override mounts, pulls images, starts ZooKeeper, handles ClickHouse according to `CLICKHOUSE_MODE`, starts the services, and validates ports.
+Both scripts validate inputs, prepare runtime directories, sync `control.prod/`, generate optional override mounts, pull images, start ZooKeeper, handle ClickHouse according to the selected mode, start the services, and validate ports.
+
+The lower-level `deploy.sh` still exists, but normal users should prefer the mode-specific scripts.
 
 ## 9. Verify The Stack
 
@@ -307,14 +311,13 @@ Example: restart APSSvr daily at `00:05`:
 ```bash
 git clone https://github.com/bliplink/dc-quant-deploy.git
 cd dc-quant-deploy
-cp .env.example .env.prod
+cp .env.standalone.example .env.prod
 cp -a control.prod.example control.prod
 vi .env.prod
 vi control.prod/ATSConfig.ini
 vi control.prod/DBPoolConfig.ini
 vi control.prod/jaas.ini
 cp /path/to/dc.dat control.prod/dc.dat
-./validate.sh
-./deploy.sh
+./deploy-standalone.sh
 docker compose --env-file .env.prod -f compose.yaml -f compose.override.generated.yaml ps
 ```
