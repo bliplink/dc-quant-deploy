@@ -15,6 +15,11 @@ Usage:
   ./deploy-service.sh <service> [--dry-run]
 
 Supported services:
+  gateway
+  mdsvr
+  apssvr
+  quantsvr
+  indsvr
   batchsvr
   simsvr
 
@@ -54,6 +59,41 @@ if [[ -z "${SERVICE}" ]]; then
 fi
 
 case "${SERVICE}" in
+  gateway)
+    LEGACY_SERVICE="GW"
+    CONTAINER_NAME="dc-gateway"
+    SERVICE_PORT="3000"
+    LOG_FILE="GW.log"
+    IMAGE_VAR="GW_TAG"
+    ;;
+  mdsvr)
+    LEGACY_SERVICE="MDSvr"
+    CONTAINER_NAME="dc-mdsvr"
+    SERVICE_PORT="30028"
+    LOG_FILE="MDSvr.log"
+    IMAGE_VAR="MDSVR_TAG"
+    ;;
+  apssvr)
+    LEGACY_SERVICE="APSSvr"
+    CONTAINER_NAME="dc-apssvr"
+    SERVICE_PORT="30035"
+    LOG_FILE="APSSvr.log"
+    IMAGE_VAR="APSSVR_TAG"
+    ;;
+  quantsvr)
+    LEGACY_SERVICE="QuantSvr"
+    CONTAINER_NAME="dc-quantsvr"
+    SERVICE_PORT="30042"
+    LOG_FILE="QuantSvr.log"
+    IMAGE_VAR="QUANTSVR_TAG"
+    ;;
+  indsvr)
+    LEGACY_SERVICE="INDSvr"
+    CONTAINER_NAME="dc-indsvr"
+    SERVICE_PORT="30044"
+    LOG_FILE="INDSvr.log"
+    IMAGE_VAR="INDSVR_TAG"
+    ;;
   batchsvr)
     LEGACY_SERVICE="BatchSvr"
     CONTAINER_NAME="dc-batchsvr"
@@ -242,6 +282,31 @@ validate_clickhouse_external() {
       fi
 
       echo "External ClickHouse connectivity and SIMSvr schema check passed."
+      ;;
+    indsvr)
+      local generation_table_count
+      generation_table_count="$(clickhouse_query "SELECT count() FROM system.tables WHERE database='${CLICKHOUSE_DB_NAME}' AND name IN ('strategy_generation_task','strategy_candidate')")"
+
+      if [[ "${generation_table_count}" -lt 2 ]]; then
+        echo "Missing required ClickHouse tables for INDSvr: ${CLICKHOUSE_DB_NAME}.strategy_generation_task and/or ${CLICKHOUSE_DB_NAME}.strategy_candidate" >&2
+        exit 1
+      fi
+
+      echo "External ClickHouse connectivity and INDSvr schema check passed."
+      ;;
+    quantsvr)
+      local runtime_table_count
+      runtime_table_count="$(clickhouse_query "SELECT count() FROM system.tables WHERE database='${CLICKHOUSE_DB_NAME}' AND name IN ('signal','quant_order','strategy_live_registry')")"
+
+      if [[ "${runtime_table_count}" -lt 3 ]]; then
+        echo "Missing required ClickHouse tables for QuantSvr: ${CLICKHOUSE_DB_NAME}.signal, ${CLICKHOUSE_DB_NAME}.quant_order and/or ${CLICKHOUSE_DB_NAME}.strategy_live_registry" >&2
+        exit 1
+      fi
+
+      echo "External ClickHouse connectivity and QuantSvr schema check passed."
+      ;;
+    gateway|mdsvr|apssvr)
+      echo "External ClickHouse connectivity check passed for ${LEGACY_SERVICE}."
       ;;
   esac
 }

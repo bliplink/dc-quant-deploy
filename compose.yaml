@@ -57,6 +57,12 @@ services:
     <<: *java-service-base
     image: ghcr.io/bliplink/gw:${GW_TAG}
     container_name: dc-gateway
+    volumes:
+      - ${DEPLOY_ROOT}/control:/srv/dc/control:ro
+      - ${DEPLOY_ROOT}/data:/srv/dc/data
+      - ${DEPLOY_ROOT}/log:/srv/dc/log
+      - ${DEPLOY_ROOT}/data:/srv/dc/dc/GW/data
+      - ${DEPLOY_ROOT}/log:/srv/dc/dc/GW/log
     depends_on:
       zookeeper:
         condition: service_started
@@ -71,6 +77,12 @@ services:
     <<: *java-service-base
     image: ghcr.io/bliplink/mdsvr:${MDSVR_TAG}
     container_name: dc-mdsvr
+    volumes:
+      - ${DEPLOY_ROOT}/control:/srv/dc/control:ro
+      - ${DEPLOY_ROOT}/data:/srv/dc/data
+      - ${DEPLOY_ROOT}/log:/srv/dc/log
+      - ${DEPLOY_ROOT}/data:/srv/dc/dc/MDSvr/data
+      - ${DEPLOY_ROOT}/log:/srv/dc/dc/MDSvr/log
     depends_on:
       zookeeper:
         condition: service_started
@@ -85,6 +97,12 @@ services:
     <<: *java-service-base
     image: ghcr.io/bliplink/apssvr:${APSSVR_TAG}
     container_name: dc-apssvr
+    volumes:
+      - ${DEPLOY_ROOT}/control:/srv/dc/control:ro
+      - ${DEPLOY_ROOT}/data:/srv/dc/data
+      - ${DEPLOY_ROOT}/log:/srv/dc/log
+      - ${DEPLOY_ROOT}/data:/srv/dc/dc/APSSvr/data
+      - ${DEPLOY_ROOT}/log:/srv/dc/dc/APSSvr/log
     depends_on:
       zookeeper:
         condition: service_started
@@ -99,6 +117,12 @@ services:
     <<: *java-service-base
     image: ghcr.io/bliplink/quantsvr:${QUANTSVR_TAG}
     container_name: dc-quantsvr
+    volumes:
+      - ${DEPLOY_ROOT}/control:/srv/dc/control:ro
+      - ${DEPLOY_ROOT}/data:/srv/dc/data
+      - ${DEPLOY_ROOT}/log:/srv/dc/log
+      - ${DEPLOY_ROOT}/data:/srv/dc/dc/QuantSvr/data
+      - ${DEPLOY_ROOT}/log:/srv/dc/dc/QuantSvr/log
     depends_on:
       zookeeper:
         condition: service_started
@@ -113,6 +137,12 @@ services:
     <<: *java-service-base
     image: ghcr.io/bliplink/indsvr:${INDSVR_TAG}
     container_name: dc-indsvr
+    volumes:
+      - ${DEPLOY_ROOT}/control:/srv/dc/control:ro
+      - ${DEPLOY_ROOT}/data:/srv/dc/data
+      - ${DEPLOY_ROOT}/log:/srv/dc/log
+      - ${DEPLOY_ROOT}/data:/srv/dc/dc/INDSvr/data
+      - ${DEPLOY_ROOT}/log:/srv/dc/dc/INDSvr/log
     depends_on:
       zookeeper:
         condition: service_started

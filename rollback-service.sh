@@ -14,6 +14,11 @@ Usage:
   ./rollback-service.sh <service> [--dry-run]
 
 Supported services:
+  gateway
+  mdsvr
+  apssvr
+  quantsvr
+  indsvr
   batchsvr
   simsvr
 
@@ -51,6 +56,31 @@ if [[ -z "${SERVICE}" ]]; then
 fi
 
 case "${SERVICE}" in
+  gateway)
+    LEGACY_SERVICE="GW"
+    CONTAINER_NAME="dc-gateway"
+    SERVICE_PORT="3000"
+    ;;
+  mdsvr)
+    LEGACY_SERVICE="MDSvr"
+    CONTAINER_NAME="dc-mdsvr"
+    SERVICE_PORT="30028"
+    ;;
+  apssvr)
+    LEGACY_SERVICE="APSSvr"
+    CONTAINER_NAME="dc-apssvr"
+    SERVICE_PORT="30035"
+    ;;
+  quantsvr)
+    LEGACY_SERVICE="QuantSvr"
+    CONTAINER_NAME="dc-quantsvr"
+    SERVICE_PORT="30042"
+    ;;
+  indsvr)
+    LEGACY_SERVICE="INDSvr"
+    CONTAINER_NAME="dc-indsvr"
+    SERVICE_PORT="30044"
+    ;;
   batchsvr)
     LEGACY_SERVICE="BatchSvr"
     CONTAINER_NAME="dc-batchsvr"
