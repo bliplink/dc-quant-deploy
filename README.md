@@ -5,12 +5,14 @@
 Language:
 
 - English: [README.md](./README.md)
-- 简体中文: [README.zh-CN.md](./README.zh-CN.md)
+- Simplified Chinese: [README.zh-CN.md](./README.zh-CN.md)
 
-It is designed as a single-host Docker Compose delivery that lets external users bring up the full runtime skeleton without touching the original production machine layout:
+## Purpose
+
+This repository provides a single-host Docker Compose deployment for:
 
 - `zookeeper`
-- `gateway` (`GW`)
+- `gateway` / `GW`
 - `mdsvr`
 - `apssvr`
 - `quantsvr`
@@ -20,91 +22,91 @@ It is designed as a single-host Docker Compose delivery that lets external users
 - `web`
 - `clickhouse`
 
-## Scope
+Core contracts:
 
-- Deployment shape: single-host Docker Compose
-- Database boundary: ClickHouse only
-- Release model: versioned container images
-- `GW = gateway`
+- Deployment shape: single-host Docker Compose.
+- Database boundary: ClickHouse only. MySQL is not required.
+- Release model: versioned container images.
+- `GW = gateway`.
+- After initialization, the runtime root only needs `control/`, `data/`, and `log/`.
 
-This repository does not include:
-
-- real production secrets
-- real production `control.prod/`
-
-## Repository Layout
-
-- [compose.yaml](./compose.yaml): main deployment topology
-- [.env.example](./.env.example): public deployment variables template
-- [deploy.sh](./deploy.sh): one-click deployment entry
-- [restart-service.sh](./restart-service.sh): restart exactly one containerized service
-- [validate.sh](./validate.sh): preflight validation
-- [rollback.sh](./rollback.sh): rollback entry
-- [control.template](./control.template): placeholder-based control templates
-- [control.prod.example](./control.prod.example): sanitized example control files
-- [clickhouse](./clickhouse): ClickHouse bootstrap SQL and helper scripts
-- [docs/architecture.md](./docs/architecture.md): service and image map
-- [docs/database.md](./docs/database.md): ClickHouse initialization contract
-- [docs/runtime-overrides.md](./docs/runtime-overrides.md): optional config overrides and log level changes
-- [docs/release-flow.md](./docs/release-flow.md): image-based release flow
-- [docs/service-cutover.md](./docs/service-cutover.md): one-service-at-a-time production cutover
+This repository does not include real production secrets or real production `control.prod/`.
 
 ## Quick Start
 
-1. Copy `.env.example` to `.env.prod`.
-2. Copy `control.prod.example/` to `control.prod/`.
-3. Replace placeholders in `control.prod/`.
-4. Run `./validate.sh`.
-5. Run `./deploy.sh`.
+For the complete installation, validation, and operations walkthrough, start with the [User Manual](./docs/user-manual.md).
 
-Keep the Git checkout outside `DEPLOY_ROOT`. The runtime root is intended to contain only `control/`, `data/`, and `log/` after initialization.
+Minimal path:
+
+```bash
+git clone https://github.com/bliplink/dc-quant-deploy.git
+cd dc-quant-deploy
+cp .env.example .env.prod
+cp -a control.prod.example control.prod
+vi .env.prod
+vi control.prod/ATSConfig.ini
+vi control.prod/DBPoolConfig.ini
+vi control.prod/jaas.ini
+cp /path/to/dc.dat control.prod/dc.dat
+./validate.sh
+./deploy.sh
+```
+
+Check status after deployment:
+
+```bash
+docker compose --env-file .env.prod -f compose.yaml -f compose.override.generated.yaml ps
+```
+
+## Repository Layout
+
+- [compose.yaml](./compose.yaml): main deployment topology.
+- [.env.example](./.env.example): public deployment variables template.
+- [deploy.sh](./deploy.sh): one-command deployment entry.
+- [validate.sh](./validate.sh): preflight validation.
+- [rollback.sh](./rollback.sh): full rollback entry.
+- [deploy-service.sh](./deploy-service.sh): one-service cutover entry.
+- [rollback-service.sh](./rollback-service.sh): one-service rollback entry.
+- [restart-service.sh](./restart-service.sh): restart exactly one containerized service.
+- [control.template](./control.template): placeholder-based control templates.
+- [control.prod.example](./control.prod.example): sanitized example control files.
+- [clickhouse](./clickhouse): ClickHouse bootstrap SQL and helper scripts.
+- [docs/user-manual.md](./docs/user-manual.md): full installation and operations manual.
+- [docs/architecture.md](./docs/architecture.md): service and image map.
+- [docs/database.md](./docs/database.md): ClickHouse initialization contract.
+- [docs/runtime-overrides.md](./docs/runtime-overrides.md): optional config overrides and log level changes.
+- [docs/release-flow.md](./docs/release-flow.md): image-based release flow.
+- [docs/service-cutover.md](./docs/service-cutover.md): one-service-at-a-time production cutover.
 
 ## ClickHouse Modes
 
-The repository supports two ClickHouse deployment modes.
+The repository supports two ClickHouse modes.
 
 1. `embedded`
-   The user does not already have ClickHouse. `deploy.sh` starts the ClickHouse container from `compose.yaml` and runs the initialization scripts automatically.
+   Use this when you do not already have ClickHouse. `deploy.sh` starts the ClickHouse container and runs initialization scripts.
 2. `external`
-   The user already has ClickHouse. The user handles database initialization manually. `deploy.sh` does not start a ClickHouse container and does not modify the existing database.
+   Use this when ClickHouse already exists. The deployment script does not start or mutate ClickHouse; initialize it yourself.
 
-Set these values in `.env.prod`:
+Configure `.env.prod`:
 
-- `CLICKHOUSE_MODE=embedded` or `CLICKHOUSE_MODE=external`
-- `CLICKHOUSE_HOST`
-- `CLICKHOUSE_HTTP_PORT`
-- `CLICKHOUSE_USERNAME`
-- `CLICKHOUSE_PASSWORD`
-- `REQUIRE_GHCR_LOGIN=true` only if your GHCR images are private or your environment requires authenticated pulls.
+```dotenv
+CLICKHOUSE_MODE=embedded
+CLICKHOUSE_IMAGE_TAG=25.9.3.48
+CLICKHOUSE_DB_NAME=dc
+CLICKHOUSE_HOST=127.0.0.1
+CLICKHOUSE_HTTP_PORT=8123
+CLICKHOUSE_NATIVE_PORT=9000
+CLICKHOUSE_USERNAME=default
+CLICKHOUSE_PASSWORD=
+```
 
-The deployment script will:
+For external ClickHouse, initialize manually when needed:
 
-1. validate Docker and config inputs
-2. back up the current `control/`
-3. sync `control.prod/` into `${DEPLOY_ROOT}/control`
-4. stop legacy services if the old `scripts/stop` entry exists
-5. start `zookeeper`
-6. start `clickhouse` only when `CLICKHOUSE_MODE=embedded`
-7. run the ClickHouse initialization scripts only when `CLICKHOUSE_MODE=embedded`
-8. wait for ClickHouse schema readiness
-9. start the Java services and `web`
+```bash
+./clickhouse/apply-init.sh
+```
 
-If `CLICKHOUSE_MODE=external`, initialize the database yourself before deployment. The provided helper is:
-
-- `./clickhouse/apply-init.sh`
-
-## ClickHouse Contract
-
-ClickHouse is the only database in this public deployment package.
-
-Default behavior:
-
-- creates database `dc` if needed
-- initializes core schema from `clickhouse/init/10-schema/`
-- initializes view objects from `clickhouse/init/20-view/`
-- does not auto-run `90-optional-seed/`
-
-Optional migration, cleanup, and verification SQL is intentionally kept out of the default bootstrap path.
+Default initialization creates the database, tables, and views. Optional seed scripts are not executed automatically.
 
 ## Images
 
@@ -119,9 +121,21 @@ Optional migration, cleanup, and verification SQL is intentionally kept out of t
 - `ghcr.io/SKT-Walter/web:${WEB_TAG}`
 - `clickhouse/clickhouse-server:${CLICKHOUSE_IMAGE_TAG}`
 
-## Secrets And Local Overrides
+If GHCR authentication is required:
 
-Do not commit these back into Git:
+```bash
+docker login ghcr.io
+```
+
+Then set:
+
+```dotenv
+REQUIRE_GHCR_LOGIN=true
+```
+
+## Secrets And Local Files
+
+Do not commit these files or directories:
 
 - `.env.prod`
 - `control.prod/`
@@ -129,9 +143,38 @@ Do not commit these back into Git:
 - `${DEPLOY_ROOT}/data`
 - `${DEPLOY_ROOT}/log`
 
+`dc.dat` is a license file and belongs to the local deployment instance.
+
+## Operations
+
+Restart one service:
+
+```bash
+./restart-service.sh apssvr
+```
+
+Stop one service:
+
+```bash
+docker compose --env-file .env.prod -f compose.yaml -f compose.override.generated.yaml stop apssvr
+```
+
+Start one service:
+
+```bash
+docker compose --env-file .env.prod -f compose.yaml -f compose.override.generated.yaml up -d --no-deps apssvr
+```
+
+View logs:
+
+```bash
+docker logs dc-apssvr --tail 200
+tail -n 100 ${DEPLOY_ROOT}/log/APSSvr.log
+```
+
 ## Runtime Overrides
 
-Image-bundled config is the default. A host file is mounted only when it exists under `${DEPLOY_ROOT}/control/overrides`.
+Image-bundled config is the default. Host files are mounted only when they exist under `${DEPLOY_ROOT}/control/overrides`.
 
 Supported overrides:
 
@@ -139,35 +182,26 @@ Supported overrides:
 - `GW/config/apiKeyList.csv`
 - `GW/config/spring-gw-client.xml`
 - `GW/config/log4j.ini`
-- `<Service>/config/log4j.ini` for `MDSvr`, `APSSvr`, `QuantSvr`, `INDSvr`, `SIMSvr`, and `BatchSvr`
+- `MDSvr/config/log4j.ini`
+- `APSSvr/config/log4j.ini`
+- `QuantSvr/config/log4j.ini`
+- `INDSvr/config/log4j.ini`
+- `SIMSvr/config/log4j.ini`
+- `BatchSvr/config/log4j.ini`
 
-`deploy.sh`, `deploy-service.sh`, `rollback.sh`, `rollback-service.sh`, and `validate.sh` generate `compose.override.generated.yaml` automatically. Do not edit or commit that file.
-
-`log4j.ini`, `mcpTools.tsv`, and `apiKeyList.csv` are reloaded by the running service. `spring-gw-client.xml` is a Spring startup file and requires a `gateway` restart.
-
-## Single-Service Restart
-
-After the stack is fully containerized, restart one service without touching its dependencies:
+After adding a new override file, restart the target service once:
 
 ```bash
-./restart-service.sh apssvr --dry-run
 ./restart-service.sh apssvr
 ```
 
-Production APSSvr can be restarted by cron using the same entry:
+## Documentation
 
-```cron
-5 0 * * * cd /data/strategy/dc-quant-deploy && ./restart-service.sh apssvr >> /data/strategy/log/cron-apssvr-restart.log 2>&1
-```
-
-The script uses `docker compose up -d --no-deps --force-recreate <service>`. It does not pull a new image and does not start dependency services.
-
-## More Docs
-
+- [User Manual](./docs/user-manual.md)
 - [Architecture](./docs/architecture.md)
 - [Database](./docs/database.md)
 - [Runtime Overrides](./docs/runtime-overrides.md)
 - [Release Flow](./docs/release-flow.md)
 - [Service Cutover](./docs/service-cutover.md)
 - [Docs Index](./docs/README.md)
-- [文档索引](./docs/README.zh-CN.md)
+- [中文文档索引](./docs/README.zh-CN.md)
