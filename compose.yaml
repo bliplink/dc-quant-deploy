@@ -61,6 +61,7 @@ services:
       - ${DEPLOY_ROOT}/control:/srv/dc/control:ro
       - ${DEPLOY_ROOT}/data:/srv/dc/data
       - ${DEPLOY_ROOT}/log:/srv/dc/log
+      - ${DEPLOY_ROOT}/dc/GW/config:/srv/dc/dc/GW/config:ro
       - ${DEPLOY_ROOT}/data:/srv/dc/dc/GW/data
       - ${DEPLOY_ROOT}/log:/srv/dc/dc/GW/log
     depends_on:
