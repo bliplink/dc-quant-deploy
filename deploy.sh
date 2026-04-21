@@ -253,14 +253,14 @@ wait_for_clickhouse_schema() {
 validate_runtime() {
   validate_port "ClickHouse HTTP" "${CLICKHOUSE_HOST}" "${CLICKHOUSE_HTTP_PORT}"
   validate_port "ZooKeeper" 127.0.0.1 2181
-  validate_port "gateway" 127.0.0.1 3002
-  validate_port "MDSvr" 127.0.0.1 30028
-  validate_port "APSSvr" 127.0.0.1 30035
-  validate_port "QuantSvr" 127.0.0.1 30042
-  validate_port "INDSvr" 127.0.0.1 30044
-  validate_port "SIMSvr" 127.0.0.1 30045
-  validate_port "BatchSvr" 127.0.0.1 30046
-  validate_port "web" 127.0.0.1 80
+  validate_port "gateway" "${SERVICE_HOST:-127.0.0.1}" 3002
+  validate_port "MDSvr" "${SERVICE_HOST:-127.0.0.1}" 30028
+  validate_port "APSSvr" "${SERVICE_HOST:-127.0.0.1}" 30035
+  validate_port "QuantSvr" "${SERVICE_HOST:-127.0.0.1}" 30042
+  validate_port "INDSvr" "${SERVICE_HOST:-127.0.0.1}" 30044
+  validate_port "SIMSvr" "${SERVICE_HOST:-127.0.0.1}" 30045
+  validate_port "BatchSvr" "${SERVICE_HOST:-127.0.0.1}" 30046
+  validate_port "web" "${SERVICE_HOST:-127.0.0.1}" 80
 }
 
 main() {
