@@ -22,10 +22,9 @@ Do not mount the whole GW config directory. Use the supported single-file overri
 The scripts generate `compose.override.generated.yaml` before running Docker Compose:
 
 - `deploy.sh`
-- `deploy-service.sh`
 - `rollback.sh`
-- `rollback-service.sh`
 - `validate.sh`
+- `restart-service.sh`
 
 If an override file is missing, it is not mounted. This avoids Docker creating an empty host directory that would hide the image-bundled default file.
 

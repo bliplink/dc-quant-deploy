@@ -1,49 +1,18 @@
 # DC Quant Deploy User Manual
 
-This manual explains how to install and operate the DC Quant stack on one Linux host with Docker Compose.
+This manual explains how to install, verify, and maintain the DC Quant single-host Docker Compose stack.
 
-## 1. What Is Included
+## 1. Prepare The Server
 
-`dc-quant-deploy` starts the complete runtime skeleton:
-
-- `zookeeper`: service registry.
-- `gateway` / `GW`: HTTP, MCP, and Web API entry.
-- `MDSvr`: market data service.
-- `APSSvr`: application service API.
-- `QuantSvr`: runtime trading and strategy service.
-- `INDSvr`: strategy generation service.
-- `SIMSvr`: backtest, optimization, and publishing service.
-- `BatchSvr`: reports and batch jobs.
-- `web`: static frontend.
-- `ClickHouse`: the only database used by this stack.
-
-The deployment shape is single-host Docker Compose. Production releases should use versioned image tags instead of uploading individual JAR files.
-
-## 2. Requirements
-
-Recommended host:
+Recommended server:
 
 - Ubuntu 22.04 or compatible Linux.
 - Docker Engine.
 - Docker Compose plugin.
-- `git`, `curl`, and `bash`.
-- At least 8 GB memory. Production should use more.
+- `git`, `curl`, and `netcat-openbsd`.
+- At least 8 GB memory.
 
-Default ports:
-
-- `80`: web.
-- `2181`: ZooKeeper.
-- `3000`, `3001`, `3002`: gateway / GW.
-- `30028`: MDSvr.
-- `30035`: APSSvr.
-- `30042`: QuantSvr.
-- `30044`: INDSvr.
-- `30045`: SIMSvr.
-- `30046`: BatchSvr.
-- `8123`: ClickHouse HTTP.
-- `9000`: ClickHouse native.
-
-## 3. Install Docker
+Install Docker:
 
 ```bash
 apt-get update
@@ -66,9 +35,9 @@ For a non-root deployment user:
 usermod -aG docker <your-user>
 ```
 
-Start a new SSH session after changing group membership.
+Start a new login session before continuing.
 
-## 4. Clone The Repository
+## 2. Clone The Repository
 
 Keep the Git checkout outside the runtime root:
 
@@ -79,26 +48,69 @@ git clone https://github.com/bliplink/dc-quant-deploy.git
 cd dc-quant-deploy
 ```
 
-The runtime root is controlled by `DEPLOY_ROOT`. After initialization it should only need:
+The runtime root is controlled by `DEPLOY_ROOT`. After deployment it only needs:
 
-- `${DEPLOY_ROOT}/control`
-- `${DEPLOY_ROOT}/data`
-- `${DEPLOY_ROOT}/log`
+```text
+${DEPLOY_ROOT}/control
+${DEPLOY_ROOT}/data
+${DEPLOY_ROOT}/log
+```
 
-## 5. Prepare Configuration
+## 3. Choose A Deployment Mode
+
+### Standalone Deployment
+
+Use this when ClickHouse does not already exist.
 
 ```bash
 cp .env.standalone.example .env.prod
 cp -a control.prod.example control.prod
+vi .env.prod
+vi control.prod/ATSConfig.ini
+vi control.prod/DBPoolConfig.ini
+vi control.prod/jaas.ini
+cp /path/to/dc.dat control.prod/dc.dat
+./deploy-standalone.sh
 ```
 
-Edit `.env.prod`:
+This starts:
+
+- DC application services.
+- ZooKeeper.
+- The `dc-clickhouse` container.
+
+It also initializes the ClickHouse `dc` database, tables, and views.
+
+### Existing ClickHouse Deployment
+
+Use this when ClickHouse already exists.
 
 ```bash
+cp .env.external-clickhouse.example .env.prod
+cp -a control.prod.example control.prod
 vi .env.prod
+vi control.prod/ATSConfig.ini
+vi control.prod/DBPoolConfig.ini
+vi control.prod/jaas.ini
+cp /path/to/dc.dat control.prod/dc.dat
+./deploy-with-external-clickhouse.sh
 ```
 
-Important values:
+This deploys the DC application services and ZooKeeper. It does not start `dc-clickhouse` and does not mutate the existing ClickHouse instance.
+
+If the existing ClickHouse is not initialized yet:
+
+```bash
+./clickhouse/apply-init.sh
+```
+
+Default initialization creates database, tables, and views only. It does not import sample data.
+
+## 4. Key Configuration
+
+`.env.prod` contains local deployment variables. Do not commit it.
+
+Common fields:
 
 ```dotenv
 DEPLOY_ROOT=/opt/dc-runtime
@@ -117,130 +129,87 @@ CLICKHOUSE_USERNAME=default
 CLICKHOUSE_PASSWORD=
 ```
 
-If GHCR images require authentication:
+`control.prod/` contains local control files. Do not commit it.
 
-```bash
-docker login ghcr.io
-```
+Required files:
 
-Then set:
-
-```dotenv
-REQUIRE_GHCR_LOGIN=true
-```
-
-## 6. Prepare `control.prod`
-
-`control.prod/` is your local deployment instance. Do not commit it.
-
-Check these files:
-
-- `control.prod/ATSConfig.ini`
-- `control.prod/DBPoolConfig.ini`
-- `control.prod/jaas.ini`
-- `control.prod/dc.dat`
+- `ATSConfig.ini`
+- `DBPoolConfig.ini`
+- `jaas.ini`
+- `dc.dat`
 
 Notes:
 
 - `dc.dat` is the license file.
-- `DBPoolConfig.ini` only needs ClickHouse settings.
-- MySQL is not required.
+- ClickHouse is the only required database.
 - Secrets and production endpoints must stay local.
 
-During deployment, `control.prod/` is copied to `${DEPLOY_ROOT}/control`.
+## 5. Verify Deployment
 
-## 7. ClickHouse Modes
-
-### Embedded ClickHouse
-
-Use this when you do not already have ClickHouse:
-
-```dotenv
-CLICKHOUSE_MODE=embedded
-CLICKHOUSE_HOST=127.0.0.1
-CLICKHOUSE_HTTP_PORT=8123
-CLICKHOUSE_NATIVE_PORT=9000
-```
-
-`deploy.sh` starts ClickHouse and initializes the `dc` database, schema, and views. Optional seed scripts are not executed automatically.
-
-### External ClickHouse
-
-Use this when ClickHouse already exists:
-
-```dotenv
-CLICKHOUSE_MODE=external
-CLICKHOUSE_HOST=<your-clickhouse-host>
-CLICKHOUSE_HTTP_PORT=8123
-CLICKHOUSE_USERNAME=default
-CLICKHOUSE_PASSWORD=<your-password>
-```
-
-The deployment script will not start or mutate ClickHouse. Initialize manually when needed:
-
-```bash
-./clickhouse/apply-init.sh
-```
-
-## 8. One-Command Deployment
-
-There are two one-command entries.
-
-For a new server without ClickHouse:
-
-```bash
-./deploy-standalone.sh
-```
-
-For a server that already has ClickHouse:
-
-```bash
-./deploy-with-external-clickhouse.sh
-```
-
-Both scripts validate inputs, prepare runtime directories, sync `control.prod/`, generate optional override mounts, pull images, start ZooKeeper, handle ClickHouse according to the selected mode, start the services, and validate ports.
-
-The lower-level `deploy.sh` still exists, but normal users should prefer the mode-specific scripts.
-
-## 9. Verify The Stack
+Check containers:
 
 ```bash
 docker compose --env-file .env.prod -f compose.yaml -f compose.override.generated.yaml ps
-curl -I http://127.0.0.1/web/
-curl 'http://127.0.0.1:8123/?query=SELECT%201'
-printf ruok | nc -w 3 127.0.0.1 2181
-docker logs dc-gateway --tail 100
 ```
 
-Minimum healthy state:
+Verify web:
 
-- ZooKeeper returns `imok`.
-- Gateway is running and port `3002` is reachable.
-- Web is reachable at `/web/`.
-- Java service containers are `Up`.
-- ClickHouse has core tables such as `dc.signal`, `dc.quant_order`, and `dc.strategy_candidate`.
+```bash
+curl -I http://127.0.0.1/web/
+```
 
-## 10. Operations
+Verify ZooKeeper:
 
-Restart one service:
+```bash
+printf ruok | nc -w 3 127.0.0.1 2181
+```
+
+`imok` means ZooKeeper is healthy.
+
+Verify ClickHouse:
+
+```bash
+curl 'http://127.0.0.1:8123/?query=SELECT%201'
+curl 'http://127.0.0.1:8123/?query=SHOW%20TABLES%20FROM%20dc'
+```
+
+For existing ClickHouse, use the host, username, and password from `.env.prod`.
+
+View logs:
+
+```bash
+docker logs dc-gateway --tail 100
+docker logs dc-apssvr --tail 100
+tail -n 100 ${DEPLOY_ROOT}/log/APSSvr.log
+```
+
+## 6. Maintenance
+
+Enter the deployment repository:
+
+```bash
+cd /opt/source/dc-quant-deploy
+```
+
+Check status:
+
+```bash
+docker compose --env-file .env.prod -f compose.yaml -f compose.override.generated.yaml ps
+```
+
+Restart a service:
 
 ```bash
 ./restart-service.sh apssvr
 ```
 
-Dry run:
-
-```bash
-./restart-service.sh apssvr --dry-run
-```
-
-Stop one service:
+Stop a service:
 
 ```bash
 docker compose --env-file .env.prod -f compose.yaml -f compose.override.generated.yaml stop apssvr
 ```
 
-Start one service without dependencies:
+Start a service:
 
 ```bash
 docker compose --env-file .env.prod -f compose.yaml -f compose.override.generated.yaml up -d --no-deps apssvr
@@ -253,71 +222,110 @@ docker logs dc-apssvr --tail 200
 tail -n 100 ${DEPLOY_ROOT}/log/APSSvr.log
 ```
 
-## 11. Runtime Overrides
+See [Maintenance Guide](./maintenance.md) for more details.
 
-Image-bundled config is the default. Host overrides are mounted only when files exist under:
+## 7. Upgrade
 
-```bash
-${DEPLOY_ROOT}/control/overrides
-```
-
-Supported files:
-
-- `GW/config/mcpTools.tsv`
-- `GW/config/apiKeyList.csv`
-- `GW/config/spring-gw-client.xml`
-- `GW/config/log4j.ini`
-- `<Service>/config/log4j.ini` for `MDSvr`, `APSSvr`, `QuantSvr`, `INDSvr`, `SIMSvr`, and `BatchSvr`.
-
-After adding a new override file, restart the service once:
-
-```bash
-./restart-service.sh apssvr
-```
-
-## 12. Upgrade And Rollback
-
-To upgrade one service, change its tag in `.env.prod`:
+Change the corresponding image tag in `.env.prod`:
 
 ```dotenv
 APSSVR_TAG=v0.0.2
 ```
 
-Then:
+Pull and restart the service:
 
 ```bash
 docker compose --env-file .env.prod -f compose.yaml -f compose.override.generated.yaml pull apssvr
 ./restart-service.sh apssvr
 ```
 
-Full deployment rollback:
+Verify again after upgrade.
+
+## 8. Backup
+
+Back up regularly:
+
+- `.env.prod`
+- `control.prod/`
+- `${DEPLOY_ROOT}/control`
+- `${DEPLOY_ROOT}/data`
+- `${DEPLOY_ROOT}/log`
+
+Example:
+
+```bash
+TS=$(date +%Y%m%d-%H%M%S)
+BACKUP=/opt/dc-backup/$TS
+mkdir -p "$BACKUP"
+cp -a .env.prod "$BACKUP/env.prod"
+cp -a control.prod "$BACKUP/control.prod"
+cp -a ${DEPLOY_ROOT}/control "$BACKUP/control"
+cp -a ${DEPLOY_ROOT}/data "$BACKUP/data"
+```
+
+If using external ClickHouse, back it up according to your own ClickHouse operations policy.
+
+## 9. Rollback
+
+The recommended rollback is image-tag based:
+
+1. Change the service tag in `.env.prod` back to the previous version.
+2. Pull the previous image.
+3. Restart the service.
+
+Example:
+
+```bash
+docker compose --env-file .env.prod -f compose.yaml -f compose.override.generated.yaml pull apssvr
+./restart-service.sh apssvr
+```
+
+For a failed full deployment:
 
 ```bash
 ./rollback.sh
 ```
 
-If the stack is fully containerized, rollback by restoring the previous image tag and recreating the service.
+Rollback does not delete ClickHouse data.
 
-## 13. Scheduled Restart
+## 10. Troubleshooting
 
-Example: restart APSSvr daily at `00:05`:
+### Image Pull Fails
 
-```cron
-5 0 * * * cd /opt/source/dc-quant-deploy && ./restart-service.sh apssvr >> /opt/dc-runtime/log/cron-apssvr-restart.log 2>&1
-```
-
-## 14. Minimal Command List
+If images require authentication:
 
 ```bash
-git clone https://github.com/bliplink/dc-quant-deploy.git
-cd dc-quant-deploy
-cp .env.standalone.example .env.prod
-cp -a control.prod.example control.prod
-vi .env.prod
-vi control.prod/ATSConfig.ini
-vi control.prod/DBPoolConfig.ini
-vi control.prod/jaas.ini
-cp /path/to/dc.dat control.prod/dc.dat
-./deploy-standalone.sh
-docker compose --env-file .env.prod -f compose.yaml -f compose.override.generated.yaml ps
+docker login ghcr.io
 ```
+
+Then set:
+
+```dotenv
+REQUIRE_GHCR_LOGIN=true
+```
+
+### ClickHouse Port Conflict
+
+Standalone deployment uses `8123` and `9000`. If ClickHouse already exists on the server, use:
+
+```bash
+./deploy-with-external-clickhouse.sh
+```
+
+### ZooKeeper Is Not Reachable
+
+```bash
+docker logs dc-zookeeper --tail 200
+printf ruok | nc -w 3 127.0.0.1 2181
+```
+
+### Web Loads But API Fails
+
+Check gateway first:
+
+```bash
+docker logs dc-gateway --tail 200
+curl http://127.0.0.1:3002/
+```
+
+Then check service addresses and ports in `control/ATSConfig.ini`.
