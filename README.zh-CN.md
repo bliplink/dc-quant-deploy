@@ -76,6 +76,7 @@ docker compose --env-file .env.prod -f compose.yaml -f compose.override.generate
 - [docs/database.zh-CN.md](./docs/database.zh-CN.md)：数据库说明。
 - [docs/runtime-overrides.zh-CN.md](./docs/runtime-overrides.zh-CN.md)：运行时可选覆盖配置。
 - [docs/release-flow.zh-CN.md](./docs/release-flow.zh-CN.md)：发布流程。
+- [docs/codex-dev-release.zh-CN.md](./docs/codex-dev-release.zh-CN.md)：Codex 开发、发布与自动部署协作手册。
 - [docs/service-cutover.zh-CN.md](./docs/service-cutover.zh-CN.md)：逐服务切换。
 
 ## ClickHouse 模式
@@ -202,5 +203,6 @@ tail -n 100 ${DEPLOY_ROOT}/log/APSSvr.log
 - [数据库说明](./docs/database.zh-CN.md)
 - [运行时可选覆盖配置](./docs/runtime-overrides.zh-CN.md)
 - [发布流程](./docs/release-flow.zh-CN.md)
+- [Codex 开发、发布与自动部署协作手册](./docs/codex-dev-release.zh-CN.md)
 - [逐服务切换](./docs/service-cutover.zh-CN.md)
 - [文档索引](./docs/README.zh-CN.md)

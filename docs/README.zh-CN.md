@@ -21,4 +21,5 @@
 - [数据库说明](./database.zh-CN.md)
 - [运行时可选覆盖配置](./runtime-overrides.zh-CN.md)
 - [发布流程](./release-flow.zh-CN.md)
+- [Codex 开发、发布与自动部署协作手册](./codex-dev-release.zh-CN.md)
 - [逐服务切换](./service-cutover.zh-CN.md)

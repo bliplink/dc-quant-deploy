@@ -202,6 +202,7 @@ After adding a new override file, restart the target service once:
 - [Database](./docs/database.md)
 - [Runtime Overrides](./docs/runtime-overrides.md)
 - [Release Flow](./docs/release-flow.md)
+- [Codex Development And Release Runbook](./docs/codex-dev-release.zh-CN.md)
 - [Service Cutover](./docs/service-cutover.md)
 - [Docs Index](./docs/README.md)
 - [中文文档索引](./docs/README.zh-CN.md)
