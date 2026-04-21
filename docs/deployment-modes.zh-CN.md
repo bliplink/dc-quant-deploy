@@ -36,7 +36,7 @@ cp /path/to/dc.dat control.prod/dc.dat
 - 设置 `CLICKHOUSE_HOST=127.0.0.1`。
 - 启动 `dc-clickhouse` 容器。
 - 按 `.env.prod` 中的 `CLICKHOUSE_USERNAME` / `CLICKHOUSE_PASSWORD` 初始化容器账号。
-- 自动执行 ClickHouse 初始化脚本。
+- 自动执行 ClickHouse 初始化脚本，初始化脚本通过 native 端口 `CLICKHOUSE_NATIVE_PORT` 连接 ClickHouse。
 - 启动 ZooKeeper、Java 服务和 web。
 
 保护规则：

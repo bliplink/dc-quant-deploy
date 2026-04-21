@@ -30,7 +30,7 @@ This entry:
 - sets `CLICKHOUSE_HOST=127.0.0.1`
 - starts the `dc-clickhouse` container
 - initializes the container user from `CLICKHOUSE_USERNAME` / `CLICKHOUSE_PASSWORD`
-- runs ClickHouse initialization scripts
+- runs ClickHouse initialization scripts through the native `CLICKHOUSE_NATIVE_PORT`
 - starts ZooKeeper, Java services, and web
 
 Safety guard:
