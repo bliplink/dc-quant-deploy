@@ -1,4 +1,5 @@
 .env.prod
+.env.prod.bak*
 .last_backup
 .compose.config.check.yaml
 compose.override.generated.yaml
@@ -7,5 +8,7 @@ control.prod/*
 !control.prod/dc.dat
 !control.prod/jaas.ini
 backups/
+.fresh_install_backup/
+.external_rehearsal_backup/
 clickhouse/data/
 clickhouse/log/
