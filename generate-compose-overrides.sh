@@ -4,6 +4,7 @@ set -euo pipefail
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 ENV_FILE="${1:-${ROOT_DIR}/.env.prod}"
 OUTPUT_FILE="${2:-${ROOT_DIR}/compose.override.generated.yaml}"
+GENERATE_SENSITIVE_CONFIGS_SCRIPT="${ROOT_DIR}/generate-sensitive-configs.sh"
 
 require_file() {
   [[ -f "$1" ]] || {
@@ -44,6 +45,10 @@ append_mount_if_present() {
 
 load_env
 
+if [[ -f "${GENERATE_SENSITIVE_CONFIGS_SCRIPT}" ]]; then
+  bash "${GENERATE_SENSITIVE_CONFIGS_SCRIPT}" "${ENV_FILE}"
+fi
+
 declare -A EMITTED_SERVICES=()
 MOUNT_COUNT=0
 
@@ -60,8 +65,11 @@ append_mount_if_present gateway "${DEPLOY_ROOT}/control/overrides/GW/config/log4
 
 append_mount_if_present mdsvr "${DEPLOY_ROOT}/control/overrides/MDSvr/config/log4j.ini" "/srv/dc/dc/MDSvr/config/log4j.ini"
 append_mount_if_present apssvr "${DEPLOY_ROOT}/control/overrides/APSSvr/config/log4j.ini" "/srv/dc/dc/APSSvr/config/log4j.ini"
+append_mount_if_present apssvr "${DEPLOY_ROOT}/control/overrides/APSSvr/config/application.properties" "/srv/dc/dc/APSSvr/config/application.properties"
 append_mount_if_present quantsvr "${DEPLOY_ROOT}/control/overrides/QuantSvr/config/log4j.ini" "/srv/dc/dc/QuantSvr/config/log4j.ini"
+append_mount_if_present quantsvr "${DEPLOY_ROOT}/control/overrides/QuantSvr/config/application.properties" "/srv/dc/dc/QuantSvr/config/application.properties"
 append_mount_if_present indsvr "${DEPLOY_ROOT}/control/overrides/INDSvr/config/log4j.ini" "/srv/dc/dc/INDSvr/config/log4j.ini"
+append_mount_if_present indsvr "${DEPLOY_ROOT}/control/overrides/INDSvr/config/application.properties" "/srv/dc/dc/INDSvr/config/application.properties"
 append_mount_if_present simsvr "${DEPLOY_ROOT}/control/overrides/SIMSvr/config/log4j.ini" "/srv/dc/dc/SIMSvr/config/log4j.ini"
 append_mount_if_present batchsvr "${DEPLOY_ROOT}/control/overrides/BatchSvr/config/log4j.ini" "/srv/dc/dc/BatchSvr/config/log4j.ini"
 
