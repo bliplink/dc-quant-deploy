@@ -52,7 +52,7 @@ strategy_backtest_task
 signal -> QuantSvr 日志 -> quant_signal_block_event -> quant_order -> quant_trade
 ```
 
-更完整的运行时风控说明见：[QuantSvr 风控规则与 Telegram 使用说明](quantsvr-risk-telegram.zh-CN.md)。
+更完整的运行时风控说明见：[QuantSvr 风控规则与 Telegram 使用说明](../03-user-guide/quantsvr-risk-telegram.zh-CN.md)。
 
 ## Telegram 怎么使用
 

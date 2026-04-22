@@ -19,7 +19,7 @@ DC Quant 是一套围绕量化策略全生命周期设计的运行系统。它�
 | `GW` | 统一 HTTP/MCP 入口，负责 API key 鉴权、工具转发和外部调用接入。 |
 | `INDSvr` | 策略采集、策略生成、候选策略、编译和生成状态管理。 |
 | `SIMSvr` | 策略回测、walk-forward、参数优化、回测报告和自动发布。 |
-| `QuantSvr` | 实盘策略运行、信号消费、订单执行、Telegram 通知、日末复盘。 |
+| `QuantSvr` | 类似 `EMS + Risk + Telegram` 的组合，负责实盘策略运行、信号消费、订单执行、风控参数、Telegram 通知、日末复盘。 |
 | `BatchSvr` | 系统日报、5 分钟运行报告、批处理任务。 |
 | `MDSvr` | 行情相关支撑服务。 |
 | `APSSvr` | 账户、交易、外部交易所相关支撑服务。 |
@@ -60,6 +60,7 @@ QuantSvr/BatchSvr -> ClickHouse -> JSON/HTML 报告
 
 部署完成后，建议先阅读：
 
-- [部署后快速开始](quick-start-after-deploy.zh-CN.md)
-- [用户使用手册](user-guide.zh-CN.md)
+- [文档中心](../README.zh-CN.md)
+- [部署后快速开始](../01-getting-started/quick-start-after-deploy.zh-CN.md)
+- [用户使用手册](../03-user-guide/user-guide.zh-CN.md)
 - [核心流程](flows.zh-CN.md)

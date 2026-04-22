@@ -17,13 +17,13 @@ English documentation: [README.en.md](README.en.md)
 - `GW`：统一 HTTP/MCP/API key 入口。
 - `INDSvr`：策略采集、策略生成、候选策略和编译。
 - `SIMSvr`：walk-forward 回测、参数优化和自动发布。
-- `QuantSvr`：实盘策略运行、信号消费、下单、Telegram、日末复盘。
+- `QuantSvr`：类似 `EMS + Risk + Telegram` 的组合，负责实盘执行、风控参数、下单、通知和日末复盘。
 - `BatchSvr`：系统日报、运行报告和批处理。
 - `MDSvr/APSSvr`：行情与交易账户相关运行支撑。
 - `Web`：页面入口。
 - `ClickHouse`：策略、信号、订单、成交、回测和报告数据存储。
 
-更完整的说明见：[系统总览](docs/system-overview.zh-CN.md)。
+更完整的说明见：[系统总览](docs/02-architecture/system-overview.zh-CN.md)。
 
 ## 快速部署
 
@@ -60,7 +60,7 @@ curl -I http://127.0.0.1/web/
 curl 'http://127.0.0.1:8123/?query=SELECT%201'
 ```
 
-部署完成后的第一步见：[部署后快速开始](docs/quick-start-after-deploy.zh-CN.md)。
+部署完成后的第一步见：[部署后快速开始](docs/01-getting-started/quick-start-after-deploy.zh-CN.md)。
 
 ## 部署后如何使用
 
@@ -72,19 +72,20 @@ curl 'http://127.0.0.1:8123/?query=SELECT%201'
 - 使用 `QuantSvr` 运行已上线策略并生成日末复盘。
 - 使用 `BatchSvr` 查看每日系统报告和 5 分钟运行报告。
 
-完整使用说明见：[用户使用手册](docs/user-guide.zh-CN.md)。
+完整使用说明见：[用户使用手册](docs/03-user-guide/user-guide.zh-CN.md)。
 
 ## 核心文档
 
-- [系统总览](docs/system-overview.zh-CN.md)
-- [部署后快速开始](docs/quick-start-after-deploy.zh-CN.md)
-- [用户使用手册](docs/user-guide.zh-CN.md)
-- [核心流程](docs/flows.zh-CN.md)
-- [MCP 接口](docs/mcp-api.zh-CN.md)
-- [QuantSvr 风控与 Telegram](docs/quantsvr-risk-telegram.zh-CN.md)
-- [核心数据表](docs/data-model.zh-CN.md)
-- [报告与排障](docs/reports-and-troubleshooting.zh-CN.md)
-- [安全说明](docs/security.zh-CN.md)
+- [文档中心](docs/README.zh-CN.md)
+- [系统总览](docs/02-architecture/system-overview.zh-CN.md)
+- [部署后快速开始](docs/01-getting-started/quick-start-after-deploy.zh-CN.md)
+- [用户使用手册](docs/03-user-guide/user-guide.zh-CN.md)
+- [核心流程](docs/02-architecture/flows.zh-CN.md)
+- [MCP 接口](docs/04-reference/mcp-api.zh-CN.md)
+- [QuantSvr 风控与 Telegram](docs/03-user-guide/quantsvr-risk-telegram.zh-CN.md)
+- [核心数据表](docs/04-reference/data-model.zh-CN.md)
+- [报告与排障](docs/05-operations/reports-and-troubleshooting.zh-CN.md)
+- [安全说明](docs/05-operations/security.zh-CN.md)
 
 ## 常用运维
 

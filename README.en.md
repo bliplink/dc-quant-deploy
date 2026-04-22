@@ -17,7 +17,7 @@ Main services:
 - `GW`: external HTTP/MCP/API-key entry point.
 - `INDSvr`: strategy source ingestion, strategy generation, candidates, and compilation.
 - `SIMSvr`: walk-forward backtesting, parameter optimization, and auto-publish decisions.
-- `QuantSvr`: live strategy runtime, signal consumption, order flow, Telegram, and daily review.
+- `QuantSvr`: an EMS + Risk + Telegram runtime for live execution, risk parameters, order flow, notifications, and daily review.
 - `BatchSvr`: daily reports, runtime reports, and batch jobs.
 - `MDSvr/APSSvr`: market-data and account/trading support services.
 - `Web`: web entry point.
@@ -62,15 +62,16 @@ curl 'http://127.0.0.1:8123/?query=SELECT%201'
 
 Start from these Chinese guides:
 
-- [System overview](docs/system-overview.zh-CN.md)
-- [Quick start after deployment](docs/quick-start-after-deploy.zh-CN.md)
-- [User guide](docs/user-guide.zh-CN.md)
-- [Core flows](docs/flows.zh-CN.md)
-- [MCP API](docs/mcp-api.zh-CN.md)
-- [QuantSvr risk control and Telegram](docs/quantsvr-risk-telegram.zh-CN.md)
-- [Data model](docs/data-model.zh-CN.md)
-- [Reports and troubleshooting](docs/reports-and-troubleshooting.zh-CN.md)
-- [Security](docs/security.zh-CN.md)
+- [Documentation hub](docs/README.zh-CN.md)
+- [System overview](docs/02-architecture/system-overview.zh-CN.md)
+- [Quick start after deployment](docs/01-getting-started/quick-start-after-deploy.zh-CN.md)
+- [User guide](docs/03-user-guide/user-guide.zh-CN.md)
+- [Core flows](docs/02-architecture/flows.zh-CN.md)
+- [MCP API](docs/04-reference/mcp-api.zh-CN.md)
+- [QuantSvr risk control and Telegram](docs/03-user-guide/quantsvr-risk-telegram.zh-CN.md)
+- [Data model](docs/04-reference/data-model.zh-CN.md)
+- [Reports and troubleshooting](docs/05-operations/reports-and-troubleshooting.zh-CN.md)
+- [Security](docs/05-operations/security.zh-CN.md)
 
 ## Maintain
 
