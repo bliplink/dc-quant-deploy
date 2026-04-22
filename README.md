@@ -1,43 +1,39 @@
 # dc-quant-deploy
 
-DC Quant 单机 Docker Compose 一键部署仓库。
+DC Quant 是一套单机 Docker Compose 部署的量化策略系统，覆盖策略采集、策略生成、回测优化、自动上线、实盘运行、日末复盘、系统日报和运行报告。
 
 English documentation: [README.en.md](README.en.md)
 
-## 服务
+## 这是什么系统
 
-- `zookeeper`
-- `GW`
-- `mdsvr`
-- `apssvr`
-- `quantsvr`
-- `indsvr`
-- `simsvr`
-- `batchsvr`
-- `web`
-- `clickhouse`
+系统由多个服务协作完成完整策略生命周期：
 
-## 机器要求
+```text
+策略采集/生成 -> 回测优化 -> 自动上线 -> 实盘运行 -> 日末复盘 -> 系统报告
+```
 
-默认检查：
+核心服务：
+
+- `GW`：统一 HTTP/MCP/API key 入口。
+- `INDSvr`：策略采集、策略生成、候选策略和编译。
+- `SIMSvr`：walk-forward 回测、参数优化和自动发布。
+- `QuantSvr`：实盘策略运行、信号消费、下单、Telegram、日末复盘。
+- `BatchSvr`：系统日报、运行报告和批处理。
+- `MDSvr/APSSvr`：行情与交易账户相关运行支撑。
+- `Web`：页面入口。
+- `ClickHouse`：策略、信号、订单、成交、回测和报告数据存储。
+
+更完整的说明见：[系统总览](docs/system-overview.zh-CN.md)。
+
+## 快速部署
+
+机器默认要求：
 
 - CPU >= 2 核
 - 内存 >= 8192 MB
 - `${DEPLOY_ROOT}` 可用磁盘 >= 20 GB
 
-可在 `.env.prod` 中调整阈值：
-
-```dotenv
-MIN_CPU_CORES=2
-MIN_MEMORY_MB=8192
-MIN_DISK_GB=20
-```
-
-如果机器不满足要求，部署脚本会提示原因并退出。
-
-## 从无到有部署
-
-适合新服务器，或没有现成 ClickHouse 的环境。
+从空服务器部署，使用内置 ClickHouse：
 
 ```bash
 git clone https://github.com/bliplink/dc-quant-deploy.git
@@ -45,20 +41,7 @@ cd dc-quant-deploy
 ./deploy-standalone.sh
 ```
 
-`deploy-standalone.sh` 会自动从仓库默认文件生成缺失的运行配置：
-
-- `.env.prod`
-- `control.prod/ATSConfig.ini`
-- `control.prod/DBPoolConfig.ini`
-- `control.prod/jaas.ini`
-- `control.prod/dc.dat`
-- `control.prod/overrides/`
-
-该方式会自动启动 ClickHouse，并执行默认初始化 SQL。
-
-## 使用已有 ClickHouse 部署
-
-适合已有 ClickHouse 的环境。脚本只做连通性和 schema 检查，不做数据迁移。
+使用已有 ClickHouse：
 
 ```bash
 git clone https://github.com/bliplink/dc-quant-deploy.git
@@ -68,46 +51,46 @@ vi .env.prod
 ./deploy-with-external-clickhouse.sh
 ```
 
-如需手动初始化已有 ClickHouse：
+部署后验证：
 
 ```bash
-./clickhouse/apply-init.sh
-```
-
-## 验证
-
-```bash
+./validate.sh
 docker compose --env-file .env.prod -f compose.yaml -f compose.override.generated.yaml ps
 curl -I http://127.0.0.1/web/
-printf ruok | nc -w 3 127.0.0.1 2181
 curl 'http://127.0.0.1:8123/?query=SELECT%201'
 ```
 
-## 维护
+部署完成后的第一步见：[部署后快速开始](docs/quick-start-after-deploy.zh-CN.md)。
+
+## 部署后如何使用
+
+主要入口：
+
+- 使用 `GW` 的 MCP/API 入口提交外部信号或消息。
+- 使用 `INDSvr` 创建或导入策略，生成 candidate。
+- 使用 `SIMSvr` 自动执行回测、参数优化和上线判断。
+- 使用 `QuantSvr` 运行已上线策略并生成日末复盘。
+- 使用 `BatchSvr` 查看每日系统报告和 5 分钟运行报告。
+
+完整使用说明见：[用户使用手册](docs/user-guide.zh-CN.md)。
+
+## 核心文档
+
+- [系统总览](docs/system-overview.zh-CN.md)
+- [部署后快速开始](docs/quick-start-after-deploy.zh-CN.md)
+- [用户使用手册](docs/user-guide.zh-CN.md)
+- [核心流程](docs/flows.zh-CN.md)
+- [MCP 接口](docs/mcp-api.zh-CN.md)
+- [核心数据表](docs/data-model.zh-CN.md)
+- [报告与排障](docs/reports-and-troubleshooting.zh-CN.md)
+- [安全说明](docs/security.zh-CN.md)
+
+## 常用运维
 
 重启单个服务：
 
 ```bash
 ./restart-service.sh quantsvr
-```
-
-停止单个服务：
-
-```bash
-docker compose --env-file .env.prod -f compose.yaml -f compose.override.generated.yaml stop quantsvr
-```
-
-启动单个服务：
-
-```bash
-docker compose --env-file .env.prod -f compose.yaml -f compose.override.generated.yaml up -d --no-deps quantsvr
-```
-
-查看日志：
-
-```bash
-docker logs dc-quantsvr --tail 200
-tail -n 100 ${DEPLOY_ROOT}/log/QuantSvr.log
 ```
 
 升级单个服务镜像：
@@ -118,61 +101,24 @@ docker compose --env-file .env.prod -f compose.yaml -f compose.override.generate
 ./restart-service.sh quantsvr
 ```
 
+查看日志：
+
+```bash
+docker logs dc-quantsvr --tail 200
+tail -n 100 ${DEPLOY_ROOT}/log/QuantSvr.log
+```
+
 全量部署失败后回滚：
 
 ```bash
 ./rollback.sh
 ```
 
-## 运行目录
+## 安全提醒
 
-部署完成后，服务器运行根目录只需要：
+- 不要提交 `.env.prod`。
+- 不要提交真实 API key、Telegram token、ClickHouse 生产密码。
+- `control.prod.example/` 只放示例配置。
+- 对外开放 MCP 前必须替换 `apiKeyList.csv` 中的示例 key。
 
-```text
-${DEPLOY_ROOT}/control
-${DEPLOY_ROOT}/data
-${DEPLOY_ROOT}/log
-```
-
-## 可选配置覆盖
-
-默认使用镜像内置配置。只有当 `${DEPLOY_ROOT}/control/overrides` 下存在覆盖文件时，脚本才生成单文件挂载。
-
-支持的覆盖文件：
-
-```text
-${DEPLOY_ROOT}/control/overrides/GW/config/mcpTools.tsv
-${DEPLOY_ROOT}/control/overrides/GW/config/apiKeyList.csv
-${DEPLOY_ROOT}/control/overrides/GW/config/spring-gw-client.xml
-${DEPLOY_ROOT}/control/overrides/GW/config/log4j.ini
-${DEPLOY_ROOT}/control/overrides/<Service>/config/log4j.ini
-```
-
-新增覆盖文件后：
-
-```bash
-bash generate-compose-overrides.sh .env.prod compose.override.generated.yaml
-./restart-service.sh <service>
-```
-
-## 仓库文件
-
-本仓库只保留部署和维护所需文件：
-
-```text
-compose.yaml
-.env.standalone.example
-.env.external-clickhouse.example
-deploy.sh
-deploy-standalone.sh
-deploy-with-external-clickhouse.sh
-rollback.sh
-restart-service.sh
-validate.sh
-generate-compose-overrides.sh
-control.prod/
-control.prod.example/
-clickhouse/
-README.md
-README.en.md
-```
+许可证：Apache-2.0，详见 [LICENSE](LICENSE)。

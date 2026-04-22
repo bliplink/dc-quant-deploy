@@ -1,43 +1,37 @@
 # dc-quant-deploy
 
-DC Quant single-node Docker Compose deployment repository.
+Single-node Docker Compose deployment repository for DC Quant.
 
-中文文档: [README.md](README.md)
+Chinese documentation: [README.md](README.md)
 
-## Services
+## What Is DC Quant
 
-- `zookeeper`
-- `GW`
-- `mdsvr`
-- `apssvr`
-- `quantsvr`
-- `indsvr`
-- `simsvr`
-- `batchsvr`
-- `web`
-- `clickhouse`
+DC Quant is a quantitative strategy system that covers the full lifecycle:
 
-## Requirements
+```text
+strategy source / generation -> backtest optimization -> auto publish -> live trading -> daily review -> system reports
+```
 
-Default checks:
+Main services:
+
+- `GW`: external HTTP/MCP/API-key entry point.
+- `INDSvr`: strategy source ingestion, strategy generation, candidates, and compilation.
+- `SIMSvr`: walk-forward backtesting, parameter optimization, and auto-publish decisions.
+- `QuantSvr`: live strategy runtime, signal consumption, order flow, Telegram, and daily review.
+- `BatchSvr`: daily reports, runtime reports, and batch jobs.
+- `MDSvr/APSSvr`: market-data and account/trading support services.
+- `Web`: web entry point.
+- `ClickHouse`: storage for strategy, signal, order, trade, backtest, and report data.
+
+## Quick Deploy
+
+Minimum default requirements:
 
 - CPU >= 2 cores
 - Memory >= 8192 MB
 - Free disk under `${DEPLOY_ROOT}` >= 20 GB
 
-You can adjust the thresholds in `.env.prod`:
-
-```dotenv
-MIN_CPU_CORES=2
-MIN_MEMORY_MB=8192
-MIN_DISK_GB=20
-```
-
-The deployment script stops with a clear message if the machine does not meet the requirements.
-
-## Install From Scratch
-
-Use this mode for a new server, or for an environment without an existing ClickHouse.
+Deploy with bundled ClickHouse:
 
 ```bash
 git clone https://github.com/bliplink/dc-quant-deploy.git
@@ -45,20 +39,7 @@ cd dc-quant-deploy
 ./deploy-standalone.sh
 ```
 
-`deploy-standalone.sh` automatically creates missing runtime files from the repository defaults:
-
-- `.env.prod`
-- `control.prod/ATSConfig.ini`
-- `control.prod/DBPoolConfig.ini`
-- `control.prod/jaas.ini`
-- `control.prod/dc.dat`
-- `control.prod/overrides/`
-
-This mode starts ClickHouse and runs the default initialization SQL automatically.
-
-## Install With Existing ClickHouse
-
-Use this mode when ClickHouse already exists. The script only checks connectivity and schema; it does not migrate data.
+Deploy with an existing ClickHouse:
 
 ```bash
 git clone https://github.com/bliplink/dc-quant-deploy.git
@@ -68,20 +49,27 @@ vi .env.prod
 ./deploy-with-external-clickhouse.sh
 ```
 
-If you need to initialize an existing ClickHouse manually:
+Verify:
 
 ```bash
-./clickhouse/apply-init.sh
-```
-
-## Verify
-
-```bash
+./validate.sh
 docker compose --env-file .env.prod -f compose.yaml -f compose.override.generated.yaml ps
 curl -I http://127.0.0.1/web/
-printf ruok | nc -w 3 127.0.0.1 2181
 curl 'http://127.0.0.1:8123/?query=SELECT%201'
 ```
+
+## After Deployment
+
+Start from these Chinese guides:
+
+- [System overview](docs/system-overview.zh-CN.md)
+- [Quick start after deployment](docs/quick-start-after-deploy.zh-CN.md)
+- [User guide](docs/user-guide.zh-CN.md)
+- [Core flows](docs/flows.zh-CN.md)
+- [MCP API](docs/mcp-api.zh-CN.md)
+- [Data model](docs/data-model.zh-CN.md)
+- [Reports and troubleshooting](docs/reports-and-troubleshooting.zh-CN.md)
+- [Security](docs/security.zh-CN.md)
 
 ## Maintain
 
@@ -89,25 +77,6 @@ Restart one service:
 
 ```bash
 ./restart-service.sh quantsvr
-```
-
-Stop one service:
-
-```bash
-docker compose --env-file .env.prod -f compose.yaml -f compose.override.generated.yaml stop quantsvr
-```
-
-Start one service:
-
-```bash
-docker compose --env-file .env.prod -f compose.yaml -f compose.override.generated.yaml up -d --no-deps quantsvr
-```
-
-View logs:
-
-```bash
-docker logs dc-quantsvr --tail 200
-tail -n 100 ${DEPLOY_ROOT}/log/QuantSvr.log
 ```
 
 Upgrade one service image:
@@ -118,61 +87,25 @@ docker compose --env-file .env.prod -f compose.yaml -f compose.override.generate
 ./restart-service.sh quantsvr
 ```
 
+View logs:
+
+```bash
+docker logs dc-quantsvr --tail 200
+tail -n 100 ${DEPLOY_ROOT}/log/QuantSvr.log
+```
+
 Rollback after a failed full deployment:
 
 ```bash
 ./rollback.sh
 ```
 
-## Runtime Directories
+## Security
 
-After deployment, the server runtime root only needs:
+Never commit `.env.prod`, real API keys, Telegram tokens, ClickHouse production passwords, or private runtime data.
 
-```text
-${DEPLOY_ROOT}/control
-${DEPLOY_ROOT}/data
-${DEPLOY_ROOT}/log
-```
+See [SECURITY.md](SECURITY.md) for responsible security handling.
 
-## Optional Overrides
+## License
 
-Services use image-bundled defaults unless override files exist under `${DEPLOY_ROOT}/control/overrides`.
-
-Supported override files:
-
-```text
-${DEPLOY_ROOT}/control/overrides/GW/config/mcpTools.tsv
-${DEPLOY_ROOT}/control/overrides/GW/config/apiKeyList.csv
-${DEPLOY_ROOT}/control/overrides/GW/config/spring-gw-client.xml
-${DEPLOY_ROOT}/control/overrides/GW/config/log4j.ini
-${DEPLOY_ROOT}/control/overrides/<Service>/config/log4j.ini
-```
-
-After adding a new override file:
-
-```bash
-bash generate-compose-overrides.sh .env.prod compose.override.generated.yaml
-./restart-service.sh <service>
-```
-
-## Repository Files
-
-This repository keeps only the files needed for deployment and maintenance:
-
-```text
-compose.yaml
-.env.standalone.example
-.env.external-clickhouse.example
-deploy.sh
-deploy-standalone.sh
-deploy-with-external-clickhouse.sh
-rollback.sh
-restart-service.sh
-validate.sh
-generate-compose-overrides.sh
-control.prod/
-control.prod.example/
-clickhouse/
-README.md
-README.en.md
-```
+Apache-2.0. See [LICENSE](LICENSE).

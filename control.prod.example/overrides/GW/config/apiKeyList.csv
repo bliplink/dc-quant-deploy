@@ -1,1 +1,2 @@
-replace-with-api-key,*,*
+replace-with-api-key,quantsvr,pubsignal
+replace-with-api-key,quantsvr,sendmsg
