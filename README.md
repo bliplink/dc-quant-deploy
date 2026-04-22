@@ -81,6 +81,7 @@ curl 'http://127.0.0.1:8123/?query=SELECT%201'
 - [用户使用手册](docs/user-guide.zh-CN.md)
 - [核心流程](docs/flows.zh-CN.md)
 - [MCP 接口](docs/mcp-api.zh-CN.md)
+- [QuantSvr 风控与 Telegram](docs/quantsvr-risk-telegram.zh-CN.md)
 - [核心数据表](docs/data-model.zh-CN.md)
 - [报告与排障](docs/reports-and-troubleshooting.zh-CN.md)
 - [安全说明](docs/security.zh-CN.md)

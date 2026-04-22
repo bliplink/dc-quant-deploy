@@ -31,7 +31,7 @@
 - `strategyPayload`：默认 `{}`。
 - `venueTypeGW`：默认 `BNFutures`。
 - `type`：订单类型说明，可传 `limit` 或 `market`，不传时沿用系统默认。
-- `orderExpireSeconds`：挂单有效时间，未传时沿用当前系统默认挂单时间。
+- `validUntilTime`：挂单有效时间，未传时默认当前时间后 30 分钟。
 - `autoSubscribeSymbol`：是否自动订阅品种，外部信号默认 `true`。
 - `remark`：备注。
 
@@ -63,8 +63,8 @@
     "stopPrice": 83680.0,
     "takerPrice": 85320.0,
     "strategyName": "partnerRangeBreak",
-    "type": "limit",
-    "orderExpireSeconds": 300
+    "type": "LIMIT",
+    "validUntilTime": "2026-04-22 15:35:00"
   }
 }
 ```

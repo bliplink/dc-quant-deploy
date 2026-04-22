@@ -52,6 +52,22 @@ strategy_backtest_task
 signal -> QuantSvr 日志 -> quant_signal_block_event -> quant_order -> quant_trade
 ```
 
+更完整的运行时风控说明见：[QuantSvr 风控规则与 Telegram 使用说明](quantsvr-risk-telegram.zh-CN.md)。
+
+## Telegram 怎么使用
+
+用户入口：
+
+- `/start` 打开主菜单。
+- 先设置 API 账号。
+- 再设置策略参数，例如策略模式、交易品种、仓位金额、最大持仓、运行时间、止盈止损、当日最大亏损和连续亏损次数。
+- 启动策略后，`QuantSvr` 才会消费匹配的信号并进入下单链路。
+
+群消息：
+
+- 交易播报、外部信号审计、自动订阅提示会发送到 `botGroupId`。
+- 第三方可通过 MCP `sendMsg` 发送一条自定义纯文本群消息。
+
 ## 为什么 MCP 调不通
 
 检查：

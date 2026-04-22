@@ -68,6 +68,7 @@ MCP pubSignal
 - `pubSignal` 用于第三方发送外部交易信号。
 - 信号先写入 `signal` 表。
 - 然后异步分发给匹配的运行中策略。
+- 开仓前仍会经过 `TeleStrategy` 风控检查。
 
 ## Telegram 消息
 
@@ -81,6 +82,7 @@ MCP sendMsg
 说明：
 
 - `sendMsg` 只负责向配置的 Telegram 群发送纯文本消息。
+- 群号不对外开放，固定使用 `QuantSvr` 当前配置的 `botGroupId`。
 - 不写业务表，不触发交易。
 
 ## 日末复盘

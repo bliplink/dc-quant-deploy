@@ -132,6 +132,10 @@ MCP pubSignal -> GW -> QuantSvr -> signal -> TeleStrategy -> order/trade
 
 `autoSubscribeSymbol` 默认开启。若运行中的策略收到外部信号，且还没有订阅该 symbol，系统可以自动补订阅，使后续处理更接近手动选择 symbol 的流程。
 
+实盘开仓前还会经过 `QuantSvr` 的运行时风控，包括运行状态、交易时间、仓位数量、持仓金额、多空比例、当日亏损、连续亏损、止损止盈和滑点检查。详细说明见：[QuantSvr 风控规则与 Telegram 使用说明](quantsvr-risk-telegram.zh-CN.md)。
+
+Telegram 可用于用户设置 API、配置策略参数、启动/停止策略、查看运行状态，也可通过 MCP `sendMsg` 向固定群发送自定义消息。Telegram 群消息和外部信号审计同样由 `QuantSvr` 负责。
+
 ## 7. 日末复盘
 
 日末复盘由 `QuantSvr` 负责，用于对信号、订单、成交、持仓做对账。

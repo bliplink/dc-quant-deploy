@@ -67,6 +67,7 @@ Start from these Chinese guides:
 - [User guide](docs/user-guide.zh-CN.md)
 - [Core flows](docs/flows.zh-CN.md)
 - [MCP API](docs/mcp-api.zh-CN.md)
+- [QuantSvr risk control and Telegram](docs/quantsvr-risk-telegram.zh-CN.md)
 - [Data model](docs/data-model.zh-CN.md)
 - [Reports and troubleshooting](docs/reports-and-troubleshooting.zh-CN.md)
 - [Security](docs/security.zh-CN.md)

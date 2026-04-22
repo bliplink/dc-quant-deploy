@@ -90,3 +90,12 @@ FROM signal
 ORDER BY createTime DESC
 LIMIT 20;
 ```
+
+查看信号是否被风控拦截：
+
+```sql
+SELECT *
+FROM quant_signal_block_event
+ORDER BY createTime DESC
+LIMIT 20;
+```
