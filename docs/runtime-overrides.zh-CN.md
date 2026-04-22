@@ -39,12 +39,12 @@ ${DEPLOY_ROOT}/control/overrides
 - `log4j.ini` 通常由 Java 服务监听，修改后约 1 秒内生效。
 - `mcpTools.tsv` 由 GW 周期加载，约 1 分钟内生效。
 - `apiKeyList.csv` 由 GW 周期加载，约 1 分钟内生效。
-- `spring-gw-client.xml` 是 Spring 启动配置，修改后需要重启 `gateway`。
+- `spring-gw-client.xml` 是 Spring 启动配置，修改后需要重启 `GW`。
 
 如果容器启动后才第一次创建某个覆盖文件，需要先重新生成 override 并重启对应服务一次：
 
 ```bash
-./restart-service.sh gateway
+./restart-service.sh GW
 ```
 
 之后继续修改该文件时，再按上面的热加载规则生效。

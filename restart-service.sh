@@ -16,7 +16,7 @@ Usage:
   ./restart-service.sh <service> [--dry-run]
 
 Supported services:
-  gateway
+  GW
   mdsvr
   apssvr
   quantsvr
@@ -61,6 +61,17 @@ if [[ -z "${SERVICE}" ]]; then
 fi
 
 case "${SERVICE}" in
+  GW|gw)
+    COMPOSE_SERVICE="gateway"
+    DISPLAY_SERVICE="GW"
+    ;;
+  *)
+    COMPOSE_SERVICE="${SERVICE}"
+    DISPLAY_SERVICE="${SERVICE}"
+    ;;
+esac
+
+case "${COMPOSE_SERVICE}" in
   gateway)
     CONTAINER_NAME="dc-gateway"
     SERVICE_PORT="3000"
@@ -208,16 +219,16 @@ main() {
   require_file "${COMPOSE_FILE}"
   generate_compose_overrides
 
-  echo "Restart target: ${SERVICE}"
+  echo "Restart target: ${DISPLAY_SERVICE}"
   echo "Container: ${CONTAINER_NAME}"
   echo "Port: ${SERVICE_PORT}"
   echo "Port check host: ${SERVICE_HOST}"
   echo "Docker command will use --no-deps --force-recreate."
 
-  run compose up -d --no-deps --force-recreate "${SERVICE}"
+  run compose up -d --no-deps --force-recreate "${COMPOSE_SERVICE}"
   validate_container_service
 
-  echo "Restart completed for ${SERVICE}."
+  echo "Restart completed for ${DISPLAY_SERVICE}."
 }
 
 main "$@"

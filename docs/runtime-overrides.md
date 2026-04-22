@@ -33,6 +33,6 @@ If an override file is missing, it is not mounted. This avoids Docker creating a
 - `log4j.ini` is watched by the Java services and usually applies in about 1 second.
 - `mcpTools.tsv` is reloaded by GW about once per minute.
 - `apiKeyList.csv` is reloaded by GW about once per minute.
-- `spring-gw-client.xml` is loaded by Spring at startup, so a `gateway` restart is required.
+- `spring-gw-client.xml` is loaded by Spring at startup, so a `GW` restart is required.
 
 If a file is created after the container is already running, regenerate the compose override and recreate the target service once. Later edits follow the reload behavior above.

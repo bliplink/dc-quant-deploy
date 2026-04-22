@@ -7,7 +7,7 @@
 Service scope:
 
 - `zookeeper`
-- `gateway` (`GW`)
+- `GW`
 - `mdsvr`
 - `apssvr`
 - `quantsvr`
@@ -19,7 +19,7 @@ Service scope:
 
 ## Service Ownership
 
-- `GW = gateway`
+- `GW` is the public service name. The Docker Compose service key is `gateway` for compatibility with existing scripts.
 - `quantsvr` owns runtime trading and external signal handling
 - `indsvr` owns generation and strategy candidate lifecycle
 - `simsvr` owns backtest and optimization execution
@@ -45,7 +45,7 @@ Service scope:
 - `zookeeper` provides the registry endpoint
 - `clickhouse` provides persistent data storage
 - all Java services depend on both `zookeeper` and `clickhouse`
-- `web` depends on `gateway`
+- `web` depends on `GW`
 
 ## Runtime Mount Contract
 

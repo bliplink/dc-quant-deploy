@@ -17,7 +17,7 @@ It provides two clear one-command deployment modes:
 Included services:
 
 - `zookeeper`
-- `gateway` / `GW`
+- `GW`
 - `mdsvr`
 - `apssvr`
 - `quantsvr`
@@ -32,7 +32,8 @@ Core contracts:
 - Single-host Docker Compose only.
 - ClickHouse is the only database. MySQL is not required.
 - The runtime root only needs `control/`, `data/`, and `log/`.
-- `.env.prod`, `control.prod/`, license files, and runtime data must not be committed.
+- `.env.prod` and runtime data must not be committed.
+- `control.prod/dc.dat` is the license file tracked by this repository. Replace it only when you intentionally want to change the default license file.
 
 ## Option 1: Standalone Deployment
 
@@ -42,14 +43,20 @@ Use this on a new server or when ClickHouse does not already exist.
 git clone https://github.com/bliplink/dc-quant-deploy.git
 cd dc-quant-deploy
 cp .env.standalone.example .env.prod
-cp -a control.prod.example control.prod
+mkdir -p control.prod
+cp control.prod.example/ATSConfig.ini control.prod/
+cp control.prod.example/DBPoolConfig.ini control.prod/
+cp control.prod.example/jaas.ini control.prod/
+cp -a control.prod.example/overrides control.prod/
+# Review and adjust local deployment values when needed.
 vi .env.prod
 vi control.prod/ATSConfig.ini
 vi control.prod/DBPoolConfig.ini
 vi control.prod/jaas.ini
-cp /path/to/dc.dat control.prod/dc.dat
 ./deploy-standalone.sh
 ```
+
+The `vi control.prod/*.ini` steps mean: confirm the service addresses, ports, ClickHouse connection, and ZooKeeper authentication values for your environment. If the defaults already match your environment, you can leave them unchanged. `control.prod/dc.dat` is already provided by the repository.
 
 This starts the `dc-clickhouse` container and initializes the `dc` database, tables, and views.
 
@@ -61,14 +68,20 @@ Use this when ClickHouse already exists.
 git clone https://github.com/bliplink/dc-quant-deploy.git
 cd dc-quant-deploy
 cp .env.external-clickhouse.example .env.prod
-cp -a control.prod.example control.prod
+mkdir -p control.prod
+cp control.prod.example/ATSConfig.ini control.prod/
+cp control.prod.example/DBPoolConfig.ini control.prod/
+cp control.prod.example/jaas.ini control.prod/
+cp -a control.prod.example/overrides control.prod/
+# Review and adjust local deployment values when needed.
 vi .env.prod
 vi control.prod/ATSConfig.ini
 vi control.prod/DBPoolConfig.ini
 vi control.prod/jaas.ini
-cp /path/to/dc.dat control.prod/dc.dat
 ./deploy-with-external-clickhouse.sh
 ```
+
+The `vi control.prod/*.ini` steps mean: confirm the service addresses, ports, ClickHouse connection, and ZooKeeper authentication values for your environment. If the defaults already match your environment, you can leave them unchanged. `control.prod/dc.dat` is already provided by the repository.
 
 This does not start `dc-clickhouse` and does not mutate an existing ClickHouse instance.
 
@@ -124,8 +137,8 @@ tail -n 100 ${DEPLOY_ROOT}/log/APSSvr.log
 ## Important Files
 
 - `.env.prod`: local deployment variables. Do not commit.
-- `control.prod/`: local control files. Do not commit.
-- `control.prod/dc.dat`: license file. Do not commit.
+- `control.prod/`: local control files copied from `control.prod.example/`.
+- `control.prod/dc.dat`: license file tracked by this repository.
 - `${DEPLOY_ROOT}/control`: runtime control files.
 - `${DEPLOY_ROOT}/data`: runtime data.
 - `${DEPLOY_ROOT}/log`: runtime logs.

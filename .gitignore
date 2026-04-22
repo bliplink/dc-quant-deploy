@@ -2,7 +2,9 @@
 .last_backup
 .compose.config.check.yaml
 compose.override.generated.yaml
-control.prod/
+control.prod/*
+!control.prod/
+!control.prod/dc.dat
 backups/
 clickhouse/data/
 clickhouse/log/

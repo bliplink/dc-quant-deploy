@@ -17,7 +17,7 @@
 ## 镜像归属
 
 - `zookeeper` 来自 `bliplink/zookeeper`
-- `gateway` 来自 `bliplink/gateway`
+- `GW` 来自 `bliplink/gateway`
 - `mdsvr` 来自 `bliplink/com.app.dc.mdsvr`
 - `apssvr` 来自 `bliplink/com.app.dc.apssvr`
 - `quantsvr` 来自 `bliplink/com.app.dc.quantsvr`

@@ -64,14 +64,20 @@ Use this when ClickHouse does not already exist.
 
 ```bash
 cp .env.standalone.example .env.prod
-cp -a control.prod.example control.prod
+mkdir -p control.prod
+cp control.prod.example/ATSConfig.ini control.prod/
+cp control.prod.example/DBPoolConfig.ini control.prod/
+cp control.prod.example/jaas.ini control.prod/
+cp -a control.prod.example/overrides control.prod/
+# Review and adjust local deployment values when needed.
 vi .env.prod
 vi control.prod/ATSConfig.ini
 vi control.prod/DBPoolConfig.ini
 vi control.prod/jaas.ini
-cp /path/to/dc.dat control.prod/dc.dat
 ./deploy-standalone.sh
 ```
+
+The `vi control.prod/*.ini` steps confirm environment-specific values such as service addresses, ports, ClickHouse connection settings, and ZooKeeper authentication. Leave them unchanged if the defaults already match your environment. `control.prod/dc.dat` is already included as the license file.
 
 This starts:
 
@@ -87,14 +93,20 @@ Use this when ClickHouse already exists.
 
 ```bash
 cp .env.external-clickhouse.example .env.prod
-cp -a control.prod.example control.prod
+mkdir -p control.prod
+cp control.prod.example/ATSConfig.ini control.prod/
+cp control.prod.example/DBPoolConfig.ini control.prod/
+cp control.prod.example/jaas.ini control.prod/
+cp -a control.prod.example/overrides control.prod/
+# Review and adjust local deployment values when needed.
 vi .env.prod
 vi control.prod/ATSConfig.ini
 vi control.prod/DBPoolConfig.ini
 vi control.prod/jaas.ini
-cp /path/to/dc.dat control.prod/dc.dat
 ./deploy-with-external-clickhouse.sh
 ```
+
+The `vi control.prod/*.ini` steps confirm environment-specific values such as service addresses, ports, ClickHouse connection settings, and ZooKeeper authentication. Leave them unchanged if the defaults already match your environment. `control.prod/dc.dat` is already included as the license file.
 
 This deploys the DC application services and ZooKeeper. It does not start `dc-clickhouse` and does not mutate the existing ClickHouse instance.
 
@@ -129,7 +141,7 @@ CLICKHOUSE_USERNAME=default
 CLICKHOUSE_PASSWORD=
 ```
 
-`control.prod/` contains local control files. Do not commit it.
+`control.prod/` contains local control files copied from `control.prod.example/`.
 
 Required files:
 
@@ -140,7 +152,7 @@ Required files:
 
 Notes:
 
-- `dc.dat` is the license file.
+- `dc.dat` is the license file and is tracked at `control.prod/dc.dat`.
 - ClickHouse is the only required database.
 - Secrets and production endpoints must stay local.
 
@@ -321,7 +333,7 @@ printf ruok | nc -w 3 127.0.0.1 2181
 
 ### Web Loads But API Fails
 
-Check gateway first:
+Check GW first:
 
 ```bash
 docker logs dc-gateway --tail 200

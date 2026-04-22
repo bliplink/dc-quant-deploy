@@ -17,7 +17,7 @@ Do not treat "upload a single jar to the server" as the standard release path fo
 ## Image Owners
 
 - `zookeeper` comes from `bliplink/zookeeper`
-- `gateway` comes from `bliplink/gateway`
+- `GW` comes from `bliplink/gateway`
 - `mdsvr` comes from `bliplink/com.app.dc.mdsvr`
 - `apssvr` comes from `bliplink/com.app.dc.apssvr`
 - `quantsvr` comes from `bliplink/com.app.dc.quantsvr`

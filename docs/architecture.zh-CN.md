@@ -7,7 +7,7 @@
 服务范围：
 
 - `zookeeper`
-- `gateway` (`GW`)
+- `GW`
 - `mdsvr`
 - `apssvr`
 - `quantsvr`
@@ -19,7 +19,7 @@
 
 ## 服务职责
 
-- `GW = gateway`
+- `GW` 是对外统一服务名；Docker Compose 内部服务键仍为 `gateway`，用于兼容现有脚本。
 - `quantsvr` 负责运行时交易与外部信号处理
 - `indsvr` 负责生成与策略候选生命周期
 - `simsvr` 负责回测与优化执行
@@ -45,7 +45,7 @@
 - `zookeeper` 提供注册中心端点
 - `clickhouse` 提供持久化数据存储
 - 所有 Java 服务同时依赖 `zookeeper` 和 `clickhouse`
-- `web` 依赖 `gateway`
+- `web` 依赖 `GW`
 
 ## 运行时挂载契约
 

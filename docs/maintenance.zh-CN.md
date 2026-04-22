@@ -38,7 +38,7 @@ docker compose --env-file .env.prod -f compose.yaml -f compose.override.generate
 常用服务名：
 
 - `zookeeper`
-- `gateway`
+- `GW`
 - `mdsvr`
 - `apssvr`
 - `quantsvr`

@@ -64,14 +64,20 @@ ${DEPLOY_ROOT}/log
 
 ```bash
 cp .env.standalone.example .env.prod
-cp -a control.prod.example control.prod
+mkdir -p control.prod
+cp control.prod.example/ATSConfig.ini control.prod/
+cp control.prod.example/DBPoolConfig.ini control.prod/
+cp control.prod.example/jaas.ini control.prod/
+cp -a control.prod.example/overrides control.prod/
+# 按需确认和修改本机部署变量、服务地址、端口、ClickHouse 连接和 ZooKeeper 认证。
 vi .env.prod
 vi control.prod/ATSConfig.ini
 vi control.prod/DBPoolConfig.ini
 vi control.prod/jaas.ini
-cp /path/to/dc.dat control.prod/dc.dat
 ./deploy-standalone.sh
 ```
+
+这里的 `vi control.prod/*.ini` 是让你确认示例配置是否符合当前服务器环境；如果默认配置已经匹配，可以不改。`control.prod/dc.dat` 已经随仓库提供，不需要再手工 `cp`。
 
 这个方式会启动：
 
@@ -87,14 +93,20 @@ cp /path/to/dc.dat control.prod/dc.dat
 
 ```bash
 cp .env.external-clickhouse.example .env.prod
-cp -a control.prod.example control.prod
+mkdir -p control.prod
+cp control.prod.example/ATSConfig.ini control.prod/
+cp control.prod.example/DBPoolConfig.ini control.prod/
+cp control.prod.example/jaas.ini control.prod/
+cp -a control.prod.example/overrides control.prod/
+# 按需确认和修改本机部署变量、服务地址、端口、ClickHouse 连接和 ZooKeeper 认证。
 vi .env.prod
 vi control.prod/ATSConfig.ini
 vi control.prod/DBPoolConfig.ini
 vi control.prod/jaas.ini
-cp /path/to/dc.dat control.prod/dc.dat
 ./deploy-with-external-clickhouse.sh
 ```
+
+这里的 `vi control.prod/*.ini` 是让你确认示例配置是否符合当前服务器环境；如果默认配置已经匹配，可以不改。`control.prod/dc.dat` 已经随仓库提供，不需要再手工 `cp`。
 
 这个方式只部署 DC 应用服务和 ZooKeeper，不启动 `dc-clickhouse`，也不会自动修改已有 ClickHouse。
 
@@ -129,7 +141,7 @@ CLICKHOUSE_USERNAME=default
 CLICKHOUSE_PASSWORD=
 ```
 
-`control.prod/` 是本机控制文件目录，不提交 Git。
+`control.prod/` 是从 `control.prod.example/` 复制出的本机控制文件目录。
 
 至少需要：
 
@@ -140,7 +152,7 @@ CLICKHOUSE_PASSWORD=
 
 说明：
 
-- `dc.dat` 是 license 文件。
+- `dc.dat` 是 license 文件，仓库中固定提交在 `control.prod/dc.dat`。
 - 系统只需要 ClickHouse，不需要 MySQL。
 - 密码、密钥、生产地址只保存在本机。
 
@@ -321,7 +333,7 @@ printf ruok | nc -w 3 127.0.0.1 2181
 
 ### Web 能打开但接口不通
 
-优先检查 gateway：
+优先检查 GW：
 
 ```bash
 docker logs dc-gateway --tail 200
