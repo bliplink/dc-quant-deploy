@@ -1,10 +1,10 @@
 # dc-quant-deploy
 
-DC Quant 单机 Docker Compose 一键部署仓库。
+DC Quant single-node Docker Compose deployment repository.
 
-English documentation: [README.en.md](README.en.md)
+中文文档: [README.md](README.md)
 
-## 服务
+## Services
 
 - `zookeeper`
 - `GW`
@@ -17,15 +17,15 @@ English documentation: [README.en.md](README.en.md)
 - `web`
 - `clickhouse`
 
-## 机器要求
+## Requirements
 
-默认检查：
+Default checks:
 
-- CPU >= 2 核
-- 内存 >= 8192 MB
-- `${DEPLOY_ROOT}` 可用磁盘 >= 20 GB
+- CPU >= 2 cores
+- Memory >= 8192 MB
+- Free disk under `${DEPLOY_ROOT}` >= 20 GB
 
-可在 `.env.prod` 中调整阈值：
+You can adjust the thresholds in `.env.prod`:
 
 ```dotenv
 MIN_CPU_CORES=2
@@ -33,11 +33,11 @@ MIN_MEMORY_MB=8192
 MIN_DISK_GB=20
 ```
 
-如果机器不满足要求，部署脚本会提示原因并退出。
+The deployment script stops with a clear message if the machine does not meet the requirements.
 
-## 从无到有部署
+## Install From Scratch
 
-适合新服务器，或没有现成 ClickHouse 的环境。
+Use this mode for a new server, or for an environment without an existing ClickHouse.
 
 ```bash
 git clone https://github.com/bliplink/dc-quant-deploy.git
@@ -45,7 +45,7 @@ cd dc-quant-deploy
 ./deploy-standalone.sh
 ```
 
-`deploy-standalone.sh` 会自动从仓库默认文件生成缺失的运行配置：
+`deploy-standalone.sh` automatically creates missing runtime files from the repository defaults:
 
 - `.env.prod`
 - `control.prod/ATSConfig.ini`
@@ -54,11 +54,11 @@ cd dc-quant-deploy
 - `control.prod/dc.dat`
 - `control.prod/overrides/`
 
-该方式会自动启动 ClickHouse，并执行默认初始化 SQL。
+This mode starts ClickHouse and runs the default initialization SQL automatically.
 
-## 使用已有 ClickHouse 部署
+## Install With Existing ClickHouse
 
-适合已有 ClickHouse 的环境。脚本只做连通性和 schema 检查，不做数据迁移。
+Use this mode when ClickHouse already exists. The script only checks connectivity and schema; it does not migrate data.
 
 ```bash
 git clone https://github.com/bliplink/dc-quant-deploy.git
@@ -68,13 +68,13 @@ vi .env.prod
 ./deploy-with-external-clickhouse.sh
 ```
 
-如需手动初始化已有 ClickHouse：
+If you need to initialize an existing ClickHouse manually:
 
 ```bash
 ./clickhouse/apply-init.sh
 ```
 
-## 验证
+## Verify
 
 ```bash
 docker compose --env-file .env.prod -f compose.yaml -f compose.override.generated.yaml ps
@@ -83,34 +83,34 @@ printf ruok | nc -w 3 127.0.0.1 2181
 curl 'http://127.0.0.1:8123/?query=SELECT%201'
 ```
 
-## 维护
+## Maintain
 
-重启单个服务：
+Restart one service:
 
 ```bash
 ./restart-service.sh quantsvr
 ```
 
-停止单个服务：
+Stop one service:
 
 ```bash
 docker compose --env-file .env.prod -f compose.yaml -f compose.override.generated.yaml stop quantsvr
 ```
 
-启动单个服务：
+Start one service:
 
 ```bash
 docker compose --env-file .env.prod -f compose.yaml -f compose.override.generated.yaml up -d --no-deps quantsvr
 ```
 
-查看日志：
+View logs:
 
 ```bash
 docker logs dc-quantsvr --tail 200
 tail -n 100 ${DEPLOY_ROOT}/log/QuantSvr.log
 ```
 
-升级单个服务镜像：
+Upgrade one service image:
 
 ```bash
 vi .env.prod
@@ -118,15 +118,15 @@ docker compose --env-file .env.prod -f compose.yaml -f compose.override.generate
 ./restart-service.sh quantsvr
 ```
 
-全量部署失败后回滚：
+Rollback after a failed full deployment:
 
 ```bash
 ./rollback.sh
 ```
 
-## 运行目录
+## Runtime Directories
 
-部署完成后，服务器运行根目录只需要：
+After deployment, the server runtime root only needs:
 
 ```text
 ${DEPLOY_ROOT}/control
@@ -134,11 +134,11 @@ ${DEPLOY_ROOT}/data
 ${DEPLOY_ROOT}/log
 ```
 
-## 可选配置覆盖
+## Optional Overrides
 
-默认使用镜像内置配置。只有当 `${DEPLOY_ROOT}/control/overrides` 下存在覆盖文件时，脚本才生成单文件挂载。
+Services use image-bundled defaults unless override files exist under `${DEPLOY_ROOT}/control/overrides`.
 
-支持的覆盖文件：
+Supported override files:
 
 ```text
 ${DEPLOY_ROOT}/control/overrides/GW/config/mcpTools.tsv
@@ -148,16 +148,16 @@ ${DEPLOY_ROOT}/control/overrides/GW/config/log4j.ini
 ${DEPLOY_ROOT}/control/overrides/<Service>/config/log4j.ini
 ```
 
-新增覆盖文件后：
+After adding a new override file:
 
 ```bash
 bash generate-compose-overrides.sh .env.prod compose.override.generated.yaml
 ./restart-service.sh <service>
 ```
 
-## 仓库文件
+## Repository Files
 
-本仓库只保留部署和维护所需文件：
+This repository keeps only the files needed for deployment and maintenance:
 
 ```text
 compose.yaml
