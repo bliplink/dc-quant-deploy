@@ -53,12 +53,6 @@ QUANTSVR_BOT_ADMIN_LIST="${QUANTSVR_BOT_ADMIN_LIST:-}"
 
 INDSVR_DEEPSEEK_API_KEY="${INDSVR_DEEPSEEK_API_KEY:-}"
 
-APSSVR_BIRDEYE_API_KEY="${APSSVR_BIRDEYE_API_KEY:-}"
-APSSVR_BINANCE_API_KEY="${APSSVR_BINANCE_API_KEY:-}"
-APSSVR_BINANCE_SECRET_KEY="${APSSVR_BINANCE_SECRET_KEY:-}"
-APSSVR_ENABLE_BIRDEYE="$(bool_from_secret "${APSSVR_ENABLE_BIRDEYE:-}" "${APSSVR_BIRDEYE_API_KEY}")"
-APSSVR_ENABLE_BINANCE="$(bool_from_secret "${APSSVR_ENABLE_BINANCE:-}" "${APSSVR_BINANCE_API_KEY}${APSSVR_BINANCE_SECRET_KEY}")"
-
 write_file "${DEPLOY_ROOT}/control/overrides/QuantSvr/config/application.properties" <<EOF
 serverKey=SERVER.QuantSvr
 log4j.file=./config/log4j.ini
@@ -217,7 +211,7 @@ log4j.writeTime=true
 log4j.async=true
 
 [BNFutures]
-enableBinanceFlag=${APSSVR_ENABLE_BINANCE}
+enableBinanceFlag=false
 
 enableBookTickerFlag=false
 
@@ -225,7 +219,7 @@ enableSymbolTickerFlag=true
 
 enableMarkPriceFlag=false
 
-enableUserDataFlag=${APSSVR_ENABLE_BINANCE}
+enableUserDataFlag=false
 
 enableKlineFlag=false
 text=5m
@@ -236,13 +230,13 @@ wssUrl=
 #wss://stream.binancefuture.com/ws
 
 [BirdEye]
-enableJupFlag=${APSSVR_ENABLE_BIRDEYE}
-BirdEyeEnableFlag=${APSSVR_ENABLE_BIRDEYE}
+enableJupFlag=false
+BirdEyeEnableFlag=false
 BirdEyeApiUrl=wss://public-api.birdeye.so/socket/solana?x-api-key=%s
-BirdEyeApiKey=${APSSVR_BIRDEYE_API_KEY}
+BirdEyeApiKey=
 
 [BNSpot]
-BNSpotEnableFlag=${APSSVR_ENABLE_BINANCE}
+BNSpotEnableFlag=false
 BNSpotApiUrl=
 #https://testnet.binance.vision
 BNSpotWssUrl=
@@ -251,8 +245,8 @@ BNSpotWssUrl=
 dbpool.cfg=./config/DBPoolConfig.ini
 dbpool.default=MYSQL0
 
-apiKey=${APSSVR_BINANCE_API_KEY}
-secretKey=${APSSVR_BINANCE_SECRET_KEY}
+apiKey=
+secretKey=
 
 binanceSymbolList=btcusdt|ethusdt
 binanceSymbolAliasList=btcusdt|ethusdt

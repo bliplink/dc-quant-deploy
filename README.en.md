@@ -143,7 +143,7 @@ Rollback after a failed full deployment:
 
 Never commit `.env.prod`, real API keys, Telegram tokens, ClickHouse production passwords, or private runtime data.
 
-QuantSvr, INDSvr, and APSSvr bot/API credentials are maintained only in `.env.prod`. Deployment scripts generate `control/overrides/<Service>/config/application.properties` and mount it into the corresponding container. Restart the affected service after changing `.env.prod`.
+QuantSvr and INDSvr bot/API credentials are maintained only in `.env.prod`. Deployment scripts generate `control/overrides/<Service>/config/application.properties` and mount it into the corresponding container. APSSvr does not require external API keys by default; exchange and BirdEye integrations are disabled unless explicitly customized. Restart the affected service after changing `.env.prod`.
 
 See [SECURITY.md](SECURITY.md) for responsible security handling.
 

@@ -25,13 +25,13 @@ Use placeholder values such as `replace-with-*`, `change-me`, or `example-*` in 
 
 ## Runtime Secret Overrides
 
-QuantSvr, INDSvr, and APSSvr runtime credentials are supplied from `.env.prod`.
+QuantSvr and INDSvr runtime credentials are supplied from `.env.prod`. APSSvr does not require external API keys by default.
 
 Deployment scripts generate:
 
 - `control/overrides/QuantSvr/config/application.properties`
 - `control/overrides/INDSvr/config/application.properties`
-- `control/overrides/APSSvr/config/application.properties`
+- `control/overrides/APSSvr/config/application.properties` with external key integrations disabled by default
 
 These generated files are local runtime artifacts and must not be committed. After changing `.env.prod`, restart the affected service.
 

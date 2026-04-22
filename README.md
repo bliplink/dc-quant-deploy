@@ -157,7 +157,8 @@ tail -n 100 ${DEPLOY_ROOT}/log/QuantSvr.log
 
 - 不要提交 `.env.prod`。
 - 不要提交真实 API key、Telegram token、ClickHouse 生产密码。
-- QuantSvr、INDSvr、APSSvr 的 bot/API key 只维护在 `.env.prod`，部署脚本会生成 `control/overrides/<Service>/config/application.properties` 并挂载到容器。
+- QuantSvr、INDSvr 的 bot/API key 只维护在 `.env.prod`，部署脚本会生成 `control/overrides/<Service>/config/application.properties` 并挂载到容器。
+- APSSvr 默认不需要外部 API key，相关交易所/BirdEye 开关默认关闭。
 - 更新 `.env.prod` 后，重启对应服务让新配置生效。
 - `control.prod.example/` 只放示例配置。
 - 对外开放 MCP 前必须替换 `apiKeyList.csv` 中的示例 key。
