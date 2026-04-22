@@ -69,15 +69,12 @@ cp control.prod.example/ATSConfig.ini control.prod/
 cp control.prod.example/DBPoolConfig.ini control.prod/
 cp control.prod.example/jaas.ini control.prod/
 cp -a control.prod.example/overrides control.prod/
-# Review and adjust local deployment values when needed.
 vi .env.prod
 vi control.prod/ATSConfig.ini
 vi control.prod/DBPoolConfig.ini
 vi control.prod/jaas.ini
 ./deploy-standalone.sh
 ```
-
-The `vi control.prod/*.ini` steps confirm environment-specific values such as service addresses, ports, ClickHouse connection settings, and ZooKeeper authentication. Leave them unchanged if the defaults already match your environment. `control.prod/dc.dat` is already included as the license file.
 
 This starts:
 
@@ -98,15 +95,12 @@ cp control.prod.example/ATSConfig.ini control.prod/
 cp control.prod.example/DBPoolConfig.ini control.prod/
 cp control.prod.example/jaas.ini control.prod/
 cp -a control.prod.example/overrides control.prod/
-# Review and adjust local deployment values when needed.
 vi .env.prod
 vi control.prod/ATSConfig.ini
 vi control.prod/DBPoolConfig.ini
 vi control.prod/jaas.ini
 ./deploy-with-external-clickhouse.sh
 ```
-
-The `vi control.prod/*.ini` steps confirm environment-specific values such as service addresses, ports, ClickHouse connection settings, and ZooKeeper authentication. Leave them unchanged if the defaults already match your environment. `control.prod/dc.dat` is already included as the license file.
 
 This deploys the DC application services and ZooKeeper. It does not start `dc-clickhouse` and does not mutate the existing ClickHouse instance.
 
@@ -150,11 +144,6 @@ Required files:
 - `jaas.ini`
 - `dc.dat`
 
-Notes:
-
-- `dc.dat` is the license file and is tracked at `control.prod/dc.dat`.
-- ClickHouse is the only required database.
-- Secrets and production endpoints must stay local.
 
 ## 5. Verify Deployment
 

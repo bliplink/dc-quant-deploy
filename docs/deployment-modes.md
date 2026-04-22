@@ -19,15 +19,12 @@ cp control.prod.example/ATSConfig.ini control.prod/
 cp control.prod.example/DBPoolConfig.ini control.prod/
 cp control.prod.example/jaas.ini control.prod/
 cp -a control.prod.example/overrides control.prod/
-# Review and adjust local deployment values when needed.
 vi .env.prod
 vi control.prod/ATSConfig.ini
 vi control.prod/DBPoolConfig.ini
 vi control.prod/jaas.ini
 ./deploy-standalone.sh
 ```
-
-The `vi control.prod/*.ini` steps confirm environment-specific values such as service addresses, ports, ClickHouse connection settings, and ZooKeeper authentication. Leave them unchanged if the defaults already match your environment. `control.prod/dc.dat` is already included as the license file.
 
 This entry:
 
@@ -61,15 +58,12 @@ cp control.prod.example/ATSConfig.ini control.prod/
 cp control.prod.example/DBPoolConfig.ini control.prod/
 cp control.prod.example/jaas.ini control.prod/
 cp -a control.prod.example/overrides control.prod/
-# Review and adjust local deployment values when needed.
 vi .env.prod
 vi control.prod/ATSConfig.ini
 vi control.prod/DBPoolConfig.ini
 vi control.prod/jaas.ini
 ./deploy-with-external-clickhouse.sh
 ```
-
-The `vi control.prod/*.ini` steps confirm environment-specific values such as service addresses, ports, ClickHouse connection settings, and ZooKeeper authentication. Leave them unchanged if the defaults already match your environment. `control.prod/dc.dat` is already included as the license file.
 
 Set the real ClickHouse values in `.env.prod`:
 

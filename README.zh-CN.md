@@ -30,10 +30,8 @@
 核心约定：
 
 - 只支持单机 Docker Compose。
-- 数据库只有 ClickHouse，没有 MySQL。
 - 初始化后的运行目录只需要保留 `control/`、`data/`、`log/`。
 - `.env.prod` 和运行数据不提交 Git。
-- `control.prod/dc.dat` 是 license 文件，随仓库提交；只有明确要更换默认 license 时才替换它。
 
 ## 方式一：从无到有部署
 
@@ -48,15 +46,12 @@ cp control.prod.example/ATSConfig.ini control.prod/
 cp control.prod.example/DBPoolConfig.ini control.prod/
 cp control.prod.example/jaas.ini control.prod/
 cp -a control.prod.example/overrides control.prod/
-# 按需确认和修改本机部署变量、服务地址、端口、ClickHouse 连接和 ZooKeeper 认证。
 vi .env.prod
 vi control.prod/ATSConfig.ini
 vi control.prod/DBPoolConfig.ini
 vi control.prod/jaas.ini
 ./deploy-standalone.sh
 ```
-
-这里的 `vi control.prod/*.ini` 是让你确认示例配置是否符合当前服务器环境；如果默认配置已经匹配，可以不改。`control.prod/dc.dat` 已经随仓库提供，不需要再手工 `cp`。
 
 这个入口会启动 `dc-clickhouse` 容器，并自动初始化 `dc` 数据库、表和视图。
 
@@ -73,15 +68,12 @@ cp control.prod.example/ATSConfig.ini control.prod/
 cp control.prod.example/DBPoolConfig.ini control.prod/
 cp control.prod.example/jaas.ini control.prod/
 cp -a control.prod.example/overrides control.prod/
-# 按需确认和修改本机部署变量、服务地址、端口、ClickHouse 连接和 ZooKeeper 认证。
 vi .env.prod
 vi control.prod/ATSConfig.ini
 vi control.prod/DBPoolConfig.ini
 vi control.prod/jaas.ini
 ./deploy-with-external-clickhouse.sh
 ```
-
-这里的 `vi control.prod/*.ini` 是让你确认示例配置是否符合当前服务器环境；如果默认配置已经匹配，可以不改。`control.prod/dc.dat` 已经随仓库提供，不需要再手工 `cp`。
 
 这个入口不会启动 `dc-clickhouse`，也不会自动修改已有 ClickHouse。
 
@@ -138,7 +130,6 @@ tail -n 100 ${DEPLOY_ROOT}/log/APSSvr.log
 
 - `.env.prod`：本机部署变量，不提交 Git。
 - `control.prod/`：从 `control.prod.example/` 复制出的本机控制文件。
-- `control.prod/dc.dat`：license 文件，随仓库提交。
 - `${DEPLOY_ROOT}/control`：运行时控制文件。
 - `${DEPLOY_ROOT}/data`：运行时数据。
 - `${DEPLOY_ROOT}/log`：运行时日志。

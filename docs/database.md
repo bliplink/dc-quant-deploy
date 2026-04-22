@@ -1,13 +1,5 @@
 # Database
 
-## Boundary
-
-The public deployment only uses ClickHouse.
-
-- there is no MySQL in this repository
-- Java services should point only to ClickHouse
-- `DBPoolConfig.ini` in both template sets only contains ClickHouse settings
-
 ## Deployment Modes
 
 The repository supports two ClickHouse modes:

@@ -19,15 +19,12 @@ cp control.prod.example/ATSConfig.ini control.prod/
 cp control.prod.example/DBPoolConfig.ini control.prod/
 cp control.prod.example/jaas.ini control.prod/
 cp -a control.prod.example/overrides control.prod/
-# 按需确认和修改本机部署变量、服务地址、端口、ClickHouse 连接和 ZooKeeper 认证。
 vi .env.prod
 vi control.prod/ATSConfig.ini
 vi control.prod/DBPoolConfig.ini
 vi control.prod/jaas.ini
 ./deploy-standalone.sh
 ```
-
-这里的 `vi control.prod/*.ini` 是让你确认示例配置是否符合当前服务器环境；如果默认配置已经匹配，可以不改。`control.prod/dc.dat` 已经随仓库提供，不需要再手工 `cp`。
 
 这个入口会：
 
@@ -63,15 +60,12 @@ cp control.prod.example/ATSConfig.ini control.prod/
 cp control.prod.example/DBPoolConfig.ini control.prod/
 cp control.prod.example/jaas.ini control.prod/
 cp -a control.prod.example/overrides control.prod/
-# 按需确认和修改本机部署变量、服务地址、端口、ClickHouse 连接和 ZooKeeper 认证。
 vi .env.prod
 vi control.prod/ATSConfig.ini
 vi control.prod/DBPoolConfig.ini
 vi control.prod/jaas.ini
 ./deploy-with-external-clickhouse.sh
 ```
-
-这里的 `vi control.prod/*.ini` 是让你确认示例配置是否符合当前服务器环境；如果默认配置已经匹配，可以不改。`control.prod/dc.dat` 已经随仓库提供，不需要再手工 `cp`。
 
 `.env.prod` 中需要配置真实 ClickHouse：
 

@@ -5,6 +5,7 @@ compose.override.generated.yaml
 control.prod/*
 !control.prod/
 !control.prod/dc.dat
+!control.prod/jaas.ini
 backups/
 clickhouse/data/
 clickhouse/log/
