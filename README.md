@@ -12,6 +12,43 @@ English documentation: [README.en.md](README.en.md)
 策略采集/生成 -> 回测优化 -> 自动上线 -> 实盘运行 -> 日末复盘 -> 系统报告
 ```
 
+## 5 分钟架构图
+
+```mermaid
+flowchart LR
+  User[用户 / 第三方系统] -->|HTTP / MCP / API key| GW[GW<br/>统一入口]
+  Web[Web 页面] --> GW
+
+  GW -->|策略生成请求| IND[INDSvr<br/>策略采集 / 生成 / 编译]
+  IND --> Candidate[(strategy_candidate)]
+  IND --> BacktestTask[(strategy_backtest_task)]
+
+  BacktestTask --> SIM[SIMSvr<br/>Walk-forward 回测 / 参数优化]
+  SIM --> Result[(backtest_result)]
+  SIM -->|通过自动发布门槛| Live[(strategy_live_registry)]
+
+  Live --> Quant[QuantSvr<br/>EMS + Risk + Telegram]
+  GW -->|pubSignal / sendMsg| Quant
+  Quant --> Signal[(signal)]
+  Quant --> Order[(quant_order / quant_trade / position)]
+  Quant --> TG[Telegram<br/>策略 UI / 群消息]
+
+  Batch[BatchSvr<br/>日报 / 运行报告] --> Reports[(system reports)]
+  Quant --> Review[(daily review)]
+
+  MD[MDSvr<br/>行情支撑] --> Quant
+  APS[APSSvr<br/>账户交易支撑] --> Quant
+
+  Candidate --> CH[(ClickHouse)]
+  BacktestTask --> CH
+  Result --> CH
+  Live --> CH
+  Signal --> CH
+  Order --> CH
+  Reports --> CH
+  Review --> CH
+```
+
 核心服务：
 
 - `GW`：统一 HTTP/MCP/API key 入口。

@@ -12,6 +12,43 @@ DC Quant is a quantitative strategy system that covers the full lifecycle:
 strategy source / generation -> backtest optimization -> auto publish -> live trading -> daily review -> system reports
 ```
 
+## 5-Minute Architecture
+
+```mermaid
+flowchart LR
+  User[User / third-party system] -->|HTTP / MCP / API key| GW[GW<br/>external gateway]
+  Web[Web UI] --> GW
+
+  GW -->|strategy generation| IND[INDSvr<br/>source / generation / compile]
+  IND --> Candidate[(strategy_candidate)]
+  IND --> BacktestTask[(strategy_backtest_task)]
+
+  BacktestTask --> SIM[SIMSvr<br/>walk-forward backtest / optimization]
+  SIM --> Result[(backtest_result)]
+  SIM -->|auto-publish pass| Live[(strategy_live_registry)]
+
+  Live --> Quant[QuantSvr<br/>EMS + Risk + Telegram]
+  GW -->|pubSignal / sendMsg| Quant
+  Quant --> Signal[(signal)]
+  Quant --> Order[(quant_order / quant_trade / position)]
+  Quant --> TG[Telegram<br/>strategy UI / group messages]
+
+  Batch[BatchSvr<br/>daily/runtime reports] --> Reports[(system reports)]
+  Quant --> Review[(daily review)]
+
+  MD[MDSvr<br/>market data support] --> Quant
+  APS[APSSvr<br/>account/trading support] --> Quant
+
+  Candidate --> CH[(ClickHouse)]
+  BacktestTask --> CH
+  Result --> CH
+  Live --> CH
+  Signal --> CH
+  Order --> CH
+  Reports --> CH
+  Review --> CH
+```
+
 Main services:
 
 - `GW`: external HTTP/MCP/API-key entry point.
