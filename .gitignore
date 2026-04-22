@@ -10,5 +10,7 @@ control.prod/*
 backups/
 .fresh_install_backup/
 .external_rehearsal_backup/
+.fresh_install_backup
+.external_rehearsal_backup
 clickhouse/data/
 clickhouse/log/
