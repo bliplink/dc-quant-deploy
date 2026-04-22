@@ -211,7 +211,7 @@ log4j.writeTime=true
 log4j.async=true
 
 [BNFutures]
-enableBinanceFlag=false
+enableBinanceFlag=true
 
 enableBookTickerFlag=false
 
