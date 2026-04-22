@@ -25,6 +25,9 @@ write_file() {
   mkdir -p "${dir}"
   cat > "${file}"
   chmod 600 "${file}"
+  if [[ -n "${RUNTIME_UID:-}" && -n "${RUNTIME_GID:-}" ]]; then
+    chown "${RUNTIME_UID}:${RUNTIME_GID}" "${file}" 2>/dev/null || true
+  fi
 }
 
 bool_from_secret() {
