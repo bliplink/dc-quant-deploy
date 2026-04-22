@@ -78,6 +78,35 @@ load_env() {
   esac
 }
 
+check_system_requirements() {
+  local min_cpu min_mem_mb min_disk_gb cpu_count mem_mb disk_mb disk_gb
+  min_cpu="${MIN_CPU_CORES:-2}"
+  min_mem_mb="${MIN_MEMORY_MB:-8192}"
+  min_disk_gb="${MIN_DISK_GB:-20}"
+
+  cpu_count="$(getconf _NPROCESSORS_ONLN 2>/dev/null || echo 0)"
+  mem_mb="$(awk '/MemTotal/ {print int($2 / 1024)}' /proc/meminfo 2>/dev/null || echo 0)"
+
+  mkdir -p "${DEPLOY_ROOT}"
+  disk_mb="$(df -Pm "${DEPLOY_ROOT}" | awk 'NR==2 {print $4}')"
+  disk_gb="$((disk_mb / 1024))"
+
+  if [ "${cpu_count}" -lt "${min_cpu}" ]; then
+    echo "Machine check failed: CPU cores ${cpu_count}, required >= ${min_cpu}." >&2
+    exit 1
+  fi
+
+  if [ "${mem_mb}" -lt "${min_mem_mb}" ]; then
+    echo "Machine check failed: memory ${mem_mb} MB, required >= ${min_mem_mb} MB." >&2
+    exit 1
+  fi
+
+  if [ "${disk_gb}" -lt "${min_disk_gb}" ]; then
+    echo "Machine check failed: free disk ${disk_gb} GB at ${DEPLOY_ROOT}, required >= ${min_disk_gb} GB." >&2
+    exit 1
+  fi
+}
+
 validate_ghcr_login() {
   local docker_config
   docker_config="${HOME}/.docker/config.json"
@@ -268,6 +297,7 @@ main() {
   check_cmd curl
   docker compose version >/dev/null
   load_env
+  check_system_requirements
   validate_ghcr_login
   validate_control_prod
   check_file "${COMPOSE_FILE}"

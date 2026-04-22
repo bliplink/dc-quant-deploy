@@ -4,6 +4,9 @@ set -euo pipefail
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 ENV_FILE="${ROOT_DIR}/.env.prod"
 DEPLOY_SCRIPT="${ROOT_DIR}/deploy.sh"
+ENV_EXAMPLE="${ROOT_DIR}/.env.standalone.example"
+CONTROL_DIR="${ROOT_DIR}/control.prod"
+CONTROL_EXAMPLE_DIR="${ROOT_DIR}/control.prod.example"
 
 usage() {
   cat <<'USAGE'
@@ -13,11 +16,13 @@ Usage:
 Deploy the full stack from scratch, including the embedded ClickHouse container.
 
 This script:
-  1. backs up .env.prod
-  2. sets CLICKHOUSE_MODE=embedded
-  3. sets CLICKHOUSE_HOST=127.0.0.1
-  4. checks that ClickHouse ports are not already occupied by another process
-  5. delegates to ./deploy.sh
+  1. creates .env.prod from .env.standalone.example when missing
+  2. creates control.prod defaults when missing
+  3. backs up .env.prod
+  4. sets CLICKHOUSE_MODE=embedded
+  5. sets CLICKHOUSE_HOST=127.0.0.1
+  6. checks that ClickHouse ports are not already occupied by another process
+  7. delegates to ./deploy.sh
 USAGE
 }
 
@@ -26,6 +31,35 @@ check_file() {
     echo "Missing required file: $1" >&2
     exit 1
   }
+}
+
+copy_if_missing() {
+  local src="$1"
+  local dst="$2"
+
+  if [ ! -e "${dst}" ]; then
+    cp -a "${src}" "${dst}"
+  fi
+}
+
+prepare_defaults() {
+  check_file "${ENV_EXAMPLE}"
+  check_file "${CONTROL_EXAMPLE_DIR}/ATSConfig.ini"
+  check_file "${CONTROL_EXAMPLE_DIR}/DBPoolConfig.ini"
+  check_file "${CONTROL_EXAMPLE_DIR}/jaas.ini"
+  check_file "${CONTROL_EXAMPLE_DIR}/dc.dat"
+
+  copy_if_missing "${ENV_EXAMPLE}" "${ENV_FILE}"
+
+  mkdir -p "${CONTROL_DIR}"
+  copy_if_missing "${CONTROL_EXAMPLE_DIR}/ATSConfig.ini" "${CONTROL_DIR}/ATSConfig.ini"
+  copy_if_missing "${CONTROL_EXAMPLE_DIR}/DBPoolConfig.ini" "${CONTROL_DIR}/DBPoolConfig.ini"
+  copy_if_missing "${CONTROL_EXAMPLE_DIR}/jaas.ini" "${CONTROL_DIR}/jaas.ini"
+  copy_if_missing "${CONTROL_EXAMPLE_DIR}/dc.dat" "${CONTROL_DIR}/dc.dat"
+
+  if [ -d "${CONTROL_EXAMPLE_DIR}/overrides" ] && [ ! -e "${CONTROL_DIR}/overrides" ]; then
+    cp -a "${CONTROL_EXAMPLE_DIR}/overrides" "${CONTROL_DIR}/overrides"
+  fi
 }
 
 set_env_value() {
@@ -90,8 +124,8 @@ main() {
       ;;
   esac
 
-  check_file "${ENV_FILE}"
   check_file "${DEPLOY_SCRIPT}"
+  prepare_defaults
 
   local backup_file
   backup_file="${ENV_FILE}.bak.standalone.$(date '+%Y%m%d%H%M%S')"
