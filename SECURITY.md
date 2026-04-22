@@ -23,6 +23,18 @@ Never commit:
 
 Use placeholder values such as `replace-with-*`, `change-me`, or `example-*` in committed files.
 
+## Runtime Secret Overrides
+
+QuantSvr, INDSvr, and APSSvr runtime credentials are supplied from `.env.prod`.
+
+Deployment scripts generate:
+
+- `control/overrides/QuantSvr/config/application.properties`
+- `control/overrides/INDSvr/config/application.properties`
+- `control/overrides/APSSvr/config/application.properties`
+
+These generated files are local runtime artifacts and must not be committed. After changing `.env.prod`, restart the affected service.
+
 ## Operational Recommendations
 
 - Enable API-key authentication before exposing MCP tools.

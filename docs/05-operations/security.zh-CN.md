@@ -20,6 +20,14 @@
 - 对外开放 MCP 前，必须启用 `GW` API key 检查。
 - `apiKeyList.csv` 中的示例 key 仅用于说明格式，不能用于生产。
 
+
+## 运行时敏感配置
+
+- QuantSvr、INDSvr、APSSvr 的 bot/API key 只维护在 `.env.prod`。
+- 部署脚本会生成 `control/overrides/<Service>/config/application.properties`。
+- 生成的 override 文件属于本地运行产物，不提交 Git。
+- 修改 `.env.prod` 后，需要重启对应服务。
+
 ## MCP 暴露建议
 
 - 只开放确实需要给第三方使用的工具。
