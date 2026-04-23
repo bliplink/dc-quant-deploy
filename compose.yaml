@@ -5,7 +5,7 @@ x-java-service-base: &java-service-base
   restart: unless-stopped
   user: "${RUNTIME_UID}:${RUNTIME_GID}"
   environment:
-    TZ: Asia/Shanghai
+    TZ: UTC
     DEPLOY_ROOT: /srv/dc
   volumes:
     - ${DEPLOY_ROOT}/control:/srv/dc/control:ro
@@ -19,7 +19,7 @@ services:
     profiles: ["embedded-clickhouse"]
     restart: unless-stopped
     environment:
-      TZ: Asia/Shanghai
+      TZ: UTC
       CLICKHOUSE_DB: ${CLICKHOUSE_DB_NAME}
       CLICKHOUSE_USER: ${CLICKHOUSE_USERNAME}
       CLICKHOUSE_PASSWORD: ${CLICKHOUSE_PASSWORD}
@@ -44,7 +44,7 @@ services:
     network_mode: host
     restart: unless-stopped
     environment:
-      TZ: Asia/Shanghai
+      TZ: UTC
       ATS_ROOT: /opt/zookeeper/runtime
       ZOOKEEPER_CLIENT_PORT: 2181
       ZOOKEEPER_DATA_DIR: /opt/zookeeper/data
@@ -68,7 +68,7 @@ services:
       zookeeper:
         condition: service_started
     environment:
-      TZ: Asia/Shanghai
+      TZ: UTC
       DEPLOY_ROOT: /srv/dc
       SERVICE_NAME: GW
       MAIN_CLASS: GW
@@ -89,7 +89,7 @@ services:
       zookeeper:
         condition: service_started
     environment:
-      TZ: Asia/Shanghai
+      TZ: UTC
       DEPLOY_ROOT: /srv/dc
       SERVICE_NAME: MDSvr
       MAIN_CLASS: MDSvr
@@ -111,7 +111,7 @@ services:
       zookeeper:
         condition: service_started
     environment:
-      TZ: Asia/Shanghai
+      TZ: UTC
       DEPLOY_ROOT: /srv/dc
       SERVICE_NAME: APSSvr
       MAIN_CLASS: APSSvr
@@ -132,7 +132,7 @@ services:
       zookeeper:
         condition: service_started
     environment:
-      TZ: Asia/Shanghai
+      TZ: UTC
       DEPLOY_ROOT: /srv/dc
       SERVICE_NAME: QuantSvr
       MAIN_CLASS: QuantSvr
@@ -153,7 +153,7 @@ services:
       zookeeper:
         condition: service_started
     environment:
-      TZ: Asia/Shanghai
+      TZ: UTC
       DEPLOY_ROOT: /srv/dc
       SERVICE_NAME: INDSvr
       MAIN_CLASS: INDSvr
@@ -174,7 +174,7 @@ services:
       zookeeper:
         condition: service_started
     environment:
-      TZ: Asia/Shanghai
+      TZ: UTC
       DEPLOY_ROOT: /srv/dc
       SERVICE_NAME: SIMSvr
       MAIN_CLASS: SIMSvr
@@ -195,7 +195,7 @@ services:
       zookeeper:
         condition: service_started
     environment:
-      TZ: Asia/Shanghai
+      TZ: UTC
       DEPLOY_ROOT: /srv/dc
       SERVICE_NAME: BatchSvr
       MAIN_CLASS: BatchSvr
@@ -210,4 +210,4 @@ services:
       gateway:
         condition: service_started
     environment:
-      TZ: Asia/Shanghai
+      TZ: UTC
