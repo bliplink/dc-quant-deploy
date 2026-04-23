@@ -99,6 +99,43 @@ curl 'http://127.0.0.1:8123/?query=SELECT%201'
 
 部署完成后的第一步见：[部署后快速开始](docs/01-getting-started/quick-start-after-deploy.zh-CN.md)。
 
+## 部署后安全加固
+
+安全加固是独立运维步骤，不会随一键部署自动执行。确认系统部署成功后，再执行：
+
+```bash
+sudo ./security/harden-host.sh
+sudo ./security/validate-host-security.sh
+```
+
+如果需要回滚主机安全策略：
+
+```bash
+sudo ./security/rollback-host-security.sh
+```
+
+加固脚本会禁用宿主机 `nginx`，保留 `dc-web` 容器对外服务；默认只放行 SSH、Web、GW 和 ClickHouse 外部代理端口。生产如果 SSH 不是 `22`，先在 `.env.prod` 中设置 `PUBLIC_SSH_PORT`。
+
+## 必填运行参数
+
+默认一键部署可以先拉起系统骨架。要启用 Telegram 和 DeepSeek 能力，用户需要在 `.env.prod` 中自行提供：
+
+```bash
+QUANTSVR_BOT_TOKEN=
+QUANTSVR_BOT_USERNAME=
+QUANTSVR_BOT_GROUP_ID=
+QUANTSVR_BOT_ADMIN_LIST=
+INDSVR_DEEPSEEK_API_KEY=
+```
+
+说明：
+
+- `QUANTSVR_ENABLE_BOT` 可留空；填写 `QUANTSVR_BOT_TOKEN` 后部署脚本会自动启用 Telegram bot。
+- 如果要强制关闭 Telegram bot，可在 `.env.prod` 中设置 `QUANTSVR_ENABLE_BOT=false`。
+- `QUANTSVR_BOT_ADMIN_LIST` 使用 `|` 分隔多个管理员 ID。
+- GW 内部密码无需用户配置。
+- 修改 `.env.prod` 后，需要重启对应服务。
+
 ## 部署后如何使用
 
 主要入口：
@@ -158,6 +195,7 @@ tail -n 100 ${DEPLOY_ROOT}/log/QuantSvr.log
 - 不要提交 `.env.prod`。
 - 不要提交真实 API key、Telegram token、ClickHouse 生产密码。
 - QuantSvr、INDSvr 的 bot/API key 只维护在 `.env.prod`，部署脚本会生成 `control/overrides/<Service>/config/application.properties` 并挂载到容器。
+- 用户需要自行提供 `QUANTSVR_BOT_TOKEN`、`QUANTSVR_BOT_USERNAME`、`QUANTSVR_BOT_GROUP_ID`、`QUANTSVR_BOT_ADMIN_LIST`、`INDSVR_DEEPSEEK_API_KEY`。
 - APSSvr 默认不需要外部 API key，相关交易所/BirdEye 开关默认关闭。
 - 更新 `.env.prod` 后，重启对应服务让新配置生效。
 - `control.prod.example/` 只放示例配置。

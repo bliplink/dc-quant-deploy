@@ -95,6 +95,43 @@ curl -I http://127.0.0.1/web/
 curl 'http://127.0.0.1:8123/?query=SELECT%201'
 ```
 
+## Post-Deployment Host Hardening
+
+Host hardening is a separate operations step. It is not executed automatically by one-command deployment scripts. After the stack is deployed successfully, run:
+
+```bash
+sudo ./security/harden-host.sh
+sudo ./security/validate-host-security.sh
+```
+
+To roll back host-level security rules:
+
+```bash
+sudo ./security/rollback-host-security.sh
+```
+
+The hardening script disables the host `nginx` service and keeps the `dc-web` container as the public web server. By default it allows only SSH, Web, GW, and the ClickHouse public proxy port. If production SSH does not use `22`, set `PUBLIC_SSH_PORT` in `.env.prod` first.
+
+## Required Runtime Variables
+
+The default one-command deployment can start the system skeleton. To enable Telegram and DeepSeek features, users must provide these values in `.env.prod`:
+
+```bash
+QUANTSVR_BOT_TOKEN=
+QUANTSVR_BOT_USERNAME=
+QUANTSVR_BOT_GROUP_ID=
+QUANTSVR_BOT_ADMIN_LIST=
+INDSVR_DEEPSEEK_API_KEY=
+```
+
+Notes:
+
+- `QUANTSVR_ENABLE_BOT` can be left empty; when `QUANTSVR_BOT_TOKEN` is set, deployment scripts enable the Telegram bot automatically.
+- To force-disable the Telegram bot, set `QUANTSVR_ENABLE_BOT=false` in `.env.prod`.
+- Use `|` to separate multiple administrator IDs in `QUANTSVR_BOT_ADMIN_LIST`.
+- The internal GW password does not need user configuration.
+- Restart the affected service after changing `.env.prod`.
+
 ## After Deployment
 
 Start from these Chinese guides:
@@ -143,7 +180,7 @@ Rollback after a failed full deployment:
 
 Never commit `.env.prod`, real API keys, Telegram tokens, ClickHouse production passwords, or private runtime data.
 
-QuantSvr and INDSvr bot/API credentials are maintained only in `.env.prod`. Deployment scripts generate `control/overrides/<Service>/config/application.properties` and mount it into the corresponding container. APSSvr does not require external API keys by default; exchange and BirdEye integrations are disabled unless explicitly customized. Restart the affected service after changing `.env.prod`.
+QuantSvr and INDSvr bot/API credentials are maintained only in `.env.prod`. Users provide `QUANTSVR_BOT_TOKEN`, `QUANTSVR_BOT_USERNAME`, `QUANTSVR_BOT_GROUP_ID`, `QUANTSVR_BOT_ADMIN_LIST`, and `INDSVR_DEEPSEEK_API_KEY`. Deployment scripts generate `control/overrides/<Service>/config/application.properties` and mount it into the corresponding container. APSSvr does not require external API keys by default; exchange and BirdEye integrations are disabled unless explicitly customized. Restart the affected service after changing `.env.prod`.
 
 See [SECURITY.md](SECURITY.md) for responsible security handling.
 

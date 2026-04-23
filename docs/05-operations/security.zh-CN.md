@@ -2,6 +2,28 @@
 
 本仓库面向开源部署使用，只应包含可公开的部署脚本、示例配置和说明文档。
 
+## 部署后主机加固
+
+主机防火墙和公网端口收敛由独立脚本处理，不会随一键部署自动执行：
+
+```bash
+sudo ./security/harden-host.sh
+sudo ./security/validate-host-security.sh
+```
+
+回滚主机安全策略：
+
+```bash
+sudo ./security/rollback-host-security.sh
+```
+
+默认策略：
+
+- 禁用宿主机 `nginx`，Web 由 `dc-web` 容器提供。
+- 只放行 SSH、`80`、`3000/3001/3002`、`28123`。
+- 不直接开放 `8123/9000/2181/Java` 内部端口。
+- 执行安全加固前会创建短时间自动回滚 timer，避免 SSH 误锁。
+
 ## 不要提交的内容
 
 - `.env.prod`
@@ -24,6 +46,9 @@
 ## 运行时敏感配置
 
 - QuantSvr、INDSvr 的 bot/API key 只维护在 `.env.prod`。
+- 用户需要自行提供 `QUANTSVR_BOT_TOKEN`、`QUANTSVR_BOT_USERNAME`、`QUANTSVR_BOT_GROUP_ID`、`QUANTSVR_BOT_ADMIN_LIST`、`INDSVR_DEEPSEEK_API_KEY`。
+- `QUANTSVR_ENABLE_BOT` 可留空；填写 `QUANTSVR_BOT_TOKEN` 后部署脚本会自动启用 Telegram bot。
+- GW 内部密码无需用户配置。
 - APSSvr 默认不需要外部 API key，交易所/BirdEye 开关默认关闭。
 - 部署脚本会生成 `control/overrides/<Service>/config/application.properties`。
 - 生成的 override 文件属于本地运行产物，不提交 Git。

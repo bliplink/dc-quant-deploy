@@ -110,6 +110,17 @@ Telegram 能力由 `QuantSvr` 复用同一套 Bot 配置：
 
 真实 bot token、群号和管理员信息属于敏感配置，不应提交到开源仓库。
 
+部署时需要在 `.env.prod` 中由用户自行提供：
+
+```bash
+QUANTSVR_BOT_TOKEN=
+QUANTSVR_BOT_USERNAME=
+QUANTSVR_BOT_GROUP_ID=
+QUANTSVR_BOT_ADMIN_LIST=
+```
+
+`QUANTSVR_ENABLE_BOT` 可留空；填写 `QUANTSVR_BOT_TOKEN` 后部署脚本会自动启用 Telegram bot。`QUANTSVR_BOT_ADMIN_LIST` 使用 `|` 分隔多个管理员 ID。
+
 ## 10. Telegram 用户操作
 
 用户进入 Telegram bot 后，先发送：
