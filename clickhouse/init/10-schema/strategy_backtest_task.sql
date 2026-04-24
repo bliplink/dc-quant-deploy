@@ -1,6 +1,8 @@
 CREATE TABLE IF NOT EXISTS dc.strategy_backtest_task
 (
     `id` String,
+    `candidate_id` String DEFAULT '',
+    `generation_task_id` String DEFAULT '',
     `strategy_name` String,
     `strategy_version` String,
     `baseline_version` Nullable(String),
@@ -16,7 +18,8 @@ CREATE TABLE IF NOT EXISTS dc.strategy_backtest_task
     `attempt_count` UInt16 DEFAULT 0,
     `create_time` DateTime,
     `update_time` DateTime,
-    `payload` String
+    `payload` String,
+    `failure_reason` String DEFAULT ''
 )
 ENGINE = ReplacingMergeTree(update_time)
 PARTITION BY toYYYYMM(create_time)
