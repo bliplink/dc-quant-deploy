@@ -72,6 +72,7 @@ append_mount_if_present indsvr "${DEPLOY_ROOT}/control/overrides/INDSvr/config/l
 append_mount_if_present indsvr "${DEPLOY_ROOT}/control/overrides/INDSvr/config/application.properties" "/srv/dc/dc/INDSvr/config/application.properties"
 append_mount_if_present simsvr "${DEPLOY_ROOT}/control/overrides/SIMSvr/config/log4j.ini" "/srv/dc/dc/SIMSvr/config/log4j.ini"
 append_mount_if_present batchsvr "${DEPLOY_ROOT}/control/overrides/BatchSvr/config/log4j.ini" "/srv/dc/dc/BatchSvr/config/log4j.ini"
+append_mount_if_present batchsvr "${DEPLOY_ROOT}/control/overrides/BatchSvr/config/application.properties" "/srv/dc/dc/BatchSvr/config/application.properties"
 
 if [[ "${MOUNT_COUNT}" -eq 0 ]]; then
   {
