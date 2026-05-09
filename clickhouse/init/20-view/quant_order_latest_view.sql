@@ -6,6 +6,7 @@ CREATE VIEW IF NOT EXISTS dc.quant_order_latest_view
     `orderID` String,
     `tradeDate` Date32,
     `location` String,
+    `demo` String,
     `marketIndicator` String,
     `clOrdID` String,
     `eventTime` String,
@@ -56,6 +57,7 @@ AS SELECT
     orderID,
     argMax(tradeDate, versionTime) AS tradeDate,
     argMax(location, versionTime) AS location,
+    demo,
     argMax(marketIndicator, versionTime) AS marketIndicator,
     argMax(clOrdID, versionTime) AS clOrdID,
     argMax(eventTime, versionTime) AS eventTime,
@@ -108,4 +110,5 @@ GROUP BY
     quantID,
     venueTypeGW,
     securityID,
-    orderID;
+    orderID,
+    demo;
