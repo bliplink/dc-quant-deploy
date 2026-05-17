@@ -191,6 +191,7 @@ services:
       - ${DEPLOY_ROOT}/data/java-prefs/BatchSvr:/srv/dc/.java
       - ${DEPLOY_ROOT}/data:/srv/dc/dc/BatchSvr/data
       - ${DEPLOY_ROOT}/log:/srv/dc/dc/BatchSvr/log
+      - /var/run/docker.sock:/var/run/docker.sock:ro
     depends_on:
       zookeeper:
         condition: service_started
