@@ -184,6 +184,8 @@ services:
     <<: *java-service-base
     image: ghcr.io/bliplink/batchsvr:${BATCHSVR_TAG}
     container_name: dc-batchsvr
+    group_add:
+      - "998"
     volumes:
       - ${DEPLOY_ROOT}/control:/srv/dc/control:ro
       - ${DEPLOY_ROOT}/data:/srv/dc/data
@@ -191,6 +193,7 @@ services:
       - ${DEPLOY_ROOT}/data/java-prefs/BatchSvr:/srv/dc/.java
       - ${DEPLOY_ROOT}/data:/srv/dc/dc/BatchSvr/data
       - ${DEPLOY_ROOT}/log:/srv/dc/dc/BatchSvr/log
+      - /usr/bin/docker:/usr/bin/docker:ro
       - /var/run/docker.sock:/var/run/docker.sock:ro
     depends_on:
       zookeeper:
