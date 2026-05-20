@@ -1,5 +1,3 @@
--- dc.quant_position_latest_view source
-
 CREATE VIEW IF NOT EXISTS dc.quant_position_latest_view
 (
     `location` String,
@@ -80,7 +78,8 @@ AS SELECT
     argMax(info5, versionTime) AS info5
 FROM
 (
-    SELECT *,
+    SELECT
+        *,
         updateTime AS versionTime
     FROM dc.quant_position
 )

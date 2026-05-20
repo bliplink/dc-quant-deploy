@@ -6,10 +6,6 @@ CREATE TABLE IF NOT EXISTS dc.quant_signal_block_event
     `quantID` String,
     `userID` String,
     `algoName` String,
-    `strategyName` String,
-    `strategyVersion` String,
-    `scene` String,
-    `strategyPayload` String,
     `venueTypeGW` String,
     `securityID` String,
     `symbol` String,
@@ -23,7 +19,11 @@ CREATE TABLE IF NOT EXISTS dc.quant_signal_block_event
     `takerPrice` Nullable(Decimal(38, 12)),
     `rejectStage` String,
     `rejectReason` String,
-    `source` String
+    `source` String,
+    `scene` LowCardinality(String) DEFAULT '',
+    `strategyName` LowCardinality(String) DEFAULT '',
+    `strategyVersion` String DEFAULT '',
+    `strategyPayload` String DEFAULT ''
 )
 ENGINE = MergeTree
 PARTITION BY toYYYYMM(tradeDate)

@@ -84,7 +84,8 @@ AS SELECT
     argMax(info5, versionTime) AS info5
 FROM
 (
-    SELECT *,
+    SELECT
+        *,
         updateTime AS versionTime
     FROM dc.quant_trade
 )

@@ -10,13 +10,10 @@ CREATE TABLE IF NOT EXISTS dc.quant_trade
     `userID` String,
     `userName` String,
     `algoName` String,
-    `strategyName` String,
-    `strategyVersion` String,
-    `scene` String,
-    `strategyPayload` String,
     `venueTypeGW` String,
     `venues` String,
     `location` String,
+    `demo` String DEFAULT '',
     `marketIndicator` String,
     `securityID` String,
     `symbol` String,
@@ -39,7 +36,11 @@ CREATE TABLE IF NOT EXISTS dc.quant_trade
     `info2` String,
     `info3` String,
     `info4` String,
-    `info5` String
+    `info5` String,
+    `scene` LowCardinality(String) DEFAULT '',
+    `strategyName` LowCardinality(String) DEFAULT '',
+    `strategyVersion` String DEFAULT '',
+    `strategyPayload` String DEFAULT ''
 )
 ENGINE = ReplacingMergeTree(updateTime)
 PARTITION BY toYYYYMM(tradeDate)
