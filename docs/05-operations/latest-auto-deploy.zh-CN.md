@@ -85,16 +85,16 @@
 
 ## 6. 定时任务示例
 
-每 5 分钟检查一次 `indsvr`：
+每 1 分钟检查一次 `indsvr`：
 
 ```cron
-*/5 * * * * cd /data/strategy/dc-quant-deploy && ./auto-update-service.sh indsvr >> /data/strategy/log/indsvr-auto-update.log 2>&1
+* * * * * cd /data/strategy/dc-quant-deploy && ./auto-update-service.sh indsvr >> /data/strategy/log/indsvr-auto-update.log 2>&1
 ```
 
-每 5 分钟检查一次 `web`：
+每 1 分钟检查一次 `web`：
 
 ```cron
-*/5 * * * * cd /data/strategy/dc-quant-deploy && ./auto-update-service.sh web >> /data/strategy/log/web-auto-update.log 2>&1
+* * * * * cd /data/strategy/dc-quant-deploy && ./auto-update-service.sh web >> /data/strategy/log/web-auto-update.log 2>&1
 ```
 
 ## 7. 与旧流程的关系
