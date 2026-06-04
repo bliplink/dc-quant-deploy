@@ -139,6 +139,30 @@ image_id_or_empty() {
   docker image inspect "${image_ref}" --format '{{.Id}}' 2>/dev/null || true
 }
 
+service_container_name() {
+  case "$1" in
+    gateway)
+      echo "dc-gateway"
+      ;;
+    mdsvr|apssvr|quantsvr|indsvr|simsvr|batchsvr|web|zookeeper|clickhouse|ordersvr)
+      echo "dc-$1"
+      ;;
+    *)
+      return 1
+      ;;
+  esac
+}
+
+container_image_id_or_empty() {
+  local container_name="$1"
+  docker inspect "${container_name}" --format '{{.Image}}' 2>/dev/null || true
+}
+
+container_image_ref_or_empty() {
+  local container_name="$1"
+  docker inspect "${container_name}" --format '{{.Config.Image}}' 2>/dev/null || true
+}
+
 main() {
   require_command docker
   require_file "${PULL_SCRIPT}"
@@ -167,37 +191,43 @@ main() {
     exit 0
   fi
 
-  local before_id after_id
-  before_id="$(image_id_or_empty "${image_ref}")"
+  local container_name running_image_id running_image_ref before_latest_id after_latest_id
+  container_name="$(service_container_name "${compose_service}")"
+  running_image_id="$(container_image_id_or_empty "${container_name}")"
+  running_image_ref="$(container_image_ref_or_empty "${container_name}")"
+  before_latest_id="$(image_id_or_empty "${image_ref}")"
 
   echo "Service: ${compose_service}"
+  echo "Container: ${container_name}"
   echo "Image ref: ${image_ref}"
-  echo "Before image ID: ${before_id:-<missing>}"
+  echo "Running image ref: ${running_image_ref:-<missing>}"
+  echo "Running image ID: ${running_image_id:-<missing>}"
+  echo "Before latest image ID: ${before_latest_id:-<missing>}"
 
   run bash "${PULL_SCRIPT}" "${compose_service}"
 
-  after_id="$(image_id_or_empty "${image_ref}")"
-  echo "After image ID: ${after_id:-<missing>}"
+  after_latest_id="$(image_id_or_empty "${image_ref}")"
+  echo "After latest image ID: ${after_latest_id:-<missing>}"
 
-  if [[ -z "${after_id}" ]]; then
+  if [[ -z "${after_latest_id}" ]]; then
     echo "Image pull did not leave a local image: ${image_ref}" >&2
     exit 1
   fi
 
-  if [[ "${before_id}" == "${after_id}" ]]; then
-    echo "No image change detected for ${compose_service}; skip restart."
+  if [[ -n "${running_image_id}" && "${running_image_id}" == "${after_latest_id}" ]]; then
+    echo "Running container for ${compose_service} already uses latest image ID; skip restart."
     exit 0
   fi
 
-  echo "Image changed for ${compose_service}; restarting."
+  echo "Running container for ${compose_service} is not on latest image; restarting."
   if run bash "${RESTART_SCRIPT}" "${compose_service}"; then
     echo "Auto update completed for ${compose_service}."
     exit 0
   fi
 
-  if [[ -n "${before_id}" ]]; then
-    echo "Restart failed; rolling back ${compose_service} to previous local image ID ${before_id}."
-    run docker tag "${before_id}" "${image_ref}"
+  if [[ -n "${before_latest_id}" ]]; then
+    echo "Restart failed; rolling back ${compose_service} to previous local latest image ID ${before_latest_id}."
+    run docker tag "${before_latest_id}" "${image_ref}"
     run bash "${RESTART_SCRIPT}" "${compose_service}"
     echo "Rollback completed for ${compose_service}."
     exit 1
