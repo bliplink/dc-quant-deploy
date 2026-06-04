@@ -5,6 +5,7 @@ ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 ENV_FILE="${ROOT_DIR}/.env.prod"
 PULL_SCRIPT="${ROOT_DIR}/pull-images.sh"
 RESTART_SCRIPT="${ROOT_DIR}/restart-service.sh"
+LOCK_DIR="/tmp/dc-auto-update-locks"
 
 DRY_RUN=false
 SERVICE=""
@@ -113,13 +114,13 @@ service_image_ref() {
       echo "ghcr.io/bliplink/indsvr:${INDSVR_TAG}"
       ;;
     simsvr)
-      echo "ghcr.io/SKT-Walter/simsvr:${SIMSVR_TAG}"
+      echo "ghcr.io/skt-walter/simsvr:${SIMSVR_TAG}"
       ;;
     batchsvr)
       echo "ghcr.io/bliplink/batchsvr:${BATCHSVR_TAG}"
       ;;
     web)
-      echo "ghcr.io/SKT-Walter/web:${WEB_TAG}"
+      echo "ghcr.io/skt-walter/web:${WEB_TAG}"
       ;;
     zookeeper)
       echo "ghcr.io/bliplink/zookeeper:${ZOOKEEPER_TAG}"
@@ -143,6 +144,7 @@ main() {
   require_file "${PULL_SCRIPT}"
   require_file "${RESTART_SCRIPT}"
   load_env
+  mkdir -p "${LOCK_DIR}"
 
   local compose_service
   compose_service="$(normalize_service "${SERVICE}")"
@@ -156,6 +158,13 @@ main() {
   if [[ -z "${image_ref}" ]]; then
     echo "Image ref not found for service: ${compose_service}" >&2
     exit 1
+  fi
+
+  local lock_file="${LOCK_DIR}/global.lock"
+  exec 9>"${lock_file}"
+  if ! flock -n 9; then
+    echo "Another auto-update run is already in progress; skip ${compose_service}."
+    exit 0
   fi
 
   local before_id after_id
