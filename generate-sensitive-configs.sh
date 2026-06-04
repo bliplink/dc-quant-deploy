@@ -194,9 +194,10 @@ market.scene.analysis.symbols=BTCUSDT,ETHUSDT
 market.scene.analysis.table=dc.deepseek_market_scene_analysis
 scene.strategy.selection.enabled=true
 scene.strategy.selection.provider=deepseek
-scene.strategy.selection.prompt-version=deepseek_live_strategy_selection_v2
+scene.strategy.selection.prompt-version=deepseek_live_strategy_selection_v3
 scene.strategy.selection.cron=0 5 */12 * * ?
 scene.strategy.selection.max-candidates=30
+scene.strategy.selection.allow-default-fallback=false
 
 binanceStageGuardEnabled=true
 binanceRangeAllowedStages=0,2,B
@@ -204,7 +205,7 @@ binanceChannelAllowedStages=1,2,3,4,A,B,C
 binanceTrendAllowedStages=1,3,4,A,C
 
 chatGPTSentimentCron=0 0 8,20 * * ?
-strategy.generate.engine.default=spec_template
+strategy.generate.engine.default=full_java
 strategy.generate.engine.legacyFallback=true
 strategy.generate.engine.classifierEnabledWhenSceneEmpty=true
 strategy.generate.engine.sceneClassifierMinConfidence=0.75

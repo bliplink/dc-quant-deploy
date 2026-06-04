@@ -145,6 +145,7 @@ Start from these Chinese guides:
 - [QuantSvr risk control and Telegram](docs/03-user-guide/quantsvr-risk-telegram.zh-CN.md)
 - [Data model](docs/04-reference/data-model.zh-CN.md)
 - [Reports and troubleshooting](docs/05-operations/reports-and-troubleshooting.zh-CN.md)
+- [Latest branch auto deploy](docs/05-operations/latest-auto-deploy.zh-CN.md)
 - [Security](docs/05-operations/security.zh-CN.md)
 
 ## Maintain
