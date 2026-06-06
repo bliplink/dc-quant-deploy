@@ -191,13 +191,13 @@ chatGPTAnalysisSwitchAlgoValue=AI
 market.scene.analysis.enabled=true
 market.scene.analysis.provider=deepseek
 market.scene.analysis.prompt-version=deepseek_market_scene_v1
-market.scene.analysis.cron=0 0 */12 * * ?
+market.scene.analysis.cron=0 0 0 * * ?
 market.scene.analysis.symbols=BTCUSDT,ETHUSDT
 market.scene.analysis.table=dc.deepseek_market_scene_analysis
 scene.strategy.selection.enabled=true
 scene.strategy.selection.provider=deepseek
 scene.strategy.selection.prompt-version=deepseek_live_strategy_selection_v3
-scene.strategy.selection.cron=0 5 */12 * * ?
+scene.strategy.selection.cron=0 5 */6 * * ?
 scene.strategy.selection.max-candidates=30
 scene.strategy.selection.allow-default-fallback=false
 
