@@ -22,6 +22,12 @@ CREATE TABLE IF NOT EXISTS dc.backtest_slice_result
     `fit_max_drawdown_pct` Float64,
     `validate_max_drawdown_pct` Float64,
     `forward_max_drawdown_pct` Float64,
+    `best_param_set` String DEFAULT '{}',
+    `fit_score` Float64 DEFAULT 0,
+    `validate_score` Float64 DEFAULT 0,
+    `forward_score` Float64 DEFAULT 0,
+    `selection_objective` String DEFAULT '',
+    `fragile_best` Int8 DEFAULT 0,
     `payload` String
 )
 ENGINE = MergeTree
