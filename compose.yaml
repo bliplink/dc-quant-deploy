@@ -74,6 +74,27 @@ services:
       MAIN_CLASS: GW
       JAVA_OPTS: -server -Xmx2048m -Xms2048m -Xmn512m -Djava.security.auth.login.config=../../control/jaas.ini
 
+  loginsvr:
+    <<: *java-service-base
+    image: ghcr.io/bliplink/loginsvr:${LOGINSVR_TAG}
+    container_name: dc-loginsvr
+    volumes:
+      - ${DEPLOY_ROOT}/control:/srv/dc/control:ro
+      - ${DEPLOY_ROOT}/data:/srv/dc/data
+      - ${DEPLOY_ROOT}/log:/srv/dc/log
+      - ${DEPLOY_ROOT}/data/java-prefs/LoginSvr:/srv/dc/.java
+      - ${DEPLOY_ROOT}/data:/srv/dc/dc/LoginSvr/data
+      - ${DEPLOY_ROOT}/log:/srv/dc/dc/LoginSvr/log
+    depends_on:
+      zookeeper:
+        condition: service_started
+    environment:
+      TZ: UTC
+      DEPLOY_ROOT: /srv/dc
+      SERVICE_NAME: LoginSvr
+      MAIN_CLASS: LoginSvr
+      JAVA_OPTS: -server -Xmx2048m -Xms2048m -Xmn512m -Djava.security.auth.login.config=../../control/jaas.ini
+
   mdsvr:
     <<: *java-service-base
     image: ghcr.io/bliplink/mdsvr:${MDSVR_TAG}

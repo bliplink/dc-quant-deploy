@@ -87,7 +87,7 @@ normalize_service() {
     GW|gw)
       echo "gateway"
       ;;
-    gateway|mdsvr|apssvr|quantsvr|indsvr|simsvr|batchsvr|web|zookeeper|clickhouse)
+    gateway|loginsvr|mdsvr|apssvr|quantsvr|indsvr|simsvr|batchsvr|web|zookeeper|clickhouse)
       echo "$1"
       ;;
     *)
@@ -100,6 +100,9 @@ service_image_ref() {
   case "$1" in
     gateway)
       echo "ghcr.io/bliplink/gw:${GW_TAG}"
+      ;;
+    loginsvr)
+      echo "ghcr.io/bliplink/loginsvr:${LOGINSVR_TAG}"
       ;;
     mdsvr)
       echo "ghcr.io/bliplink/mdsvr:${MDSVR_TAG}"
@@ -144,7 +147,7 @@ service_container_name() {
     gateway)
       echo "dc-gateway"
       ;;
-    mdsvr|apssvr|quantsvr|indsvr|simsvr|batchsvr|web|zookeeper|clickhouse|ordersvr)
+    loginsvr|mdsvr|apssvr|quantsvr|indsvr|simsvr|batchsvr|web|zookeeper|clickhouse|ordersvr)
       echo "dc-$1"
       ;;
     *)

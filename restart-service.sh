@@ -17,6 +17,7 @@ Usage:
 
 Supported services:
   GW
+  loginsvr
   mdsvr
   apssvr
   quantsvr
@@ -76,6 +77,11 @@ case "${COMPOSE_SERVICE}" in
     CONTAINER_NAME="dc-gateway"
     SERVICE_PORT="3000"
     LOG_FILE="GW.log"
+    ;;
+  loginsvr)
+    CONTAINER_NAME="dc-loginsvr"
+    SERVICE_PORT="30022"
+    LOG_FILE="LoginSvr.log"
     ;;
   mdsvr)
     CONTAINER_NAME="dc-mdsvr"

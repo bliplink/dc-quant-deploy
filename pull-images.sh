@@ -12,6 +12,7 @@ INCLUDE_INFRA=false
 
 APP_SERVICES=(
   gateway
+  loginsvr
   mdsvr
   apssvr
   quantsvr
@@ -41,7 +42,7 @@ Examples:
 
 Behavior:
   - Without service arguments, pull all app services:
-      gateway mdsvr apssvr quantsvr indsvr simsvr batchsvr web
+      gateway loginsvr mdsvr apssvr quantsvr indsvr simsvr batchsvr web
   - With --include-infra, also pull:
       zookeeper clickhouse
   - This script only pulls images. It does not restart any service.
@@ -111,7 +112,7 @@ normalize_service() {
     GW|gw)
       echo "gateway"
       ;;
-    gateway|mdsvr|apssvr|quantsvr|indsvr|simsvr|batchsvr|web|zookeeper|clickhouse)
+    gateway|loginsvr|mdsvr|apssvr|quantsvr|indsvr|simsvr|batchsvr|web|zookeeper|clickhouse)
       echo "${value}"
       ;;
     *)

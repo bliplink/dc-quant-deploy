@@ -53,6 +53,28 @@ APSSVR_ENABLE_USER_DATA="${APSSVR_ENABLE_USER_DATA:-false}"
 
 INDSVR_DEEPSEEK_API_KEY="${INDSVR_DEEPSEEK_API_KEY:-}"
 
+write_file "${DEPLOY_ROOT}/control/overrides/LoginSvr/config/application.properties" <<EOF
+server.servlet.context-path=/dc
+server.port=19990
+
+serverKey=SERVER.LoginSvr
+log4j.file=./config/log4j.ini
+log4j.thread=1
+log4j.writeTime=true
+log4j.async=true
+
+dbpool.cfg=../../control/DBPoolConfig.ini
+dbpool.default=MYSQL0
+dbType=clickhouse
+clickhouse.default=ClickHouse1
+
+defaultStartId=500000
+defaultPwd=123456
+isSignature=0
+validTime=3600
+checkInterval=60
+EOF
+
 write_file "${DEPLOY_ROOT}/control/overrides/QuantSvr/config/application.properties" <<EOF
 serverKey=SERVER.QuantSvr
 log4j.file=./config/log4j.ini
