@@ -65,6 +65,7 @@ append_mount_if_present gateway "${DEPLOY_ROOT}/control/overrides/GW/config/log4
 
 append_mount_if_present loginsvr "${DEPLOY_ROOT}/control/overrides/LoginSvr/config/log4j.ini" "/srv/dc/dc/LoginSvr/config/log4j.ini"
 append_mount_if_present loginsvr "${DEPLOY_ROOT}/control/overrides/LoginSvr/config/application.properties" "/srv/dc/dc/LoginSvr/config/application.properties"
+append_mount_if_present loginsvr "${DEPLOY_ROOT}/control/overrides/LoginSvr/config/DBPoolConfig.ini" "/srv/dc/dc/LoginSvr/config/DBPoolConfig.ini"
 append_mount_if_present mdsvr "${DEPLOY_ROOT}/control/overrides/MDSvr/config/log4j.ini" "/srv/dc/dc/MDSvr/config/log4j.ini"
 append_mount_if_present apssvr "${DEPLOY_ROOT}/control/overrides/APSSvr/config/log4j.ini" "/srv/dc/dc/APSSvr/config/log4j.ini"
 append_mount_if_present apssvr "${DEPLOY_ROOT}/control/overrides/APSSvr/config/application.properties" "/srv/dc/dc/APSSvr/config/application.properties"

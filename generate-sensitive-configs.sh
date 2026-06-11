@@ -52,6 +52,9 @@ QUANTSVR_BOT_ADMIN_LIST="${QUANTSVR_BOT_ADMIN_LIST:-}"
 APSSVR_ENABLE_USER_DATA="${APSSVR_ENABLE_USER_DATA:-false}"
 
 INDSVR_DEEPSEEK_API_KEY="${INDSVR_DEEPSEEK_API_KEY:-}"
+CLICKHOUSE_JDBC_URL="jdbc:clickhouse://${CLICKHOUSE_HOST}:${CLICKHOUSE_HTTP_PORT}/${CLICKHOUSE_DB_NAME}?compression=true"
+CLICKHOUSE_JDBC_USERNAME="${CLICKHOUSE_USERNAME:-default}"
+CLICKHOUSE_JDBC_PASSWORD="${CLICKHOUSE_PASSWORD:-}"
 
 write_file "${DEPLOY_ROOT}/control/overrides/LoginSvr/config/application.properties" <<EOF
 server.servlet.context-path=/dc
@@ -63,8 +66,8 @@ log4j.thread=1
 log4j.writeTime=true
 log4j.async=true
 
-dbpool.cfg=../../control/DBPoolConfig.ini
-dbpool.default=MYSQL0
+dbpool.cfg=./config/DBPoolConfig.ini
+dbpool.default=ClickHouse1
 dbType=clickhouse
 clickhouse.default=ClickHouse1
 
@@ -73,6 +76,39 @@ defaultPwd=123456
 isSignature=0
 validTime=3600
 checkInterval=60
+EOF
+
+write_file "${DEPLOY_ROOT}/control/overrides/LoginSvr/config/DBPoolConfig.ini" <<EOF
+####################DBPool Cinfig###############[Begin]###
+[DBPOOL]
+DBPOOL.DBCount=1
+DBPOOL.LogLevel=0
+DBPOOL.LogPath=./log/DBPool.log
+
+DBPOOL.DBSourceName_0=ClickHouse1
+DBPOOL.DBDriver_0=com.clickhouse.jdbc.ClickHouseDriver
+DBPOOL.DBUrl_0=${CLICKHOUSE_JDBC_URL}
+DBPOOL.DBUsername_0=${CLICKHOUSE_JDBC_USERNAME}
+DBPOOL.DBPasswd_0=${CLICKHOUSE_JDBC_PASSWORD}
+DBPOOL.DBCheckSql_0=select 1
+DBPOOL.DBIsEncrypt_0=false
+DBPOOL.DBMaxCount_0=10
+DBPOOL.DBMinCount_0=5
+DBPOOL.DBConnOutTime_0=1000
+DBPOOL.DBConnCheckNumber_0=1000
+DBPOOL.DBStrategy_0=false
+
+CLICKHOUSE.DBCount=1
+CLICKHOUSE.DBSourceName_0=ClickHouse1
+CLICKHOUSE.DBUrl_0=${CLICKHOUSE_JDBC_URL}
+CLICKHOUSE.DBUsername_0=${CLICKHOUSE_JDBC_USERNAME}
+CLICKHOUSE.DBPasswd_0=${CLICKHOUSE_JDBC_PASSWORD}
+CLICKHOUSE.DBIsEncrypt_0=false
+CLICKHOUSE.DBMaxCount_0=50
+CLICKHOUSE.DBMinCount_0=5
+CLICKHOUSE.DBConnOutTime_0=1000
+CLICKHOUSE.DBAsyncInsert_0=1
+CLICKHOUSE.DBAsyncInsertMaxInternet_0=2000
 EOF
 
 write_file "${DEPLOY_ROOT}/control/overrides/QuantSvr/config/application.properties" <<EOF
