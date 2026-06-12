@@ -54,7 +54,7 @@ AS SELECT
     argMax(accountID, versionTime) AS accountID,
     argMax(currency, versionTime) AS currency,
     argMax(venues, versionTime) AS venues,
-    argMax(symbol, versionTime) AS symbol,
+    argMax(if(symbol = '', securityID, symbol), versionTime) AS symbol,
     argMax(positionType, versionTime) AS positionType,
     argMax(positionStatus, versionTime) AS positionStatus,
     argMax(demo, versionTime) AS demo,
