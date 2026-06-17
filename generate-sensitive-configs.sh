@@ -250,7 +250,6 @@ market.scene.analysis.enabled=true
 market.scene.analysis.provider=deepseek
 market.scene.analysis.prompt-version=deepseek_market_scene_v1
 market.scene.analysis.cron=0 0 0 * * ?
-market.scene.analysis.symbols=BTCUSDT,ETHUSDT
 market.scene.analysis.table=dc.deepseek_market_scene_analysis
 scene.strategy.selection.enabled=true
 scene.strategy.selection.provider=deepseek
