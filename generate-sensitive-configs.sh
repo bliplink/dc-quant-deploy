@@ -237,6 +237,11 @@ strategy.generate.forwardWindowDays=14
 strategy.generate.backtestPriority=5
 strategy.review.evolution.reanalysis.enabled=true
 strategy.review.evolution.reanalysis.threadNamePrefix=strategy-review-evolution-
+strategy.live.upgrade.auto.enabled=true
+strategy.live.upgrade.auto.cron=0 20 */2 * * ?
+strategy.live.upgrade.auto.limit=6
+strategy.live.upgrade.auto.retryCooldownHours=12
+strategy.live.upgrade.auto.maxAttemptsPerVersion=2
 
 signalCron=0 0/15 * * * ?
 deepSeekJobSignalCron=0 5 0 * * ?
