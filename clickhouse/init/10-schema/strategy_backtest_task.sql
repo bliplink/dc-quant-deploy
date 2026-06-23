@@ -17,6 +17,7 @@ CREATE TABLE IF NOT EXISTS dc.strategy_backtest_task
     `update_time` DateTime,
     `payload` String,
     `failure_reason` String DEFAULT '',
+    `published_live` UInt8 DEFAULT 0,
     `suspend_reason` String DEFAULT '',
     `next_retry_time` Nullable(DateTime),
     `attempt_count` UInt16 DEFAULT 0
