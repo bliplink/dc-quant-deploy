@@ -215,6 +215,9 @@ strategy.runtime.jar.enabled=true
 strategy.runtime.load.enabled=true
 strategy.runtime.load.cron=0 */1 * * * ?
 strategy.runtime.executionText=15m
+strategy.runtime.fallbackCandidates.enabled=false
+strategy.runtime.selectionRefreshOnMissing.enabled=true
+strategy.runtime.selectionRefreshOnMissing.cooldownMs=300000
 strategy.selection.defaults=range=binanceRange,trend=binanceTrend,channel=binanceChannel
 strategy.selection.backend=clickhouse
 deepseek.api.key=${INDSVR_DEEPSEEK_API_KEY}
