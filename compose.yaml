@@ -30,7 +30,7 @@ services:
     volumes:
       - ${DEPLOY_ROOT}/data/clickhouse:/var/lib/clickhouse
       - ${DEPLOY_ROOT}/log/clickhouse:/var/log/clickhouse-server
-      - ./clickhouse/config.d:/etc/clickhouse-server/config.d:ro
+      - ./clickhouse/users.d:/etc/clickhouse-server/users.d:ro
       - ./clickhouse/init:/docker-entrypoint-initdb.d:ro
     healthcheck:
       test: ["CMD-SHELL", "clickhouse-client --user \"$${CLICKHOUSE_USER}\" --password \"$${CLICKHOUSE_PASSWORD}\" --query 'SELECT 1' >/dev/null 2>&1"]
