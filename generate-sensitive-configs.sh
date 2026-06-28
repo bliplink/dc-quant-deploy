@@ -197,6 +197,7 @@ apsServerKey=SERVER.APSSvr
 quantServerKey=SERVER.QuantSvr
 textList=15m
 kline.supported.texts=15m
+kline.default.text=15m
 initial.kline.backfill.intervals=15m
 symbolList=TRXUSDT|ETHUSDT|SOLUSDT|LINKUSDT|XRPUSDT|DOGEUSDT|ADAUSDT|BNBUSDT|BTCUSDT|UNIUSDT
 queryKlineCount=50
