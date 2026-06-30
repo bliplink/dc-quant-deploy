@@ -221,7 +221,7 @@ validate_web_delivery() {
   verify_host="${WEB_VERIFY_HOST:-127.0.0.1}"
   base_url="http://${verify_host}"
   tmp_dir="$(mktemp -d)"
-  trap 'rm -rf "${tmp_dir}"' RETURN
+  trap '[[ -n "${tmp_dir:-}" ]] && rm -rf "${tmp_dir}"' RETURN
 
   for round in 1 2 3; do
     index_html="${tmp_dir}/index_${round}.html"
