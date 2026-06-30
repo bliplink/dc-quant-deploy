@@ -144,6 +144,19 @@ require_command() {
   }
 }
 
+require_http_command() {
+  if command -v curl >/dev/null 2>&1; then
+    echo "curl"
+    return 0
+  fi
+  if command -v wget >/dev/null 2>&1; then
+    echo "wget"
+    return 0
+  fi
+  echo "Missing required HTTP command: curl or wget" >&2
+  exit 1
+}
+
 require_file() {
   [[ -f "$1" ]] || {
     echo "Missing required file: $1" >&2
@@ -191,6 +204,43 @@ wait_for_port_open() {
   return 1
 }
 
+http_fetch() {
+  local http_cmd="$1"
+  local url="$2"
+  local output_path="$3"
+  if [[ "${http_cmd}" == "curl" ]]; then
+    curl -fsS --http1.1 --max-time 20 -H 'Cache-Control: no-cache' "${url}" -o "${output_path}"
+    return
+  fi
+  wget -qO "${output_path}" --timeout=20 --header='Cache-Control: no-cache' "${url}"
+}
+
+validate_web_delivery() {
+  local http_cmd verify_host base_url tmp_dir index_html assets
+  http_cmd="$(require_http_command)"
+  verify_host="${WEB_VERIFY_HOST:-127.0.0.1}"
+  base_url="http://${verify_host}"
+  tmp_dir="$(mktemp -d)"
+  trap 'rm -rf "${tmp_dir}"' RETURN
+
+  for round in 1 2 3; do
+    index_html="${tmp_dir}/index_${round}.html"
+    http_fetch "${http_cmd}" "${base_url}/web/" "${index_html}"
+    grep -q '/web/assets/' "${index_html}" || {
+      echo "web index missing asset references on round ${round}" >&2
+      return 1
+    }
+    mapfile -t assets < <(grep -Eo '/web/assets/[^"]+' "${index_html}" | sort -u)
+    if [[ "${#assets[@]}" -eq 0 ]]; then
+      echo "web index did not expose any assets on round ${round}" >&2
+      return 1
+    fi
+    for asset in "${assets[@]}"; do
+      http_fetch "${http_cmd}" "${base_url}${asset}" /dev/null
+    done
+  done
+}
+
 validate_container_service() {
   if [[ "${DRY_RUN}" == "true" ]]; then
     echo "Dry run: validation skipped."
@@ -206,6 +256,10 @@ validate_container_service() {
   fi
 
   wait_for_port_open "${SERVICE_HOST}" "${SERVICE_PORT}"
+
+  if [[ "${COMPOSE_SERVICE}" == "web" ]]; then
+    validate_web_delivery
+  fi
 
   docker ps --filter "name=${CONTAINER_NAME}" --format 'table {{.Names}}\t{{.Image}}\t{{.Status}}\t{{.Ports}}'
   docker logs "${CONTAINER_NAME}" --tail 120 || true

@@ -232,6 +232,22 @@ services:
     container_name: dc-web
     network_mode: host
     restart: unless-stopped
+    ulimits:
+      nofile:
+        soft: 65535
+        hard: 65535
+    tmpfs:
+      - /var/cache/nginx:size=128m
+      - /var/run:size=16m
+      - /tmp:size=64m
+    healthcheck:
+      test:
+        - CMD-SHELL
+        - wget -qO- http://127.0.0.1/healthz | grep -q '^ok$' && wget -qO- http://127.0.0.1/web/ | grep -q '/web/assets/index-'
+      interval: 15s
+      timeout: 5s
+      retries: 4
+      start_period: 10s
     depends_on:
       gateway:
         condition: service_started
