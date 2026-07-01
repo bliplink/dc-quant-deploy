@@ -226,6 +226,7 @@ strategy.selection.backend=clickhouse
 deepseek.api.key=${INDSVR_DEEPSEEK_API_KEY}
 strategy.generate.provider=deepseek
 strategy.generate.rootDir=../../data/INDSvr/strategy
+workbench.strategy.backup.dir=/srv/dc/data/indsvr/backup
 strategy.generate.async.default=true
 strategy.generate.async.parallelism=2
 strategy.generate.async.queueCapacity=32
