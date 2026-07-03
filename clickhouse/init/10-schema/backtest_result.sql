@@ -34,6 +34,7 @@ CREATE TABLE IF NOT EXISTS dc.backtest_result
     `validate_primary_score` Float64 DEFAULT 0,
     `forward_aux_score` Float64 DEFAULT 0,
     `fee_adjusted_validate_pnl` Float64 DEFAULT 0,
+    `fee_adjusted_forward_pnl` Float64 DEFAULT 0,
     `slice_param_drift_score` Float64 DEFAULT 0,
     `oos_pass` Int8 DEFAULT 0,
     `overfit_reason` String DEFAULT '',
