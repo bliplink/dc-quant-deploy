@@ -23,6 +23,7 @@ CREATE TABLE IF NOT EXISTS dc.backtest_result
     `strategy_version` String DEFAULT '',
     `baseline_version` Nullable(String) DEFAULT NULL,
     `runtime_type` LowCardinality(String) DEFAULT 'LEGACY_SPRING',
+    `execution_model_version` LowCardinality(String) DEFAULT '',
     `scene` String DEFAULT '',
     `fit_payload` String DEFAULT '',
     `forward_score` Float64 DEFAULT 0,
