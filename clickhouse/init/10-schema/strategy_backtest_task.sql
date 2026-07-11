@@ -23,5 +23,5 @@ CREATE TABLE IF NOT EXISTS dc.strategy_backtest_task
     `attempt_count` UInt16 DEFAULT 0
 )
 ENGINE = ReplacingMergeTree(update_time)
-ORDER BY (status, priority, create_time, strategy_name, strategy_version)
+ORDER BY (status, priority, create_time, strategy_name, strategy_version, id)
 SETTINGS index_granularity = 8192;
