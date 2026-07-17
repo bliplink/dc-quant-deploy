@@ -24,5 +24,6 @@ CREATE TABLE IF NOT EXISTS dc.strategy_quality_event
 )
 ENGINE = ReplacingMergeTree(ingest_time)
 PARTITION BY toYYYYMM(event_time)
-ORDER BY (id, event_time)
+ORDER BY (symbol, scene, event_time, id)
+TTL event_time + toIntervalDay(365)
 SETTINGS index_granularity = 8192;
