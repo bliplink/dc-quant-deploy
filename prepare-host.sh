@@ -9,6 +9,8 @@ LEGACY_EL7_DOCKER_VERSION="26.1.4-1.el7"
 LEGACY_EL7_CONTAINERD_VERSION="1.6.33-3.1.el7"
 LEGACY_EL7_BUILDX_VERSION="0.14.1-1.el7"
 LEGACY_EL7_COMPOSE_VERSION="2.27.1-1.el7"
+LEGACY_EL7_VAULT_BASE_URL="${LEGACY_EL7_VAULT_BASE_URL:-https://mirrors.aliyun.com/centos-vault/7.9.2009}"
+RPM_REPO_ARGS=()
 
 usage() {
   cat <<'USAGE'
@@ -151,19 +153,53 @@ resolve_rpm_package_manager() {
   fi
 }
 
+configure_legacy_el7_repository() {
+  local repository_file="/etc/yum.repos.d/dc-centos7-vault.repo"
+  local repository_content
+
+  repository_content='[dc-centos7-base]
+name=DC CentOS 7.9.2009 Vault - Base
+baseurl='"${LEGACY_EL7_VAULT_BASE_URL}"'/os/$basearch/
+enabled=1
+gpgcheck=0
+
+[dc-centos7-updates]
+name=DC CentOS 7.9.2009 Vault - Updates
+baseurl='"${LEGACY_EL7_VAULT_BASE_URL}"'/updates/$basearch/
+enabled=1
+gpgcheck=0
+
+[dc-centos7-extras]
+name=DC CentOS 7.9.2009 Vault - Extras
+baseurl='"${LEGACY_EL7_VAULT_BASE_URL}"'/extras/$basearch/
+enabled=1
+gpgcheck=0'
+
+  log "Legacy EL7 detected; configuring archived CentOS repositories."
+  write_file "${repository_file}" "${repository_content}"
+  RPM_REPO_ARGS=(
+    --disablerepo=base
+    --disablerepo=updates
+    --disablerepo=extras
+    --enablerepo=dc-centos7-base
+    --enablerepo=dc-centos7-updates
+    --enablerepo=dc-centos7-extras
+  )
+}
+
 configure_rpm_repository() {
   local package_manager="$1"
 
-  run "${package_manager}" install -y ca-certificates curl
+  run "${package_manager}" "${RPM_REPO_ARGS[@]}" install -y ca-certificates curl
   run update-ca-trust
 
   if [[ "${package_manager}" == "dnf" ]]; then
-    run dnf install -y dnf-plugins-core
+    run dnf "${RPM_REPO_ARGS[@]}" install -y dnf-plugins-core
     if [[ ! -f /etc/yum.repos.d/docker-ce.repo ]]; then
       run dnf config-manager --add-repo https://download.docker.com/linux/centos/docker-ce.repo
     fi
   else
-    run yum install -y yum-utils
+    run yum "${RPM_REPO_ARGS[@]}" install -y yum-utils
     if [[ ! -f /etc/yum.repos.d/docker-ce.repo ]]; then
       run yum-config-manager --add-repo https://download.docker.com/linux/centos/docker-ce.repo
     fi
@@ -173,16 +209,19 @@ configure_rpm_repository() {
 install_rpm_packages() {
   local package_manager
   package_manager="$(resolve_rpm_package_manager)"
+  if legacy_el7; then
+    configure_legacy_el7_repository
+  fi
   configure_rpm_repository "${package_manager}"
 
   if legacy_el7; then
     log "Legacy EL7 detected; installing the final Docker CE packages published for EL7."
     if docker_engine_ready; then
-      run "${package_manager}" install -y \
+      run "${package_manager}" "${RPM_REPO_ARGS[@]}" install -y \
         "docker-buildx-plugin-${LEGACY_EL7_BUILDX_VERSION}" \
         "docker-compose-plugin-${LEGACY_EL7_COMPOSE_VERSION}"
     else
-      run "${package_manager}" install -y \
+      run "${package_manager}" "${RPM_REPO_ARGS[@]}" install -y \
         "docker-ce-${LEGACY_EL7_DOCKER_VERSION}" \
         "docker-ce-cli-${LEGACY_EL7_DOCKER_VERSION}" \
         "containerd.io-${LEGACY_EL7_CONTAINERD_VERSION}" \

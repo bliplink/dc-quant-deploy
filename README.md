@@ -92,7 +92,8 @@ vi .env.prod
 `prepare-host.sh` 会幂等安装并验证 Docker Engine、Buildx、Docker Compose v2
 和 Docker 开机自启，支持 CentOS/RHEL/Rocky/AlmaLinux 与 Ubuntu/Debian。
 对于已停止官方维护的 EL7/CentOS 7，脚本固定安装该仓库最后发布的
-Docker CE 26.1.4 和 Compose 2.27.1，不会错误尝试新版本。
+Docker CE 26.1.4 和 Compose 2.27.1，并自动使用 CentOS 7.9.2009
+归档源解决官方镜像下线问题，不会错误尝试新版本。
 仅检查现有环境可运行 `sudo ./prepare-host.sh --check`；如需让普通用户执行
 Docker，可显式传入 `--docker-user USER`，该权限等同于宿主机 root 权限。
 
