@@ -105,6 +105,18 @@ Docker，可显式传入 `--docker-user USER`，该权限等同于宿主机 root
 
 定向部署会复用完整部署相同的配置生成、备份和运行校验，但使用
 `--no-deps`，不会在该机器自动启动 ZooKeeper、ClickHouse 或其他业务服务。
+如果是空机验证，希望只部署指定业务服务并自动带起必要的本机基础设施，
+可直接运行：
+
+```bash
+./deploy.sh --services loginsvr --with-deps
+```
+
+该命令会在缺少 Docker 时自动执行主机准备，自动生成首次部署所需的
+`.env.prod` 和 `control.prod` 默认文件，只启动 LoginSvr 和 ClickHouse，
+不会启动其他业务服务。默认 LoginSvr 使用
+`SERVER.LoginSvr.RegisterEnable=0` 固定地址模式，因此不会安装或启动
+ZooKeeper；只有所选服务明确配置 `RegisterEnable=1` 时才会带起 ZooKeeper。
 
 部署脚本会自动创建 `${DEPLOY_ROOT}/control`、`${DEPLOY_ROOT}/data`、
 `${DEPLOY_ROOT}/log` 及各 Java 服务的偏好目录，不需要手工预建。

@@ -3,16 +3,22 @@ set -euo pipefail
 
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 ENV_FILE="${ROOT_DIR}/.env.prod"
+ENV_DEFAULT="${ROOT_DIR}/.env.example"
+ENV_STANDALONE_EXAMPLE="${ROOT_DIR}/.env.standalone.example"
+ENV_EXTERNAL_EXAMPLE="${ROOT_DIR}/.env.external-clickhouse.example"
 COMPOSE_FILE="${ROOT_DIR}/compose.yaml"
 OVERRIDE_FILE="${ROOT_DIR}/compose.override.generated.yaml"
 GENERATE_OVERRIDES_SCRIPT="${ROOT_DIR}/generate-compose-overrides.sh"
 CONTROL_SRC="${ROOT_DIR}/control.prod"
+CONTROL_EXAMPLE_DIR="${ROOT_DIR}/control.prod.example"
+PREPARE_HOST_SCRIPT="${ROOT_DIR}/prepare-host.sh"
 LAST_BACKUP_FILE="${ROOT_DIR}/.last_backup"
 BACKUP_ROOT="${ROOT_DIR}/backups"
 
 SERVICE_NAMES=(
   "tpc/Registry"
   "dc/GW/GW"
+  "dc/LoginSvr/LoginSvr"
   "dc/MDSvr/MDSvr"
   "dc/APSSvr/APSSvr"
   "dc/QuantSvr/QuantSvr"
@@ -43,6 +49,7 @@ TARGETABLE_SERVICES=(
 )
 DEPLOY_MODE="full"
 DEPLOY_SERVICES=()
+START_LOCAL_DEPS=false
 CLICKHOUSE_INIT_SCRIPT="${ROOT_DIR}/clickhouse/apply-init.sh"
 
 usage() {
@@ -50,18 +57,28 @@ usage() {
 Usage:
   ./deploy.sh
   ./deploy.sh --services SERVICE[,SERVICE...]
+  ./deploy.sh --services SERVICE[,SERVICE...] --with-deps
 
 Without --services, deploy the complete stack.
 
-With --services, initialize shared runtime files and deploy only the selected
-application containers with --no-deps. Local ZooKeeper and ClickHouse are not
-started in this mode; configure their reachable addresses before deployment.
+The script bootstraps Docker when missing, creates .env.prod and control.prod
+defaults when missing, prepares runtime mount directories, and validates the
+result.
+
+With --services, deploy only the selected application containers. By default,
+local dependencies are not started; configure reachable external ClickHouse
+and ZooKeeper addresses before deployment.
+
+With --with-deps, start embedded ClickHouse and start ZooKeeper only when a
+selected service has RegisterEnable=1. Other application services are not
+started.
 
 Supported service names:
   gateway, loginsvr, mdsvr, apssvr, quantsvr, indsvr, simsvr, batchsvr, web
 
 Example:
   ./deploy.sh --services apssvr,quantsvr
+  ./deploy.sh --services loginsvr --with-deps
 USAGE
 }
 
@@ -128,6 +145,9 @@ parse_args() {
           append_deploy_service "${normalized}"
         done
         ;;
+      --with-deps)
+        START_LOCAL_DEPS=true
+        ;;
       -h|--help)
         usage
         exit 0
@@ -142,6 +162,10 @@ parse_args() {
   done
 
   if [[ "${DEPLOY_MODE}" == "full" ]]; then
+    if [[ "${START_LOCAL_DEPS}" == "true" ]]; then
+      echo "--with-deps is only valid with --services." >&2
+      exit 1
+    fi
     DEPLOY_SERVICES=("${APP_SERVICES[@]}")
   elif [[ "${#DEPLOY_SERVICES[@]}" -eq 0 ]]; then
     echo "No deployable services were selected." >&2
@@ -168,6 +192,58 @@ check_dir() {
     echo "Missing required directory: $1" >&2
     exit 1
   }
+}
+
+copy_if_missing() {
+  local src="$1"
+  local dst="$2"
+  if [ ! -e "${dst}" ]; then
+    mkdir -p "$(dirname "${dst}")"
+    cp -a "${src}" "${dst}"
+    echo "Created ${dst} from deployment defaults."
+  fi
+}
+
+prepare_deploy_defaults() {
+  local env_example="${ENV_DEFAULT}"
+
+  if [[ "${DEPLOY_MODE}" == "selected" ]]; then
+    if [[ "${START_LOCAL_DEPS}" == "true" ]]; then
+      env_example="${ENV_STANDALONE_EXAMPLE}"
+    else
+      env_example="${ENV_EXTERNAL_EXAMPLE}"
+    fi
+  fi
+
+  check_file "${env_example}"
+  check_dir "${CONTROL_EXAMPLE_DIR}"
+  copy_if_missing "${env_example}" "${ENV_FILE}"
+
+  mkdir -p "${CONTROL_SRC}"
+  copy_if_missing "${CONTROL_EXAMPLE_DIR}/ATSConfig.ini" "${CONTROL_SRC}/ATSConfig.ini"
+  copy_if_missing "${CONTROL_EXAMPLE_DIR}/DBPoolConfig.ini" "${CONTROL_SRC}/DBPoolConfig.ini"
+  copy_if_missing "${CONTROL_EXAMPLE_DIR}/jaas.ini" "${CONTROL_SRC}/jaas.ini"
+  copy_if_missing "${CONTROL_EXAMPLE_DIR}/dc.dat" "${CONTROL_SRC}/dc.dat"
+  if [ -d "${CONTROL_EXAMPLE_DIR}/overrides" ] && [ ! -e "${CONTROL_SRC}/overrides" ]; then
+    cp -a "${CONTROL_EXAMPLE_DIR}/overrides" "${CONTROL_SRC}/overrides"
+    echo "Created ${CONTROL_SRC}/overrides from deployment defaults."
+  fi
+}
+
+ensure_container_runtime() {
+  if command -v docker >/dev/null 2>&1 &&
+     docker compose version >/dev/null 2>&1; then
+    return 0
+  fi
+
+  check_file "${PREPARE_HOST_SCRIPT}"
+  if [[ "$(id -u)" -ne 0 ]]; then
+    echo "Docker is missing. Re-run this deployment command as root so the host can be prepared automatically." >&2
+    exit 1
+  fi
+
+  echo "Docker runtime is missing; preparing the host automatically."
+  "${PREPARE_HOST_SCRIPT}"
 }
 
 load_env() {
@@ -343,6 +419,7 @@ stop_legacy_services() {
     for service in "${DEPLOY_SERVICES[@]}"; do
       case "${service}" in
         gateway) legacy_services+=("dc/GW/GW") ;;
+        loginsvr) legacy_services+=("dc/LoginSvr/LoginSvr") ;;
         mdsvr) legacy_services+=("dc/MDSvr/MDSvr") ;;
         apssvr) legacy_services+=("dc/APSSvr/APSSvr") ;;
         quantsvr) legacy_services+=("dc/QuantSvr/QuantSvr") ;;
@@ -433,7 +510,7 @@ validate_service_port() {
   local service="$1"
   case "${service}" in
     gateway) validate_port "gateway" "${SERVICE_HOST:-127.0.0.1}" 3002 ;;
-    loginsvr) validate_port "LoginSvr" "${SERVICE_HOST:-127.0.0.1}" 30022 ;;
+    loginsvr) validate_port "LoginSvr" "${SERVICE_HOST:-127.0.0.1}" 20034 ;;
     mdsvr) validate_port "MDSvr" "${SERVICE_HOST:-127.0.0.1}" 30028 ;;
     apssvr) validate_port "APSSvr" "${SERVICE_HOST:-127.0.0.1}" 30035 ;;
     quantsvr) validate_port "QuantSvr" "${SERVICE_HOST:-127.0.0.1}" 30042 ;;
@@ -507,21 +584,81 @@ deploy_full_stack() {
 
 deploy_selected_services() {
   echo "Selected-service deployment: ${DEPLOY_SERVICES[*]}"
-  echo "Dependencies will not be started; ClickHouse and ZooKeeper must already be reachable."
+  if [[ "${START_LOCAL_DEPS}" == "true" ]]; then
+    local -a infrastructure=(clickhouse)
+    local pull_services=(clickhouse)
+    local service config_name register_enable
 
-  compose pull "${DEPLOY_SERVICES[@]}"
+    if [[ "${CLICKHOUSE_MODE}" != "embedded" ]]; then
+      echo "--with-deps requires CLICKHOUSE_MODE=embedded in ${ENV_FILE}." >&2
+      exit 1
+    fi
 
-  if ! wait_for_clickhouse_ready; then
-    echo "Configured ClickHouse is not reachable. Selected services were not started." >&2
-    exit 1
+    for service in "${DEPLOY_SERVICES[@]}"; do
+      case "${service}" in
+        gateway) config_name="GW" ;;
+        loginsvr) config_name="LoginSvr" ;;
+        mdsvr) config_name="MDSvr" ;;
+        apssvr) config_name="APSSvr" ;;
+        quantsvr) config_name="QuantSvr" ;;
+        indsvr) config_name="INDSvr" ;;
+        simsvr) config_name="SIMSvr" ;;
+        batchsvr) config_name="BatchSvr" ;;
+        *) config_name="" ;;
+      esac
+
+      if [[ -n "${config_name}" ]]; then
+        register_enable="$(
+          sed -n "s/^SERVER\\.${config_name}\\.RegisterEnable=//p" \
+            "${CONTROL_SRC}/ATSConfig.ini" | tail -n 1
+        )"
+        if [[ "${register_enable}" == "1" ]] &&
+           ! contains_service "zookeeper" "${infrastructure[@]}"; then
+          infrastructure+=(zookeeper)
+          pull_services+=(zookeeper)
+        fi
+      fi
+    done
+    pull_services+=("${DEPLOY_SERVICES[@]}")
+
+    echo "Starting local infrastructure: ${infrastructure[*]}"
+    compose --profile embedded-clickhouse pull "${pull_services[@]}"
+    compose --profile embedded-clickhouse up -d "${infrastructure[@]}"
+
+    if ! wait_for_clickhouse_ready; then
+      echo "Embedded ClickHouse did not become ready. Selected services were not started." >&2
+      exit 1
+    fi
+
+    if ! wait_for_clickhouse_schema 2 1; then
+      if ! apply_clickhouse_init; then
+        echo "Embedded ClickHouse initialization failed. Selected services were not started." >&2
+        exit 1
+      fi
+    fi
+
+    if ! wait_for_clickhouse_schema; then
+      echo "Embedded ClickHouse schema is not ready. Selected services were not started." >&2
+      exit 1
+    fi
+
+    compose --profile embedded-clickhouse up -d --no-deps "${DEPLOY_SERVICES[@]}"
+  else
+    echo "Dependencies will not be started; ClickHouse and ZooKeeper must already be reachable."
+    compose pull "${DEPLOY_SERVICES[@]}"
+
+    if ! wait_for_clickhouse_ready; then
+      echo "Configured ClickHouse is not reachable. Selected services were not started." >&2
+      exit 1
+    fi
+
+    if ! wait_for_clickhouse_schema; then
+      echo "Configured ClickHouse schema is not ready. Selected services were not started." >&2
+      exit 1
+    fi
+
+    compose up -d --no-deps "${DEPLOY_SERVICES[@]}"
   fi
-
-  if ! wait_for_clickhouse_schema; then
-    echo "Configured ClickHouse schema is not ready. Selected services were not started." >&2
-    exit 1
-  fi
-
-  compose up -d --no-deps "${DEPLOY_SERVICES[@]}"
 
   if ! validate_runtime; then
     echo "Selected-service validation failed. Inspect the selected containers before retrying." >&2
@@ -532,6 +669,8 @@ deploy_selected_services() {
 
 main() {
   parse_args "$@"
+  prepare_deploy_defaults
+  ensure_container_runtime
   check_cmd docker
   check_cmd curl
   docker compose version >/dev/null

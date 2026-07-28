@@ -107,6 +107,19 @@ Selected-service deployment reuses the same configuration generation, backup,
 and runtime checks as a full deployment, but uses `--no-deps`. It does not
 start ZooKeeper, ClickHouse, or other application services on that host.
 
+For an empty-host smoke deployment that should start only required local
+infrastructure without starting other application services, run:
+
+```bash
+./deploy.sh --services loginsvr --with-deps
+```
+
+This command prepares Docker when missing, creates initial `.env.prod` and
+`control.prod` defaults, and starts only LoginSvr plus ClickHouse. LoginSvr
+defaults to fixed-address mode with `RegisterEnable=0`, so ZooKeeper is not
+started. ZooKeeper is included only when a selected service explicitly uses
+`RegisterEnable=1`.
+
 The deployment script automatically creates `${DEPLOY_ROOT}/control`,
 `${DEPLOY_ROOT}/data`, `${DEPLOY_ROOT}/log`, and the per-service Java
 preferences directories. `control` is mounted read-only, while `data`, `log`,
