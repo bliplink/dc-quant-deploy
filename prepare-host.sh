@@ -10,6 +10,7 @@ LEGACY_EL7_CONTAINERD_VERSION="1.6.33-3.1.el7"
 LEGACY_EL7_BUILDX_VERSION="0.14.1-1.el7"
 LEGACY_EL7_COMPOSE_VERSION="2.27.1-1.el7"
 LEGACY_EL7_VAULT_BASE_URL="${LEGACY_EL7_VAULT_BASE_URL:-https://mirrors.aliyun.com/centos-vault/7.9.2009}"
+LEGACY_EL7_DOCKER_REPO_BASE_URL="${LEGACY_EL7_DOCKER_REPO_BASE_URL:-https://mirrors.aliyun.com/docker-ce/linux/centos/7}"
 RPM_REPO_ARGS=()
 
 usage() {
@@ -187,6 +188,21 @@ gpgcheck=0'
   )
 }
 
+configure_legacy_el7_docker_repository() {
+  local repository_file="/etc/yum.repos.d/docker-ce.repo"
+  local repository_content
+
+  repository_content='[docker-ce-stable]
+name=Docker CE Stable - $basearch
+baseurl='"${LEGACY_EL7_DOCKER_REPO_BASE_URL}"'/$basearch/stable
+enabled=1
+gpgcheck=1
+gpgkey=https://mirrors.aliyun.com/docker-ce/linux/centos/gpg'
+
+  log "Configuring the archived EL7 Docker CE repository mirror."
+  write_file "${repository_file}" "${repository_content}"
+}
+
 configure_rpm_repository() {
   local package_manager="$1"
 
@@ -195,12 +211,16 @@ configure_rpm_repository() {
 
   if [[ "${package_manager}" == "dnf" ]]; then
     run dnf "${RPM_REPO_ARGS[@]}" install -y dnf-plugins-core
-    if [[ ! -f /etc/yum.repos.d/docker-ce.repo ]]; then
+    if legacy_el7; then
+      configure_legacy_el7_docker_repository
+    elif [[ ! -f /etc/yum.repos.d/docker-ce.repo ]]; then
       run dnf config-manager --add-repo https://download.docker.com/linux/centos/docker-ce.repo
     fi
   else
     run yum "${RPM_REPO_ARGS[@]}" install -y yum-utils
-    if [[ ! -f /etc/yum.repos.d/docker-ce.repo ]]; then
+    if legacy_el7; then
+      configure_legacy_el7_docker_repository
+    elif [[ ! -f /etc/yum.repos.d/docker-ce.repo ]]; then
       run yum-config-manager --add-repo https://download.docker.com/linux/centos/docker-ce.repo
     fi
   fi
