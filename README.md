@@ -111,13 +111,14 @@ Docker，可显式传入 `--docker-user USER`，该权限等同于宿主机 root
 空机可直接执行：
 
 ```bash
-./deploy.sh --services apssvr --license-url https://example.com/path/to/dc.dat
+./deploy.sh --services apssvr
 ```
 
-脚本会自动安装 Docker、从 HTTPS 地址下载未提交到部署仓库的合法
-`dc.dat`、补齐首次部署配置、创建挂载目录，并且只启动 APSSvr。已有合法
-`control.prod/dc.dat` 时可以省略 `--license-url`。占位许可证会在启动容器前
-被明确拒绝，避免服务进入反复重启状态。定向部署默认按
+部署仓库已包含可公开分发的试用 `control.prod/dc.dat`。脚本会自动安装
+Docker、复制并校验试用许可证、补齐首次部署配置、创建挂载目录，并且只
+启动 APSSvr。正式环境可在部署前替换 `control.prod/dc.dat`；缺少内置文件时
+也可以使用 `--license-url HTTPS_URL` 下载许可证。空文件或占位许可证会在
+启动容器前被明确拒绝，避免服务进入反复重启状态。定向部署默认按
 `MIN_SELECTED_MEMORY_MB=1024`、`MIN_SELECTED_DISK_GB=5` 校验宿主机，
 不会套用完整系统的 8GB/20GB 门槛；部署高内存服务时可在 `.env.prod`
 覆盖这两个值。配置同步会保留宿主机 `control` 挂载根目录和已有运行时

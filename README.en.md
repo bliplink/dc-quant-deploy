@@ -114,14 +114,15 @@ APSSvr does not require ClickHouse and defaults to fixed-address mode with
 `RegisterEnable=0`, so an empty host can deploy it directly:
 
 ```bash
-./deploy.sh --services apssvr --license-url https://example.com/path/to/dc.dat
+./deploy.sh --services apssvr
 ```
 
-The script prepares Docker, downloads the valid `dc.dat` that is intentionally
-not committed to this deployment repository, creates initial configuration and
-mount directories, then starts only APSSvr. Omit `--license-url` when
-`control.prod/dc.dat` already contains a valid license. Placeholder licenses are
-rejected before containers start so the service cannot enter a restart loop.
+The repository includes a distributable trial `control.prod/dc.dat`. The script
+prepares Docker, copies and validates the trial license, creates initial
+configuration and mount directories, then starts only APSSvr. For production,
+replace `control.prod/dc.dat` before deployment. If the bundled file is absent,
+`--license-url HTTPS_URL` can download a license. Empty or placeholder licenses
+are rejected before containers start so the service cannot enter a restart loop.
 Selected-service deployment defaults to `MIN_SELECTED_MEMORY_MB=1024` and
 `MIN_SELECTED_DISK_GB=5` instead of applying the full-stack 8 GB/20 GB gate.
 Override these values in `.env.prod` for memory-intensive services. Control
