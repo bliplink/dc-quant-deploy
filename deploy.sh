@@ -505,6 +505,12 @@ sync_control() {
   if [ -d "${CONTROL_SRC}/overrides" ]; then
     cp -an "${CONTROL_SRC}/overrides/." "${DEPLOY_ROOT}/control/overrides/"
   fi
+
+  if [ -f "${DEPLOY_ROOT}/control/dc.dat" ]; then
+    # Keep the source license root-only while allowing the runtime group to read its copy.
+    chown "root:${RUNTIME_GID}" "${DEPLOY_ROOT}/control/dc.dat"
+    chmod 0640 "${DEPLOY_ROOT}/control/dc.dat"
+  fi
 }
 
 generate_compose_overrides() {
