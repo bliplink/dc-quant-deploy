@@ -64,7 +64,6 @@ Main services:
 
 Minimum default requirements:
 
-- CPU >= 2 cores
 - Memory >= 8192 MB
 - Free disk under `${DEPLOY_ROOT}` >= 20 GB
 
@@ -73,6 +72,7 @@ Deploy with bundled ClickHouse:
 ```bash
 git clone https://github.com/bliplink/dc-quant-deploy.git
 cd dc-quant-deploy
+sudo ./prepare-host.sh
 ./deploy-standalone.sh
 ```
 
@@ -81,10 +81,31 @@ Deploy with an existing ClickHouse:
 ```bash
 git clone https://github.com/bliplink/dc-quant-deploy.git
 cd dc-quant-deploy
+sudo ./prepare-host.sh
 cp .env.external-clickhouse.example .env.prod
 vi .env.prod
 ./deploy-with-external-clickhouse.sh
 ```
+
+`prepare-host.sh` idempotently installs and verifies Docker Engine, Buildx,
+Docker Compose v2, and Docker startup at boot. It supports
+CentOS/RHEL/Rocky/AlmaLinux and Ubuntu/Debian.
+For end-of-life EL7/CentOS 7, it pins the final repository releases:
+Docker CE 26.1.4 and Compose 2.27.1. Run `sudo ./prepare-host.sh --check` to
+validate an existing runtime. To allow a
+non-root user to run Docker, explicitly pass `--docker-user USER`; Docker group
+membership grants root-equivalent access to the host.
+
+To deploy only selected services on a dedicated host, first configure external
+ClickHouse, ZooKeeper, and `control.prod/dc.dat`, then run:
+
+```bash
+./deploy.sh --services apssvr,quantsvr
+```
+
+Selected-service deployment reuses the same configuration generation, backup,
+and runtime checks as a full deployment, but uses `--no-deps`. It does not
+start ZooKeeper, ClickHouse, or other application services on that host.
 
 Verify:
 

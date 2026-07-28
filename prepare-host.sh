@@ -1,0 +1,344 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+MODE="install"
+DRY_RUN="false"
+DOCKER_USER="${DOCKER_USER:-}"
+OS_RELEASE_FILE="${PREPARE_HOST_OS_RELEASE_FILE:-/etc/os-release}"
+LEGACY_EL7_DOCKER_VERSION="26.1.4-1.el7"
+LEGACY_EL7_CONTAINERD_VERSION="1.6.33-3.1.el7"
+LEGACY_EL7_BUILDX_VERSION="0.14.1-1.el7"
+LEGACY_EL7_COMPOSE_VERSION="2.27.1-1.el7"
+
+usage() {
+  cat <<'USAGE'
+Usage:
+  sudo ./prepare-host.sh [--check] [--dry-run] [--docker-user USER]
+
+Install and verify the Docker runtime required by dc-quant-deploy.
+
+Options:
+  --check             Verify Docker Engine, Docker Compose v2, and the service.
+  --dry-run           Print installation commands without changing the host.
+  --docker-user USER  Add an existing user to the docker group after installation.
+  -h, --help          Show this help.
+
+Supported operating systems:
+  CentOS, RHEL, Rocky Linux, AlmaLinux, Ubuntu, and Debian.
+
+The script is idempotent. It does not deploy DC Quant or overwrite Docker daemon
+configuration. Membership in the docker group grants root-equivalent access.
+USAGE
+}
+
+log() {
+  printf '[prepare-host] %s\n' "$*"
+}
+
+die() {
+  printf '[prepare-host] ERROR: %s\n' "$*" >&2
+  exit 1
+}
+
+print_command() {
+  printf '[prepare-host] DRY-RUN:'
+  printf ' %q' "$@"
+  printf '\n'
+}
+
+run() {
+  if [[ "${DRY_RUN}" == "true" ]]; then
+    print_command "$@"
+    return 0
+  fi
+  "$@"
+}
+
+write_file() {
+  local target="$1"
+  local content="$2"
+
+  if [[ "${DRY_RUN}" == "true" ]]; then
+    log "DRY-RUN: write ${target}"
+    return 0
+  fi
+  printf '%s\n' "${content}" > "${target}"
+}
+
+parse_args() {
+  while [[ "$#" -gt 0 ]]; do
+    case "$1" in
+      --check)
+        MODE="check"
+        ;;
+      --dry-run)
+        DRY_RUN="true"
+        ;;
+      --docker-user)
+        shift
+        [[ "$#" -gt 0 ]] || die "--docker-user requires a username"
+        DOCKER_USER="$1"
+        ;;
+      -h|--help)
+        usage
+        exit 0
+        ;;
+      *)
+        die "Unexpected argument: $1"
+        ;;
+    esac
+    shift
+  done
+}
+
+require_root() {
+  if [[ "${EUID}" -ne 0 ]]; then
+    die "Run this command as root or with sudo."
+  fi
+}
+
+load_os_release() {
+  [[ -r "${OS_RELEASE_FILE}" ]] || die "Cannot read ${OS_RELEASE_FILE}"
+
+  # shellcheck disable=SC1090
+  . "${OS_RELEASE_FILE}"
+  OS_ID="${ID,,}"
+  OS_VERSION_ID="${VERSION_ID:-}"
+  OS_CODENAME="${VERSION_CODENAME:-}"
+
+  case "${OS_ID}" in
+    centos|rhel|rocky|almalinux|ubuntu|debian)
+      ;;
+    *)
+      die "Unsupported operating system: ${OS_ID}. See --help for supported systems."
+      ;;
+  esac
+
+  case "$(uname -m)" in
+    x86_64|aarch64)
+      ;;
+    *)
+      die "Unsupported CPU architecture: $(uname -m)"
+      ;;
+  esac
+}
+
+legacy_el7() {
+  [[ "${OS_ID}" =~ ^(centos|rhel|rocky|almalinux)$ ]] &&
+    [[ "${OS_VERSION_ID%%.*}" == "7" ]]
+}
+
+docker_engine_ready() {
+  command -v docker >/dev/null 2>&1
+}
+
+docker_compose_ready() {
+  docker_engine_ready && docker compose version >/dev/null 2>&1
+}
+
+require_systemd() {
+  command -v systemctl >/dev/null 2>&1 ||
+    die "systemd is required to manage the Docker service."
+}
+
+resolve_rpm_package_manager() {
+  if command -v dnf >/dev/null 2>&1; then
+    printf 'dnf\n'
+  elif command -v yum >/dev/null 2>&1; then
+    printf 'yum\n'
+  else
+    die "Neither dnf nor yum is available."
+  fi
+}
+
+configure_rpm_repository() {
+  local package_manager="$1"
+
+  run "${package_manager}" install -y ca-certificates curl
+  run update-ca-trust
+
+  if [[ "${package_manager}" == "dnf" ]]; then
+    run dnf install -y dnf-plugins-core
+    if [[ ! -f /etc/yum.repos.d/docker-ce.repo ]]; then
+      run dnf config-manager --add-repo https://download.docker.com/linux/centos/docker-ce.repo
+    fi
+  else
+    run yum install -y yum-utils
+    if [[ ! -f /etc/yum.repos.d/docker-ce.repo ]]; then
+      run yum-config-manager --add-repo https://download.docker.com/linux/centos/docker-ce.repo
+    fi
+  fi
+}
+
+install_rpm_packages() {
+  local package_manager
+  package_manager="$(resolve_rpm_package_manager)"
+  configure_rpm_repository "${package_manager}"
+
+  if legacy_el7; then
+    log "Legacy EL7 detected; installing the final Docker CE packages published for EL7."
+    if docker_engine_ready; then
+      run "${package_manager}" install -y \
+        "docker-buildx-plugin-${LEGACY_EL7_BUILDX_VERSION}" \
+        "docker-compose-plugin-${LEGACY_EL7_COMPOSE_VERSION}"
+    else
+      run "${package_manager}" install -y \
+        "docker-ce-${LEGACY_EL7_DOCKER_VERSION}" \
+        "docker-ce-cli-${LEGACY_EL7_DOCKER_VERSION}" \
+        "containerd.io-${LEGACY_EL7_CONTAINERD_VERSION}" \
+        "docker-buildx-plugin-${LEGACY_EL7_BUILDX_VERSION}" \
+        "docker-compose-plugin-${LEGACY_EL7_COMPOSE_VERSION}"
+    fi
+    return 0
+  fi
+
+  if docker_engine_ready; then
+    log "Docker Engine already exists; installing the Compose and Buildx plugins."
+    run "${package_manager}" install -y docker-buildx-plugin docker-compose-plugin
+  else
+    run "${package_manager}" install -y \
+      docker-ce \
+      docker-ce-cli \
+      containerd.io \
+      docker-buildx-plugin \
+      docker-compose-plugin
+  fi
+}
+
+configure_deb_repository() {
+  local repository_os="$1"
+  local keyring="/etc/apt/keyrings/docker.asc"
+  local repository_file="/etc/apt/sources.list.d/docker.list"
+  local temporary_keyring="${keyring}.tmp"
+  local architecture
+  local repository
+
+  run apt-get update
+  run apt-get install -y ca-certificates curl
+  run install -m 0755 -d /etc/apt/keyrings
+
+  run curl -fsSL "https://download.docker.com/linux/${repository_os}/gpg" -o "${temporary_keyring}"
+  run mv "${temporary_keyring}" "${keyring}"
+  run chmod a+r "${keyring}"
+
+  architecture="$(dpkg --print-architecture)"
+  [[ -n "${OS_CODENAME}" ]] || die "VERSION_CODENAME is missing from ${OS_RELEASE_FILE}"
+  repository="deb [arch=${architecture} signed-by=${keyring}] https://download.docker.com/linux/${repository_os} ${OS_CODENAME} stable"
+  write_file "${repository_file}" "${repository}"
+  run apt-get update
+}
+
+install_deb_packages() {
+  configure_deb_repository "${OS_ID}"
+
+  if docker_engine_ready; then
+    log "Docker Engine already exists; installing the Compose and Buildx plugins."
+    run apt-get install -y docker-buildx-plugin docker-compose-plugin
+  else
+    run apt-get install -y \
+      docker-ce \
+      docker-ce-cli \
+      containerd.io \
+      docker-buildx-plugin \
+      docker-compose-plugin
+  fi
+}
+
+install_docker() {
+  case "${OS_ID}" in
+    centos|rhel|rocky|almalinux)
+      install_rpm_packages
+      ;;
+    ubuntu|debian)
+      install_deb_packages
+      ;;
+    *)
+      die "Unsupported operating system: ${OS_ID}"
+      ;;
+  esac
+}
+
+enable_docker_service() {
+  require_systemd
+  run systemctl enable --now docker
+}
+
+configure_docker_user() {
+  [[ -n "${DOCKER_USER}" ]] || return 0
+
+  getent passwd "${DOCKER_USER}" >/dev/null ||
+    die "User does not exist: ${DOCKER_USER}"
+
+  run usermod -aG docker "${DOCKER_USER}"
+  log "Added ${DOCKER_USER} to the docker group."
+  log "The user must log out and back in before group membership takes effect."
+}
+
+validate_runtime() {
+  local failed="false"
+
+  if ! docker_engine_ready; then
+    printf '[prepare-host] ERROR: docker command is missing.\n' >&2
+    failed="true"
+  fi
+
+  if ! docker_compose_ready; then
+    printf '[prepare-host] ERROR: Docker Compose v2 plugin is missing.\n' >&2
+    failed="true"
+  fi
+
+  if command -v systemctl >/dev/null 2>&1; then
+    if ! systemctl is-enabled docker >/dev/null 2>&1; then
+      printf '[prepare-host] ERROR: Docker is not enabled at boot.\n' >&2
+      failed="true"
+    fi
+    if ! systemctl is-active docker >/dev/null 2>&1; then
+      printf '[prepare-host] ERROR: Docker service is not active.\n' >&2
+      failed="true"
+    fi
+  else
+    printf '[prepare-host] ERROR: systemctl is missing.\n' >&2
+    failed="true"
+  fi
+
+  if docker_engine_ready && ! docker info >/dev/null 2>&1; then
+    printf '[prepare-host] ERROR: Docker daemon is not reachable.\n' >&2
+    failed="true"
+  fi
+
+  [[ "${failed}" == "false" ]] || return 1
+
+  log "$(docker --version)"
+  log "$(docker compose version)"
+  log "Docker runtime is ready for dc-quant-deploy."
+}
+
+main() {
+  parse_args "$@"
+  load_os_release
+
+  if [[ "${MODE}" == "check" ]]; then
+    validate_runtime
+    exit 0
+  fi
+
+  require_root
+
+  if docker_engine_ready && docker_compose_ready; then
+    log "Docker Engine and Compose v2 are already installed."
+  else
+    install_docker
+  fi
+
+  enable_docker_service
+  configure_docker_user
+
+  if [[ "${DRY_RUN}" == "true" ]]; then
+    log "Dry run completed; no host changes were made."
+    exit 0
+  fi
+
+  validate_runtime
+}
+
+main "$@"

@@ -30,10 +30,123 @@ APP_SERVICES=(
   batchsvr
   web
 )
+TARGETABLE_SERVICES=(
+  gateway
+  loginsvr
+  mdsvr
+  apssvr
+  quantsvr
+  indsvr
+  simsvr
+  batchsvr
+  web
+)
+DEPLOY_MODE="full"
+DEPLOY_SERVICES=()
 CLICKHOUSE_INIT_SCRIPT="${ROOT_DIR}/clickhouse/apply-init.sh"
+
+usage() {
+  cat <<'USAGE'
+Usage:
+  ./deploy.sh
+  ./deploy.sh --services SERVICE[,SERVICE...]
+
+Without --services, deploy the complete stack.
+
+With --services, initialize shared runtime files and deploy only the selected
+application containers with --no-deps. Local ZooKeeper and ClickHouse are not
+started in this mode; configure their reachable addresses before deployment.
+
+Supported service names:
+  gateway, loginsvr, mdsvr, apssvr, quantsvr, indsvr, simsvr, batchsvr, web
+
+Example:
+  ./deploy.sh --services apssvr,quantsvr
+USAGE
+}
 
 compose() {
   docker compose --env-file "${ENV_FILE}" -f "${COMPOSE_FILE}" -f "${OVERRIDE_FILE}" "$@"
+}
+
+contains_service() {
+  local needle="$1"
+  shift
+  local item
+  for item in "$@"; do
+    if [[ "${item}" == "${needle}" ]]; then
+      return 0
+    fi
+  done
+  return 1
+}
+
+normalize_service() {
+  case "$1" in
+    GW|gw)
+      printf 'gateway\n'
+      ;;
+    gateway|loginsvr|mdsvr|apssvr|quantsvr|indsvr|simsvr|batchsvr|web)
+      printf '%s\n' "$1"
+      ;;
+    *)
+      printf '\n'
+      ;;
+  esac
+}
+
+append_deploy_service() {
+  local service="$1"
+  if ! contains_service "${service}" "${DEPLOY_SERVICES[@]:-}"; then
+    DEPLOY_SERVICES+=("${service}")
+  fi
+}
+
+parse_args() {
+  local raw_services raw normalized
+  local -a requested=()
+
+  while [[ "$#" -gt 0 ]]; do
+    case "$1" in
+      --services)
+        shift
+        [[ "$#" -gt 0 ]] || {
+          echo "--services requires a comma-separated value." >&2
+          exit 1
+        }
+        DEPLOY_MODE="selected"
+        raw_services="$1"
+        IFS=',' read -r -a requested <<< "${raw_services}"
+        for raw in "${requested[@]}"; do
+          normalized="$(normalize_service "${raw}")"
+          if [[ -z "${normalized}" ]] ||
+             ! contains_service "${normalized}" "${TARGETABLE_SERVICES[@]}"; then
+            echo "Unsupported service: ${raw}" >&2
+            usage >&2
+            exit 1
+          fi
+          append_deploy_service "${normalized}"
+        done
+        ;;
+      -h|--help)
+        usage
+        exit 0
+        ;;
+      *)
+        echo "Unexpected argument: $1" >&2
+        usage >&2
+        exit 1
+        ;;
+    esac
+    shift
+  done
+
+  if [[ "${DEPLOY_MODE}" == "full" ]]; then
+    DEPLOY_SERVICES=("${APP_SERVICES[@]}")
+  elif [[ "${#DEPLOY_SERVICES[@]}" -eq 0 ]]; then
+    echo "No deployable services were selected." >&2
+    exit 1
+  fi
 }
 
 check_cmd() {
@@ -79,22 +192,15 @@ load_env() {
 }
 
 check_system_requirements() {
-  local min_cpu min_mem_mb min_disk_gb cpu_count mem_mb disk_mb disk_gb
-  min_cpu="${MIN_CPU_CORES:-2}"
+  local min_mem_mb min_disk_gb mem_mb disk_mb disk_gb
   min_mem_mb="${MIN_MEMORY_MB:-8192}"
   min_disk_gb="${MIN_DISK_GB:-20}"
 
-  cpu_count="$(getconf _NPROCESSORS_ONLN 2>/dev/null || echo 0)"
   mem_mb="$(awk '/MemTotal/ {print int($2 / 1024)}' /proc/meminfo 2>/dev/null || echo 0)"
 
   mkdir -p "${DEPLOY_ROOT}"
   disk_mb="$(df -Pm "${DEPLOY_ROOT}" | awk 'NR==2 {print $4}')"
   disk_gb="$((disk_mb / 1024))"
-
-  if [ "${cpu_count}" -lt "${min_cpu}" ]; then
-    echo "Machine check failed: CPU cores ${cpu_count}, required >= ${min_cpu}." >&2
-    exit 1
-  fi
 
   if [ "${mem_mb}" -lt "${min_mem_mb}" ]; then
     echo "Machine check failed: memory ${mem_mb} MB, required >= ${min_mem_mb} MB." >&2
@@ -205,8 +311,29 @@ generate_compose_overrides() {
 }
 
 stop_legacy_services() {
+  local legacy_services=()
+
+  if [[ "${DEPLOY_MODE}" == "full" ]]; then
+    legacy_services=("${SERVICE_NAMES[@]}")
+  else
+    local service
+    for service in "${DEPLOY_SERVICES[@]}"; do
+      case "${service}" in
+        gateway) legacy_services+=("dc/GW/GW") ;;
+        mdsvr) legacy_services+=("dc/MDSvr/MDSvr") ;;
+        apssvr) legacy_services+=("dc/APSSvr/APSSvr") ;;
+        quantsvr) legacy_services+=("dc/QuantSvr/QuantSvr") ;;
+        indsvr) legacy_services+=("dc/INDSvr/INDSvr") ;;
+        simsvr) legacy_services+=("dc/SIMSvr/SIMSvr") ;;
+        batchsvr) legacy_services+=("dc/BatchSvr/BatchSvr") ;;
+      esac
+    done
+  fi
+
   if [ -x "${DEPLOY_ROOT}/scripts/stop" ]; then
-    "${DEPLOY_ROOT}/scripts/stop" "${SERVICE_NAMES[@]}" || true
+    if [[ "${#legacy_services[@]}" -gt 0 ]]; then
+      "${DEPLOY_ROOT}/scripts/stop" "${legacy_services[@]}" || true
+    fi
   fi
 }
 
@@ -279,41 +406,42 @@ wait_for_clickhouse_schema() {
   return 1
 }
 
-validate_runtime() {
-  validate_port "ClickHouse HTTP" "${CLICKHOUSE_HOST}" "${CLICKHOUSE_HTTP_PORT}"
-  validate_port "ZooKeeper" 127.0.0.1 2181
-  validate_port "gateway" "${SERVICE_HOST:-127.0.0.1}" 3002
-  validate_port "MDSvr" "${SERVICE_HOST:-127.0.0.1}" 30028
-  validate_port "APSSvr" "${SERVICE_HOST:-127.0.0.1}" 30035
-  validate_port "QuantSvr" "${SERVICE_HOST:-127.0.0.1}" 30042
-  validate_port "INDSvr" "${SERVICE_HOST:-127.0.0.1}" 30044
-  validate_port "SIMSvr" "${SERVICE_HOST:-127.0.0.1}" 30045
-  validate_port "BatchSvr" "${SERVICE_HOST:-127.0.0.1}" 30046
-  validate_port "web" "${SERVICE_HOST:-127.0.0.1}" 80
+validate_service_port() {
+  local service="$1"
+  case "${service}" in
+    gateway) validate_port "gateway" "${SERVICE_HOST:-127.0.0.1}" 3002 ;;
+    loginsvr) validate_port "LoginSvr" "${SERVICE_HOST:-127.0.0.1}" 30022 ;;
+    mdsvr) validate_port "MDSvr" "${SERVICE_HOST:-127.0.0.1}" 30028 ;;
+    apssvr) validate_port "APSSvr" "${SERVICE_HOST:-127.0.0.1}" 30035 ;;
+    quantsvr) validate_port "QuantSvr" "${SERVICE_HOST:-127.0.0.1}" 30042 ;;
+    indsvr) validate_port "INDSvr" "${SERVICE_HOST:-127.0.0.1}" 30044 ;;
+    simsvr) validate_port "SIMSvr" "${SERVICE_HOST:-127.0.0.1}" 30045 ;;
+    batchsvr) validate_port "BatchSvr" "${SERVICE_HOST:-127.0.0.1}" 30046 ;;
+    web) validate_port "web" "${SERVICE_HOST:-127.0.0.1}" 80 ;;
+    *)
+      echo "No validation rule for service: ${service}" >&2
+      return 1
+      ;;
+  esac
 }
 
-main() {
-  check_cmd docker
-  check_cmd curl
-  docker compose version >/dev/null
-  load_env
-  check_system_requirements
-  validate_ghcr_login
-  validate_control_prod
-  check_file "${COMPOSE_FILE}"
-  prepare_runtime_dirs
+validate_runtime() {
+  local service
+  validate_port "ClickHouse HTTP" "${CLICKHOUSE_HOST}" "${CLICKHOUSE_HTTP_PORT}"
+  if [[ "${DEPLOY_MODE}" == "full" ]]; then
+    validate_port "ZooKeeper" 127.0.0.1 2181
+  fi
+  for service in "${DEPLOY_SERVICES[@]}"; do
+    validate_service_port "${service}"
+  done
+}
 
-  backup_control
-  record_status
-  sync_control
-  generate_compose_overrides
-  stop_legacy_services
-
+deploy_full_stack() {
   if [[ "${CLICKHOUSE_MODE}" == "embedded" ]]; then
-    compose --profile embedded-clickhouse pull clickhouse zookeeper "${APP_SERVICES[@]}"
+    compose --profile embedded-clickhouse pull clickhouse zookeeper "${DEPLOY_SERVICES[@]}"
     compose --profile embedded-clickhouse up -d clickhouse zookeeper
   else
-    compose pull zookeeper "${APP_SERVICES[@]}"
+    compose pull zookeeper "${DEPLOY_SERVICES[@]}"
     compose up -d zookeeper
   fi
 
@@ -342,15 +470,65 @@ main() {
   fi
 
   if [[ "${CLICKHOUSE_MODE}" == "embedded" ]]; then
-    compose --profile embedded-clickhouse up -d "${APP_SERVICES[@]}"
+    compose --profile embedded-clickhouse up -d "${DEPLOY_SERVICES[@]}"
   else
-    compose up -d "${APP_SERVICES[@]}"
+    compose up -d "${DEPLOY_SERVICES[@]}"
   fi
 
   if ! validate_runtime; then
     echo "Validation failed. Running rollback..." >&2
     "${ROOT_DIR}/rollback.sh"
     exit 1
+  fi
+}
+
+deploy_selected_services() {
+  echo "Selected-service deployment: ${DEPLOY_SERVICES[*]}"
+  echo "Dependencies will not be started; ClickHouse and ZooKeeper must already be reachable."
+
+  compose pull "${DEPLOY_SERVICES[@]}"
+
+  if ! wait_for_clickhouse_ready; then
+    echo "Configured ClickHouse is not reachable. Selected services were not started." >&2
+    exit 1
+  fi
+
+  if ! wait_for_clickhouse_schema; then
+    echo "Configured ClickHouse schema is not ready. Selected services were not started." >&2
+    exit 1
+  fi
+
+  compose up -d --no-deps "${DEPLOY_SERVICES[@]}"
+
+  if ! validate_runtime; then
+    echo "Selected-service validation failed. Inspect the selected containers before retrying." >&2
+    compose ps "${DEPLOY_SERVICES[@]}" >&2 || true
+    exit 1
+  fi
+}
+
+main() {
+  parse_args "$@"
+  check_cmd docker
+  check_cmd curl
+  docker compose version >/dev/null
+  load_env
+  check_system_requirements
+  validate_ghcr_login
+  validate_control_prod
+  check_file "${COMPOSE_FILE}"
+  prepare_runtime_dirs
+
+  backup_control
+  record_status
+  sync_control
+  generate_compose_overrides
+  stop_legacy_services
+
+  if [[ "${DEPLOY_MODE}" == "full" ]]; then
+    deploy_full_stack
+  else
+    deploy_selected_services
   fi
 
   echo "Deployment completed successfully."

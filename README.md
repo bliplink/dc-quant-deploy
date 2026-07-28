@@ -66,7 +66,6 @@ flowchart LR
 
 机器默认要求：
 
-- CPU >= 2 核
 - 内存 >= 8192 MB
 - `${DEPLOY_ROOT}` 可用磁盘 >= 20 GB
 
@@ -75,6 +74,7 @@ flowchart LR
 ```bash
 git clone https://github.com/bliplink/dc-quant-deploy.git
 cd dc-quant-deploy
+sudo ./prepare-host.sh
 ./deploy-standalone.sh
 ```
 
@@ -83,10 +83,28 @@ cd dc-quant-deploy
 ```bash
 git clone https://github.com/bliplink/dc-quant-deploy.git
 cd dc-quant-deploy
+sudo ./prepare-host.sh
 cp .env.external-clickhouse.example .env.prod
 vi .env.prod
 ./deploy-with-external-clickhouse.sh
 ```
+
+`prepare-host.sh` 会幂等安装并验证 Docker Engine、Buildx、Docker Compose v2
+和 Docker 开机自启，支持 CentOS/RHEL/Rocky/AlmaLinux 与 Ubuntu/Debian。
+对于已停止官方维护的 EL7/CentOS 7，脚本固定安装该仓库最后发布的
+Docker CE 26.1.4 和 Compose 2.27.1，不会错误尝试新版本。
+仅检查现有环境可运行 `sudo ./prepare-host.sh --check`；如需让普通用户执行
+Docker，可显式传入 `--docker-user USER`，该权限等同于宿主机 root 权限。
+
+如果要在独立机器只部署部分服务，先配置外部 ClickHouse、ZooKeeper 和
+`control.prod/dc.dat`，然后运行：
+
+```bash
+./deploy.sh --services apssvr,quantsvr
+```
+
+定向部署会复用完整部署相同的配置生成、备份和运行校验，但使用
+`--no-deps`，不会在该机器自动启动 ZooKeeper、ClickHouse 或其他业务服务。
 
 部署后验证：
 
