@@ -468,26 +468,43 @@ record_status() {
 }
 
 sync_control() {
-  local preserved_overrides
-  preserved_overrides="$(mktemp -d)"
+  local source_item target_item staged_item base_name
 
-  if [ -d "${DEPLOY_ROOT}/control/overrides" ]; then
-    cp -a "${DEPLOY_ROOT}/control/overrides" "${preserved_overrides}/overrides"
-  fi
-
-  mkdir -p "${DEPLOY_ROOT}"
-  rm -rf "${DEPLOY_ROOT}/control"
   mkdir -p "${DEPLOY_ROOT}/control"
+  mkdir -p "${DEPLOY_ROOT}/control/overrides"
 
-  find "${CONTROL_SRC}" -mindepth 1 -maxdepth 1 ! -name overrides -exec cp -a {} "${DEPLOY_ROOT}/control/" \;
+  while IFS= read -r -d '' source_item; do
+    base_name="$(basename "${source_item}")"
+    target_item="${DEPLOY_ROOT}/control/${base_name}"
+    staged_item="${DEPLOY_ROOT}/control/.${base_name}.deploy-new.$$"
+    rm -rf "${staged_item}"
+    cp -a "${source_item}" "${staged_item}"
 
-  if [ -d "${preserved_overrides}/overrides" ]; then
-    cp -a "${preserved_overrides}/overrides" "${DEPLOY_ROOT}/control/overrides"
-  else
-    mkdir -p "${DEPLOY_ROOT}/control/overrides"
+    if { [ -d "${source_item}" ] && [ ! -L "${source_item}" ]; } ||
+       { [ -d "${target_item}" ] && [ ! -L "${target_item}" ]; }; then
+      rm -rf "${target_item}"
+      mv "${staged_item}" "${target_item}"
+    else
+      mv -f "${staged_item}" "${target_item}"
+    fi
+  done < <(
+    find "${CONTROL_SRC}" -mindepth 1 -maxdepth 1 ! -name overrides -print0
+  )
+
+  while IFS= read -r -d '' target_item; do
+    base_name="$(basename "${target_item}")"
+    if [ ! -e "${CONTROL_SRC}/${base_name}" ] &&
+       [ ! -L "${CONTROL_SRC}/${base_name}" ]; then
+      rm -rf "${target_item}"
+    fi
+  done < <(
+    find "${DEPLOY_ROOT}/control" -mindepth 1 -maxdepth 1 \
+      ! -name overrides ! -name '.*.deploy-new.*' -print0
+  )
+
+  if [ -d "${CONTROL_SRC}/overrides" ]; then
+    cp -an "${CONTROL_SRC}/overrides/." "${DEPLOY_ROOT}/control/overrides/"
   fi
-
-  rm -rf "${preserved_overrides}"
 }
 
 generate_compose_overrides() {
@@ -749,7 +766,8 @@ deploy_selected_services() {
       fi
     fi
 
-    compose --profile embedded-clickhouse up -d --no-deps "${DEPLOY_SERVICES[@]}"
+    compose --profile embedded-clickhouse up -d --force-recreate --no-deps \
+      "${DEPLOY_SERVICES[@]}"
   else
     echo "Local dependencies will not be started."
     compose pull "${DEPLOY_SERVICES[@]}"
@@ -768,7 +786,7 @@ deploy_selected_services() {
       echo "The selected services do not require ClickHouse; database checks were skipped."
     fi
 
-    compose up -d --no-deps "${DEPLOY_SERVICES[@]}"
+    compose up -d --force-recreate --no-deps "${DEPLOY_SERVICES[@]}"
   fi
 
   if ! validate_runtime; then

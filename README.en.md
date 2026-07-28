@@ -124,7 +124,10 @@ mount directories, then starts only APSSvr. Omit `--license-url` when
 rejected before containers start so the service cannot enter a restart loop.
 Selected-service deployment defaults to `MIN_SELECTED_MEMORY_MB=1024` and
 `MIN_SELECTED_DISK_GB=5` instead of applying the full-stack 8 GB/20 GB gate.
-Override these values in `.env.prod` for memory-intensive services.
+Override these values in `.env.prod` for memory-intensive services. Control
+sync keeps the host mount root and existing runtime `overrides` in place, and
+selected deployment recreates only the selected containers so active bind
+mounts cannot become detached.
 
 For an empty-host smoke deployment that should start only required local
 infrastructure without starting other application services, run:
