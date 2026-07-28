@@ -114,11 +114,14 @@ APSSvr does not require ClickHouse and defaults to fixed-address mode with
 `RegisterEnable=0`, so an empty host can deploy it directly:
 
 ```bash
-./deploy.sh --services apssvr
+./deploy.sh --services apssvr --license-url https://example.com/path/to/dc.dat
 ```
 
-The script prepares Docker, initial configuration, and mount directories, then
-starts only APSSvr.
+The script prepares Docker, downloads the valid `dc.dat` that is intentionally
+not committed to this deployment repository, creates initial configuration and
+mount directories, then starts only APSSvr. Omit `--license-url` when
+`control.prod/dc.dat` already contains a valid license. Placeholder licenses are
+rejected before containers start so the service cannot enter a restart loop.
 
 For an empty-host smoke deployment that should start only required local
 infrastructure without starting other application services, run:

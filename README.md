@@ -111,11 +111,13 @@ Docker，可显式传入 `--docker-user USER`，该权限等同于宿主机 root
 空机可直接执行：
 
 ```bash
-./deploy.sh --services apssvr
+./deploy.sh --services apssvr --license-url https://example.com/path/to/dc.dat
 ```
 
-脚本会自动安装 Docker、补齐首次部署配置、创建挂载目录，并且只启动
-APSSvr。
+脚本会自动安装 Docker、从 HTTPS 地址下载未提交到部署仓库的合法
+`dc.dat`、补齐首次部署配置、创建挂载目录，并且只启动 APSSvr。已有合法
+`control.prod/dc.dat` 时可以省略 `--license-url`。占位许可证会在启动容器前
+被明确拒绝，避免服务进入反复重启状态。
 如果是空机验证，希望只部署指定业务服务并自动带起必要的本机基础设施，
 可直接运行：
 

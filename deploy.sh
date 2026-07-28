@@ -50,6 +50,7 @@ TARGETABLE_SERVICES=(
 DEPLOY_MODE="full"
 DEPLOY_SERVICES=()
 START_LOCAL_DEPS=false
+LICENSE_URL_OVERRIDE=""
 CLICKHOUSE_INIT_SCRIPT="${ROOT_DIR}/clickhouse/apply-init.sh"
 
 usage() {
@@ -58,6 +59,7 @@ Usage:
   ./deploy.sh
   ./deploy.sh --services SERVICE[,SERVICE...]
   ./deploy.sh --services SERVICE[,SERVICE...] --with-deps
+  ./deploy.sh --services SERVICE[,SERVICE...] --license-url HTTPS_URL
 
 Without --services, deploy the complete stack.
 
@@ -73,11 +75,14 @@ With --with-deps, start embedded ClickHouse and start ZooKeeper only when a
 selected service has RegisterEnable=1. Other application services are not
 started.
 
+With --license-url, download dc.dat from the specified HTTPS URL when the
+current control.prod/dc.dat is missing or still contains placeholder content.
+
 Supported service names:
   gateway, loginsvr, mdsvr, apssvr, quantsvr, indsvr, simsvr, batchsvr, web
 
 Example:
-  ./deploy.sh --services apssvr,quantsvr
+  ./deploy.sh --services apssvr --license-url https://example.com/dc.dat
   ./deploy.sh --services loginsvr --with-deps
 USAGE
 }
@@ -168,6 +173,18 @@ parse_args() {
         ;;
       --with-deps)
         START_LOCAL_DEPS=true
+        ;;
+      --license-url)
+        shift
+        [[ "$#" -gt 0 ]] || {
+          echo "--license-url requires an HTTPS URL." >&2
+          exit 1
+        }
+        [[ "$1" == https://* ]] || {
+          echo "--license-url only accepts HTTPS URLs." >&2
+          exit 1
+        }
+        LICENSE_URL_OVERRIDE="$1"
         ;;
       -h|--help)
         usage
@@ -296,6 +313,7 @@ load_env() {
       exit 1
       ;;
   esac
+  DC_LICENSE_URL="${LICENSE_URL_OVERRIDE:-${DC_LICENSE_URL:-}}"
 }
 
 check_system_requirements() {
@@ -341,7 +359,49 @@ validate_control_prod() {
   check_file "${CONTROL_SRC}/ATSConfig.ini"
   check_file "${CONTROL_SRC}/DBPoolConfig.ini"
   check_file "${CONTROL_SRC}/jaas.ini"
+  ensure_license_file
   check_file "${CONTROL_SRC}/dc.dat"
+}
+
+license_is_placeholder() {
+  local license_file="$1"
+
+  [ -s "${license_file}" ] || return 0
+  LC_ALL=C grep -aqE \
+    '^(dc\.dat|Copy your valid dc\.dat license content here before deployment\.)[[:space:]]*$' \
+    "${license_file}"
+}
+
+ensure_license_file() {
+  local license_file="${CONTROL_SRC}/dc.dat"
+  local temporary_file
+
+  if [ -f "${license_file}" ] && ! license_is_placeholder "${license_file}"; then
+    return 0
+  fi
+
+  if [[ -z "${DC_LICENSE_URL:-}" ]]; then
+    echo "A valid control.prod/dc.dat license is required before deployment." >&2
+    echo "Provide it with --license-url HTTPS_URL or DC_LICENSE_URL in .env.prod." >&2
+    exit 1
+  fi
+
+  temporary_file="$(mktemp "${CONTROL_SRC}/.dc.dat.XXXXXX")"
+  if ! curl -fsSL "${DC_LICENSE_URL}" -o "${temporary_file}"; then
+    rm -f "${temporary_file}"
+    echo "Failed to download dc.dat from the configured license URL." >&2
+    exit 1
+  fi
+
+  if license_is_placeholder "${temporary_file}"; then
+    rm -f "${temporary_file}"
+    echo "The downloaded dc.dat is empty or contains placeholder content." >&2
+    exit 1
+  fi
+
+  chmod 600 "${temporary_file}"
+  mv -f "${temporary_file}" "${license_file}"
+  echo "Downloaded a non-placeholder dc.dat license into control.prod."
 }
 
 prepare_runtime_dirs() {
@@ -548,7 +608,9 @@ validate_service_port() {
 
 validate_runtime() {
   local service
-  validate_port "ClickHouse HTTP" "${CLICKHOUSE_HOST}" "${CLICKHOUSE_HTTP_PORT}"
+  if [[ "${DEPLOY_MODE}" == "full" ]] || selected_services_require_clickhouse; then
+    validate_port "ClickHouse HTTP" "${CLICKHOUSE_HOST}" "${CLICKHOUSE_HTTP_PORT}"
+  fi
   if [[ "${DEPLOY_MODE}" == "full" ]]; then
     validate_port "ZooKeeper" 127.0.0.1 2181
   fi
