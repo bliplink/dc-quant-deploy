@@ -107,6 +107,12 @@ Selected-service deployment reuses the same configuration generation, backup,
 and runtime checks as a full deployment, but uses `--no-deps`. It does not
 start ZooKeeper, ClickHouse, or other application services on that host.
 
+The deployment script automatically creates `${DEPLOY_ROOT}/control`,
+`${DEPLOY_ROOT}/data`, `${DEPLOY_ROOT}/log`, and the per-service Java
+preferences directories. `control` is mounted read-only, while `data`, `log`,
+and Java preferences are made writable by `RUNTIME_UID:RUNTIME_GID`. Existing
+application data ownership is not changed recursively.
+
 Verify:
 
 ```bash

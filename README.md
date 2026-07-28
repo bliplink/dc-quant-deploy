@@ -106,6 +106,11 @@ Docker，可显式传入 `--docker-user USER`，该权限等同于宿主机 root
 定向部署会复用完整部署相同的配置生成、备份和运行校验，但使用
 `--no-deps`，不会在该机器自动启动 ZooKeeper、ClickHouse 或其他业务服务。
 
+部署脚本会自动创建 `${DEPLOY_ROOT}/control`、`${DEPLOY_ROOT}/data`、
+`${DEPLOY_ROOT}/log` 及各 Java 服务的偏好目录，不需要手工预建。
+`control` 以只读方式挂载到容器，`data`、`log` 和 Java 偏好目录按
+`RUNTIME_UID:RUNTIME_GID` 设置为可写；脚本不会递归修改已有业务数据的归属。
+
 部署后验证：
 
 ```bash

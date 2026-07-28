@@ -175,6 +175,8 @@ load_env() {
   # shellcheck disable=SC1090
   set -a && . "${ENV_FILE}" && set +a
   : "${DEPLOY_ROOT:?DEPLOY_ROOT is required}"
+  : "${RUNTIME_UID:?RUNTIME_UID is required}"
+  : "${RUNTIME_GID:?RUNTIME_GID is required}"
   : "${CLICKHOUSE_MODE:?CLICKHOUSE_MODE is required}"
   : "${CLICKHOUSE_DB_NAME:?CLICKHOUSE_DB_NAME is required}"
   : "${CLICKHOUSE_HOST:?CLICKHOUSE_HOST is required}"
@@ -182,6 +184,14 @@ load_env() {
   : "${CLICKHOUSE_IMAGE_TAG:?CLICKHOUSE_IMAGE_TAG is required}"
   : "${CLICKHOUSE_USERNAME:=default}"
   : "${CLICKHOUSE_PASSWORD:=}"
+  [[ "${RUNTIME_UID}" =~ ^[0-9]+$ ]] || {
+    echo "RUNTIME_UID must be numeric." >&2
+    exit 1
+  }
+  [[ "${RUNTIME_GID}" =~ ^[0-9]+$ ]] || {
+    echo "RUNTIME_GID must be numeric." >&2
+    exit 1
+  }
   case "${CLICKHOUSE_MODE}" in
     embedded|external) ;;
     *)
@@ -244,6 +254,7 @@ prepare_runtime_dirs() {
   mkdir -p "${DEPLOY_ROOT}/data"
   mkdir -p "${DEPLOY_ROOT}/data/zookeeper"
   mkdir -p "${DEPLOY_ROOT}/data/java-prefs/GW"
+  mkdir -p "${DEPLOY_ROOT}/data/java-prefs/LoginSvr"
   mkdir -p "${DEPLOY_ROOT}/data/java-prefs/MDSvr"
   mkdir -p "${DEPLOY_ROOT}/data/java-prefs/APSSvr"
   mkdir -p "${DEPLOY_ROOT}/data/java-prefs/QuantSvr"
@@ -255,6 +266,18 @@ prepare_runtime_dirs() {
     mkdir -p "${DEPLOY_ROOT}/data/clickhouse"
     mkdir -p "${DEPLOY_ROOT}/log/clickhouse"
   fi
+
+  chown "${RUNTIME_UID}:${RUNTIME_GID}" \
+    "${DEPLOY_ROOT}/data" \
+    "${DEPLOY_ROOT}/log" \
+    "${DEPLOY_ROOT}/data/java-prefs/GW" \
+    "${DEPLOY_ROOT}/data/java-prefs/LoginSvr" \
+    "${DEPLOY_ROOT}/data/java-prefs/MDSvr" \
+    "${DEPLOY_ROOT}/data/java-prefs/APSSvr" \
+    "${DEPLOY_ROOT}/data/java-prefs/QuantSvr" \
+    "${DEPLOY_ROOT}/data/java-prefs/INDSvr" \
+    "${DEPLOY_ROOT}/data/java-prefs/SIMSvr" \
+    "${DEPLOY_ROOT}/data/java-prefs/BatchSvr"
 }
 
 backup_control() {
