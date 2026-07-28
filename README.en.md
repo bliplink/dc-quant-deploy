@@ -122,6 +122,9 @@ not committed to this deployment repository, creates initial configuration and
 mount directories, then starts only APSSvr. Omit `--license-url` when
 `control.prod/dc.dat` already contains a valid license. Placeholder licenses are
 rejected before containers start so the service cannot enter a restart loop.
+Selected-service deployment defaults to `MIN_SELECTED_MEMORY_MB=1024` and
+`MIN_SELECTED_DISK_GB=5` instead of applying the full-stack 8 GB/20 GB gate.
+Override these values in `.env.prod` for memory-intensive services.
 
 For an empty-host smoke deployment that should start only required local
 infrastructure without starting other application services, run:

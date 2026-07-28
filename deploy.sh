@@ -318,8 +318,13 @@ load_env() {
 
 check_system_requirements() {
   local min_mem_mb min_disk_gb mem_mb disk_mb disk_gb
-  min_mem_mb="${MIN_MEMORY_MB:-8192}"
-  min_disk_gb="${MIN_DISK_GB:-20}"
+  if [[ "${DEPLOY_MODE}" == "selected" ]]; then
+    min_mem_mb="${MIN_SELECTED_MEMORY_MB:-1024}"
+    min_disk_gb="${MIN_SELECTED_DISK_GB:-5}"
+  else
+    min_mem_mb="${MIN_MEMORY_MB:-8192}"
+    min_disk_gb="${MIN_DISK_GB:-20}"
+  fi
 
   mem_mb="$(awk '/MemTotal/ {print int($2 / 1024)}' /proc/meminfo 2>/dev/null || echo 0)"
 
