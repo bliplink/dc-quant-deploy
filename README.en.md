@@ -107,6 +107,16 @@ Selected-service deployment reuses the same configuration generation, backup,
 and runtime checks as a full deployment, but uses `--no-deps`. It does not
 start ZooKeeper, ClickHouse, or other application services on that host.
 
+APSSvr does not require ClickHouse and defaults to fixed-address mode with
+`RegisterEnable=0`, so an empty host can deploy it directly:
+
+```bash
+./deploy.sh --services apssvr
+```
+
+The script prepares Docker, initial configuration, and mount directories, then
+starts only APSSvr.
+
 For an empty-host smoke deployment that should start only required local
 infrastructure without starting other application services, run:
 

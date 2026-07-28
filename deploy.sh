@@ -98,6 +98,27 @@ contains_service() {
   return 1
 }
 
+service_requires_clickhouse() {
+  case "$1" in
+    apssvr|mdsvr)
+      return 1
+      ;;
+    *)
+      return 0
+      ;;
+  esac
+}
+
+selected_services_require_clickhouse() {
+  local service
+  for service in "${DEPLOY_SERVICES[@]}"; do
+    if service_requires_clickhouse "${service}"; then
+      return 0
+    fi
+  done
+  return 1
+}
+
 normalize_service() {
   case "$1" in
     GW|gw)
@@ -583,15 +604,26 @@ deploy_full_stack() {
 }
 
 deploy_selected_services() {
+  local requires_clickhouse=false
+  if selected_services_require_clickhouse; then
+    requires_clickhouse=true
+  fi
+
   echo "Selected-service deployment: ${DEPLOY_SERVICES[*]}"
   if [[ "${START_LOCAL_DEPS}" == "true" ]]; then
-    local -a infrastructure=(clickhouse)
-    local pull_services=(clickhouse)
+    local -a infrastructure=()
+    local -a pull_services=()
     local service config_name register_enable
 
-    if [[ "${CLICKHOUSE_MODE}" != "embedded" ]]; then
+    if [[ "${requires_clickhouse}" == "true" &&
+          "${CLICKHOUSE_MODE}" != "embedded" ]]; then
       echo "--with-deps requires CLICKHOUSE_MODE=embedded in ${ENV_FILE}." >&2
       exit 1
+    fi
+
+    if [[ "${requires_clickhouse}" == "true" ]]; then
+      infrastructure+=(clickhouse)
+      pull_services+=(clickhouse)
     fi
 
     for service in "${DEPLOY_SERVICES[@]}"; do
@@ -621,40 +653,52 @@ deploy_selected_services() {
     done
     pull_services+=("${DEPLOY_SERVICES[@]}")
 
-    echo "Starting local infrastructure: ${infrastructure[*]}"
+    if [[ "${#infrastructure[@]}" -gt 0 ]]; then
+      echo "Starting local infrastructure: ${infrastructure[*]}"
+    else
+      echo "No local infrastructure is required by the selected services."
+    fi
     compose --profile embedded-clickhouse pull "${pull_services[@]}"
-    compose --profile embedded-clickhouse up -d "${infrastructure[@]}"
-
-    if ! wait_for_clickhouse_ready; then
-      echo "Embedded ClickHouse did not become ready. Selected services were not started." >&2
-      exit 1
+    if [[ "${#infrastructure[@]}" -gt 0 ]]; then
+      compose --profile embedded-clickhouse up -d "${infrastructure[@]}"
     fi
 
-    if ! wait_for_clickhouse_schema 2 1; then
-      if ! apply_clickhouse_init; then
-        echo "Embedded ClickHouse initialization failed. Selected services were not started." >&2
+    if [[ "${requires_clickhouse}" == "true" ]]; then
+      if ! wait_for_clickhouse_ready; then
+        echo "Embedded ClickHouse did not become ready. Selected services were not started." >&2
+        exit 1
+      fi
+
+      if ! wait_for_clickhouse_schema 2 1; then
+        if ! apply_clickhouse_init; then
+          echo "Embedded ClickHouse initialization failed. Selected services were not started." >&2
+          exit 1
+        fi
+      fi
+
+      if ! wait_for_clickhouse_schema; then
+        echo "Embedded ClickHouse schema is not ready. Selected services were not started." >&2
         exit 1
       fi
     fi
 
-    if ! wait_for_clickhouse_schema; then
-      echo "Embedded ClickHouse schema is not ready. Selected services were not started." >&2
-      exit 1
-    fi
-
     compose --profile embedded-clickhouse up -d --no-deps "${DEPLOY_SERVICES[@]}"
   else
-    echo "Dependencies will not be started; ClickHouse and ZooKeeper must already be reachable."
+    echo "Local dependencies will not be started."
     compose pull "${DEPLOY_SERVICES[@]}"
 
-    if ! wait_for_clickhouse_ready; then
-      echo "Configured ClickHouse is not reachable. Selected services were not started." >&2
-      exit 1
-    fi
+    if [[ "${requires_clickhouse}" == "true" ]]; then
+      if ! wait_for_clickhouse_ready; then
+        echo "Configured ClickHouse is not reachable. Selected services were not started." >&2
+        exit 1
+      fi
 
-    if ! wait_for_clickhouse_schema; then
-      echo "Configured ClickHouse schema is not ready. Selected services were not started." >&2
-      exit 1
+      if ! wait_for_clickhouse_schema; then
+        echo "Configured ClickHouse schema is not ready. Selected services were not started." >&2
+        exit 1
+      fi
+    else
+      echo "The selected services do not require ClickHouse; database checks were skipped."
     fi
 
     compose up -d --no-deps "${DEPLOY_SERVICES[@]}"

@@ -105,6 +105,15 @@ Docker，可显式传入 `--docker-user USER`，该权限等同于宿主机 root
 
 定向部署会复用完整部署相同的配置生成、备份和运行校验，但使用
 `--no-deps`，不会在该机器自动启动 ZooKeeper、ClickHouse 或其他业务服务。
+对于不依赖 ClickHouse 且使用 `RegisterEnable=0` 固定地址模式的 APSSvr，
+空机可直接执行：
+
+```bash
+./deploy.sh --services apssvr
+```
+
+脚本会自动安装 Docker、补齐首次部署配置、创建挂载目录，并且只启动
+APSSvr。
 如果是空机验证，希望只部署指定业务服务并自动带起必要的本机基础设施，
 可直接运行：
 
