@@ -14,7 +14,7 @@ x-java-service-base: &java-service-base
 
 services:
   clickhouse:
-    image: clickhouse/clickhouse-server:${CLICKHOUSE_IMAGE_TAG}
+    image: ${CLICKHOUSE_IMAGE_REPOSITORY:-clickhouse/clickhouse-server}:${CLICKHOUSE_IMAGE_TAG}
     container_name: dc-clickhouse
     profiles: ["embedded-clickhouse"]
     restart: unless-stopped

@@ -73,6 +73,15 @@ set_env_value() {
   fi
 }
 
+set_env_value_if_missing() {
+  local key="$1"
+  local value="$2"
+
+  if ! grep -q "^${key}=" "${ENV_FILE}"; then
+    printf '%s=%s\n' "${key}" "${value}" >> "${ENV_FILE}"
+  fi
+}
+
 load_env() {
   # shellcheck disable=SC1090
   set -a && . "${ENV_FILE}" && set +a
@@ -133,6 +142,9 @@ main() {
 
   set_env_value CLICKHOUSE_MODE embedded
   set_env_value CLICKHOUSE_HOST 127.0.0.1
+  set_env_value_if_missing \
+    CLICKHOUSE_IMAGE_REPOSITORY \
+    docker.m.daocloud.io/clickhouse/clickhouse-server
   load_env
   check_embedded_ports
 

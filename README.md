@@ -94,7 +94,9 @@ vi .env.prod
 对于已停止官方维护的 EL7/CentOS 7，脚本固定安装该仓库最后发布的
 Docker CE 26.1.4 和 Compose 2.27.1，并自动使用 CentOS 7.9.2009
 归档源与 EL7 Docker CE 镜像源解决官方镜像下线或网络不可达问题，不会
-错误尝试新版本。
+错误尝试新版本。内置 ClickHouse 默认通过可配置的
+`CLICKHOUSE_IMAGE_REPOSITORY` 镜像代理拉取；如环境可直连 Docker Hub，
+可将其改为 `clickhouse/clickhouse-server`。
 仅检查现有环境可运行 `sudo ./prepare-host.sh --check`；如需让普通用户执行
 Docker，可显式传入 `--docker-user USER`，该权限等同于宿主机 root 权限。
 

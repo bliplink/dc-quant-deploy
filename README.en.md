@@ -93,7 +93,9 @@ CentOS/RHEL/Rocky/AlmaLinux and Ubuntu/Debian.
 For end-of-life EL7/CentOS 7, it pins the final repository releases:
 Docker CE 26.1.4 and Compose 2.27.1, and automatically uses a CentOS 7.9.2009
 archive repository plus an EL7 Docker CE mirror after the normal upstream
-repositories have retired or become unreachable. Run
+repositories have retired or become unreachable. Embedded ClickHouse uses the
+configurable `CLICKHOUSE_IMAGE_REPOSITORY` mirror by default; environments with
+direct Docker Hub access can set it to `clickhouse/clickhouse-server`. Run
 `sudo ./prepare-host.sh --check` to
 validate an existing runtime. To allow a
 non-root user to run Docker, explicitly pass `--docker-user USER`; Docker group
