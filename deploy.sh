@@ -92,6 +92,25 @@ compose() {
   docker compose --env-file "${ENV_FILE}" -f "${COMPOSE_FILE}" -f "${OVERRIDE_FILE}" "$@"
 }
 
+compose_pull_with_retry() {
+  local attempt
+  local attempts="${IMAGE_PULL_ATTEMPTS:-5}"
+  local delay_seconds="${IMAGE_PULL_RETRY_DELAY_SECONDS:-10}"
+
+  for ((attempt = 1; attempt <= attempts; attempt++)); do
+    if compose "$@"; then
+      return 0
+    fi
+    if [[ "${attempt}" -lt "${attempts}" ]]; then
+      echo "Image pull failed (attempt ${attempt}/${attempts}); retrying in ${delay_seconds}s." >&2
+      sleep "${delay_seconds}"
+    fi
+  done
+
+  echo "Image pull failed after ${attempts} attempts." >&2
+  return 1
+}
+
 contains_service() {
   local needle="$1"
   shift
@@ -650,10 +669,10 @@ validate_runtime() {
 
 deploy_full_stack() {
   if [[ "${CLICKHOUSE_MODE}" == "embedded" ]]; then
-    compose --profile embedded-clickhouse pull clickhouse zookeeper "${DEPLOY_SERVICES[@]}"
+    compose_pull_with_retry --profile embedded-clickhouse pull clickhouse zookeeper "${DEPLOY_SERVICES[@]}"
     compose --profile embedded-clickhouse up -d clickhouse zookeeper
   else
-    compose pull zookeeper "${DEPLOY_SERVICES[@]}"
+    compose_pull_with_retry pull zookeeper "${DEPLOY_SERVICES[@]}"
     compose up -d zookeeper
   fi
 
@@ -749,7 +768,7 @@ deploy_selected_services() {
     else
       echo "No local infrastructure is required by the selected services."
     fi
-    compose --profile embedded-clickhouse pull "${pull_services[@]}"
+    compose_pull_with_retry --profile embedded-clickhouse pull "${pull_services[@]}"
     if [[ "${#infrastructure[@]}" -gt 0 ]]; then
       compose --profile embedded-clickhouse up -d "${infrastructure[@]}"
     fi
@@ -777,7 +796,7 @@ deploy_selected_services() {
       "${DEPLOY_SERVICES[@]}"
   else
     echo "Local dependencies will not be started."
-    compose pull "${DEPLOY_SERVICES[@]}"
+    compose_pull_with_retry pull "${DEPLOY_SERVICES[@]}"
 
     if [[ "${requires_clickhouse}" == "true" ]]; then
       if ! wait_for_clickhouse_ready; then
