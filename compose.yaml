@@ -231,6 +231,8 @@ services:
     container_name: dc-web
     network_mode: host
     restart: unless-stopped
+    volumes:
+      - ./web/default.conf.template:/etc/nginx/templates/default.conf.template:ro
     ulimits:
       nofile:
         soft: 65535
@@ -242,7 +244,7 @@ services:
     healthcheck:
       test:
         - CMD-SHELL
-        - wget -qO- http://127.0.0.1/healthz | grep -q '^ok$' && wget -qO- http://127.0.0.1/web/ | grep -q '/web/assets/index-'
+        - wget -qO- http://127.0.0.1:$${WEB_LISTEN_PORT}/healthz | grep -q '^ok$' && wget -qO- http://127.0.0.1:$${WEB_LISTEN_PORT}/web/ | grep -q '/web/assets/index-'
       interval: 15s
       timeout: 5s
       retries: 4
@@ -252,3 +254,6 @@ services:
         condition: service_started
     environment:
       TZ: UTC
+      WEB_LISTEN_PORT: ${WEB_LISTEN_PORT:-80}
+      GATEWAY_HOST: ${GATEWAY_HOST:-127.0.0.1}
+      GATEWAY_PORT: ${GATEWAY_PORT:-3002}

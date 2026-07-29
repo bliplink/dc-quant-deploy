@@ -144,6 +144,10 @@ selected_services_require_clickhouse() {
   return 1
 }
 
+full_stack_requires_zookeeper() {
+  grep -Eq '^SERVER\.[^.]+\.RegisterEnable=1$' "${CONTROL_SRC}/ATSConfig.ini"
+}
+
 normalize_service() {
   case "$1" in
     GW|gw)
@@ -321,12 +325,24 @@ load_env() {
   : "${CLICKHOUSE_IMAGE_TAG:?CLICKHOUSE_IMAGE_TAG is required}"
   : "${CLICKHOUSE_USERNAME:=default}"
   : "${CLICKHOUSE_PASSWORD:=}"
+  : "${WEB_LISTEN_PORT:=80}"
+  : "${WEB_FALLBACK_LISTEN_PORT:=8088}"
+  : "${GATEWAY_HOST:=127.0.0.1}"
+  : "${GATEWAY_PORT:=3002}"
   [[ "${RUNTIME_UID}" =~ ^[0-9]+$ ]] || {
     echo "RUNTIME_UID must be numeric." >&2
     exit 1
   }
   [[ "${RUNTIME_GID}" =~ ^[0-9]+$ ]] || {
     echo "RUNTIME_GID must be numeric." >&2
+    exit 1
+  }
+  [[ "${WEB_LISTEN_PORT}" =~ ^[0-9]+$ ]] || {
+    echo "WEB_LISTEN_PORT must be numeric." >&2
+    exit 1
+  }
+  [[ "${WEB_FALLBACK_LISTEN_PORT}" =~ ^[0-9]+$ ]] || {
+    echo "WEB_FALLBACK_LISTEN_PORT must be numeric." >&2
     exit 1
   }
   case "${CLICKHOUSE_MODE}" in
@@ -337,6 +353,34 @@ load_env() {
       ;;
   esac
   DC_LICENSE_URL="${LICENSE_URL_OVERRIDE:-${DC_LICENSE_URL:-}}"
+}
+
+persist_env_value() {
+  local key="$1"
+  local value="$2"
+  if grep -q "^${key}=" "${ENV_FILE}"; then
+    sed -i "s|^${key}=.*|${key}=${value}|" "${ENV_FILE}"
+  else
+    printf '%s=%s\n' "${key}" "${value}" >> "${ENV_FILE}"
+  fi
+}
+
+resolve_web_listener() {
+  contains_service web "${DEPLOY_SERVICES[@]}" || return 0
+  if ! port_is_open 127.0.0.1 "${WEB_LISTEN_PORT}" ||
+     container_is_running dc-web; then
+    return 0
+  fi
+
+  if port_is_open 127.0.0.1 "${WEB_FALLBACK_LISTEN_PORT}"; then
+    echo "Web ports ${WEB_LISTEN_PORT} and ${WEB_FALLBACK_LISTEN_PORT} are already in use." >&2
+    exit 1
+  fi
+
+  echo "Web port ${WEB_LISTEN_PORT} is already in use; using ${WEB_FALLBACK_LISTEN_PORT}."
+  WEB_LISTEN_PORT="${WEB_FALLBACK_LISTEN_PORT}"
+  export WEB_LISTEN_PORT
+  persist_env_value WEB_LISTEN_PORT "${WEB_LISTEN_PORT}"
 }
 
 check_system_requirements() {
@@ -682,7 +726,7 @@ validate_service_port() {
     indsvr) validate_port "INDSvr" "${SERVICE_HOST:-127.0.0.1}" 30044 ;;
     simsvr) validate_port "SIMSvr" "${SERVICE_HOST:-127.0.0.1}" 30045 ;;
     batchsvr) validate_port "BatchSvr" "${SERVICE_HOST:-127.0.0.1}" 30046 ;;
-    web) validate_port "web" "${SERVICE_HOST:-127.0.0.1}" 80 ;;
+    web) validate_port "web" "${SERVICE_HOST:-127.0.0.1}" "${WEB_LISTEN_PORT:-80}" ;;
     *)
       echo "No validation rule for service: ${service}" >&2
       return 1
@@ -697,7 +741,9 @@ validate_runtime() {
     validate_port "ClickHouse HTTP" "${CLICKHOUSE_HOST}" "${CLICKHOUSE_HTTP_PORT}" || failed=1
   fi
   if [[ "${DEPLOY_MODE}" == "full" ]]; then
-    validate_port "ZooKeeper" 127.0.0.1 2181 || failed=1
+    if full_stack_requires_zookeeper; then
+      validate_port "ZooKeeper" 127.0.0.1 2181 || failed=1
+    fi
   fi
   for service in "${DEPLOY_SERVICES[@]}"; do
     validate_service_port "${service}" || failed=1
@@ -706,27 +752,33 @@ validate_runtime() {
 }
 
 deploy_full_stack() {
-  local use_existing_zookeeper=false
-  if port_is_open 127.0.0.1 2181 && ! container_is_running dc-zookeeper; then
-    use_existing_zookeeper=true
-    echo "Reusing the existing ZooKeeper listener on 127.0.0.1:2181."
+  local start_zookeeper=false
+  if full_stack_requires_zookeeper; then
+    start_zookeeper=true
+    if port_is_open 127.0.0.1 2181 && ! container_is_running dc-zookeeper; then
+      echo "Port 2181 is already used by a non-deployment process." >&2
+      echo "Stop that process or set all SERVER.*.RegisterEnable values to 0." >&2
+      exit 1
+    fi
+  else
+    echo "All services use fixed addresses; ZooKeeper will not be started."
     docker rm -f dc-zookeeper >/dev/null 2>&1 || true
   fi
 
   if [[ "${CLICKHOUSE_MODE}" == "embedded" ]]; then
-    if [[ "${use_existing_zookeeper}" == "true" ]]; then
-      compose_pull_with_retry --profile embedded-clickhouse pull clickhouse "${DEPLOY_SERVICES[@]}"
-      compose --profile embedded-clickhouse up -d clickhouse
-    else
+    if [[ "${start_zookeeper}" == "true" ]]; then
       compose_pull_with_retry --profile embedded-clickhouse pull clickhouse zookeeper "${DEPLOY_SERVICES[@]}"
       compose --profile embedded-clickhouse up -d clickhouse zookeeper
+    else
+      compose_pull_with_retry --profile embedded-clickhouse pull clickhouse "${DEPLOY_SERVICES[@]}"
+      compose --profile embedded-clickhouse up -d clickhouse
     fi
   else
-    if [[ "${use_existing_zookeeper}" == "true" ]]; then
-      compose_pull_with_retry pull "${DEPLOY_SERVICES[@]}"
-    else
+    if [[ "${start_zookeeper}" == "true" ]]; then
       compose_pull_with_retry pull zookeeper "${DEPLOY_SERVICES[@]}"
       compose up -d zookeeper
+    else
+      compose_pull_with_retry pull "${DEPLOY_SERVICES[@]}"
     fi
   fi
 
@@ -754,7 +806,7 @@ deploy_full_stack() {
     exit 1
   fi
 
-  if [[ "${use_existing_zookeeper}" == "true" ]]; then
+  if [[ "${start_zookeeper}" != "true" ]]; then
     if [[ "${CLICKHOUSE_MODE}" == "embedded" ]]; then
       compose --profile embedded-clickhouse up -d --no-deps "${DEPLOY_SERVICES[@]}"
     else
@@ -890,6 +942,7 @@ main() {
   check_cmd curl
   docker compose version >/dev/null
   load_env
+  resolve_web_listener
   check_system_requirements
   validate_ghcr_login
   validate_control_prod

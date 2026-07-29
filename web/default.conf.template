@@ -1,0 +1,80 @@
+server_tokens off;
+limit_req_zone $binary_remote_addr zone=web_static_limit:10m rate=20r/s;
+
+server {
+  listen ${WEB_LISTEN_PORT};
+  server_name _;
+
+  gzip off;
+  sendfile on;
+  keepalive_timeout 65;
+  keepalive_requests 1000;
+  etag on;
+
+  root /usr/share/nginx/html;
+  index index.html;
+
+  add_header X-Content-Type-Options "nosniff" always;
+  add_header X-Frame-Options "SAMEORIGIN" always;
+  add_header Referrer-Policy "strict-origin-when-cross-origin" always;
+  add_header Permissions-Policy "geolocation=(), microphone=(), camera=()" always;
+
+  location = / {
+    return 302 /web/;
+  }
+
+  location = /healthz {
+    default_type text/plain;
+    return 200 "ok";
+  }
+
+  location = /web {
+    return 301 /web/;
+  }
+
+  location = /favicon.ico {
+    access_log off;
+    log_not_found off;
+    return 204;
+  }
+
+  location ~ /(?:\.env|\.git|\.svn|\.hg|composer\.(?:json|lock)|package-lock\.json|yarn\.lock|pnpm-lock\.yaml|webpack\.config|vite\.config|server-status|actuator|swagger-ui|api-docs|phpmyadmin|wp-admin|wp-login\.php|xmlrpc\.php|cgi-bin|boaform|HNAP1) {
+    access_log off;
+    return 444;
+  }
+
+  location ~ /\.(?!well-known/) {
+    access_log off;
+    return 404;
+  }
+
+  location /web/assets/ {
+    limit_req zone=web_static_limit burst=60 nodelay;
+    try_files $uri =404;
+    expires 7d;
+    add_header Cache-Control "public, max-age=604800";
+    add_header X-Content-Type-Options "nosniff" always;
+    add_header X-Frame-Options "SAMEORIGIN" always;
+    add_header Referrer-Policy "strict-origin-when-cross-origin" always;
+    add_header Permissions-Policy "geolocation=(), microphone=(), camera=()" always;
+  }
+
+  location /gw/ {
+    proxy_pass http://${GATEWAY_HOST}:${GATEWAY_PORT}/;
+    proxy_http_version 1.1;
+    proxy_set_header Host $host;
+    proxy_set_header X-Real-IP $remote_addr;
+    proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+    proxy_set_header X-Forwarded-Proto $scheme;
+    proxy_set_header Accept-Encoding "";
+    proxy_set_header Connection "";
+    proxy_buffering on;
+    proxy_request_buffering on;
+    proxy_read_timeout 60s;
+    proxy_send_timeout 60s;
+  }
+
+  location /web/ {
+    try_files $uri $uri/ /web/index.html;
+  }
+}
