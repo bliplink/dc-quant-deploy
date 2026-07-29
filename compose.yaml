@@ -224,6 +224,7 @@ services:
       DEPLOY_ROOT: /srv/dc
       SERVICE_NAME: BatchSvr
       MAIN_CLASS: BatchSvr
+      SERVER_PORT: ${BATCHSVR_HTTP_PORT:-18080}
       JAVA_OPTS: -server -Xmx5048m -Xms128m -Xmn512m -Djava.security.auth.login.config=../../control/jaas.ini
 
   web:
