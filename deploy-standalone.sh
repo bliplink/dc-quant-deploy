@@ -82,6 +82,28 @@ set_env_value_if_missing() {
   fi
 }
 
+generate_secret() {
+  if command -v openssl >/dev/null 2>&1; then
+    openssl rand -hex 24
+    return 0
+  fi
+
+  od -An -N24 -tx1 /dev/urandom | tr -d ' \n'
+}
+
+ensure_clickhouse_password() {
+  local current_password
+  current_password="$(
+    sed -n 's/^CLICKHOUSE_PASSWORD=//p' "${ENV_FILE}" | tail -n 1
+  )"
+  if [[ -n "${current_password}" ]]; then
+    return 0
+  fi
+
+  set_env_value CLICKHOUSE_PASSWORD "$(generate_secret)"
+  echo "Generated a non-empty ClickHouse password in .env.prod."
+}
+
 load_env() {
   # shellcheck disable=SC1090
   set -a && . "${ENV_FILE}" && set +a
@@ -145,6 +167,7 @@ main() {
   set_env_value_if_missing \
     CLICKHOUSE_IMAGE_REPOSITORY \
     docker.m.daocloud.io/clickhouse/clickhouse-server
+  ensure_clickhouse_password
   load_env
   check_embedded_ports
 

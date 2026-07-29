@@ -18,6 +18,7 @@ fi
 
 CLICKHOUSE_USERNAME="${CLICKHOUSE_USERNAME:-default}"
 CLICKHOUSE_PASSWORD="${CLICKHOUSE_PASSWORD:-}"
+CLICKHOUSE_IMAGE_REPOSITORY="${CLICKHOUSE_IMAGE_REPOSITORY:-clickhouse/clickhouse-server}"
 
 docker run --rm --network host \
   -e CLICKHOUSE_INIT_ROOT=/work/init \
@@ -27,5 +28,5 @@ docker run --rm --network host \
   -e CLICKHOUSE_USER="${CLICKHOUSE_USERNAME}" \
   -e CLICKHOUSE_PASSWORD="${CLICKHOUSE_PASSWORD}" \
   -v "${SCRIPT_DIR}/init:/work/init:ro" \
-  "clickhouse/clickhouse-server:${CLICKHOUSE_IMAGE_TAG}" \
+  "${CLICKHOUSE_IMAGE_REPOSITORY}:${CLICKHOUSE_IMAGE_TAG}" \
   bash /work/init/01-run-all.sh
