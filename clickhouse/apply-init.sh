@@ -19,10 +19,13 @@ fi
 CLICKHOUSE_USERNAME="${CLICKHOUSE_USERNAME:-default}"
 CLICKHOUSE_PASSWORD="${CLICKHOUSE_PASSWORD:-}"
 CLICKHOUSE_IMAGE_REPOSITORY="${CLICKHOUSE_IMAGE_REPOSITORY:-clickhouse/clickhouse-server}"
+CLICKHOUSE_APPLY_OPTIONAL_SEED="${CLICKHOUSE_APPLY_OPTIONAL_SEED:-false}"
 
 if [[ "${CLICKHOUSE_MODE:-external}" == "embedded" ]] &&
    docker container inspect dc-clickhouse >/dev/null 2>&1; then
-  docker exec dc-clickhouse \
+  docker exec \
+    -e CLICKHOUSE_APPLY_OPTIONAL_SEED="${CLICKHOUSE_APPLY_OPTIONAL_SEED}" \
+    dc-clickhouse \
     bash /docker-entrypoint-initdb.d/01-run-all.sh
   exit 0
 fi
@@ -34,6 +37,7 @@ docker run --rm --network host \
   -e CLICKHOUSE_DB="${CLICKHOUSE_DB_NAME}" \
   -e CLICKHOUSE_USER="${CLICKHOUSE_USERNAME}" \
   -e CLICKHOUSE_PASSWORD="${CLICKHOUSE_PASSWORD}" \
+  -e CLICKHOUSE_APPLY_OPTIONAL_SEED="${CLICKHOUSE_APPLY_OPTIONAL_SEED}" \
   -v "${SCRIPT_DIR}/init:/work/init:ro" \
   "${CLICKHOUSE_IMAGE_REPOSITORY}:${CLICKHOUSE_IMAGE_TAG}" \
   bash /work/init/01-run-all.sh

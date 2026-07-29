@@ -167,6 +167,7 @@ main() {
   set_env_value_if_missing \
     CLICKHOUSE_IMAGE_REPOSITORY \
     docker.m.daocloud.io/clickhouse/clickhouse-server
+  set_env_value_if_missing CLICKHOUSE_APPLY_OPTIONAL_SEED true
   ensure_clickhouse_password
   load_env
   check_embedded_ports

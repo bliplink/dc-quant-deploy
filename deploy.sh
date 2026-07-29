@@ -290,6 +290,18 @@ prepare_deploy_defaults() {
     cp -a "${CONTROL_EXAMPLE_DIR}/overrides" "${CONTROL_SRC}/overrides"
     echo "Created ${CONTROL_SRC}/overrides from deployment defaults."
   fi
+  ensure_web_gateway_access
+}
+
+ensure_web_gateway_access() {
+  local api_key_file="${CONTROL_SRC}/overrides/GW/config/apiKeyList.csv"
+
+  mkdir -p "$(dirname "${api_key_file}")"
+  touch "${api_key_file}"
+  if ! grep -Fqx '1,*,*' "${api_key_file}"; then
+    printf '%s\n' '1,*,*' >> "${api_key_file}"
+    echo "Added the Web workbench gateway route to ${api_key_file}."
+  fi
 }
 
 ensure_container_runtime() {
@@ -325,6 +337,7 @@ load_env() {
   : "${CLICKHOUSE_IMAGE_TAG:?CLICKHOUSE_IMAGE_TAG is required}"
   : "${CLICKHOUSE_USERNAME:=default}"
   : "${CLICKHOUSE_PASSWORD:=}"
+  : "${CLICKHOUSE_APPLY_OPTIONAL_SEED:=false}"
   : "${WEB_LISTEN_PORT:=80}"
   : "${WEB_FALLBACK_LISTEN_PORT:=8088}"
   : "${GATEWAY_HOST:=127.0.0.1}"
@@ -349,6 +362,13 @@ load_env() {
     embedded|external) ;;
     *)
       echo "CLICKHOUSE_MODE must be embedded or external" >&2
+      exit 1
+      ;;
+  esac
+  case "${CLICKHOUSE_APPLY_OPTIONAL_SEED}" in
+    true|false) ;;
+    *)
+      echo "CLICKHOUSE_APPLY_OPTIONAL_SEED must be true or false" >&2
       exit 1
       ;;
   esac

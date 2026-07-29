@@ -7,6 +7,7 @@ CLICKHOUSE_PORT="${CLICKHOUSE_PORT:-9000}"
 CLICKHOUSE_USER="${CLICKHOUSE_USER:-default}"
 CLICKHOUSE_PASSWORD="${CLICKHOUSE_PASSWORD:-}"
 CLICKHOUSE_DB="${CLICKHOUSE_DB:-dc}"
+CLICKHOUSE_APPLY_OPTIONAL_SEED="${CLICKHOUSE_APPLY_OPTIONAL_SEED:-false}"
 
 client_cmd() {
   local args
@@ -33,4 +34,8 @@ client_cmd --query "CREATE DATABASE IF NOT EXISTS ${CLICKHOUSE_DB}"
 run_sql_dir "${ROOT_DIR}/10-schema"
 run_sql_dir "${ROOT_DIR}/20-view"
 
-echo "Optional SQL under ${ROOT_DIR}/90-optional-seed is not applied automatically."
+if [[ "${CLICKHOUSE_APPLY_OPTIONAL_SEED}" == "true" ]]; then
+  run_sql_dir "${ROOT_DIR}/90-optional-seed"
+else
+  echo "Optional SQL under ${ROOT_DIR}/90-optional-seed is not applied automatically."
+fi
