@@ -609,6 +609,17 @@ validate_port() {
   return 1
 }
 
+port_is_open() {
+  local host="$1"
+  local port="$2"
+  bash -c "exec 3<>/dev/tcp/${host}/${port}" >/dev/null 2>&1
+}
+
+container_is_running() {
+  local container_name="$1"
+  [[ "$(docker inspect --format '{{.State.Status}}' "${container_name}" 2>/dev/null || true)" == "running" ]]
+}
+
 clickhouse_http_query() {
   local sql="$1"
   curl --silent --show-error --fail \
@@ -681,24 +692,42 @@ validate_service_port() {
 
 validate_runtime() {
   local service
+  local failed=0
   if [[ "${DEPLOY_MODE}" == "full" ]] || selected_services_require_clickhouse; then
-    validate_port "ClickHouse HTTP" "${CLICKHOUSE_HOST}" "${CLICKHOUSE_HTTP_PORT}"
+    validate_port "ClickHouse HTTP" "${CLICKHOUSE_HOST}" "${CLICKHOUSE_HTTP_PORT}" || failed=1
   fi
   if [[ "${DEPLOY_MODE}" == "full" ]]; then
-    validate_port "ZooKeeper" 127.0.0.1 2181
+    validate_port "ZooKeeper" 127.0.0.1 2181 || failed=1
   fi
   for service in "${DEPLOY_SERVICES[@]}"; do
-    validate_service_port "${service}"
+    validate_service_port "${service}" || failed=1
   done
+  return "${failed}"
 }
 
 deploy_full_stack() {
+  local use_existing_zookeeper=false
+  if port_is_open 127.0.0.1 2181 && ! container_is_running dc-zookeeper; then
+    use_existing_zookeeper=true
+    echo "Reusing the existing ZooKeeper listener on 127.0.0.1:2181."
+    docker rm -f dc-zookeeper >/dev/null 2>&1 || true
+  fi
+
   if [[ "${CLICKHOUSE_MODE}" == "embedded" ]]; then
-    compose_pull_with_retry --profile embedded-clickhouse pull clickhouse zookeeper "${DEPLOY_SERVICES[@]}"
-    compose --profile embedded-clickhouse up -d clickhouse zookeeper
+    if [[ "${use_existing_zookeeper}" == "true" ]]; then
+      compose_pull_with_retry --profile embedded-clickhouse pull clickhouse "${DEPLOY_SERVICES[@]}"
+      compose --profile embedded-clickhouse up -d clickhouse
+    else
+      compose_pull_with_retry --profile embedded-clickhouse pull clickhouse zookeeper "${DEPLOY_SERVICES[@]}"
+      compose --profile embedded-clickhouse up -d clickhouse zookeeper
+    fi
   else
-    compose_pull_with_retry pull zookeeper "${DEPLOY_SERVICES[@]}"
-    compose up -d zookeeper
+    if [[ "${use_existing_zookeeper}" == "true" ]]; then
+      compose_pull_with_retry pull "${DEPLOY_SERVICES[@]}"
+    else
+      compose_pull_with_retry pull zookeeper "${DEPLOY_SERVICES[@]}"
+      compose up -d zookeeper
+    fi
   fi
 
   if ! wait_for_clickhouse_ready; then
@@ -725,7 +754,13 @@ deploy_full_stack() {
     exit 1
   fi
 
-  if [[ "${CLICKHOUSE_MODE}" == "embedded" ]]; then
+  if [[ "${use_existing_zookeeper}" == "true" ]]; then
+    if [[ "${CLICKHOUSE_MODE}" == "embedded" ]]; then
+      compose --profile embedded-clickhouse up -d --no-deps "${DEPLOY_SERVICES[@]}"
+    else
+      compose up -d --no-deps "${DEPLOY_SERVICES[@]}"
+    fi
+  elif [[ "${CLICKHOUSE_MODE}" == "embedded" ]]; then
     compose --profile embedded-clickhouse up -d "${DEPLOY_SERVICES[@]}"
   else
     compose up -d "${DEPLOY_SERVICES[@]}"
