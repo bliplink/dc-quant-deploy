@@ -30,6 +30,7 @@ services:
     volumes:
       - ${DEPLOY_ROOT}/data/clickhouse:/var/lib/clickhouse
       - ${DEPLOY_ROOT}/log/clickhouse:/var/log/clickhouse-server
+      - ./clickhouse/config.d/10-merge-tree-compat.xml:/etc/clickhouse-server/config.d/10-merge-tree-compat.xml:ro
       - ./clickhouse/users.d/10-async-insert.xml:/etc/clickhouse-server/users.d/10-async-insert.xml:ro
       - ./clickhouse/init:/docker-entrypoint-initdb.d:ro
     healthcheck:
