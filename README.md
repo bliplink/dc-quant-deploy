@@ -100,6 +100,13 @@ Docker CE 26.1.4 和 Compose 2.27.1，并自动使用 CentOS 7.9.2009
 仅检查现有环境可运行 `sudo ./prepare-host.sh --check`；如需让普通用户执行
 Docker，可显式传入 `--docker-user USER`，该权限等同于宿主机 root 权限。
 
+对于全新 EL7/XFS 主机，如果旧内核迫使 Docker 使用 `vfs` 存储驱动，
+主机准备脚本会在 `/opt/sumscope` 是独立挂载盘时自动使用
+`/opt/sumscope/docker-data`。也可以通过
+`DOCKER_DATA_ROOT=/更大的目录` 显式指定。脚本不会自动迁移已有 Docker
+容器、镜像，也不会覆盖已有 `/etc/docker/daemon.json`。由于 `vfs` 会复制
+镜像层而不是共享镜像层，完整部署要求 Docker 数据根至少有 120GB 可用空间。
+
 如果要在独立机器只部署部分服务，先配置外部 ClickHouse、ZooKeeper 和
 `control.prod/dc.dat`，然后运行：
 

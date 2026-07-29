@@ -101,6 +101,14 @@ validate an existing runtime. To allow a
 non-root user to run Docker, explicitly pass `--docker-user USER`; Docker group
 membership grants root-equivalent access to the host.
 
+On a fresh legacy EL7/XFS host where the kernel forces Docker to use the `vfs`
+storage driver, host preparation automatically uses
+`/opt/sumscope/docker-data` when `/opt/sumscope` is a separate mount. Override
+it with `DOCKER_DATA_ROOT=/larger/path`. Existing Docker data and an existing
+`/etc/docker/daemon.json` are never migrated or overwritten automatically.
+Full-stack deployment requires at least 120 GB free in a `vfs` Docker data
+root because that driver copies image layers instead of sharing them.
+
 To deploy only selected services on a dedicated host, first configure external
 ClickHouse, ZooKeeper, and `control.prod/dc.dat`, then run:
 

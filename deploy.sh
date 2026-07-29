@@ -291,6 +291,9 @@ prepare_deploy_defaults() {
 ensure_container_runtime() {
   if command -v docker >/dev/null 2>&1 &&
      docker compose version >/dev/null 2>&1; then
+    if [[ "$(id -u)" -eq 0 ]] && [[ -f "${PREPARE_HOST_SCRIPT}" ]]; then
+      "${PREPARE_HOST_SCRIPT}"
+    fi
     return 0
   fi
 
@@ -338,6 +341,7 @@ load_env() {
 
 check_system_requirements() {
   local min_mem_mb min_disk_gb mem_mb disk_mb disk_gb
+  local docker_driver docker_root docker_disk_mb docker_disk_gb min_docker_disk_gb
   if [[ "${DEPLOY_MODE}" == "selected" ]]; then
     min_mem_mb="${MIN_SELECTED_MEMORY_MB:-1024}"
     min_disk_gb="${MIN_SELECTED_DISK_GB:-5}"
@@ -359,6 +363,27 @@ check_system_requirements() {
 
   if [ "${disk_gb}" -lt "${min_disk_gb}" ]; then
     echo "Machine check failed: free disk ${disk_gb} GB at ${DEPLOY_ROOT}, required >= ${min_disk_gb} GB." >&2
+    exit 1
+  fi
+
+  docker_driver="$(docker info --format '{{.Driver}}')"
+  docker_root="$(docker info --format '{{.DockerRootDir}}')"
+  docker_disk_mb="$(df -Pm "${docker_root}" | awk 'NR==2 {print $4}')"
+  docker_disk_gb="$((docker_disk_mb / 1024))"
+  min_docker_disk_gb="${min_disk_gb}"
+  if [[ "${docker_driver}" == "vfs" ]]; then
+    if [[ "${DEPLOY_MODE}" == "selected" ]]; then
+      min_docker_disk_gb="${MIN_SELECTED_VFS_DOCKER_DISK_GB:-10}"
+    else
+      min_docker_disk_gb="${MIN_VFS_DOCKER_DISK_GB:-120}"
+    fi
+  fi
+
+  if [ "${docker_disk_gb}" -lt "${min_docker_disk_gb}" ]; then
+    echo "Machine check failed: Docker uses ${docker_driver} with ${docker_disk_gb} GB free at ${docker_root}; required >= ${min_docker_disk_gb} GB." >&2
+    if [[ "${docker_driver}" == "vfs" ]]; then
+      echo "Move Docker's data-root to a larger filesystem before deployment (for example DOCKER_DATA_ROOT=/opt/sumscope/docker-data)." >&2
+    fi
     exit 1
   fi
 }

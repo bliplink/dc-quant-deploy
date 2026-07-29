@@ -4,6 +4,8 @@ set -euo pipefail
 MODE="install"
 DRY_RUN="false"
 DOCKER_USER="${DOCKER_USER:-}"
+DOCKER_DATA_ROOT="${DOCKER_DATA_ROOT:-}"
+LEGACY_VFS_DOCKER_DATA_ROOT="${LEGACY_VFS_DOCKER_DATA_ROOT:-/opt/sumscope/docker-data}"
 OS_RELEASE_FILE="${PREPARE_HOST_OS_RELEASE_FILE:-/etc/os-release}"
 LEGACY_EL7_DOCKER_VERSION="26.1.4-1.el7"
 LEGACY_EL7_CONTAINERD_VERSION="1.6.33-3.1.el7"
@@ -29,8 +31,10 @@ Options:
 Supported operating systems:
   CentOS, RHEL, Rocky Linux, AlmaLinux, Ubuntu, and Debian.
 
-The script is idempotent. It does not deploy DC Quant or overwrite Docker daemon
-configuration. Membership in the docker group grants root-equivalent access.
+The script is idempotent. It does not deploy DC Quant or overwrite an existing
+Docker daemon configuration. On a fresh legacy EL7 host where Docker falls back
+to vfs, it uses /opt/sumscope/docker-data when that mount is available.
+Membership in the docker group grants root-equivalent access.
 USAGE
 }
 
@@ -322,6 +326,55 @@ enable_docker_service() {
   run systemctl enable --now docker
 }
 
+resolve_vfs_data_root() {
+  if [[ -n "${DOCKER_DATA_ROOT}" ]]; then
+    printf '%s\n' "${DOCKER_DATA_ROOT}"
+    return 0
+  fi
+
+  if legacy_el7 &&
+     [[ -d "/opt/sumscope" ]] &&
+     mountpoint -q "/opt/sumscope"; then
+    printf '%s\n' "${LEGACY_VFS_DOCKER_DATA_ROOT}"
+  fi
+}
+
+configure_fresh_vfs_data_root() {
+  local target current_driver current_root
+  target="$(resolve_vfs_data_root)"
+  [[ -n "${target}" ]] || return 0
+  [[ "${target}" == /* ]] || die "DOCKER_DATA_ROOT must be an absolute path."
+
+  if [[ "${DRY_RUN}" == "true" ]]; then
+    log "DRY-RUN: configure fresh vfs Docker data root at ${target} when required."
+    return 0
+  fi
+
+  current_driver="$(docker info --format '{{.Driver}}' 2>/dev/null || true)"
+  current_root="$(docker info --format '{{.DockerRootDir}}' 2>/dev/null || true)"
+  [[ "${current_driver}" == "vfs" ]] || return 0
+  [[ "${current_root}" != "${target}" ]] || return 0
+
+  if [[ -e "/etc/docker/daemon.json" ]]; then
+    log "Docker uses vfs, but /etc/docker/daemon.json already exists; leaving it unchanged."
+    return 0
+  fi
+
+  if [[ -n "$(docker ps -aq 2>/dev/null)" ]] ||
+     [[ -n "$(docker images -q 2>/dev/null)" ]]; then
+    log "Docker uses vfs and already contains data; automatic data-root migration was skipped."
+    log "Set DOCKER_DATA_ROOT and migrate Docker data during a maintenance window."
+    return 0
+  fi
+
+  log "Docker uses vfs on a fresh host; moving its data root to ${target}."
+  run mkdir -p "${target}" /etc/docker
+  run systemctl stop docker docker.socket
+  write_file "/etc/docker/daemon.json" \
+    '{"data-root":"'"${target}"'","storage-driver":"vfs"}'
+  run systemctl start docker
+}
+
 configure_docker_user() {
   [[ -n "${DOCKER_USER}" ]] || return 0
 
@@ -390,6 +443,7 @@ main() {
   fi
 
   enable_docker_service
+  configure_fresh_vfs_data_root
   configure_docker_user
 
   if [[ "${DRY_RUN}" == "true" ]]; then
