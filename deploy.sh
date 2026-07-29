@@ -28,6 +28,7 @@ SERVICE_NAMES=(
 )
 APP_SERVICES=(
   gateway
+  loginsvr
   mdsvr
   apssvr
   quantsvr
