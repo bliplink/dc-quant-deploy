@@ -20,6 +20,13 @@ CLICKHOUSE_USERNAME="${CLICKHOUSE_USERNAME:-default}"
 CLICKHOUSE_PASSWORD="${CLICKHOUSE_PASSWORD:-}"
 CLICKHOUSE_IMAGE_REPOSITORY="${CLICKHOUSE_IMAGE_REPOSITORY:-clickhouse/clickhouse-server}"
 
+if [[ "${CLICKHOUSE_MODE:-external}" == "embedded" ]] &&
+   docker container inspect dc-clickhouse >/dev/null 2>&1; then
+  docker exec dc-clickhouse \
+    bash /docker-entrypoint-initdb.d/01-run-all.sh
+  exit 0
+fi
+
 docker run --rm --network host \
   -e CLICKHOUSE_INIT_ROOT=/work/init \
   -e CLICKHOUSE_HOST="${CLICKHOUSE_HOST}" \
