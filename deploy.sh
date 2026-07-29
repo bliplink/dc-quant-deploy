@@ -520,6 +520,8 @@ ensure_license_file() {
 
 prepare_runtime_dirs() {
   mkdir -p "${DEPLOY_ROOT}"
+  printf '%s\n' "${COMPOSE_PROJECT_NAME:-dc-quant-deploy}" \
+    > "${DEPLOY_ROOT}/.dc-quant-deploy-managed"
   mkdir -p "${DEPLOY_ROOT}/control"
   mkdir -p "${DEPLOY_ROOT}/control/overrides"
   mkdir -p "${DEPLOY_ROOT}/data"
