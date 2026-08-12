@@ -24,9 +24,10 @@ CLICKHOUSE_APPLY_OPTIONAL_SEED="${CLICKHOUSE_APPLY_OPTIONAL_SEED:-false}"
 if [[ "${CLICKHOUSE_MODE:-external}" == "embedded" ]] &&
    docker container inspect dc-clickhouse >/dev/null 2>&1; then
   docker exec \
+    -e CLICKHOUSE_INIT_ROOT=/opt/dc-clickhouse-init \
     -e CLICKHOUSE_APPLY_OPTIONAL_SEED="${CLICKHOUSE_APPLY_OPTIONAL_SEED}" \
     dc-clickhouse \
-    bash /docker-entrypoint-initdb.d/01-run-all.sh
+    bash /opt/dc-clickhouse-init/01-run-all.sh
   exit 0
 fi
 
