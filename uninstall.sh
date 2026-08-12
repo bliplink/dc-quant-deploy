@@ -293,9 +293,13 @@ remove_docker_packages() {
   rm -rf --one-file-system -- \
     /var/lib/docker \
     /var/lib/containerd \
-    /etc/docker \
-    /run/docker \
-    /run/containerd
+    /etc/docker
+  if [[ -d /run/docker ]]; then
+    while IFS= read -r mount_target; do
+      [[ -n "${mount_target}" ]] && umount -l -- "${mount_target}" >/dev/null 2>&1 || true
+    done < <(findmnt -R -n -o TARGET /run/docker 2>/dev/null | tac)
+  fi
+  rm -rf --one-file-system -- /run/docker /run/containerd
   if [[ -n "${docker_root}" && "${docker_root}" != "/var/lib/docker" ]]; then
     rm -rf --one-file-system -- "${docker_root}"
   fi
@@ -323,6 +327,16 @@ main() {
     exit 1
   }
   command -v docker >/dev/null 2>&1 || {
+    if [[ "${REMOVE_DOCKER}" == "true" ]]; then
+      load_env
+      validate_runtime_root
+      remove_runtime_data
+      remove_generated_repository_files
+      remove_docker_packages
+      echo "dc-quant-deploy was removed successfully."
+      echo "Docker Engine, Containerd, plugins, and Docker data were removed."
+      exit 0
+    fi
     echo "Docker is not installed; only generated files can be removed manually." >&2
     exit 1
   }
