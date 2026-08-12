@@ -10,6 +10,7 @@ VALIDATE_ENV_SCRIPT="${ROOT_DIR}/validate-env.sh"
 
 DRY_RUN=false
 SERVICE=""
+ORIGINAL_ARGS=("$@")
 
 usage() {
   cat <<'USAGE'
@@ -328,6 +329,14 @@ validate_container_service() {
 main() {
   if [[ "${DRY_RUN}" != "true" ]]; then
     require_command docker
+    if ! docker info >/dev/null 2>&1; then
+      if [[ "$(id -u)" -ne 0 ]] && command -v sudo >/dev/null 2>&1; then
+        echo "Docker access requires elevated privileges; restarting with sudo."
+        exec sudo "${BASH_SOURCE[0]}" "${ORIGINAL_ARGS[@]}"
+      fi
+      echo "Unable to access the Docker daemon. Run this command with sudo." >&2
+      exit 1
+    fi
     docker compose version >/dev/null
   fi
 
