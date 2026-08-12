@@ -701,17 +701,20 @@ container_is_running() {
 port_owned_by_container() {
   local container_name="$1"
   local port="$2"
-  docker exec --user 0 "${container_name}" sh -c '
-    port_hex=$(printf "%04X" "$1")
-    inodes=$(awk -v suffix=":${port_hex}" '\''$2 ~ suffix "$" && $4 == "0A" { print $10 }'\'' \
-      /proc/net/tcp /proc/net/tcp6 2>/dev/null)
-    for inode in ${inodes}; do
-      for fd in /proc/[0-9]*/fd/*; do
-        [ "$(readlink "${fd}" 2>/dev/null)" = "socket:[${inode}]" ] && exit 0
-      done
-    done
-    exit 1
-  ' sh "${port}" >/dev/null 2>&1
+  local container_pids listener_pid
+  container_pids="$(docker top "${container_name}" -eo pid 2>/dev/null | tail -n +2 || true)"
+  [[ -n "${container_pids}" ]] || return 1
+
+  while IFS= read -r listener_pid; do
+    [[ -n "${listener_pid}" ]] || continue
+    if grep -Eq "^[[:space:]]*${listener_pid}[[:space:]]*$" <<< "${container_pids}"; then
+      return 0
+    fi
+  done < <(
+    ss -H -lntp "sport = :${port}" 2>/dev/null |
+      grep -oE 'pid=[0-9]+' | cut -d= -f2 | sort -u
+  )
+  return 1
 }
 
 validate_container_port() {
