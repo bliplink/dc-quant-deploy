@@ -7,6 +7,7 @@ DEPLOY_SCRIPT="${ROOT_DIR}/deploy.sh"
 ENV_EXAMPLE="${ROOT_DIR}/.env.standalone.example"
 CONTROL_DIR="${ROOT_DIR}/control.prod"
 CONTROL_EXAMPLE_DIR="${ROOT_DIR}/control.prod.example"
+VALIDATE_ENV_SCRIPT="${ROOT_DIR}/validate-env.sh"
 
 usage() {
   cat <<'USAGE'
@@ -105,6 +106,8 @@ ensure_clickhouse_password() {
 }
 
 load_env() {
+  check_file "${VALIDATE_ENV_SCRIPT}"
+  bash "${VALIDATE_ENV_SCRIPT}" "${ENV_FILE}"
   # shellcheck disable=SC1090
   set -a && . "${ENV_FILE}" && set +a
   : "${CLICKHOUSE_HTTP_PORT:?CLICKHOUSE_HTTP_PORT is required}"

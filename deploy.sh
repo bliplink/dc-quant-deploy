@@ -12,6 +12,7 @@ GENERATE_OVERRIDES_SCRIPT="${ROOT_DIR}/generate-compose-overrides.sh"
 CONTROL_SRC="${ROOT_DIR}/control.prod"
 CONTROL_EXAMPLE_DIR="${ROOT_DIR}/control.prod.example"
 PREPARE_HOST_SCRIPT="${ROOT_DIR}/prepare-host.sh"
+VALIDATE_ENV_SCRIPT="${ROOT_DIR}/validate-env.sh"
 LAST_BACKUP_FILE="${ROOT_DIR}/.last_backup"
 BACKUP_ROOT="${ROOT_DIR}/backups"
 
@@ -325,6 +326,8 @@ ensure_container_runtime() {
 
 load_env() {
   check_file "${ENV_FILE}"
+  check_file "${VALIDATE_ENV_SCRIPT}"
+  bash "${VALIDATE_ENV_SCRIPT}" "${ENV_FILE}"
   # shellcheck disable=SC1090
   set -a && . "${ENV_FILE}" && set +a
   : "${DEPLOY_ROOT:?DEPLOY_ROOT is required}"
@@ -341,7 +344,10 @@ load_env() {
   : "${WEB_LISTEN_PORT:=80}"
   : "${WEB_FALLBACK_LISTEN_PORT:=8088}"
   : "${GATEWAY_HOST:=127.0.0.1}"
+  : "${GW_TCP_PORT:=3000}"
+  : "${GW_WEBSOCKET_PORT:=3001}"
   : "${GATEWAY_PORT:=3002}"
+  : "${LOGINSVR_HTTP_PORT:=19990}"
   [[ "${RUNTIME_UID}" =~ ^[0-9]+$ ]] || {
     echo "RUNTIME_UID must be numeric." >&2
     exit 1
@@ -358,6 +364,12 @@ load_env() {
     echo "WEB_FALLBACK_LISTEN_PORT must be numeric." >&2
     exit 1
   }
+  for port_var in GW_TCP_PORT GW_WEBSOCKET_PORT GATEWAY_PORT LOGINSVR_HTTP_PORT; do
+    [[ "${!port_var}" =~ ^[0-9]+$ ]] || {
+      echo "${port_var} must be numeric." >&2
+      exit 1
+    }
+  done
   case "${CLICKHOUSE_MODE}" in
     embedded|external) ;;
     *)
@@ -686,6 +698,83 @@ container_is_running() {
   [[ "$(docker inspect --format '{{.State.Status}}' "${container_name}" 2>/dev/null || true)" == "running" ]]
 }
 
+port_owned_by_container() {
+  local container_name="$1"
+  local port="$2"
+  docker exec --user 0 "${container_name}" sh -c '
+    port_hex=$(printf "%04X" "$1")
+    inodes=$(awk -v suffix=":${port_hex}" '\''$2 ~ suffix "$" && $4 == "0A" { print $10 }'\'' \
+      /proc/net/tcp /proc/net/tcp6 2>/dev/null)
+    for inode in ${inodes}; do
+      for fd in /proc/[0-9]*/fd/*; do
+        [ "$(readlink "${fd}" 2>/dev/null)" = "socket:[${inode}]" ] && exit 0
+      done
+    done
+    exit 1
+  ' sh "${port}" >/dev/null 2>&1
+}
+
+validate_container_port() {
+  local label="$1"
+  local container_name="$2"
+  local port="$3"
+  local retries="${4:-30}"
+  local delay="${5:-2}"
+
+  for _ in $(seq 1 "${retries}"); do
+    if container_is_running "${container_name}" &&
+       port_owned_by_container "${container_name}" "${port}"; then
+      return 0
+    fi
+    sleep "${delay}"
+  done
+
+  echo "Container port check failed: ${label} (${container_name}) does not own port ${port}." >&2
+  ss -H -lntp "sport = :${port}" >&2 || true
+  return 1
+}
+
+require_free_or_owned_port() {
+  local label="$1"
+  local container_name="$2"
+  local port="$3"
+  if ! port_is_open 127.0.0.1 "${port}"; then
+    return 0
+  fi
+  if port_owned_by_container "${container_name}" "${port}"; then
+    return 0
+  fi
+
+  echo "Port ${port} for ${label} is already owned by another process." >&2
+  ss -H -lntp "sport = :${port}" >&2 || true
+  return 1
+}
+
+preflight_service_ports() {
+  local service failed=0
+  for service in "${DEPLOY_SERVICES[@]}"; do
+    case "${service}" in
+      gateway)
+        require_free_or_owned_port "GW TCP" dc-gateway "${GW_TCP_PORT}" || failed=1
+        require_free_or_owned_port "GW WebSocket" dc-gateway "${GW_WEBSOCKET_PORT}" || failed=1
+        require_free_or_owned_port "GW HTTP" dc-gateway "${GATEWAY_PORT}" || failed=1
+        ;;
+      loginsvr)
+        require_free_or_owned_port "LoginSvr HTTP" dc-loginsvr "${LOGINSVR_HTTP_PORT}" || failed=1
+        require_free_or_owned_port "LoginSvr GW" dc-loginsvr 20034 || failed=1
+        ;;
+      mdsvr) require_free_or_owned_port MDSvr dc-mdsvr 30028 || failed=1 ;;
+      apssvr) require_free_or_owned_port APSSvr dc-apssvr 30035 || failed=1 ;;
+      quantsvr) require_free_or_owned_port QuantSvr dc-quantsvr 30042 || failed=1 ;;
+      indsvr) require_free_or_owned_port INDSvr dc-indsvr 30044 || failed=1 ;;
+      simsvr) require_free_or_owned_port SIMSvr dc-simsvr 30045 || failed=1 ;;
+      batchsvr) require_free_or_owned_port BatchSvr dc-batchsvr 30046 || failed=1 ;;
+      web) require_free_or_owned_port web dc-web "${WEB_LISTEN_PORT}" || failed=1 ;;
+    esac
+  done
+  [[ "${failed}" -eq 0 ]]
+}
+
 clickhouse_http_query() {
   local sql="$1"
   curl --silent --show-error --fail \
@@ -740,15 +829,22 @@ wait_for_clickhouse_schema() {
 validate_service_port() {
   local service="$1"
   case "${service}" in
-    gateway) validate_port "gateway" "${SERVICE_HOST:-127.0.0.1}" 3002 ;;
-    loginsvr) validate_port "LoginSvr" "${SERVICE_HOST:-127.0.0.1}" 20034 ;;
-    mdsvr) validate_port "MDSvr" "${SERVICE_HOST:-127.0.0.1}" 30028 ;;
-    apssvr) validate_port "APSSvr" "${SERVICE_HOST:-127.0.0.1}" 30035 ;;
-    quantsvr) validate_port "QuantSvr" "${SERVICE_HOST:-127.0.0.1}" 30042 ;;
-    indsvr) validate_port "INDSvr" "${SERVICE_HOST:-127.0.0.1}" 30044 ;;
-    simsvr) validate_port "SIMSvr" "${SERVICE_HOST:-127.0.0.1}" 30045 ;;
-    batchsvr) validate_port "BatchSvr" "${SERVICE_HOST:-127.0.0.1}" 30046 ;;
-    web) validate_port "web" "${SERVICE_HOST:-127.0.0.1}" "${WEB_LISTEN_PORT:-80}" ;;
+    gateway)
+      validate_container_port "GW TCP" dc-gateway "${GW_TCP_PORT}" &&
+        validate_container_port "GW WebSocket" dc-gateway "${GW_WEBSOCKET_PORT}" &&
+        validate_container_port "GW HTTP" dc-gateway "${GATEWAY_PORT}"
+      ;;
+    loginsvr)
+      validate_container_port "LoginSvr HTTP" dc-loginsvr "${LOGINSVR_HTTP_PORT}" &&
+        validate_container_port "LoginSvr GW" dc-loginsvr 20034
+      ;;
+    mdsvr) validate_container_port MDSvr dc-mdsvr 30028 ;;
+    apssvr) validate_container_port APSSvr dc-apssvr 30035 ;;
+    quantsvr) validate_container_port QuantSvr dc-quantsvr 30042 ;;
+    indsvr) validate_container_port INDSvr dc-indsvr 30044 ;;
+    simsvr) validate_container_port SIMSvr dc-simsvr 30045 ;;
+    batchsvr) validate_container_port BatchSvr dc-batchsvr 30046 ;;
+    web) validate_container_port web dc-web "${WEB_LISTEN_PORT:-80}" ;;
     *)
       echo "No validation rule for service: ${service}" >&2
       return 1
@@ -975,6 +1071,11 @@ main() {
   record_status
   sync_control
   generate_compose_overrides
+  if ! preflight_service_ports; then
+    echo "Deployment stopped because one or more service ports belong to other processes." >&2
+    echo "Choose unused ports in .env.prod or stop the conflicting host services." >&2
+    exit 1
+  fi
   stop_legacy_services
 
   if [[ "${DEPLOY_MODE}" == "full" ]]; then

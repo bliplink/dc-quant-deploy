@@ -201,7 +201,7 @@ Notes:
 
 - `QUANTSVR_ENABLE_BOT` can be left empty; when `QUANTSVR_BOT_TOKEN` is set, deployment scripts enable the Telegram bot automatically.
 - To force-disable the Telegram bot, set `QUANTSVR_ENABLE_BOT=false` in `.env.prod`.
-- Use `|` to separate multiple administrator IDs in `QUANTSVR_BOT_ADMIN_LIST`.
+- Use `|` to separate multiple administrator IDs and quote the complete value, for example `QUANTSVR_BOT_ADMIN_LIST='123|456'`.
 - The internal GW password does not need user configuration.
 - Restart the affected service after changing `.env.prod`.
 

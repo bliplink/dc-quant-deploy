@@ -5,6 +5,7 @@ ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 ENV_FILE="${1:-${ROOT_DIR}/.env.prod}"
 OUTPUT_FILE="${2:-${ROOT_DIR}/compose.override.generated.yaml}"
 GENERATE_SENSITIVE_CONFIGS_SCRIPT="${ROOT_DIR}/generate-sensitive-configs.sh"
+VALIDATE_ENV_SCRIPT="${ROOT_DIR}/validate-env.sh"
 
 require_file() {
   [[ -f "$1" ]] || {
@@ -15,6 +16,8 @@ require_file() {
 
 load_env() {
   require_file "${ENV_FILE}"
+  require_file "${VALIDATE_ENV_SCRIPT}"
+  bash "${VALIDATE_ENV_SCRIPT}" "${ENV_FILE}"
   # shellcheck disable=SC1090
   set -a && . "${ENV_FILE}" && set +a
   : "${DEPLOY_ROOT:?DEPLOY_ROOT is required}"
@@ -62,6 +65,7 @@ append_mount_if_present gateway "${DEPLOY_ROOT}/control/overrides/GW/config/mcpT
 append_mount_if_present gateway "${DEPLOY_ROOT}/control/overrides/GW/config/apiKeyList.csv" "/srv/dc/dc/GW/config/apiKeyList.csv"
 append_mount_if_present gateway "${DEPLOY_ROOT}/control/overrides/GW/config/spring-gw-client.xml" "/srv/dc/dc/GW/config/spring-gw-client.xml"
 append_mount_if_present gateway "${DEPLOY_ROOT}/control/overrides/GW/config/log4j.ini" "/srv/dc/dc/GW/config/log4j.ini"
+append_mount_if_present gateway "${DEPLOY_ROOT}/control/overrides/GW/config/spring-tcp-server.xml" "/srv/dc/dc/GW/config/spring-tcp-server.xml"
 
 append_mount_if_present loginsvr "${DEPLOY_ROOT}/control/overrides/LoginSvr/config/log4j.ini" "/srv/dc/dc/LoginSvr/config/log4j.ini"
 append_mount_if_present loginsvr "${DEPLOY_ROOT}/control/overrides/LoginSvr/config/application.properties" "/srv/dc/dc/LoginSvr/config/application.properties"
@@ -86,5 +90,5 @@ if [[ "${MOUNT_COUNT}" -eq 0 ]]; then
   } > "${OUTPUT_FILE}.tmp"
 fi
 
-mv "${OUTPUT_FILE}.tmp" "${OUTPUT_FILE}"
+mv -f "${OUTPUT_FILE}.tmp" "${OUTPUT_FILE}"
 echo "Generated ${OUTPUT_FILE} with ${MOUNT_COUNT} optional override mount(s)."

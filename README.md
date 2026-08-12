@@ -195,7 +195,7 @@ INDSVR_DEEPSEEK_API_KEY=
 
 - `QUANTSVR_ENABLE_BOT` 可留空；填写 `QUANTSVR_BOT_TOKEN` 后部署脚本会自动启用 Telegram bot。
 - 如果要强制关闭 Telegram bot，可在 `.env.prod` 中设置 `QUANTSVR_ENABLE_BOT=false`。
-- `QUANTSVR_BOT_ADMIN_LIST` 使用 `|` 分隔多个管理员 ID。
+- `QUANTSVR_BOT_ADMIN_LIST` 使用 `|` 分隔多个管理员 ID，并给完整值加引号，例如 `QUANTSVR_BOT_ADMIN_LIST='123|456'`。
 - GW 内部密码无需用户配置。
 - 修改 `.env.prod` 后，需要重启对应服务。
 

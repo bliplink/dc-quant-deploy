@@ -3,6 +3,7 @@ set -euo pipefail
 
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 ENV_FILE="${1:-${ROOT_DIR}/.env.prod}"
+VALIDATE_ENV_SCRIPT="${ROOT_DIR}/validate-env.sh"
 
 require_file() {
   [[ -f "$1" ]] || {
@@ -13,6 +14,8 @@ require_file() {
 
 load_env() {
   require_file "${ENV_FILE}"
+  require_file "${VALIDATE_ENV_SCRIPT}"
+  bash "${VALIDATE_ENV_SCRIPT}" "${ENV_FILE}"
   # shellcheck disable=SC1090
   set -a && . "${ENV_FILE}" && set +a
   : "${DEPLOY_ROOT:?DEPLOY_ROOT is required}"
@@ -50,6 +53,10 @@ QUANTSVR_BOT_USERNAME="${QUANTSVR_BOT_USERNAME:-}"
 QUANTSVR_BOT_GROUP_ID="${QUANTSVR_BOT_GROUP_ID:-0}"
 QUANTSVR_BOT_ADMIN_LIST="${QUANTSVR_BOT_ADMIN_LIST:-}"
 APSSVR_ENABLE_USER_DATA="${APSSVR_ENABLE_USER_DATA:-false}"
+GW_TCP_PORT="${GW_TCP_PORT:-3000}"
+GW_WEBSOCKET_PORT="${GW_WEBSOCKET_PORT:-3001}"
+GATEWAY_PORT="${GATEWAY_PORT:-3002}"
+LOGINSVR_HTTP_PORT="${LOGINSVR_HTTP_PORT:-19990}"
 
 INDSVR_DEEPSEEK_API_KEY="${INDSVR_DEEPSEEK_API_KEY:-}"
 CLICKHOUSE_JDBC_URL="jdbc:clickhouse://${CLICKHOUSE_HOST}:${CLICKHOUSE_HTTP_PORT}/${CLICKHOUSE_DB_NAME}?compression=true"
@@ -73,7 +80,7 @@ EOF
 
 write_file "${DEPLOY_ROOT}/control/overrides/LoginSvr/config/application.properties" <<EOF
 server.servlet.context-path=/dc
-server.port=19990
+server.port=${LOGINSVR_HTTP_PORT}
 
 serverKey=SERVER.LoginSvr
 log4j.file=./config/log4j.ini
@@ -91,6 +98,64 @@ defaultPwd=123456
 isSignature=0
 validTime=3600
 checkInterval=60
+EOF
+
+write_file "${DEPLOY_ROOT}/control/overrides/GW/config/spring-tcp-server.xml" <<EOF
+<?xml version="1.0" encoding="UTF-8"?>
+<beans xmlns="http://www.springframework.org/schema/beans"
+    xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+    xsi:schemaLocation="http://www.springframework.org/schema/beans http://www.springframework.org/schema/beans/spring-beans-4.3.xsd">
+  <bean id="tcpServer" class="com.gateway.connector.tcp.server.TServer"
+      init-method="init" destroy-method="shutdown">
+    <property name="port" value="${GW_TCP_PORT}" />
+    <property name="serverConfig" ref="serverConfig" />
+  </bean>
+  <bean id="webSocketServer" class="com.gateway.connector.tcp.server.WebSocketServer"
+      init-method="init" destroy-method="shutdown">
+    <property name="port" value="${GW_WEBSOCKET_PORT}" />
+    <property name="serverConfig" ref="webSocketServerConfig" />
+  </bean>
+  <bean id="httpServer" class="com.gateway.connector.tcp.server.HttpServer"
+      init-method="init" destroy-method="shutdown">
+    <property name="port" value="${GATEWAY_PORT}" />
+    <property name="serverConfig" ref="serverConfig" />
+  </bean>
+  <bean id="tcpSessionManager" class="com.gateway.connector.tcp.TcpSessionManager">
+    <property name="maxInactiveInterval" value="500" />
+    <property name="topicManager" ref="topicManager" />
+    <property name="sessionListeners"><list><ref bean="logSessionListener" /></list></property>
+  </bean>
+  <bean id="logSessionListener" class="com.gateway.connector.api.listener.LogSessionListener" />
+  <bean id="ingressConnectionMonitor" class="com.gateway.monitor.IngressConnectionMonitor" />
+  <bean id="tcpSender" class="com.gateway.remoting.TcpSender">
+    <property name="tcpConnector" ref="tcpConnector" />
+  </bean>
+  <bean id="serverConfig" class="com.gateway.connector.tcp.config.ServerTransportConfig">
+    <property name="tcpConnector" ref="tcpConnector" />
+    <property name="proxy" ref="proxy" />
+    <property name="notify" ref="notify" />
+    <property name="ingressConnectionMonitor" ref="ingressConnectionMonitor" />
+    <property name="gzip" value="true" />
+    <property name="login" value="false" />
+  </bean>
+  <bean id="webSocketServerConfig" class="com.gateway.connector.tcp.config.ServerTransportConfig">
+    <property name="tcpConnector" ref="tcpConnector" />
+    <property name="proxy" ref="proxy" />
+    <property name="notify" ref="notify" />
+    <property name="ingressConnectionMonitor" ref="ingressConnectionMonitor" />
+    <property name="gzip" value="true" />
+    <property name="login" value="false" />
+  </bean>
+  <bean id="tcpConnector" class="com.gateway.connector.tcp.TcpConnector"
+      init-method="init" destroy-method="destroy">
+    <property name="tcpSessionManager" ref="tcpSessionManager" />
+  </bean>
+  <bean id="topicManager" class="com.gateway.invoke.TopicManager" />
+  <bean id="notify" class="com.gateway.notify.NotifyProxy">
+    <property name="tcpConnector" ref="tcpConnector" />
+    <property name="topicManager" ref="topicManager" />
+  </bean>
+</beans>
 EOF
 
 write_file "${DEPLOY_ROOT}/control/overrides/LoginSvr/config/DBPoolConfig.ini" <<EOF

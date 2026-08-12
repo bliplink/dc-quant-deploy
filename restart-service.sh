@@ -6,6 +6,7 @@ ENV_FILE="${ROOT_DIR}/.env.prod"
 COMPOSE_FILE="${ROOT_DIR}/compose.yaml"
 OVERRIDE_FILE="${ROOT_DIR}/compose.override.generated.yaml"
 GENERATE_OVERRIDES_SCRIPT="${ROOT_DIR}/generate-compose-overrides.sh"
+VALIDATE_ENV_SCRIPT="${ROOT_DIR}/validate-env.sh"
 
 DRY_RUN=false
 SERVICE=""
@@ -75,12 +76,12 @@ esac
 case "${COMPOSE_SERVICE}" in
   gateway)
     CONTAINER_NAME="dc-gateway"
-    SERVICE_PORT="3000"
+    SERVICE_PORT=""
     LOG_FILE="GW.log"
     ;;
   loginsvr)
     CONTAINER_NAME="dc-loginsvr"
-    SERVICE_PORT="30022"
+    SERVICE_PORT="20034"
     LOG_FILE="LoginSvr.log"
     ;;
   mdsvr)
@@ -115,7 +116,7 @@ case "${COMPOSE_SERVICE}" in
     ;;
   web)
     CONTAINER_NAME="dc-web"
-    SERVICE_PORT="80"
+    SERVICE_PORT=""
     LOG_FILE=""
     ;;
   zookeeper)
@@ -166,10 +167,16 @@ require_file() {
 
 load_env() {
   require_file "${ENV_FILE}"
+  require_file "${VALIDATE_ENV_SCRIPT}"
+  bash "${VALIDATE_ENV_SCRIPT}" "${ENV_FILE}"
   # shellcheck disable=SC1090
   set -a && . "${ENV_FILE}" && set +a
   : "${DEPLOY_ROOT:?DEPLOY_ROOT is required}"
   SERVICE_HOST="${SERVICE_HOST:-127.0.0.1}"
+  case "${COMPOSE_SERVICE}" in
+    gateway) SERVICE_PORT="${GATEWAY_PORT:-3002}" ;;
+    web) SERVICE_PORT="${WEB_LISTEN_PORT:-80}" ;;
+  esac
 }
 
 compose() {
@@ -201,6 +208,40 @@ wait_for_port_open() {
   done
 
   echo "Port did not open: ${host}:${port}" >&2
+  return 1
+}
+
+port_owned_by_container() {
+  local container_name="$1"
+  local port="$2"
+  docker exec --user 0 "${container_name}" sh -c '
+    port_hex=$(printf "%04X" "$1")
+    inodes=$(awk -v suffix=":${port_hex}" '\''$2 ~ suffix "$" && $4 == "0A" { print $10 }'\'' \
+      /proc/net/tcp /proc/net/tcp6 2>/dev/null)
+    for inode in ${inodes}; do
+      for fd in /proc/[0-9]*/fd/*; do
+        [ "$(readlink "${fd}" 2>/dev/null)" = "socket:[${inode}]" ] && exit 0
+      done
+    done
+    exit 1
+  ' sh "${port}" >/dev/null 2>&1
+}
+
+wait_for_owned_port() {
+  local container_name="$1"
+  local port="$2"
+  local retries="${3:-45}"
+  local delay="${4:-2}"
+
+  for _ in $(seq 1 "${retries}"); do
+    if port_owned_by_container "${container_name}" "${port}"; then
+      return 0
+    fi
+    sleep "${delay}"
+  done
+
+  echo "Container ${container_name} does not own expected port ${port}." >&2
+  ss -H -lntp "sport = :${port}" >&2 || true
   return 1
 }
 
@@ -256,6 +297,18 @@ validate_container_service() {
   fi
 
   wait_for_port_open "${SERVICE_HOST}" "${SERVICE_PORT}"
+  if [[ "${COMPOSE_SERVICE}" != "zookeeper" ]]; then
+    wait_for_owned_port "${CONTAINER_NAME}" "${SERVICE_PORT}"
+    case "${COMPOSE_SERVICE}" in
+      gateway)
+        wait_for_owned_port "${CONTAINER_NAME}" "${GW_TCP_PORT:-3000}"
+        wait_for_owned_port "${CONTAINER_NAME}" "${GW_WEBSOCKET_PORT:-3001}"
+        ;;
+      loginsvr)
+        wait_for_owned_port "${CONTAINER_NAME}" "${LOGINSVR_HTTP_PORT:-19990}"
+        ;;
+    esac
+  fi
 
   if [[ "${COMPOSE_SERVICE}" == "web" ]]; then
     validate_web_delivery
