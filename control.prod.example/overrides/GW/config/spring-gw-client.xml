@@ -9,7 +9,7 @@
 		<property name="notifyProxy" ref="notify" />
 		<property name="tcpConnector" ref="tcpConnector" />
 		<property name="SessionService" value="" />
-		<property name="RequestService" value="APSSvr,MDSvr,APSSvr,INDSvr,BatchSvr,QuantSvr" />
+		<property name="RequestService" value="LoginSvr,MDSvr,APSSvr,QuantSvr,INDSvr,SIMSvr,BatchSvr" />
 		<property name="Subscribes">
 			<map>
 				<entry key="MDSvr" value="dc.md.kline.**|dc.md.trade.**" />
