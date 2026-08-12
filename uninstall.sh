@@ -26,6 +26,7 @@ usage() {
 Usage:
   sudo ./uninstall.sh
   sudo ./uninstall.sh --keep-images
+  sudo ./uninstall.sh --keep-docker
 
 Remove only resources created by dc-quant-deploy:
   - dc-* containers
@@ -34,18 +35,26 @@ Remove only resources created by dc-quant-deploy:
   - DEPLOY_ROOT, including ClickHouse data, logs, and runtime configuration
   - generated deployment files in this repository
 
-Docker itself, host nginx, host ZooKeeper, unrelated containers, and this Git
-repository are preserved.
+By default Docker Engine, Containerd, Compose/Buildx plugins, Docker
+configuration, and Docker data are also removed. The Git repository and
+non-Docker host services are preserved.
+
+This mode refuses to continue if any non-dc-quant-deploy container exists. Use
+--keep-docker only when Docker is shared with another project and must remain.
 USAGE
 }
 
 KEEP_IMAGES=false
+REMOVE_DOCKER=true
 
 parse_args() {
   while [[ "$#" -gt 0 ]]; do
     case "$1" in
       --keep-images)
         KEEP_IMAGES=true
+        ;;
+      --keep-docker)
+        REMOVE_DOCKER=false
         ;;
       -h|--help)
         usage
@@ -59,6 +68,24 @@ parse_args() {
     esac
     shift
   done
+}
+
+assert_no_unrelated_containers() {
+  local container
+  [[ "${REMOVE_DOCKER}" == "true" ]] || return 0
+
+  while IFS= read -r container; do
+    [[ -n "${container}" ]] || continue
+    case "${container}" in
+      dc-web|dc-batchsvr|dc-simsvr|dc-indsvr|dc-quantsvr|dc-apssvr|dc-mdsvr|dc-loginsvr|dc-gateway|dc-zookeeper|dc-clickhouse)
+        ;;
+      *)
+        echo "Refusing to remove Docker because an unrelated container exists: ${container}" >&2
+        echo "Remove or migrate unrelated containers, or retry with --keep-docker." >&2
+        exit 1
+        ;;
+    esac
+  done < <(docker ps -a --format '{{.Names}}')
 }
 
 load_env() {
@@ -217,6 +244,78 @@ verify_removed() {
   return "${failed}"
 }
 
+remove_docker_packages() {
+  local os_id package_manager docker_root
+  [[ "${REMOVE_DOCKER}" == "true" ]] || return 0
+
+  docker_root="$(docker info --format '{{.DockerRootDir}}' 2>/dev/null || true)"
+  case "${docker_root}" in
+    ""|/var/lib/docker|/opt/sumscope/docker-data)
+      ;;
+    /)
+      echo "Refusing to remove unsafe Docker data root: ${docker_root}" >&2
+      exit 1
+      ;;
+    *)
+      [[ -f "${docker_root}/${MANAGED_MARKER}" ]] || {
+        echo "Refusing to remove unmarked custom Docker data root: ${docker_root}" >&2
+        exit 1
+      }
+      ;;
+  esac
+
+  systemctl disable --now docker.service docker.socket containerd.service >/dev/null 2>&1 || true
+
+  os_id="$(. /etc/os-release && printf '%s' "${ID}")"
+  case "${os_id}" in
+    amzn|centos|rhel|rocky|almalinux)
+      if command -v dnf >/dev/null 2>&1; then
+        package_manager=dnf
+      else
+        package_manager=yum
+      fi
+      "${package_manager}" remove -y \
+        docker docker-ce docker-ce-cli docker-buildx-plugin docker-compose-plugin \
+        containerd containerd.io >/dev/null 2>&1 || true
+      ;;
+    ubuntu|debian)
+      DEBIAN_FRONTEND=noninteractive apt-get purge -y \
+        docker-ce docker-ce-cli docker-buildx-plugin docker-compose-plugin \
+        docker.io containerd containerd.io runc >/dev/null 2>&1 || true
+      DEBIAN_FRONTEND=noninteractive apt-get autoremove -y >/dev/null 2>&1 || true
+      ;;
+    *)
+      echo "Unsupported operating system for Docker removal: ${os_id}" >&2
+      exit 1
+      ;;
+  esac
+
+  rm -rf --one-file-system -- \
+    /var/lib/docker \
+    /var/lib/containerd \
+    /etc/docker \
+    /run/docker \
+    /run/containerd
+  if [[ -n "${docker_root}" && "${docker_root}" != "/var/lib/docker" ]]; then
+    rm -rf --one-file-system -- "${docker_root}"
+  fi
+  rm -f -- \
+    /var/run/docker.sock \
+    /usr/local/bin/docker-compose \
+    /usr/local/lib/docker/cli-plugins/docker-compose \
+    /usr/local/libexec/docker/cli-plugins/docker-compose \
+    /etc/yum.repos.d/docker-ce.repo \
+    /etc/apt/sources.list.d/docker.list \
+    /etc/apt/keyrings/docker.asc
+  rm -rf -- /etc/systemd/system/docker.service.d
+  systemctl daemon-reload >/dev/null 2>&1 || true
+
+  if command -v docker >/dev/null 2>&1; then
+    echo "Docker command still exists after package removal: $(command -v docker)" >&2
+    exit 1
+  fi
+}
+
 main() {
   parse_args "$@"
   [[ "$(id -u)" -eq 0 ]] || {
@@ -230,6 +329,7 @@ main() {
 
   load_env
   validate_runtime_root
+  assert_no_unrelated_containers
   collect_project_images
 
   echo "Removing dc-quant-deploy runtime from ${DEPLOY_ROOT}."
@@ -238,9 +338,14 @@ main() {
   remove_runtime_data
   remove_generated_repository_files
   verify_removed
+  remove_docker_packages
 
   echo "dc-quant-deploy was removed successfully."
-  echo "The Git repository and shared host software were preserved."
+  if [[ "${REMOVE_DOCKER}" == "true" ]]; then
+    echo "Docker Engine, Containerd, plugins, and Docker data were removed."
+  else
+    echo "The Git repository and shared host software were preserved."
+  fi
 }
 
 main "$@"
