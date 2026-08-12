@@ -355,6 +355,12 @@ load_env() {
   : "${INDSVR_GW_PORT:=30044}"
   : "${SIMSVR_GW_PORT:=30045}"
   : "${BATCHSVR_GW_PORT:=30046}"
+  if [[ -S /var/run/docker.sock ]]; then
+    DOCKER_SOCKET_GID="${DOCKER_SOCKET_GID:-$(stat -c '%g' /var/run/docker.sock)}"
+  else
+    DOCKER_SOCKET_GID="${DOCKER_SOCKET_GID:-998}"
+  fi
+  export DOCKER_SOCKET_GID
   [[ "${RUNTIME_UID}" =~ ^[0-9]+$ ]] || {
     echo "RUNTIME_UID must be numeric." >&2
     exit 1

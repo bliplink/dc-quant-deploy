@@ -79,6 +79,12 @@ REGISTER.Svr1.Host=127.0.0.1:2181
 
 NetType=dps
 ProtoVersion=1
+ServerMonitor.Enable=true
+ServerMonitor.EnableRouteMeta=true
+ServerMonitor.RecentTopicLimit=20
+ServerMonitor.RequestTouchMinIntervalMs=5000
+ServerMonitor.NodeSnapshotPeriodSeconds=60
+ServerMonitor.ConnectionSnapshotPeriodSeconds=60
 
 SERVER.MDSvr.Name=MDSvr
 SERVER.MDSvr.Host=127.0.0.1:${MDSVR_GW_PORT}
@@ -135,6 +141,54 @@ SERVER.BatchSvr.RegisterEnable=0
 SERVER.BatchSvr.LBFactor=1
 SERVER.BatchSvr.ServiceName=BatchSvr
 SERVER.BatchSvr.RegisterServerList=REGISTER.Svr1
+EOF
+
+write_file "${DEPLOY_ROOT}/control/overrides/GW/config/spring-gw-client.xml" <<'EOF'
+<?xml version="1.0" encoding="UTF-8"?>
+<beans xmlns="http://www.springframework.org/schema/beans"
+	xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+	xsi:schemaLocation="http://www.springframework.org/schema/beans
+                           http://www.springframework.org/schema/beans/spring-beans-3.0.xsd">
+	<bean id="proxy" class="com.gateway.invoke.gw.GWProxy" init-method="init">
+		<property name="topicManager" ref="topicManager" />
+		<property name="notifyProxy" ref="notify" />
+		<property name="tcpConnector" ref="tcpConnector" />
+		<property name="mcpToolConfigPath" value="./config/mcpTools.tsv" />
+		<property name="mcpReloadPeriod" value="1" />
+		<property name="SessionService" value="" />
+		<property name="RequestService" value="LoginSvr,MDSvr,APSSvr,QuantSvr,INDSvr,SIMSvr,BatchSvr" />
+		<property name="Subscribes">
+			<map>
+				<entry key="MDSvr" value="dc.md.kline.**|dc.md.trade.**|md.monitor.**" />
+				<entry key="APSSvr" value="dc.aps|aps.monitor.**" />
+			</map>
+		</property>
+		<property name="securityChecks">
+			<list><ref bean="apiKeySecurityCheck" /></list>
+		</property>
+		<property name="filterTopics">
+			<list>
+				<ref bean="apiKeyService" />
+				<ref bean="serverMonitor" />
+			</list>
+		</property>
+		<property name="ApiKeyService" ref="apiKeyService" />
+		<property name="serverMonitor" ref="serverMonitor" />
+	</bean>
+	<bean id="serverMonitor" class="com.gateway.monitor.ServerMonitor">
+		<property name="ingressConnectionMonitor" ref="ingressConnectionMonitor" />
+	</bean>
+	<bean id="apiKeyService" class="com.gateway.invoke.filter.apikey.ApiKeyService" />
+	<bean id="limitSecurityCheck" class="com.gateway.invoke.security.LimitSecurityCheck" init-method="init">
+		<property name="tcpSessionManager" ref="tcpSessionManager" />
+		<property name="limitQps" value="100" />
+	</bean>
+	<bean id="sqlInjSecurityCheck" class="com.gateway.invoke.security.SqlInjSecurityCheck" init-method="init" />
+	<bean id="apiKeySecurityCheck" class="com.gateway.invoke.security.APIKeySecurityCheck" init-method="init">
+		<property name="apiKeyListPath" value="./config/apiKeyList.csv" />
+		<property name="period" value="1" />
+	</bean>
+</beans>
 EOF
 
 write_file "${DEPLOY_ROOT}/control/DBPoolConfig.ini" <<EOF

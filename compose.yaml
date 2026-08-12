@@ -207,7 +207,7 @@ services:
     image: ghcr.io/bliplink/batchsvr:${BATCHSVR_TAG}
     container_name: dc-batchsvr
     group_add:
-      - "998"
+      - "${DOCKER_SOCKET_GID:-998}"
     volumes:
       - ${DEPLOY_ROOT}/control:/srv/dc/control:ro
       - ${DEPLOY_ROOT}/data:/srv/dc/data

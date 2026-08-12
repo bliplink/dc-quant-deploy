@@ -8,12 +8,14 @@
 		<property name="topicManager" ref="topicManager" />
 		<property name="notifyProxy" ref="notify" />
 		<property name="tcpConnector" ref="tcpConnector" />
+		<property name="mcpToolConfigPath" value="./config/mcpTools.tsv" />
+		<property name="mcpReloadPeriod" value="1" />
 		<property name="SessionService" value="" />
 		<property name="RequestService" value="LoginSvr,MDSvr,APSSvr,QuantSvr,INDSvr,SIMSvr,BatchSvr" />
 		<property name="Subscribes">
 			<map>
-				<entry key="MDSvr" value="dc.md.kline.**|dc.md.trade.**" />
-				<entry key="APSSvr" value="dc.aps" />
+				<entry key="MDSvr" value="dc.md.kline.**|dc.md.trade.**|md.monitor.**" />
+				<entry key="APSSvr" value="dc.aps|aps.monitor.**" />
 			</map>
 		</property>
 		<property name="securityChecks">
@@ -24,9 +26,14 @@
 		<property name="filterTopics">
 			<list>
 				<ref bean="apiKeyService" />
+				<ref bean="serverMonitor" />
 			</list>
 		</property>
 		<property name="ApiKeyService" ref="apiKeyService" />
+		<property name="serverMonitor" ref="serverMonitor" />
+	</bean>
+	<bean id="serverMonitor" class="com.gateway.monitor.ServerMonitor">
+		<property name="ingressConnectionMonitor" ref="ingressConnectionMonitor" />
 	</bean>
 	<bean id="apiKeyService"
 		class="com.gateway.invoke.filter.apikey.ApiKeyService" />

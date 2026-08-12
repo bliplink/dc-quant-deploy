@@ -24,6 +24,8 @@ ATS_FILE="${TMP_DIR}/runtime/control/ATSConfig.ini"
 QUANT_FILE="${TMP_DIR}/runtime/control/overrides/QuantSvr/config/application.properties"
 
 grep -qx 'ProtoVersion=1' "${ATS_FILE}"
+grep -qx 'ServerMonitor.Enable=true' "${ATS_FILE}"
+grep -qx 'ServerMonitor.EnableRouteMeta=true' "${ATS_FILE}"
 grep -qx 'SERVER.MDSvr.Host=127.0.0.1:30128' "${ATS_FILE}"
 grep -qx 'SERVER.APSSvr.Host=127.0.0.1:30135' "${ATS_FILE}"
 grep -qx 'SERVER.LoginSvr.Host=127.0.0.1:20134' "${ATS_FILE}"
@@ -31,6 +33,12 @@ grep -qx 'SERVER.QuantSvr.Host=127.0.0.1:30142' "${ATS_FILE}"
 grep -qx 'SERVER.INDSvr.Host=127.0.0.1:30144' "${ATS_FILE}"
 grep -qx 'SERVER.SIMSvr.Host=127.0.0.1:30145' "${ATS_FILE}"
 grep -qx 'SERVER.BatchSvr.Host=127.0.0.1:30146' "${ATS_FILE}"
+
+GW_CLIENT_FILE="${TMP_DIR}/runtime/control/overrides/GW/config/spring-gw-client.xml"
+grep -q '<property name="serverMonitor" ref="serverMonitor" />' "${GW_CLIENT_FILE}"
+grep -q '<ref bean="serverMonitor" />' "${GW_CLIENT_FILE}"
+grep -q 'md.monitor.\*\*' "${GW_CLIENT_FILE}"
+grep -q 'aps.monitor.\*\*' "${GW_CLIENT_FILE}"
 grep -qx 'GWPort=30135' "${QUANT_FILE}"
 
 echo 'configurable service port test passed'

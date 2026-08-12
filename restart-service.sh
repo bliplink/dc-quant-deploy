@@ -174,6 +174,12 @@ load_env() {
   set -a && . "${ENV_FILE}" && set +a
   : "${DEPLOY_ROOT:?DEPLOY_ROOT is required}"
   SERVICE_HOST="${SERVICE_HOST:-127.0.0.1}"
+  if [[ -S /var/run/docker.sock ]]; then
+    DOCKER_SOCKET_GID="${DOCKER_SOCKET_GID:-$(stat -c '%g' /var/run/docker.sock)}"
+  else
+    DOCKER_SOCKET_GID="${DOCKER_SOCKET_GID:-998}"
+  fi
+  export DOCKER_SOCKET_GID
   case "${COMPOSE_SERVICE}" in
     gateway) SERVICE_PORT="${GATEWAY_PORT:-3002}" ;;
     loginsvr) SERVICE_PORT="${LOGINSVR_GW_PORT:-20034}" ;;
