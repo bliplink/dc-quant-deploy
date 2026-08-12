@@ -13,6 +13,8 @@ LEGACY_EL7_BUILDX_VERSION="0.14.1-1.el7"
 LEGACY_EL7_COMPOSE_VERSION="2.27.1-1.el7"
 LEGACY_EL7_VAULT_BASE_URL="${LEGACY_EL7_VAULT_BASE_URL:-https://mirrors.aliyun.com/centos-vault/7.9.2009}"
 LEGACY_EL7_DOCKER_REPO_BASE_URL="${LEGACY_EL7_DOCKER_REPO_BASE_URL:-https://mirrors.aliyun.com/docker-ce/linux/centos/7}"
+DOCKER_COMPOSE_VERSION="${DOCKER_COMPOSE_VERSION:-v2.27.1}"
+DOCKER_COMPOSE_RELEASE_BASE_URL="${DOCKER_COMPOSE_RELEASE_BASE_URL:-https://github.com/docker/compose/releases/download}"
 RPM_REPO_ARGS=()
 
 usage() {
@@ -29,7 +31,7 @@ Options:
   -h, --help          Show this help.
 
 Supported operating systems:
-  CentOS, RHEL, Rocky Linux, AlmaLinux, Ubuntu, and Debian.
+  Amazon Linux, CentOS, RHEL, Rocky Linux, AlmaLinux, Ubuntu, and Debian.
 
 The script is idempotent. It does not deploy DC Quant or overwrite an existing
 Docker daemon configuration. On a fresh legacy EL7 host where Docker falls back
@@ -114,7 +116,7 @@ load_os_release() {
   OS_CODENAME="${VERSION_CODENAME:-}"
 
   case "${OS_ID}" in
-    centos|rhel|rocky|almalinux|ubuntu|debian)
+    amzn|centos|rhel|rocky|almalinux|ubuntu|debian)
       ;;
     *)
       die "Unsupported operating system: ${OS_ID}. See --help for supported systems."
@@ -133,6 +135,38 @@ load_os_release() {
 legacy_el7() {
   [[ "${OS_ID}" =~ ^(centos|rhel|rocky|almalinux)$ ]] &&
     [[ "${OS_VERSION_ID%%.*}" == "7" ]]
+}
+
+amazon_linux_2() {
+  [[ "${OS_ID}" == "amzn" ]] && [[ "${OS_VERSION_ID%%.*}" == "2" ]]
+}
+
+compose_plugin_arch() {
+  case "$(uname -m)" in
+    x86_64)
+      printf 'x86_64\n'
+      ;;
+    aarch64)
+      printf 'aarch64\n'
+      ;;
+  esac
+}
+
+install_compose_plugin_binary() {
+  local architecture plugin_dir plugin_path temporary_path download_url
+  docker_compose_ready && return 0
+
+  architecture="$(compose_plugin_arch)"
+  plugin_dir="/usr/local/lib/docker/cli-plugins"
+  plugin_path="${plugin_dir}/docker-compose"
+  temporary_path="${plugin_path}.tmp"
+  download_url="${DOCKER_COMPOSE_RELEASE_BASE_URL}/${DOCKER_COMPOSE_VERSION}/docker-compose-linux-${architecture}"
+
+  log "Installing Docker Compose ${DOCKER_COMPOSE_VERSION} CLI plugin."
+  run mkdir -p "${plugin_dir}"
+  run curl -fsSL "${download_url}" -o "${temporary_path}"
+  run chmod 0755 "${temporary_path}"
+  run mv -f "${temporary_path}" "${plugin_path}"
 }
 
 docker_engine_ready() {
@@ -268,6 +302,25 @@ install_rpm_packages() {
   fi
 }
 
+install_amazon_linux_packages() {
+  local package_manager
+  package_manager="$(resolve_rpm_package_manager)"
+
+  run "${package_manager}" install -y ca-certificates curl
+
+  if docker_engine_ready; then
+    log "Docker Engine already exists; checking the Compose v2 plugin."
+  else
+    if amazon_linux_2 && command -v amazon-linux-extras >/dev/null 2>&1; then
+      run amazon-linux-extras enable docker
+      run yum clean metadata
+    fi
+    run "${package_manager}" install -y docker
+  fi
+
+  install_compose_plugin_binary
+}
+
 configure_deb_repository() {
   local repository_os="$1"
   local keyring="/etc/apt/keyrings/docker.asc"
@@ -309,6 +362,9 @@ install_deb_packages() {
 
 install_docker() {
   case "${OS_ID}" in
+    amzn)
+      install_amazon_linux_packages
+      ;;
     centos|rhel|rocky|almalinux)
       install_rpm_packages
       ;;

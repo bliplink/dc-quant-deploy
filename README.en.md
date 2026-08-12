@@ -89,7 +89,7 @@ vi .env.prod
 
 `prepare-host.sh` idempotently installs and verifies Docker Engine, Buildx,
 Docker Compose v2, and Docker startup at boot. It supports
-CentOS/RHEL/Rocky/AlmaLinux and Ubuntu/Debian.
+Amazon Linux 2/2023, CentOS/RHEL/Rocky/AlmaLinux, and Ubuntu/Debian.
 For end-of-life EL7/CentOS 7, it pins the final repository releases:
 Docker CE 26.1.4 and Compose 2.27.1, and automatically uses a CentOS 7.9.2009
 archive repository plus an EL7 Docker CE mirror after the normal upstream
