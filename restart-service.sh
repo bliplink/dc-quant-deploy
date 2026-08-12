@@ -82,37 +82,37 @@ case "${COMPOSE_SERVICE}" in
     ;;
   loginsvr)
     CONTAINER_NAME="dc-loginsvr"
-    SERVICE_PORT="20034"
+    SERVICE_PORT=""
     LOG_FILE="LoginSvr.log"
     ;;
   mdsvr)
     CONTAINER_NAME="dc-mdsvr"
-    SERVICE_PORT="30028"
+    SERVICE_PORT=""
     LOG_FILE="MDSvr.log"
     ;;
   apssvr)
     CONTAINER_NAME="dc-apssvr"
-    SERVICE_PORT="30035"
+    SERVICE_PORT=""
     LOG_FILE="APSSvr.log"
     ;;
   quantsvr)
     CONTAINER_NAME="dc-quantsvr"
-    SERVICE_PORT="30042"
+    SERVICE_PORT=""
     LOG_FILE="QuantSvr.log"
     ;;
   indsvr)
     CONTAINER_NAME="dc-indsvr"
-    SERVICE_PORT="30044"
+    SERVICE_PORT=""
     LOG_FILE="INDSvr.log"
     ;;
   batchsvr)
     CONTAINER_NAME="dc-batchsvr"
-    SERVICE_PORT="30046"
+    SERVICE_PORT=""
     LOG_FILE="BatchSvr.log"
     ;;
   simsvr)
     CONTAINER_NAME="dc-simsvr"
-    SERVICE_PORT="30045"
+    SERVICE_PORT=""
     LOG_FILE="SIMSvr.log"
     ;;
   web)
@@ -176,6 +176,13 @@ load_env() {
   SERVICE_HOST="${SERVICE_HOST:-127.0.0.1}"
   case "${COMPOSE_SERVICE}" in
     gateway) SERVICE_PORT="${GATEWAY_PORT:-3002}" ;;
+    loginsvr) SERVICE_PORT="${LOGINSVR_GW_PORT:-20034}" ;;
+    mdsvr) SERVICE_PORT="${MDSVR_GW_PORT:-30028}" ;;
+    apssvr) SERVICE_PORT="${APSSVR_GW_PORT:-30035}" ;;
+    quantsvr) SERVICE_PORT="${QUANTSVR_GW_PORT:-30042}" ;;
+    indsvr) SERVICE_PORT="${INDSVR_GW_PORT:-30044}" ;;
+    simsvr) SERVICE_PORT="${SIMSVR_GW_PORT:-30045}" ;;
+    batchsvr) SERVICE_PORT="${BATCHSVR_GW_PORT:-30046}" ;;
     web) SERVICE_PORT="${WEB_LISTEN_PORT:-80}" ;;
   esac
 }

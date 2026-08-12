@@ -348,6 +348,13 @@ load_env() {
   : "${GW_WEBSOCKET_PORT:=3001}"
   : "${GATEWAY_PORT:=3002}"
   : "${LOGINSVR_HTTP_PORT:=19990}"
+  : "${MDSVR_GW_PORT:=30028}"
+  : "${APSSVR_GW_PORT:=30035}"
+  : "${LOGINSVR_GW_PORT:=20034}"
+  : "${QUANTSVR_GW_PORT:=30042}"
+  : "${INDSVR_GW_PORT:=30044}"
+  : "${SIMSVR_GW_PORT:=30045}"
+  : "${BATCHSVR_GW_PORT:=30046}"
   [[ "${RUNTIME_UID}" =~ ^[0-9]+$ ]] || {
     echo "RUNTIME_UID must be numeric." >&2
     exit 1
@@ -364,7 +371,9 @@ load_env() {
     echo "WEB_FALLBACK_LISTEN_PORT must be numeric." >&2
     exit 1
   }
-  for port_var in GW_TCP_PORT GW_WEBSOCKET_PORT GATEWAY_PORT LOGINSVR_HTTP_PORT; do
+  for port_var in GW_TCP_PORT GW_WEBSOCKET_PORT GATEWAY_PORT LOGINSVR_HTTP_PORT \
+    MDSVR_GW_PORT APSSVR_GW_PORT LOGINSVR_GW_PORT QUANTSVR_GW_PORT \
+    INDSVR_GW_PORT SIMSVR_GW_PORT BATCHSVR_GW_PORT; do
     [[ "${!port_var}" =~ ^[0-9]+$ ]] || {
       echo "${port_var} must be numeric." >&2
       exit 1
@@ -764,14 +773,14 @@ preflight_service_ports() {
         ;;
       loginsvr)
         require_free_or_owned_port "LoginSvr HTTP" dc-loginsvr "${LOGINSVR_HTTP_PORT}" || failed=1
-        require_free_or_owned_port "LoginSvr GW" dc-loginsvr 20034 || failed=1
+        require_free_or_owned_port "LoginSvr GW" dc-loginsvr "${LOGINSVR_GW_PORT}" || failed=1
         ;;
-      mdsvr) require_free_or_owned_port MDSvr dc-mdsvr 30028 || failed=1 ;;
-      apssvr) require_free_or_owned_port APSSvr dc-apssvr 30035 || failed=1 ;;
-      quantsvr) require_free_or_owned_port QuantSvr dc-quantsvr 30042 || failed=1 ;;
-      indsvr) require_free_or_owned_port INDSvr dc-indsvr 30044 || failed=1 ;;
-      simsvr) require_free_or_owned_port SIMSvr dc-simsvr 30045 || failed=1 ;;
-      batchsvr) require_free_or_owned_port BatchSvr dc-batchsvr 30046 || failed=1 ;;
+      mdsvr) require_free_or_owned_port MDSvr dc-mdsvr "${MDSVR_GW_PORT}" || failed=1 ;;
+      apssvr) require_free_or_owned_port APSSvr dc-apssvr "${APSSVR_GW_PORT}" || failed=1 ;;
+      quantsvr) require_free_or_owned_port QuantSvr dc-quantsvr "${QUANTSVR_GW_PORT}" || failed=1 ;;
+      indsvr) require_free_or_owned_port INDSvr dc-indsvr "${INDSVR_GW_PORT}" || failed=1 ;;
+      simsvr) require_free_or_owned_port SIMSvr dc-simsvr "${SIMSVR_GW_PORT}" || failed=1 ;;
+      batchsvr) require_free_or_owned_port BatchSvr dc-batchsvr "${BATCHSVR_GW_PORT}" || failed=1 ;;
       web) require_free_or_owned_port web dc-web "${WEB_LISTEN_PORT}" || failed=1 ;;
     esac
   done
@@ -839,14 +848,14 @@ validate_service_port() {
       ;;
     loginsvr)
       validate_container_port "LoginSvr HTTP" dc-loginsvr "${LOGINSVR_HTTP_PORT}" &&
-        validate_container_port "LoginSvr GW" dc-loginsvr 20034
+        validate_container_port "LoginSvr GW" dc-loginsvr "${LOGINSVR_GW_PORT}"
       ;;
-    mdsvr) validate_container_port MDSvr dc-mdsvr 30028 ;;
-    apssvr) validate_container_port APSSvr dc-apssvr 30035 ;;
-    quantsvr) validate_container_port QuantSvr dc-quantsvr 30042 ;;
-    indsvr) validate_container_port INDSvr dc-indsvr 30044 ;;
-    simsvr) validate_container_port SIMSvr dc-simsvr 30045 ;;
-    batchsvr) validate_container_port BatchSvr dc-batchsvr 30046 ;;
+    mdsvr) validate_container_port MDSvr dc-mdsvr "${MDSVR_GW_PORT}" ;;
+    apssvr) validate_container_port APSSvr dc-apssvr "${APSSVR_GW_PORT}" ;;
+    quantsvr) validate_container_port QuantSvr dc-quantsvr "${QUANTSVR_GW_PORT}" ;;
+    indsvr) validate_container_port INDSvr dc-indsvr "${INDSVR_GW_PORT}" ;;
+    simsvr) validate_container_port SIMSvr dc-simsvr "${SIMSVR_GW_PORT}" ;;
+    batchsvr) validate_container_port BatchSvr dc-batchsvr "${BATCHSVR_GW_PORT}" ;;
     web) validate_container_port web dc-web "${WEB_LISTEN_PORT:-80}" ;;
     *)
       echo "No validation rule for service: ${service}" >&2
