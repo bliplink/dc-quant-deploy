@@ -7,6 +7,19 @@ COMPOSE_FILE="${ROOT_DIR}/compose.yaml"
 OVERRIDE_FILE="${ROOT_DIR}/compose.override.generated.yaml"
 GENERATE_OVERRIDES_SCRIPT="${ROOT_DIR}/generate-compose-overrides.sh"
 LAST_BACKUP_FILE="${ROOT_DIR}/.last_backup"
+VALIDATE_ENV_SCRIPT="${ROOT_DIR}/validate-env.sh"
+
+APP_SERVICES=(
+  gateway
+  loginsvr
+  mdsvr
+  apssvr
+  quantsvr
+  indsvr
+  simsvr
+  batchsvr
+  web
+)
 
 SERVICE_NAMES=(
   "tpc/Registry"
@@ -24,6 +37,11 @@ load_env() {
     echo "Missing ${ENV_FILE}" >&2
     exit 1
   }
+  [ -f "${VALIDATE_ENV_SCRIPT}" ] || {
+    echo "Missing ${VALIDATE_ENV_SCRIPT}" >&2
+    exit 1
+  }
+  bash "${VALIDATE_ENV_SCRIPT}" "${ENV_FILE}"
   # shellcheck disable=SC1090
   set -a && . "${ENV_FILE}" && set +a
   : "${DEPLOY_ROOT:?DEPLOY_ROOT is required}"
@@ -62,11 +80,12 @@ restart_legacy_services() {
 
 main() {
   load_env
-  generate_compose_overrides
-  docker compose --env-file "${ENV_FILE}" -f "${COMPOSE_FILE}" -f "${OVERRIDE_FILE}" down || true
   restore_control
+  generate_compose_overrides
+  docker compose --env-file "${ENV_FILE}" -f "${COMPOSE_FILE}" -f "${OVERRIDE_FILE}" \
+    up -d --force-recreate --no-deps "${APP_SERVICES[@]}"
   restart_legacy_services
-  echo "Rollback completed. ClickHouse data in ${DEPLOY_ROOT}/data/clickhouse was preserved."
+  echo "Rollback completed. Containerized services were restored and ClickHouse data in ${DEPLOY_ROOT}/data/clickhouse was preserved."
 }
 
 main "$@"

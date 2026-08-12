@@ -929,14 +929,14 @@ deploy_full_stack() {
 
   if [[ "${start_zookeeper}" != "true" ]]; then
     if [[ "${CLICKHOUSE_MODE}" == "embedded" ]]; then
-      compose --profile embedded-clickhouse up -d --no-deps "${DEPLOY_SERVICES[@]}"
+      compose --profile embedded-clickhouse up -d --force-recreate --no-deps "${DEPLOY_SERVICES[@]}"
     else
-      compose up -d --no-deps "${DEPLOY_SERVICES[@]}"
+      compose up -d --force-recreate --no-deps "${DEPLOY_SERVICES[@]}"
     fi
   elif [[ "${CLICKHOUSE_MODE}" == "embedded" ]]; then
-    compose --profile embedded-clickhouse up -d "${DEPLOY_SERVICES[@]}"
+    compose --profile embedded-clickhouse up -d --force-recreate "${DEPLOY_SERVICES[@]}"
   else
-    compose up -d "${DEPLOY_SERVICES[@]}"
+    compose up -d --force-recreate "${DEPLOY_SERVICES[@]}"
   fi
 
   if ! validate_runtime; then
