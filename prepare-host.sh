@@ -141,6 +141,10 @@ amazon_linux_2() {
   [[ "${OS_ID}" == "amzn" ]] && [[ "${OS_VERSION_ID%%.*}" == "2" ]]
 }
 
+amazon_linux_2023() {
+  [[ "${OS_ID}" == "amzn" ]] && [[ "${OS_VERSION_ID%%.*}" == "2023" ]]
+}
+
 compose_plugin_arch() {
   case "$(uname -m)" in
     x86_64)
@@ -306,7 +310,14 @@ install_amazon_linux_packages() {
   local package_manager
   package_manager="$(resolve_rpm_package_manager)"
 
-  run "${package_manager}" install -y ca-certificates curl
+  run "${package_manager}" install -y ca-certificates
+  if ! command -v curl >/dev/null 2>&1; then
+    if amazon_linux_2023; then
+      run "${package_manager}" install -y curl-minimal
+    else
+      run "${package_manager}" install -y curl
+    fi
+  fi
 
   if docker_engine_ready; then
     log "Docker Engine already exists; checking the Compose v2 plugin."
