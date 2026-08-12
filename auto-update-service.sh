@@ -129,7 +129,7 @@ service_image_ref() {
       echo "ghcr.io/bliplink/zookeeper:${ZOOKEEPER_TAG}"
       ;;
     clickhouse)
-      echo "clickhouse/clickhouse-server:${CLICKHOUSE_IMAGE_TAG}"
+      echo "${CLICKHOUSE_IMAGE_REPOSITORY:-clickhouse/clickhouse-server}:${CLICKHOUSE_IMAGE_TAG}"
       ;;
     *)
       return 1

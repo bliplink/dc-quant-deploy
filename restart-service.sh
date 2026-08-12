@@ -28,6 +28,7 @@ Supported services:
   simsvr
   web
   zookeeper
+  clickhouse
 
 This script restarts exactly one containerized service with:
   docker compose up -d --no-deps --force-recreate <service>
@@ -125,6 +126,11 @@ case "${COMPOSE_SERVICE}" in
     SERVICE_PORT="2181"
     LOG_FILE=""
     ;;
+  clickhouse)
+    CONTAINER_NAME="dc-clickhouse"
+    SERVICE_PORT=""
+    LOG_FILE=""
+    ;;
   *)
     echo "Unsupported service: ${SERVICE}" >&2
     usage >&2
@@ -190,6 +196,7 @@ load_env() {
     simsvr) SERVICE_PORT="${SIMSVR_GW_PORT:-30045}" ;;
     batchsvr) SERVICE_PORT="${BATCHSVR_GW_PORT:-30046}" ;;
     web) SERVICE_PORT="${WEB_LISTEN_PORT:-80}" ;;
+    clickhouse) SERVICE_PORT="${CLICKHOUSE_HTTP_PORT:-8123}" ;;
   esac
 }
 
