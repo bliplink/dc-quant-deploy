@@ -298,8 +298,15 @@ remove_docker_packages() {
     while IFS= read -r mount_target; do
       [[ -n "${mount_target}" ]] && umount -l -- "${mount_target}" >/dev/null 2>&1 || true
     done < <(findmnt -R -n -o TARGET /run/docker 2>/dev/null | tac)
+    for mount_target in /run/docker/netns/*; do
+      [[ -e "${mount_target}" ]] || continue
+      umount -l -- "${mount_target}" >/dev/null 2>&1 || true
+    done
   fi
-  rm -rf --one-file-system -- /run/docker /run/containerd
+  rm -rf --one-file-system -- /run/docker /run/containerd || {
+    sleep 1
+    rm -rf --one-file-system -- /run/docker /run/containerd
+  }
   if [[ -n "${docker_root}" && "${docker_root}" != "/var/lib/docker" ]]; then
     rm -rf --one-file-system -- "${docker_root}"
   fi
