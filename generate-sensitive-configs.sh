@@ -407,6 +407,7 @@ textList=15m
 kline.supported.texts=15m
 kline.default.text=15m
 initial.kline.backfill.intervals=15m,1h,1d
+initial.kline.backfill.delayMs=30000
 symbolList=TRXUSDT|ETHUSDT|SOLUSDT|LINKUSDT|XRPUSDT|DOGEUSDT|ADAUSDT|BNBUSDT|BTCUSDT|UNIUSDT
 queryKlineCount=50
 queryKlineCount1d=400
