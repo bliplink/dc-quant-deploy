@@ -236,6 +236,7 @@ port_owned_by_container() {
   local container_name="$1"
   local port="$2"
   local container_pids listener_pid
+  command -v ss >/dev/null 2>&1 || return 2
   container_pids="$(docker top "${container_name}" -eo pid 2>/dev/null | tail -n +2 || true)"
   [[ -n "${container_pids}" ]] || return 1
 
@@ -257,6 +258,12 @@ wait_for_owned_port() {
   local retries="${3:-45}"
   local delay="${4:-2}"
 
+  if ! command -v ss >/dev/null 2>&1; then
+    echo "Warning: ss is unavailable; validating ${container_name}:${port} with container state and TCP connectivity."
+    wait_for_port_open "${SERVICE_HOST}" "${port}" "${retries}" "${delay}"
+    return
+  fi
+
   for _ in $(seq 1 "${retries}"); do
     if port_owned_by_container "${container_name}" "${port}"; then
       return 0
@@ -265,7 +272,9 @@ wait_for_owned_port() {
   done
 
   echo "Container ${container_name} does not own expected port ${port}." >&2
-  ss -H -lntp "sport = :${port}" >&2 || true
+  if command -v ss >/dev/null 2>&1; then
+    ss -H -lntp "sport = :${port}" >&2 || true
+  fi
   return 1
 }
 

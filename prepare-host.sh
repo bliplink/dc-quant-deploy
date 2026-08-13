@@ -388,6 +388,26 @@ install_docker() {
   esac
 }
 
+install_network_diagnostics() {
+  command -v ss >/dev/null 2>&1 && return 0
+
+  log "Installing the socket diagnostics required by deployment health checks."
+  case "${OS_ID}" in
+    amzn|centos|rhel|rocky|almalinux)
+      local package_manager
+      package_manager="$(resolve_rpm_package_manager)"
+      run "${package_manager}" "${RPM_REPO_ARGS[@]}" install -y iproute
+      ;;
+    ubuntu|debian)
+      run apt-get update
+      run apt-get install -y iproute2
+      ;;
+    *)
+      die "Cannot install socket diagnostics on unsupported operating system: ${OS_ID}"
+      ;;
+  esac
+}
+
 enable_docker_service() {
   require_systemd
   run systemctl enable --now docker
@@ -509,6 +529,7 @@ main() {
     install_docker
   fi
 
+  install_network_diagnostics
   enable_docker_service
   configure_fresh_vfs_data_root
   configure_docker_user

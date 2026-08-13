@@ -717,6 +717,7 @@ port_owned_by_container() {
   local container_name="$1"
   local port="$2"
   local container_pids listener_pid
+  command -v ss >/dev/null 2>&1 || return 2
   container_pids="$(docker top "${container_name}" -eo pid 2>/dev/null | tail -n +2 || true)"
   [[ -n "${container_pids}" ]] || return 1
 
@@ -739,6 +740,18 @@ validate_container_port() {
   local retries="${4:-30}"
   local delay="${5:-2}"
 
+  if ! command -v ss >/dev/null 2>&1; then
+    echo "Warning: ss is unavailable; validating ${label} with container state and TCP connectivity."
+    for _ in $(seq 1 "${retries}"); do
+      if container_is_running "${container_name}" && port_is_open 127.0.0.1 "${port}"; then
+        return 0
+      fi
+      sleep "${delay}"
+    done
+    echo "Container port check failed: ${label} (${container_name}) is not reachable on port ${port}." >&2
+    return 1
+  fi
+
   for _ in $(seq 1 "${retries}"); do
     if container_is_running "${container_name}" &&
        port_owned_by_container "${container_name}" "${port}"; then
@@ -748,7 +761,9 @@ validate_container_port() {
   done
 
   echo "Container port check failed: ${label} (${container_name}) does not own port ${port}." >&2
-  ss -H -lntp "sport = :${port}" >&2 || true
+  if command -v ss >/dev/null 2>&1; then
+    ss -H -lntp "sport = :${port}" >&2 || true
+  fi
   return 1
 }
 
@@ -759,12 +774,22 @@ require_free_or_owned_port() {
   if ! port_is_open 127.0.0.1 "${port}"; then
     return 0
   fi
+  if ! command -v ss >/dev/null 2>&1; then
+    if container_is_running "${container_name}"; then
+      echo "Warning: ss is unavailable; accepting open port ${port} owned by the running ${container_name} deployment."
+      return 0
+    fi
+    echo "Port ${port} for ${label} is open, but ownership cannot be verified because ss is unavailable." >&2
+    return 1
+  fi
   if port_owned_by_container "${container_name}" "${port}"; then
     return 0
   fi
 
   echo "Port ${port} for ${label} is already owned by another process." >&2
-  ss -H -lntp "sport = :${port}" >&2 || true
+  if command -v ss >/dev/null 2>&1; then
+    ss -H -lntp "sport = :${port}" >&2 || true
+  fi
   return 1
 }
 
