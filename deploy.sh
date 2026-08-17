@@ -727,7 +727,7 @@ port_owned_by_container() {
       return 0
     fi
   done < <(
-    ss -H -lntp "sport = :${port}" 2>/dev/null |
+    ss -lntp "sport = :${port}" 2>/dev/null |
       grep -oE 'pid=[0-9]+' | cut -d= -f2 | sort -u
   )
   return 1
@@ -762,7 +762,7 @@ validate_container_port() {
 
   echo "Container port check failed: ${label} (${container_name}) does not own port ${port}." >&2
   if command -v ss >/dev/null 2>&1; then
-    ss -H -lntp "sport = :${port}" >&2 || true
+    ss -lntp "sport = :${port}" >&2 || true
   fi
   return 1
 }
@@ -788,7 +788,7 @@ require_free_or_owned_port() {
 
   echo "Port ${port} for ${label} is already owned by another process." >&2
   if command -v ss >/dev/null 2>&1; then
-    ss -H -lntp "sport = :${port}" >&2 || true
+    ss -lntp "sport = :${port}" >&2 || true
   fi
   return 1
 }
