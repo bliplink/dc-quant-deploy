@@ -34,6 +34,8 @@ load_env() {
   # shellcheck disable=SC1090
   set -a && . "${ENV_FILE}" && set +a
   : "${DEPLOY_ROOT:?DEPLOY_ROOT is required}"
+  : "${RUNTIME_UID:?RUNTIME_UID is required}"
+  : "${RUNTIME_GID:?RUNTIME_GID is required}"
 }
 
 config_name_for_service() {
@@ -130,6 +132,23 @@ seed_all_service_configs() {
   done
 }
 
+normalize_override_permissions() {
+  local service config_name target_dir
+
+  for service in "${CONFIG_SERVICES[@]}"; do
+    config_name="$(config_name_for_service "${service}")"
+    target_dir="${DEPLOY_ROOT}/control/overrides/${config_name}/config"
+    [[ -d "${target_dir}" ]] || continue
+
+    # The containers run as RUNTIME_UID:RUNTIME_GID. docker cp may preserve
+    # root ownership from the image, so make every mounted config path readable
+    # and traversable by the runtime user without changing operator file contents.
+    chown -R "${RUNTIME_UID}:${RUNTIME_GID}" "${target_dir}"
+    find "${target_dir}" -type d -exec chmod u+rwx {} +
+    find "${target_dir}" -type f -exec chmod u+rw {} +
+  done
+}
+
 append_service_header() {
   local service="$1"
   if [[ -z "${EMITTED_SERVICES[${service}]:-}" ]]; then
@@ -160,6 +179,8 @@ seed_all_service_configs
 if [[ -f "${GENERATE_SENSITIVE_CONFIGS_SCRIPT}" ]]; then
   bash "${GENERATE_SENSITIVE_CONFIGS_SCRIPT}" "${ENV_FILE}"
 fi
+
+normalize_override_permissions
 
 declare -A EMITTED_SERVICES=()
 MOUNT_COUNT=0
