@@ -191,7 +191,7 @@ QUANTSVR_BOT_ADMIN_LIST=
 INDSVR_DEEPSEEK_API_KEY=
 CUSTOMINDSVR_TAG=latest
 CUSTOMINDSVR_GW_PORT=30047
-STRATEGY_QUANT_ID=
+STRATEGY_SIGNAL_CHANNEL=CD
 STRATEGY_VENUE_TYPE_GW=BNFutures
 ```
 
@@ -200,12 +200,12 @@ STRATEGY_VENUE_TYPE_GW=BNFutures
 - `QUANTSVR_ENABLE_BOT` 可留空；填写 `QUANTSVR_BOT_TOKEN` 后部署脚本会自动启用 Telegram bot。
 - 如果要强制关闭 Telegram bot，可在 `.env.prod` 中设置 `QUANTSVR_ENABLE_BOT=false`。
 - `QUANTSVR_BOT_ADMIN_LIST` 使用 `|` 分隔多个管理员 ID，并给完整值加引号，例如 `QUANTSVR_BOT_ADMIN_LIST='123|456'`。
-- `STRATEGY_QUANT_ID` 必须填写 QuantSvr 中已经启动、实际接收确定性信号的策略 ID；CustomindSvr 不进行账户猜测。
+- `STRATEGY_SIGNAL_CHANNEL` 是公共策略信号频道，固定默认为 `CD`。QuantSvr 中需要接收该策略池信号的运行策略将 `algo` 配置为相同值；旧 Indsvr 继续使用 `AI`，禁止混用。
 - `customindsvr` 与旧 `indsvr` 独立运行，默认容器名为 `dc-customindsvr`，服务端口为 `30047`。
 - GW 内部密码无需用户配置。
 - 修改 `.env.prod` 后，需要重启对应服务。
 
-首次上线 `customindsvr` 时，先确保 `.env.prod` 已填写真实的 `STRATEGY_QUANT_ID`，再按顺序执行：
+首次上线 `customindsvr` 时，先确认 QuantSvr 账户策略已订阅 `STRATEGY_SIGNAL_CHANNEL`，再按顺序执行：
 
 ```bash
 # 幂等创建 cus_signal 等 ClickHouse 表

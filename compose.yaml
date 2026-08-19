@@ -186,7 +186,7 @@ services:
       DEPLOY_ROOT: /srv/dc
       SERVICE_NAME: CustomindSvr
       MAIN_CLASS: CustomindSvr
-      STRATEGY_QUANT_ID: ${STRATEGY_QUANT_ID:?STRATEGY_QUANT_ID is required}
+      STRATEGY_SIGNAL_CHANNEL: ${STRATEGY_SIGNAL_CHANNEL:-CD}
       STRATEGY_VENUE_TYPE_GW: ${STRATEGY_VENUE_TYPE_GW:-BNFutures}
       JAVA_OPTS: -server -Xmx2048m -Xms1024m -Xmn512m -Djava.security.auth.login.config=../../control/jaas.ini
 

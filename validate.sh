@@ -79,11 +79,6 @@ for tag_var in CLICKHOUSE_IMAGE_TAG CLICKHOUSE_DB_NAME CLICKHOUSE_HOST CLICKHOUS
   fi
 done
 
-if [[ -z "${STRATEGY_QUANT_ID:-}" ]]; then
-  echo "STRATEGY_QUANT_ID is required in .env.prod for customindsvr" >&2
-  exit 1
-fi
-
 if [[ ! -d "${DEPLOY_ROOT}" ]]; then
   mkdir -p "${DEPLOY_ROOT}" || {
     echo "DEPLOY_ROOT cannot be created: ${DEPLOY_ROOT}" >&2
