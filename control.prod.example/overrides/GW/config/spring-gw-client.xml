@@ -11,7 +11,7 @@
 		<property name="mcpToolConfigPath" value="./config/mcpTools.tsv" />
 		<property name="mcpReloadPeriod" value="1" />
 		<property name="SessionService" value="" />
-		<property name="RequestService" value="LoginSvr,MDSvr,APSSvr,QuantSvr,INDSvr,SIMSvr,BatchSvr" />
+		<property name="RequestService" value="LoginSvr,MDSvr,APSSvr,QuantSvr,INDSvr,CustomindSvr,SIMSvr,BatchSvr" />
 		<property name="Subscribes">
 			<map>
 				<entry key="MDSvr" value="dc.md.kline.**|dc.md.trade.**|md.monitor.**" />

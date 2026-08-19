@@ -189,6 +189,10 @@ QUANTSVR_BOT_USERNAME=
 QUANTSVR_BOT_GROUP_ID=
 QUANTSVR_BOT_ADMIN_LIST=
 INDSVR_DEEPSEEK_API_KEY=
+CUSTOMINDSVR_TAG=sha-cadcf86
+CUSTOMINDSVR_GW_PORT=30047
+STRATEGY_QUANT_ID=
+STRATEGY_VENUE_TYPE_GW=BNFutures
 ```
 
 说明：
@@ -196,8 +200,25 @@ INDSVR_DEEPSEEK_API_KEY=
 - `QUANTSVR_ENABLE_BOT` 可留空；填写 `QUANTSVR_BOT_TOKEN` 后部署脚本会自动启用 Telegram bot。
 - 如果要强制关闭 Telegram bot，可在 `.env.prod` 中设置 `QUANTSVR_ENABLE_BOT=false`。
 - `QUANTSVR_BOT_ADMIN_LIST` 使用 `|` 分隔多个管理员 ID，并给完整值加引号，例如 `QUANTSVR_BOT_ADMIN_LIST='123|456'`。
+- `STRATEGY_QUANT_ID` 必须填写 QuantSvr 中已经启动、实际接收确定性信号的策略 ID；CustomindSvr 不进行账户猜测。
+- `customindsvr` 与旧 `indsvr` 独立运行，默认容器名为 `dc-customindsvr`，服务端口为 `30047`。
 - GW 内部密码无需用户配置。
 - 修改 `.env.prod` 后，需要重启对应服务。
+
+首次上线 `customindsvr` 时，先确保 `.env.prod` 已填写真实的 `STRATEGY_QUANT_ID`，再按顺序执行：
+
+```bash
+# 幂等创建 cus_signal 等 ClickHouse 表
+./clickhouse/apply-init.sh
+
+# QuantSvr 新镜像应先就绪，再启动确定性实时策略服务
+./deploy.sh --services quantsvr
+./deploy.sh --services customindsvr
+
+docker logs dc-customindsvr --tail 200
+```
+
+已有旧 `indsvr` 不会被替换或停止；两个服务使用不同名称和端口并行运行。
 
 ## 部署后如何使用
 
@@ -230,6 +251,7 @@ INDSVR_DEEPSEEK_API_KEY=
 
 ```bash
 ./restart-service.sh quantsvr
+./restart-service.sh customindsvr
 ```
 
 升级单个服务镜像：
@@ -238,6 +260,9 @@ INDSVR_DEEPSEEK_API_KEY=
 vi .env.prod
 docker compose --env-file .env.prod -f compose.yaml -f compose.override.generated.yaml pull quantsvr
 ./restart-service.sh quantsvr
+
+./pull-images.sh customindsvr
+./restart-service.sh customindsvr
 ```
 
 查看日志：
@@ -245,6 +270,8 @@ docker compose --env-file .env.prod -f compose.yaml -f compose.override.generate
 ```bash
 docker logs dc-quantsvr --tail 200
 tail -n 100 ${DEPLOY_ROOT}/log/QuantSvr.log
+docker logs dc-customindsvr --tail 200
+tail -n 100 ${DEPLOY_ROOT}/log/CustomindSvr.log
 ```
 
 全量部署失败后回滚：

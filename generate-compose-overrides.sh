@@ -15,6 +15,7 @@ CONFIG_SERVICES=(
   apssvr
   quantsvr
   indsvr
+  customindsvr
   simsvr
   batchsvr
 )
@@ -46,6 +47,7 @@ config_name_for_service() {
     apssvr) printf 'APSSvr\n' ;;
     quantsvr) printf 'QuantSvr\n' ;;
     indsvr) printf 'INDSvr\n' ;;
+    customindsvr) printf 'CustomindSvr\n' ;;
     simsvr) printf 'SIMSvr\n' ;;
     batchsvr) printf 'BatchSvr\n' ;;
     *)
@@ -198,6 +200,7 @@ append_config_dir_mount mdsvr MDSvr
 append_config_dir_mount apssvr APSSvr
 append_config_dir_mount quantsvr QuantSvr
 append_config_dir_mount indsvr INDSvr
+append_config_dir_mount customindsvr CustomindSvr
 append_config_dir_mount simsvr SIMSvr
 append_config_dir_mount batchsvr BatchSvr
 

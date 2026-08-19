@@ -16,6 +16,7 @@ docker compose --env-file .env.prod -f compose.yaml -f compose.override.generate
 - `dc-apssvr`
 - `dc-quantsvr`
 - `dc-indsvr`
+- `dc-customindsvr`
 - `dc-simsvr`
 - `dc-batchsvr`
 - `dc-web`

@@ -3,7 +3,7 @@ set -euo pipefail
 
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 UPDATE_SCRIPT="${ROOT_DIR}/auto-update-service.sh"
-SERVICES=(gateway loginsvr mdsvr apssvr quantsvr indsvr simsvr batchsvr web zookeeper clickhouse)
+SERVICES=(gateway loginsvr mdsvr apssvr quantsvr indsvr customindsvr simsvr batchsvr web zookeeper clickhouse)
 
 [[ -x "${UPDATE_SCRIPT}" ]] || {
   echo "Missing executable updater: ${UPDATE_SCRIPT}" >&2

@@ -14,6 +14,7 @@ sed -i \
   -e 's/^LOGINSVR_GW_PORT=.*/LOGINSVR_GW_PORT=20134/' \
   -e 's/^QUANTSVR_GW_PORT=.*/QUANTSVR_GW_PORT=30142/' \
   -e 's/^INDSVR_GW_PORT=.*/INDSVR_GW_PORT=30144/' \
+  -e 's/^CUSTOMINDSVR_GW_PORT=.*/CUSTOMINDSVR_GW_PORT=30147/' \
   -e 's/^SIMSVR_GW_PORT=.*/SIMSVR_GW_PORT=30145/' \
   -e 's/^BATCHSVR_GW_PORT=.*/BATCHSVR_GW_PORT=30146/' \
   "${ENV_FILE}"
@@ -31,6 +32,7 @@ grep -qx 'SERVER.APSSvr.Host=127.0.0.1:30135' "${ATS_FILE}"
 grep -qx 'SERVER.LoginSvr.Host=127.0.0.1:20134' "${ATS_FILE}"
 grep -qx 'SERVER.QuantSvr.Host=127.0.0.1:30142' "${ATS_FILE}"
 grep -qx 'SERVER.INDSvr.Host=127.0.0.1:30144' "${ATS_FILE}"
+grep -qx 'SERVER.CustomindSvr.Host=127.0.0.1:30147' "${ATS_FILE}"
 grep -qx 'SERVER.SIMSvr.Host=127.0.0.1:30145' "${ATS_FILE}"
 grep -qx 'SERVER.BatchSvr.Host=127.0.0.1:30146' "${ATS_FILE}"
 

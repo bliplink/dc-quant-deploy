@@ -169,6 +169,27 @@ services:
       MAIN_CLASS: INDSvr
       JAVA_OPTS: -server -Xmx2048m -Xms128m -Xmn512m -Djava.security.auth.login.config=../../control/jaas.ini
 
+  customindsvr:
+    <<: *java-service-base
+    image: ghcr.io/skt-walter/customindsvr:${CUSTOMINDSVR_TAG}
+    container_name: dc-customindsvr
+    volumes:
+      - ${DEPLOY_ROOT}/control:/srv/dc/control:ro
+      - ${DEPLOY_ROOT}/data:/srv/dc/data
+      - ${DEPLOY_ROOT}/log:/srv/dc/log
+      - ${DEPLOY_ROOT}/data/java-prefs/CustomindSvr:/srv/dc/.java
+    depends_on:
+      zookeeper:
+        condition: service_started
+    environment:
+      TZ: UTC
+      DEPLOY_ROOT: /srv/dc
+      SERVICE_NAME: CustomindSvr
+      MAIN_CLASS: CustomindSvr
+      STRATEGY_QUANT_ID: ${STRATEGY_QUANT_ID:?STRATEGY_QUANT_ID is required}
+      STRATEGY_VENUE_TYPE_GW: ${STRATEGY_VENUE_TYPE_GW:-BNFutures}
+      JAVA_OPTS: -server -Xmx2048m -Xms1024m -Xmn512m -Djava.security.auth.login.config=../../control/jaas.ini
+
   simsvr:
     <<: *java-service-base
     image: ghcr.io/skt-walter/simsvr:${SIMSVR_TAG}

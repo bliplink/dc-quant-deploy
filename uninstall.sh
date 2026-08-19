@@ -12,6 +12,7 @@ PROJECT_CONTAINERS=(
   dc-batchsvr
   dc-simsvr
   dc-indsvr
+  dc-customindsvr
   dc-quantsvr
   dc-apssvr
   dc-mdsvr
@@ -77,7 +78,7 @@ assert_no_unrelated_containers() {
   while IFS= read -r container; do
     [[ -n "${container}" ]] || continue
     case "${container}" in
-      dc-web|dc-batchsvr|dc-simsvr|dc-indsvr|dc-quantsvr|dc-apssvr|dc-mdsvr|dc-loginsvr|dc-gateway|dc-zookeeper|dc-clickhouse)
+      dc-web|dc-batchsvr|dc-simsvr|dc-indsvr|dc-customindsvr|dc-quantsvr|dc-apssvr|dc-mdsvr|dc-loginsvr|dc-gateway|dc-zookeeper|dc-clickhouse)
         ;;
       *)
         echo "Refusing to remove Docker because an unrelated container exists: ${container}" >&2

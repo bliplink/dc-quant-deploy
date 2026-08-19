@@ -16,6 +16,7 @@ APP_SERVICES=(
   apssvr
   quantsvr
   indsvr
+  customindsvr
   simsvr
   batchsvr
   web

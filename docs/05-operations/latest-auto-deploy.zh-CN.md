@@ -75,12 +75,17 @@
 
 ```bash
 ./auto-update-service.sh indsvr
+
+# customindsvr 使用独立镜像与版本变量
+./auto-update-service.sh customindsvr
 ```
 
 ### 预演
 
 ```bash
 ./auto-update-service.sh indsvr --dry-run
+
+./auto-update-service.sh customindsvr --dry-run
 ```
 
 ## 6. 定时任务示例

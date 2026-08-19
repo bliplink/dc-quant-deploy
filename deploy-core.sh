@@ -34,6 +34,7 @@ APP_SERVICES=(
   apssvr
   quantsvr
   indsvr
+  customindsvr
   simsvr
   batchsvr
   web
@@ -45,6 +46,7 @@ TARGETABLE_SERVICES=(
   apssvr
   quantsvr
   indsvr
+  customindsvr
   simsvr
   batchsvr
   web
@@ -81,7 +83,7 @@ With --license-url, download dc.dat from the specified HTTPS URL when the
 current control.prod/dc.dat is missing or still contains placeholder content.
 
 Supported service names:
-  gateway, loginsvr, mdsvr, apssvr, quantsvr, indsvr, simsvr, batchsvr, web
+  gateway, loginsvr, mdsvr, apssvr, quantsvr, indsvr, customindsvr, simsvr, batchsvr, web
 
 Example:
   ./deploy.sh --services apssvr --license-url https://example.com/dc.dat
@@ -154,7 +156,7 @@ normalize_service() {
     GW|gw)
       printf 'gateway\n'
       ;;
-    gateway|loginsvr|mdsvr|apssvr|quantsvr|indsvr|simsvr|batchsvr|web)
+    gateway|loginsvr|mdsvr|apssvr|quantsvr|indsvr|customindsvr|simsvr|batchsvr|web)
       printf '%s\n' "$1"
       ;;
     *)
@@ -353,6 +355,7 @@ load_env() {
   : "${LOGINSVR_GW_PORT:=20034}"
   : "${QUANTSVR_GW_PORT:=30042}"
   : "${INDSVR_GW_PORT:=30044}"
+  : "${CUSTOMINDSVR_GW_PORT:=30047}"
   : "${SIMSVR_GW_PORT:=30045}"
   : "${BATCHSVR_GW_PORT:=30046}"
   if [[ -S /var/run/docker.sock ]]; then
@@ -379,7 +382,7 @@ load_env() {
   }
   for port_var in GW_TCP_PORT GW_WEBSOCKET_PORT GATEWAY_PORT LOGINSVR_HTTP_PORT \
     MDSVR_GW_PORT APSSVR_GW_PORT LOGINSVR_GW_PORT QUANTSVR_GW_PORT \
-    INDSVR_GW_PORT SIMSVR_GW_PORT BATCHSVR_GW_PORT; do
+    INDSVR_GW_PORT CUSTOMINDSVR_GW_PORT SIMSVR_GW_PORT BATCHSVR_GW_PORT; do
     [[ "${!port_var}" =~ ^[0-9]+$ ]] || {
       echo "${port_var} must be numeric." >&2
       exit 1
@@ -559,6 +562,7 @@ prepare_runtime_dirs() {
   mkdir -p "${DEPLOY_ROOT}/data/java-prefs/APSSvr"
   mkdir -p "${DEPLOY_ROOT}/data/java-prefs/QuantSvr"
   mkdir -p "${DEPLOY_ROOT}/data/java-prefs/INDSvr"
+  mkdir -p "${DEPLOY_ROOT}/data/java-prefs/CustomindSvr"
   mkdir -p "${DEPLOY_ROOT}/data/java-prefs/SIMSvr"
   mkdir -p "${DEPLOY_ROOT}/data/java-prefs/BatchSvr"
   mkdir -p "${DEPLOY_ROOT}/log"
@@ -576,6 +580,7 @@ prepare_runtime_dirs() {
     "${DEPLOY_ROOT}/data/java-prefs/APSSvr" \
     "${DEPLOY_ROOT}/data/java-prefs/QuantSvr" \
     "${DEPLOY_ROOT}/data/java-prefs/INDSvr" \
+    "${DEPLOY_ROOT}/data/java-prefs/CustomindSvr" \
     "${DEPLOY_ROOT}/data/java-prefs/SIMSvr" \
     "${DEPLOY_ROOT}/data/java-prefs/BatchSvr"
 }
@@ -810,6 +815,7 @@ preflight_service_ports() {
       apssvr) require_free_or_owned_port APSSvr dc-apssvr "${APSSVR_GW_PORT}" || failed=1 ;;
       quantsvr) require_free_or_owned_port QuantSvr dc-quantsvr "${QUANTSVR_GW_PORT}" || failed=1 ;;
       indsvr) require_free_or_owned_port INDSvr dc-indsvr "${INDSVR_GW_PORT}" || failed=1 ;;
+      customindsvr) require_free_or_owned_port CustomindSvr dc-customindsvr "${CUSTOMINDSVR_GW_PORT}" || failed=1 ;;
       simsvr) require_free_or_owned_port SIMSvr dc-simsvr "${SIMSVR_GW_PORT}" || failed=1 ;;
       batchsvr) require_free_or_owned_port BatchSvr dc-batchsvr "${BATCHSVR_GW_PORT}" || failed=1 ;;
       web) require_free_or_owned_port web dc-web "${WEB_LISTEN_PORT}" || failed=1 ;;
@@ -847,14 +853,14 @@ apply_clickhouse_init() {
 }
 
 wait_for_clickhouse_schema() {
-  local expected_tables=3
+  local expected_tables=4
   local retries="${1:-45}"
   local delay="${2:-2}"
   local sql="
     SELECT count()
     FROM system.tables
     WHERE database = '${CLICKHOUSE_DB_NAME}'
-      AND name IN ('signal', 'quant_order', 'strategy_candidate')
+      AND name IN ('signal', 'quant_order', 'strategy_candidate', 'cus_signal')
     FORMAT TSV
   "
 
@@ -885,6 +891,7 @@ validate_service_port() {
     apssvr) validate_container_port APSSvr dc-apssvr "${APSSVR_GW_PORT}" ;;
     quantsvr) validate_container_port QuantSvr dc-quantsvr "${QUANTSVR_GW_PORT}" ;;
     indsvr) validate_container_port INDSvr dc-indsvr "${INDSVR_GW_PORT}" ;;
+    customindsvr) validate_container_port CustomindSvr dc-customindsvr "${CUSTOMINDSVR_GW_PORT}" ;;
     simsvr) validate_container_port SIMSvr dc-simsvr "${SIMSVR_GW_PORT}" ;;
     batchsvr) validate_container_port BatchSvr dc-batchsvr "${BATCHSVR_GW_PORT}" ;;
     web) validate_container_port web dc-web "${WEB_LISTEN_PORT:-80}" ;;
@@ -1017,6 +1024,7 @@ deploy_selected_services() {
         apssvr) config_name="APSSvr" ;;
         quantsvr) config_name="QuantSvr" ;;
         indsvr) config_name="INDSvr" ;;
+        customindsvr) config_name="CustomindSvr" ;;
         simsvr) config_name="SIMSvr" ;;
         batchsvr) config_name="BatchSvr" ;;
         *) config_name="" ;;

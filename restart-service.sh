@@ -24,6 +24,7 @@ Supported services:
   apssvr
   quantsvr
   indsvr
+  customindsvr
   batchsvr
   simsvr
   web
@@ -105,6 +106,11 @@ case "${COMPOSE_SERVICE}" in
     CONTAINER_NAME="dc-indsvr"
     SERVICE_PORT=""
     LOG_FILE="INDSvr.log"
+    ;;
+  customindsvr)
+    CONTAINER_NAME="dc-customindsvr"
+    SERVICE_PORT=""
+    LOG_FILE="CustomindSvr.log"
     ;;
   batchsvr)
     CONTAINER_NAME="dc-batchsvr"
@@ -193,6 +199,7 @@ load_env() {
     apssvr) SERVICE_PORT="${APSSVR_GW_PORT:-30035}" ;;
     quantsvr) SERVICE_PORT="${QUANTSVR_GW_PORT:-30042}" ;;
     indsvr) SERVICE_PORT="${INDSVR_GW_PORT:-30044}" ;;
+    customindsvr) SERVICE_PORT="${CUSTOMINDSVR_GW_PORT:-30047}" ;;
     simsvr) SERVICE_PORT="${SIMSVR_GW_PORT:-30045}" ;;
     batchsvr) SERVICE_PORT="${BATCHSVR_GW_PORT:-30046}" ;;
     web) SERVICE_PORT="${WEB_LISTEN_PORT:-80}" ;;

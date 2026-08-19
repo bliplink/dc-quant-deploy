@@ -62,6 +62,7 @@ APSSVR_GW_PORT="${APSSVR_GW_PORT:-30035}"
 LOGINSVR_GW_PORT="${LOGINSVR_GW_PORT:-20034}"
 QUANTSVR_GW_PORT="${QUANTSVR_GW_PORT:-30042}"
 INDSVR_GW_PORT="${INDSVR_GW_PORT:-30044}"
+CUSTOMINDSVR_GW_PORT="${CUSTOMINDSVR_GW_PORT:-30047}"
 SIMSVR_GW_PORT="${SIMSVR_GW_PORT:-30045}"
 BATCHSVR_GW_PORT="${BATCHSVR_GW_PORT:-30046}"
 
@@ -126,6 +127,14 @@ SERVER.INDSvr.LBFactor=1
 SERVER.INDSvr.ServiceName=INDSvr
 SERVER.INDSvr.RegisterServerList=REGISTER.Svr1
 
+SERVER.CustomindSvr.Name=CustomindSvr
+SERVER.CustomindSvr.Host=127.0.0.1:${CUSTOMINDSVR_GW_PORT}
+SERVER.CustomindSvr.RegType=2
+SERVER.CustomindSvr.RegisterEnable=0
+SERVER.CustomindSvr.LBFactor=1
+SERVER.CustomindSvr.ServiceName=CustomindSvr
+SERVER.CustomindSvr.RegisterServerList=REGISTER.Svr1
+
 SERVER.SIMSvr.Name=SIMSvr
 SERVER.SIMSvr.Host=127.0.0.1:${SIMSVR_GW_PORT}
 SERVER.SIMSvr.RegType=2
@@ -156,7 +165,7 @@ write_file "${DEPLOY_ROOT}/control/overrides/GW/config/spring-gw-client.xml" <<'
 		<property name="mcpToolConfigPath" value="./config/mcpTools.tsv" />
 		<property name="mcpReloadPeriod" value="1" />
 		<property name="SessionService" value="" />
-		<property name="RequestService" value="LoginSvr,MDSvr,APSSvr,QuantSvr,INDSvr,SIMSvr,BatchSvr" />
+		<property name="RequestService" value="LoginSvr,MDSvr,APSSvr,QuantSvr,INDSvr,CustomindSvr,SIMSvr,BatchSvr" />
 		<property name="Subscribes">
 			<map>
 				<entry key="MDSvr" value="dc.md.kline.**|dc.md.trade.**|md.monitor.**" />
