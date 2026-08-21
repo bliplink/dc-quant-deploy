@@ -4,7 +4,6 @@ set -euo pipefail
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 ENV_FILE="${ROOT_DIR}/.env.prod"
 COMPOSE_FILE="${ROOT_DIR}/compose.yaml"
-OVERRIDE_FILE="${ROOT_DIR}/compose.override.generated.yaml"
 GENERATE_OVERRIDES_SCRIPT="${ROOT_DIR}/generate-compose-overrides.sh"
 VALIDATE_ENV_SCRIPT="${ROOT_DIR}/validate-env.sh"
 
@@ -75,6 +74,14 @@ case "${SERVICE}" in
     DISPLAY_SERVICE="${SERVICE}"
     ;;
 esac
+
+# Use an invocation-specific override so the minute-level auto updater cannot
+# rewrite the file while docker compose is parsing a single-service restart.
+OVERRIDE_FILE="${ROOT_DIR}/compose.override.${COMPOSE_SERVICE}.$$.yaml"
+cleanup() {
+  rm -f "${OVERRIDE_FILE}" "${OVERRIDE_FILE}.tmp"
+}
+trap cleanup EXIT
 
 case "${COMPOSE_SERVICE}" in
   gateway)

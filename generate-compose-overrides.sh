@@ -192,6 +192,26 @@ append_config_dir_mount() {
   fi
 }
 
+append_requested_config_mounts() {
+  local service config_name
+
+  if [[ -n "${REQUESTED_CONFIG_SERVICE}" ]]; then
+    for service in "${CONFIG_SERVICES[@]}"; do
+      if [[ "${service}" == "${REQUESTED_CONFIG_SERVICE}" ]]; then
+        config_name="$(config_name_for_service "${service}")"
+        append_config_dir_mount "${service}" "${config_name}"
+        return 0
+      fi
+    done
+    return 0
+  fi
+
+  for service in "${CONFIG_SERVICES[@]}"; do
+    config_name="$(config_name_for_service "${service}")"
+    append_config_dir_mount "${service}" "${config_name}"
+  done
+}
+
 load_env
 seed_all_service_configs
 
@@ -211,15 +231,7 @@ MOUNT_COUNT=0
   printf 'services:\n'
 } > "${OUTPUT_FILE}.tmp"
 
-append_config_dir_mount gateway GW
-append_config_dir_mount loginsvr LoginSvr
-append_config_dir_mount mdsvr MDSvr
-append_config_dir_mount apssvr APSSvr
-append_config_dir_mount quantsvr QuantSvr
-append_config_dir_mount indsvr INDSvr
-append_config_dir_mount customindsvr CustomindSvr
-append_config_dir_mount simsvr SIMSvr
-append_config_dir_mount batchsvr BatchSvr
+append_requested_config_mounts
 
 if [[ "${MOUNT_COUNT}" -eq 0 ]]; then
   {
