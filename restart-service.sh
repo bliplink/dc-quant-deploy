@@ -213,7 +213,7 @@ compose() {
 
 generate_compose_overrides() {
   require_file "${GENERATE_OVERRIDES_SCRIPT}"
-  run bash "${GENERATE_OVERRIDES_SCRIPT}" "${ENV_FILE}" "${OVERRIDE_FILE}"
+  run bash "${GENERATE_OVERRIDES_SCRIPT}" "${ENV_FILE}" "${OVERRIDE_FILE}" "${COMPOSE_SERVICE}"
 }
 
 is_port_open() {

@@ -4,6 +4,7 @@ set -euo pipefail
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 ENV_FILE="${1:-${ROOT_DIR}/.env.prod}"
 OUTPUT_FILE="${2:-${ROOT_DIR}/compose.override.generated.yaml}"
+REQUESTED_CONFIG_SERVICE="${3:-}"
 COMPOSE_FILE="${ROOT_DIR}/compose.yaml"
 GENERATE_SENSITIVE_CONFIGS_SCRIPT="${ROOT_DIR}/generate-sensitive-configs.sh"
 VALIDATE_ENV_SCRIPT="${ROOT_DIR}/validate-env.sh"
@@ -121,15 +122,31 @@ seed_service_config() {
 
 seed_all_service_configs() {
   local service
+  local selected_services=("${CONFIG_SERVICES[@]}")
+
+  if [[ -n "${REQUESTED_CONFIG_SERVICE}" ]]; then
+    selected_services=()
+    for service in "${CONFIG_SERVICES[@]}"; do
+      if [[ "${service}" == "${REQUESTED_CONFIG_SERVICE}" ]]; then
+        selected_services+=("${service}")
+        break
+      fi
+    done
+  fi
+
+  if [[ "${#selected_services[@]}" -eq 0 ]]; then
+    echo "No application config image is required for ${REQUESTED_CONFIG_SERVICE}."
+    return 0
+  fi
 
   echo "Ensuring application images are available for config extraction."
-  docker compose --env-file "${ENV_FILE}" -f "${COMPOSE_FILE}" pull "${CONFIG_SERVICES[@]}"
+  docker compose --env-file "${ENV_FILE}" -f "${COMPOSE_FILE}" pull "${selected_services[@]}"
 
   BASE_COMPOSE_CONFIG="$(
     docker compose --env-file "${ENV_FILE}" -f "${COMPOSE_FILE}" config
   )"
 
-  for service in "${CONFIG_SERVICES[@]}"; do
+  for service in "${selected_services[@]}"; do
     seed_service_config "${service}"
   done
 }
