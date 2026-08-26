@@ -23,11 +23,47 @@ BUILD_ROOT="${BUILD_ROOT:-/opt/dc-saas-build}"
 MAVEN_BUILD_IMAGE="${MAVEN_BUILD_IMAGE:-docker.m.daocloud.io/library/maven:3.9.9-eclipse-temurin-8}"
 SRC_ROOT="${BUILD_ROOT}/src"
 M2_ROOT="${BUILD_ROOT}/m2"
+SOURCE_BUNDLE_PATH="${SOURCE_BUNDLE_PATH:-${BUILD_ROOT}/source-bundle.tar.gz}"
+SOURCE_BUNDLE_SHA256="${SOURCE_BUNDLE_SHA256:-}"
 
 [[ "${BUILD_ROOT}" == /* && "${BUILD_ROOT}" != "/" && "${BUILD_ROOT}" != "/opt" ]] ||
   die "BUILD_ROOT must be a dedicated absolute directory."
 
 install -d -m 0750 "${SRC_ROOT}" "${M2_ROOT}"
+
+prepare_source_bundle() {
+  local entry actual_hash resolved_src
+
+  [[ -f "${SRC_ROOT}/.source-bundle" ]] && return 0
+  [[ -f "${SOURCE_BUNDLE_PATH}" ]] || return 0
+  [[ "${SOURCE_BUNDLE_PATH}" == /* ]] ||
+    die "SOURCE_BUNDLE_PATH must be an absolute path."
+
+  if [[ -n "${SOURCE_BUNDLE_SHA256}" ]]; then
+    actual_hash="$(sha256sum -- "${SOURCE_BUNDLE_PATH}" | awk '{print $1}')"
+    [[ "${actual_hash,,}" == "${SOURCE_BUNDLE_SHA256,,}" ]] ||
+      die "Source bundle SHA-256 does not match SOURCE_BUNDLE_SHA256."
+  fi
+
+  while IFS= read -r entry; do
+    [[ "${entry}" == src || "${entry}" == src/* ]] ||
+      die "Source bundle contains a path outside src/: ${entry}"
+    [[ "/${entry}/" != *"/../"* ]] ||
+      die "Source bundle contains a parent-directory path: ${entry}"
+  done < <(tar -tzf "${SOURCE_BUNDLE_PATH}")
+
+  resolved_src="$(readlink -m "${SRC_ROOT}")"
+  [[ "${resolved_src}" == "${BUILD_ROOT}/src" ]] ||
+    die "Refusing to replace unexpected source directory ${resolved_src}."
+
+  log "Extracting verified private source bundle ${SOURCE_BUNDLE_PATH}."
+  rm -rf -- "${SRC_ROOT}"
+  tar -xzf "${SOURCE_BUNDLE_PATH}" -C "${BUILD_ROOT}"
+  [[ -f "${SRC_ROOT}/.source-bundle" ]] ||
+    die "Source bundle does not contain src/.source-bundle."
+}
+
+prepare_source_bundle
 
 sync_repo() {
   local name="$1"

@@ -78,6 +78,12 @@ ensure_env_defaults() {
   if ! grep -q '^BUILD_ROOT=' "${ENV_FILE}"; then
     printf 'BUILD_ROOT=/opt/dc-saas-build\n' >> "${ENV_FILE}"
   fi
+  if ! grep -q '^SOURCE_BUNDLE_PATH=' "${ENV_FILE}"; then
+    printf 'SOURCE_BUNDLE_PATH=/opt/dc-saas-build/source-bundle.tar.gz\n' >> "${ENV_FILE}"
+  fi
+  if ! grep -q '^SOURCE_BUNDLE_SHA256=' "${ENV_FILE}"; then
+    printf 'SOURCE_BUNDLE_SHA256=\n' >> "${ENV_FILE}"
+  fi
   if grep -q '^ZOOKEEPER_TAG=v0.0.3-test$' "${ENV_FILE}"; then
     sed -i 's/^ZOOKEEPER_TAG=v0.0.3-test$/ZOOKEEPER_TAG=3.8.4/' "${ENV_FILE}"
   fi

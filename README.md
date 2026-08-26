@@ -50,10 +50,16 @@ The first run:
 
 `.env.prod` is runtime-only and must never be committed.
 
-The default `IMAGE_SOURCE=local` mode is self-contained and requires no GHCR
-token. For a registry-based release, set `IMAGE_SOURCE=registry), replace the
-image repository values, and enable `REQUIRE_GHCR_LOGIN` with credentials
-provided only in the runtime environment.
+The default `IMAGE_SOURCE=local` mode requires the private, committed source
+bundle at `/opt/dc-saas-build/source-bundle.tar.gz`. The archive must contain
+`src/.source-bundle` and the twelve repositories under `src/`. Set
+`SOURCE_BUNDLE_SHA256` in `.env.prod` to make the build reject any other
+archive. The build script rejects paths outside `src/` before extraction.
+
+For a registry-based release, set `IMAGE_SOURCE=registry`, replace the image
+repository values, and enable `REQUIRE_GHCR_LOGIN` with credentials provided
+only in the runtime environment. Registry mode does not require a source
+bundle.
 
 ## Validation
 
