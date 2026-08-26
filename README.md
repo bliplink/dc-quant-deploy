@@ -50,19 +50,14 @@ The first run:
 
 `.env.prod` is runtime-only and must never be committed.
 
-The default `IMAGE_SOURCE=registry` mode pulls the `saas-crypto` images from
+The default `IMAGE_SOURCE=registry` mode pulls public `saas-crypto` images from
 GHCR and never uploads or compiles application source on the deployment host.
-New GHCR packages inherit private repository visibility until an owner changes
-them to public. Before the first deployment, either make every SaaS package
-public or authenticate once with a classic PAT that has `read:packages`:
+No GitHub or GHCR login is required. Package visibility is public while the
+service source repositories may remain private.
 
-```bash
-docker login ghcr.io
-```
-
-The deploy script accepts an existing Docker login. For unattended operation,
-`GHCR_USERNAME` and `GHCR_TOKEN` may instead be provided only in the protected
-runtime environment; they must never be committed.
+`REQUIRE_GHCR_LOGIN` remains available only for operators who replace the
+defaults with their own private registry packages. Credentials must be supplied
+through the protected runtime environment and must never be committed.
 
 ## Validation
 
