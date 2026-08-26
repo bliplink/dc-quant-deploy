@@ -98,6 +98,7 @@ ensure_env_defaults() {
   migrate_env_value MANAGERSVR_IMAGE_REPOSITORY dc-saas/managersvr ghcr.io/bliplink/managersvr
   migrate_env_value ADMINSVR_IMAGE_REPOSITORY dc-saas/adminsvr ghcr.io/bliplink/adminsvr
   migrate_env_value TRADE_WEB_IMAGE_REPOSITORY dc-saas/dc-trade-web ghcr.io/skt-walter/dc-trade-web
+  migrate_env_value REQUIRE_GHCR_LOGIN false true
   if grep -q '^ZOOKEEPER_TAG=v0.0.3-test$' "${ENV_FILE}"; then
     sed -i 's/^ZOOKEEPER_TAG=v0.0.3-test$/ZOOKEEPER_TAG=3.8.4/' "${ENV_FILE}"
   fi
@@ -179,9 +180,17 @@ wait_for_health() {
 
 verify_ghcr_access() {
   [[ "${REQUIRE_GHCR_LOGIN:-false}" == "true" ]] || return 0
-  [[ -n "${GHCR_USERNAME:-}" && -n "${GHCR_TOKEN:-}" ]] ||
-    die "REQUIRE_GHCR_LOGIN=true requires GHCR_USERNAME and GHCR_TOKEN."
-  printf '%s' "${GHCR_TOKEN}" | docker login ghcr.io -u "${GHCR_USERNAME}" --password-stdin
+  if [[ -n "${GHCR_USERNAME:-}" && -n "${GHCR_TOKEN:-}" ]]; then
+    printf '%s' "${GHCR_TOKEN}" | docker login ghcr.io -u "${GHCR_USERNAME}" --password-stdin
+    return 0
+  fi
+
+  if docker manifest inspect "${TRADESVR_IMAGE_REPOSITORY}:${TRADESVR_TAG}" >/dev/null 2>&1; then
+    log "Existing Docker credentials can read the private GHCR SaaS packages."
+    return 0
+  fi
+
+  die "Private GHCR images are not readable. Run 'docker login ghcr.io' with a classic PAT containing read:packages, or set GHCR_USERNAME/GHCR_TOKEN in the protected runtime environment."
 }
 
 ensure_env_file

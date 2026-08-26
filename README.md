@@ -52,10 +52,17 @@ The first run:
 
 The default `IMAGE_SOURCE=registry` mode pulls the `saas-crypto` images from
 GHCR and never uploads or compiles application source on the deployment host.
-The current SaaS packages allow anonymous pull. If package visibility is later
-changed to private, authenticate Docker with `docker login ghcr.io` or provide
-`GHCR_USERNAME` and `GHCR_TOKEN` only in the runtime environment and set
-`REQUIRE_GHCR_LOGIN=true`.
+New GHCR packages inherit private repository visibility until an owner changes
+them to public. Before the first deployment, either make every SaaS package
+public or authenticate once with a classic PAT that has `read:packages`:
+
+```bash
+docker login ghcr.io
+```
+
+The deploy script accepts an existing Docker login. For unattended operation,
+`GHCR_USERNAME` and `GHCR_TOKEN` may instead be provided only in the protected
+runtime environment; they must never be committed.
 
 ## Validation
 
