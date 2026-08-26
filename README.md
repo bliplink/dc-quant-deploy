@@ -43,23 +43,19 @@ The first run:
 2. creates `.env.prod` with random local passwords;
 3. verifies the isolated ports are unused;
 4. generates ATS, DB pool, GW, and service configuration;
-5. builds application images from each dedicated `saas-crypto` source branch
-   when private registry credentials are unavailable;
+5. pulls the application images produced from each dedicated `saas-crypto`
+   branch on GitHub Container Registry;
 6. initializes MySQL and the location-aware ClickHouse K-line schema;
 7. starts and validates all 13 containers.
 
 `.env.prod` is runtime-only and must never be committed.
 
-The default `IMAGE_SOURCE=local` mode requires the private, committed source
-bundle at `/opt/dc-saas-build/source-bundle.tar.gz`. The archive must contain
-`src/.source-bundle` and the twelve repositories under `src/`. Set
-`SOURCE_BUNDLE_SHA256` in `.env.prod` to make the build reject any other
-archive. The build script rejects paths outside `src/` before extraction.
-
-For a registry-based release, set `IMAGE_SOURCE=registry`, replace the image
-repository values, and enable `REQUIRE_GHCR_LOGIN` with credentials provided
-only in the runtime environment. Registry mode does not require a source
-bundle.
+The default `IMAGE_SOURCE=registry` mode pulls the `saas-crypto` images from
+GHCR and never uploads or compiles application source on the deployment host.
+The current SaaS packages allow anonymous pull. If package visibility is later
+changed to private, authenticate Docker with `docker login ghcr.io` or provide
+`GHCR_USERNAME` and `GHCR_TOKEN` only in the runtime environment and set
+`REQUIRE_GHCR_LOGIN=true`.
 
 ## Validation
 

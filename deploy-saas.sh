@@ -57,6 +57,15 @@ set_env_value() {
   sed -i "s|^${key}=.*$|${key}=${value}|" "${ENV_FILE}"
 }
 
+migrate_env_value() {
+  local key="$1"
+  local old_value="$2"
+  local new_value="$3"
+  if grep -Fqx "${key}=${old_value}" "${ENV_FILE}"; then
+    set_env_value "${key}" "${new_value}"
+  fi
+}
+
 ensure_env_file() {
   if [[ -f "${ENV_FILE}" ]]; then
     return 0
@@ -73,17 +82,22 @@ ensure_env_file() {
 
 ensure_env_defaults() {
   if ! grep -q '^IMAGE_SOURCE=' "${ENV_FILE}"; then
-    printf '\nIMAGE_SOURCE=local\n' >> "${ENV_FILE}"
+    printf '\nIMAGE_SOURCE=registry\n' >> "${ENV_FILE}"
   fi
   if ! grep -q '^BUILD_ROOT=' "${ENV_FILE}"; then
     printf 'BUILD_ROOT=/opt/dc-saas-build\n' >> "${ENV_FILE}"
   fi
-  if ! grep -q '^SOURCE_BUNDLE_PATH=' "${ENV_FILE}"; then
-    printf 'SOURCE_BUNDLE_PATH=/opt/dc-saas-build/source-bundle.tar.gz\n' >> "${ENV_FILE}"
-  fi
-  if ! grep -q '^SOURCE_BUNDLE_SHA256=' "${ENV_FILE}"; then
-    printf 'SOURCE_BUNDLE_SHA256=\n' >> "${ENV_FILE}"
-  fi
+  migrate_env_value IMAGE_SOURCE local registry
+  migrate_env_value GW_IMAGE_REPOSITORY dc-saas/gw ghcr.io/bliplink/gw
+  migrate_env_value LOGINSVR_IMAGE_REPOSITORY dc-saas/loginsvr ghcr.io/bliplink/loginsvr
+  migrate_env_value MDSVR_IMAGE_REPOSITORY dc-saas/mdsvr ghcr.io/bliplink/mdsvr
+  migrate_env_value APSSVR_IMAGE_REPOSITORY dc-saas/apssvr ghcr.io/bliplink/apssvr
+  migrate_env_value ORDERSVR_IMAGE_REPOSITORY dc-saas/ordersvr ghcr.io/bliplink/ordersvr
+  migrate_env_value TRADESVR_IMAGE_REPOSITORY dc-saas/tradesvr ghcr.io/bliplink/tradesvr
+  migrate_env_value LIQSVR_IMAGE_REPOSITORY dc-saas/liqsvr ghcr.io/bliplink/liqsvr
+  migrate_env_value MANAGERSVR_IMAGE_REPOSITORY dc-saas/managersvr ghcr.io/bliplink/managersvr
+  migrate_env_value ADMINSVR_IMAGE_REPOSITORY dc-saas/adminsvr ghcr.io/bliplink/adminsvr
+  migrate_env_value TRADE_WEB_IMAGE_REPOSITORY dc-saas/dc-trade-web ghcr.io/skt-walter/dc-trade-web
   if grep -q '^ZOOKEEPER_TAG=v0.0.3-test$' "${ENV_FILE}"; then
     sed -i 's/^ZOOKEEPER_TAG=v0.0.3-test$/ZOOKEEPER_TAG=3.8.4/' "${ENV_FILE}"
   fi
