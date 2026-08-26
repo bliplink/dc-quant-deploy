@@ -71,6 +71,18 @@ ensure_env_file() {
   log "Created ${ENV_FILE} with generated local secrets."
 }
 
+ensure_env_defaults() {
+  if ! grep -q '^IMAGE_SOURCE=' "${ENV_FILE}"; then
+    printf '\nIMAGE_SOURCE=local\n' >> "${ENV_FILE}"
+  fi
+  if ! grep -q '^BUILD_ROOT=' "${ENV_FILE}"; then
+    printf 'BUILD_ROOT=/opt/dc-saas-build\n' >> "${ENV_FILE}"
+  fi
+  if grep -q '^ZOOKEEPER_TAG=v0.0.3-test$' "${ENV_FILE}"; then
+    sed -i 's/^ZOOKEEPER_TAG=v0.0.3-test$/ZOOKEEPER_TAG=3.8.4/' "${ENV_FILE}"
+  fi
+}
+
 ensure_host_runtime() {
   if command -v docker >/dev/null 2>&1 && docker compose version >/dev/null 2>&1; then
     return 0
@@ -95,7 +107,7 @@ validate_runtime_root() {
 
 port_is_listening() {
   local port="$1"
-  ss -lntH | awk '{print $4}' | grep -Eq "[:.]${port}$"
+  ss -lnt | awk 'NR > 1 {print $4}' | grep -Eq "[:.]${port}$"
 }
 
 validate_initial_ports() {
@@ -153,6 +165,7 @@ verify_ghcr_access() {
 }
 
 ensure_env_file
+ensure_env_defaults
 ensure_host_runtime
 load_env
 validate_runtime_root
@@ -163,9 +176,20 @@ verify_ghcr_access
 
 compose config --quiet
 
-if [[ "${SKIP_PULL}" == "false" ]]; then
-  log "Pulling pinned SaaS and infrastructure images."
-  compose pull
+if [[ "${IMAGE_SOURCE:-local}" == "local" ]]; then
+  if [[ "${SKIP_PULL}" == "false" ]]; then
+    log "Building SaaS application images from the dedicated source branches."
+    "${SCRIPT_DIR}/build-saas-images.sh" "${ENV_FILE}"
+  fi
+  log "Pulling public infrastructure images."
+  compose pull mysql clickhouse zookeeper
+elif [[ "${IMAGE_SOURCE}" == "registry" ]]; then
+  if [[ "${SKIP_PULL}" == "false" ]]; then
+    log "Pulling SaaS application and infrastructure images."
+    compose pull
+  fi
+else
+  die "IMAGE_SOURCE must be local or registry."
 fi
 
 log "Starting isolated MySQL, ClickHouse, and ZooKeeper."

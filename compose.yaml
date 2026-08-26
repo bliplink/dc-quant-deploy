@@ -72,7 +72,7 @@ services:
     mem_limit: 3g
 
   zookeeper:
-    image: ghcr.io/bliplink/zookeeper:${ZOOKEEPER_TAG:-v0.0.3-test}
+    image: ${ZOOKEEPER_IMAGE_REPOSITORY:-docker.m.daocloud.io/library/zookeeper}:${ZOOKEEPER_TAG:-3.8.4}
     container_name: dc-saas-zookeeper
     restart: unless-stopped
     ports:
@@ -80,18 +80,16 @@ services:
       - "127.0.0.1:${ZOOKEEPER_JMX_PORT:-38888}:8888"
     environment:
       TZ: Asia/Shanghai
-      ATS_ROOT: /opt/zookeeper/runtime
-      ZOOKEEPER_CLIENT_PORT: 2181
-      ZOOKEEPER_DATA_DIR: /opt/zookeeper/data
-      ZOOKEEPER_JMX_PORT: 8888
+      ZOO_CLIENT_PORT: 2181
+      ZOO_4LW_COMMANDS_WHITELIST: ruok,srvr,mntr
     volumes:
-      - ${DEPLOY_ROOT}/data/zookeeper:/opt/zookeeper/data
-      - ${DEPLOY_ROOT}/log/zookeeper:/opt/zookeeper/runtime/log
+      - ${DEPLOY_ROOT}/data/zookeeper:/data
+      - ${DEPLOY_ROOT}/log/zookeeper:/datalog
     mem_limit: 512m
 
   gateway:
     <<: *java-service-base
-    image: ghcr.io/bliplink/gw:${GW_TAG:-saas-crypto}
+    image: ${GW_IMAGE_REPOSITORY:-dc-saas/gw}:${GW_TAG:-saas-crypto}
     container_name: dc-saas-gateway
     depends_on:
       zookeeper:
@@ -112,7 +110,7 @@ services:
 
   loginsvr:
     <<: *java-service-base
-    image: ghcr.io/bliplink/loginsvr:${LOGINSVR_TAG:-saas-crypto}
+    image: ${LOGINSVR_IMAGE_REPOSITORY:-dc-saas/loginsvr}:${LOGINSVR_TAG:-saas-crypto}
     container_name: dc-saas-loginsvr
     depends_on:
       mysql:
@@ -134,7 +132,7 @@ services:
 
   mdsvr:
     <<: *java-service-base
-    image: ghcr.io/bliplink/mdsvr:${MDSVR_TAG:-saas-crypto}
+    image: ${MDSVR_IMAGE_REPOSITORY:-dc-saas/mdsvr}:${MDSVR_TAG:-saas-crypto}
     container_name: dc-saas-mdsvr
     depends_on:
       clickhouse:
@@ -156,7 +154,7 @@ services:
 
   apssvr:
     <<: *java-service-base
-    image: ghcr.io/bliplink/apssvr:${APSSVR_TAG:-saas-crypto}
+    image: ${APSSVR_IMAGE_REPOSITORY:-dc-saas/apssvr}:${APSSVR_TAG:-saas-crypto}
     container_name: dc-saas-apssvr
     depends_on:
       mysql:
@@ -179,7 +177,7 @@ services:
 
   ordersvr:
     <<: *java-service-base
-    image: ghcr.io/bliplink/ordersvr:${ORDERSVR_TAG:-saas-crypto}
+    image: ${ORDERSVR_IMAGE_REPOSITORY:-dc-saas/ordersvr}:${ORDERSVR_TAG:-saas-crypto}
     container_name: dc-saas-ordersvr
     depends_on:
       mysql:
@@ -201,7 +199,7 @@ services:
 
   tradesvr:
     <<: *java-service-base
-    image: ghcr.io/bliplink/tradesvr:${TRADESVR_TAG:-saas-crypto}
+    image: ${TRADESVR_IMAGE_REPOSITORY:-dc-saas/tradesvr}:${TRADESVR_TAG:-saas-crypto}
     container_name: dc-saas-tradesvr
     depends_on:
       mysql:
@@ -223,7 +221,7 @@ services:
 
   liqsvr:
     <<: *java-service-base
-    image: ghcr.io/bliplink/liqsvr:${LIQSVR_TAG:-saas-crypto}
+    image: ${LIQSVR_IMAGE_REPOSITORY:-dc-saas/liqsvr}:${LIQSVR_TAG:-saas-crypto}
     container_name: dc-saas-liqsvr
     depends_on:
       mysql:
@@ -245,7 +243,7 @@ services:
 
   managersvr:
     <<: *java-service-base
-    image: ghcr.io/bliplink/managersvr:${MANAGERSVR_TAG:-saas-crypto}
+    image: ${MANAGERSVR_IMAGE_REPOSITORY:-dc-saas/managersvr}:${MANAGERSVR_TAG:-saas-crypto}
     container_name: dc-saas-managersvr
     depends_on:
       mysql:
@@ -267,7 +265,7 @@ services:
 
   adminsvr:
     <<: *java-service-base
-    image: ghcr.io/bliplink/adminsvr:${ADMINSVR_TAG:-saas-crypto}
+    image: ${ADMINSVR_IMAGE_REPOSITORY:-dc-saas/adminsvr}:${ADMINSVR_TAG:-saas-crypto}
     container_name: dc-saas-adminsvr
     depends_on:
       mysql:
@@ -288,7 +286,7 @@ services:
     mem_limit: 1g
 
   web:
-    image: ghcr.io/skt-walter/dc-trade-web:${TRADE_WEB_TAG:-saas-crypto}
+    image: ${TRADE_WEB_IMAGE_REPOSITORY:-dc-saas/dc-trade-web}:${TRADE_WEB_TAG:-saas-crypto}
     container_name: dc-saas-trade-web
     network_mode: host
     restart: unless-stopped

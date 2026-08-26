@@ -82,6 +82,13 @@ if [[ "${PURGE_DATA}" == "true" ]]; then
   [[ ! -L "${DEPLOY_ROOT}" ]] || die "Refusing to purge a symbolic-link runtime root."
   rm -rf --one-file-system "${resolved_root}"
   log "Permanently removed ${resolved_root}. This data is not recoverable unless separately backed up."
+
+  resolved_build_root="$(readlink -m "${BUILD_ROOT:-/opt/dc-saas-build}")"
+  [[ "${resolved_build_root}" == "/opt/dc-saas-build" ]] ||
+    die "Refusing build-cache purge outside /opt/dc-saas-build (resolved: ${resolved_build_root})."
+  [[ ! -L "${resolved_build_root}" ]] || die "Refusing to purge a symbolic-link build root."
+  rm -rf --one-file-system "${resolved_build_root}"
+  log "Removed the isolated SaaS source and Maven build cache at ${resolved_build_root}."
 else
   log "Preserved runtime data and generated config at ${DEPLOY_ROOT}."
 fi

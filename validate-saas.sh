@@ -70,7 +70,7 @@ required_ports=(
   "${MANAGERSVR_GW_PORT}" "${ADMINSVR_GW_PORT}" "${WEB_LISTEN_PORT}"
 )
 
-listening="$(ss -lntH | awk '{print $4}')"
+listening="$(ss -lnt | awk 'NR > 1 {print $4}')"
 for port in "${required_ports[@]}"; do
   grep -Eq "[:.]${port}$" <<<"${listening}" || die "Expected port ${port} is not listening."
 done

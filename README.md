@@ -43,10 +43,17 @@ The first run:
 2. creates `.env.prod` with random local passwords;
 3. verifies the isolated ports are unused;
 4. generates ATS, DB pool, GW, and service configuration;
-5. initializes MySQL and the location-aware ClickHouse K-line schema;
-6. starts and validates all 13 containers.
+5. builds application images from each dedicated `saas-crypto` source branch
+   when private registry credentials are unavailable;
+6. initializes MySQL and the location-aware ClickHouse K-line schema;
+7. starts and validates all 13 containers.
 
 `.env.prod` is runtime-only and must never be committed.
+
+The default `IMAGE_SOURCE=local` mode is self-contained and requires no GHCR
+token. For a registry-based release, set `IMAGE_SOURCE=registry), replace the
+image repository values, and enable `REQUIRE_GHCR_LOGIN` with credentials
+provided only in the runtime environment.
 
 ## Validation
 
