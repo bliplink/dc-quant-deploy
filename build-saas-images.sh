@@ -35,6 +35,12 @@ sync_repo() {
   local branch="$3"
   local target="${SRC_ROOT}/${name}"
 
+  if [[ -f "${SRC_ROOT}/.source-bundle" ]]; then
+    [[ -d "${target}" ]] || die "Uploaded source bundle is missing ${name}."
+    log "Using uploaded source for ${name}."
+    return 0
+  fi
+
   if [[ -d "${target}/.git" ]]; then
     log "Updating ${name} from ${branch}."
     git -C "${target}" fetch --depth 1 origin "${branch}"
