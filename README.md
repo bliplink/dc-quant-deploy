@@ -1,294 +1,96 @@
-# dc-quant-deploy
+# DC Cryptocurrency SaaS deployment
 
-DC Quant 是一套单机 Docker Compose 部署的量化策略系统，覆盖策略采集、策略生成、回测优化、自动上线、实盘运行、日末复盘、系统日报和运行报告。
+This branch deploys the standalone cryptocurrency SaaS product. It does not
+contain or start QuantSvr, INDSvr, CustomIndSvr, SIMSvr, BatchSvr, or the
+quantitative web application.
 
-English documentation: [README.en.md](README.en.md)
+## Runtime boundary
 
-## 这是什么系统
+| Layer | Components | Storage |
+| --- | --- | --- |
+| Access | dc-trade-web, GW, LoginSvr | MySQL session/user data |
+| Market data | APSSvr, MDSvr | ClickHouse K-line data |
+| Trading | OrderSvr, TradeSvr, LiqSvr | MySQL orders/trades/balances/positions |
+| Management | ManagerSvr, AdminSvr | MySQL configuration and audit data |
+| Discovery | ZooKeeper | Dedicated loopback port and data directory |
 
-系统由多个服务协作完成完整策略生命周期：
+The tenant key is always `location`. This deployment does not introduce a
+parallel `tenant_id`. MySQL holds business transactions; ClickHouse holds only
+market/K-line data.
 
-```text
-策略采集/生成 -> 回测优化 -> 自动上线 -> 实盘运行 -> 日末复盘 -> 系统报告
-```
+All names, ports, and data paths are isolated from a legacy STC installation:
 
-## 5 分钟架构图
+- Compose project and containers: `dc-saas*`
+- Runtime root: `/opt/dc-saas-runtime`
+- Web: `18088`
+- ZooKeeper: `32181`
+- MySQL: `33306` (loopback only)
+- ClickHouse: `38123/39000` (loopback only)
+- GW: `33000/33001/33002`
+- SaaS services: `33028`, `33034-33040`
 
-```mermaid
-flowchart LR
-  User[用户 / 第三方系统] -->|HTTP / MCP / API key| GW[GW<br/>统一入口]
-  Web[Web 页面] --> GW
-
-  GW -->|策略生成请求| IND[INDSvr<br/>策略采集 / 生成 / 编译]
-  IND --> Candidate[(strategy_candidate)]
-  IND --> BacktestTask[(strategy_backtest_task)]
-
-  BacktestTask --> SIM[SIMSvr<br/>Walk-forward 回测 / 参数优化]
-  SIM --> Result[(backtest_result)]
-  SIM -->|通过自动发布门槛| Live[(strategy_live_registry)]
-
-  Live --> Quant[QuantSvr<br/>EMS + Risk + Telegram]
-  GW -->|pubSignal / sendMsg| Quant
-  Quant --> Signal[(signal)]
-  Quant --> Order[(quant_order / quant_trade / position)]
-  Quant --> TG[Telegram<br/>策略 UI / 群消息]
-
-  Batch[BatchSvr<br/>日报 / 运行报告] --> Reports[(system reports)]
-  Quant --> Review[(daily review)]
-
-  MD[MDSvr<br/>行情支撑] --> Quant
-  APS[APSSvr<br/>账户交易支撑] --> Quant
-
-  Candidate --> CH[(ClickHouse)]
-  BacktestTask --> CH
-  Result --> CH
-  Live --> CH
-  Signal --> CH
-  Order --> CH
-  Reports --> CH
-  Review --> CH
-```
-
-核心服务：
-
-- `GW`：统一 HTTP/MCP/API key 入口。
-- `INDSvr`：策略采集、策略生成、候选策略和编译。
-- `SIMSvr`：walk-forward 回测、参数优化和自动发布。
-- `QuantSvr`：类似 `EMS + Risk + Telegram` 的组合，负责实盘执行、风控参数、下单、通知和日末复盘。
-- `BatchSvr`：系统日报、运行报告和批处理。
-- `MDSvr/APSSvr`：行情与交易账户相关运行支撑。
-- `Web`：页面入口。
-- `ClickHouse`：策略、信号、订单、成交、回测和报告数据存储。
-
-更完整的说明见：[系统总览](docs/02-architecture/system-overview.zh-CN.md)。
-
-## 快速部署
-
-机器默认要求：
-
-- 内存 >= 8192 MB
-- `${DEPLOY_ROOT}` 可用磁盘 >= 20 GB
-
-从空服务器部署，使用内置 ClickHouse：
+## One-click deploy
 
 ```bash
-git clone https://github.com/bliplink/dc-quant-deploy.git
-cd dc-quant-deploy
-sudo ./prepare-host.sh
-./deploy-standalone.sh
+git clone --branch saas-crypto <dc-quant-deploy-repository> /root/dc-saas-deploy
+cd /root/dc-saas-deploy
+sudo ./deploy-saas.sh
 ```
 
-使用已有 ClickHouse：
+The first run:
+
+1. installs Docker Engine and Compose when absent;
+2. creates `.env.prod` with random local passwords;
+3. verifies the isolated ports are unused;
+4. generates ATS, DB pool, GW, and service configuration;
+5. initializes MySQL and the location-aware ClickHouse K-line schema;
+6. starts and validates all 13 containers.
+
+`.env.prod` is runtime-only and must never be committed.
+
+## Validation
 
 ```bash
-git clone https://github.com/bliplink/dc-quant-deploy.git
-cd dc-quant-deploy
-sudo ./prepare-host.sh
-cp .env.external-clickhouse.example .env.prod
-vi .env.prod
-./deploy-with-external-clickhouse.sh
+sudo ./validate-saas.sh
+sudo ./smoke-test-location.sh
 ```
 
-`prepare-host.sh` 会幂等安装并验证 Docker Engine、Buildx、Docker Compose v2
-和 Docker 开机自启，支持 Amazon Linux 2/2023、CentOS/RHEL/Rocky/AlmaLinux
-与 Ubuntu/Debian。
-对于已停止官方维护的 EL7/CentOS 7，脚本固定安装该仓库最后发布的
-Docker CE 26.1.4 和 Compose 2.27.1，并自动使用 CentOS 7.9.2009
-归档源与 EL7 Docker CE 镜像源解决官方镜像下线或网络不可达问题，不会
-错误尝试新版本。内置 ClickHouse 默认通过可配置的
-`CLICKHOUSE_IMAGE_REPOSITORY` 镜像代理拉取；如环境可直连 Docker Hub，
-可将其改为 `clickhouse/clickhouse-server`。
-仅检查现有环境可运行 `sudo ./prepare-host.sh --check`；如需让普通用户执行
-Docker，可显式传入 `--docker-user USER`，该权限等同于宿主机 root 权限。
+The location smoke test inserts temporary rows for two locations into MySQL and
+ClickHouse, verifies there is no cross-location match, and removes its test
+rows.
 
-对于全新 EL7/XFS 主机，如果旧内核迫使 Docker 使用 `vfs` 存储驱动，
-主机准备脚本会在 `/opt/sumscope` 是独立挂载盘时自动使用
-`/opt/sumscope/docker-data`。也可以通过
-`DOCKER_DATA_ROOT=/更大的目录` 显式指定。脚本不会自动迁移已有 Docker
-容器、镜像，也不会覆盖已有 `/etc/docker/daemon.json`。由于 `vfs` 会复制
-镜像层而不是共享镜像层，完整部署要求 Docker 数据根至少有 120GB 可用空间。
+## Uninstall and recovery
 
-如果要在独立机器只部署部分服务，先配置外部 ClickHouse、ZooKeeper 和
-`control.prod/dc.dat`，然后运行：
+Remove containers but preserve databases and generated configuration:
 
 ```bash
-./deploy.sh --services apssvr,quantsvr
+sudo ./uninstall-saas.sh
 ```
 
-定向部署会复用完整部署相同的配置生成、备份和运行校验，但使用
-`--no-deps`，不会在该机器自动启动 ZooKeeper、ClickHouse 或其他业务服务。
-对于不依赖 ClickHouse 且使用 `RegisterEnable=0` 固定地址模式的 APSSvr，
-空机可直接执行：
+Permanently remove the isolated SaaS runtime data:
 
 ```bash
-./deploy.sh --services apssvr
+sudo ./uninstall-saas.sh --purge-data
 ```
 
-部署仓库已包含可公开分发的试用 `control.prod/dc.dat`。脚本会自动安装
-Docker、复制并校验试用许可证、补齐首次部署配置、创建挂载目录，并且只
-启动 APSSvr。正式环境可在部署前替换 `control.prod/dc.dat`；缺少内置文件时
-也可以使用 `--license-url HTTPS_URL` 下载许可证。空文件或占位许可证会在
-启动容器前被明确拒绝，避免服务进入反复重启状态。定向部署默认按
-`MIN_SELECTED_MEMORY_MB=1024`、`MIN_SELECTED_DISK_GB=5` 校验宿主机，
-不会套用完整系统的 8GB/20GB 门槛；部署高内存服务时可在 `.env.prod`
-覆盖这两个值。配置同步会保留宿主机 `control` 挂载根目录和已有运行时
-`overrides`，定向部署只重建所选容器，避免在线绑定挂载失效。
-如果是空机验证，希望只部署指定业务服务并自动带起必要的本机基础设施，
-可直接运行：
+The purge command accepts only the exact
+`/opt/dc-saas-runtime` path and never selects `/opt/sumscope`.
 
-```bash
-./deploy.sh --services loginsvr --with-deps
-```
+Redeploy with the preserved data by running `sudo ./deploy-saas.sh` again.
 
-该命令会在缺少 Docker 时自动执行主机准备，自动生成首次部署所需的
-`.env.prod` 和 `control.prod` 默认文件，只启动 LoginSvr 和 ClickHouse，
-不会启动其他业务服务。默认 LoginSvr 使用
-`SERVER.LoginSvr.RegisterEnable=0` 固定地址模式，因此不会安装或启动
-ZooKeeper；只有所选服务明确配置 `RegisterEnable=1` 时才会带起 ZooKeeper。
+## Implementation sequence after deployment
 
-部署脚本会自动创建 `${DEPLOY_ROOT}/control`、`${DEPLOY_ROOT}/data`、
-`${DEPLOY_ROOT}/log` 及各 Java 服务的偏好目录，不需要手工预建。
-`control` 以只读方式挂载到容器，`data`、`log` 和 Java 偏好目录按
-`RUNTIME_UID:RUNTIME_GID` 设置为可写；脚本不会递归修改已有业务数据的归属。
-
-部署后验证：
-
-```bash
-./validate.sh
-docker compose --env-file .env.prod -f compose.yaml -f compose.override.generated.yaml ps
-curl -I http://127.0.0.1/web/
-curl 'http://127.0.0.1:8123/?query=SELECT%201'
-```
-
-部署完成后的第一步见：[部署后快速开始](docs/01-getting-started/quick-start-after-deploy.zh-CN.md)。
-
-## 部署后安全加固
-
-安全加固是独立运维步骤，不会随一键部署自动执行。确认系统部署成功后，再执行：
-
-```bash
-sudo ./security/harden-host.sh
-sudo ./security/validate-host-security.sh
-```
-
-如果需要回滚主机安全策略：
-
-```bash
-sudo ./security/rollback-host-security.sh
-```
-
-加固脚本会禁用宿主机 `nginx`，保留 `dc-web` 容器对外服务；默认只放行 SSH、Web、GW 和 ClickHouse 外部代理端口。生产如果 SSH 不是 `22`，先在 `.env.prod` 中设置 `PUBLIC_SSH_PORT`。
-
-## 必填运行参数
-
-默认一键部署可以先拉起系统骨架。要启用 Telegram 和 DeepSeek 能力，用户需要在 `.env.prod` 中自行提供：
-
-```bash
-QUANTSVR_BOT_TOKEN=
-QUANTSVR_BOT_USERNAME=
-QUANTSVR_BOT_GROUP_ID=
-QUANTSVR_BOT_ADMIN_LIST=
-INDSVR_DEEPSEEK_API_KEY=
-CUSTOMINDSVR_TAG=latest
-CUSTOMINDSVR_GW_PORT=30047
-STRATEGY_SIGNAL_CHANNEL=CD
-STRATEGY_VENUE_TYPE_GW=BNFutures
-```
-
-说明：
-
-- `QUANTSVR_ENABLE_BOT` 可留空；填写 `QUANTSVR_BOT_TOKEN` 后部署脚本会自动启用 Telegram bot。
-- 如果要强制关闭 Telegram bot，可在 `.env.prod` 中设置 `QUANTSVR_ENABLE_BOT=false`。
-- `QUANTSVR_BOT_ADMIN_LIST` 使用 `|` 分隔多个管理员 ID，并给完整值加引号，例如 `QUANTSVR_BOT_ADMIN_LIST='123|456'`。
-- `STRATEGY_SIGNAL_CHANNEL` 是公共策略信号频道，固定默认为 `CD`。QuantSvr 中需要接收该策略池信号的运行策略将 `algo` 配置为相同值；旧 Indsvr 继续使用 `AI`，禁止混用。
-- `customindsvr` 与旧 `indsvr` 独立运行，默认容器名为 `dc-customindsvr`，服务端口为 `30047`。
-- GW 内部密码无需用户配置。
-- 修改 `.env.prod` 后，需要重启对应服务。
-
-首次上线 `customindsvr` 时，先确认 QuantSvr 账户策略已订阅 `STRATEGY_SIGNAL_CHANNEL`，再按顺序执行：
-
-```bash
-# 幂等创建 cus_signal 等 ClickHouse 表
-./clickhouse/apply-init.sh
-
-# QuantSvr 新镜像应先就绪，再启动确定性实时策略服务
-./deploy.sh --services quantsvr
-./deploy.sh --services customindsvr
-
-docker logs dc-customindsvr --tail 200
-```
-
-已有旧 `indsvr` 不会被替换或停止；两个服务使用不同名称和端口并行运行。
-
-## 部署后如何使用
-
-主要入口：
-
-- 使用 `GW` 的 MCP/API 入口提交外部信号或消息。
-- 使用 `INDSvr` 创建或导入策略，生成 candidate。
-- 使用 `SIMSvr` 自动执行回测、参数优化和上线判断。
-- 使用 `QuantSvr` 运行已上线策略并生成日末复盘。
-- 使用 `BatchSvr` 查看每日系统报告和 5 分钟运行报告。
-
-完整使用说明见：[用户使用手册](docs/03-user-guide/user-guide.zh-CN.md)。
-
-## 核心文档
-
-- [文档中心](docs/README.zh-CN.md)
-- [系统总览](docs/02-architecture/system-overview.zh-CN.md)
-- [部署后快速开始](docs/01-getting-started/quick-start-after-deploy.zh-CN.md)
-- [用户使用手册](docs/03-user-guide/user-guide.zh-CN.md)
-- [核心流程](docs/02-architecture/flows.zh-CN.md)
-- [MCP 接口](docs/04-reference/mcp-api.zh-CN.md)
-- [QuantSvr 风控与 Telegram](docs/03-user-guide/quantsvr-risk-telegram.zh-CN.md)
-- [核心数据表](docs/04-reference/data-model.zh-CN.md)
-- [报告与排障](docs/05-operations/reports-and-troubleshooting.zh-CN.md)
-- [安全说明](docs/05-operations/security.zh-CN.md)
-
-## 常用运维
-
-重启单个服务：
-
-```bash
-./restart-service.sh quantsvr
-./restart-service.sh customindsvr
-```
-
-升级单个服务镜像：
-
-```bash
-vi .env.prod
-docker compose --env-file .env.prod -f compose.yaml -f compose.override.generated.yaml pull quantsvr
-./restart-service.sh quantsvr
-
-./pull-images.sh customindsvr
-./restart-service.sh customindsvr
-```
-
-查看日志：
-
-```bash
-docker logs dc-quantsvr --tail 200
-tail -n 100 ${DEPLOY_ROOT}/log/QuantSvr.log
-docker logs dc-customindsvr --tail 200
-tail -n 100 ${DEPLOY_ROOT}/log/CustomindSvr.log
-```
-
-全量部署失败后回滚：
-
-```bash
-./rollback.sh
-```
-
-## 安全提醒
-
-- 不要提交 `.env.prod`。
-- 不要提交真实 API key、Telegram token、ClickHouse 生产密码。
-- QuantSvr、INDSvr 的 bot/API key 只维护在 `.env.prod`，部署脚本会生成 `control/overrides/<Service>/config/application.properties` 并挂载到容器。
-- 用户需要自行提供 `QUANTSVR_BOT_TOKEN`、`QUANTSVR_BOT_USERNAME`、`QUANTSVR_BOT_GROUP_ID`、`QUANTSVR_BOT_ADMIN_LIST`、`INDSVR_DEEPSEEK_API_KEY`。
-- APSSvr 默认不需要外部 API key，相关交易所/BirdEye 开关默认关闭。
-- 更新 `.env.prod` 后，重启对应服务让新配置生效。
-- `control.prod.example/` 只放示例配置。
-- 对外开放 MCP 前必须替换 `apiKeyList.csv` 中的示例 key。
-
-许可证：Apache-2.0，详见 [LICENSE](LICENSE)。
+1. Establish a regression baseline for login, market data, order lifecycle,
+   execution, liquidation, balances, positions, and two-location isolation.
+2. Audit every MySQL DAO and GW handler so all tenant-owned reads and writes
+   include `location`; add composite indexes or keys only through versioned
+   migrations.
+3. Implement exchange-compatible order validation as shared domain rules:
+   tick/step size, minimum notional, market/limit/stop orders, reduce-only,
+   position mode, leverage, margin, fees, funding, and liquidation.
+4. Add idempotency keys, immutable order/trade events, reconciliation jobs,
+   ledger invariants, and risk limits before enabling real funds.
+5. Add observability, encrypted secret management, backups, restore drills,
+   rolling upgrades, and tenant-level rate limits.
+6. Promote immutable `sha-*` images through QA and staging before production;
+   never deploy the moving quant `latest` tags into this stack.

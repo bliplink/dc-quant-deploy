@@ -22,7 +22,7 @@ usage() {
 Usage:
   sudo ./prepare-host.sh [--check] [--dry-run] [--docker-user USER]
 
-Install and verify the Docker runtime required by dc-quant-deploy.
+Install and verify the Docker runtime required by DC SaaS.
 
 Options:
   --check             Verify Docker Engine, Docker Compose v2, and the service.
@@ -33,7 +33,7 @@ Options:
 Supported operating systems:
   Amazon Linux, CentOS, RHEL, Rocky Linux, AlmaLinux, Ubuntu, and Debian.
 
-The script is idempotent. It does not deploy DC Quant or overwrite an existing
+The script is idempotent. It does not deploy DC SaaS or overwrite an existing
 Docker daemon configuration. On a fresh legacy EL7 host where Docker falls back
 to vfs, it uses /opt/sumscope/docker-data when that mount is available.
 Membership in the docker group grants root-equivalent access.
@@ -509,7 +509,7 @@ validate_runtime() {
 
   log "$(docker --version)"
   log "$(docker compose version)"
-  log "Docker runtime is ready for dc-quant-deploy."
+  log "Docker runtime is ready for DC SaaS."
 }
 
 main() {

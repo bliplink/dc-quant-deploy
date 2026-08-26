@@ -1,10 +1,13 @@
 # Contributing
 
-Thanks for helping improve `dc-quant-deploy`.
+Thanks for helping improve the DC cryptocurrency SaaS deployment.
 
 ## Scope
 
-This repository is for deployment, operations, and user-facing documentation of DC Quant. Business service source code, private production configuration, and runtime data should not be added here.
+This branch is for deployment, operations, and user-facing documentation of
+the standalone DC cryptocurrency SaaS product. Quantitative-service definitions,
+business service source code, private production configuration, and runtime
+data should not be added here.
 
 ## Before Opening A Pull Request
 

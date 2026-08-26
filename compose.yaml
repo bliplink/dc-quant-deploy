@@ -1,11 +1,13 @@
-name: ${COMPOSE_PROJECT_NAME}
+name: ${COMPOSE_PROJECT_NAME:-dc-saas}
 
 x-java-service-base: &java-service-base
   network_mode: host
   restart: unless-stopped
-  user: "${RUNTIME_UID}:${RUNTIME_GID}"
+  init: true
+  user: "${RUNTIME_UID:-0}:${RUNTIME_GID:-0}"
+  stop_grace_period: 30s
   environment:
-    TZ: UTC
+    TZ: Asia/Shanghai
     DEPLOY_ROOT: /srv/dc
   volumes:
     - ${DEPLOY_ROOT}/control:/srv/dc/control:ro
@@ -13,254 +15,296 @@ x-java-service-base: &java-service-base
     - ${DEPLOY_ROOT}/log:/srv/dc/log
 
 services:
-  clickhouse:
-    image: ${CLICKHOUSE_IMAGE_REPOSITORY:-clickhouse/clickhouse-server}:${CLICKHOUSE_IMAGE_TAG}
-    container_name: dc-clickhouse
-    profiles: ["embedded-clickhouse"]
-    network_mode: host
+  mysql:
+    image: ${MYSQL_IMAGE_REPOSITORY:-docker.m.daocloud.io/library/mysql}:${MYSQL_IMAGE_TAG:-8.0.36}
+    container_name: dc-saas-mysql
     restart: unless-stopped
+    ports:
+      - "127.0.0.1:${MYSQL_PORT:-33306}:3306"
     environment:
-      TZ: UTC
-      CLICKHOUSE_DB: ${CLICKHOUSE_DB_NAME}
+      TZ: Asia/Shanghai
+      MYSQL_DATABASE: dc
+      MYSQL_USER: ${MYSQL_USERNAME}
+      MYSQL_PASSWORD: ${MYSQL_PASSWORD}
+      MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD}
+    command:
+      - --character-set-server=utf8mb4
+      - --collation-server=utf8mb4_0900_ai_ci
+      - --default-time-zone=+08:00
+      - --innodb-buffer-pool-size=512M
+      - --max-connections=300
+    volumes:
+      - ${DEPLOY_ROOT}/data/mysql:/var/lib/mysql
+      - ./mysql/init:/docker-entrypoint-initdb.d:ro
+    healthcheck:
+      test: ["CMD-SHELL", "mysqladmin ping -h 127.0.0.1 -uroot -p\"$${MYSQL_ROOT_PASSWORD}\" --silent"]
+      interval: 10s
+      timeout: 5s
+      retries: 30
+      start_period: 30s
+    mem_limit: 2g
+
+  clickhouse:
+    image: ${CLICKHOUSE_IMAGE_REPOSITORY:-docker.m.daocloud.io/clickhouse/clickhouse-server}:${CLICKHOUSE_IMAGE_TAG:-25.9.3.48}
+    container_name: dc-saas-clickhouse
+    restart: unless-stopped
+    ports:
+      - "127.0.0.1:${CLICKHOUSE_HTTP_PORT:-38123}:8123"
+      - "127.0.0.1:${CLICKHOUSE_NATIVE_PORT:-39000}:9000"
+    environment:
+      TZ: Asia/Shanghai
+      CLICKHOUSE_DB: dc
       CLICKHOUSE_USER: ${CLICKHOUSE_USERNAME}
       CLICKHOUSE_PASSWORD: ${CLICKHOUSE_PASSWORD}
+      CLICKHOUSE_DEFAULT_ACCESS_MANAGEMENT: "1"
       CLICKHOUSE_RUN_AS_ROOT: "1"
     volumes:
       - ${DEPLOY_ROOT}/data/clickhouse:/var/lib/clickhouse
       - ${DEPLOY_ROOT}/log/clickhouse:/var/log/clickhouse-server
-      - ./clickhouse/config.d/10-merge-tree-compat.xml:/etc/clickhouse-server/config.d/10-merge-tree-compat.xml:ro
-      - ./clickhouse/users.d/10-async-insert.xml:/etc/clickhouse-server/users.d/10-async-insert.xml:ro
-      # deploy.sh applies these idempotent scripts after the final server is healthy.
-      - ./clickhouse/init:/opt/dc-clickhouse-init:ro
+      - ./clickhouse/saas-init:/docker-entrypoint-initdb.d:ro
+      - ./clickhouse/users.d/20-saas-memory.xml:/etc/clickhouse-server/users.d/20-saas-memory.xml:ro
     healthcheck:
       test: ["CMD-SHELL", "clickhouse-client --user \"$${CLICKHOUSE_USER}\" --password \"$${CLICKHOUSE_PASSWORD}\" --query 'SELECT 1' >/dev/null 2>&1"]
       interval: 10s
       timeout: 5s
       retries: 30
-      start_period: 20s
+      start_period: 30s
+    mem_limit: 3g
 
   zookeeper:
-    image: ghcr.io/bliplink/zookeeper:${ZOOKEEPER_TAG}
-    container_name: dc-zookeeper
-    network_mode: host
+    image: ghcr.io/bliplink/zookeeper:${ZOOKEEPER_TAG:-v0.0.3-test}
+    container_name: dc-saas-zookeeper
     restart: unless-stopped
+    ports:
+      - "127.0.0.1:${ZOOKEEPER_PORT:-32181}:2181"
+      - "127.0.0.1:${ZOOKEEPER_JMX_PORT:-38888}:8888"
     environment:
-      TZ: UTC
+      TZ: Asia/Shanghai
       ATS_ROOT: /opt/zookeeper/runtime
       ZOOKEEPER_CLIENT_PORT: 2181
       ZOOKEEPER_DATA_DIR: /opt/zookeeper/data
       ZOOKEEPER_JMX_PORT: 8888
     volumes:
       - ${DEPLOY_ROOT}/data/zookeeper:/opt/zookeeper/data
-      - ${DEPLOY_ROOT}/log:/opt/zookeeper/runtime/log
+      - ${DEPLOY_ROOT}/log/zookeeper:/opt/zookeeper/runtime/log
+    mem_limit: 512m
 
   gateway:
     <<: *java-service-base
-    image: ghcr.io/bliplink/gw:${GW_TAG}
-    container_name: dc-gateway
-    volumes:
-      - ${DEPLOY_ROOT}/control:/srv/dc/control:ro
-      - ${DEPLOY_ROOT}/data:/srv/dc/data
-      - ${DEPLOY_ROOT}/log:/srv/dc/log
-      - ${DEPLOY_ROOT}/data/java-prefs/GW:/srv/dc/.java
+    image: ghcr.io/bliplink/gw:${GW_TAG:-saas-crypto}
+    container_name: dc-saas-gateway
     depends_on:
       zookeeper:
         condition: service_started
     environment:
-      TZ: UTC
+      TZ: Asia/Shanghai
       DEPLOY_ROOT: /srv/dc
       SERVICE_NAME: GW
       MAIN_CLASS: GW
-      JAVA_OPTS: -server -Xmx2048m -Xms128m -Xmn512m -Djava.security.auth.login.config=../../control/jaas.ini
+      JAVA_OPTS: -server -Xms128m -Xmx768m -Xmn256m -Djava.security.auth.login.config=../../control/jaas.ini
+    volumes:
+      - ${DEPLOY_ROOT}/control:/srv/dc/control:ro
+      - ${DEPLOY_ROOT}/data:/srv/dc/data
+      - ${DEPLOY_ROOT}/log:/srv/dc/log
+      - ${DEPLOY_ROOT}/control/overrides/GW/config/spring-tcp-server.xml:/srv/dc/dc/GW/config/spring-tcp-server.xml:ro
+      - ${DEPLOY_ROOT}/control/overrides/GW/config/spring-gw-client.xml:/srv/dc/dc/GW/config/spring-gw-client.xml:ro
+    mem_limit: 1280m
 
   loginsvr:
     <<: *java-service-base
-    image: ghcr.io/bliplink/loginsvr:${LOGINSVR_TAG}
-    container_name: dc-loginsvr
-    volumes:
-      - ${DEPLOY_ROOT}/control:/srv/dc/control:ro
-      - ${DEPLOY_ROOT}/data:/srv/dc/data
-      - ${DEPLOY_ROOT}/log:/srv/dc/log
-      - ${DEPLOY_ROOT}/data/java-prefs/LoginSvr:/srv/dc/.java
+    image: ghcr.io/bliplink/loginsvr:${LOGINSVR_TAG:-saas-crypto}
+    container_name: dc-saas-loginsvr
     depends_on:
+      mysql:
+        condition: service_healthy
       zookeeper:
         condition: service_started
     environment:
-      TZ: UTC
+      TZ: Asia/Shanghai
       DEPLOY_ROOT: /srv/dc
       SERVICE_NAME: LoginSvr
       MAIN_CLASS: LoginSvr
-      JAVA_OPTS: -server -Xmx2048m -Xms128m -Xmn512m -Djava.security.auth.login.config=../../control/jaas.ini
-
-  mdsvr:
-    <<: *java-service-base
-    image: ghcr.io/bliplink/mdsvr:${MDSVR_TAG}
-    container_name: dc-mdsvr
+      JAVA_OPTS: -server -Xms128m -Xmx512m -Xmn192m -Djava.security.auth.login.config=../../control/jaas.ini
     volumes:
       - ${DEPLOY_ROOT}/control:/srv/dc/control:ro
       - ${DEPLOY_ROOT}/data:/srv/dc/data
       - ${DEPLOY_ROOT}/log:/srv/dc/log
-      - ${DEPLOY_ROOT}/data/java-prefs/MDSvr:/srv/dc/.java
+      - ${DEPLOY_ROOT}/control/overrides/LoginSvr/config/application.properties:/srv/dc/dc/LoginSvr/config/application.properties:ro
+    mem_limit: 1g
+
+  mdsvr:
+    <<: *java-service-base
+    image: ghcr.io/bliplink/mdsvr:${MDSVR_TAG:-saas-crypto}
+    container_name: dc-saas-mdsvr
     depends_on:
+      clickhouse:
+        condition: service_healthy
       zookeeper:
         condition: service_started
     environment:
-      TZ: UTC
+      TZ: Asia/Shanghai
       DEPLOY_ROOT: /srv/dc
       SERVICE_NAME: MDSvr
       MAIN_CLASS: MDSvr
-      JAVA_OPTS: -server -Xmx2048m -Xms128m -Xmn512m -Djava.security.auth.login.config=../../control/jaas.ini
+      JAVA_OPTS: -server -Xms128m -Xmx1024m -Xmn256m -Djava.security.auth.login.config=../../control/jaas.ini
+    volumes:
+      - ${DEPLOY_ROOT}/control:/srv/dc/control:ro
+      - ${DEPLOY_ROOT}/data:/srv/dc/data
+      - ${DEPLOY_ROOT}/log:/srv/dc/log
+      - ${DEPLOY_ROOT}/control/overrides/MDSvr/config/application.properties:/srv/dc/dc/MDSvr/config/application.properties:ro
+    mem_limit: 1536m
 
   apssvr:
     <<: *java-service-base
-    image: ghcr.io/bliplink/apssvr:${APSSVR_TAG}
-    container_name: dc-apssvr
+    image: ghcr.io/bliplink/apssvr:${APSSVR_TAG:-saas-crypto}
+    container_name: dc-saas-apssvr
+    depends_on:
+      mysql:
+        condition: service_healthy
+      zookeeper:
+        condition: service_started
+    environment:
+      TZ: Asia/Shanghai
+      DEPLOY_ROOT: /srv/dc
+      SERVICE_NAME: APSSvr
+      MAIN_CLASS: APSSvr
+      JAVA_OPTS: -server -Xms128m -Xmx1024m -Xmn256m -Djava.security.auth.login.config=../../control/jaas.ini
     volumes:
       - ${DEPLOY_ROOT}/control:/srv/dc/control:ro
       - ${DEPLOY_ROOT}/data:/srv/dc/data
       - ${DEPLOY_ROOT}/log:/srv/dc/log
       - ${DEPLOY_ROOT}/log:/srv/dc/logs
-      - ${DEPLOY_ROOT}/data/java-prefs/APSSvr:/srv/dc/.java
+      - ${DEPLOY_ROOT}/control/overrides/APSSvr/config/application.properties:/srv/dc/dc/APSSvr/config/application.properties:ro
+    mem_limit: 1536m
+
+  ordersvr:
+    <<: *java-service-base
+    image: ghcr.io/bliplink/ordersvr:${ORDERSVR_TAG:-saas-crypto}
+    container_name: dc-saas-ordersvr
     depends_on:
+      mysql:
+        condition: service_healthy
       zookeeper:
         condition: service_started
     environment:
-      TZ: UTC
+      TZ: Asia/Shanghai
       DEPLOY_ROOT: /srv/dc
-      SERVICE_NAME: APSSvr
-      MAIN_CLASS: APSSvr
-      JAVA_OPTS: -server -Xmx2048m -Xms128m -Xmn512m -Djava.security.auth.login.config=../../control/jaas.ini
-
-  quantsvr:
-    <<: *java-service-base
-    image: ghcr.io/bliplink/quantsvr:${QUANTSVR_TAG}
-    container_name: dc-quantsvr
+      SERVICE_NAME: OrderSvr
+      MAIN_CLASS: OrderSvr
+      JAVA_OPTS: -server -Xms128m -Xmx1024m -Xmn256m -Djava.security.auth.login.config=../../control/jaas.ini
     volumes:
       - ${DEPLOY_ROOT}/control:/srv/dc/control:ro
       - ${DEPLOY_ROOT}/data:/srv/dc/data
       - ${DEPLOY_ROOT}/log:/srv/dc/log
-      - ${DEPLOY_ROOT}/data/java-prefs/QuantSvr:/srv/dc/.java
+      - ${DEPLOY_ROOT}/control/overrides/OrderSvr/config/application.properties:/srv/dc/dc/OrderSvr/config/application.properties:ro
+    mem_limit: 1536m
+
+  tradesvr:
+    <<: *java-service-base
+    image: ghcr.io/bliplink/tradesvr:${TRADESVR_TAG:-saas-crypto}
+    container_name: dc-saas-tradesvr
     depends_on:
+      mysql:
+        condition: service_healthy
       zookeeper:
         condition: service_started
     environment:
-      TZ: UTC
+      TZ: Asia/Shanghai
       DEPLOY_ROOT: /srv/dc
-      SERVICE_NAME: QuantSvr
-      MAIN_CLASS: QuantSvr
-      JAVA_OPTS: -server -Xmx2048m -Xms128m -Xmn512m -Djava.security.auth.login.config=../../control/jaas.ini
-
-  indsvr:
-    <<: *java-service-base
-    image: ghcr.io/bliplink/indsvr:${INDSVR_TAG}
-    container_name: dc-indsvr
+      SERVICE_NAME: TradeSvr
+      MAIN_CLASS: TradeSvr
+      JAVA_OPTS: -server -Xms128m -Xmx768m -Xmn256m -Djava.security.auth.login.config=../../control/jaas.ini
     volumes:
       - ${DEPLOY_ROOT}/control:/srv/dc/control:ro
       - ${DEPLOY_ROOT}/data:/srv/dc/data
       - ${DEPLOY_ROOT}/log:/srv/dc/log
-      - ${DEPLOY_ROOT}/data/java-prefs/INDSvr:/srv/dc/.java
+      - ${DEPLOY_ROOT}/control/overrides/TradeSvr/config/application.properties:/srv/dc/dc/TradeSvr/config/application.properties:ro
+    mem_limit: 1280m
+
+  liqsvr:
+    <<: *java-service-base
+    image: ghcr.io/bliplink/liqsvr:${LIQSVR_TAG:-saas-crypto}
+    container_name: dc-saas-liqsvr
     depends_on:
+      mysql:
+        condition: service_healthy
       zookeeper:
         condition: service_started
     environment:
-      TZ: UTC
+      TZ: Asia/Shanghai
       DEPLOY_ROOT: /srv/dc
-      SERVICE_NAME: INDSvr
-      MAIN_CLASS: INDSvr
-      JAVA_OPTS: -server -Xmx2048m -Xms128m -Xmn512m -Djava.security.auth.login.config=../../control/jaas.ini
-
-  customindsvr:
-    <<: *java-service-base
-    image: ghcr.io/skt-walter/customindsvr:${CUSTOMINDSVR_TAG:-latest}
-    container_name: dc-customindsvr
+      SERVICE_NAME: LiqSvr
+      MAIN_CLASS: LiqSvr
+      JAVA_OPTS: -server -Xms128m -Xmx512m -Xmn192m -Djava.security.auth.login.config=../../control/jaas.ini
     volumes:
       - ${DEPLOY_ROOT}/control:/srv/dc/control:ro
       - ${DEPLOY_ROOT}/data:/srv/dc/data
       - ${DEPLOY_ROOT}/log:/srv/dc/log
-      - ${DEPLOY_ROOT}/data/java-prefs/CustomindSvr:/srv/dc/.java
+      - ${DEPLOY_ROOT}/control/overrides/LiqSvr/config/application.properties:/srv/dc/dc/LiqSvr/config/application.properties:ro
+    mem_limit: 1g
+
+  managersvr:
+    <<: *java-service-base
+    image: ghcr.io/bliplink/managersvr:${MANAGERSVR_TAG:-saas-crypto}
+    container_name: dc-saas-managersvr
     depends_on:
+      mysql:
+        condition: service_healthy
       zookeeper:
         condition: service_started
     environment:
-      TZ: UTC
+      TZ: Asia/Shanghai
       DEPLOY_ROOT: /srv/dc
-      SERVICE_NAME: CustomindSvr
-      MAIN_CLASS: CustomindSvr
-      STRATEGY_SIGNAL_CHANNEL: ${STRATEGY_SIGNAL_CHANNEL:-CD}
-      STRATEGY_VENUE_TYPE_GW: ${STRATEGY_VENUE_TYPE_GW:-BNFutures}
-      JAVA_OPTS: -server -Xmx2048m -Xms1024m -Xmn512m -Djava.security.auth.login.config=../../control/jaas.ini
-
-  simsvr:
-    <<: *java-service-base
-    image: ghcr.io/skt-walter/simsvr:${SIMSVR_TAG}
-    container_name: dc-simsvr
+      SERVICE_NAME: ManagerSvr
+      MAIN_CLASS: ManagerSvr
+      JAVA_OPTS: -server -Xms128m -Xmx512m -Xmn192m -Djava.security.auth.login.config=../../control/jaas.ini
     volumes:
       - ${DEPLOY_ROOT}/control:/srv/dc/control:ro
       - ${DEPLOY_ROOT}/data:/srv/dc/data
       - ${DEPLOY_ROOT}/log:/srv/dc/log
-      - ${DEPLOY_ROOT}/data/java-prefs/SIMSvr:/srv/dc/.java
+      - ${DEPLOY_ROOT}/control/overrides/ManagerSvr/config/application.properties:/srv/dc/dc/ManagerSvr/config/application.properties:ro
+    mem_limit: 1g
+
+  adminsvr:
+    <<: *java-service-base
+    image: ghcr.io/bliplink/adminsvr:${ADMINSVR_TAG:-saas-crypto}
+    container_name: dc-saas-adminsvr
     depends_on:
+      mysql:
+        condition: service_healthy
       zookeeper:
         condition: service_started
     environment:
-      TZ: UTC
+      TZ: Asia/Shanghai
       DEPLOY_ROOT: /srv/dc
-      SERVICE_NAME: SIMSvr
-      MAIN_CLASS: SIMSvr
-      JAVA_OPTS: -server -Xmx2048m -Xms128m -Xmn512m -Djava.security.auth.login.config=../../control/jaas.ini
-
-  batchsvr:
-    <<: *java-service-base
-    image: ghcr.io/bliplink/batchsvr:${BATCHSVR_TAG}
-    container_name: dc-batchsvr
-    group_add:
-      - "${DOCKER_SOCKET_GID:-998}"
+      SERVICE_NAME: AdminSvr
+      MAIN_CLASS: AdminSvr
+      JAVA_OPTS: -server -Xms128m -Xmx512m -Xmn192m -Djava.security.auth.login.config=../../control/jaas.ini
     volumes:
       - ${DEPLOY_ROOT}/control:/srv/dc/control:ro
       - ${DEPLOY_ROOT}/data:/srv/dc/data
       - ${DEPLOY_ROOT}/log:/srv/dc/log
-      - ${DEPLOY_ROOT}/data/java-prefs/BatchSvr:/srv/dc/.java
-      - /usr/bin/docker:/usr/bin/docker:ro
-      - /var/run/docker.sock:/var/run/docker.sock:ro
-    depends_on:
-      zookeeper:
-        condition: service_started
-    environment:
-      TZ: UTC
-      DEPLOY_ROOT: /srv/dc
-      SERVICE_NAME: BatchSvr
-      MAIN_CLASS: BatchSvr
-      SERVER_PORT: ${BATCHSVR_HTTP_PORT:-18080}
-      JAVA_OPTS: -server -Xmx5048m -Xms128m -Xmn512m -Djava.security.auth.login.config=../../control/jaas.ini
+      - ${DEPLOY_ROOT}/control/overrides/AdminSvr/config/application.properties:/srv/dc/dc/AdminSvr/config/application.properties:ro
+    mem_limit: 1g
 
   web:
-    image: ghcr.io/skt-walter/web:${WEB_TAG}
-    container_name: dc-web
+    image: ghcr.io/skt-walter/dc-trade-web:${TRADE_WEB_TAG:-saas-crypto}
+    container_name: dc-saas-trade-web
     network_mode: host
     restart: unless-stopped
-    volumes:
-      - ./web/default.conf.template:/etc/nginx/templates/default.conf.template:ro
-    ulimits:
-      nofile:
-        soft: 65535
-        hard: 65535
-    tmpfs:
-      - /var/cache/nginx:size=128m
-      - /var/run:size=16m
-      - /tmp:size=64m
-    healthcheck:
-      test:
-        - CMD-SHELL
-        - wget -qO- http://127.0.0.1:$${WEB_LISTEN_PORT}/healthz | grep -q '^ok$' && wget -qO- http://127.0.0.1:$${WEB_LISTEN_PORT}/web/ | grep -q '/web/assets/index-'
-      interval: 15s
-      timeout: 5s
-      retries: 4
-      start_period: 10s
     depends_on:
       gateway:
         condition: service_started
     environment:
-      TZ: UTC
-      WEB_LISTEN_PORT: ${WEB_LISTEN_PORT:-80}
-      GATEWAY_HOST: ${GATEWAY_HOST:-127.0.0.1}
-      GATEWAY_PORT: ${GATEWAY_PORT:-3002}
+      TZ: Asia/Shanghai
+      WEB_LISTEN_PORT: ${WEB_LISTEN_PORT:-18088}
+      GATEWAY_HOST: 127.0.0.1
+      GATEWAY_HTTP_PORT: ${GW_HTTP_PORT:-33002}
+      GATEWAY_WS_PORT: ${GW_WEBSOCKET_PORT:-33001}
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://127.0.0.1:$${WEB_LISTEN_PORT}/healthz | grep -q '^ok$'"]
+      interval: 15s
+      timeout: 5s
+      retries: 10
+      start_period: 10s
+    mem_limit: 512m

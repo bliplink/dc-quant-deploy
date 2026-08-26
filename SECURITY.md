@@ -1,43 +1,20 @@
-# Security Policy
+# Security policy
 
-## Supported Usage
-
-This repository contains deployment scripts, example configuration, and documentation for DC Quant. It must not contain private production configuration or runtime data.
-
-## Reporting A Vulnerability
-
-If you find a security issue, please report it privately through GitHub Security Advisory when available, or contact the project maintainer through a private channel.
-
-Please do not publish real credentials, API keys, server addresses, or exploit details in a public issue.
-
-## Secret Handling
+This repository contains deployment files for the standalone DC cryptocurrency
+SaaS product. Report vulnerabilities privately to the maintainers.
 
 Never commit:
 
-- `.env.prod`
-- real API keys
-- Telegram bot tokens
-- exchange API keys or secrets
-- ClickHouse production credentials
-- production logs, backups, reports, or private trading data
+- `.env.prod` or generated files under `/opt/dc-saas-runtime/control`;
+- MySQL or ClickHouse passwords;
+- exchange API keys, signing keys, wallet keys, or user credentials;
+- production logs, database files, backups, or customer trading data.
 
-Use placeholder values such as `replace-with-*`, `change-me`, or `example-*` in committed files.
+The default deployment binds MySQL, ClickHouse, and ZooKeeper to loopback only.
+Expose the web/GW ports only through an approved firewall, VPN, TLS reverse
+proxy, and tenant-aware rate limiting. Keep APSSvr user-data access disabled
+until secrets are supplied by a dedicated secret manager.
 
-## Runtime Secret Overrides
-
-QuantSvr and INDSvr runtime credentials are supplied from `.env.prod`. APSSvr does not require external API keys by default.
-
-Deployment scripts generate:
-
-- `control/overrides/QuantSvr/config/application.properties`
-- `control/overrides/INDSvr/config/application.properties`
-- `control/overrides/APSSvr/config/application.properties` with external key integrations disabled by default
-
-These generated files are local runtime artifacts and must not be committed. After changing `.env.prod`, restart the affected service.
-
-## Operational Recommendations
-
-- Enable API-key authentication before exposing MCP tools.
-- Restrict public network access with firewall rules, VPN, or a trusted reverse proxy.
-- Rotate API keys when sharing access with third parties.
-- Keep ClickHouse off the public internet unless there is an explicit hardened access model.
+Use immutable `sha-*` image tags for staged and production releases. Back up
+and restore both MySQL and ClickHouse, and rehearse recovery before accepting
+real funds.
