@@ -17,7 +17,7 @@ AS SELECT
     startTime,
     argMax(endTime, createTime) AS endTime,
     securityID,
-    text,
+    canonicalText AS text,
     fmtTime,
     argMax(open, createTime) AS open,
     argMax(close, createTime) AS close,
@@ -26,9 +26,15 @@ AS SELECT
     argMax(turnover, createTime) AS turnover,
     argMax(volume, createTime) AS volume,
     argMax(inf1, createTime) AS inf1
-FROM dc.kline
+FROM
+(
+    SELECT
+        *,
+        upperUTF8(text) AS canonicalText
+    FROM dc.kline
+)
 GROUP BY
     startTime,
     fmtTime,
     securityID,
-    text;
+    canonicalText;
