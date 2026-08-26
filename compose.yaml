@@ -286,7 +286,7 @@ services:
     mem_limit: 1g
 
   web:
-    image: ${TRADE_WEB_IMAGE_REPOSITORY:-ghcr.io/skt-walter/dc-trade-web}:${TRADE_WEB_TAG:-saas-crypto}
+    image: ${TRADE_WEB_IMAGE_REPOSITORY:-ghcr.io/bliplink/dc-saas-trade-web}:${TRADE_WEB_TAG:-saas-crypto}
     container_name: dc-saas-trade-web
     network_mode: host
     restart: unless-stopped
