@@ -102,7 +102,7 @@ build_java_image() {
   DOCKER_BUILDKIT=1 docker build --pull -t "${image_ref}" "${source_dir}"
 }
 
-sync_repo common https://github.com/bliplink/com.app.dc.git 0.0.3
+sync_repo common https://github.com/bliplink/com.app.dc.git saas-crypto
 sync_repo connector https://github.com/bliplink/binance-futures-connector.git main
 sync_repo ordersvr https://github.com/bliplink/com.app.dc.ordersvr.git saas-crypto
 sync_repo tradesvr https://github.com/bliplink/com.app.dc.tradesvr.git saas-crypto

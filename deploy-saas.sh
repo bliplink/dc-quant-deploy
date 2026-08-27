@@ -187,6 +187,28 @@ wait_for_health() {
   done
 }
 
+apply_mysql_migrations() {
+  local migration
+  local migrations=()
+
+  shopt -s nullglob
+  migrations=("${SCRIPT_DIR}"/mysql/migrations/*.sql)
+  shopt -u nullglob
+
+  if (( ${#migrations[@]} == 0 )); then
+    log "No MySQL migrations to apply."
+    return 0
+  fi
+
+  for migration in "${migrations[@]}"; do
+    log "Applying MySQL migration $(basename "${migration}")."
+    docker exec -i \
+      -e MYSQL_PWD="${MYSQL_ROOT_PASSWORD}" \
+      dc-saas-mysql \
+      mysql --protocol=TCP -h127.0.0.1 -P"${MYSQL_PORT}" -uroot dc < "${migration}"
+  done
+}
+
 verify_ghcr_access() {
   [[ "${REQUIRE_GHCR_LOGIN:-false}" == "true" ]] || return 0
   if [[ -n "${GHCR_USERNAME:-}" && -n "${GHCR_TOKEN:-}" ]]; then
@@ -235,6 +257,7 @@ compose_up -d mysql clickhouse zookeeper
 wait_for_health dc-saas-mysql 420
 wait_for_health dc-saas-clickhouse 420
 wait_for_health dc-saas-zookeeper 120
+apply_mysql_migrations
 
 log "Starting the SaaS application services and dc-trade-web."
 compose_up -d
