@@ -124,6 +124,10 @@ append_server LiqSvr LiqSvr "${LIQSVR_GW_PORT}" LiqSvr
 append_server ManagerSvr ManagerSvr "${MANAGERSVR_GW_PORT}" ManagerSvr
 
 install -m 0600 "${SCRIPT_DIR}/control.prod/jaas.ini" "${CONTROL_ROOT}/jaas.ini"
+# The official image drops from root to its zookeeper user before starting.
+# Keep the server-only mount readable inside that container; CONTROL_ROOT
+# itself remains restricted to the deployment account.
+install -m 0644 "${SCRIPT_DIR}/control.prod/jaas.ini" "${CONTROL_ROOT}/zookeeper-jaas.ini"
 install -m 0600 "${SCRIPT_DIR}/control.prod/dc.dat" "${CONTROL_ROOT}/dc.dat"
 
 cat > "${OVERRIDE_ROOT}/LoginSvr/config/application.properties" <<EOF

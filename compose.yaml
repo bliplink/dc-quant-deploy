@@ -87,9 +87,12 @@ services:
       ZOO_SERVERS: server.1=localhost:32888:33888;${ZOOKEEPER_PORT:-32181}
       ZOO_4LW_COMMANDS_WHITELIST: ruok,srvr,mntr
       ZOO_ADMINSERVER_ENABLED: "false"
+      ZOO_CFG_EXTRA: authProvider.1=org.apache.zookeeper.server.auth.SASLAuthenticationProvider requireClientAuthScheme=sasl
+      SERVER_JVMFLAGS: -Djava.security.auth.login.config=/conf/jaas.ini
     volumes:
       - ${DEPLOY_ROOT}/data/zookeeper:/data
       - ${DEPLOY_ROOT}/log/zookeeper:/datalog
+      - ${DEPLOY_ROOT}/control/zookeeper-jaas.ini:/conf/jaas.ini:ro
     mem_limit: 512m
 
   gateway:
