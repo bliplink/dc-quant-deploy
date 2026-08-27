@@ -50,6 +50,8 @@ services:
     container_name: dc-saas-clickhouse
     network_mode: host
     restart: unless-stopped
+    security_opt:
+      - systempaths=unconfined
     environment:
       TZ: Asia/Shanghai
       SAAS_CLICKHOUSE_NATIVE_PORT: ${CLICKHOUSE_NATIVE_PORT:-39000}
