@@ -122,7 +122,12 @@ async function cancelFirstOpenOrder(page) {
 
 async function tradeHistoryText(page) {
   await page.getByText('Trade History', { exact: true }).click();
-  const row = page.locator('.ant-table-tbody tr').filter({ hasText: 'BTCUSDT' }).first();
+  // Tabs are force-rendered, so inactive tables stay in the DOM as hidden rows.
+  // Scope the lookup to the active pane instead of taking the first global row.
+  const row = page
+    .locator('.orderWrap .ant-tabs-tabpane-active .ant-table-tbody tr')
+    .filter({ hasText: 'BTCUSDT' })
+    .first();
   await row.waitFor({ timeout: 20000 });
   return row.innerText();
 }
