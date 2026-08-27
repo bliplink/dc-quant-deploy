@@ -130,6 +130,23 @@ install -m 0600 "${SCRIPT_DIR}/control.prod/jaas.ini" "${CONTROL_ROOT}/jaas.ini"
 install -m 0644 "${SCRIPT_DIR}/control.prod/jaas.ini" "${CONTROL_ROOT}/zookeeper-jaas.ini"
 install -m 0600 "${SCRIPT_DIR}/control.prod/dc.dat" "${CONTROL_ROOT}/dc.dat"
 
+cat > "${CONTROL_ROOT}/clickhouse-ports.xml" <<EOF
+<clickhouse>
+    <http_port>${CLICKHOUSE_HTTP_PORT}</http_port>
+    <tcp_port>${CLICKHOUSE_NATIVE_PORT}</tcp_port>
+    <interserver_http_port>39009</interserver_http_port>
+</clickhouse>
+EOF
+chmod 0644 "${CONTROL_ROOT}/clickhouse-ports.xml"
+
+cat > "${CONTROL_ROOT}/clickhouse-client.xml" <<EOF
+<config>
+    <host>127.0.0.1</host>
+    <port>${CLICKHOUSE_NATIVE_PORT}</port>
+</config>
+EOF
+chmod 0644 "${CONTROL_ROOT}/clickhouse-client.xml"
+
 cat > "${OVERRIDE_ROOT}/LoginSvr/config/application.properties" <<EOF
 serverKey=SERVER.LoginSvr
 log4j.file=./config/log4j.ini

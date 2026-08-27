@@ -60,15 +60,13 @@ services:
       CLICKHOUSE_PASSWORD: ${CLICKHOUSE_PASSWORD}
       CLICKHOUSE_DEFAULT_ACCESS_MANAGEMENT: "1"
       CLICKHOUSE_RUN_AS_ROOT: "1"
-    command:
-      - --http_port=${CLICKHOUSE_HTTP_PORT:-38123}
-      - --tcp_port=${CLICKHOUSE_NATIVE_PORT:-39000}
-      - --interserver_http_port=39009
     volumes:
       - ${DEPLOY_ROOT}/data/clickhouse:/var/lib/clickhouse
       - ${DEPLOY_ROOT}/log/clickhouse:/var/log/clickhouse-server
       - ./clickhouse/saas-init:/docker-entrypoint-initdb.d:ro
       - ./clickhouse/users.d/20-saas-memory.xml:/etc/clickhouse-server/users.d/20-saas-memory.xml:ro
+      - ${DEPLOY_ROOT}/control/clickhouse-ports.xml:/etc/clickhouse-server/config.d/10-saas-ports.xml:ro
+      - ${DEPLOY_ROOT}/control/clickhouse-client.xml:/etc/clickhouse-client/config.xml:ro
     healthcheck:
       test: ["CMD-SHELL", "clickhouse-client --port \"$${SAAS_CLICKHOUSE_NATIVE_PORT}\" --user \"$${CLICKHOUSE_USER}\" --password \"$${CLICKHOUSE_PASSWORD}\" --query 'SELECT 1' >/dev/null 2>&1"]
       interval: 10s
