@@ -139,6 +139,8 @@ async function tradeHistoryText(page) {
   const row = page
     .locator('.orderWrap .ant-tabs-tabpane-active .ant-table-tbody tr')
     .filter({ hasText: 'BTCUSDT' })
+    .filter({ hasText: '60000.0' })
+    .filter({ hasText: '0.0010' })
     .first();
   await row.waitFor({ timeout: 20000 });
   return row.innerText();
