@@ -323,6 +323,12 @@ CREATE TABLE `dc_symbol` (
   PRIMARY KEY (`id`) USING BTREE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci COMMENT='产品表';
 
+-- Keep a fresh standalone installation immediately tradeable. AdminSvr
+-- publishes this catalog to TradeSvr; without a row every order is rejected
+-- with SYMBOL_NOTEXIST.
+INSERT INTO `dc_symbol` (`id`,`symbol`,`symbol_en_name`,`symbol_cn_name`,`index_symbol`,`mark_symbol`,`predicate_funding_symbol`,`funding_symbol`,`tick_size`,`qty_tick_size`,`price_precision`,`max_order_qty`,`tip_order_qty`,`activity`,`expiried`,`ticker_root`,`contract_size`,`initial_margin`,`maint_margin`,`funding_rate_precision`,`funding_interval`,`predicted_rate`,`adl_enable`,`risk_limit`,`risk_step`,`max_price`,`taker_commission`,`maker_commission`,`create_time`,`update_time`,`close_by`,`volume_precision`,`base_currency`,`quote_currency`,`qty_precision`,`value_precision`,`assets`) VALUES
+  (1,'BTCUSDT','BTCUSDT','BTC/USDT','.BTCUSDT','.BTCUSDTMP','.BTCUSDTPREDFR','.BTCUSDTFR','0.10000000','0.00010000',1,'10.00000000','2.00000000','1','0','USDT','1','0.01000000','0.00500000',8,28800,'','1','','9',' ','0.00060000','0.00020000','2023-01-03 14:31:00','2023-01-03 14:31:00','system',4,'BTC','USDT',4,4,NULL);
+
 CREATE TABLE `dc_symbol_category` (
   `id` int(11) NOT NULL,
   `symbol_category` varchar(45) DEFAULT NULL COMMENT '产品分类',
