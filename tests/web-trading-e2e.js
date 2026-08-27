@@ -83,6 +83,9 @@ async function login(browser, username) {
   if (loginBody.data.user_id !== username) {
     throw new Error(`login returned unexpected user ${loginBody.data.user_id}`);
   }
+  if (loginBody.data.location !== location) {
+    throw new Error(`login returned unexpected location ${loginBody.data.location}`);
+  }
   await page.waitForFunction(() => Boolean(sessionStorage.getItem('loginData')));
   await page.waitForURL(`**/#/trade?location=${encodeURIComponent(location)}`);
   await page.locator('.tradeWrap').waitFor({ timeout: 20000 });

@@ -71,6 +71,22 @@ The location smoke test inserts temporary rows for two locations into MySQL and
 ClickHouse, verifies there is no cross-location match, and removes its test
 rows.
 
+Run the complete browser acceptance flow with an operator-supplied test
+password. The helper idempotently prepares the two test users, verifies both
+logins through the real GW/LoginSvr path, and then covers deposit, limit order,
+cancel, matched buy/sell execution, trade history, and recent trades:
+
+```bash
+sudo E2E_PASSWORD='replace-with-a-test-password' \
+  ./tests/run-web-trading-e2e-host.sh
+```
+
+The password is never committed. Its SHA-256 digest is written only to the two
+named test users in `WEB_E2E`. The reusable Playwright runner and npm cache make
+subsequent checks fast on legacy hosts using Docker's `vfs` storage driver.
+The precheck also proves that valid credentials are rejected when the request
+uses another `location`.
+
 ## Product documentation
 
 - [中文用户手册](docs/USER_GUIDE.zh-CN.md)

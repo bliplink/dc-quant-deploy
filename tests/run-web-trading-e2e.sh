@@ -1,11 +1,15 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-work_dir="$(mktemp -d)"
-trap 'rm -rf "${work_dir}"' EXIT
+runner_root="${E2E_RUNNER_ROOT:-/runner}"
+playwright_version="1.55.0"
+mkdir -p "${runner_root}"
 
-cd "${work_dir}"
-npm init -y >/dev/null
-npm install --no-audit --no-fund --silent playwright@1.55.0
+installed_version="$(node -p "try { require('${runner_root}/node_modules/playwright/package.json').version } catch (_) { '' }" 2>/dev/null || true)"
+if [[ "${installed_version}" != "${playwright_version}" ]]; then
+  cd "${runner_root}"
+  [[ -f package.json ]] || npm init -y >/dev/null
+  npm install --no-audit --no-fund --silent "playwright@${playwright_version}"
+fi
 
-NODE_PATH="${work_dir}/node_modules" node /work/web-trading-e2e.js
+NODE_PATH="${runner_root}/node_modules" node /work/web-trading-e2e.js
