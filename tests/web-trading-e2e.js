@@ -43,9 +43,28 @@ async function login(browser, username) {
   const page = await context.newPage();
   const pageErrors = [];
   page.on('pageerror', error => pageErrors.push(error.message));
+  page.on('console', message => {
+    if (message.type() === 'error') pageErrors.push(`console: ${message.text()}`);
+  });
 
   await page.goto(`${baseUrl}/#/login`, { waitUntil: 'domcontentloaded' });
+  await page.waitForTimeout(3000);
   const inputs = page.locator('.loginWrap input');
+  const inputCount = await inputs.count();
+  if (inputCount < 2) {
+    await page.screenshot({
+      path: path.join(artifactDir, `login-render-failure-${username}.png`),
+      fullPage: true
+    });
+    const bodyText = await page.locator('body').innerText().catch(() => '');
+    throw new Error(`login form did not render: ${JSON.stringify({
+      url: page.url(),
+      title: await page.title(),
+      inputCount,
+      bodyText: bodyText.slice(0, 1000),
+      pageErrors
+    })}`);
+  }
   await inputs.nth(0).fill(username);
   await inputs.nth(1).fill(password);
   const loginBody = await invokeFromPage(page, 'SYS.ATS.LOGIN', () =>
