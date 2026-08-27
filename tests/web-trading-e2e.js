@@ -120,6 +120,18 @@ async function cancelFirstOpenOrder(page) {
   await page.waitForTimeout(1200);
 }
 
+async function clearOpenOrders(page) {
+  for (let attempt = 0; attempt < 20; attempt += 1) {
+    const rows = await openOrders(page);
+    if (await rows.count() === 0) return;
+    await invokeFromPage(page, 'cancelOrder', () =>
+      rows.first().getByText('Cancel', { exact: true }).click()
+    );
+    await page.waitForTimeout(500);
+  }
+  throw new Error('failed to clear existing E2E open orders');
+}
+
 async function tradeHistoryText(page) {
   await page.getByText('Trade History', { exact: true }).click();
   // Tabs are force-rendered, so inactive tables stay in the DOM as hidden rows.
@@ -146,6 +158,9 @@ async function recentTradeText(page) {
   try {
     buyerSession = await login(browser, buyer);
     sellerSession = await login(browser, seller);
+
+    await clearOpenOrders(buyerSession.page);
+    await clearOpenOrders(sellerSession.page);
 
     await deposit(buyerSession.page, '100000');
     await deposit(sellerSession.page, '100000');
