@@ -152,6 +152,14 @@ compose() {
   docker compose --env-file "${ENV_FILE}" -f "${SCRIPT_DIR}/compose.yaml" "$@"
 }
 
+compose_up() {
+  # The production host uses Docker's vfs driver on XFS. Serial container
+  # creation avoids long XFS log stalls while copying multiple Java rootfs
+  # layers at the same time. Faster hosts may override this value.
+  COMPOSE_PARALLEL_LIMIT="${COMPOSE_UP_PARALLEL_LIMIT:-1}" \
+    docker compose --env-file "${ENV_FILE}" -f "${SCRIPT_DIR}/compose.yaml" up "$@"
+}
+
 wait_for_health() {
   local container="$1"
   local timeout_seconds="${2:-300}"
@@ -223,13 +231,13 @@ else
 fi
 
 log "Starting isolated MySQL, ClickHouse, and ZooKeeper."
-compose up -d mysql clickhouse zookeeper
+compose_up -d mysql clickhouse zookeeper
 wait_for_health dc-saas-mysql 420
 wait_for_health dc-saas-clickhouse 420
 wait_for_health dc-saas-zookeeper 120
 
 log "Starting the SaaS application services and dc-trade-web."
-compose up -d
+compose_up -d
 wait_for_health dc-saas-trade-web 300
 
 "${SCRIPT_DIR}/validate-saas.sh" --env-file "${ENV_FILE}"
