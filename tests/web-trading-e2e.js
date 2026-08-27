@@ -47,7 +47,9 @@ async function login(browser, username) {
     if (message.type() === 'error') pageErrors.push(`console: ${message.text()}`);
   });
 
-  await page.goto(`${baseUrl}/#/login`, { waitUntil: 'domcontentloaded' });
+  await page.goto(`${baseUrl}/#/login?location=${encodeURIComponent(location)}`, {
+    waitUntil: 'domcontentloaded'
+  });
   await page.waitForTimeout(3000);
   const inputs = page.locator('.loginWrap input');
   const inputCount = await inputs.count();
@@ -74,9 +76,7 @@ async function login(browser, username) {
     throw new Error(`login returned unexpected user ${loginBody.data.user_id}`);
   }
   await page.waitForFunction(() => Boolean(sessionStorage.getItem('loginData')));
-  await page.goto(`${baseUrl}/#/trade?location=${encodeURIComponent(location)}`, {
-    waitUntil: 'domcontentloaded'
-  });
+  await page.waitForURL(`**/#/trade?location=${encodeURIComponent(location)}`);
   await page.locator('.tradeWrap').waitFor({ timeout: 20000 });
   await page.waitForTimeout(3000);
   return { context, page, pageErrors };
