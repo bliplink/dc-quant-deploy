@@ -30,7 +30,7 @@ mysql_exec() {
 }
 
 clickhouse_exec() {
-  docker exec dc-saas-clickhouse clickhouse-client --user "${CLICKHOUSE_USERNAME}" --password "${CLICKHOUSE_PASSWORD}" --query "$1"
+  docker exec dc-saas-clickhouse clickhouse-client --port "${CLICKHOUSE_NATIVE_PORT}" --user "${CLICKHOUSE_USERNAME}" --password "${CLICKHOUSE_PASSWORD}" --query "$1"
 }
 
 cleanup() {

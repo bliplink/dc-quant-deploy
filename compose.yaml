@@ -18,11 +18,11 @@ services:
   mysql:
     image: ${MYSQL_IMAGE_REPOSITORY:-docker.m.daocloud.io/library/mysql}:${MYSQL_IMAGE_TAG:-8.0.36}
     container_name: dc-saas-mysql
+    network_mode: host
     restart: unless-stopped
-    ports:
-      - "127.0.0.1:${MYSQL_PORT:-33306}:3306"
     environment:
       TZ: Asia/Shanghai
+      MYSQL_TCP_PORT: ${MYSQL_PORT:-33306}
       MYSQL_DATABASE: dc
       MYSQL_USER: ${MYSQL_USERNAME}
       MYSQL_PASSWORD: ${MYSQL_PASSWORD}
@@ -31,13 +31,14 @@ services:
       - --character-set-server=utf8mb4
       - --collation-server=utf8mb4_0900_ai_ci
       - --default-time-zone=+08:00
+      - --port=${MYSQL_PORT:-33306}
       - --innodb-buffer-pool-size=512M
       - --max-connections=300
     volumes:
       - ${DEPLOY_ROOT}/data/mysql:/var/lib/mysql
       - ./mysql/init:/docker-entrypoint-initdb.d:ro
     healthcheck:
-      test: ["CMD-SHELL", "mysqladmin ping -h 127.0.0.1 -uroot -p\"$${MYSQL_ROOT_PASSWORD}\" --silent"]
+      test: ["CMD-SHELL", "mysqladmin ping -h 127.0.0.1 -P\"$${MYSQL_TCP_PORT}\" -uroot -p\"$${MYSQL_ROOT_PASSWORD}\" --silent"]
       interval: 10s
       timeout: 5s
       retries: 30
@@ -47,24 +48,27 @@ services:
   clickhouse:
     image: ${CLICKHOUSE_IMAGE_REPOSITORY:-docker.m.daocloud.io/clickhouse/clickhouse-server}:${CLICKHOUSE_IMAGE_TAG:-25.9.3.48}
     container_name: dc-saas-clickhouse
+    network_mode: host
     restart: unless-stopped
-    ports:
-      - "127.0.0.1:${CLICKHOUSE_HTTP_PORT:-38123}:8123"
-      - "127.0.0.1:${CLICKHOUSE_NATIVE_PORT:-39000}:9000"
     environment:
       TZ: Asia/Shanghai
+      SAAS_CLICKHOUSE_NATIVE_PORT: ${CLICKHOUSE_NATIVE_PORT:-39000}
       CLICKHOUSE_DB: dc
       CLICKHOUSE_USER: ${CLICKHOUSE_USERNAME}
       CLICKHOUSE_PASSWORD: ${CLICKHOUSE_PASSWORD}
       CLICKHOUSE_DEFAULT_ACCESS_MANAGEMENT: "1"
       CLICKHOUSE_RUN_AS_ROOT: "1"
+    command:
+      - --http_port=${CLICKHOUSE_HTTP_PORT:-38123}
+      - --tcp_port=${CLICKHOUSE_NATIVE_PORT:-39000}
+      - --interserver_http_port=39009
     volumes:
       - ${DEPLOY_ROOT}/data/clickhouse:/var/lib/clickhouse
       - ${DEPLOY_ROOT}/log/clickhouse:/var/log/clickhouse-server
       - ./clickhouse/saas-init:/docker-entrypoint-initdb.d:ro
       - ./clickhouse/users.d/20-saas-memory.xml:/etc/clickhouse-server/users.d/20-saas-memory.xml:ro
     healthcheck:
-      test: ["CMD-SHELL", "clickhouse-client --user \"$${CLICKHOUSE_USER}\" --password \"$${CLICKHOUSE_PASSWORD}\" --query 'SELECT 1' >/dev/null 2>&1"]
+      test: ["CMD-SHELL", "clickhouse-client --port \"$${SAAS_CLICKHOUSE_NATIVE_PORT}\" --user \"$${CLICKHOUSE_USER}\" --password \"$${CLICKHOUSE_PASSWORD}\" --query 'SELECT 1' >/dev/null 2>&1"]
       interval: 10s
       timeout: 5s
       retries: 30

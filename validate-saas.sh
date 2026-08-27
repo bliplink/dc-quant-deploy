@@ -88,12 +88,12 @@ mysql_location_columns="$(
   die "MySQL location isolation columns are incomplete: ${mysql_location_columns}."
 
 clickhouse_location="$(
-  docker exec dc-saas-clickhouse clickhouse-client --user "${CLICKHOUSE_USERNAME}" --password "${CLICKHOUSE_PASSWORD}" --query "SELECT count() FROM system.columns WHERE database='dc' AND table='kline' AND name='location'"
+  docker exec dc-saas-clickhouse clickhouse-client --port "${CLICKHOUSE_NATIVE_PORT}" --user "${CLICKHOUSE_USERNAME}" --password "${CLICKHOUSE_PASSWORD}" --query "SELECT count() FROM system.columns WHERE database='dc' AND table='kline' AND name='location'"
 )"
 [[ "${clickhouse_location}" == "1" ]] || die "ClickHouse kline.location is missing."
 
 clickhouse_view="$(
-  docker exec dc-saas-clickhouse clickhouse-client --user "${CLICKHOUSE_USERNAME}" --password "${CLICKHOUSE_PASSWORD}" --query "SELECT count() FROM system.tables WHERE database='dc' AND name='kline_view'"
+  docker exec dc-saas-clickhouse clickhouse-client --port "${CLICKHOUSE_NATIVE_PORT}" --user "${CLICKHOUSE_USERNAME}" --password "${CLICKHOUSE_PASSWORD}" --query "SELECT count() FROM system.tables WHERE database='dc' AND name='kline_view'"
 )"
 [[ "${clickhouse_view}" == "1" ]] || die "ClickHouse kline_view is missing."
 
