@@ -84,7 +84,7 @@ services:
       TZ: Asia/Shanghai
       # Java services also use host networking. Bind ZooKeeper directly to the
       # isolated SaaS port to avoid the legacy kernel's docker-proxy resets.
-      ZOO_CLIENT_PORT: ${ZOOKEEPER_PORT:-32181}
+      ZOO_SERVERS: server.1=localhost:32888:33888;${ZOOKEEPER_PORT:-32181}
       ZOO_4LW_COMMANDS_WHITELIST: ruok,srvr,mntr
       ZOO_ADMINSERVER_ENABLED: "false"
     volumes:
