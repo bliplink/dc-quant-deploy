@@ -118,7 +118,10 @@ async function placeLimit(page, side, price, amount) {
 }
 
 async function openOrders(page) {
-  await page.getByText('Open Orders', { exact: true }).click();
+  // The live order book continuously relayouts this section. Force the tab
+  // click after resolving the exact visible control so Playwright does not
+  // spend its action timeout waiting for a permanently "stable" bounding box.
+  await page.locator('.orderWrap').getByText('Open Orders', { exact: true }).click({ force: true });
   return page.locator('.openOrderWrap .ant-table-tbody tr').filter({ hasText: 'BTCUSDT' });
 }
 
@@ -144,7 +147,7 @@ async function clearOpenOrders(page) {
 }
 
 async function tradeHistoryText(page) {
-  await page.getByText('Trade History', { exact: true }).click();
+  await page.locator('.orderWrap').getByText('Trade History', { exact: true }).click({ force: true });
   // Tabs are force-rendered, so inactive tables stay in the DOM as hidden rows.
   // Scope the lookup to the active pane instead of taking the first global row.
   const row = page
@@ -216,6 +219,20 @@ async function recentTradeText(page) {
       sellerTrade,
       recentTrade
     }, null, 2));
+  } catch (error) {
+    if (buyerSession) {
+      await buyerSession.page.screenshot({
+        path: path.join(artifactDir, 'buyer-trading-flow-failure.png'),
+        fullPage: true
+      }).catch(() => {});
+    }
+    if (sellerSession) {
+      await sellerSession.page.screenshot({
+        path: path.join(artifactDir, 'seller-trading-flow-failure.png'),
+        fullPage: true
+      }).catch(() => {});
+    }
+    throw error;
   } finally {
     if (buyerSession) await buyerSession.context.close();
     if (sellerSession) await sellerSession.context.close();
