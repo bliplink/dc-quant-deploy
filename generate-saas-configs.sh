@@ -273,6 +273,7 @@ log4j.writeTime=true
 log4j.async=true
 storePath=../../data/TradeSvr
 enableSaveDBDemo=false
+allowMissingMarkPrice=${TRADE_ALLOW_MISSING_MARK_PRICE:-false}
 dbType=mysql
 dbpool.cfg=../../control/DBPoolConfig.ini
 dbpool.default=MYSQL0
