@@ -75,6 +75,10 @@ services:
     image: ${ZOOKEEPER_IMAGE_REPOSITORY:-docker.m.daocloud.io/library/zookeeper}:${ZOOKEEPER_TAG:-3.8.4}
     container_name: dc-saas-zookeeper
     restart: unless-stopped
+    # The 97.64 host runs an old 3.10 kernel. Docker 26/runc otherwise rejects
+    # the default /sys/fs/cgroup mount while creating this image's container.
+    security_opt:
+      - systempaths=unconfined
     ports:
       - "127.0.0.1:${ZOOKEEPER_PORT:-32181}:2181"
       - "127.0.0.1:${ZOOKEEPER_JMX_PORT:-38888}:8888"
