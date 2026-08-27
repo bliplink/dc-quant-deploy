@@ -71,6 +71,11 @@ The location smoke test inserts temporary rows for two locations into MySQL and
 ClickHouse, verifies there is no cross-location match, and removes its test
 rows.
 
+## Product documentation
+
+- [中文用户手册](docs/USER_GUIDE.zh-CN.md)
+- [对标 Binance / Bybit 的产品化路线图](docs/BINANCE_BYBIT_ROADMAP.zh-CN.md)
+
 ## Uninstall and recovery
 
 Remove containers but preserve databases and generated configuration:
