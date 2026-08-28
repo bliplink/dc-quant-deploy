@@ -79,16 +79,16 @@ compose() {
 
 service_image_ref() {
   case "$1" in
-    gateway) echo "${GW_IMAGE_REPOSITORY}:${GW_TAG}" ;;
-    loginsvr) echo "${LOGINSVR_IMAGE_REPOSITORY}:${LOGINSVR_TAG}" ;;
-    mdsvr) echo "${MDSVR_IMAGE_REPOSITORY}:${MDSVR_TAG}" ;;
-    apssvr) echo "${APSSVR_IMAGE_REPOSITORY}:${APSSVR_TAG}" ;;
-    ordersvr) echo "${ORDERSVR_IMAGE_REPOSITORY}:${ORDERSVR_TAG}" ;;
-    tradesvr) echo "${TRADESVR_IMAGE_REPOSITORY}:${TRADESVR_TAG}" ;;
-    liqsvr) echo "${LIQSVR_IMAGE_REPOSITORY}:${LIQSVR_TAG}" ;;
-    managersvr) echo "${MANAGERSVR_IMAGE_REPOSITORY}:${MANAGERSVR_TAG}" ;;
-    adminsvr) echo "${ADMINSVR_IMAGE_REPOSITORY}:${ADMINSVR_TAG}" ;;
-    web) echo "${TRADE_WEB_IMAGE_REPOSITORY}:${TRADE_WEB_TAG}" ;;
+    gateway) echo "${GW_IMAGE_REPOSITORY:-ghcr.io/bliplink/gw}:${GW_TAG:-saas-crypto}" ;;
+    loginsvr) echo "${LOGINSVR_IMAGE_REPOSITORY:-ghcr.io/bliplink/loginsvr}:${LOGINSVR_TAG:-saas-crypto}" ;;
+    mdsvr) echo "${MDSVR_IMAGE_REPOSITORY:-ghcr.io/bliplink/mdsvr}:${MDSVR_TAG:-saas-crypto}" ;;
+    apssvr) echo "${APSSVR_IMAGE_REPOSITORY:-ghcr.io/bliplink/apssvr}:${APSSVR_TAG:-saas-crypto}" ;;
+    ordersvr) echo "${ORDERSVR_IMAGE_REPOSITORY:-ghcr.io/bliplink/ordersvr}:${ORDERSVR_TAG:-saas-crypto}" ;;
+    tradesvr) echo "${TRADESVR_IMAGE_REPOSITORY:-ghcr.io/bliplink/tradesvr}:${TRADESVR_TAG:-saas-crypto}" ;;
+    liqsvr) echo "${LIQSVR_IMAGE_REPOSITORY:-ghcr.io/bliplink/liqsvr}:${LIQSVR_TAG:-saas-crypto}" ;;
+    managersvr) echo "${MANAGERSVR_IMAGE_REPOSITORY:-ghcr.io/bliplink/managersvr}:${MANAGERSVR_TAG:-saas-crypto}" ;;
+    adminsvr) echo "${ADMINSVR_IMAGE_REPOSITORY:-ghcr.io/bliplink/adminsvr}:${ADMINSVR_TAG:-saas-crypto}" ;;
+    web) echo "${TRADE_WEB_IMAGE_REPOSITORY:-ghcr.io/bliplink/dc-saas-trade-web}:${TRADE_WEB_TAG:-saas-crypto}" ;;
     *) return 1 ;;
   esac
 }
