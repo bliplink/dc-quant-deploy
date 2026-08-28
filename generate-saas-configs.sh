@@ -290,6 +290,8 @@ log4j.async=true
 storePath=../../data/LiqSvr
 dbpool.cfg=../../control/DBPoolConfig.ini
 dbpool.default=MYSQL0
+liquidation.partialEnabled=${LIQUIDATION_PARTIAL_ENABLED:-true}
+liquidation.partialRatio=${LIQUIDATION_PARTIAL_RATIO:-0.25}
 EOF
 
 cat > "${OVERRIDE_ROOT}/ManagerSvr/config/application.properties" <<EOF
