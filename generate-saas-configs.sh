@@ -275,6 +275,7 @@ log4j.async=true
 storePath=../../data/TradeSvr
 enableSaveDBDemo=false
 allowMissingMarkPrice=${TRADE_ALLOW_MISSING_MARK_PRICE:-false}
+trade.executionDedupe.maxEntries=${TRADE_EXECUTION_DEDUPE_MAX_ENTRIES:-1000000}
 dbType=mysql
 dbpool.cfg=../../control/DBPoolConfig.ini
 dbpool.default=MYSQL0
