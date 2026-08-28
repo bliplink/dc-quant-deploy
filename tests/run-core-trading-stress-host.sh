@@ -4,7 +4,7 @@ set -euo pipefail
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 DEPLOY_DIR="$(cd "${SCRIPT_DIR}/.." && pwd)"
 ENV_FILE="${ENV_FILE:-${DEPLOY_DIR}/.env.prod}"
-LOAD_LOCATION="${LOAD_LOCATION:-CORE_STRESS}"
+LOAD_LOCATION="${LOAD_LOCATION:-CORE_E2E}"
 LOAD_MAKER="${LOAD_MAKER:-stressmaker}"
 LOAD_TAKER="${LOAD_TAKER:-stresstaker}"
 LOAD_ORDERS="${LOAD_ORDERS:-1000}"
@@ -56,6 +56,19 @@ wait_for_route() {
     if (( $(date +%s) - start >= 120 )); then die "${server} did not become routable"; fi
     sleep 2
   done
+}
+
+api_order() {
+  local content="$1" request response
+  request="$(mktemp)"
+  printf '{"serverName":"OrderSvr","method":"placeOrder","content":%s}\n' "${content}" >"${request}"
+  response="$(curl -fsS --max-time 30 -H 'Content-Type: application/json' --data-binary "@${request}" \
+    "http://127.0.0.1:${WEB_LISTEN_PORT}/httpapi/")" || {
+      rm -f "${request}"
+      die "Close-order API request failed"
+    }
+  rm -f "${request}"
+  grep -Eq '"code"[[:space:]]*:[[:space:]]*0' <<<"${response}" || die "Close order rejected: ${response}"
 }
 
 log "Preparing isolated load accounts in ${LOAD_LOCATION}."
@@ -179,6 +192,38 @@ WHERE location='${LOAD_LOCATION}' AND user_id IN ('${LOAD_MAKER}','${LOAD_TAKER}
 SQL
 } | mysql_exec dc)"
 [[ "${recovery}" == $'1\n1' ]] || die "Restart recovery verification failed: ${recovery}"
+
+log "Closing the recovered positions through reduce-only matching."
+api_order "{\"OCType\":\"ClOSE\",\"OrderQty\":\"${quantity}\",\"OrdType\":\"Limit\",\"ClOrdID\":\"LOAD-${LOAD_RUN_ID}-CLOSE-SHORT\",\"Terminal\":\"API\",\"AlgoName\":\"cross\",\"Side\":\"Buy\",\"PositionSide\":\"Short\",\"Price\":\"60000\",\"UserID\":\"${LOAD_MAKER}\",\"MarketIndicator\":\"4\",\"TimeInForce\":\"GTC\",\"SecurityID\":\"BTCUSDT\",\"ReduceOnly\":\"true\",\"Location\":\"${LOAD_LOCATION}\"}"
+for _ in $(seq 1 60); do
+  close_maker_ready="$({
+    cat <<SQL
+SELECT COUNT(*) FROM dc.dc_orders WHERE location='${LOAD_LOCATION}'
+  AND clord_id='LOAD-${LOAD_RUN_ID}-CLOSE-SHORT' AND ord_status='New';
+SQL
+  } | mysql_exec dc)"
+  [[ "${close_maker_ready}" == "1" ]] && break
+  sleep 1
+done
+[[ "${close_maker_ready:-0}" == "1" ]] || die "Recovered short close order did not rest"
+api_order "{\"OCType\":\"ClOSE\",\"OrderQty\":\"${quantity}\",\"OrdType\":\"Limit\",\"ClOrdID\":\"LOAD-${LOAD_RUN_ID}-CLOSE-LONG\",\"Terminal\":\"API\",\"AlgoName\":\"cross\",\"Side\":\"Sell\",\"PositionSide\":\"Long\",\"Price\":\"60000\",\"UserID\":\"${LOAD_TAKER}\",\"MarketIndicator\":\"4\",\"TimeInForce\":\"GTC\",\"SecurityID\":\"BTCUSDT\",\"ReduceOnly\":\"true\",\"Location\":\"${LOAD_LOCATION}\"}"
+for _ in $(seq 1 120); do
+  close_ok="$({
+    cat <<SQL
+SELECT IF(COUNT(*)=2,1,0) FROM dc.dc_orders_position p JOIN dc.dc_users_balance b
+  ON b.location=p.location AND b.user_id=p.user_id
+WHERE p.location='${LOAD_LOCATION}' AND p.security_id='BTCUSDT'
+  AND p.user_id IN ('${LOAD_MAKER}','${LOAD_TAKER}')
+  AND ABS(p.long_position)<0.00000001 AND ABS(p.short_position)<0.00000001
+  AND ABS(p.long_used_margin)<0.00000001 AND ABS(p.short_used_margin)<0.00000001
+  AND ABS(b.used_margin)<0.00000001 AND ABS(b.freezed_margin)<0.00000001
+  AND ABS(b.freezed_commission)<0.00000001;
+SQL
+  } | mysql_exec dc)"
+  [[ "${close_ok}" == "1" ]] && break
+  sleep 1
+done
+[[ "${close_ok:-0}" == "1" ]] || die "Recovered positions did not close cleanly"
 
 docker stats --no-stream --format '{{.Name}}\t{{.CPUPerc}}\t{{.MemUsage}}' \
   dc-saas-gateway dc-saas-ordersvr dc-saas-tradesvr dc-saas-mdsvr \

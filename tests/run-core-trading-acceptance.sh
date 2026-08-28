@@ -55,7 +55,7 @@ ENV_FILE="${ENV_FILE}" "${DEPLOY_DIR}/smoke-test-location.sh"
 
 log "Running strict order-rule validation in an isolated acceptance location."
 ENV_FILE="${ENV_FILE}" \
-RULE_E2E_LOCATION="${CORE_LOCATION}_RULES" \
+RULE_E2E_LOCATION="${CORE_LOCATION}" \
   "${SCRIPT_DIR}/run-trading-rules-e2e-host.sh"
 
 log "Running browser login, deposit, order, cancel, match, market close, history and recent-trade flow in ${CORE_LOCATION}."
@@ -96,7 +96,7 @@ log "Revalidating health after TradeSvr restart and ADL settlement."
 if [[ "${RUN_CORE_STRESS:-false}" == "true" ]]; then
   log "Running the opt-in full-stack concurrent load and restart-recovery gate."
   ENV_FILE="${ENV_FILE}" \
-  LOAD_LOCATION="${CORE_LOCATION}_STRESS" \
+  LOAD_LOCATION="${CORE_LOCATION}" \
     "${SCRIPT_DIR}/run-core-trading-stress-host.sh"
 fi
 

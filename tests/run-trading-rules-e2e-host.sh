@@ -4,7 +4,7 @@ set -euo pipefail
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 DEPLOY_DIR="$(cd "${SCRIPT_DIR}/.." && pwd)"
 ENV_FILE="${ENV_FILE:-${DEPLOY_DIR}/.env.prod}"
-RULE_LOCATION="${RULE_E2E_LOCATION:-CORE_RULE_E2E}"
+RULE_LOCATION="${RULE_E2E_LOCATION:-CORE_E2E}"
 MAKER_ONE="${RULE_E2E_MAKER_ONE:-rulemaker1}"
 MAKER_TWO="${RULE_E2E_MAKER_TWO:-rulemaker2}"
 TAKER="${RULE_E2E_TAKER:-ruletaker}"
@@ -290,17 +290,29 @@ SQL
 done
 [[ "${active:-1}" == "0" ]] || die "Active orders remained after mass cancel"
 
+api placeOrder "{\"OCType\":\"ClOSE\",\"OrderQty\":\"0.0003\",\"OrdType\":\"Limit\",\"ClOrdID\":\"RULE-${RUN_ID}-CLOSE-SHORT\",\"Terminal\":\"API\",\"AlgoName\":\"cross\",\"Side\":\"Buy\",\"PositionSide\":\"Short\",\"Price\":\"60000\",\"UserID\":\"${MAKER_ONE}\",\"MarketIndicator\":\"4\",\"TimeInForce\":\"GTC\",\"SecurityID\":\"BTCUSDT\",\"ReduceOnly\":\"true\",\"Location\":\"${RULE_LOCATION}\"}"
+assert_success
+wait_order "RULE-${RUN_ID}-CLOSE-SHORT" New
+api placeOrder "{\"OCType\":\"ClOSE\",\"OrderQty\":\"0.0003\",\"OrdType\":\"Limit\",\"ClOrdID\":\"RULE-${RUN_ID}-CLOSE-LONG\",\"Terminal\":\"API\",\"AlgoName\":\"cross\",\"Side\":\"Sell\",\"PositionSide\":\"Long\",\"Price\":\"60000\",\"UserID\":\"${TAKER}\",\"MarketIndicator\":\"4\",\"TimeInForce\":\"GTC\",\"SecurityID\":\"BTCUSDT\",\"ReduceOnly\":\"true\",\"Location\":\"${RULE_LOCATION}\"}"
+assert_success
+wait_order "RULE-${RUN_ID}-CLOSE-SHORT" Filled
+wait_order "RULE-${RUN_ID}-CLOSE-LONG" Filled
+
 funds_ok="$({
   cat <<SQL
 SELECT IF(COUNT(*)=4,1,0) FROM dc.dc_users_balance
 WHERE location='${RULE_LOCATION}' AND user_id IN ('${MAKER_ONE}','${MAKER_TWO}','${TAKER}','${SELF_USER}')
-  AND ABS(freezed_margin)<0.00000001 AND ABS(freezed_commission)<0.00000001 AND used_margin>=0;
+  AND ABS(freezed_margin)<0.00000001 AND ABS(freezed_commission)<0.00000001 AND ABS(used_margin)<0.00000001;
 SELECT IF(COUNT(*)=0,1,0) FROM dc.dc_orders_execorders e
 JOIN dc.dc_orders o ON o.location=e.location AND o.order_id=e.order_id AND o.user_id=e.user_id
 WHERE e.location='${RULE_LOCATION}' AND o.clord_id LIKE 'RULE-${RUN_ID}-%'
   AND o.timeinforce IN ('FOK','PO') AND o.cum_qty=0;
+SELECT IF(COUNT(*)=2,1,0) FROM dc.dc_orders_position
+WHERE location='${RULE_LOCATION}' AND user_id IN ('${MAKER_ONE}','${TAKER}')
+  AND ABS(long_position)<0.00000001 AND ABS(short_position)<0.00000001
+  AND ABS(long_used_margin)<0.00000001 AND ABS(short_used_margin)<0.00000001;
 SQL
 } | mysql_exec dc)"
-[[ "${funds_ok}" == $'1\n1' ]] || die "Final rule-test accounting checks failed: ${funds_ok}"
+[[ "${funds_ok}" == $'1\n1\n1' ]] || die "Final rule-test accounting checks failed: ${funds_ok}"
 
 log "PASS: symbol filters, TIF, Post Only, FIFO, STP, idempotency, replace, batch and mass cancel rules succeeded."
