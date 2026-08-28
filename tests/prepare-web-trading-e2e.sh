@@ -58,6 +58,20 @@ SQL
 
 verified_count="$({
   cat <<SQL
+START TRANSACTION;
+DELETE FROM dc.dc_order_idempotency
+WHERE location='${E2E_LOCATION}' AND user_id IN ('${E2E_BUYER}','${E2E_SELLER}');
+DELETE FROM dc.dc_orders_execorders
+WHERE location='${E2E_LOCATION}' AND user_id IN ('${E2E_BUYER}','${E2E_SELLER}');
+DELETE FROM dc.dc_orders
+WHERE location='${E2E_LOCATION}' AND user_id IN ('${E2E_BUYER}','${E2E_SELLER}');
+DELETE FROM dc.dc_orders_position
+WHERE location='${E2E_LOCATION}' AND user_id IN ('${E2E_BUYER}','${E2E_SELLER}');
+DELETE FROM dc.dc_users_posting
+WHERE location='${E2E_LOCATION}' AND user_id IN ('${E2E_BUYER}','${E2E_SELLER}');
+DELETE FROM dc.dc_users_balance
+WHERE location='${E2E_LOCATION}' AND user_id IN ('${E2E_BUYER}','${E2E_SELLER}');
+
 INSERT INTO dc.dc_users
   (user_id,user_name,name,password,user_type,enable,create_time,update_time,
    enable_trade,enable_cash_in,enable_cash_out,close_by,location)
@@ -76,6 +90,7 @@ ON DUPLICATE KEY UPDATE
   enable_cash_out=VALUES(enable_cash_out),
   close_by=VALUES(close_by),
   location=VALUES(location);
+COMMIT;
 
 SELECT COUNT(*)
 FROM dc.dc_users
@@ -88,4 +103,4 @@ SQL
 } | mysql_exec)"
 
 [[ "${verified_count}" == "2" ]] || die "E2E users were not stored with the expected tenant and password hash"
-log "Prepared ${E2E_BUYER} and ${E2E_SELLER} for location ${E2E_LOCATION}."
+log "Prepared clean accounts ${E2E_BUYER} and ${E2E_SELLER} for location ${E2E_LOCATION}."

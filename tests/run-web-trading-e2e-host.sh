@@ -28,6 +28,23 @@ set -a
 . "${ENV_FILE}"
 set +a
 
+mysql_exec() {
+  docker exec -i -e MYSQL_PWD="${MYSQL_PASSWORD}" dc-saas-mysql \
+    mysql -u"${MYSQL_USERNAME}" -N "$@"
+}
+
+wait_for_port() {
+  local port="$1" service="$2" start
+  start="$(date +%s)"
+  until ss -lnt | awk 'NR > 1 {print $4}' | grep -Eq "[:.]${port}$"; do
+    if (( $(date +%s) - start >= 120 )); then
+      docker logs --tail 120 "${service}" >&2 || true
+      die "${service} did not listen on ${port}"
+    fi
+    sleep 2
+  done
+}
+
 E2E_BASE_URL="${E2E_BASE_URL:-http://127.0.0.1:${WEB_LISTEN_PORT}}"
 artifact_dir="${E2E_ARTIFACT_DIR:-${DEPLOY_ROOT}/e2e-artifacts}"
 install -d -m 0750 "${artifact_dir}"
@@ -38,6 +55,11 @@ E2E_BUYER="${E2E_BUYER}" \
 E2E_SELLER="${E2E_SELLER}" \
 E2E_PASSWORD="${E2E_PASSWORD}" \
   "${SCRIPT_DIR}/prepare-web-trading-e2e.sh"
+
+log "Restarting OrderSvr and TradeSvr on the clean E2E database baseline."
+docker restart dc-saas-ordersvr dc-saas-tradesvr >/dev/null
+wait_for_port "${ORDERSVR_GW_PORT}" dc-saas-ordersvr
+wait_for_port "${TRADESVR_GW_PORT}" dc-saas-tradesvr
 
 login_api_check() {
   local user="$1"
@@ -103,5 +125,38 @@ docker exec \
   -e E2E_PASSWORD="${E2E_PASSWORD}" \
   -e E2E_ARTIFACT_DIR=/artifacts \
   "${E2E_RUNNER_NAME}" bash /work/run-web-trading-e2e.sh
+
+log "Verifying authoritative order, execution and position state in MySQL."
+db_result="$({
+  cat <<SQL
+SELECT COUNT(*) FROM dc.dc_orders_position
+WHERE location='${E2E_LOCATION}'
+  AND user_id IN ('${E2E_BUYER}','${E2E_SELLER}')
+  AND (long_position <> 0 OR short_position <> 0
+       OR long_locked_position <> 0 OR short_locked_position <> 0);
+SELECT COUNT(*) FROM dc.dc_orders
+WHERE location='${E2E_LOCATION}'
+  AND user_id IN ('${E2E_BUYER}','${E2E_SELLER}')
+  AND ord_status IN ('Newing','New','PartiallyFilled','PendingCancel');
+SELECT COUNT(*) FROM dc.dc_orders_execorders
+WHERE location='${E2E_LOCATION}'
+  AND user_id IN ('${E2E_BUYER}','${E2E_SELLER}')
+  AND UPPER(oc_type)='OPEN' AND last_qty > 0;
+SELECT COUNT(*) FROM dc.dc_orders_execorders
+WHERE location='${E2E_LOCATION}'
+  AND user_id IN ('${E2E_BUYER}','${E2E_SELLER}')
+  AND UPPER(oc_type)='CLOSE' AND last_qty > 0;
+SELECT COUNT(*) FROM dc.dc_users_posting
+WHERE location='${E2E_LOCATION}'
+  AND user_id IN ('${E2E_BUYER}','${E2E_SELLER}') AND type=1 AND amount='100000';
+SQL
+} | mysql_exec dc)"
+mapfile -t db_rows <<<"${db_result}"
+[[ "${#db_rows[@]}" -eq 5 ]] || die "Unexpected database verification output: ${db_result}"
+[[ "${db_rows[0]}" == "0" ]] || die "E2E accounts still have non-flat or locked positions: ${db_rows[0]}"
+[[ "${db_rows[1]}" == "0" ]] || die "E2E accounts still have live orders: ${db_rows[1]}"
+(( db_rows[2] >= 2 )) || die "Missing authoritative open executions: ${db_rows[2]}"
+(( db_rows[3] >= 2 )) || die "Missing authoritative close executions: ${db_rows[3]}"
+(( db_rows[4] >= 2 )) || die "Missing authoritative deposits: ${db_rows[4]}"
 
 log "Browser trading acceptance passed; artifacts: ${artifact_dir}."

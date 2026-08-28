@@ -7,6 +7,7 @@ ENV_FILE="${ENV_FILE:-${DEPLOY_DIR}/.env.prod}"
 ADL_LOCATION="${ADL_E2E_LOCATION:-ADL_E2E}"
 OTHER_LOCATION="${ADL_E2E_OTHER_LOCATION:-ADL_E2E_OTHER}"
 ORDER_ID="${ADL_E2E_ORDER_ID:-ADL-E2E-LIQ-001}"
+REFERENCE_PRICE="${ADL_E2E_REFERENCE_PRICE:-80}"
 
 log() {
   printf '[adl-e2e] %s\n' "$*"
@@ -25,7 +26,13 @@ safe_identifier() {
 safe_identifier "${ADL_LOCATION}" || die "ADL_E2E_LOCATION contains unsupported characters"
 safe_identifier "${OTHER_LOCATION}" || die "ADL_E2E_OTHER_LOCATION contains unsupported characters"
 safe_identifier "${ORDER_ID}" || die "ADL_E2E_ORDER_ID contains unsupported characters"
+[[ "${REFERENCE_PRICE}" =~ ^[0-9]+([.][0-9]+)?$ ]] ||
+  die "ADL_E2E_REFERENCE_PRICE must be a nonnegative number"
 [[ "${ADL_LOCATION}" != "${OTHER_LOCATION}" ]] || die "ADL locations must be different"
+
+high_short_average="$(awk -v price="${REFERENCE_PRICE}" 'BEGIN {printf "%.8f", price + 70}')"
+low_short_average="$(awk -v price="${REFERENCE_PRICE}" 'BEGIN {printf "%.8f", price + 40}')"
+foreign_short_average="$(awk -v price="${REFERENCE_PRICE}" 'BEGIN {printf "%.8f", price + 120}')"
 
 set -a
 # shellcheck disable=SC1090
@@ -80,11 +87,11 @@ VALUES
   ('adl_liquidated','BTCUSDT','BTCUSDT',0,'Cross',100,
    1,180,1.8,0,0,0,1,0,0,0,NOW(),'ADL_E2E','${ADL_LOCATION}'),
   ('adl_high','BTCUSDT','BTCUSDT',0,'Cross',100,
-   0,0,0,1,150,10,0,0,0,0,NOW(),'ADL_E2E','${ADL_LOCATION}'),
+   0,0,0,1,${high_short_average},10,0,0,0,0,NOW(),'ADL_E2E','${ADL_LOCATION}'),
   ('adl_low','BTCUSDT','BTCUSDT',0,'Cross',100,
-   0,0,0,1,120,20,0,0,0,0,NOW(),'ADL_E2E','${ADL_LOCATION}'),
+   0,0,0,1,${low_short_average},20,0,0,0,0,NOW(),'ADL_E2E','${ADL_LOCATION}'),
   ('adl_foreign','BTCUSDT','BTCUSDT',0,'Cross',100,
-   0,0,0,2,200,10,0,0,0,0,NOW(),'ADL_E2E','${OTHER_LOCATION}');
+   0,0,0,2,${foreign_short_average},10,0,0,0,0,NOW(),'ADL_E2E','${OTHER_LOCATION}');
 
 INSERT INTO dc.dc_insurance_fund(location,security_id,balance,update_time)
 VALUES('${ADL_LOCATION}','BTCUSDT',0,NOW());

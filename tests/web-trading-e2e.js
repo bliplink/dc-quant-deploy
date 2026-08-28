@@ -122,7 +122,9 @@ async function openOrders(page) {
   // click after resolving the exact visible control so Playwright does not
   // spend its action timeout waiting for a permanently "stable" bounding box.
   await page.locator('.orderWrap').getByText('Open Orders', { exact: true }).click({ force: true });
-  return page.locator('.openOrderWrap .ant-table-tbody tr').filter({ hasText: 'BTCUSDT' });
+  return page
+    .locator('.orderWrap .ant-tabs-tabpane-active .openOrderWrap .ant-table-tbody tr')
+    .filter({ hasText: 'BTCUSDT' });
 }
 
 async function cancelFirstOpenOrder(page) {
@@ -169,7 +171,9 @@ async function recentTradeText(page) {
 
 async function positionRows(page, side) {
   await page.locator('.orderWrap').getByText('Positions', { exact: true }).click({ force: true });
-  let rows = page.locator('.orderPositionWrap .ant-table-tbody tr').filter({ hasText: 'BTCUSDT' });
+  let rows = page
+    .locator('.orderWrap .ant-tabs-tabpane-active .orderPositionWrap .ant-table-tbody tr')
+    .filter({ hasText: 'BTCUSDT' });
   if (side) rows = rows.filter({ hasText: side });
   return rows;
 }

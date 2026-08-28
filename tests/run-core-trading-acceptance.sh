@@ -38,22 +38,34 @@ log "Running insurance-deficit and transactional ADL flow in the same ${CORE_LOC
 ENV_FILE="${ENV_FILE}" \
 ADL_E2E_LOCATION="${CORE_LOCATION}" \
 ADL_E2E_OTHER_LOCATION="${CORE_LOCATION}_FOREIGN" \
+ADL_E2E_REFERENCE_PRICE=60000 \
   "${SCRIPT_DIR}/run-adl-e2e-host.sh"
 
 log "Revalidating health after TradeSvr restart and ADL settlement."
 "${DEPLOY_DIR}/validate-saas.sh" --env-file "${ENV_FILE}"
 
-log "Capturing configured JVM heaps and container memory limits."
-for container in \
-  dc-saas-gateway dc-saas-loginsvr dc-saas-mdsvr dc-saas-apssvr \
-  dc-saas-ordersvr dc-saas-tradesvr dc-saas-liqsvr dc-saas-managersvr dc-saas-adminsvr; do
-  java_opts="$(docker inspect --format '{{range .Config.Env}}{{println .}}{{end}}' "${container}" |
-    awk -F= '$1 == "JAVA_OPTS" {sub(/^[^=]*=/, ""); print; exit}')"
+log "Capturing effective JVM heaps and container memory limits."
+while read -r container expected_xmx expected_memory; do
+  java_command="$(docker exec "${container}" sh -c "ps -ef | grep '[j]ava' | head -n 1")"
   memory_bytes="$(docker inspect --format '{{.HostConfig.Memory}}' "${container}")"
-  [[ -n "${java_opts}" && "${memory_bytes}" =~ ^[1-9][0-9]+$ ]] ||
+  [[ -n "${java_command}" && "${memory_bytes}" =~ ^[1-9][0-9]+$ ]] ||
     die "Missing JVM or memory limit for ${container}"
-  printf '[core-acceptance] MEMORY %s limit_bytes=%s java_opts=%s\n' \
-    "${container}" "${memory_bytes}" "${java_opts}"
-done
+  grep -Fq -- "-Xmx${expected_xmx}" <<<"${java_command}" ||
+    die "Effective JVM heap for ${container} is not -Xmx${expected_xmx}: ${java_command}"
+  (( memory_bytes == expected_memory )) ||
+    die "Memory limit for ${container} is ${memory_bytes}, expected ${expected_memory}"
+  printf '[core-acceptance] MEMORY %s limit_bytes=%s effective_xmx=%s\n' \
+    "${container}" "${memory_bytes}" "${expected_xmx}"
+done <<'MEMORY_EXPECTATIONS'
+dc-saas-gateway 512m 805306368
+dc-saas-loginsvr 512m 805306368
+dc-saas-mdsvr 768m 1073741824
+dc-saas-apssvr 768m 1073741824
+dc-saas-ordersvr 768m 1073741824
+dc-saas-tradesvr 640m 939524096
+dc-saas-liqsvr 512m 805306368
+dc-saas-managersvr 512m 805306368
+dc-saas-adminsvr 512m 805306368
+MEMORY_EXPECTATIONS
 
 log "PASS: the complete single-location core trading acceptance flow succeeded."
