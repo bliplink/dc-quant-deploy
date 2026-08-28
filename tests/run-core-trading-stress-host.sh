@@ -10,7 +10,7 @@ LOAD_TAKER="${LOAD_TAKER:-stresstaker}"
 LOAD_ORDERS="${LOAD_ORDERS:-1000}"
 LOAD_CONCURRENCY="${LOAD_CONCURRENCY:-16}"
 LOAD_RUN_ID="${LOAD_RUN_ID:-$(date +%Y%m%d%H%M%S)}"
-LOAD_RUNNER_IMAGE="${LOAD_RUNNER_IMAGE:-mcr.microsoft.com/playwright:v1.55.0-noble}"
+LOAD_RUNNER_NAME="${LOAD_RUNNER_NAME:-dc-saas-web-e2e-runner}"
 
 log() { printf '[core-stress] %s\n' "$*"; }
 die() { printf '[core-stress] ERROR: %s\n' "$*" >&2; exit 1; }
@@ -32,7 +32,7 @@ set +a
 liq_was_running="$(docker inspect --format '{{.State.Running}}' dc-saas-liqsvr 2>/dev/null || true)"
 restore_liqsvr() {
   if [[ "${liq_was_running}" == "true" ]]; then
-    docker start dc-saas-liqsvr >/dev/null 2>&1 || true
+    timeout 120 docker start dc-saas-liqsvr >/dev/null 2>&1 || true
   fi
 }
 trap restore_liqsvr EXIT
@@ -123,15 +123,30 @@ before_stats="$(docker stats --no-stream --format '{{.Name}}\t{{.CPUPerc}}\t{{.M
 printf '%s\n' "${before_stats}" >"${artifact_dir}/container-stats-before.tsv"
 
 log "Running ${LOAD_ORDERS} resting/cancel and ${LOAD_ORDERS} matched orders at concurrency ${LOAD_CONCURRENCY}."
-docker run --rm --network host \
+runner_state="$(docker inspect --format '{{.State.Status}}' "${LOAD_RUNNER_NAME}" 2>/dev/null || true)"
+[[ "${runner_state}" == "running" ]] ||
+  die "Reusable E2E runner ${LOAD_RUNNER_NAME} is not running; run the Web E2E acceptance first"
+runner_work_source="$(docker inspect --format \
+  '{{range .Mounts}}{{if eq .Destination "/work"}}{{.Source}}{{end}}{{end}}' \
+  "${LOAD_RUNNER_NAME}")"
+[[ "${runner_work_source}" == "${SCRIPT_DIR}" ]] ||
+  die "Runner /work mount is ${runner_work_source}, expected ${SCRIPT_DIR}"
+runner_artifact_source="$(docker inspect --format \
+  '{{range .Mounts}}{{if eq .Destination "/artifacts"}}{{.Source}}{{end}}{{end}}' \
+  "${LOAD_RUNNER_NAME}")"
+[[ -n "${runner_artifact_source}" && "${artifact_dir}" == "${runner_artifact_source}"/* ]] ||
+  die "Stress artifact directory is outside runner /artifacts mount"
+runner_artifact_rel="${artifact_dir#${runner_artifact_source}/}"
+
+docker exec -w /work \
   -e LOAD_BASE_URL="http://127.0.0.1:${WEB_LISTEN_PORT}" \
   -e LOAD_LOCATION="${LOAD_LOCATION}" -e LOAD_MAKER="${LOAD_MAKER}" -e LOAD_TAKER="${LOAD_TAKER}" \
   -e LOAD_ORDERS="${LOAD_ORDERS}" -e LOAD_CONCURRENCY="${LOAD_CONCURRENCY}" \
   -e LOAD_REQUEST_TIMEOUT_MS="${LOAD_REQUEST_TIMEOUT_MS:-30000}" \
   -e LOAD_SETTLE_MS="${LOAD_SETTLE_MS:-10000}" \
-  -e LOAD_RUN_ID="${LOAD_RUN_ID}" -e LOAD_OUTPUT="/artifacts/core-trading-load.json" \
-  -v "${SCRIPT_DIR}:/work:ro" -v "${artifact_dir}:/artifacts" -w /work \
-  "${LOAD_RUNNER_IMAGE}" node core-trading-load.js | tee "${artifact_dir}/core-trading-load.log"
+  -e LOAD_RUN_ID="${LOAD_RUN_ID}" \
+  -e LOAD_OUTPUT="/artifacts/${runner_artifact_rel}/core-trading-load.json" \
+  "${LOAD_RUNNER_NAME}" node core-trading-load.js | tee "${artifact_dir}/core-trading-load.log"
 
 expected_exec=$((LOAD_ORDERS * 2))
 expected_orders=$((LOAD_ORDERS * 3))
