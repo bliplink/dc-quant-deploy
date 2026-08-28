@@ -127,6 +127,7 @@ docker run --rm --network host \
   -e LOAD_BASE_URL="http://127.0.0.1:${WEB_LISTEN_PORT}" \
   -e LOAD_LOCATION="${LOAD_LOCATION}" -e LOAD_MAKER="${LOAD_MAKER}" -e LOAD_TAKER="${LOAD_TAKER}" \
   -e LOAD_ORDERS="${LOAD_ORDERS}" -e LOAD_CONCURRENCY="${LOAD_CONCURRENCY}" \
+  -e LOAD_REQUEST_TIMEOUT_MS="${LOAD_REQUEST_TIMEOUT_MS:-30000}" \
   -e LOAD_SETTLE_MS="${LOAD_SETTLE_MS:-10000}" \
   -e LOAD_RUN_ID="${LOAD_RUN_ID}" -e LOAD_OUTPUT="/artifacts/core-trading-load.json" \
   -v "${SCRIPT_DIR}:/work:ro" -v "${artifact_dir}:/artifacts" -w /work \

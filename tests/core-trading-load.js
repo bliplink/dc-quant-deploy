@@ -9,11 +9,15 @@ const taker = process.env.LOAD_TAKER || 'stresstaker';
 const orders = Number(process.env.LOAD_ORDERS || 1000);
 const concurrency = Number(process.env.LOAD_CONCURRENCY || 16);
 const settleMs = Number(process.env.LOAD_SETTLE_MS || 10000);
+const requestTimeoutMs = Number(process.env.LOAD_REQUEST_TIMEOUT_MS || 30000);
 const output = process.env.LOAD_OUTPUT || '/artifacts/core-trading-load.json';
 const runId = process.env.LOAD_RUN_ID || `${Date.now()}`;
 
 if (!Number.isInteger(orders) || orders < 1) throw new Error('LOAD_ORDERS must be a positive integer');
 if (!Number.isInteger(concurrency) || concurrency < 1) throw new Error('LOAD_CONCURRENCY must be a positive integer');
+if (!Number.isInteger(requestTimeoutMs) || requestTimeoutMs < 1000) {
+  throw new Error('LOAD_REQUEST_TIMEOUT_MS must be an integer of at least 1000');
+}
 
 const endpoint = `${baseUrl.replace(/\/$/, '')}/httpapi/`;
 
@@ -25,13 +29,16 @@ function percentile(values, ratio) {
 
 async function invoke(method, content) {
   const started = process.hrtime.bigint();
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), requestTimeoutMs);
   let response;
   let body = '';
   try {
     response = await fetch(endpoint, {
       method: 'POST',
       headers: { 'content-type': 'application/json' },
-      body: JSON.stringify({ serverName: 'OrderSvr', method, content })
+      body: JSON.stringify({ serverName: 'OrderSvr', method, content }),
+      signal: controller.signal
     });
     body = await response.text();
     const elapsedMs = Number(process.hrtime.bigint() - started) / 1e6;
@@ -42,6 +49,8 @@ async function invoke(method, content) {
   } catch (error) {
     return { ok: false, httpStatus: 0, code: 'NETWORK', msg: error.message,
       elapsedMs: Number(process.hrtime.bigint() - started) / 1e6, body };
+  } finally {
+    clearTimeout(timeout);
   }
 }
 
@@ -86,26 +95,31 @@ async function cancelAll(user) {
 
 async function main() {
   const phases = [];
-  phases.push(await runConcurrent('resting-order-place', orders, index =>
+  const record = phase => {
+    phases.push(phase);
+    process.stderr.write(`[core-load] ${phase.name}: success=${phase.success} failed=${phase.failed} wallMs=${phase.wallMs.toFixed(1)}\n`);
+  };
+  record(await runConcurrent('resting-order-place', orders, index =>
     invoke('placeOrder', orderContent(maker, 'Sell', '90000', `LOAD-${runId}-REST-${index}`))));
   await new Promise(resolve => setTimeout(resolve, settleMs));
 
   const cancelStarted = process.hrtime.bigint();
   const cancelResult = await cancelAll(maker);
-  phases.push({ name: 'mass-cancel', total: 1, success: cancelResult.ok ? 1 : 0,
+  record({ name: 'mass-cancel', total: 1, success: cancelResult.ok ? 1 : 0,
     failed: cancelResult.ok ? 0 : 1, wallMs: Number(process.hrtime.bigint() - cancelStarted) / 1e6,
     throughput: 0, latencyMs: { p50: cancelResult.elapsedMs, p95: cancelResult.elapsedMs,
       p99: cancelResult.elapsedMs, max: cancelResult.elapsedMs },
     failureSamples: cancelResult.ok ? [] : [{ code: cancelResult.code, msg: cancelResult.msg }] });
 
-  phases.push(await runConcurrent('maker-place', orders, index =>
+  record(await runConcurrent('maker-place', orders, index =>
     invoke('placeOrder', orderContent(maker, 'Sell', '60000', `LOAD-${runId}-MAKER-${index}`))));
   await new Promise(resolve => setTimeout(resolve, settleMs));
-  phases.push(await runConcurrent('taker-match', orders, index =>
+  record(await runConcurrent('taker-match', orders, index =>
     invoke('placeOrder', orderContent(taker, 'Buy', '60000', `LOAD-${runId}-TAKER-${index}`))));
 
   const summary = {
-    runId, generatedAt: new Date().toISOString(), endpoint, location, maker, taker, orders, concurrency, phases,
+    runId, generatedAt: new Date().toISOString(), endpoint, location, maker, taker, orders, concurrency,
+    requestTimeoutMs, phases,
     passed: phases.every(phase => phase.failed === 0)
   };
   fs.writeFileSync(output, `${JSON.stringify(summary, null, 2)}\n`);
