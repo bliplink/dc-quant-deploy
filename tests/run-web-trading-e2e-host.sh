@@ -82,6 +82,8 @@ log "Restarting OrderSvr and TradeSvr on the clean E2E database baseline."
 docker restart dc-saas-ordersvr dc-saas-tradesvr >/dev/null
 wait_for_port "${ORDERSVR_GW_PORT}" dc-saas-ordersvr
 wait_for_port "${TRADESVR_GW_PORT}" dc-saas-tradesvr
+log "Restarting GW so it resolves the refreshed OrderSvr and TDSvr routes."
+docker restart dc-saas-gateway >/dev/null
 wait_for_gateway_route OrderSvr
 wait_for_gateway_route TDSvr
 
