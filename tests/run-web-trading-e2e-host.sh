@@ -45,6 +45,28 @@ wait_for_port() {
   done
 }
 
+wait_for_gateway_route() {
+  local server_name="$1" start request_file response
+  start="$(date +%s)"
+  request_file="$(mktemp)"
+  chmod 0600 "${request_file}"
+  printf '{"serverName":"%s","method":"__e2e_readiness__","content":{}}\n' \
+    "${server_name}" >"${request_file}"
+  while true; do
+    response="$(curl -fsS --max-time 10 -H 'Content-Type: application/json' \
+      --data-binary "@${request_file}" "${E2E_BASE_URL}/httpapi/" 2>/dev/null || true)"
+    if [[ -n "${response}" ]] && ! grep -Fq 'is not Online' <<<"${response}"; then
+      rm -f "${request_file}"
+      return 0
+    fi
+    if (( $(date +%s) - start >= 120 )); then
+      rm -f "${request_file}"
+      die "${server_name} did not become routable through GW"
+    fi
+    sleep 2
+  done
+}
+
 E2E_BASE_URL="${E2E_BASE_URL:-http://127.0.0.1:${WEB_LISTEN_PORT}}"
 artifact_dir="${E2E_ARTIFACT_DIR:-${DEPLOY_ROOT}/e2e-artifacts}"
 install -d -m 0750 "${artifact_dir}"
@@ -60,6 +82,8 @@ log "Restarting OrderSvr and TradeSvr on the clean E2E database baseline."
 docker restart dc-saas-ordersvr dc-saas-tradesvr >/dev/null
 wait_for_port "${ORDERSVR_GW_PORT}" dc-saas-ordersvr
 wait_for_port "${TRADESVR_GW_PORT}" dc-saas-tradesvr
+wait_for_gateway_route OrderSvr
+wait_for_gateway_route TDSvr
 
 login_api_check() {
   local user="$1"
