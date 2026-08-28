@@ -232,6 +232,18 @@ SQL
 } | mysql_exec dc)"
 [[ "${fifo_check}" == "1" ]] || die "Same-price orders did not follow time priority"
 
+# FIFO-TWO is intentionally left resting by the priority assertion. Remove it
+# before the STP case so the self-cross is the best (and only) eligible match.
+fifo_two_id="$({
+  cat <<SQL
+SELECT order_id FROM dc.dc_orders WHERE location='${RULE_LOCATION}' AND clord_id='RULE-${RUN_ID}-FIFO-TWO' LIMIT 1;
+SQL
+} | mysql_exec dc)"
+[[ -n "${fifo_two_id}" ]] || die "Could not resolve remaining FIFO order"
+api cancelOrder "{\"UserID\":\"${MAKER_TWO}\",\"MarketIndicator\":\"4\",\"SecurityID\":\"BTCUSDT\",\"OrderID\":\"${fifo_two_id}\",\"AlgoName\":\"cross\",\"Location\":\"${RULE_LOCATION}\"}"
+assert_success
+wait_order "RULE-${RUN_ID}-FIFO-TWO" Cancelled
+
 log "Checking default Cancel Taker self-trade prevention."
 place "${SELF_USER}" Sell 0.0001 60300 GTC "RULE-${RUN_ID}-STP-MAKER"; assert_success
 wait_order "RULE-${RUN_ID}-STP-MAKER" New
