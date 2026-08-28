@@ -3,6 +3,7 @@ set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 ENV_FILE="${ENV_FILE:-${SCRIPT_DIR}/.env.prod}"
+LOCK_FILE="${SAAS_AUTO_UPDATE_LOCK_FILE:-/tmp/dc-saas-auto-update.lock}"
 PURGE_DATA="false"
 PURGE_IMAGES="false"
 
@@ -51,6 +52,13 @@ done
 
 [[ "${EUID}" -eq 0 ]] || die "Run as root or with sudo."
 [[ -r "${ENV_FILE}" ]] || die "Cannot read ${ENV_FILE}"
+command -v flock >/dev/null 2>&1 || die "flock is required."
+exec 8>"${LOCK_FILE}"
+flock -n 8 || die "Another SaaS deploy, uninstall, or auto-update run holds ${LOCK_FILE}."
+
+if [[ -x "${SCRIPT_DIR}/install-auto-update-cron.sh" ]]; then
+  "${SCRIPT_DIR}/install-auto-update-cron.sh" --remove
+fi
 
 set -a
 # shellcheck disable=SC1090

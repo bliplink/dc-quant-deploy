@@ -87,10 +87,26 @@ subsequent checks fast on legacy hosts using Docker's `vfs` storage driver.
 The precheck also proves that valid credentials are rejected when the request
 uses another `location`.
 
+## Automatic public-image deployment
+
+Install the root cron task that checks the public GHCR application tags every
+five minutes and deploys a complete, validated SaaS release when they change:
+
+```bash
+sudo ./install-auto-update-cron.sh
+sudo ./auto-update-saas.sh --force
+```
+
+The updater checks remote manifest digests before downloading, waits for one
+stable release set, pulls changed application images serially, applies schema
+migrations, validates the whole stack, and restores the previous running image
+IDs if validation fails. It never updates MySQL, ClickHouse, or ZooKeeper.
+
 ## Product documentation
 
 - [中文用户手册](docs/USER_GUIDE.zh-CN.md)
 - [对标 Binance / Bybit 的产品化路线图](docs/BINANCE_BYBIT_ROADMAP.zh-CN.md)
+- [SaaS 公共镜像自动部署与运维](docs/AUTO_UPDATE.zh-CN.md)
 
 ## Uninstall and recovery
 

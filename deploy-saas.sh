@@ -3,6 +3,7 @@ set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 ENV_FILE="${ENV_FILE:-${SCRIPT_DIR}/.env.prod}"
+LOCK_FILE="${SAAS_AUTO_UPDATE_LOCK_FILE:-/tmp/dc-saas-auto-update.lock}"
 SKIP_HOST_PREPARE="false"
 SKIP_PULL="false"
 
@@ -45,6 +46,12 @@ done
 
 [[ "${EUID}" -eq 0 ]] || die "Run as root or with sudo."
 cd "${SCRIPT_DIR}"
+
+if [[ "${SAAS_DEPLOY_LOCK_HELD:-false}" != "true" ]]; then
+  command -v flock >/dev/null 2>&1 || die "flock is required."
+  exec 8>"${LOCK_FILE}"
+  flock -n 8 || die "Another SaaS deploy, uninstall, or auto-update run holds ${LOCK_FILE}."
+fi
 
 generate_secret() {
   command -v openssl >/dev/null 2>&1 || die "openssl is required to generate runtime secrets."
