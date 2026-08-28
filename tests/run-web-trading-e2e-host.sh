@@ -123,6 +123,16 @@ fi
 log "Login API precheck passed and wrong-location authentication was rejected."
 
 runner_state="$(docker inspect --format '{{.State.Status}}' "${E2E_RUNNER_NAME}" 2>/dev/null || true)"
+if [[ -n "${runner_state}" ]]; then
+  runner_work_source="$(docker inspect --format \
+    '{{range .Mounts}}{{if eq .Destination "/work"}}{{.Source}}{{end}}{{end}}' \
+    "${E2E_RUNNER_NAME}")"
+  if [[ "${runner_work_source}" != "${SCRIPT_DIR}" ]]; then
+    log "Replacing stale Playwright runner mounted from ${runner_work_source}."
+    docker rm -f "${E2E_RUNNER_NAME}" >/dev/null
+    runner_state=""
+  fi
+fi
 if [[ -z "${runner_state}" ]]; then
   log "Creating reusable Playwright runner ${E2E_RUNNER_NAME}."
   docker run -d \
