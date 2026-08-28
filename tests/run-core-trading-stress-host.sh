@@ -29,6 +29,18 @@ set -a
 . "${ENV_FILE}"
 set +a
 
+liq_was_running="$(docker inspect --format '{{.State.Running}}' dc-saas-liqsvr 2>/dev/null || true)"
+restore_liqsvr() {
+  if [[ "${liq_was_running}" == "true" ]]; then
+    docker start dc-saas-liqsvr >/dev/null 2>&1 || true
+  fi
+}
+trap restore_liqsvr EXIT
+if [[ "${liq_was_running}" == "true" ]]; then
+  log "Pausing LiqSvr so background liquidation cannot alter load-test order flow."
+  docker stop dc-saas-liqsvr >/dev/null
+fi
+
 mysql_exec() {
   docker exec -i -e MYSQL_PWD="${MYSQL_PASSWORD}" dc-saas-mysql mysql -u"${MYSQL_USERNAME}" -N "$@"
 }
