@@ -201,6 +201,23 @@ wait_for_health() {
   done
 }
 
+wait_for_port() {
+  local port="$1"
+  local service_name="$2"
+  local timeout_seconds="${3:-120}"
+  local start
+  start="$(date +%s)"
+
+  until port_is_listening "${port}"; do
+    if (( $(date +%s) - start >= timeout_seconds )); then
+      docker logs --tail 100 "dc-saas-${service_name}" >&2 || true
+      die "Timed out waiting for ${service_name} to listen on port ${port}."
+    fi
+    sleep 2
+  done
+  log "${service_name}: listening on ${port}"
+}
+
 apply_mysql_migrations() {
   local migration
   local migrations=()
@@ -276,6 +293,15 @@ apply_mysql_migrations
 log "Starting the SaaS application services and dc-trade-web."
 compose_up -d
 wait_for_health dc-saas-trade-web 300
+wait_for_port "${GW_TCP_PORT}" gateway 120
+wait_for_port "${LOGINSVR_GW_PORT}" loginsvr 120
+wait_for_port "${MDSVR_GW_PORT}" mdsvr 120
+wait_for_port "${APSSVR_GW_PORT}" apssvr 120
+wait_for_port "${ORDERSVR_GW_PORT}" ordersvr 120
+wait_for_port "${TRADESVR_GW_PORT}" tradesvr 120
+wait_for_port "${LIQSVR_GW_PORT}" liqsvr 120
+wait_for_port "${MANAGERSVR_GW_PORT}" managersvr 120
+wait_for_port "${ADMINSVR_GW_PORT}" adminsvr 120
 
 "${SCRIPT_DIR}/validate-saas.sh" --env-file "${ENV_FILE}"
 log "DC SaaS is ready at http://$(hostname -I | awk '{print $1}'):${WEB_LISTEN_PORT}/"
