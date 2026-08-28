@@ -169,11 +169,16 @@ SELECT COUNT(*) FROM dc.dc_orders_position
 WHERE location='${E2E_LOCATION}'
   AND user_id IN ('${E2E_BUYER}','${E2E_SELLER}')
   AND (long_position <> 0 OR short_position <> 0
-       OR long_locked_position <> 0 OR short_locked_position <> 0);
+       OR long_locked_position <> 0 OR short_locked_position <> 0
+       OR long_used_margin <> 0 OR short_used_margin <> 0);
 SELECT COUNT(*) FROM dc.dc_orders
 WHERE location='${E2E_LOCATION}'
   AND user_id IN ('${E2E_BUYER}','${E2E_SELLER}')
-  AND ord_status IN ('Newing','New','PartiallyFilled','PendingCancel');
+  AND ord_status IN ('Newing','New','PartiallyFilled','Partially_Filled','PendingCancel','Pending_Cancel');
+SELECT COUNT(*) FROM dc.dc_users_balance
+WHERE location='${E2E_LOCATION}'
+  AND user_id IN ('${E2E_BUYER}','${E2E_SELLER}')
+  AND (used_margin <> 0 OR freezed_margin <> 0 OR freezed_commission <> 0);
 SELECT COUNT(*) FROM dc.dc_orders_execorders
 WHERE location='${E2E_LOCATION}'
   AND user_id IN ('${E2E_BUYER}','${E2E_SELLER}')
@@ -192,12 +197,13 @@ WHERE location='${E2E_LOCATION}'
 SQL
 } | mysql_exec dc)"
 mapfile -t db_rows <<<"${db_result}"
-[[ "${#db_rows[@]}" -eq 6 ]] || die "Unexpected database verification output: ${db_result}"
+[[ "${#db_rows[@]}" -eq 7 ]] || die "Unexpected database verification output: ${db_result}"
 [[ "${db_rows[0]}" == "0" ]] || die "E2E accounts still have non-flat or locked positions: ${db_rows[0]}"
 [[ "${db_rows[1]}" == "0" ]] || die "E2E accounts still have live orders: ${db_rows[1]}"
-(( db_rows[2] >= 2 )) || die "Missing authoritative open executions: ${db_rows[2]}"
-(( db_rows[3] >= 1 )) || die "Missing authoritative close execution: ${db_rows[3]}"
-(( db_rows[4] >= 1 )) || die "Missing filled reduce-only Market/IOC close order: ${db_rows[4]}"
-(( db_rows[5] >= 2 )) || die "Missing authoritative deposits: ${db_rows[5]}"
+[[ "${db_rows[2]}" == "0" ]] || die "E2E accounts retain frozen or used margin after cancel/close: ${db_rows[2]}"
+(( db_rows[3] >= 2 )) || die "Missing authoritative open executions: ${db_rows[3]}"
+(( db_rows[4] >= 1 )) || die "Missing authoritative close execution: ${db_rows[4]}"
+(( db_rows[5] >= 1 )) || die "Missing filled reduce-only Market/IOC close order: ${db_rows[5]}"
+(( db_rows[6] >= 2 )) || die "Missing authoritative deposits: ${db_rows[6]}"
 
 log "Browser trading acceptance passed; artifacts: ${artifact_dir}."
