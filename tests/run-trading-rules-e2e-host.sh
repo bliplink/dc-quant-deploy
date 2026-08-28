@@ -197,6 +197,14 @@ SELECT IF((SELECT ord_status FROM dc.dc_orders WHERE location='${RULE_LOCATION}'
 SQL
 } | mysql_exec dc)"
 [[ "${po_check}" == "1" ]] || die "Post Only consumed resting liquidity"
+po_maker_id="$({
+  cat <<SQL
+SELECT order_id FROM dc.dc_orders WHERE location='${RULE_LOCATION}' AND clord_id='RULE-${RUN_ID}-PO-MAKER' LIMIT 1;
+SQL
+} | mysql_exec dc)"
+api cancelOrder "{\"UserID\":\"${MAKER_ONE}\",\"MarketIndicator\":\"4\",\"SecurityID\":\"BTCUSDT\",\"OrderID\":\"${po_maker_id}\",\"AlgoName\":\"cross\",\"Location\":\"${RULE_LOCATION}\"}"
+assert_success
+wait_order "RULE-${RUN_ID}-PO-MAKER" Cancelled
 
 place "${MAKER_ONE}" Sell 0.0001 60200 GTC "RULE-${RUN_ID}-FIFO-ONE"; assert_success
 wait_order "RULE-${RUN_ID}-FIFO-ONE" New
@@ -263,13 +271,13 @@ wait_order "RULE-${RUN_ID}-BATCH-TWO" Cancelled
 
 foreign_id="$({
   cat <<SQL
-SELECT order_id FROM dc.dc_orders WHERE location='${RULE_LOCATION}' AND clord_id='RULE-${RUN_ID}-PO-MAKER' LIMIT 1;
+SELECT order_id FROM dc.dc_orders WHERE location='${RULE_LOCATION}' AND clord_id='RULE-${RUN_ID}-STP-MAKER' LIMIT 1;
 SQL
 } | mysql_exec dc)"
 [[ -n "${foreign_id}" ]] || die "Could not resolve another user's order for batch-cancel isolation"
 api cancelBatchOrder "{\"location\":\"${RULE_LOCATION}\",\"userID\":\"${MAKER_TWO}\",\"securityID\":\"BTCUSDT\",\"algoName\":\"cross\",\"orderIDs\":[\"${foreign_id}\"]}"
 assert_success
-wait_order "RULE-${RUN_ID}-PO-MAKER" New
+wait_order "RULE-${RUN_ID}-STP-MAKER" New
 
 log "Cancelling remaining orders and verifying no active-order or frozen-fund residue."
 for user in "${MAKER_ONE}" "${MAKER_TWO}" "${TAKER}" "${SELF_USER}"; do
