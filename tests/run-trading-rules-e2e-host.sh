@@ -262,6 +262,7 @@ idem_clid="RULE-${RUN_ID}-IDEMPOTENT"
 place "${MAKER_TWO}" Buy 0.0001 50000 GTC "${idem_clid}"; assert_success
 idem_order_one="$(response_order_id)"
 [[ -n "${idem_order_one}" ]] || die "First idempotent request returned no order ID"
+wait_order "${idem_clid}" New
 place "${MAKER_TWO}" Buy 0.0001 50000 GTC "${idem_clid}"; assert_success
 idem_order_two="$(response_order_id)"
 [[ "${idem_order_one}" == "${idem_order_two}" ]] || die "Identical idempotent requests returned different order IDs"
@@ -271,7 +272,7 @@ idem_count="$({
 SELECT COUNT(*) FROM dc.dc_orders WHERE location='${RULE_LOCATION}' AND user_id='${MAKER_TWO}' AND clord_id='${idem_clid}';
 SQL
 } | mysql_exec dc)"
-[[ "${idem_count}" == "1" ]] || die "Idempotent retry persisted duplicate orders"
+[[ "${idem_count}" == "1" ]] || die "Idempotent retry expected one persisted order, got ${idem_count}"
 
 log "Checking atomic cancel-replace and identity-bound batch cancel."
 original_clid="RULE-${RUN_ID}-REPLACE-OLD"
