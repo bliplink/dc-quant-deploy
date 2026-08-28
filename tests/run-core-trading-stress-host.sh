@@ -157,12 +157,28 @@ SELECT COUNT(*) FROM dc.dc_orders WHERE location='${LOAD_LOCATION}'
   AND user_id IN ('${LOAD_MAKER}','${LOAD_TAKER}') AND clord_id LIKE 'LOAD-${LOAD_RUN_ID}-%';
 SELECT COUNT(*) FROM dc.dc_orders_execorders WHERE location='${LOAD_LOCATION}'
   AND user_id IN ('${LOAD_MAKER}','${LOAD_TAKER}');
+SELECT COUNT(*) FROM dc.dc_orders WHERE location='${LOAD_LOCATION}'
+  AND user_id IN ('${LOAD_MAKER}','${LOAD_TAKER}') AND clord_id LIKE 'LOAD-${LOAD_RUN_ID}-%'
+  AND ord_status='Rejected';
 SQL
   } | mysql_exec dc)"
   mapfile -t progress <<<"${persisted}"
+  if (( ${progress[2]:-0} > 0 )); then
+    timeout_rejections="$({
+      cat <<SQL
+SELECT COALESCE(ord_Rej_Reason,''),COALESCE(reject_Text,''),COUNT(*) FROM dc.dc_orders
+WHERE location='${LOAD_LOCATION}' AND user_id IN ('${LOAD_MAKER}','${LOAD_TAKER}')
+  AND clord_id LIKE 'LOAD-${LOAD_RUN_ID}-%' AND ord_status='Rejected'
+GROUP BY ord_Rej_Reason,reject_Text;
+SQL
+    } | mysql_exec dc)"
+    die "Load produced asynchronous order rejections: ${timeout_rejections}"
+  fi
   if [[ "${progress[0]:-0}" == "${expected_orders}" && "${progress[1]:-0}" == "${expected_exec}" ]]; then break; fi
   sleep 2
 done
+[[ "${progress[0]:-0}" == "${expected_orders}" && "${progress[1]:-0}" == "${expected_exec}" ]] ||
+  die "Load did not settle completely: orders=${progress[0]:-0}/${expected_orders}, executions=${progress[1]:-0}/${expected_exec}"
 
 quantity="$(awk -v count="${LOAD_ORDERS}" 'BEGIN {printf "%.8f", count * 0.0001}')"
 maker_fee="$(awk -v count="${LOAD_ORDERS}" 'BEGIN {printf "%.8f", count * 0.0012}')"
