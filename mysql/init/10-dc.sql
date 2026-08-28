@@ -175,6 +175,9 @@ CREATE TABLE `dc_liquidation_deficit` (
   `deficit_amount` decimal(35,16) NOT NULL,
   `covered_amount` decimal(35,16) NOT NULL,
   `uncovered_amount` decimal(35,16) NOT NULL,
+  `adl_covered_amount` decimal(35,16) NOT NULL DEFAULT 0,
+  `remaining_amount` decimal(35,16) NOT NULL DEFAULT 0,
+  `status` varchar(20) NOT NULL DEFAULT 'OPEN',
   `create_time` varchar(30) NOT NULL,
   PRIMARY KEY (`location`,`liquidation_order_id`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci COMMENT='穿仓与保险基金赔付流水';
@@ -185,11 +188,42 @@ CREATE TABLE `dc_adl_event` (
   `user_id` varchar(45) NOT NULL,
   `security_id` varchar(30) NOT NULL,
   `amount` decimal(35,16) NOT NULL,
+  `liquidation_side` varchar(10) DEFAULT NULL,
+  `reference_price` decimal(35,16) DEFAULT NULL,
+  `adl_amount` decimal(35,16) NOT NULL DEFAULT 0,
+  `remaining_amount` decimal(35,16) NOT NULL DEFAULT 0,
+  `candidate_count` int NOT NULL DEFAULT 0,
   `status` varchar(20) NOT NULL,
   `create_time` varchar(30) NOT NULL,
   `update_time` varchar(30) NOT NULL,
+  `completed_time` varchar(30) DEFAULT NULL,
   PRIMARY KEY (`location`,`liquidation_order_id`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci COMMENT='自动减仓事件';
+
+CREATE TABLE `dc_adl_ledger` (
+  `location` varchar(45) NOT NULL DEFAULT '',
+  `liquidation_order_id` varchar(255) NOT NULL,
+  `rank_no` int NOT NULL,
+  `liquidated_user_id` varchar(45) NOT NULL,
+  `candidate_user_id` varchar(45) NOT NULL,
+  `security_id` varchar(30) NOT NULL,
+  `position_side` varchar(10) NOT NULL,
+  `reference_price` decimal(35,16) NOT NULL,
+  `profit_rate` decimal(35,16) NOT NULL,
+  `effective_leverage` decimal(35,16) NOT NULL,
+  `position_before` decimal(35,9) NOT NULL,
+  `position_after` decimal(35,9) NOT NULL,
+  `reduced_quantity` decimal(35,9) NOT NULL,
+  `realized_pnl` decimal(35,16) NOT NULL,
+  `allocated_amount` decimal(35,16) NOT NULL,
+  `released_margin` decimal(35,16) NOT NULL,
+  `balance_before` decimal(35,16) NOT NULL,
+  `balance_after` decimal(35,16) NOT NULL,
+  `create_time` varchar(30) NOT NULL,
+  PRIMARY KEY (`location`,`liquidation_order_id`,`rank_no`),
+  KEY `idx_adl_candidate_time` (`location`,`candidate_user_id`,`create_time`),
+  KEY `idx_adl_symbol_time` (`location`,`security_id`,`create_time`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci COMMENT='Automatic deleveraging allocation ledger';
 
 CREATE TABLE `dc_orders_execorders` (
   `exec_id` varchar(300) NOT NULL COMMENT '撮合成交对id',
