@@ -82,9 +82,9 @@ GROUP BY location,user_id ORDER BY user_id;"
 
 clickhouse_table "${work_dir}/clickhouse.txt" "
 SELECT database,table,name,type FROM system.columns
-WHERE database='dc' AND table='kline' AND name IN ('location','security_id','period','datetime')
+WHERE database='dc' AND table='kline' AND name IN ('location','securityID','type','startTime','endTime')
 ORDER BY name;
-SELECT location,count() rows,min(datetime) first_time,max(datetime) last_time
+SELECT location,count() rows,min(startTime) first_time,max(endTime) last_time
 FROM dc.kline GROUP BY location ORDER BY location;"
 
 docker inspect dc-saas-ordersvr dc-saas-tradesvr dc-saas-liqsvr dc-saas-mdsvr dc-saas-apssvr \
