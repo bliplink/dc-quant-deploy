@@ -104,6 +104,8 @@ CREATE TABLE `dc_orders` (
   `ord_type` varchar(45) DEFAULT NULL COMMENT '订单类型',
   `timeinforce` varchar(45) DEFAULT NULL COMMENT 'GTC,IOC,FOK,PostOnly',
   `oc_type` varchar(45) DEFAULT NULL COMMENT '开平仓',
+  `position_side` varchar(16) DEFAULT NULL COMMENT '持仓方向',
+  `reduce_only` tinyint(1) NOT NULL DEFAULT '0' COMMENT '只减仓',
   `price` decimal(60,8) DEFAULT NULL COMMENT '订单价格',
   `order_qty` decimal(35,8) DEFAULT NULL COMMENT '订单数量',
   `ord_status` varchar(45) DEFAULT NULL COMMENT '订单状态',
