@@ -104,11 +104,22 @@ cat >"${request_file}" <<JSON
 {"serverName":"TradeSvr","method":"updateOrder","content":{"ExecType":"Trade","ExecID":"ADL-E2E-EXEC-001","OrdStatus":"Filled","OCType":"ClOSE","OrderID":"${ORDER_ID}","SecurityID":"BTCUSDT","UserID":"adl_liquidated","Side":"Sell","LastQty":"1","LastPx":"80","OrigOrdPrice":"80","LeavesQty":"0","Maker":"false","CloseBy":"liq","Location":"${ADL_LOCATION}","Demo":""}}
 JSON
 
-response="$(curl -fsS --max-time 30 -H 'Content-Type: application/json' \
-  --data-binary "@${request_file}" "http://127.0.0.1:${WEB_LISTEN_PORT}/httpapi/")" ||
-  die "TradeSvr updateOrder request failed"
-grep -Eq '"code"[[:space:]]*:[[:space:]]*0' <<<"${response}" ||
+response=""
+for attempt in $(seq 1 30); do
+  response="$(curl -fsS --max-time 30 -H 'Content-Type: application/json' \
+    --data-binary "@${request_file}" "http://127.0.0.1:${WEB_LISTEN_PORT}/httpapi/")" ||
+    die "TradeSvr updateOrder request failed"
+  if grep -Eq '"code"[[:space:]]*:[[:space:]]*0' <<<"${response}"; then
+    break
+  fi
+  if grep -Fq 'is not Online' <<<"${response}"; then
+    sleep 2
+    continue
+  fi
   die "TradeSvr rejected the liquidation fill: ${response}"
+done
+grep -Eq '"code"[[:space:]]*:[[:space:]]*0' <<<"${response}" ||
+  die "TradeSvr did not become routable through GW: ${response}"
 
 result="$({
   cat <<SQL
