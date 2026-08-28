@@ -152,6 +152,13 @@ compose() {
   docker compose --env-file "${ENV_FILE}" -f "${SCRIPT_DIR}/compose.yaml" "$@"
 }
 
+compose_pull() {
+  # Small production hosts and restricted egress links can stall when Compose
+  # opens one registry connection per service. Pull serially by default.
+  COMPOSE_PARALLEL_LIMIT="${COMPOSE_PULL_PARALLEL_LIMIT:-1}" \
+    docker compose --env-file "${ENV_FILE}" -f "${SCRIPT_DIR}/compose.yaml" pull "$@"
+}
+
 compose_up() {
   # The production host uses Docker's vfs driver on XFS. Serial container
   # creation avoids long XFS log stalls while copying multiple Java rootfs
@@ -242,11 +249,11 @@ if [[ "${IMAGE_SOURCE:-local}" == "local" ]]; then
     "${SCRIPT_DIR}/build-saas-images.sh" "${ENV_FILE}"
   fi
   log "Pulling public infrastructure images."
-  compose pull mysql clickhouse zookeeper
+  compose_pull mysql clickhouse zookeeper
 elif [[ "${IMAGE_SOURCE}" == "registry" ]]; then
   if [[ "${SKIP_PULL}" == "false" ]]; then
     log "Pulling SaaS application and infrastructure images."
-    compose pull
+    compose_pull
   fi
 else
   die "IMAGE_SOURCE must be local or registry."
