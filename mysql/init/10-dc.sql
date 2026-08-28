@@ -145,6 +145,20 @@ CREATE TABLE `dc_order_idempotency` (
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci
   COMMENT='客户端订单号幂等登记';
 
+CREATE TABLE `dc_funding_settlement` (
+  `location` varchar(45) NOT NULL DEFAULT '',
+  `user_id` varchar(45) NOT NULL,
+  `security_id` varchar(30) NOT NULL,
+  `settlement_time` bigint NOT NULL COMMENT '计划结算时点(Unix毫秒)',
+  `mark_price` decimal(35,9) NOT NULL,
+  `funding_rate` decimal(35,16) NOT NULL,
+  `net_position` decimal(35,9) NOT NULL,
+  `amount` decimal(35,16) NOT NULL COMMENT '余额变动，正数入账、负数扣款',
+  `create_time` varchar(30) NOT NULL,
+  PRIMARY KEY (`location`,`user_id`,`security_id`,`settlement_time`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci
+  COMMENT='永续合约资金费幂等结算记录';
+
 CREATE TABLE `dc_orders_execorders` (
   `exec_id` varchar(300) NOT NULL COMMENT '撮合成交对id',
   `order_id` varchar(45) DEFAULT NULL COMMENT '订单id',
@@ -200,14 +214,14 @@ CREATE TABLE `dc_orders_position` (
   `short_liq_price` decimal(35,9) NOT NULL COMMENT '强平价格(空头)',
   `update_time` varchar(30) DEFAULT NULL COMMENT '更新时间',
   `close_by` varchar(500) DEFAULT NULL COMMENT '最后操作人',
-  `location` varchar(45) DEFAULT NULL COMMENT '多实体',
+  `location` varchar(45) NOT NULL DEFAULT '' COMMENT '多实体',
   `inf1` varchar(30) DEFAULT NULL,
   `inf2` varchar(30) DEFAULT NULL,
   `inf3` varchar(30) DEFAULT NULL,
   `inf4` varchar(30) DEFAULT NULL,
   `inf5` varchar(30) DEFAULT NULL,
   `market_indicator` varchar(32) DEFAULT NULL,
-  PRIMARY KEY (`user_id`,`security_id`) USING BTREE
+  PRIMARY KEY (`location`,`user_id`,`security_id`) USING BTREE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci ROW_FORMAT=DYNAMIC COMMENT='持仓汇总表';
 
 CREATE TABLE `dc_orders_position_day` (
@@ -325,6 +339,7 @@ CREATE TABLE `dc_symbol` (
   `adl_enable` varchar(45) DEFAULT NULL COMMENT '自动减仓功能是否开启',
   `risk_limit` varchar(45) DEFAULT NULL COMMENT '风险限额',
   `risk_step` varchar(45) DEFAULT NULL COMMENT '风险阶梯',
+  `risk_tiers` json DEFAULT NULL COMMENT '名义价值风险阶梯(JSON)',
   `max_price` varchar(45) DEFAULT NULL COMMENT '价格上限',
   `taker_commission` varchar(45) DEFAULT NULL COMMENT 'taker手续费',
   `maker_commission` varchar(45) DEFAULT NULL COMMENT 'maker手续费',
@@ -458,12 +473,12 @@ CREATE TABLE `dc_users_balance` (
   `freezed_commission` decimal(30,16) DEFAULT NULL COMMENT '冻结手续费',
   `update_time` varchar(30) DEFAULT NULL COMMENT '更新时间',
   `close_by` varchar(600) DEFAULT NULL COMMENT '最后操作人',
-  `location` varchar(30) DEFAULT NULL COMMENT '多实体',
+  `location` varchar(30) NOT NULL DEFAULT '' COMMENT '多实体',
   `is_trader` varchar(2) DEFAULT NULL COMMENT 'trade，lp',
   `position_type` varchar(2) DEFAULT NULL COMMENT '逐仓，全仓标记',
   `security_id` varchar(45) DEFAULT NULL COMMENT 'market_index',
   `market_indicator` varchar(20) DEFAULT NULL,
-  PRIMARY KEY (`user_id`) USING BTREE
+  PRIMARY KEY (`location`,`user_id`) USING BTREE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci ROW_FORMAT=DYNAMIC COMMENT='用户资金表';
 
 CREATE TABLE `dc_users_balance_day` (
@@ -519,9 +534,9 @@ CREATE TABLE `dc_users_config` (
   `maker_commission` decimal(30,16) DEFAULT NULL COMMENT 'maker手续费',
   `update_time` varchar(30) DEFAULT NULL COMMENT '更新时间',
   `close_by` varchar(600) DEFAULT NULL COMMENT '最后操作人',
-  `location` varchar(30) DEFAULT NULL COMMENT '多实体',
+  `location` varchar(30) NOT NULL DEFAULT '' COMMENT '多实体',
   `market_indicator` varchar(20) DEFAULT NULL,
-  PRIMARY KEY (`user_id`) USING BTREE
+  PRIMARY KEY (`location`,`user_id`) USING BTREE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci ROW_FORMAT=DYNAMIC COMMENT='用户配置表';
 
 CREATE TABLE `dc_users_posting` (
@@ -564,7 +579,7 @@ CREATE TABLE `dc_users_symbol_config` (
   `position_type` varchar(30) DEFAULT NULL COMMENT '逐仓，全仓标记',
   `update_time` varchar(30) DEFAULT NULL COMMENT '更新时间',
   `close_by` varchar(600) DEFAULT NULL COMMENT '最后操作人',
-  `location` varchar(30) DEFAULT NULL COMMENT '多实体',
+  `location` varchar(30) NOT NULL DEFAULT '' COMMENT '多实体',
   `market_indicator` varchar(20) DEFAULT NULL,
-  PRIMARY KEY (`user_id`,`security_id`) USING BTREE
+  PRIMARY KEY (`location`,`user_id`,`security_id`) USING BTREE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci ROW_FORMAT=DYNAMIC COMMENT='用户配置表';

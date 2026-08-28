@@ -253,6 +253,7 @@ fullOrderBookPublishIntervalMs=1000
 depthDiffPublishIntervalMs=200
 bookTickerPublishOnQtyChange=true
 bookTickerPublishIntervalMs=0
+order.selfTradePreventionMode=${ORDER_SELF_TRADE_PREVENTION_MODE:-CANCEL_TAKER}
 enablePerfStats=true
 perfStatsPeriodSeconds=10
 log4j.file=./config/log4j.ini
