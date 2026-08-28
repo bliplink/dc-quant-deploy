@@ -160,6 +160,8 @@ SELECT COUNT(*) FROM dc.dc_orders_execorders WHERE location='${LOAD_LOCATION}'
 SELECT COUNT(*) FROM dc.dc_orders WHERE location='${LOAD_LOCATION}'
   AND user_id IN ('${LOAD_MAKER}','${LOAD_TAKER}') AND clord_id LIKE 'LOAD-${LOAD_RUN_ID}-%'
   AND ord_status='Rejected';
+SELECT COUNT(*) FROM dc.dc_users_posting WHERE location='${LOAD_LOCATION}'
+  AND user_id IN ('${LOAD_MAKER}','${LOAD_TAKER}');
 SQL
   } | mysql_exec dc)"
   mapfile -t progress <<<"${persisted}"
@@ -174,11 +176,13 @@ SQL
     } | mysql_exec dc)"
     die "Load produced asynchronous order rejections: ${timeout_rejections}"
   fi
-  if [[ "${progress[0]:-0}" == "${expected_orders}" && "${progress[1]:-0}" == "${expected_exec}" ]]; then break; fi
+  if [[ "${progress[0]:-0}" == "${expected_orders}" && "${progress[1]:-0}" == "${expected_exec}" \
+        && "${progress[3]:-0}" == "${expected_exec}" ]]; then break; fi
   sleep 2
 done
-[[ "${progress[0]:-0}" == "${expected_orders}" && "${progress[1]:-0}" == "${expected_exec}" ]] ||
-  die "Load did not settle completely: orders=${progress[0]:-0}/${expected_orders}, executions=${progress[1]:-0}/${expected_exec}"
+[[ "${progress[0]:-0}" == "${expected_orders}" && "${progress[1]:-0}" == "${expected_exec}" \
+   && "${progress[3]:-0}" == "${expected_exec}" ]] ||
+  die "Load did not settle completely: orders=${progress[0]:-0}/${expected_orders}, executions=${progress[1]:-0}/${expected_exec}, postings=${progress[3]:-0}/${expected_exec}"
 
 quantity="$(awk -v count="${LOAD_ORDERS}" 'BEGIN {printf "%.8f", count * 0.0001}')"
 maker_fee="$(awk -v count="${LOAD_ORDERS}" 'BEGIN {printf "%.8f", count * 0.0012}')"
@@ -199,6 +203,10 @@ SELECT IF(COUNT(*)=$((LOAD_ORDERS * 2)),1,0) FROM dc.dc_orders WHERE location='$
   AND ord_status='Filled';
 SELECT IF(COUNT(*)=${expected_exec},1,0) FROM dc.dc_orders_execorders WHERE location='${LOAD_LOCATION}'
   AND user_id IN ('${LOAD_MAKER}','${LOAD_TAKER}');
+SELECT IF(COUNT(*)=${LOAD_ORDERS} AND ABS(SUM(CAST(amount AS DECIMAL(35,9)))+${maker_fee})<0.00000001,1,0)
+FROM dc.dc_users_posting WHERE location='${LOAD_LOCATION}' AND user_id='${LOAD_MAKER}';
+SELECT IF(COUNT(*)=${LOAD_ORDERS} AND ABS(SUM(CAST(amount AS DECIMAL(35,9)))+${taker_fee})<0.00000001,1,0)
+FROM dc.dc_users_posting WHERE location='${LOAD_LOCATION}' AND user_id='${LOAD_TAKER}';
 SELECT IF(ABS(p.short_position-${quantity})<0.00000001 AND ABS(p.short_used_margin-${maker_margin})<0.00000001
           AND ABS(b.balance-(1000000-${maker_fee}))<0.00000001 AND ABS(b.used_margin-${maker_margin})<0.00000001
           AND ABS(b.freezed_margin)<0.00000001 AND ABS(b.freezed_commission)<0.00000001,1,0)
@@ -225,7 +233,7 @@ SELECT IF(
 SQL
 } | mysql_exec dc)"
 mapfile -t checks <<<"${verification}"
-[[ "${#checks[@]}" -eq 8 ]] || die "Unexpected load verification output: ${verification}"
+[[ "${#checks[@]}" -eq 10 ]] || die "Unexpected load verification output: ${verification}"
 for index in "${!checks[@]}"; do
   [[ "${checks[${index}]}" == "1" ]] || die "Load verification check $((index + 1)) failed"
 done
