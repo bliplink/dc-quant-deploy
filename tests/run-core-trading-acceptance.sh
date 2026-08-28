@@ -67,7 +67,13 @@ LIQ_E2E_LOCATION="${CORE_LOCATION}" \
 LIQ_E2E_OTHER_LOCATION="${CORE_LOCATION}_FOREIGN" \
   "${SCRIPT_DIR}/run-liquidation-e2e-host.sh"
 
-log "Running insurance-deficit and transactional ADL flow in the same ${CORE_LOCATION} location."
+log "Running natural final-liquidation, insurance and step-aligned ADL flow in ${CORE_LOCATION}."
+ENV_FILE="${ENV_FILE}" \
+FINAL_LIQ_E2E_LOCATION="${CORE_LOCATION}" \
+FINAL_LIQ_E2E_OTHER_LOCATION="${CORE_LOCATION}_FOREIGN" \
+  "${SCRIPT_DIR}/run-final-liquidation-e2e-host.sh"
+
+log "Running deterministic multi-candidate ADL ranking flow in the same ${CORE_LOCATION} location."
 ENV_FILE="${ENV_FILE}" \
 ADL_E2E_LOCATION="${CORE_LOCATION}" \
 ADL_E2E_OTHER_LOCATION="${CORE_LOCATION}_FOREIGN" \
