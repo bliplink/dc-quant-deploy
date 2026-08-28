@@ -218,7 +218,7 @@ backoff_is_active() {
 }
 
 update_deploy_repository() {
-  local old_head new_head dirty
+  local old_head new_head dirty attempt fetch_timeout fetched
   [[ "${AUTO_UPDATE_DEPLOY_REPO}" == "true" ]] || return 0
   [[ "${SKIP_GIT_UPDATE}" == "false" ]] || {
     log "Deployment repository update skipped by command line."
@@ -240,8 +240,19 @@ update_deploy_repository() {
   }
   old_head="$(git_in_deploy rev-parse HEAD)"
   log "Checking deployment branch origin/${AUTO_UPDATE_DEPLOY_BRANCH}."
-  if ! (cd "${SCRIPT_DIR}" && timeout --signal=TERM --kill-after=10 "${GIT_TIMEOUT_SECONDS}" \
-    git -c http.version=HTTP/1.1 fetch origin "${AUTO_UPDATE_DEPLOY_BRANCH}"); then
+  fetch_timeout=$((GIT_TIMEOUT_SECONDS / GIT_FETCH_ATTEMPTS))
+  (( fetch_timeout > 0 )) || fetch_timeout=1
+  fetched="false"
+  for ((attempt=1; attempt<=GIT_FETCH_ATTEMPTS; attempt++)); do
+    if (cd "${SCRIPT_DIR}" && timeout --signal=TERM --kill-after=10 "${fetch_timeout}" \
+      git -c http.version=HTTP/1.1 fetch origin "${AUTO_UPDATE_DEPLOY_BRANCH}"); then
+      fetched="true"
+      break
+    fi
+    log "Deployment repository fetch failed (attempt ${attempt}/${GIT_FETCH_ATTEMPTS})." >&2
+    (( attempt == GIT_FETCH_ATTEMPTS )) || sleep $((attempt * 5))
+  done
+  if [[ "${fetched}" != "true" ]]; then
     log "Deployment repository fetch failed." >&2
     return 1
   fi
@@ -304,12 +315,13 @@ main() {
   PULL_TIMEOUT_SECONDS="${SAAS_AUTO_UPDATE_PULL_TIMEOUT_SECONDS:-600}"
   MANIFEST_TIMEOUT_SECONDS="${SAAS_AUTO_UPDATE_MANIFEST_TIMEOUT_SECONDS:-30}"
   GIT_TIMEOUT_SECONDS="${SAAS_AUTO_UPDATE_GIT_TIMEOUT_SECONDS:-180}"
+  GIT_FETCH_ATTEMPTS="${SAAS_AUTO_UPDATE_GIT_FETCH_ATTEMPTS:-3}"
   FAILURE_BACKOFF_SECONDS="${SAAS_AUTO_UPDATE_FAILURE_BACKOFF_SECONDS:-600}"
   FAILURE_MAX_BACKOFF_SECONDS="${SAAS_AUTO_UPDATE_FAILURE_MAX_BACKOFF_SECONDS:-21600}"
   AUTO_UPDATE_DEPLOY_REPO="${SAAS_AUTO_UPDATE_DEPLOY_REPO:-true}"
   AUTO_UPDATE_DEPLOY_BRANCH="${SAAS_AUTO_UPDATE_DEPLOY_BRANCH:-saas-crypto}"
 
-  for value in QUIET_SECONDS PULL_TIMEOUT_SECONDS MANIFEST_TIMEOUT_SECONDS GIT_TIMEOUT_SECONDS FAILURE_BACKOFF_SECONDS FAILURE_MAX_BACKOFF_SECONDS; do
+  for value in QUIET_SECONDS PULL_TIMEOUT_SECONDS MANIFEST_TIMEOUT_SECONDS GIT_TIMEOUT_SECONDS GIT_FETCH_ATTEMPTS FAILURE_BACKOFF_SECONDS FAILURE_MAX_BACKOFF_SECONDS; do
     positive_integer "${!value}" || die "${value} must be a positive integer."
   done
 
