@@ -182,17 +182,22 @@ SELECT COUNT(*) FROM dc.dc_orders_execorders
 WHERE location='${E2E_LOCATION}'
   AND user_id IN ('${E2E_BUYER}','${E2E_SELLER}')
   AND UPPER(oc_type)='CLOSE' AND last_qty > 0;
+SELECT COUNT(*) FROM dc.dc_orders
+WHERE location='${E2E_LOCATION}' AND user_id='${E2E_BUYER}'
+  AND UPPER(oc_type)='CLOSE' AND reduce_only=1
+  AND ord_type='Market' AND timeinforce='IOC' AND ord_status='Filled';
 SELECT COUNT(*) FROM dc.dc_users_posting
 WHERE location='${E2E_LOCATION}'
   AND user_id IN ('${E2E_BUYER}','${E2E_SELLER}') AND type=1 AND amount='100000';
 SQL
 } | mysql_exec dc)"
 mapfile -t db_rows <<<"${db_result}"
-[[ "${#db_rows[@]}" -eq 5 ]] || die "Unexpected database verification output: ${db_result}"
+[[ "${#db_rows[@]}" -eq 6 ]] || die "Unexpected database verification output: ${db_result}"
 [[ "${db_rows[0]}" == "0" ]] || die "E2E accounts still have non-flat or locked positions: ${db_rows[0]}"
 [[ "${db_rows[1]}" == "0" ]] || die "E2E accounts still have live orders: ${db_rows[1]}"
 (( db_rows[2] >= 2 )) || die "Missing authoritative open executions: ${db_rows[2]}"
-(( db_rows[3] >= 2 )) || die "Missing authoritative close executions: ${db_rows[3]}"
-(( db_rows[4] >= 2 )) || die "Missing authoritative deposits: ${db_rows[4]}"
+(( db_rows[3] >= 1 )) || die "Missing authoritative close execution: ${db_rows[3]}"
+(( db_rows[4] >= 1 )) || die "Missing filled reduce-only Market/IOC close order: ${db_rows[4]}"
+(( db_rows[5] >= 2 )) || die "Missing authoritative deposits: ${db_rows[5]}"
 
 log "Browser trading acceptance passed; artifacts: ${artifact_dir}."
