@@ -61,10 +61,16 @@ log "Preparing final-liquidation, insurance and ADL accounts in ${LIQ_LOCATION}.
 {
   cat <<SQL
 START TRANSACTION;
+-- The full acceptance suite reuses one location by design.  A completed run of
+-- run-adl-e2e-host.sh intentionally leaves its reduced candidate positions in
+-- place as evidence; remove those named test fixtures before constructing this
+-- single-candidate final-liquidation scenario so repeated suites are isolated.
 DELETE FROM dc.dc_users_posting WHERE location IN ('${LIQ_LOCATION}','${OTHER_LOCATION}')
-  AND user_id IN ('${LIQ_USER}','${MAKER_USER}','${ADL_USER}','${FOREIGN_USER}');
+  AND user_id IN ('${LIQ_USER}','${MAKER_USER}','${ADL_USER}','${FOREIGN_USER}',
+                  'adl_liquidated','adl_high','adl_low','adl_foreign');
 DELETE FROM dc.dc_adl_ledger WHERE location IN ('${LIQ_LOCATION}','${OTHER_LOCATION}')
-  AND (liquidated_user_id='${LIQ_USER}' OR candidate_user_id IN ('${ADL_USER}','${FOREIGN_USER}'));
+  AND (liquidated_user_id IN ('${LIQ_USER}','adl_liquidated')
+       OR candidate_user_id IN ('${ADL_USER}','${FOREIGN_USER}','adl_high','adl_low','adl_foreign'));
 DELETE FROM dc.dc_adl_event WHERE location IN ('${LIQ_LOCATION}','${OTHER_LOCATION}') AND user_id='${LIQ_USER}';
 DELETE FROM dc.dc_liquidation_deficit WHERE location IN ('${LIQ_LOCATION}','${OTHER_LOCATION}')
   AND user_id='${LIQ_USER}';
@@ -75,9 +81,11 @@ DELETE FROM dc.dc_orders_execorders WHERE location IN ('${LIQ_LOCATION}','${OTHE
 DELETE FROM dc.dc_orders WHERE location IN ('${LIQ_LOCATION}','${OTHER_LOCATION}')
   AND user_id IN ('${LIQ_USER}','${MAKER_USER}','${ADL_USER}','${FOREIGN_USER}');
 DELETE FROM dc.dc_orders_position WHERE location IN ('${LIQ_LOCATION}','${OTHER_LOCATION}')
-  AND user_id IN ('${LIQ_USER}','${MAKER_USER}','${ADL_USER}','${FOREIGN_USER}');
+  AND user_id IN ('${LIQ_USER}','${MAKER_USER}','${ADL_USER}','${FOREIGN_USER}',
+                  'adl_liquidated','adl_high','adl_low','adl_foreign');
 DELETE FROM dc.dc_users_balance WHERE location IN ('${LIQ_LOCATION}','${OTHER_LOCATION}')
-  AND user_id IN ('${LIQ_USER}','${MAKER_USER}','${ADL_USER}','${FOREIGN_USER}');
+  AND user_id IN ('${LIQ_USER}','${MAKER_USER}','${ADL_USER}','${FOREIGN_USER}',
+                  'adl_liquidated','adl_high','adl_low','adl_foreign');
 DELETE FROM dc.dc_insurance_fund WHERE location='${LIQ_LOCATION}' AND security_id='BTCUSDT';
 
 INSERT INTO dc.dc_users_balance
