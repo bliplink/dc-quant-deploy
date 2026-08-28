@@ -183,7 +183,10 @@ done
 quantity="$(awk -v count="${LOAD_ORDERS}" 'BEGIN {printf "%.8f", count * 0.0001}')"
 maker_fee="$(awk -v count="${LOAD_ORDERS}" 'BEGIN {printf "%.8f", count * 0.0012}')"
 taker_fee="$(awk -v count="${LOAD_ORDERS}" 'BEGIN {printf "%.8f", count * 0.0036}')"
-margin="$(awk -v count="${LOAD_ORDERS}" 'BEGIN {printf "%.8f", count * 0.06}')"
+# Position margin is initial margin plus a conservative taker-fee reserve for closing the
+# entire resulting position at bankruptcy price.  A maker entry must not reduce that reserve.
+maker_margin="$(awk -v count="${LOAD_ORDERS}" 'BEGIN {printf "%.8f", count * (0.06 + 0.003636)}')"
+taker_margin="$(awk -v count="${LOAD_ORDERS}" 'BEGIN {printf "%.8f", count * (0.06 + 0.003564)}')"
 
 verification="$({
   cat <<SQL
@@ -196,13 +199,13 @@ SELECT IF(COUNT(*)=$((LOAD_ORDERS * 2)),1,0) FROM dc.dc_orders WHERE location='$
   AND ord_status='Filled';
 SELECT IF(COUNT(*)=${expected_exec},1,0) FROM dc.dc_orders_execorders WHERE location='${LOAD_LOCATION}'
   AND user_id IN ('${LOAD_MAKER}','${LOAD_TAKER}');
-SELECT IF(ABS(p.short_position-${quantity})<0.00000001 AND ABS(p.short_used_margin-${margin})<0.00000001
-          AND ABS(b.balance-(1000000-${maker_fee}))<0.00000001 AND ABS(b.used_margin-${margin})<0.00000001
+SELECT IF(ABS(p.short_position-${quantity})<0.00000001 AND ABS(p.short_used_margin-${maker_margin})<0.00000001
+          AND ABS(b.balance-(1000000-${maker_fee}))<0.00000001 AND ABS(b.used_margin-${maker_margin})<0.00000001
           AND ABS(b.freezed_margin)<0.00000001 AND ABS(b.freezed_commission)<0.00000001,1,0)
 FROM dc.dc_orders_position p JOIN dc.dc_users_balance b ON b.location=p.location AND b.user_id=p.user_id
 WHERE p.location='${LOAD_LOCATION}' AND p.user_id='${LOAD_MAKER}' AND p.security_id='BTCUSDT';
-SELECT IF(ABS(p.long_position-${quantity})<0.00000001 AND ABS(p.long_used_margin-${margin})<0.00000001
-          AND ABS(b.balance-(1000000-${taker_fee}))<0.00000001 AND ABS(b.used_margin-${margin})<0.00000001
+SELECT IF(ABS(p.long_position-${quantity})<0.00000001 AND ABS(p.long_used_margin-${taker_margin})<0.00000001
+          AND ABS(b.balance-(1000000-${taker_fee}))<0.00000001 AND ABS(b.used_margin-${taker_margin})<0.00000001
           AND ABS(b.freezed_margin)<0.00000001 AND ABS(b.freezed_commission)<0.00000001,1,0)
 FROM dc.dc_orders_position p JOIN dc.dc_users_balance b ON b.location=p.location AND b.user_id=p.user_id
 WHERE p.location='${LOAD_LOCATION}' AND p.user_id='${LOAD_TAKER}' AND p.security_id='BTCUSDT';
