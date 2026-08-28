@@ -61,6 +61,12 @@ E2E_SELLER="${CORE_SELLER}" \
 E2E_PASSWORD="${E2E_PASSWORD}" \
   "${SCRIPT_DIR}/run-web-trading-e2e-host.sh"
 
+log "Running LiqSvr partial-liquidation flow in the same ${CORE_LOCATION} location."
+ENV_FILE="${ENV_FILE}" \
+LIQ_E2E_LOCATION="${CORE_LOCATION}" \
+LIQ_E2E_OTHER_LOCATION="${CORE_LOCATION}_FOREIGN" \
+  "${SCRIPT_DIR}/run-liquidation-e2e-host.sh"
+
 log "Running insurance-deficit and transactional ADL flow in the same ${CORE_LOCATION} location."
 ENV_FILE="${ENV_FILE}" \
 ADL_E2E_LOCATION="${CORE_LOCATION}" \
