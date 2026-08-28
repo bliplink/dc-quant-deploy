@@ -53,6 +53,11 @@ log "Validating the deployed SaaS stack."
 log "Running MySQL and ClickHouse location-isolation smoke tests."
 ENV_FILE="${ENV_FILE}" "${DEPLOY_DIR}/smoke-test-location.sh"
 
+log "Running strict order-rule validation in an isolated acceptance location."
+ENV_FILE="${ENV_FILE}" \
+RULE_E2E_LOCATION="${CORE_LOCATION}_RULES" \
+  "${SCRIPT_DIR}/run-trading-rules-e2e-host.sh"
+
 log "Running browser login, deposit, order, cancel, match, market close, history and recent-trade flow in ${CORE_LOCATION}."
 ENV_FILE="${ENV_FILE}" \
 E2E_LOCATION="${CORE_LOCATION}" \
@@ -87,6 +92,13 @@ wait_for_gateway_route TDSvr
 
 log "Revalidating health after TradeSvr restart and ADL settlement."
 "${DEPLOY_DIR}/validate-saas.sh" --env-file "${ENV_FILE}"
+
+if [[ "${RUN_CORE_STRESS:-false}" == "true" ]]; then
+  log "Running the opt-in full-stack concurrent load and restart-recovery gate."
+  ENV_FILE="${ENV_FILE}" \
+  LOAD_LOCATION="${CORE_LOCATION}_STRESS" \
+    "${SCRIPT_DIR}/run-core-trading-stress-host.sh"
+fi
 
 log "Capturing effective JVM heaps and container memory limits."
 while read -r container expected_xmx expected_memory; do
