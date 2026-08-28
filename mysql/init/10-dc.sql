@@ -159,6 +159,38 @@ CREATE TABLE `dc_funding_settlement` (
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci
   COMMENT='永续合约资金费幂等结算记录';
 
+CREATE TABLE `dc_insurance_fund` (
+  `location` varchar(45) NOT NULL DEFAULT '',
+  `security_id` varchar(30) NOT NULL,
+  `balance` decimal(35,16) NOT NULL DEFAULT 0,
+  `update_time` varchar(30) NOT NULL,
+  PRIMARY KEY (`location`,`security_id`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci COMMENT='强平保险基金';
+
+CREATE TABLE `dc_liquidation_deficit` (
+  `location` varchar(45) NOT NULL DEFAULT '',
+  `liquidation_order_id` varchar(255) NOT NULL,
+  `user_id` varchar(45) NOT NULL,
+  `security_id` varchar(30) NOT NULL,
+  `deficit_amount` decimal(35,16) NOT NULL,
+  `covered_amount` decimal(35,16) NOT NULL,
+  `uncovered_amount` decimal(35,16) NOT NULL,
+  `create_time` varchar(30) NOT NULL,
+  PRIMARY KEY (`location`,`liquidation_order_id`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci COMMENT='穿仓与保险基金赔付流水';
+
+CREATE TABLE `dc_adl_event` (
+  `location` varchar(45) NOT NULL DEFAULT '',
+  `liquidation_order_id` varchar(255) NOT NULL,
+  `user_id` varchar(45) NOT NULL,
+  `security_id` varchar(30) NOT NULL,
+  `amount` decimal(35,16) NOT NULL,
+  `status` varchar(20) NOT NULL,
+  `create_time` varchar(30) NOT NULL,
+  `update_time` varchar(30) NOT NULL,
+  PRIMARY KEY (`location`,`liquidation_order_id`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci COMMENT='自动减仓事件';
+
 CREATE TABLE `dc_orders_execorders` (
   `exec_id` varchar(300) NOT NULL COMMENT '撮合成交对id',
   `order_id` varchar(45) DEFAULT NULL COMMENT '订单id',
