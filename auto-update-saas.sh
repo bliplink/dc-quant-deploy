@@ -77,6 +77,10 @@ compose() {
   docker compose --env-file "${ENV_FILE}" -f "${COMPOSE_FILE}" "$@"
 }
 
+git_in_deploy() {
+  (cd "${SCRIPT_DIR}" && git "$@")
+}
+
 service_image_ref() {
   case "$1" in
     gateway) echo "${GW_IMAGE_REPOSITORY:-ghcr.io/bliplink/gw}:${GW_TAG:-saas-crypto}" ;;
@@ -229,23 +233,23 @@ update_deploy_repository() {
     return 1
   }
 
-  dirty="$(git -C "${SCRIPT_DIR}" status --porcelain --untracked-files=no)"
+  dirty="$(git_in_deploy status --porcelain --untracked-files=no)"
   [[ -z "${dirty}" ]] || {
     log "Tracked deployment files are dirty; refusing automatic fast-forward." >&2
     return 1
   }
-  old_head="$(git -C "${SCRIPT_DIR}" rev-parse HEAD)"
+  old_head="$(git_in_deploy rev-parse HEAD)"
   log "Checking deployment branch origin/${AUTO_UPDATE_DEPLOY_BRANCH}."
   if ! timeout --signal=TERM --kill-after=10 "${GIT_TIMEOUT_SECONDS}" \
-    git -C "${SCRIPT_DIR}" -c http.version=HTTP/1.1 fetch origin "${AUTO_UPDATE_DEPLOY_BRANCH}"; then
+    git_in_deploy -c http.version=HTTP/1.1 fetch origin "${AUTO_UPDATE_DEPLOY_BRANCH}"; then
     log "Deployment repository fetch failed." >&2
     return 1
   fi
-  if ! git -C "${SCRIPT_DIR}" merge --ff-only FETCH_HEAD; then
+  if ! git_in_deploy merge --ff-only FETCH_HEAD; then
     log "Deployment repository cannot be fast-forwarded safely." >&2
     return 1
   fi
-  new_head="$(git -C "${SCRIPT_DIR}" rev-parse HEAD)"
+  new_head="$(git_in_deploy rev-parse HEAD)"
   if [[ "${old_head}" != "${new_head}" ]]; then
     log "Deployment repository advanced ${old_head:0:12} -> ${new_head:0:12}."
   fi
@@ -452,7 +456,7 @@ main() {
   {
     printf 'deployed_at=%s\n' "$(date --iso-8601=seconds)"
     printf 'fingerprint=%s\n' "${fingerprint}"
-    printf 'git_commit=%s\n' "$(git -C "${SCRIPT_DIR}" rev-parse HEAD 2>/dev/null || echo unavailable)"
+    printf 'git_commit=%s\n' "$(git_in_deploy rev-parse HEAD 2>/dev/null || echo unavailable)"
     printf 'services=%s\n' "${changed_services[*]}"
   } > "${HISTORY_FILE}.tmp"
   mv "${HISTORY_FILE}.tmp" "${HISTORY_FILE}"
