@@ -167,6 +167,29 @@ async function recentTradeText(page) {
   return row.innerText();
 }
 
+async function positionRows(page, side) {
+  await page.locator('.orderWrap').getByText('Positions', { exact: true }).click({ force: true });
+  let rows = page.locator('.orderPositionWrap .ant-table-tbody tr').filter({ hasText: 'BTCUSDT' });
+  if (side) rows = rows.filter({ hasText: side });
+  return rows;
+}
+
+async function closeFirstPosition(page, side) {
+  const rows = await positionRows(page, side);
+  await rows.first().waitFor({ timeout: 15000 });
+  await invokeFromPage(page, 'placeOrder', () =>
+    rows.first().getByText('Close', { exact: true }).click()
+  );
+}
+
+async function waitForNoPosition(page) {
+  for (let attempt = 0; attempt < 30; attempt += 1) {
+    if (await (await positionRows(page)).count() === 0) return;
+    await page.waitForTimeout(500);
+  }
+  throw new Error('position did not close after the offsetting execution');
+}
+
 (async () => {
   const browser = await chromium.launch({ headless: true });
   let buyerSession;
@@ -192,6 +215,15 @@ async function recentTradeText(page) {
     const sellerTrade = await tradeHistoryText(sellerSession.page);
     const recentTrade = await recentTradeText(buyerSession.page);
 
+    // Rest an offsetting buy for the short account, then exercise the Web
+    // reduce-only Market/IOC close action for the long account. The same match
+    // closes both sides and leaves the acceptance location flat.
+    await placeLimit(sellerSession.page, 'Buy/Long', '60000', '0.001');
+    await (await openOrders(sellerSession.page)).first().waitFor({ timeout: 15000 });
+    await closeFirstPosition(buyerSession.page, 'Long');
+    await waitForNoPosition(buyerSession.page);
+    await waitForNoPosition(sellerSession.page);
+
     await buyerSession.page.screenshot({
       path: path.join(artifactDir, 'buyer-trading-flow.png'),
       fullPage: true
@@ -215,6 +247,7 @@ async function recentTradeText(page) {
       deposit: 'PASS',
       cancel: 'PASS',
       execution: 'PASS',
+      closePosition: 'PASS',
       buyerTrade,
       sellerTrade,
       recentTrade
