@@ -146,8 +146,10 @@ fi
 
 verification="$({
   cat <<SQL
-SELECT long_position,long_used_margin FROM dc.dc_orders_position
-WHERE location='${LIQ_LOCATION}' AND user_id='${LIQ_USER}' AND security_id='BTCUSDT';
+SELECT p.long_position,p.long_used_margin,b.used_margin,b.balance
+FROM dc.dc_orders_position p
+JOIN dc.dc_users_balance b ON b.location=p.location AND b.user_id=p.user_id
+WHERE p.location='${LIQ_LOCATION}' AND p.user_id='${LIQ_USER}' AND p.security_id='BTCUSDT';
 SELECT COUNT(*) FROM dc.dc_orders_execorders WHERE location='${LIQ_LOCATION}' AND user_id='${LIQ_USER}'
   AND UPPER(oc_type)='CLOSE' AND last_qty=0.001;
 SELECT long_position FROM dc.dc_orders_position
@@ -156,7 +158,10 @@ SQL
 } | mysql_exec dc)"
 mapfile -t rows <<<"${verification}"
 [[ "${#rows[@]}" -eq 3 ]] || die "Unexpected liquidation verification output: ${verification}"
-[[ "${rows[0]}" == $'0.003000000\t1.800000000' ]] || die "Partial liquidation position mismatch: ${rows[0]}"
+# Remaining margin includes the reserved taker fee for closing the remaining
+# position: 0.003 * 60000 / 100 + 0.003 * 59400 * 0.0006 = 1.90692.
+[[ "${rows[0]}" == $'0.003000000\t1.906920000\t1.9069200000000000\t0.9640000000000000' ]] ||
+  die "Partial liquidation balance/position mismatch: ${rows[0]}"
 [[ "${rows[1]}" == "1" ]] || die "Liquidation execution was not persisted: ${rows[1]}"
 [[ "${rows[2]}" == "0.004000000" ]] || die "Foreign-tenant position was modified: ${rows[2]}"
 
