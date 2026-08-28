@@ -54,7 +54,7 @@ FROM dc_orders WHERE location='${EVIDENCE_LOCATION}'
 ORDER BY transact_time DESC LIMIT 12;"
 
 mysql_table "${work_dir}/executions.txt" "
-SELECT location,user_id,order_id,exec_id,oc_type,side,last_px,last_qty,commission,maker,close_by,transact_time
+SELECT location,user_id,order_id,exec_id,oc_type,side,last_px,last_qty,fee,maker,close_by,transact_time
 FROM dc_orders_execorders WHERE location='${EVIDENCE_LOCATION}'
   AND user_id IN ('corebuyer','coreseller')
 ORDER BY transact_time DESC LIMIT 12;"
