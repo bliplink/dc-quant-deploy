@@ -119,7 +119,7 @@ for attempt in $(seq 1 30); do
   if grep -Eq '"code"[[:space:]]*:[[:space:]]*0' <<<"${response}"; then
     break
   fi
-  if grep -Fq 'is not Online' <<<"${response}"; then
+  if grep -Fq 'is not Online' <<<"${response}" || grep -Fq 'SYMBOL_NOTEXIST' <<<"${response}"; then
     sleep 2
     continue
   fi
