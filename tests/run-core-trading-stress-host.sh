@@ -192,10 +192,21 @@ FROM dc.dc_orders_position p JOIN dc.dc_users_balance b ON b.location=p.location
 WHERE p.location='${LOAD_LOCATION}' AND p.user_id='${LOAD_TAKER}' AND p.security_id='BTCUSDT';
 SELECT IF(COUNT(*)=COUNT(DISTINCT clord_id),1,0) FROM dc.dc_orders
 WHERE location='${LOAD_LOCATION}' AND clord_id LIKE 'LOAD-${LOAD_RUN_ID}-%';
+SELECT IF(
+  COALESCE((SELECT MAX(price) FROM dc.dc_orders
+    WHERE location='${LOAD_LOCATION}' AND security_id='BTCUSDT' AND market_indicator='4'
+      AND user_id IN ('${LOAD_MAKER}','${LOAD_TAKER}') AND clord_id LIKE 'LOAD-${LOAD_RUN_ID}-%'
+      AND side='Buy' AND ord_status IN ('New','Partially_Filled')), -1)
+  <
+  COALESCE((SELECT MIN(price) FROM dc.dc_orders
+    WHERE location='${LOAD_LOCATION}' AND security_id='BTCUSDT' AND market_indicator='4'
+      AND user_id IN ('${LOAD_MAKER}','${LOAD_TAKER}') AND clord_id LIKE 'LOAD-${LOAD_RUN_ID}-%'
+      AND side='Sell' AND ord_status IN ('New','Partially_Filled')), 999999999999999999),
+  1,0);
 SQL
 } | mysql_exec dc)"
 mapfile -t checks <<<"${verification}"
-[[ "${#checks[@]}" -eq 7 ]] || die "Unexpected load verification output: ${verification}"
+[[ "${#checks[@]}" -eq 8 ]] || die "Unexpected load verification output: ${verification}"
 for index in "${!checks[@]}"; do
   [[ "${checks[${index}]}" == "1" ]] || die "Load verification check $((index + 1)) failed"
 done
