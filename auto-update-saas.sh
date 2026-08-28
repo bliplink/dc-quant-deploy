@@ -240,8 +240,8 @@ update_deploy_repository() {
   }
   old_head="$(git_in_deploy rev-parse HEAD)"
   log "Checking deployment branch origin/${AUTO_UPDATE_DEPLOY_BRANCH}."
-  if ! timeout --signal=TERM --kill-after=10 "${GIT_TIMEOUT_SECONDS}" \
-    git_in_deploy -c http.version=HTTP/1.1 fetch origin "${AUTO_UPDATE_DEPLOY_BRANCH}"; then
+  if ! (cd "${SCRIPT_DIR}" && timeout --signal=TERM --kill-after=10 "${GIT_TIMEOUT_SECONDS}" \
+    git -c http.version=HTTP/1.1 fetch origin "${AUTO_UPDATE_DEPLOY_BRANCH}"); then
     log "Deployment repository fetch failed." >&2
     return 1
   fi
