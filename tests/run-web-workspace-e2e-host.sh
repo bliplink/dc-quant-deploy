@@ -39,6 +39,6 @@ docker exec \
   -e E2E_PASSWORD="${E2E_PASSWORD}" \
   -e E2E_ARTIFACT_DIR=/artifacts \
   "${E2E_RUNNER_NAME}" bash -lc \
-  'cd /runner && [[ -f package.json ]] || npm init -y >/dev/null 2>&1; [[ -d node_modules/playwright ]] || npm install --no-fund --no-audit playwright@1.55.0 >/dev/null; node /work/web-workspace-e2e.js'
+  'cd /runner && [[ -f package.json ]] || npm init -y >/dev/null 2>&1; [[ -d node_modules/playwright ]] || npm install --no-fund --no-audit playwright@1.55.0 >/dev/null; NODE_PATH=/runner/node_modules node /work/web-workspace-e2e.js'
 
 printf '[web-workspace-e2e] PASS; artifacts: %s\n' "${artifact_dir}"
