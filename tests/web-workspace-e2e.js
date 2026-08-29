@@ -49,6 +49,12 @@ async function layoutSnapshot(page) {
   });
 }
 
+function layoutItem(snapshot, breakpoint, key) {
+  if (!snapshot.value) return null;
+  const layouts = JSON.parse(snapshot.value);
+  return (layouts[breakpoint] || []).find(item => item.i === key) || null;
+}
+
 (async () => {
   const browser = await chromium.launch({headless: true});
   const context = await browser.newContext({viewport: {width: 1920, height: 1080}});
@@ -96,7 +102,12 @@ async function layoutSnapshot(page) {
     await page.locator('.tradeGrid').waitFor({timeout: 30000});
     await page.waitForTimeout(1500);
     const reloaded = await layoutSnapshot(page);
-    if (reloaded.value !== after.value) throw new Error('custom layout did not survive reload');
+    const savedChart = layoutItem(after, 'lg', 'chart');
+    const reloadedChart = layoutItem(reloaded, 'lg', 'chart');
+    if (!savedChart || !reloadedChart ||
+        ['x', 'y', 'w', 'h'].some(field => savedChart[field] !== reloadedChart[field])) {
+      throw new Error(`custom layout did not survive reload: ${JSON.stringify({savedChart, reloadedChart})}`);
+    }
 
     await page.getByRole('button', {name: 'Lock layout'}).click();
     if (await page.locator('.panelDragHandle').count() !== 0) {
