@@ -123,13 +123,19 @@ if [[ -n "${remaining_container_ids}" ]]; then
   docker rm -f ${remaining_container_ids}
 fi
 
-remaining_network_ids="$(docker network ls -q --filter 'label=com.docker.compose.project=dc-saas' | sort -u || true)"
+remaining_network_ids="$({
+  docker network ls -q --filter 'label=com.docker.compose.project=dc-saas' || true
+  docker network ls --format '{{.ID}} {{.Name}}' | awk '$2 ~ /^dc-saas-/ {print $1}' || true
+} | sort -u)"
 if [[ -n "${remaining_network_ids}" ]]; then
   # shellcheck disable=SC2086
   docker network rm ${remaining_network_ids} || true
 fi
 
-remaining_volume_names="$(docker volume ls -q --filter 'label=com.docker.compose.project=dc-saas' | sort -u || true)"
+remaining_volume_names="$({
+  docker volume ls -q --filter 'label=com.docker.compose.project=dc-saas' || true
+  docker volume ls -q | grep -E '^dc-saas-' || true
+} | sort -u)"
 if [[ -n "${remaining_volume_names}" ]]; then
   # shellcheck disable=SC2086
   docker volume rm ${remaining_volume_names} || true

@@ -128,7 +128,7 @@ sudo ./uninstall-saas.sh --purge-data
 sudo ./uninstall-saas.sh --purge-data --purge-images
 ```
 
-卸载脚本清理名称前缀 `dc-saas-*`、带 `dc.saas.role` 标签，或明确挂载本仓库测试目录/`/opt/dc-saas-runtime` 的验收容器，同时清理 Compose 项目 `dc-saas` 的网络和卷；不会选择量化系统或 `/opt/sumscope`。
+卸载脚本清理名称前缀 `dc-saas-*`、带 `dc.saas.role` 标签，或明确挂载本仓库测试目录/`/opt/dc-saas-runtime` 的验收容器，同时清理 Compose 项目 `dc-saas` 以及 `dc-saas-*` 前缀的网络和卷（包括 Web E2E 缓存卷）；不会选择量化系统或 `/opt/sumscope`。
 
 The purge command accepts only the exact
 `/opt/dc-saas-runtime` path and never selects `/opt/sumscope`.
