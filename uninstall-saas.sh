@@ -70,7 +70,26 @@ compose() {
   docker compose --env-file "${ENV_FILE}" -f "${SCRIPT_DIR}/compose.yaml" "$@"
 }
 
-saas_container_ids="$(docker ps -aq --filter 'name=^/dc-saas-' | sort -u || true)"
+discover_saas_container_ids() {
+  docker ps -aq --filter 'name=^/dc-saas-' || true
+  docker ps -aq --filter 'label=dc.saas.role' || true
+
+  # Some ad-hoc Playwright/load-test runs predate the dc.saas.role label and
+  # received a random Docker name.  Select them only when a bind mount proves
+  # that they belong to this deployment's tests or isolated runtime root.
+  for container_id in $(docker ps -aq); do
+    while IFS= read -r mount_source; do
+      case "${mount_source}" in
+        "${DEPLOY_ROOT}"|"${DEPLOY_ROOT}/"*|"${SCRIPT_DIR}/tests"|"${SCRIPT_DIR}/tests/"*)
+          printf '%s\n' "${container_id}"
+          break
+          ;;
+      esac
+    done < <(docker inspect --format '{{range .Mounts}}{{println .Source}}{{end}}' "${container_id}" 2>/dev/null || true)
+  done
+}
+
+saas_container_ids="$(discover_saas_container_ids | sort -u)"
 image_ids=""
 image_refs=""
 if [[ "${PURGE_IMAGES}" == "true" ]]; then
@@ -98,7 +117,7 @@ compose down --volumes --remove-orphans
 # Rollback and browser-acceptance containers are deliberately outside the
 # current Compose model.  Keep the removal boundary exact and auditable by
 # selecting only the reserved dc-saas-* name prefix.
-remaining_container_ids="$(docker ps -aq --filter 'name=^/dc-saas-' | sort -u || true)"
+remaining_container_ids="$(discover_saas_container_ids | sort -u)"
 if [[ -n "${remaining_container_ids}" ]]; then
   # shellcheck disable=SC2086
   docker rm -f ${remaining_container_ids}
