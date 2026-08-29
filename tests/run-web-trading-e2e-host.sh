@@ -163,8 +163,10 @@ docker exec \
   "${E2E_RUNNER_NAME}" bash /work/run-web-trading-e2e.sh
 
 log "Verifying authoritative order, execution and position state in MySQL."
-db_result="$({
-  cat <<SQL
+db_ready="false"
+for attempt in $(seq 1 30); do
+  db_result="$({
+    cat <<SQL
 SELECT COUNT(*) FROM dc.dc_orders_position
 WHERE location='${E2E_LOCATION}'
   AND user_id IN ('${E2E_BUYER}','${E2E_SELLER}')
@@ -195,8 +197,26 @@ SELECT COUNT(*) FROM dc.dc_users_posting
 WHERE location='${E2E_LOCATION}'
   AND user_id IN ('${E2E_BUYER}','${E2E_SELLER}') AND type=1 AND amount='100000';
 SQL
-} | mysql_exec dc)"
-mapfile -t db_rows <<<"${db_result}"
+  } | mysql_exec dc)"
+  mapfile -t db_rows <<<"${db_result}"
+  if [[ "${#db_rows[@]}" -eq 7 ]] \
+    && [[ "${db_rows[0]}" == "0" ]] \
+    && [[ "${db_rows[1]}" == "0" ]] \
+    && [[ "${db_rows[2]}" == "0" ]] \
+    && (( db_rows[3] >= 2 )) \
+    && (( db_rows[4] >= 1 )) \
+    && (( db_rows[5] >= 1 )) \
+    && (( db_rows[6] >= 2 )); then
+    db_ready="true"
+    break
+  fi
+  if [[ "${attempt}" -eq 1 ]]; then
+    log "Waiting for asynchronous TradeSvr persistence to converge."
+  fi
+  sleep 1
+done
+
+[[ "${db_ready}" == "true" ]] || log "Database state did not converge within 30 seconds."
 [[ "${#db_rows[@]}" -eq 7 ]] || die "Unexpected database verification output: ${db_result}"
 [[ "${db_rows[0]}" == "0" ]] || die "E2E accounts still have non-flat or locked positions: ${db_rows[0]}"
 [[ "${db_rows[1]}" == "0" ]] || die "E2E accounts still have live orders: ${db_rows[1]}"
