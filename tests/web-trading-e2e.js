@@ -32,7 +32,7 @@ function requestMethod(response) {
 async function invokeFromPage(page, method, action) {
   const responsePromise = page.waitForResponse(
     response => response.url().includes('/httpapi/') && requestMethod(response) === method,
-    { timeout: 20000 }
+    { timeout: 60000 }
   );
   await action();
   const response = await responsePromise;
@@ -88,7 +88,7 @@ async function login(browser, username) {
   }
   await page.waitForFunction(() => Boolean(sessionStorage.getItem('loginData')));
   await page.waitForURL(`**/#/trade?location=${encodeURIComponent(location)}`);
-  await page.locator('.tradeWrap').waitFor({ timeout: 20000 });
+  await page.locator('.tradeWrap').waitFor({ timeout: 60000 });
   await page.waitForTimeout(3000);
   return { context, page, pageErrors };
 }

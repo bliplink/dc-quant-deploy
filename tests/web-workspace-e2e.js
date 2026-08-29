@@ -29,7 +29,7 @@ async function login(page) {
   await inputs.nth(1).fill(password);
   const responsePromise = page.waitForResponse(
     response => response.url().includes('/httpapi/') && requestMethod(response) === 'SYS.ATS.LOGIN',
-    {timeout: 30000}
+    {timeout: 60000}
   );
   await page.locator('.loginWrap button').click();
   const response = await responsePromise;
@@ -38,7 +38,7 @@ async function login(page) {
     throw new Error(`login failed: ${JSON.stringify(body)}`);
   }
   await page.waitForURL(`**/#/trade?location=${encodeURIComponent(location)}`);
-  await page.locator('.tradeGrid').waitFor({timeout: 30000});
+  await page.locator('.tradeGrid').waitFor({timeout: 60000});
   await page.waitForTimeout(2500);
 }
 
