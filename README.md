@@ -122,6 +122,14 @@ Permanently remove the isolated SaaS runtime data:
 sudo ./uninstall-saas.sh --purge-data
 ```
 
+完整清理 SaaS 容器、运行数据、专用构建缓存及这些容器引用的镜像：
+
+```bash
+sudo ./uninstall-saas.sh --purge-data --purge-images
+```
+
+卸载脚本的容器边界固定为名称前缀 `dc-saas-*`，同时清理 Compose 项目 `dc-saas` 的网络和卷；不会选择量化系统或 `/opt/sumscope`。
+
 The purge command accepts only the exact
 `/opt/dc-saas-runtime` path and never selects `/opt/sumscope`.
 

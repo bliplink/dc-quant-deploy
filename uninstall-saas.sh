@@ -20,11 +20,12 @@ usage() {
   cat <<'EOF'
 Usage: sudo ./uninstall-saas.sh [--purge-data] [--purge-images]
 
-Without flags, remove only DC SaaS containers and its Compose network while
-preserving MySQL, ClickHouse, ZooKeeper, logs, generated config, and images.
+Without flags, remove only containers whose names start with dc-saas-, plus
+this Compose project's networks and volumes, while preserving MySQL,
+ClickHouse, ZooKeeper, logs, generated config, and images.
 
 --purge-data    Also permanently remove /opt/dc-saas-runtime.
---purge-images  Also remove images referenced by this SaaS Compose project.
+--purge-images  Also remove images referenced by any dc-saas-* container.
 
 The independent quantitative-trading and legacy /opt/sumscope services are
 never selected by this script.
@@ -69,13 +70,45 @@ compose() {
   docker compose --env-file "${ENV_FILE}" -f "${SCRIPT_DIR}/compose.yaml" "$@"
 }
 
+saas_container_ids="$(docker ps -aq --filter 'name=^/dc-saas-' | sort -u || true)"
 image_ids=""
 if [[ "${PURGE_IMAGES}" == "true" ]]; then
-  image_ids="$(compose images -q 2>/dev/null | sort -u || true)"
+  image_ids="$(
+    {
+      compose images -q 2>/dev/null || true
+      if [[ -n "${saas_container_ids}" ]]; then
+        for container_id in ${saas_container_ids}; do
+          docker inspect --format '{{.Image}}' "${container_id}" 2>/dev/null || true
+        done
+      fi
+    } | sort -u
+  )"
 fi
 
-compose down --remove-orphans
-log "Removed only dc-saas containers and its Compose network."
+compose down --volumes --remove-orphans
+
+# Rollback and browser-acceptance containers are deliberately outside the
+# current Compose model.  Keep the removal boundary exact and auditable by
+# selecting only the reserved dc-saas-* name prefix.
+remaining_container_ids="$(docker ps -aq --filter 'name=^/dc-saas-' | sort -u || true)"
+if [[ -n "${remaining_container_ids}" ]]; then
+  # shellcheck disable=SC2086
+  docker rm -f ${remaining_container_ids}
+fi
+
+remaining_network_ids="$(docker network ls -q --filter 'label=com.docker.compose.project=dc-saas' | sort -u || true)"
+if [[ -n "${remaining_network_ids}" ]]; then
+  # shellcheck disable=SC2086
+  docker network rm ${remaining_network_ids} || true
+fi
+
+remaining_volume_names="$(docker volume ls -q --filter 'label=com.docker.compose.project=dc-saas' | sort -u || true)"
+if [[ -n "${remaining_volume_names}" ]]; then
+  # shellcheck disable=SC2086
+  docker volume rm ${remaining_volume_names} || true
+fi
+
+log "Removed all dc-saas-* containers and this Compose project's networks and volumes."
 
 if [[ "${PURGE_IMAGES}" == "true" && -n "${image_ids}" ]]; then
   # shellcheck disable=SC2086
