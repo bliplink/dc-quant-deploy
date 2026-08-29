@@ -72,6 +72,7 @@ compose() {
 
 saas_container_ids="$(docker ps -aq --filter 'name=^/dc-saas-' | sort -u || true)"
 image_ids=""
+image_refs=""
 if [[ "${PURGE_IMAGES}" == "true" ]]; then
   image_ids="$(
     {
@@ -83,6 +84,13 @@ if [[ "${PURGE_IMAGES}" == "true" ]]; then
       fi
     } | sort -u
   )"
+  if [[ -n "${image_ids}" ]]; then
+    image_refs="$(
+      for image_id in ${image_ids}; do
+        docker image inspect --format '{{range .RepoTags}}{{println .}}{{end}}' "${image_id}" 2>/dev/null || true
+      done | grep -v '<none>' | sort -u || true
+    )"
+  fi
 fi
 
 compose down --volumes --remove-orphans
@@ -110,10 +118,17 @@ fi
 
 log "Removed all dc-saas-* containers and this Compose project's networks and volumes."
 
+if [[ "${PURGE_IMAGES}" == "true" && -n "${image_refs}" ]]; then
+  # Remove every tag pointing at a captured SaaS image before deleting by ID;
+  # Docker otherwise rejects IDs that have multiple repository references.
+  # shellcheck disable=SC2086
+  docker image rm ${image_refs} || true
+fi
+
 if [[ "${PURGE_IMAGES}" == "true" && -n "${image_ids}" ]]; then
   # shellcheck disable=SC2086
   docker image rm ${image_ids} || true
-  log "Removed unreferenced SaaS images."
+  log "Removed captured SaaS image references and unreferenced image layers."
 fi
 
 if [[ "${PURGE_DATA}" == "true" ]]; then
