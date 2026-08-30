@@ -114,6 +114,10 @@ ensure_env_defaults() {
   migrate_env_value TRADE_WEB_IMAGE_REPOSITORY dc-saas/dc-trade-web ghcr.io/bliplink/dc-saas-trade-web
   migrate_env_value TRADE_WEB_IMAGE_REPOSITORY ghcr.io/skt-walter/dc-trade-web ghcr.io/bliplink/dc-saas-trade-web
   migrate_env_value REQUIRE_GHCR_LOGIN true false
+  if ! grep -q '^SAAS_MIN_TOTAL_MEMORY_MB=' "${ENV_FILE}"; then
+    printf 'SAAS_MIN_TOTAL_MEMORY_MB=7680\n' >> "${ENV_FILE}"
+  fi
+  migrate_env_value SAAS_MIN_AVAILABLE_MEMORY_MB 8192 2048
   if grep -q '^ZOOKEEPER_TAG=v0.0.3-test$' "${ENV_FILE}"; then
     sed -i 's/^ZOOKEEPER_TAG=v0.0.3-test$/ZOOKEEPER_TAG=3.8.4/' "${ENV_FILE}"
   fi
@@ -155,6 +159,10 @@ available_memory_mb() {
   awk '/^MemAvailable:/ {printf "%d\n", $2 / 1024}' /proc/meminfo
 }
 
+total_memory_mb() {
+  awk '/^MemTotal:/ {printf "%d\n", $2 / 1024}' /proc/meminfo
+}
+
 available_disk_gb() {
   local target="$1"
   while [[ ! -e "${target}" && "${target}" != "/" ]]; do target="$(dirname "${target}")"; done
@@ -162,18 +170,21 @@ available_disk_gb() {
 }
 
 validate_runtime_capacity() {
-  local memory_mb runtime_disk_gb docker_root docker_disk_gb
+  local memory_mb total_mb runtime_disk_gb docker_root docker_disk_gb
   memory_mb="$(available_memory_mb)"
+  total_mb="$(total_memory_mb)"
   runtime_disk_gb="$(available_disk_gb "${DEPLOY_ROOT}")"
   docker_root="$(docker info --format '{{.DockerRootDir}}')"
   docker_disk_gb="$(available_disk_gb "${docker_root}")"
-  (( memory_mb >= ${SAAS_MIN_AVAILABLE_MEMORY_MB:-8192} )) ||
-    die "Only ${memory_mb} MiB memory is available; at least ${SAAS_MIN_AVAILABLE_MEMORY_MB:-8192} MiB is required."
+  (( total_mb >= ${SAAS_MIN_TOTAL_MEMORY_MB:-7680} )) ||
+    die "Only ${total_mb} MiB total memory is installed; at least ${SAAS_MIN_TOTAL_MEMORY_MB:-7680} MiB is required."
+  (( memory_mb >= ${SAAS_MIN_AVAILABLE_MEMORY_MB:-2048} )) ||
+    die "Only ${memory_mb} MiB memory is available; at least ${SAAS_MIN_AVAILABLE_MEMORY_MB:-2048} MiB is required."
   (( runtime_disk_gb >= ${SAAS_MIN_RUNTIME_DISK_GB:-100} )) ||
     die "Only ${runtime_disk_gb} GiB is free for ${DEPLOY_ROOT}; at least ${SAAS_MIN_RUNTIME_DISK_GB:-100} GiB is required."
   (( docker_disk_gb >= ${SAAS_MIN_DOCKER_DISK_GB:-15} )) ||
     die "Only ${docker_disk_gb} GiB is free below Docker root ${docker_root}; at least ${SAAS_MIN_DOCKER_DISK_GB:-15} GiB is required."
-  log "Capacity preflight passed: ${memory_mb} MiB memory, ${runtime_disk_gb} GiB runtime disk, ${docker_disk_gb} GiB Docker disk available."
+  log "Capacity preflight passed: ${total_mb} MiB total/${memory_mb} MiB available memory, ${runtime_disk_gb} GiB runtime disk, ${docker_disk_gb} GiB Docker disk available."
 }
 
 port_is_listening() {
