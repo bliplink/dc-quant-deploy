@@ -10,6 +10,7 @@ LIQ_USER="${FINAL_LIQ_E2E_USER:-final_liquidated}"
 MAKER_USER="${FINAL_LIQ_E2E_MAKER:-final_maker}"
 ADL_USER="${FINAL_LIQ_E2E_ADL_USER:-final_adl_high}"
 FOREIGN_USER="${FINAL_LIQ_E2E_FOREIGN_USER:-final_adl_foreign}"
+ADL_AVERAGE="${FINAL_LIQ_E2E_ADL_AVERAGE:-1000000}"
 
 log() { printf '[final-liq-e2e] %s\n' "$*"; }
 die() { printf '[final-liq-e2e] ERROR: %s\n' "$*" >&2; exit 1; }
@@ -22,6 +23,8 @@ for value in "${LIQ_LOCATION}" "${OTHER_LOCATION}" "${LIQ_USER}" "${MAKER_USER}"
   safe_identifier "${value}" || die "Unsupported identifier: ${value}"
 done
 [[ "${LIQ_LOCATION}" != "${OTHER_LOCATION}" ]] || die "Liquidation locations must differ"
+[[ "${ADL_AVERAGE}" =~ ^[0-9]+([.][0-9]+)?$ ]] ||
+  die "FINAL_LIQ_E2E_ADL_AVERAGE must be a nonnegative number"
 
 set -a
 # shellcheck disable=SC1090
@@ -142,7 +145,7 @@ VALUES
   ('${LIQ_USER}','BTCUSDT','BTCUSDT',0,'Cross',100,
    0.0001,100000,0.1,0,0,0,0,0,999999,0,NOW(),'FINAL_LIQ_E2E','${LIQ_LOCATION}'),
   ('${ADL_USER}','BTCUSDT','BTCUSDT',0,'Cross',100,
-   0,0,0,0.001,70000,0.7,0,0,0,0,NOW(),'FINAL_LIQ_E2E','${LIQ_LOCATION}'),
+   0,0,0,0.001,${ADL_AVERAGE},0.7,0,0,0,0,NOW(),'FINAL_LIQ_E2E','${LIQ_LOCATION}'),
   ('${FOREIGN_USER}','BTCUSDT','BTCUSDT',0,'Cross',100,
    0,0,0,0.001,70000,0.7,0,0,0,0,NOW(),'FINAL_LIQ_E2E','${OTHER_LOCATION}');
 
@@ -218,7 +221,8 @@ FROM dc.dc_liquidation_deficit d JOIN dc.dc_adl_event e
   ON e.location=d.location AND e.liquidation_order_id=d.liquidation_order_id
 WHERE d.location='${LIQ_LOCATION}' AND d.liquidation_order_id='${liquidation_order_id}';
 SELECT IF(rank_no=1 AND candidate_user_id='${ADL_USER}' AND position_side='SHORT'
-          AND ABS(reduced_quantity-0.0003)<0.00000001 AND ABS(realized_pnl-3)<0.00000001
+          AND ABS(reduced_quantity-0.0001)<0.00000001
+          AND ABS(realized_pnl-((${ADL_AVERAGE}-reference_price)*0.0001))<0.00000001
           AND ABS(allocated_amount-2.0036)<0.00000001,1,0)
 FROM dc.dc_adl_ledger
 WHERE location='${LIQ_LOCATION}' AND liquidation_order_id='${liquidation_order_id}';
@@ -227,10 +231,14 @@ SELECT IF(ABS(p.long_position)<0.00000001 AND ABS(p.long_used_margin)<0.00000001
 FROM dc.dc_orders_position p JOIN dc.dc_users_balance b
   ON b.location=p.location AND b.user_id=p.user_id
 WHERE p.location='${LIQ_LOCATION}' AND p.user_id='${LIQ_USER}' AND p.security_id='BTCUSDT';
-SELECT IF(ABS(p.short_position-0.0007)<0.00000001 AND ABS(p.short_used_margin-0.49)<0.00000001
-          AND ABS(b.balance-10.9964)<0.00000001 AND ABS(b.used_margin-0.49)<0.00000001,1,0)
+SELECT IF(ABS(p.short_position-0.0009)<0.00000001 AND ABS(p.short_used_margin-0.63)<0.00000001
+          AND ABS(b.balance-(10+l.realized_pnl-l.allocated_amount))<0.00000001
+          AND ABS(b.used_margin-0.63)<0.00000001,1,0)
 FROM dc.dc_orders_position p JOIN dc.dc_users_balance b
   ON b.location=p.location AND b.user_id=p.user_id
+JOIN dc.dc_adl_ledger l
+  ON l.location=p.location AND l.candidate_user_id=p.user_id
+  AND l.liquidation_order_id='${liquidation_order_id}'
 WHERE p.location='${LIQ_LOCATION}' AND p.user_id='${ADL_USER}' AND p.security_id='BTCUSDT';
 SELECT IF(ABS(balance)<0.00000001,1,0) FROM dc.dc_insurance_fund
 WHERE location='${LIQ_LOCATION}' AND security_id='BTCUSDT';
