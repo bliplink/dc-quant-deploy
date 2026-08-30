@@ -111,14 +111,14 @@ services:
       DEPLOY_ROOT: /srv/dc
       SERVICE_NAME: GW
       MAIN_CLASS: GW
-      JAVA_OPTS: ${GW_JAVA_OPTS:--server -Xms64m -Xmx512m -Xmn128m -Djava.security.auth.login.config=../../control/jaas.ini}
+      JAVA_OPTS: ${GW_JAVA_OPTS:--server -Xms64m -Xmx320m -Xmn96m -Djava.security.auth.login.config=../../control/jaas.ini}
     volumes:
       - ${DEPLOY_ROOT}/control:/srv/dc/control:ro
       - ${DEPLOY_ROOT}/data:/srv/dc/data
       - ${DEPLOY_ROOT}/log:/srv/dc/log
       - ${DEPLOY_ROOT}/control/overrides/GW/config/spring-tcp-server.xml:/srv/dc/dc/GW/config/spring-tcp-server.xml:ro
       - ${DEPLOY_ROOT}/control/overrides/GW/config/spring-gw-client.xml:/srv/dc/dc/GW/config/spring-gw-client.xml:ro
-    mem_limit: ${GW_MEMORY_LIMIT:-768m}
+    mem_limit: ${GW_MEMORY_LIMIT:-512m}
 
   loginsvr:
     <<: *java-service-base
@@ -134,13 +134,13 @@ services:
       DEPLOY_ROOT: /srv/dc
       SERVICE_NAME: LoginSvr
       MAIN_CLASS: LoginSvr
-      JAVA_OPTS: ${LOGINSVR_JAVA_OPTS:--server -Xms64m -Xmx512m -Xmn128m -Djava.security.auth.login.config=../../control/jaas.ini}
+      JAVA_OPTS: ${LOGINSVR_JAVA_OPTS:--server -Xms64m -Xmx320m -Xmn96m -Djava.security.auth.login.config=../../control/jaas.ini}
     volumes:
       - ${DEPLOY_ROOT}/control:/srv/dc/control:ro
       - ${DEPLOY_ROOT}/data:/srv/dc/data
       - ${DEPLOY_ROOT}/log:/srv/dc/log
       - ${DEPLOY_ROOT}/control/overrides/LoginSvr/config/application.properties:/srv/dc/dc/LoginSvr/config/application.properties:ro
-    mem_limit: ${LOGINSVR_MEMORY_LIMIT:-768m}
+    mem_limit: ${LOGINSVR_MEMORY_LIMIT:-512m}
 
   mdsvr:
     <<: *java-service-base
@@ -156,13 +156,13 @@ services:
       DEPLOY_ROOT: /srv/dc
       SERVICE_NAME: MDSvr
       MAIN_CLASS: MDSvr
-      JAVA_OPTS: ${MDSVR_JAVA_OPTS:--server -Xms64m -Xmx768m -Xmn192m -Djava.security.auth.login.config=../../control/jaas.ini}
+      JAVA_OPTS: ${MDSVR_JAVA_OPTS:--server -Xms64m -Xmx512m -Xmn128m -Djava.security.auth.login.config=../../control/jaas.ini}
     volumes:
       - ${DEPLOY_ROOT}/control:/srv/dc/control:ro
       - ${DEPLOY_ROOT}/data:/srv/dc/data
       - ${DEPLOY_ROOT}/log:/srv/dc/log
       - ${DEPLOY_ROOT}/control/overrides/MDSvr/config/application.properties:/srv/dc/dc/MDSvr/config/application.properties:ro
-    mem_limit: ${MDSVR_MEMORY_LIMIT:-1g}
+    mem_limit: ${MDSVR_MEMORY_LIMIT:-768m}
 
   apssvr:
     <<: *java-service-base
@@ -178,14 +178,14 @@ services:
       DEPLOY_ROOT: /srv/dc
       SERVICE_NAME: APSSvr
       MAIN_CLASS: APSSvr
-      JAVA_OPTS: ${APSSVR_JAVA_OPTS:--server -Xms64m -Xmx768m -Xmn192m -Djava.security.auth.login.config=../../control/jaas.ini}
+      JAVA_OPTS: ${APSSVR_JAVA_OPTS:--server -Xms64m -Xmx512m -Xmn128m -Djava.security.auth.login.config=../../control/jaas.ini}
     volumes:
       - ${DEPLOY_ROOT}/control:/srv/dc/control:ro
       - ${DEPLOY_ROOT}/data:/srv/dc/data
       - ${DEPLOY_ROOT}/log:/srv/dc/log
       - ${DEPLOY_ROOT}/log:/srv/dc/logs
       - ${DEPLOY_ROOT}/control/overrides/APSSvr/config/application.properties:/srv/dc/dc/APSSvr/config/application.properties:ro
-    mem_limit: ${APSSVR_MEMORY_LIMIT:-1g}
+    mem_limit: ${APSSVR_MEMORY_LIMIT:-768m}
 
   ordersvr:
     <<: *java-service-base
@@ -201,13 +201,13 @@ services:
       DEPLOY_ROOT: /srv/dc
       SERVICE_NAME: OrderSvr
       MAIN_CLASS: OrderSvr
-      JAVA_OPTS: ${ORDERSVR_JAVA_OPTS:--server -Xms64m -Xmx768m -Xmn192m -Djava.security.auth.login.config=../../control/jaas.ini}
+      JAVA_OPTS: ${ORDERSVR_JAVA_OPTS:--server -Xms64m -Xmx512m -Xmn128m -Djava.security.auth.login.config=../../control/jaas.ini}
     volumes:
       - ${DEPLOY_ROOT}/control:/srv/dc/control:ro
       - ${DEPLOY_ROOT}/data:/srv/dc/data
       - ${DEPLOY_ROOT}/log:/srv/dc/log
       - ${DEPLOY_ROOT}/control/overrides/OrderSvr/config/application.properties:/srv/dc/dc/OrderSvr/config/application.properties:ro
-    mem_limit: ${ORDERSVR_MEMORY_LIMIT:-1g}
+    mem_limit: ${ORDERSVR_MEMORY_LIMIT:-768m}
 
   tradesvr:
     <<: *java-service-base
@@ -223,13 +223,13 @@ services:
       DEPLOY_ROOT: /srv/dc
       SERVICE_NAME: TradeSvr
       MAIN_CLASS: TradeSvr
-      JAVA_OPTS: ${TRADESVR_JAVA_OPTS:--server -Xms64m -Xmx640m -Xmn160m -Djava.security.auth.login.config=../../control/jaas.ini}
+      JAVA_OPTS: ${TRADESVR_JAVA_OPTS:--server -Xms64m -Xmx448m -Xmn112m -Djava.security.auth.login.config=../../control/jaas.ini}
     volumes:
       - ${DEPLOY_ROOT}/control:/srv/dc/control:ro
       - ${DEPLOY_ROOT}/data:/srv/dc/data
       - ${DEPLOY_ROOT}/log:/srv/dc/log
       - ${DEPLOY_ROOT}/control/overrides/TradeSvr/config/application.properties:/srv/dc/dc/TradeSvr/config/application.properties:ro
-    mem_limit: ${TRADESVR_MEMORY_LIMIT:-896m}
+    mem_limit: ${TRADESVR_MEMORY_LIMIT:-704m}
 
   liqsvr:
     <<: *java-service-base
@@ -245,13 +245,13 @@ services:
       DEPLOY_ROOT: /srv/dc
       SERVICE_NAME: LiqSvr
       MAIN_CLASS: LiqSvr
-      JAVA_OPTS: ${LIQSVR_JAVA_OPTS:--server -Xms64m -Xmx512m -Xmn128m -Djava.security.auth.login.config=../../control/jaas.ini}
+      JAVA_OPTS: ${LIQSVR_JAVA_OPTS:--server -Xms64m -Xmx320m -Xmn96m -Djava.security.auth.login.config=../../control/jaas.ini}
     volumes:
       - ${DEPLOY_ROOT}/control:/srv/dc/control:ro
       - ${DEPLOY_ROOT}/data:/srv/dc/data
       - ${DEPLOY_ROOT}/log:/srv/dc/log
       - ${DEPLOY_ROOT}/control/overrides/LiqSvr/config/application.properties:/srv/dc/dc/LiqSvr/config/application.properties:ro
-    mem_limit: ${LIQSVR_MEMORY_LIMIT:-768m}
+    mem_limit: ${LIQSVR_MEMORY_LIMIT:-512m}
 
   managersvr:
     <<: *java-service-base
@@ -267,13 +267,13 @@ services:
       DEPLOY_ROOT: /srv/dc
       SERVICE_NAME: ManagerSvr
       MAIN_CLASS: ManagerSvr
-      JAVA_OPTS: ${MANAGERSVR_JAVA_OPTS:--server -Xms64m -Xmx512m -Xmn128m -Djava.security.auth.login.config=../../control/jaas.ini}
+      JAVA_OPTS: ${MANAGERSVR_JAVA_OPTS:--server -Xms64m -Xmx320m -Xmn96m -Djava.security.auth.login.config=../../control/jaas.ini}
     volumes:
       - ${DEPLOY_ROOT}/control:/srv/dc/control:ro
       - ${DEPLOY_ROOT}/data:/srv/dc/data
       - ${DEPLOY_ROOT}/log:/srv/dc/log
       - ${DEPLOY_ROOT}/control/overrides/ManagerSvr/config/application.properties:/srv/dc/dc/ManagerSvr/config/application.properties:ro
-    mem_limit: ${MANAGERSVR_MEMORY_LIMIT:-768m}
+    mem_limit: ${MANAGERSVR_MEMORY_LIMIT:-512m}
 
   adminsvr:
     <<: *java-service-base
@@ -289,13 +289,13 @@ services:
       DEPLOY_ROOT: /srv/dc
       SERVICE_NAME: AdminSvr
       MAIN_CLASS: AdminSvr
-      JAVA_OPTS: ${ADMINSVR_JAVA_OPTS:--server -Xms64m -Xmx512m -Xmn128m -Djava.security.auth.login.config=../../control/jaas.ini}
+      JAVA_OPTS: ${ADMINSVR_JAVA_OPTS:--server -Xms64m -Xmx320m -Xmn96m -Djava.security.auth.login.config=../../control/jaas.ini}
     volumes:
       - ${DEPLOY_ROOT}/control:/srv/dc/control:ro
       - ${DEPLOY_ROOT}/data:/srv/dc/data
       - ${DEPLOY_ROOT}/log:/srv/dc/log
       - ${DEPLOY_ROOT}/control/overrides/AdminSvr/config/application.properties:/srv/dc/dc/AdminSvr/config/application.properties:ro
-    mem_limit: ${ADMINSVR_MEMORY_LIMIT:-768m}
+    mem_limit: ${ADMINSVR_MEMORY_LIMIT:-512m}
 
   web:
     image: ${TRADE_WEB_IMAGE_REPOSITORY:-ghcr.io/bliplink/dc-saas-trade-web}:${TRADE_WEB_TAG:-saas-crypto}
