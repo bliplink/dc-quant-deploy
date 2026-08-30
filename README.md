@@ -101,6 +101,14 @@ queries, suspend/reactivate enforcement, audit rows, and database account
 initialization. The two acceptance tenants are retained as immutable evidence;
 their randomly generated passwords are never printed or committed.
 
+Use the browser variant to execute the same API/database contract and then
+verify the English/Chinese desktop and mobile onboarding/administration pages.
+It stores screenshots below the protected runtime evidence directory:
+
+```bash
+sudo ./tests/run-tenant-lifecycle-web-e2e-host.sh
+```
+
 ## Automatic public-image deployment
 
 Install the root cron task that checks the public GHCR application tags every
