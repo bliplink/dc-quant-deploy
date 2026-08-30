@@ -158,6 +158,8 @@ function layoutItem(snapshot, breakpoint, key) {
       throw new Error('drag gesture did not move the chart panel');
     }
 
+    await chartPanel.scrollIntoViewIfNeeded();
+    await page.waitForTimeout(300);
     const beforeResizeBox = await chartPanel.boundingBox();
     const resizeHandle = chartPanel.locator('.react-resizable-handle');
     const resizeHandleBox = await resizeHandle.boundingBox();
