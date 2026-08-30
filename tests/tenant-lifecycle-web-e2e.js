@@ -20,15 +20,6 @@ function screenshotPath(name) {
   return path.join(artifactDir, name);
 }
 
-function requestMethod(response) {
-  try {
-    const body = response.request().postDataJSON();
-    return body && (body.method || (body.content && body.content.method));
-  } catch (_) {
-    return '';
-  }
-}
-
 async function login(page, username, password, location) {
   await page.goto(`${baseUrl}/#/login?location=${encodeURIComponent(location)}`, {waitUntil: 'domcontentloaded'});
   const languageButtons = page.locator('.loginLanguageSwitch button');
@@ -37,16 +28,10 @@ async function login(page, username, password, location) {
   const inputs = page.locator('.loginWrap input');
   await inputs.nth(0).fill(username);
   await inputs.nth(1).fill(password);
-  const responseBodyPromise = page.waitForResponse(
-    response => response.url().includes('/httpapi/') && requestMethod(response) === 'SYS.ATS.LOGIN',
-    {timeout: 60000}
-  ).then(response => response.json());
   await page.locator('.loginWrap .ant-btn-primary').click();
-  const body = await responseBodyPromise;
-  if (Number(body.code) !== 0 || body.data.location !== location) {
-    throw new Error(`tenant login failed: ${JSON.stringify(body)}`);
-  }
   await page.waitForURL(`**/#/trade?location=${encodeURIComponent(location)}`, {timeout: 60000});
+  const loginData = await page.evaluate(() => JSON.parse(sessionStorage.getItem('loginData') || '{}'));
+  if (loginData.location !== location) throw new Error(`tenant session location mismatch: ${JSON.stringify(loginData)}`);
 }
 
 (async () => {
@@ -76,16 +61,10 @@ async function login(page, username, password, location) {
     const platformInputs = page.locator('.tenant-card input');
     await platformInputs.nth(0).fill(platformUser);
     await platformInputs.nth(1).fill(platformPassword);
-    const platformBodyPromise = page.waitForResponse(
-      response => response.url().includes('/httpapi/') && requestMethod(response) === 'SYS.ATS.LOGIN',
-      {timeout: 60000}
-    ).then(response => response.json());
     await page.locator('.tenant-card .ant-btn-primary').click();
-    const platformBody = await platformBodyPromise;
-    if (Number(platformBody.code) !== 0 || platformBody.data.location !== 'PLATFORM') {
-      throw new Error(`platform login failed: ${JSON.stringify(platformBody)}`);
-    }
     await page.waitForURL('**/#/platform-admin', {timeout: 60000});
+    const platformData = await page.evaluate(() => JSON.parse(sessionStorage.getItem('loginData') || '{}'));
+    if (platformData.location !== 'PLATFORM') throw new Error(`platform session mismatch: ${JSON.stringify(platformData)}`);
     await page.getByText('Provisioned tenants', {exact: true}).click();
     await page.getByText(locationA, {exact: true}).waitFor({timeout: 30000});
     await page.getByText(locationB, {exact: true}).waitFor({timeout: 30000});
