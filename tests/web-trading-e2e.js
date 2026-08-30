@@ -222,6 +222,10 @@ async function waitForNoPosition(page) {
     const buyerTrade = await tradeHistoryText(buyerSession.page);
     const sellerTrade = await tradeHistoryText(sellerSession.page);
     const recentTrade = await recentTradeText(buyerSession.page);
+    const buyerTradeTime = (buyerTrade.match(/\d{4}-\d{2}-\d{2}\s+(\d{2}:\d{2}:\d{2})/) || [])[1];
+    if (!buyerTradeTime || !recentTrade.includes(buyerTradeTime)) {
+      throw new Error(`recent trade is stale: execution=${buyerTrade} recent=${recentTrade}`);
+    }
 
     // Rest an offsetting buy for the short account, then exercise the Web
     // reduce-only Market/IOC close action for the long account. The same match
