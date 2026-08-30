@@ -87,6 +87,20 @@ subsequent checks fast on legacy hosts using Docker's `vfs` storage driver.
 The precheck also proves that valid credentials are rejected when the request
 uses another `location`.
 
+Run the SaaS control-plane acceptance as root so the generated platform
+administrator password remains inside the protected runtime environment:
+
+```bash
+sudo ./tests/run-tenant-lifecycle-e2e-host.sh
+```
+
+This provisions two uniquely named `*_E2E_*` tenants through the public
+application and platform-approval APIs. It verifies dedicated login URLs,
+same-name user isolation, tenant-admin RBAC, product settings, trade-record
+queries, suspend/reactivate enforcement, audit rows, and database account
+initialization. The two acceptance tenants are retained as immutable evidence;
+their randomly generated passwords are never printed or committed.
+
 ## Automatic public-image deployment
 
 Install the root cron task that checks the public GHCR application tags every
