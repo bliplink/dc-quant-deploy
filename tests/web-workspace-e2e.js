@@ -138,10 +138,16 @@ function layoutItem(snapshot, breakpoint, key) {
     await page.mouse.up();
     await page.waitForTimeout(800);
 
-    const afterBox = await chartPanel.boundingBox();
     const afterMove = await layoutSnapshot(page);
+    const afterBox = await chartPanel.boundingBox();
     if (!afterMove.key || !afterMove.value || afterMove.value === before.value) {
-      throw new Error('dragged layout was not persisted to localStorage');
+      throw new Error(`dragged layout was not persisted to localStorage: ${JSON.stringify({
+        beforeBox,
+        afterBox,
+        beforeLayout: before,
+        afterLayout: afterMove,
+        panelClass: await chartPanel.getAttribute('class')
+      })}`);
     }
     if (!afterBox || (Math.abs(afterBox.x - beforeBox.x) < 20 && Math.abs(afterBox.y - beforeBox.y) < 20)) {
       throw new Error('drag gesture did not move the chart panel');
