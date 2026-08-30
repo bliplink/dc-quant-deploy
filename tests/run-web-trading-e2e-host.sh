@@ -8,6 +8,8 @@ E2E_BASE_URL="${E2E_BASE_URL:-}"
 E2E_LOCATION="${E2E_LOCATION:-WEB_E2E}"
 E2E_BUYER="${E2E_BUYER:-webbuyer}"
 E2E_SELLER="${E2E_SELLER:-webseller}"
+E2E_PREPARE_BASELINE="${E2E_PREPARE_BASELINE:-true}"
+E2E_RESTART_SERVICES="${E2E_RESTART_SERVICES:-true}"
 E2E_RUNNER_NAME="${E2E_RUNNER_NAME:-dc-saas-web-e2e-runner}"
 E2E_RUNNER_IMAGE="${E2E_RUNNER_IMAGE:-mcr.microsoft.com/playwright:v1.55.0-noble}"
 
@@ -18,6 +20,10 @@ log() {
 die() {
   printf '[web-e2e-host] ERROR: %s\n' "$*" >&2
   exit 1
+}
+
+is_true() {
+  [[ "$1" == "true" || "$1" == "1" || "$1" == "yes" ]]
 }
 
 [[ -r "${ENV_FILE}" ]] || die "Cannot read ${ENV_FILE}"
@@ -71,19 +77,31 @@ E2E_BASE_URL="${E2E_BASE_URL:-http://127.0.0.1:${WEB_LISTEN_PORT}}"
 artifact_dir="${E2E_ARTIFACT_DIR:-${DEPLOY_ROOT}/e2e-artifacts}"
 install -d -m 0750 "${artifact_dir}"
 
-ENV_FILE="${ENV_FILE}" \
-E2E_LOCATION="${E2E_LOCATION}" \
-E2E_BUYER="${E2E_BUYER}" \
-E2E_SELLER="${E2E_SELLER}" \
-E2E_PASSWORD="${E2E_PASSWORD}" \
-  "${SCRIPT_DIR}/prepare-web-trading-e2e.sh"
+if is_true "${E2E_PREPARE_BASELINE}"; then
+  ENV_FILE="${ENV_FILE}" \
+  E2E_LOCATION="${E2E_LOCATION}" \
+  E2E_BUYER="${E2E_BUYER}" \
+  E2E_SELLER="${E2E_SELLER}" \
+  E2E_PASSWORD="${E2E_PASSWORD}" \
+    "${SCRIPT_DIR}/prepare-web-trading-e2e.sh"
+elif is_true "${E2E_RESTART_SERVICES}"; then
+  die "E2E_RESTART_SERVICES=true requires E2E_PREPARE_BASELINE=true"
+else
+  log "Using the existing E2E database baseline without mutation."
+fi
 
-log "Restarting OrderSvr and TradeSvr on the clean E2E database baseline."
-docker restart dc-saas-ordersvr dc-saas-tradesvr >/dev/null
+if is_true "${E2E_RESTART_SERVICES}"; then
+  log "Restarting OrderSvr and TradeSvr on the clean E2E database baseline."
+  docker restart dc-saas-ordersvr dc-saas-tradesvr >/dev/null
+else
+  log "Keeping running trading services; only readiness will be checked."
+fi
 wait_for_port "${ORDERSVR_GW_PORT}" dc-saas-ordersvr
 wait_for_port "${TRADESVR_GW_PORT}" dc-saas-tradesvr
-log "Restarting GW so it resolves the refreshed OrderSvr and TDSvr routes."
-docker restart dc-saas-gateway >/dev/null
+if is_true "${E2E_RESTART_SERVICES}"; then
+  log "Restarting GW so it resolves the refreshed OrderSvr and TDSvr routes."
+  docker restart dc-saas-gateway >/dev/null
+fi
 wait_for_gateway_route OrderSvr
 wait_for_gateway_route TDSvr
 
