@@ -127,6 +127,10 @@ IDs if validation fails. It never updates MySQL, ClickHouse, or ZooKeeper.
 ## Product documentation
 
 - [中文用户手册](docs/USER_GUIDE.zh-CN.md)
+- [产品、业务规则、数据流与完整验收报告](docs/DC_SAAS_CRYPTO_PRODUCT_AND_ACCEPTANCE_20260829.zh-CN.md)
+- [产品与完整验收报告（Word）](docs/DC_SAAS_CRYPTO_PRODUCT_AND_ACCEPTANCE_20260829.zh-CN.docx)
+- [多租户控制面生产验收报告](docs/TENANT_CONTROL_PLANE_ACCEPTANCE_20260830.zh-CN.md)
+- [多租户控制面生产验收报告（Word）](docs/TENANT_CONTROL_PLANE_ACCEPTANCE_20260830.zh-CN.docx)
 - [对标 Binance / Bybit 的产品化路线图](docs/BINANCE_BYBIT_ROADMAP.zh-CN.md)
 - [SaaS 公共镜像自动部署与运维](docs/AUTO_UPDATE.zh-CN.md)
 

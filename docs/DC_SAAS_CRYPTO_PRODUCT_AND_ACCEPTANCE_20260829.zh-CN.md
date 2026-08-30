@@ -1,12 +1,12 @@
 # DC SaaS 加密货币永续合约系统产品与验收说明
 
-文档版本：V1.2
+文档版本：V1.3
 
 基线日期：2026-08-30
 
 代码分支：`saas-crypto`
 
-当前生产验证环境：`18.140.45.126`，Compose 项目 `dc-saas`，最终隔离回归 `location=POSTFIX2_E2E`
+当前生产验证环境：`18.140.45.126`，Compose 项目 `dc-saas`；核心隔离回归 `location=POSTFIX2_E2E`，多租户控制面最终回归 `location=SAASA_E2E_0830160159 / SAASB_E2E_0830160159`
 
 ## 1. 文档目的与结论
 
@@ -16,7 +16,9 @@
 
 本轮在生产验证环境完成峰值档 3,000 个挂单、3,000 个 maker 单、3,000 个 taker 单、并发 32 的严格压力门禁：9,000 个订单请求、6,000 条双方执行记录和 6,000 条成交资金流水全部成功并精确核对，随后重启恢复和平仓归零。五个核心服务共 154 项单元测试全部通过。该轮同时发现并修复 TradeSvr 640 MiB cgroup OOM，以及超时重试未返回首次手续费/PnL 导致 OrderSvr 状态未收敛的问题；失败轮次保留为诊断证据，不计为通过。
 
-当前结论是“核心交易功能可供产品验收和继续开发”，不是“可直接承载真实用户资金”。真实资金上线前仍必须完成服务端权威租户、不可变复式账本/持久化事件、生产指数和标记价、私有流、限流、安全合规、高可用、灾备和更高容量门禁。
+2026-08-30 又完成了 SaaS 控制面生产验收：公开试用申请、平台审批、租户初始化、独立 URL、租户内注册、租户管理员、同名用户隔离、品种规则、API Key、流动性 Robot 配置、交易记录、租户设置与审计、暂停和恢复均已形成真实 Web/GW/服务/MySQL 闭环。最终浏览器回归覆盖桌面端和 390×844 手机端。
+
+当前结论是“核心交易功能和第一阶段多租户控制面可供产品验收和继续开发”，不是“可直接承载真实用户资金”。真实资金上线前仍必须完成不可变复式账本/持久化事件、生产指数和标记价、私有流、限流、安全合规、高可用、灾备和更高容量门禁；还需继续对 OrderSvr、TradeSvr、MDSvr、LiqSvr 的全部请求、Topic、缓存、锁和持久化键执行系统性跨租户攻击测试。
 
 ## 2. 产品定位与范围
 
@@ -37,7 +39,7 @@
 - KYC/KYB、AML、制裁筛查、Travel Rule 和司法辖区合规。
 - 生产级多活、多可用区和撮合热备。
 - 完整 Binance/Bybit 协议兼容层与官方 SDK 兼容承诺。
-- 已产品化的租户申请、审批、独立域名、租户管理员和 RBAC 控制台。
+- 自定义域名自动解析、证书自动签发、套餐计费、完整平台 RBAC、KYC 和租户配额计费；当前已交付 location 独立 URL 与第一阶段平台/租户管理控制台。
 - RobotSvr 的正式 SaaS 部署；RobotSvr 架构已规划，但不在当前生产验证环境 13 个核心容器内。
 
 ## 3. 用户入口与当前账号
@@ -60,12 +62,12 @@
 - 切换品种和离开交易页时统一释放订单、成交、持仓、资金、订单簿和行情 WebSocket 订阅，防止重复回报与无效取消订阅异常。
 - 使用深色层级、专业买卖色、紧凑表格和响应式断点，功能布局参考主流永续合约交易终端，但不复制其品牌和专有素材。
 
-Web 源码当前部署基线为 `2ed6e68`，使用公开 `ghcr.io` 镜像。生产环境已完成真实浏览器桌面英文/中文、390×844 手机英文/中文、拖动、缩放、布局持久化、市场抽屉和完整交易链路验收；本报告中的 Web 图片均来自 `18.140.45.126`，不是本地效果图。
+Web 源码当前部署基线为 `97b3afe88928fe0c6b26a8564d88ae5168556dba`，运行不可变公开镜像 `source-97b3afe88928fe0c6b26a8564d88ae5168556dba`。生产环境已完成真实浏览器桌面英文/中文、390×844 手机英文/中文、拖动、缩放、布局持久化、市场抽屉、完整交易链路、租户申请/注册和平台/租户管理验收；本报告中的 Web 图片均来自 `18.140.45.126`，不是本地效果图。
 
 ## 4. 总体架构与服务职责
 
 ```text
-Web / API / RobotSvr(规划)
+Web / API / RobotSvr
           |
           v
         GW ---- LoginSvr（登录、会话）
@@ -91,15 +93,15 @@ Order/Trade/Login/Admin/Manager/Liq 事务与配置 -> MySQL
 | 服务 | 当前职责 | 关键租户边界 |
 |---|---|---|
 | GW | HTTP/WebSocket 入口、服务路由、Topic 转发 | 当前保持通用网关；不在本阶段强改。服务 snapshot 校验订阅，校验失败不返回订阅确认，GW 不把 Topic 加入订阅表 |
-| LoginSvr | 用户登录和认证 | 用户凭据与 location 绑定；错误 location 登录已验收拒绝 |
+| LoginSvr | 用户注册、登录、会话、租户生命周期校验和 API Key | 用户凭据与 location 绑定；错误 location、暂停租户、错误密码已验收拒绝 |
 | OrderSvr | 参数、品种和订单规则；幂等；改单/撤单；价格时间优先撮合；条件单 | 订单簿、锁、幂等和撮合序列包含 location、market、symbol |
 | TradeSvr | 账户余额、冻结、持仓、保证金、手续费、资金费、保险基金、ADL | 余额/持仓/流水/ADL 查询和写入包含 location |
 | LiqSvr | 消费租户标记价格与持仓，触发部分或最终强平 | 标记价 key、重试 key、强平订单均包含 location |
 | MDSvr | 每个租户独立订单簿行情、最近成交和 K 线 | 行情不是全租户共享；按 location 发布和持久化 |
-| APSSvr | 外部行情接入、指数计算输入、向 GW/MDSvr 提供指数类行情 | 未来需按租户的指数方案和配置生成数据 |
-| AdminSvr | 向 Web 提供管理类接口 | 未来承载租户管理员前台接口 |
-| ManagerSvr | 后台运营管理 | 未来承载平台审批、租户配置和审计 |
-| RobotSvr | 规划中的租户策略/流动性服务：使用租户 API key 报单，订阅 APSSvr，按 ticker 报价档位并做外部反向对冲 | 必须按租户、API key、品种和策略实例隔离；当前未部署验收 |
+| APSSvr | 外部行情接入、指数计算输入、向 GW/MDSvr 提供指数类行情 | 当前生产验证单一 Binance Futures 外部源；后续按租户指数方案配置多源计算 |
+| AdminSvr | 面向 Web 的租户管理接口：用户、品种、API Key、Robot、交易记录、设置和审计 | location 取自认证会话；跨 location 和非管理员访问已验收拒绝 |
+| ManagerSvr | 平台运营：申请、审批、初始化、生命周期、独立 URL | 仅 PLATFORM 角色可审批和变更租户；操作写审计 |
+| RobotSvr | 租户策略/流动性服务：使用租户 API Key 报单，订阅 APSSvr，按 ticker 报价档位并做外部反向对冲 | 配置控制面已交付；RobotSvr 运行容器和真实外部对冲仍未纳入本轮生产验收 |
 
 ## 5. 核心交易业务规则
 
@@ -314,39 +316,38 @@ MDSvr snapshot -> 服务端校验 location/topic -> GW 仅登记已确认订阅
 6. 最终负余额先扣租户保险基金，再筛选同租户反向盈利持仓并执行 ADL。
 7. MySQL 事务提交 deficit/event/ledger/posting/balance/position；GW 向相关用户发布更新。
 
-## 10. 多租户产品规划
+## 10. 多租户控制面
 
-核心交易规则完成后进入多租户控制面，建议分为平台端、租户端和交易端三层。
+第一阶段多租户控制面已经落地并完成生产双租户验收，分为平台端、租户端和交易端三层。`location` 是租户唯一边界；GW 保持通用路由和 Topic 转发能力，认证、管理和各业务服务负责校验自身请求与 snapshot。
 
 ### 10.1 试用申请与审批
 
-- 官网提交企业/团队、联系人、用途、预计用户数、交易品种和试用周期。
-- ManagerSvr 平台运营查看材料、风控评分、审批、拒绝、补充材料、到期和续期。
-- 审批通过后创建 location、租户管理员、默认品种/费率/风控模板和独立 URL。
-- URL 可采用 `tenant.example.com` 或 `/t/{tenantCode}`；域名、证书、品牌和状态由平台管理。
-- 租户禁用或到期后，登录、交易、API key、Robot 和订阅统一停用，但历史数据保留审计。
+- 公开页面提交企业/团队、租户代码、联系人、用途、预计用户数、交易品种和试用周期；申请 ID 可用于查询状态。
+- ManagerSvr 平台运营审批或拒绝申请，重复请求凭证不会重复创建租户。
+- 审批通过后事务内创建 location、租户管理员、默认账户/配置、品种规则、试用期限和独立 URL。
+- 当前独立 URL 使用 `/#/login?location={LOCATION}`；自定义域名、自动 DNS 和证书属于下一阶段。
+- 生命周期覆盖 `TRIAL / ACTIVE / SUSPENDED / EXPIRED`。暂停或到期后注册、普通用户登录和交易入口被拒绝；历史数据与审计保留，恢复 ACTIVE 后重新开放。
 
 ### 10.2 租户管理员
 
-- 用户：注册开关、邀请、启停、重置 2FA、角色和子账户。
-- 品种：交易对、交易状态、精度、最小金额、风险档位、杠杆、费率和资金费周期。
-- 交易：活动单、历史单、成交、持仓、强平和 ADL 查询/导出。
-- 资金：余额、流水、人工调账审批、保险基金和对账异常。
-- Robot：API key、报价档位、价差、数量、库存上限、启停、外部对冲账户和熔断。
-- 风控：用户/品种限额、最大活动单、价格偏离、频率、IP/设备和黑白名单。
-- 审计：管理员登录、配置变更、资金操作、API key 和数据导出全留痕。
+- 用户：租户内注册、管理员创建、启停和重置初始密码；同一用户名可在不同租户独立存在。
+- 品种：交易状态、精度、最小/最大数量、最小名义金额、价格上限、手续费、资金费周期和风险档位。
+- API Key：创建、列出和撤销；Secret 只在创建时显示一次。
+- Robot：报价档位、价差、数量、库存上限、外部对冲配置、启停和熔断参数的控制面。
+- 交易：按本租户查询订单、成交和相关交易记录。
+- 设置：注册/交易开关、默认语言和品牌参数。
+- 审计：用户、品种、API Key、Robot 和设置变更留痕；资金人工调账审批、2FA、角色细分和导出审批仍属后续。
 
 ### 10.3 平台管理员
 
-- 租户申请审批、套餐、配额、到期、独立域名和镜像版本。
-- 跨租户健康和容量视图，但业务查询必须经过授权并写审计。
-- 模板化品种、费率、风控和品牌配置；支持灰度发布和回滚。
-- 平台客服、财务、风控、审计员与超级管理员分权。
+- 已交付申请审批、租户初始化、试用到期、注册/交易开关、状态切换、location URL 和审计。
+- 平台运营使用独立 `PLATFORM` 账号；普通租户管理员和交易用户无审批权限。
+- 套餐计费、配额、独立域名、跨租户健康容量视图、灰度发布和平台角色细分仍属后续。
 
 ### 10.4 location 强制边界实施原则
 
 - 用户已决定暂不直接改 GW；先由每个业务服务完成 snapshot/请求身份校验，同时设计 GW 的可选租户插件，保证通用 GW 仍可用于非多租户系统。
-- 最终形态由 LoginSvr/会话产生服务端权威 location；启用 SaaS 插件时 GW 注入并拒绝冲突字段，未启用时保持普通透传。
+- LoginSvr 登录会话产生权威 location；AdminSvr 和 ManagerSvr 已使用认证上下文并拒绝越权 location。后续如启用可选 SaaS GW 插件，GW 可注入并拒绝冲突字段；未启用时保持普通透传。
 - MySQL 主键、唯一键、索引、RocksDB key、缓存 key、锁 key、Topic、幂等键和导出路径全部包含 location。
 - 任何跨 location 的查询、撮合、撤单、订阅、Robot 报单和管理操作必须默认拒绝，并产生安全审计。
 
@@ -377,7 +378,7 @@ MDSvr snapshot -> 服务端校验 location/topic -> GW 仅登记已确认订阅
 - 只从公开 GHCR 拉取应用镜像，不自动更新 MySQL、ClickHouse、ZooKeeper。
 - 新镜像需要稳定窗口后成组部署；失败自动恢复上一组镜像。
 - 验收报告记录每个运行容器的不可变 image ID；自动更新以整组远端 digest 指纹和稳定窗口判定发布，测试过程中不允许版本漂移。
-- Web 固定为 `source-2ed6e68f3ad45a65cb184b5397abc9f752719721`，自动更新 dry-run 已确认 `runtime_drift=false`，不会把验收版本替换为旧 mutable tag。
+- Web 固定为 `source-97b3afe88928fe0c6b26a8564d88ae5168556dba`；自动更新只替换发生不可变镜像变更的服务，本轮 Web 更新未重启核心交易服务。
 - GitHub 网络偶发 reset/timeout 时，当前运行服务保持不变；源码提交使用直连官方地址重试，不允许 Git 网络问题阻塞开发。
 
 ## 12. 测试与验收结果
@@ -391,7 +392,12 @@ MDSvr snapshot -> 服务端校验 location/topic -> GW 仅登记已确认订阅
 | LiqSvr | 11 | 0 | 0 |
 | MDSvr | 12 | 0 | 0 |
 | APSSvr | 20 | 0 | 0 |
-| 合计 | 154 | 0 | 0 |
+| AdminSvr | 13 | 0 | 0 |
+| ManagerSvr | 7 | 0 | 0 |
+| LoginSvr | 5 | 0 | 0 |
+| 合计 | 179 | 0 | 0 |
+
+Trade Web 同期执行 `npm run build-prod` 成功；AdminSvr、ManagerSvr、LoginSvr 使用受控小内存 Maven 参数完整运行测试，未通过跳过测试生成镜像。
 
 ### 12.2 压力与稳定性
 
@@ -421,6 +427,20 @@ MDSvr snapshot -> 服务端校验 location/topic -> GW 仅登记已确认订阅
 - 多候选 ADL 按盈利率和有效杠杆排序、跨 location 不变：PASS。
 - 完整验收日志：`/data/dc-saas-runtime/e2e-artifacts/core-full-acceptance-postfix.log`；3000×32 日志：`core-stress-3000x32-retry.log`，退出码 0。
 
+### 12.4 多租户控制面生产验收
+
+最终自动化在公开 Web/GW、真实 ManagerSvr、AdminSvr、LoginSvr 和 MySQL 上创建两套独立租户 `SAASA_E2E_0830160159` 与 `SAASB_E2E_0830160159`，完成以下断言：
+
+- 公开申请、状态查询、PLATFORM 审批、location/独立 URL 和租户管理员初始化：PASS。
+- 同一用户名在两个 location 注册得到不同 user_id；错租户密码和错误 location 登录：拒绝。
+- 普通用户调用平台审批、交易用户调用租户管理、A 租户管理员访问 B 租户数据：拒绝。
+- 租户管理员创建用户、品种查询与 UPSERT、交易记录、设置和审计：PASS。
+- 租户暂停后登录受阻，恢复 ACTIVE 后重新登录：PASS。
+- 桌面申请页、桌面平台运营页、桌面租户管理页、390×844 注册页和租户管理页：真实浏览器 PASS。
+- 测试产物：`/data/dc-saas-runtime/e2e-artifacts/tenant-0830160159`。证据租户按审计要求保留，未执行未经授权的数据删除。
+
+自动化曾在真实 MySQL 暴露历史 `dc_symbol` 数字列包含空字符串，审批复制到 DECIMAL 失败；ManagerSvr 与 AdminSvr 已统一通过 `TRIM / NULLIF / CAST` 规范化旧规则。部署预检还发现运行中主机不应按 8 GiB 可用内存拒绝增量更新，现已拆分总内存 7.5 GiB 与可用内存 2 GiB 门禁。修复后重新构建公开镜像并完成全链路回归。
+
 ## 13. 截图证据
 
 ### 13.1 生产环境桌面交易工作区
@@ -447,6 +467,18 @@ MDSvr snapshot -> 服务端校验 location/topic -> GW 仅登记已确认订阅
 
 ![真实数据库查询与运行镜像证据](evidence/database-evidence.png)
 
+### 13.5 多租户申请、注册与管理证据（生产环境）
+
+![公开 SaaS 试用申请](evidence/tenant-application-en.png)
+
+![390×844 租户内注册](evidence/tenant-registration-mobile-en.png)
+
+![平台租户运营与生命周期](evidence/platform-tenant-operations-en.png)
+
+![租户管理员桌面控制台](evidence/tenant-administration-en.png)
+
+![390×844 租户管理员控制台](evidence/tenant-administration-mobile-en.png)
+
 证据 SHA-256：
 
 - `buyer-trading-flow.png`：`19712c9c9c23982daa26f75d0ba66246227e0492b91dd278c549d1d2e9137a7d`
@@ -457,12 +489,17 @@ MDSvr snapshot -> 服务端校验 location/topic -> GW 仅登记已确认订阅
 - `workspace-mobile-en.png`：`ded9008f1509462f02820a7e6d10c87263f3c599c5f597e151736bd56705a693`
 - `workspace-mobile-zh.png`：`b3978c5a7dc17c8222c8d37b0c5b850b67a1707f0aa562f8ace0e85196471cf1`
 - `database-evidence.png`：`13ae3ced4d100e095d751b8a295468964d4c2da8224097affa6ba2bfe1e7d267`
+- `tenant-application-en.png`：`a0661d1cf673862fe7369274fa664b3d5905f410d00b239e1f53fb7a56e9abb7`
+- `tenant-registration-mobile-en.png`：`f66a33ba34fab0fd3203381daefe00af8f073d7c24e599d7986174482e15071d`
+- `platform-tenant-operations-en.png`：`1b72269c80aa2c17ac1ac91467f1d2fb7f4088cd5d0819fb53fac4949866c55a`
+- `tenant-administration-en.png`：`6246988bd5ac1f363693e1772e0b8e9bdc17cfb1ce57c89eec7180638260904e`
+- `tenant-administration-mobile-en.png`：`ada46f478359bc9c81d2dd632c21ed9937dd7605d3cdba1f9996fa5cf7c4abce`
 
 ## 14. 已知边界与剩余风险
 
 | 优先级 | 边界/风险 | 当前处理 | 上线要求 |
 |---|---|---|---|
-| P0 | location 仍未由所有服务端链路强制注入 | 登录错租户拒绝；多数交易 key/表已 location 化 | 完成会话权威 location、全 DAO/Topic/缓存/锁攻击测试 |
+| P0 | location 尚未完成全部交易服务攻击面证明 | 登录/注册/平台/租户管理已使用权威会话并完成双租户越权拒绝；交易 key/表已 location 化 | 继续完成 Order/Trade/MD/Liq 全 DAO、Topic、缓存、锁和重放攻击测试；GW 保持可选增强而非硬编码 SaaS |
 | P0 | 资金流水普通成交使用内存异步队列 | 批量 250、失败重试、优雅停机排空、压力精确核对 | 事务 outbox、不可变复式账本、持续对账 |
 | P0 | APS 当前仅验证单一外部源 | Binance Futures 实时 ticker/bookTicker 和 Web Mark/Index 已通过 | 建设多源指数、异常剔除、断源降级与偏离保护 |
 | P0 | 无真实钱包和合规 | Deposit 仅测试 | 钱包/KMS/HSM、KYC/AML、提现审批和审计 |
@@ -470,15 +507,18 @@ MDSvr snapshot -> 服务端校验 location/topic -> GW 仅登记已确认订阅
 | P1 | 私有流和深度流未生产化 | 现有 Topic/Snapshot 可用 | 序号、补发、断线恢复、快照+增量一致性 |
 | P1 | 完整账户模式不足 | 核心 long/short 字段和 Cross 配置存在 | 完整单向/双向、全仓/逐仓、统一账户验收 |
 | P1 | 订单产品仍不齐 | TP/SL/OCO 已有核心语义 | 追踪止损、Close on Trigger、SMP group、活动单上限 |
+| P1 | 多租户控制面仍是第一阶段 | 申请、审批、URL、注册、用户、品种、API Key、Robot 配置、交易记录、设置和审计已验收 | 自定义域名/证书、套餐配额、2FA、完整 RBAC、导出审批和平台分权 |
+| P1 | Robot 仅完成租户配置控制面 | 可配置 API Key、报价档位和对冲参数 | 部署 RobotSvr，完成 APSSvr 行情、真实报单、库存风控和外部反向对冲验收 |
 | P1 | 单机基础设施 | Docker 单机可恢复 | MySQL/ClickHouse/ZK 集群、撮合热备、PITR、灾备演练 |
 
 ## 15. 后续实施顺序
 
 1. 先把核心金融正确性补成生产形态：事务 outbox/复式账本、持续对账、多源指数和标记价、完整账户模式、风险限额、资金费和极端行情回放。
-2. 建立服务端权威 location 的可选 SaaS 安全插件，完成跨租户请求、订阅、缓存、锁和数据库攻击测试，同时保持 GW 在非 SaaS 系统中的独立性。
-3. 实现租户申请/审批、独立 URL、租户内注册、租户管理员、用户/品种/费率/风控/Robot 和审计。
-4. 发布版本化 REST/WebSocket API、HMAC/RSA/Ed25519、API key 权限/IP 白名单、私有流、序号恢复和分层限流。
-5. 完成真实钱包、安全合规、高可用、容量、混沌和灾备后，才进入小额内部真实资金灰度。
+2. 收口服务端权威 location：完成 Order/Trade/MD/Liq 跨租户请求、订阅、缓存、锁、重放和数据库攻击测试；如需前置防御，以可选 SaaS GW 插件实现，保持通用 GW 独立性。
+3. 部署并验收 RobotSvr 的 APSSvr 行情、租户 API Key 报单、库存控制、熔断和外部反向对冲；补齐追踪止损、Close on Trigger、完整账户模式等交易产品。
+4. 完成多租户第二阶段：自定义域名/证书、套餐配额、2FA、平台/租户 RBAC、导出审批、品牌资产和用量计费。
+5. 发布版本化 REST/WebSocket API、HMAC/RSA/Ed25519、API Key 权限/IP 白名单、私有流、序号恢复和分层限流。
+6. 完成真实钱包、安全合规、高可用、容量、混沌和灾备后，才进入小额内部真实资金灰度。
 
 ## 16. 手工验收步骤
 

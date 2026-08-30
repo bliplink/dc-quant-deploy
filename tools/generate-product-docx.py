@@ -185,7 +185,41 @@ def configure_document(document):
     settings.append(update_fields)
 
 
-def add_cover(document):
+def metadata_value(markdown, *labels, default="-"):
+    for label in labels:
+        match = re.search(rf"^{re.escape(label)}：(.+)$", markdown, re.MULTILINE)
+        if match:
+            return clean_inline(match.group(1)).strip()
+    return default
+
+
+def add_cover(document, markdown):
+    markdown_title = next(
+        (line[2:].strip() for line in markdown.splitlines() if line.startswith("# ")),
+        "DC SaaS 加密货币永续合约系统",
+    )
+    if "多租户控制面" in markdown_title:
+        cover_title = "DC SaaS 加密货币\n多租户控制面"
+        cover_subtitle = "业务能力、租户边界、数据流与生产验收报告"
+    else:
+        cover_title = "DC SaaS 加密货币\n永续合约交易系统"
+        cover_subtitle = "产品说明、业务规则、数据流与完整验收报告"
+    version = metadata_value(markdown, "文档版本", default="V1.0")
+    baseline = metadata_value(markdown, "基线日期", "验收日期", default="2026-08-30")
+    branch = metadata_value(markdown, "代码分支", default="saas-crypto")
+    environment = metadata_value(
+        markdown,
+        "当前生产验证环境",
+        "生产验证环境",
+        default="18.140.45.126 / dc-saas",
+    )
+    environment_ip = re.search(r"\b(?:\d{1,3}\.){3}\d{1,3}\b", environment)
+    compose_project = re.search(r"Compose 项目\s+([\w-]+)", environment)
+    if environment_ip:
+        environment = environment_ip.group(0)
+        if compose_project:
+            environment += f" / {compose_project.group(1)}"
+
     for _ in range(4):
         document.add_paragraph()
     tag = document.add_paragraph()
@@ -197,12 +231,12 @@ def add_cover(document):
     title.alignment = WD_ALIGN_PARAGRAPH.CENTER
     title.paragraph_format.space_before = Pt(20)
     title.paragraph_format.space_after = Pt(12)
-    run = title.add_run("DC SaaS 加密货币\n永续合约交易系统")
+    run = title.add_run(cover_title)
     set_run_font(run, size=28, bold=True, color=DARK)
 
     subtitle = document.add_paragraph()
     subtitle.alignment = WD_ALIGN_PARAGRAPH.CENTER
-    run = subtitle.add_run("产品说明、业务规则、数据流与完整验收报告")
+    run = subtitle.add_run(cover_subtitle)
     set_run_font(run, size=14, color=MUTED)
 
     document.add_paragraph()
@@ -215,10 +249,10 @@ def add_cover(document):
     meta.alignment = WD_ALIGN_PARAGRAPH.CENTER
     meta.paragraph_format.space_before = Pt(26)
     run = meta.add_run(
-        "版本：V1.1\n"
-        "基线：2026-08-30\n"
-        "分支：saas-crypto\n"
-        "验收环境：172.16.97.64 / CORE_E2E"
+        f"版本：{version}\n"
+        f"基线：{baseline}\n"
+        f"分支：{branch}\n"
+        f"验收环境：{environment}"
     )
     set_run_font(run, size=11, color=DARK)
     document.add_page_break()
@@ -355,7 +389,7 @@ def generate(source, output):
     markdown = source.read_text(encoding="utf-8")
     document = Document()
     configure_document(document)
-    add_cover(document)
+    add_cover(document, markdown)
     add_toc(document)
     add_markdown(document, markdown, source.parent)
     document.core_properties.title = "DC SaaS 加密货币永续合约系统产品与验收说明"
