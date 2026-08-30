@@ -78,7 +78,11 @@ compose() {
 }
 
 git_in_deploy() {
-  (cd "${SCRIPT_DIR}" && git "$@")
+  # The updater is installed in root's crontab while the deployment checkout
+  # remains owned by the unprivileged operator. Scope Git's ownership exception
+  # to this one explicitly resolved checkout instead of weakening global Git
+  # safety for every repository on the host.
+  (cd "${SCRIPT_DIR}" && git -c safe.directory="${SCRIPT_DIR}" "$@")
 }
 
 service_image_ref() {
@@ -245,7 +249,8 @@ update_deploy_repository() {
   fetched="false"
   for ((attempt=1; attempt<=GIT_FETCH_ATTEMPTS; attempt++)); do
     if (cd "${SCRIPT_DIR}" && timeout --signal=TERM --kill-after=10 "${fetch_timeout}" \
-      git -c http.version=HTTP/1.1 fetch origin "${AUTO_UPDATE_DEPLOY_BRANCH}"); then
+      git -c safe.directory="${SCRIPT_DIR}" -c http.version=HTTP/1.1 \
+        fetch origin "${AUTO_UPDATE_DEPLOY_BRANCH}"); then
       fetched="true"
       break
     fi
