@@ -180,22 +180,33 @@ async function waitForMarketMetric(page, label) {
 }
 
 async function verifyKlineAndMarketData(page) {
-  const klineResponsePromise = page.waitForResponse(
-    response => response.url().includes('/httpapi/') && requestMethod(response) === 'queryKLine',
-    {timeout: 60000}
-  );
-  await page.reload({waitUntil: 'domcontentloaded'});
-  await page.locator('.tradeWrap').waitFor({timeout: 60000});
-  const klineResponse = await klineResponsePromise;
-  const klineBody = await klineResponse.json();
-  if (Number(klineBody.code) !== 0) {
-    throw new Error(`queryKLine failed: ${JSON.stringify(klineBody)}`);
-  }
-  const klineRows = Array.isArray(klineBody.data)
-    ? klineBody.data
-    : (klineBody.data && Array.isArray(klineBody.data.data) ? klineBody.data.data : []);
+  // MDSvr deliberately batches ClickHouse writes.  The realtime K-line is
+  // already sent over WebSocket, but a reload can race the asynchronous
+  // history insert.  Poll the real browser history request until the same
+  // tenant bar is durable instead of accepting a transient empty response.
+  const deadline = Date.now() + 60000;
+  let klineBody = null;
+  let klineRows = [];
+  do {
+    const klineResponsePromise = page.waitForResponse(
+      response => response.url().includes('/httpapi/') && requestMethod(response) === 'queryKLine',
+      {timeout: 60000}
+    );
+    await page.reload({waitUntil: 'domcontentloaded'});
+    await page.locator('.tradeWrap').waitFor({timeout: 60000});
+    const klineResponse = await klineResponsePromise;
+    klineBody = await klineResponse.json();
+    if (Number(klineBody.code) !== 0) {
+      throw new Error(`queryKLine failed: ${JSON.stringify(klineBody)}`);
+    }
+    klineRows = Array.isArray(klineBody.data)
+      ? klineBody.data
+      : (klineBody.data && Array.isArray(klineBody.data.data) ? klineBody.data.data : []);
+    if (klineRows.length) break;
+    await page.waitForTimeout(2000);
+  } while (Date.now() < deadline);
   if (!klineRows.length) {
-    throw new Error(`queryKLine returned no tenant bars: ${JSON.stringify(klineBody)}`);
+    throw new Error(`queryKLine returned no durable tenant bars within 60s: ${JSON.stringify(klineBody)}`);
   }
   await page.locator('.TVChartContainer iframe').waitFor({timeout: 30000});
   const lastPrice = await waitForMarketMetric(page, 'Last Price');
