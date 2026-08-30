@@ -142,7 +142,18 @@ async function cancelFirstOpenOrder(page) {
 
 async function waitForRestingBid(page, expectedPrice) {
   const bid = page.locator('.orderBookWrap .showDiv .bid-price').filter({hasText: String(expectedPrice)}).first();
-  await bid.waitFor({timeout: 20000});
+  try {
+    await bid.waitFor({timeout: 20000});
+  } catch (error) {
+    const diagnostics = await page.evaluate(() => ({
+      currentSymbol: sessionStorage.getItem('currentSymbol'),
+      loginData: sessionStorage.getItem('loginData'),
+      orderBookText: document.querySelector('.orderBookWrap')?.innerText || '',
+      bidPrices: [...document.querySelectorAll('.orderBookWrap .bid-price')].map(item => item.textContent),
+      askPrices: [...document.querySelectorAll('.orderBookWrap .ask-price')].map(item => item.textContent)
+    }));
+    throw new Error(`resting bid did not reach Web order book: ${JSON.stringify(diagnostics)}`);
+  }
   const row = bid.locator('xpath=..');
   const text = await row.innerText();
   if (!text.includes(String(expectedPrice))) {
