@@ -212,12 +212,12 @@ async function waitForNoPosition(page) {
     await deposit(buyerSession.page, '100000');
     await deposit(sellerSession.page, '100000');
 
-    await placeLimit(buyerSession.page, 'Buy/Long', '10000', '0.001');
+    await placeLimit(buyerSession.page, 'Buy / Long', '10000', '0.001');
     await cancelFirstOpenOrder(buyerSession.page);
 
-    await placeLimit(buyerSession.page, 'Buy/Long', '60000', '0.001');
+    await placeLimit(buyerSession.page, 'Buy / Long', '60000', '0.001');
     await (await openOrders(buyerSession.page)).first().waitFor({ timeout: 15000 });
-    await placeLimit(sellerSession.page, 'Sell/Short', '60000', '0.001');
+    await placeLimit(sellerSession.page, 'Sell / Short', '60000', '0.001');
 
     const buyerTrade = await tradeHistoryText(buyerSession.page);
     const sellerTrade = await tradeHistoryText(sellerSession.page);
@@ -226,7 +226,7 @@ async function waitForNoPosition(page) {
     // Rest an offsetting buy for the short account, then exercise the Web
     // reduce-only Market/IOC close action for the long account. The same match
     // closes both sides and leaves the acceptance location flat.
-    await placeLimit(sellerSession.page, 'Buy/Long', '60000', '0.001');
+    await placeLimit(sellerSession.page, 'Buy / Long', '60000', '0.001');
     await (await openOrders(sellerSession.page)).first().waitFor({ timeout: 15000 });
     await closeFirstPosition(buyerSession.page, 'Long');
     await waitForNoPosition(buyerSession.page);
