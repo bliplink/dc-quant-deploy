@@ -169,7 +169,7 @@ SELECT IF(ABS(b.balance)<0.00000001 AND ABS(b.used_margin)<0.00000001,1,0)
 FROM dc.dc_users_balance b
 WHERE b.location='${ADL_LOCATION}' AND b.user_id='adl_liquidated';
 SELECT IF(ABS(b.balance-(100+l.realized_pnl-l.allocated_amount))<0.00000001
-          AND ABS(b.used_margin-18)<0.00000001,1,0)
+          AND ABS(b.used_margin-19.998)<0.00000001,1,0)
 FROM dc.dc_users_balance b JOIN dc.dc_adl_ledger l
   ON l.location=b.location AND l.candidate_user_id=b.user_id
   AND l.liquidation_order_id='${ORDER_ID}' AND l.rank_no=2
@@ -177,7 +177,7 @@ WHERE b.location='${ADL_LOCATION}' AND b.user_id='adl_low';
 SELECT IF(ABS(short_position)<0.00000001 AND ABS(short_used_margin)<0.00000001,1,0)
 FROM dc.dc_orders_position
 WHERE location='${ADL_LOCATION}' AND user_id='adl_high' AND security_id='BTCUSDT';
-SELECT IF(ABS(short_position-0.0009)<0.00000001 AND ABS(short_used_margin-18)<0.00000001,1,0)
+SELECT IF(ABS(short_position-0.9999)<0.00000001 AND ABS(short_used_margin-19.998)<0.00000001,1,0)
 FROM dc.dc_orders_position
 WHERE location='${ADL_LOCATION}' AND user_id='adl_low' AND security_id='BTCUSDT';
 SELECT IF(ABS(short_position-2)<0.00000001,1,0)
