@@ -30,12 +30,13 @@ function requestMethod(response) {
 }
 
 async function invokeFromPage(page, method, action) {
-  const responsePromise = page.waitForResponse(
-    response => response.url().includes('/httpapi/') && requestMethod(response) === method,
-    { timeout: 60000 }
-  );
-  await action();
-  const response = await responsePromise;
+  const [response] = await Promise.all([
+    page.waitForResponse(
+      candidate => candidate.url().includes('/httpapi/') && requestMethod(candidate) === method,
+      { timeout: 60000 }
+    ),
+    action()
+  ]);
   const body = await response.json();
   if (Number(body.code) !== 0) {
     throw new Error(`${method} failed: ${JSON.stringify(body)}`);
