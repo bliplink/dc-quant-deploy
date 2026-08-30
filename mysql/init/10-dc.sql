@@ -526,8 +526,9 @@ CREATE TABLE `dc_users_api` (
   `update_time` varchar(45) DEFAULT NULL COMMENT '更新时间',
   `close_by` varchar(45) DEFAULT NULL COMMENT '操作人',
   `inf1` varchar(45) DEFAULT NULL COMMENT '扩展字段',
-  `location` varchar(45) DEFAULT NULL COMMENT '多实体',
-  PRIMARY KEY (`api_key`,`user_id`,`type`) USING BTREE
+  `location` varchar(64) NOT NULL DEFAULT '' COMMENT '多实体',
+  PRIMARY KEY (`api_key`,`user_id`,`type`) USING BTREE,
+  KEY `idx_users_api_location_user` (`location`,`user_id`,`enable`) USING BTREE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8 ROW_FORMAT=DYNAMIC COMMENT='api用户表';
 
 CREATE TABLE `dc_users_balance` (
