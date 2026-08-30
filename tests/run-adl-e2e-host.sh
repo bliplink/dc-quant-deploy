@@ -33,6 +33,11 @@ safe_identifier "${ORDER_ID}" || die "ADL_E2E_ORDER_ID contains unsupported char
 high_short_average="$(awk -v price="${REFERENCE_PRICE}" 'BEGIN {printf "%.8f", price + 70}')"
 low_short_average="$(awk -v price="${REFERENCE_PRICE}" 'BEGIN {printf "%.8f", price + 40}')"
 foreign_short_average="$(awk -v price="${REFERENCE_PRICE}" 'BEGIN {printf "%.8f", price + 120}')"
+liquidated_long_average="$(awk -v price="${REFERENCE_PRICE}" 'BEGIN {printf "%.8f", price + 100}')"
+# Keep the deterministic post-fill deficit at 99.048 for any reference price:
+# initial balance + (-100 realized PnL) + (-0.06% taker fee) = -99.048.
+liquidated_balance="$(awk -v price="${REFERENCE_PRICE}" \
+  'BEGIN {printf "%.8f", 0.952 + (price * 0.0006)}')"
 
 set -a
 # shellcheck disable=SC1090
@@ -65,15 +70,19 @@ DELETE FROM dc.dc_adl_ledger WHERE location='${ADL_LOCATION}' AND liquidation_or
 DELETE FROM dc.dc_adl_event WHERE location='${ADL_LOCATION}' AND liquidation_order_id='${ORDER_ID}';
 DELETE FROM dc.dc_liquidation_deficit WHERE location='${ADL_LOCATION}' AND liquidation_order_id='${ORDER_ID}';
 DELETE FROM dc.dc_orders_position WHERE location IN ('${ADL_LOCATION}','${OTHER_LOCATION}')
-  AND user_id IN ('adl_liquidated','adl_high','adl_low','adl_foreign');
+  AND user_id IN ('adl_liquidated','adl_high','adl_low','adl_foreign',
+                  'final_liquidated','final_adl_high','final_adl_foreign','final_maker',
+                  'liq_trigger','liq_maker','liq_foreign');
 DELETE FROM dc.dc_users_balance WHERE location IN ('${ADL_LOCATION}','${OTHER_LOCATION}')
-  AND user_id IN ('adl_liquidated','adl_high','adl_low','adl_foreign');
+  AND user_id IN ('adl_liquidated','adl_high','adl_low','adl_foreign',
+                  'final_liquidated','final_adl_high','final_adl_foreign','final_maker',
+                  'liq_trigger','liq_maker','liq_foreign');
 DELETE FROM dc.dc_insurance_fund WHERE location='${ADL_LOCATION}' AND security_id='BTCUSDT';
 
 INSERT INTO dc.dc_users_balance
   (user_id,balance,used_margin,freezed_margin,freezed_commission,update_time,close_by,location)
 VALUES
-  ('adl_liquidated',1,1.8,0,0,NOW(),'ADL_E2E','${ADL_LOCATION}'),
+  ('adl_liquidated',${liquidated_balance},1.8,0,0,NOW(),'ADL_E2E','${ADL_LOCATION}'),
   ('adl_high',10,10,0,0,NOW(),'ADL_E2E','${ADL_LOCATION}'),
   ('adl_low',100,20,0,0,NOW(),'ADL_E2E','${ADL_LOCATION}'),
   ('adl_foreign',10,10,0,0,NOW(),'ADL_E2E','${OTHER_LOCATION}');
@@ -85,7 +94,7 @@ INSERT INTO dc.dc_orders_position
    update_time,close_by,location)
 VALUES
   ('adl_liquidated','BTCUSDT','BTCUSDT',0,'Cross',100,
-   1,180,1.8,0,0,0,1,0,0,0,NOW(),'ADL_E2E','${ADL_LOCATION}'),
+   1,${liquidated_long_average},1.8,0,0,0,1,0,0,0,NOW(),'ADL_E2E','${ADL_LOCATION}'),
   ('adl_high','BTCUSDT','BTCUSDT',0,'Cross',100,
    0,0,0,1,${high_short_average},10,0,0,0,0,NOW(),'ADL_E2E','${ADL_LOCATION}'),
   ('adl_low','BTCUSDT','BTCUSDT',0,'Cross',100,
@@ -108,7 +117,7 @@ request_file="$(mktemp)"
 trap 'rm -f "${request_file}"' EXIT
 chmod 0600 "${request_file}"
 cat >"${request_file}" <<JSON
-{"serverName":"TradeSvr","method":"updateOrder","content":{"ExecType":"Trade","ExecID":"ADL-E2E-EXEC-001","OrdStatus":"Filled","OCType":"ClOSE","OrderID":"${ORDER_ID}","SecurityID":"BTCUSDT","UserID":"adl_liquidated","Side":"Sell","LastQty":"1","LastPx":"80","OrigOrdPrice":"80","LeavesQty":"0","Maker":"false","CloseBy":"liq","Location":"${ADL_LOCATION}","Demo":""}}
+{"serverName":"TradeSvr","method":"updateOrder","content":{"ExecType":"Trade","ExecID":"ADL-E2E-EXEC-001","OrdStatus":"Filled","OCType":"ClOSE","OrderID":"${ORDER_ID}","SecurityID":"BTCUSDT","UserID":"adl_liquidated","Side":"Sell","LastQty":"1","LastPx":"${REFERENCE_PRICE}","OrigOrdPrice":"${REFERENCE_PRICE}","LeavesQty":"0","Maker":"false","CloseBy":"liq","Location":"${ADL_LOCATION}","Demo":""}}
 JSON
 
 response=""
