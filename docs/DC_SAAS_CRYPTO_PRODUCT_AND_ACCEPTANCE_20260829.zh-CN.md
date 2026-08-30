@@ -405,8 +405,8 @@ MDSvr snapshot -> 服务端校验 location/topic -> GW 仅登记已确认订阅
 | AdminSvr | 13 | 0 | 0 |
 | ManagerSvr | 7 | 0 | 0 |
 | LoginSvr | 5 | 0 | 0 |
-| RobotSvr | 16 | 0 | 0 |
-| 合计 | 195 | 0 | 0 |
+| RobotSvr | 18 | 0 | 0 |
+| 合计 | 197 | 0 | 0 |
 
 Trade Web 同期执行 `npm run build-prod` 成功；AdminSvr、ManagerSvr、LoginSvr 使用受控小内存 Maven 参数完整运行测试，未通过跳过测试生成镜像。
 
