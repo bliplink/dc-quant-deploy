@@ -120,15 +120,15 @@ while read -r container expected_xmx expected_memory; do
   printf '[core-acceptance] MEMORY %s limit_bytes=%s effective_xmx=%s\n' \
     "${container}" "${memory_bytes}" "${expected_xmx}"
 done <<'MEMORY_EXPECTATIONS'
-dc-saas-gateway 512m 805306368
-dc-saas-loginsvr 512m 805306368
-dc-saas-mdsvr 768m 1073741824
-dc-saas-apssvr 768m 1073741824
-dc-saas-ordersvr 768m 1073741824
-dc-saas-tradesvr 640m 939524096
-dc-saas-liqsvr 512m 805306368
-dc-saas-managersvr 512m 805306368
-dc-saas-adminsvr 512m 805306368
+dc-saas-gateway 256m 402653184
+dc-saas-loginsvr 256m 402653184
+dc-saas-mdsvr 448m 671088640
+dc-saas-apssvr 448m 671088640
+dc-saas-ordersvr 448m 671088640
+dc-saas-tradesvr 384m 671088640
+dc-saas-liqsvr 256m 402653184
+dc-saas-managersvr 256m 402653184
+dc-saas-adminsvr 256m 402653184
 MEMORY_EXPECTATIONS
 
 log "PASS: the complete single-location core trading acceptance flow succeeded."
