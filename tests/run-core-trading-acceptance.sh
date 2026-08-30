@@ -73,6 +73,13 @@ E2E_USER="${CORE_BUYER}" \
 E2E_PASSWORD="${E2E_PASSWORD}" \
   "${SCRIPT_DIR}/run-web-workspace-e2e-host.sh"
 
+log "Validating the 390px touch-friendly, overflow-free and bilingual mobile trading workspace."
+ENV_FILE="${ENV_FILE}" \
+E2E_LOCATION="${CORE_LOCATION}" \
+E2E_USER="${CORE_BUYER}" \
+E2E_PASSWORD="${E2E_PASSWORD}" \
+  "${SCRIPT_DIR}/run-web-mobile-e2e-host.sh"
+
 log "Running LiqSvr partial-liquidation flow in the same ${CORE_LOCATION} location."
 ENV_FILE="${ENV_FILE}" \
 LIQ_E2E_LOCATION="${CORE_LOCATION}" \
