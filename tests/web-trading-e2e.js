@@ -140,6 +140,59 @@ async function cancelFirstOpenOrder(page) {
   await page.waitForTimeout(1200);
 }
 
+async function waitForRestingBid(page, expectedPrice) {
+  const bid = page.locator('.orderBookWrap .showDiv .bid-price').filter({hasText: String(expectedPrice)}).first();
+  await bid.waitFor({timeout: 20000});
+  const row = bid.locator('xpath=..');
+  const text = await row.innerText();
+  if (!text.includes(String(expectedPrice))) {
+    throw new Error(`resting bid is missing from the Web order book: ${text}`);
+  }
+  return text;
+}
+
+async function waitForMarketMetric(page, label) {
+  const metric = page.locator('.symbolMarketWrap > .df.fdc').filter({
+    has: page.getByText(label, {exact: true})
+  }).first();
+  await metric.waitFor({timeout: 20000});
+  await page.waitForFunction(
+    ({selector, text}) => {
+      const nodes = [...document.querySelectorAll(selector)];
+      const node = nodes.find(item => item.innerText.includes(text));
+      return node && !node.innerText.includes('--') && /\d/.test(node.innerText);
+    },
+    {selector: '.symbolMarketWrap > .df.fdc', text: label},
+    {timeout: 20000}
+  );
+  return metric.innerText();
+}
+
+async function verifyKlineAndMarketData(page) {
+  const klineResponsePromise = page.waitForResponse(
+    response => response.url().includes('/httpapi/') && requestMethod(response) === 'queryKLine',
+    {timeout: 60000}
+  );
+  await page.reload({waitUntil: 'domcontentloaded'});
+  await page.locator('.tradeWrap').waitFor({timeout: 60000});
+  const klineResponse = await klineResponsePromise;
+  const klineBody = await klineResponse.json();
+  if (Number(klineBody.code) !== 0) {
+    throw new Error(`queryKLine failed: ${JSON.stringify(klineBody)}`);
+  }
+  const klineRows = Array.isArray(klineBody.data)
+    ? klineBody.data
+    : (klineBody.data && Array.isArray(klineBody.data.data) ? klineBody.data.data : []);
+  if (!klineRows.length) {
+    throw new Error(`queryKLine returned no tenant bars: ${JSON.stringify(klineBody)}`);
+  }
+  await page.locator('.TVChartContainer iframe').waitFor({timeout: 30000});
+  const lastPrice = await waitForMarketMetric(page, 'Last Price');
+  const markPrice = await waitForMarketMetric(page, 'Mark Price');
+  const indexPrice = await waitForMarketMetric(page, 'Index Price');
+  return {klineRows: klineRows.length, lastPrice, markPrice, indexPrice};
+}
+
 async function clearOpenOrders(page) {
   for (let attempt = 0; attempt < 20; attempt += 1) {
     const rows = await openOrders(page);
@@ -220,6 +273,7 @@ async function waitForNoPosition(page) {
     await deposit(sellerSession.page, '100000');
 
     await placeLimit(buyerSession.page, 'Buy / Long', '10000', '0.001');
+    const restingBid = await waitForRestingBid(buyerSession.page, '10000');
     await cancelFirstOpenOrder(buyerSession.page);
 
     await placeLimit(buyerSession.page, 'Buy / Long', '60000', '0.001');
@@ -233,6 +287,11 @@ async function waitForNoPosition(page) {
     if (!buyerTradeTime || !recentTrade.includes(buyerTradeTime)) {
       throw new Error(`recent trade is stale: execution=${buyerTrade} recent=${recentTrade}`);
     }
+    const marketData = await verifyKlineAndMarketData(buyerSession.page);
+    await buyerSession.page.screenshot({
+      path: path.join(artifactDir, 'web-market-data.png'),
+      fullPage: true
+    });
 
     // Rest an offsetting buy for the short account, then exercise the Web
     // reduce-only Market/IOC close action for the long account. The same match
@@ -269,7 +328,12 @@ async function waitForNoPosition(page) {
       closePosition: 'PASS',
       buyerTrade,
       sellerTrade,
-      recentTrade
+      recentTrade,
+      marketData: {
+        orderBook: restingBid,
+        recentTrade,
+        ...marketData
+      }
     }, null, 2));
   } catch (error) {
     if (buyerSession) {
