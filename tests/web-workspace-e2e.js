@@ -96,16 +96,16 @@ function layoutItem(snapshot, breakpoint, key) {
     await page.getByText('Last Price', {exact: true}).first().waitFor({timeout: 10000});
     const buyButton = page.getByRole('button', {name: 'Buy / Long'});
     await buyButton.click();
-    await page.getByText('Enter an amount greater than 0.', {exact: true}).waitFor({timeout: 10000});
+    await page.getByText('Enter an amount greater than 0.', {exact: true}).first().waitFor({timeout: 10000});
 
     await page.getByRole('button', {name: 'Limit', exact: true}).click();
     await page.getByLabel('Amount').fill('1');
     await buyButton.click();
-    await page.getByText('Enter a limit price greater than 0.', {exact: true}).waitFor({timeout: 10000});
+    await page.getByText('Enter a limit price greater than 0.', {exact: true}).first().waitFor({timeout: 10000});
 
     await page.getByRole('button', {name: 'Conditional', exact: true}).click();
     await buyButton.click();
-    await page.getByText('Enter a trigger price greater than 0.', {exact: true}).waitFor({timeout: 10000});
+    await page.getByText('Enter a trigger price greater than 0.', {exact: true}).first().waitFor({timeout: 10000});
     await page.getByLabel('Execution Type').selectOption('Market');
     if (await page.getByLabel('Limit Price').isVisible()) {
       throw new Error('conditional market must not display a limit price');
@@ -120,7 +120,7 @@ function layoutItem(snapshot, breakpoint, key) {
     await page.getByRole('button', {name: 'Market', exact: true}).click();
     await page.getByLabel('Amount').fill('1e2');
     await buyButton.click();
-    await page.getByText('Enter an amount greater than 0.', {exact: true}).waitFor({timeout: 10000});
+    await page.getByText('Enter an amount greater than 0.', {exact: true}).first().waitFor({timeout: 10000});
 
     const before = await layoutSnapshot(page);
     const chartPanel = panels.nth(0);
