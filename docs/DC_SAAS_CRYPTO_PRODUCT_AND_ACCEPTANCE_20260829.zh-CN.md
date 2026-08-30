@@ -1,6 +1,6 @@
 # DC SaaS 加密货币永续合约系统产品与验收说明
 
-文档版本：V1.3
+文档版本：V1.4
 
 基线日期：2026-08-30
 
@@ -40,7 +40,7 @@
 - 生产级多活、多可用区和撮合热备。
 - 完整 Binance/Bybit 协议兼容层与官方 SDK 兼容承诺。
 - 自定义域名自动解析、证书自动签发、套餐计费、完整平台 RBAC、KYC 和租户配额计费；当前已交付 location 独立 URL 与第一阶段平台/租户管理控制台。
-- RobotSvr 的正式 SaaS 部署；RobotSvr 架构已规划，但不在当前生产验证环境 13 个核心容器内。
+- RobotSvr 的正式生产验收；实现、镜像构建、数据库迁移和一键部署编排已完成，但在 RobotSvr GHCR 包切换为 Public 前仍不计入当前生产验证环境 13 个核心容器。
 
 ## 3. 用户入口与当前账号
 
@@ -101,7 +101,7 @@ Order/Trade/Login/Admin/Manager/Liq 事务与配置 -> MySQL
 | APSSvr | 外部行情接入、指数计算输入、向 GW/MDSvr 提供指数类行情 | 当前生产验证单一 Binance Futures 外部源；后续按租户指数方案配置多源计算 |
 | AdminSvr | 面向 Web 的租户管理接口：用户、品种、API Key、Robot、交易记录、设置和审计 | location 取自认证会话；跨 location 和非管理员访问已验收拒绝 |
 | ManagerSvr | 平台运营：申请、审批、初始化、生命周期、独立 URL | 仅 PLATFORM 角色可审批和变更租户；操作写审计 |
-| RobotSvr | 租户策略/流动性服务：使用租户 API Key 报单，订阅 APSSvr，按 ticker 报价档位并做外部反向对冲 | 配置控制面已交付；RobotSvr 运行容器和真实外部对冲仍未纳入本轮生产验收 |
+| RobotSvr | 租户策略/流动性服务：订阅 APSSvr 的 Binance Futures 10 档深度，使用租户 API Key 向 OrderSvr 提交 PostOnly 报价；价差内用户挂单由 IOC 扫单；内部成交后按净持仓差额经 APSSvr 反向对冲 | 所有配置、订单查询、持仓、扫单和对冲流水均绑定 location + robot + symbol；外部凭据只以环境变量别名注入；代码与本地测试完成，生产容器和真实币安账户对冲待验收 |
 
 ## 5. 核心交易业务规则
 
@@ -279,6 +279,16 @@ MDSvr snapshot -> 服务端校验 location/topic -> GW 仅登记已确认订阅
 
 上线门禁：至少三个独立来源、来源权重、时间戳新鲜度、异常值剔除、中位数/加权指数、断流降级、标记价平滑、价格保护、监控和审计全部通过后，才允许真实资金交易。
 
+### 8.4 Robot 流动性与外部对冲规则（实现完成、生产待验收）
+
+- APSSvr 订阅 Binance Futures 100 ms partial-depth 10 档并发布 `dc.aps.depth.BNFutures.<symbol>`；RobotSvr 只消费该行情，不绕过 APSSvr 直连行情。
+- 一个 Robot worker 固定绑定 `location + robot_id + security_id + tenant API key`。默认上下各 10 档，价格跟随 Binance 档位，数量使用租户固定值或外部数量缩放值，并继续受 tick、step、最小数量、最小名义金额、单档上限和库存上限约束。
+- 常规报价为 PostOnly，避免 Robot 主动成为 taker。部分成交后按剩余数量而不是原始数量对账，撤旧补新恢复完整档位。行情超时、价格瞬时偏离、连续运行异常、配置停用、服务退出或未决外部对冲都会撤销 Robot 活动单并停止继续报价。
+- 用户卖单严格进入外部卖一以内，Robot 才以 Buy IOC 扫单；用户买单严格进入外部买一以内，Robot 才以 Sell IOC 扫单。扫单受最大允许损失 bps、单次最大数量和库存上限约束。外部买一/卖一同价边界不扫，避免 IOC 先打到 Robot 自己的镜像订单。
+- Robot 报价或扫单成交后，以“目标外部仓位 = 租户内 Robot 净持仓的相反数”计算差额，通过 APSSvr 向 Binance Futures 报 Market 对冲单。
+- 外部对冲在发送前先事务写入 `dc_robot_hedge_execution`，使用确定性 clientOrderId。响应不确定时立即停报，并用同一 clientOrderId 查询 Binance；完全成交、部分终态、失败终态分别落 FILLED、PARTIAL、FAILED，未知状态持续阻断，防止重复全量对冲。
+- Binance API Key/Secret 不写数据库、不返回 Web，只允许在 RobotSvr 容器的 `ROBOT_HEDGE_ACCOUNTS_JSON` 中按 `hedge_account_ref` 解析。
+
 ## 9. 端到端数据流向
 
 ### 9.1 登录
@@ -395,7 +405,8 @@ MDSvr snapshot -> 服务端校验 location/topic -> GW 仅登记已确认订阅
 | AdminSvr | 13 | 0 | 0 |
 | ManagerSvr | 7 | 0 | 0 |
 | LoginSvr | 5 | 0 | 0 |
-| 合计 | 179 | 0 | 0 |
+| RobotSvr | 16 | 0 | 0 |
+| 合计 | 195 | 0 | 0 |
 
 Trade Web 同期执行 `npm run build-prod` 成功；AdminSvr、ManagerSvr、LoginSvr 使用受控小内存 Maven 参数完整运行测试，未通过跳过测试生成镜像。
 
@@ -508,14 +519,14 @@ Trade Web 同期执行 `npm run build-prod` 成功；AdminSvr、ManagerSvr、Log
 | P1 | 完整账户模式不足 | 核心 long/short 字段和 Cross 配置存在 | 完整单向/双向、全仓/逐仓、统一账户验收 |
 | P1 | 订单产品仍不齐 | TP/SL/OCO 已有核心语义 | 追踪止损、Close on Trigger、SMP group、活动单上限 |
 | P1 | 多租户控制面仍是第一阶段 | 申请、审批、URL、注册、用户、品种、API Key、Robot 配置、交易记录、设置和审计已验收 | 自定义域名/证书、套餐配额、2FA、完整 RBAC、导出审批和平台分权 |
-| P1 | Robot 仅完成租户配置控制面 | 可配置 API Key、报价档位和对冲参数 | 部署 RobotSvr，完成 APSSvr 行情、真实报单、库存风控和外部反向对冲验收 |
+| P1 | RobotSvr 实现完成但生产证据尚未闭环 | APSSvr 10 档、租户报价、价差内扫单、库存保护、幂等对冲流水和 1 万轮盘口风险测试已完成；公开镜像构建成功 | GHCR 包设为 Public 后执行单 location E2E；使用专用币安测试/小额账户完成真实反向对冲、断网不确定响应和恢复验收 |
 | P1 | 单机基础设施 | Docker 单机可恢复 | MySQL/ClickHouse/ZK 集群、撮合热备、PITR、灾备演练 |
 
 ## 15. 后续实施顺序
 
 1. 先把核心金融正确性补成生产形态：事务 outbox/复式账本、持续对账、多源指数和标记价、完整账户模式、风险限额、资金费和极端行情回放。
 2. 收口服务端权威 location：完成 Order/Trade/MD/Liq 跨租户请求、订阅、缓存、锁、重放和数据库攻击测试；如需前置防御，以可选 SaaS GW 插件实现，保持通用 GW 独立性。
-3. 部署并验收 RobotSvr 的 APSSvr 行情、租户 API Key 报单、库存控制、熔断和外部反向对冲；补齐追踪止损、Close on Trigger、完整账户模式等交易产品。
+3. RobotSvr GHCR 包公开后执行一键增量部署：先验收 APSSvr 10 档与租户上下 10 档重合、用户价差内挂单被扫、成交持仓、停用撤单和跨 location 隔离；再以专用币安账户验收真实反向对冲及不确定响应恢复。随后补齐追踪止损、Close on Trigger、完整账户模式等交易产品。
 4. 完成多租户第二阶段：自定义域名/证书、套餐配额、2FA、平台/租户 RBAC、导出审批、品牌资产和用量计费。
 5. 发布版本化 REST/WebSocket API、HMAC/RSA/Ed25519、API Key 权限/IP 白名单、私有流、序号恢复和分层限流。
 6. 完成真实钱包、安全合规、高可用、容量、混沌和灾备后，才进入小额内部真实资金灰度。

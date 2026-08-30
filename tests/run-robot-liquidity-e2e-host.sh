@@ -209,6 +209,45 @@ done
 [[ "${depth_matched}" == "1" ]] || die "Robot prices did not overlap at least 8/10 live Binance levels per side"
 log "Binance depth overlap passed: 10 bid/10 ask levels, at least 8 live prices per side matched."
 
+log "Hitting a Robot ask and verifying the partially filled level is replenished."
+robot_filled_before="$(mysql_exec -e "SELECT COALESCE(SUM(cum_qty),0) FROM dc_orders WHERE location='${LOCATION}' AND user_id='${ROBOT_USER}' AND algo_name='robot:${ROBOT_ID}'" dc)"
+hit_ok="0"
+hit_clid=""
+for attempt in $(seq 1 20); do
+  current_ask="$(mysql_exec -e "SELECT MIN(price) FROM dc_orders WHERE location='${LOCATION}' AND user_id='${ROBOT_USER}' AND algo_name='robot:${ROBOT_ID}' AND side='Sell' AND ord_status IN ('New','Partially_Filled')" dc)"
+  [[ -n "${current_ask}" && "${current_ask}" != "NULL" ]] || { sleep 1; continue; }
+  hit_clid="ROBOT-HIT-${RUN_ID}-${attempt}"
+  hit_response="$(api_call "{\"serverName\":\"OrderSvr\",\"method\":\"placeOrder\",\"content\":{\"OCType\":\"OPEN\",\"OrderQty\":\"0.0001\",\"OrdType\":\"Limit\",\"ClOrdID\":\"${hit_clid}\",\"Terminal\":\"RobotE2E\",\"AlgoName\":\"robot-e2e-hit\",\"Side\":\"Buy\",\"Price\":\"${current_ask}\",\"UserID\":\"${TRADER_USER}\",\"MarketIndicator\":\"4\",\"TimeInForce\":\"IOC\",\"SecurityID\":\"BTCUSDT\",\"Location\":\"${LOCATION}\"}}" "${trader_token}" 2>/dev/null || true)"
+  if [[ -z "${hit_response}" ]] || [[ "$(printf '%s' "${hit_response}" | json_eval 'd.get("code",-1)' 2>/dev/null || true)" != "0" ]]; then
+    sleep 1
+    continue
+  fi
+  for _ in $(seq 1 20); do
+    hit_ok="$(mysql_exec -e "SELECT IF(
+      (SELECT ord_status FROM dc_orders WHERE location='${LOCATION}' AND clord_id='${hit_clid}')='Filled'
+      AND (SELECT COALESCE(SUM(cum_qty),0) FROM dc_orders WHERE location='${LOCATION}' AND user_id='${ROBOT_USER}' AND algo_name='robot:${ROBOT_ID}') >= ${robot_filled_before}+0.0001,
+      1,0)" dc)"
+    [[ "${hit_ok}" == "1" ]] && break 2
+    sleep 0.5
+  done
+done
+[[ "${hit_ok}" == "1" ]] || die "User IOC did not hit a Robot ask after 20 live-book attempts"
+
+replenished="0"
+for _ in $(seq 1 60); do
+  replenished="$(mysql_exec -e "SELECT IF(
+    (SELECT COUNT(*) FROM dc_orders WHERE location='${LOCATION}' AND user_id='${ROBOT_USER}'
+      AND algo_name='robot:${ROBOT_ID}' AND ord_status IN ('New','Partially_Filled'))=20
+    AND (SELECT COUNT(*) FROM dc_orders WHERE location='${LOCATION}' AND user_id='${ROBOT_USER}'
+      AND algo_name='robot:${ROBOT_ID}' AND ord_status IN ('New','Partially_Filled')
+      AND COALESCE(leaves_qty,0)<>COALESCE(order_qty,0))=0,
+    1,0)" dc)"
+  [[ "${replenished}" == "1" ]] && break
+  sleep 1
+done
+[[ "${replenished}" == "1" ]] || die "Robot did not replenish all 20 quote levels after a user fill"
+log "User hit and full 10+10 level replenishment passed (${hit_clid})."
+
 read -r best_bid best_ask <<<"$(mysql_exec -e "SELECT MAX(CASE WHEN side='Buy' THEN price END),MIN(CASE WHEN side='Sell' THEN price END) FROM dc_orders WHERE location='${LOCATION}' AND user_id='${ROBOT_USER}' AND algo_name='robot:${ROBOT_ID}' AND ord_status='New'" dc)"
 inside_price="$(python3 - "${best_bid}" "${best_ask}" <<'PY'
 from decimal import Decimal, ROUND_DOWN
