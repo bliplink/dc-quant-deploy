@@ -78,7 +78,7 @@ async function login(browser, username) {
   await inputs.nth(0).fill(username);
   await inputs.nth(1).fill(password);
   const loginBody = await invokeFromPage(page, 'SYS.ATS.LOGIN', () =>
-    page.locator('.loginWrap button').click()
+    page.locator('.loginWrap .ant-btn-primary').click()
   );
   if (loginBody.data.user_id !== username) {
     throw new Error(`login returned unexpected user ${loginBody.data.user_id}`);

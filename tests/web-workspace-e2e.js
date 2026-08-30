@@ -24,6 +24,13 @@ async function login(page) {
   await page.goto(`${baseUrl}/#/login?location=${encodeURIComponent(location)}`, {
     waitUntil: 'domcontentloaded'
   });
+  const loginLanguages = page.locator('.loginLanguageSwitch button');
+  if (await loginLanguages.count() !== 2) throw new Error('login language switch is missing');
+  await loginLanguages.nth(1).click();
+  await page.getByText('Username', {exact: true}).waitFor({timeout: 10000});
+  await loginLanguages.nth(0).click();
+  await page.getByText('用户名', {exact: true}).waitFor({timeout: 10000});
+  await loginLanguages.nth(1).click();
   const inputs = page.locator('.loginWrap input');
   await inputs.nth(0).fill(username);
   await inputs.nth(1).fill(password);
@@ -31,7 +38,7 @@ async function login(page) {
     response => response.url().includes('/httpapi/') && requestMethod(response) === 'SYS.ATS.LOGIN',
     {timeout: 60000}
   );
-  await page.locator('.loginWrap button').click();
+  await page.locator('.loginWrap .ant-btn-primary').click();
   const response = await responsePromise;
   const body = await response.json();
   if (Number(body.code) !== 0 || body.data.user_id !== username || body.data.location !== location) {
@@ -165,6 +172,7 @@ function layoutItem(snapshot, breakpoint, key) {
       persisted: true,
       lockable: true,
       languages: ['en', 'zh'],
+      bilingualLogin: true,
       professionalTheme: colors,
       artifacts: ['workspace-en.png', 'workspace-zh.png']
     }, null, 2));
