@@ -30,6 +30,7 @@ async function login(page, username, password, location) {
   await inputs.nth(1).fill(password);
   await page.locator('.loginWrap .ant-btn-primary').click();
   await page.waitForURL(`**/#/trade?location=${encodeURIComponent(location)}`, {timeout: 60000});
+  await page.locator('.tradeGrid').waitFor({timeout: 60000});
   const loginData = await page.evaluate(() => JSON.parse(sessionStorage.getItem('loginData') || '{}'));
   if (loginData.location !== location) throw new Error(`tenant session location mismatch: ${JSON.stringify(loginData)}`);
 }
@@ -63,6 +64,7 @@ async function login(page, username, password, location) {
     await platformInputs.nth(1).fill(platformPassword);
     await page.locator('.tenant-card .ant-btn-primary').click();
     await page.waitForURL('**/#/platform-admin', {timeout: 60000});
+    await page.getByRole('heading', {name: 'SaaS Platform Operations'}).waitFor({timeout: 60000});
     const platformData = await page.evaluate(() => JSON.parse(sessionStorage.getItem('loginData') || '{}'));
     if (platformData.location !== 'PLATFORM') throw new Error(`platform session mismatch: ${JSON.stringify(platformData)}`);
     await page.getByText('Provisioned tenants', {exact: true}).click();
