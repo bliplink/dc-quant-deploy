@@ -395,6 +395,7 @@ compose_up -d
 wait_for_health dc-saas-trade-web 300
 wait_for_port "${GW_TCP_PORT}" gateway 120
 wait_for_port "${LOGINSVR_GW_PORT}" loginsvr 120
+wait_for_port "${LOGINSVR_HTTP_PORT}" loginsvr 180
 wait_for_port "${MDSVR_GW_PORT}" mdsvr 120
 wait_for_port "${APSSVR_GW_PORT}" apssvr 120
 wait_for_port "${ORDERSVR_GW_PORT}" ordersvr 120
