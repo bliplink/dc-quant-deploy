@@ -83,6 +83,24 @@ function layoutItem(snapshot, breakpoint, key) {
       throw new Error('all workspace panels must expose a drag handle while unlocked');
     }
 
+    await page.getByText('Last Price', {exact: true}).first().waitFor({timeout: 10000});
+    const buyButton = page.getByRole('button', {name: 'Buy / Long'});
+    await buyButton.click();
+    await page.getByText('Enter an amount greater than 0.', {exact: true}).waitFor({timeout: 10000});
+
+    await page.getByRole('button', {name: 'Limit', exact: true}).click();
+    let orderInputs = page.locator('.placeOrderWrap input:visible');
+    await orderInputs.nth(1).fill('1');
+    await buyButton.click();
+    await page.getByText('Enter a limit price greater than 0.', {exact: true}).waitFor({timeout: 10000});
+
+    await page.getByRole('button', {name: 'Conditional', exact: true}).click();
+    orderInputs = page.locator('.placeOrderWrap input:visible');
+    await orderInputs.nth(1).fill('1');
+    await buyButton.click();
+    await page.getByText('Enter a trigger price greater than 0.', {exact: true}).waitFor({timeout: 10000});
+    await page.getByRole('button', {name: 'Market', exact: true}).click();
+
     const before = await layoutSnapshot(page);
     const chartPanel = panels.nth(0);
     const beforeBox = await chartPanel.boundingBox();
@@ -173,6 +191,8 @@ function layoutItem(snapshot, breakpoint, key) {
       lockable: true,
       languages: ['en', 'zh'],
       bilingualLogin: true,
+      orderInputValidation: true,
+      lastPriceHeader: true,
       professionalTheme: colors,
       artifacts: ['workspace-en.png', 'workspace-zh.png']
     }, null, 2));
