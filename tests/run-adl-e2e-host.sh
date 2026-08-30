@@ -30,9 +30,13 @@ safe_identifier "${ORDER_ID}" || die "ADL_E2E_ORDER_ID contains unsupported char
   die "ADL_E2E_REFERENCE_PRICE must be a nonnegative number"
 [[ "${ADL_LOCATION}" != "${OTHER_LOCATION}" ]] || die "ADL locations must be different"
 
-high_short_average="$(awk -v price="${REFERENCE_PRICE}" 'BEGIN {printf "%.8f", price + 70}')"
-low_short_average="$(awk -v price="${REFERENCE_PRICE}" 'BEGIN {printf "%.8f", price + 40}')"
-foreign_short_average="$(awk -v price="${REFERENCE_PRICE}" 'BEGIN {printf "%.8f", price + 120}')"
+# Candidate profitability is evaluated against TradeSvr's live tenant mark,
+# not the execution price below.  Use deterministic profitable averages and a
+# one-step first candidate so both ranking slots are exercised at any normal
+# BTC mark price.
+high_short_average="900000"
+low_short_average="800000"
+foreign_short_average="950000"
 liquidated_long_average="$(awk -v price="${REFERENCE_PRICE}" 'BEGIN {printf "%.8f", price + 100}')"
 # Keep the deterministic post-fill deficit at 99.048 for any reference price:
 # initial balance + (-100 realized PnL) + (-0.06% taker fee) = -99.048.
@@ -83,7 +87,7 @@ INSERT INTO dc.dc_users_balance
   (user_id,balance,used_margin,freezed_margin,freezed_commission,update_time,close_by,location)
 VALUES
   ('adl_liquidated',${liquidated_balance},1.8,0,0,NOW(),'ADL_E2E','${ADL_LOCATION}'),
-  ('adl_high',10,10,0,0,NOW(),'ADL_E2E','${ADL_LOCATION}'),
+  ('adl_high',10,0.001,0,0,NOW(),'ADL_E2E','${ADL_LOCATION}'),
   ('adl_low',100,20,0,0,NOW(),'ADL_E2E','${ADL_LOCATION}'),
   ('adl_foreign',10,10,0,0,NOW(),'ADL_E2E','${OTHER_LOCATION}');
 
@@ -96,7 +100,7 @@ VALUES
   ('adl_liquidated','BTCUSDT','BTCUSDT',0,'Cross',100,
    1,${liquidated_long_average},1.8,0,0,0,1,0,0,0,NOW(),'ADL_E2E','${ADL_LOCATION}'),
   ('adl_high','BTCUSDT','BTCUSDT',0,'Cross',100,
-   0,0,0,1,${high_short_average},10,0,0,0,0,NOW(),'ADL_E2E','${ADL_LOCATION}'),
+   0,0,0,0.0001,${high_short_average},0.001,0,0,0,0,NOW(),'ADL_E2E','${ADL_LOCATION}'),
   ('adl_low','BTCUSDT','BTCUSDT',0,'Cross',100,
    0,0,0,1,${low_short_average},20,0,0,0,0,NOW(),'ADL_E2E','${ADL_LOCATION}'),
   ('adl_foreign','BTCUSDT','BTCUSDT',0,'Cross',100,
@@ -145,19 +149,38 @@ FROM dc.dc_liquidation_deficit d
 JOIN dc.dc_adl_event e
   ON e.location=d.location AND e.liquidation_order_id=d.liquidation_order_id
 WHERE d.location='${ADL_LOCATION}' AND d.liquidation_order_id='${ORDER_ID}';
-SELECT rank_no,candidate_user_id,position_side,reduced_quantity,allocated_amount
+SELECT IF(rank_no=1 AND candidate_user_id='adl_high' AND position_side='SHORT'
+          AND ABS(reduced_quantity-0.0001)<0.00000001
+          AND ABS(realized_pnl-((900000-reference_price)*0.0001))<0.00000001
+          AND ABS(allocated_amount-realized_pnl)<0.00000001,1,0)
 FROM dc.dc_adl_ledger
-WHERE location='${ADL_LOCATION}' AND liquidation_order_id='${ORDER_ID}'
-ORDER BY rank_no;
-SELECT user_id,balance,used_margin
-FROM dc.dc_users_balance
-WHERE location='${ADL_LOCATION}' AND user_id IN ('adl_liquidated','adl_high','adl_low')
-ORDER BY user_id;
-SELECT user_id,short_position,short_used_margin
+WHERE location='${ADL_LOCATION}' AND liquidation_order_id='${ORDER_ID}' AND rank_no=1;
+SELECT IF(l.rank_no=2 AND l.candidate_user_id='adl_low' AND l.position_side='SHORT'
+          AND ABS(l.reduced_quantity-0.0001)<0.00000001
+          AND ABS(l.realized_pnl-((800000-l.reference_price)*0.0001))<0.00000001
+          AND ABS(l.allocated_amount-(99.048-h.allocated_amount))<0.00000001,1,0)
+FROM dc.dc_adl_ledger l JOIN dc.dc_adl_ledger h
+  ON h.location=l.location AND h.liquidation_order_id=l.liquidation_order_id AND h.rank_no=1
+WHERE l.location='${ADL_LOCATION}' AND l.liquidation_order_id='${ORDER_ID}' AND l.rank_no=2;
+SELECT IF(ABS(b.balance-10)<0.00000001 AND ABS(b.used_margin)<0.00000001,1,0)
+FROM dc.dc_users_balance b
+WHERE b.location='${ADL_LOCATION}' AND b.user_id='adl_high';
+SELECT IF(ABS(b.balance)<0.00000001 AND ABS(b.used_margin)<0.00000001,1,0)
+FROM dc.dc_users_balance b
+WHERE b.location='${ADL_LOCATION}' AND b.user_id='adl_liquidated';
+SELECT IF(ABS(b.balance-(100+l.realized_pnl-l.allocated_amount))<0.00000001
+          AND ABS(b.used_margin-18)<0.00000001,1,0)
+FROM dc.dc_users_balance b JOIN dc.dc_adl_ledger l
+  ON l.location=b.location AND l.candidate_user_id=b.user_id
+  AND l.liquidation_order_id='${ORDER_ID}' AND l.rank_no=2
+WHERE b.location='${ADL_LOCATION}' AND b.user_id='adl_low';
+SELECT IF(ABS(short_position)<0.00000001 AND ABS(short_used_margin)<0.00000001,1,0)
 FROM dc.dc_orders_position
-WHERE location='${ADL_LOCATION}' AND user_id IN ('adl_high','adl_low')
-ORDER BY user_id;
-SELECT short_position
+WHERE location='${ADL_LOCATION}' AND user_id='adl_high' AND security_id='BTCUSDT';
+SELECT IF(ABS(short_position-0.0009)<0.00000001 AND ABS(short_used_margin-18)<0.00000001,1,0)
+FROM dc.dc_orders_position
+WHERE location='${ADL_LOCATION}' AND user_id='adl_low' AND security_id='BTCUSDT';
+SELECT IF(ABS(short_position-2)<0.00000001,1,0)
 FROM dc.dc_orders_position
 WHERE location='${OTHER_LOCATION}' AND user_id='adl_foreign' AND security_id='BTCUSDT';
 SQL
@@ -167,21 +190,21 @@ mapfile -t rows <<<"${result}"
 [[ "${#rows[@]}" -eq 9 ]] || die "Unexpected ADL verification row count: ${#rows[@]} (${result})"
 [[ "${rows[0]}" == $'COMPLETED\t99.0480000000000000\t0.0000000000000000\t99.0480000000000000\t0.0000000000000000\tCOMPLETED\t2' ]] ||
   die "ADL event/deficit mismatch: ${rows[0]}"
-[[ "${rows[1]}" == $'1\tadl_high\tSHORT\t1.000000000\t70.0000000000000000' ]] ||
+[[ "${rows[1]}" == "1" ]] ||
   die "First-ranked candidate mismatch: ${rows[1]}"
-[[ "${rows[2]}" == $'2\tadl_low\tSHORT\t0.726200000\t29.0480000000000000' ]] ||
+[[ "${rows[2]}" == "1" ]] ||
   die "Second-ranked candidate mismatch: ${rows[2]}"
-[[ "${rows[3]}" == $'adl_high\t10.0000000000000000\t0.0000000000000000' ]] ||
+[[ "${rows[3]}" == "1" ]] ||
   die "High-ranked balance mismatch: ${rows[3]}"
-[[ "${rows[4]}" == $'adl_liquidated\t0.0000000000000000\t0.0000000000000000' ]] ||
+[[ "${rows[4]}" == "1" ]] ||
   die "Liquidated balance mismatch: ${rows[4]}"
-[[ "${rows[5]}" == $'adl_low\t100.0000000000000000\t5.4760000000000000' ]] ||
+[[ "${rows[5]}" == "1" ]] ||
   die "Low-ranked balance mismatch: ${rows[5]}"
-[[ "${rows[6]}" == $'adl_high\t0.000000000\t0.000000000' ]] ||
+[[ "${rows[6]}" == "1" ]] ||
   die "High-ranked position mismatch: ${rows[6]}"
-[[ "${rows[7]}" == $'adl_low\t0.273800000\t5.476000000' ]] ||
+[[ "${rows[7]}" == "1" ]] ||
   die "Low-ranked position mismatch: ${rows[7]}"
-[[ "${rows[8]}" == $'2.000000000' ]] || die "Cross-tenant position was modified: ${rows[8]}"
+[[ "${rows[8]}" == "1" ]] || die "Cross-tenant position was modified: ${rows[8]}"
 
 foreign_ledger_count="$({
   cat <<SQL
