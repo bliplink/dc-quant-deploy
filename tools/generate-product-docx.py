@@ -215,8 +215,8 @@ def add_cover(document):
     meta.alignment = WD_ALIGN_PARAGRAPH.CENTER
     meta.paragraph_format.space_before = Pt(26)
     run = meta.add_run(
-        "版本：V1.0\n"
-        "基线：2026-08-29\n"
+        "版本：V1.1\n"
+        "基线：2026-08-30\n"
         "分支：saas-crypto\n"
         "验收环境：172.16.97.64 / CORE_E2E"
     )

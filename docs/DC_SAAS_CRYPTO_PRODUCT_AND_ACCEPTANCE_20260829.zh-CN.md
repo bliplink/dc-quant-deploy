@@ -1,8 +1,8 @@
 # DC SaaS 加密货币永续合约系统产品与验收说明
 
-文档版本：V1.0
+文档版本：V1.1
 
-基线日期：2026-08-29
+基线日期：2026-08-30
 
 代码分支：`saas-crypto`
 
@@ -57,7 +57,7 @@
 - 支持中文和英文切换；行情、下单、表头、方向、订单类型和状态随语言变化，协议标识保持原值。
 - 使用深色层级、专业买卖色、紧凑表格和响应式断点，功能布局参考主流永续合约交易终端，但不复制其品牌和专有素材。
 
-Web 源码提交为 `d933d09`，公开镜像为 `ghcr.io/bliplink/dc-saas-trade-web@sha256:c7511bcd35c4d30b53cba27583b0a6f764015812c87d69d0f1e388554baae5f6`。生产构建和公开拉取验证已通过；64 环境的新界面部署、浏览器自动化和截图将在本轮环境恢复后补充到最终证据。
+Web 源码提交为 `0e71570f84ef18a6c2804fd70d980d7a133c86ea`，公开镜像为 `ghcr.io/bliplink/dc-saas-trade-web@sha256:f8d6223d0f0ba8f0153a28850f76c597ffddcf9dfd93e726c85ba337143145c1`。生产构建、公开镜像构建和匿名拉取验证已通过；本地生产构建截图已归档。64 环境的新界面部署、浏览器自动化和远端截图仍需等待主机 SSH 恢复后补充，不能用本地截图替代远端验收结论。
 
 ## 4. 总体架构与服务职责
 
@@ -416,20 +416,25 @@ MDSvr snapshot -> 服务端校验 location/topic -> GW 仅登记已确认订阅
 
 ## 13. 截图证据
 
-### 13.1 Web 交易界面
+### 13.1 新版双语登录页（本地生产构建）
+
+![新版专业深色英文登录页](evidence/login-professional-en.png)
+
+### 13.2 Web 交易界面（64 环境历史核心验收）
 
 ![Web 交易界面、最近成交、账户资金和下单区域](evidence/buyer-trading-flow.png)
 
-### 13.2 Web 第二会话/订单簿界面
+### 13.3 Web 第二会话/订单簿界面（64 环境历史核心验收）
 
 ![第二用户会话与订单簿界面](evidence/seller-trade-history.png)
 
-### 13.3 MySQL、ClickHouse 与容器证据
+### 13.4 MySQL、ClickHouse 与容器证据（64 环境历史核心验收）
 
 ![真实数据库查询与运行镜像证据](evidence/database-evidence.png)
 
 证据 SHA-256：
 
+- `login-professional-en.png`：`60ba9c4dbbb0645bf748d07ba4c6be904c526445b3f861e09a1afe8cad3e3aef`
 - `buyer-trading-flow.png`：`7ab70d9a29fcf9e87faf7c73e6532394daade4d304bcd07c44ebcc2d8a4ef3f2`
 - `seller-trade-history.png`：`fde33445d2c9fb351fbe9c035e3017d27455c3f3e081cbaf1e0aa3e98894bd60`
 - `database-evidence.png`：`6d94892d0f94661ed08bd5c5d0b2635bd8486974c0ac359f4e35eb55271fbdbe`
