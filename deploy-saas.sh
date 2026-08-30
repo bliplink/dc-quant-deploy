@@ -243,6 +243,27 @@ wait_for_health() {
   done
 }
 
+ensure_zookeeper_service_root() {
+  local output status
+  set +e
+  output="$({
+    printf 'create /MDTService\nquit\n'
+  } | docker exec -i \
+    -e CLIENT_JVMFLAGS=-Djava.security.auth.login.config=/conf/jaas.ini \
+    dc-saas-zookeeper \
+    zkCli.sh -server "127.0.0.1:${ZOOKEEPER_PORT}" 2>&1)"
+  status="$?"
+  set -e
+
+  if grep -Eq 'Created /MDTService|Node already exists: /MDTService' <<<"${output}"; then
+    log "ZooKeeper service root /MDTService is ready."
+    return 0
+  fi
+
+  printf '%s\n' "${output}" >&2
+  die "Could not initialize /MDTService in ZooKeeper (exit ${status})."
+}
+
 wait_for_port() {
   local port="$1"
   local service_name="$2"
@@ -350,6 +371,7 @@ compose_up -d mysql clickhouse zookeeper
 wait_for_health dc-saas-mysql 420
 wait_for_health dc-saas-clickhouse 420
 wait_for_health dc-saas-zookeeper 120
+ensure_zookeeper_service_root
 apply_mysql_migrations
 provision_platform_admin
 
