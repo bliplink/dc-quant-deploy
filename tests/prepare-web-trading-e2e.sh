@@ -27,6 +27,8 @@ safe_identifier "${E2E_LOCATION}" || die "E2E_LOCATION contains unsupported char
 safe_identifier "${E2E_BUYER}" || die "E2E_BUYER contains unsupported characters"
 safe_identifier "${E2E_SELLER}" || die "E2E_SELLER contains unsupported characters"
 [[ "${E2E_BUYER}" != "${E2E_SELLER}" ]] || die "Buyer and seller must be different users"
+[[ "${E2E_LOCATION}" =~ (^|_)E2E($|_) ]] ||
+  die "E2E_LOCATION must be an isolated *_E2E location"
 
 set -a
 # shellcheck disable=SC1090
@@ -59,6 +61,16 @@ SQL
 verified_count="$({
   cat <<SQL
 START TRANSACTION;
+INSERT IGNORE INTO dc.dc_tenant
+  (location,tenant_code,tenant_name,status,registration_enabled,admin_console_enabled,
+   trade_enabled,base_url,default_locale,create_by,update_by,create_time,update_time)
+VALUES
+  ('${E2E_LOCATION}','${E2E_LOCATION}','Automated E2E Tenant','TRIAL',1,1,1,
+   '/#/login?location=${E2E_LOCATION}','en-US','e2e-bootstrap','e2e-bootstrap',NOW(),NOW());
+INSERT IGNORE INTO dc.dc_tenant_symbol
+  (location,security_id,market_indicator,enabled,create_by,update_by,create_time,update_time)
+VALUES
+  ('${E2E_LOCATION}','BTCUSDT','4',1,'e2e-bootstrap','e2e-bootstrap',NOW(),NOW());
 DELETE FROM dc.dc_order_idempotency
 WHERE location='${E2E_LOCATION}' AND user_id IN ('${E2E_BUYER}','${E2E_SELLER}');
 DELETE FROM dc.dc_orders_execorders
@@ -92,13 +104,17 @@ ON DUPLICATE KEY UPDATE
   location=VALUES(location);
 COMMIT;
 
-SELECT COUNT(*)
-FROM dc.dc_users
-WHERE user_id IN ('${E2E_BUYER}','${E2E_SELLER}')
-  AND user_id = user_name
-  AND location = '${E2E_LOCATION}'
-  AND enable = '1'
-  AND password = '${password_hash}';
+SELECT IF(
+  (SELECT COUNT(*) FROM dc.dc_users
+   WHERE user_id IN ('${E2E_BUYER}','${E2E_SELLER}')
+     AND user_id = user_name
+     AND location = '${E2E_LOCATION}'
+     AND enable = '1'
+     AND password = '${password_hash}') = 2
+  AND EXISTS (
+    SELECT 1 FROM dc.dc_tenant_symbol
+    WHERE location='${E2E_LOCATION}' AND security_id='BTCUSDT' AND enabled=1
+  ), 2, 0);
 SQL
 } | mysql_exec)"
 
