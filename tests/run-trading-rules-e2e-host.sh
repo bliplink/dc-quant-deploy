@@ -10,12 +10,14 @@ MAKER_TWO="${RULE_E2E_MAKER_TWO:-rulemaker2}"
 TAKER="${RULE_E2E_TAKER:-ruletaker}"
 SELF_USER="${RULE_E2E_SELF_USER:-ruleself}"
 RUN_ID="${RULE_E2E_RUN_ID:-$(date +%Y%m%d%H%M%S)}"
+RULE_PASSWORD="${RULE_E2E_PASSWORD:-${E2E_PASSWORD:-}}"
 
 log() { printf '[rules-e2e] %s\n' "$*"; }
 die() { printf '[rules-e2e] ERROR: %s\n' "$*" >&2; exit 1; }
 safe_identifier() { [[ "$1" =~ ^[A-Za-z0-9_.-]+$ ]]; }
 
 [[ -r "${ENV_FILE}" ]] || die "Cannot read ${ENV_FILE}"
+[[ -n "${RULE_PASSWORD}" ]] || die "RULE_E2E_PASSWORD or E2E_PASSWORD is required"
 for value in "${RULE_LOCATION}" "${MAKER_ONE}" "${MAKER_TWO}" "${TAKER}" "${SELF_USER}" "${RUN_ID}"; do
   safe_identifier "${value}" || die "Unsupported identifier: ${value}"
 done
@@ -39,6 +41,31 @@ fi
 
 mysql_exec() {
   docker exec -i -e MYSQL_PWD="${MYSQL_PASSWORD}" dc-saas-mysql mysql -u"${MYSQL_USERNAME}" -N "$@"
+}
+
+password_hash="$(printf '%s' "${RULE_PASSWORD}" | sha256sum | awk '{print $1}')"
+declare -A SESSION_BY_USER
+
+collision_count="$(mysql_exec -e "
+SELECT COUNT(*) FROM dc.dc_users
+WHERE user_name IN ('${MAKER_ONE}','${MAKER_TWO}','${TAKER}','${SELF_USER}')
+  AND (user_id<>user_name OR COALESCE(location,'')<>'${RULE_LOCATION}');" dc)"
+[[ "${collision_count}" == "0" ]] || die "A rule-test username belongs to another identity or location"
+
+login_user() {
+  local user="$1" request response token
+  request="$(mktemp)"
+  printf '{"serverName":"LoginSvr","method":"SYS.ATS.LOGIN","content":{"user_id":"%s","user_name":"%s","password":"%s","method":"login","client_type":"WEB","cid":"RULE_%s","Location":"%s"}}\n' \
+    "${user}" "${user}" "${RULE_PASSWORD}" "${user}" "${RULE_LOCATION}" >"${request}"
+  response="$(curl -fsS --max-time 20 -H 'Content-Type: application/json' \
+    --data-binary "@${request}" "http://127.0.0.1:${WEB_LISTEN_PORT}/httpapi/")" || {
+      rm -f "${request}"
+      die "Login failed for ${user}"
+    }
+  rm -f "${request}"
+  token="$(sed -n 's/.*"token"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/p' <<<"${response}")"
+  [[ -n "${token}" ]] || die "Login returned no session token for ${user}: ${response}"
+  SESSION_BY_USER["${user}"]="${token}"
 }
 
 wait_for_port() {
@@ -68,10 +95,12 @@ wait_for_route() {
 
 API_RESPONSE=""
 api() {
-  local method="$1" content="$2" request
+  local method="$1" content="$2" user="$3" request token
+  token="${SESSION_BY_USER[${user}]:-}"
+  [[ -n "${token}" ]] || die "No authenticated session for ${user}"
   request="$(mktemp)"
   printf '{"serverName":"OrderSvr","method":"%s","content":%s}\n' "${method}" "${content}" >"${request}"
-  API_RESPONSE="$(curl -fsS --max-time 30 -H 'Content-Type: application/json' \
+  API_RESPONSE="$(curl -fsS --max-time 30 -H 'Content-Type: application/json' -H "sessionId: ${token}" \
     --data-binary "@${request}" "http://127.0.0.1:${WEB_LISTEN_PORT}/httpapi/")" || {
       rm -f "${request}"
       die "${method} request failed"
@@ -82,7 +111,7 @@ api() {
 place() {
   local user="$1" side="$2" qty="$3" price="$4" tif="$5" clid="$6"
   local ord_type="${7:-Limit}" oc_type="${8:-OPEN}" reduce_only="${9:-false}"
-  api placeOrder "{\"OCType\":\"${oc_type}\",\"OrderQty\":\"${qty}\",\"OrdType\":\"${ord_type}\",\"ClOrdID\":\"${clid}\",\"Terminal\":\"API\",\"AlgoName\":\"cross\",\"Side\":\"${side}\",\"Price\":\"${price}\",\"UserID\":\"${user}\",\"MarketIndicator\":\"4\",\"TimeInForce\":\"${tif}\",\"SecurityID\":\"BTCUSDT\",\"ReduceOnly\":\"${reduce_only}\",\"Location\":\"${RULE_LOCATION}\"}"
+  api placeOrder "{\"OCType\":\"${oc_type}\",\"OrderQty\":\"${qty}\",\"OrdType\":\"${ord_type}\",\"ClOrdID\":\"${clid}\",\"Terminal\":\"API\",\"AlgoName\":\"cross\",\"Side\":\"${side}\",\"Price\":\"${price}\",\"UserID\":\"${user}\",\"MarketIndicator\":\"4\",\"TimeInForce\":\"${tif}\",\"SecurityID\":\"BTCUSDT\",\"ReduceOnly\":\"${reduce_only}\",\"Location\":\"${RULE_LOCATION}\"}" "${user}"
 }
 
 assert_success() {
@@ -146,6 +175,15 @@ VALUES
   ('${MAKER_TWO}','BTCUSDT','BTCUSDT',100,'Cross',NOW(),'RULE_E2E','${RULE_LOCATION}','4'),
   ('${TAKER}','BTCUSDT','BTCUSDT',100,'Cross',NOW(),'RULE_E2E','${RULE_LOCATION}','4'),
   ('${SELF_USER}','BTCUSDT','BTCUSDT',100,'Cross',NOW(),'RULE_E2E','${RULE_LOCATION}','4');
+INSERT INTO dc.dc_users
+  (user_id,user_name,name,password,user_type,enable,create_time,update_time,
+   enable_trade,enable_cash_in,enable_cash_out,close_by,location)
+VALUES
+  ('${MAKER_ONE}','${MAKER_ONE}','Rule Maker One','${password_hash}','1','1',NOW(),NOW(),'1','1','1','RULE_E2E','${RULE_LOCATION}'),
+  ('${MAKER_TWO}','${MAKER_TWO}','Rule Maker Two','${password_hash}','1','1',NOW(),NOW(),'1','1','1','RULE_E2E','${RULE_LOCATION}'),
+  ('${TAKER}','${TAKER}','Rule Taker','${password_hash}','1','1',NOW(),NOW(),'1','1','1','RULE_E2E','${RULE_LOCATION}'),
+  ('${SELF_USER}','${SELF_USER}','Rule Self','${password_hash}','1','1',NOW(),NOW(),'1','1','1','RULE_E2E','${RULE_LOCATION}')
+ON DUPLICATE KEY UPDATE password=VALUES(password),enable='1',enable_trade='1',location=VALUES(location),update_time=NOW();
 COMMIT;
 SQL
 } | mysql_exec dc
@@ -156,6 +194,9 @@ wait_for_port "${TRADESVR_GW_PORT}" dc-saas-tradesvr
 docker restart dc-saas-gateway >/dev/null
 wait_for_route OrderSvr
 wait_for_route TDSvr
+for user in "${MAKER_ONE}" "${MAKER_TWO}" "${TAKER}" "${SELF_USER}"; do
+  login_user "${user}"
+done
 
 log "Checking synchronous input and symbol filters."
 place "${TAKER}" Buy 0.0001 60000.05 GTC "RULE-${RUN_ID}-REJECT-TICK"; assert_rejected
@@ -214,7 +255,7 @@ po_maker_id="$({
 SELECT order_id FROM dc.dc_orders WHERE location='${RULE_LOCATION}' AND clord_id='RULE-${RUN_ID}-PO-MAKER' LIMIT 1;
 SQL
 } | mysql_exec dc)"
-api cancelOrder "{\"UserID\":\"${MAKER_ONE}\",\"MarketIndicator\":\"4\",\"SecurityID\":\"BTCUSDT\",\"OrderID\":\"${po_maker_id}\",\"AlgoName\":\"cross\",\"Location\":\"${RULE_LOCATION}\"}"
+api cancelOrder "{\"UserID\":\"${MAKER_ONE}\",\"MarketIndicator\":\"4\",\"SecurityID\":\"BTCUSDT\",\"OrderID\":\"${po_maker_id}\",\"AlgoName\":\"cross\",\"Location\":\"${RULE_LOCATION}\"}" "${MAKER_ONE}"
 assert_success
 wait_order "RULE-${RUN_ID}-PO-MAKER" Cancelled
 
@@ -240,7 +281,7 @@ SELECT order_id FROM dc.dc_orders WHERE location='${RULE_LOCATION}' AND clord_id
 SQL
 } | mysql_exec dc)"
 [[ -n "${fifo_two_id}" ]] || die "Could not resolve remaining FIFO order"
-api cancelOrder "{\"UserID\":\"${MAKER_TWO}\",\"MarketIndicator\":\"4\",\"SecurityID\":\"BTCUSDT\",\"OrderID\":\"${fifo_two_id}\",\"AlgoName\":\"cross\",\"Location\":\"${RULE_LOCATION}\"}"
+api cancelOrder "{\"UserID\":\"${MAKER_TWO}\",\"MarketIndicator\":\"4\",\"SecurityID\":\"BTCUSDT\",\"OrderID\":\"${fifo_two_id}\",\"AlgoName\":\"cross\",\"Location\":\"${RULE_LOCATION}\"}" "${MAKER_TWO}"
 assert_success
 wait_order "RULE-${RUN_ID}-FIFO-TWO" Cancelled
 
@@ -280,7 +321,7 @@ place "${MAKER_TWO}" Sell 0.0001 80000 GTC "${original_clid}"; assert_success
 original_id="$(response_order_id)"
 wait_order "${original_clid}" New
 replacement_clid="RULE-${RUN_ID}-REPLACE-NEW"
-api replaceOrder "{\"RefOrderID\":\"${original_id}\",\"OCType\":\"OPEN\",\"OrderQty\":\"0.0002\",\"OrdType\":\"Limit\",\"ClOrdID\":\"${replacement_clid}\",\"Terminal\":\"API\",\"AlgoName\":\"cross\",\"Side\":\"Sell\",\"Price\":\"79900\",\"UserID\":\"${MAKER_TWO}\",\"MarketIndicator\":\"4\",\"TimeInForce\":\"GTC\",\"SecurityID\":\"BTCUSDT\",\"ReduceOnly\":\"false\",\"Location\":\"${RULE_LOCATION}\"}"
+api replaceOrder "{\"RefOrderID\":\"${original_id}\",\"OCType\":\"OPEN\",\"OrderQty\":\"0.0002\",\"OrdType\":\"Limit\",\"ClOrdID\":\"${replacement_clid}\",\"Terminal\":\"API\",\"AlgoName\":\"cross\",\"Side\":\"Sell\",\"Price\":\"79900\",\"UserID\":\"${MAKER_TWO}\",\"MarketIndicator\":\"4\",\"TimeInForce\":\"GTC\",\"SecurityID\":\"BTCUSDT\",\"ReduceOnly\":\"false\",\"Location\":\"${RULE_LOCATION}\"}" "${MAKER_TWO}"
 assert_success
 wait_order "${original_clid}" Cancelled
 wait_order "${replacement_clid}" New
@@ -289,7 +330,7 @@ place "${MAKER_TWO}" Sell 0.0001 81000 GTC "RULE-${RUN_ID}-BATCH-ONE"; assert_su
 batch_one="$(response_order_id)"; wait_order "RULE-${RUN_ID}-BATCH-ONE" New
 place "${MAKER_TWO}" Sell 0.0001 82000 GTC "RULE-${RUN_ID}-BATCH-TWO"; assert_success
 batch_two="$(response_order_id)"; wait_order "RULE-${RUN_ID}-BATCH-TWO" New
-api cancelBatchOrder "{\"location\":\"${RULE_LOCATION}\",\"userID\":\"${MAKER_TWO}\",\"securityID\":\"BTCUSDT\",\"algoName\":\"cross\",\"orderIDs\":[\"${batch_one}\",\"${batch_two}\"]}"
+api cancelBatchOrder "{\"location\":\"${RULE_LOCATION}\",\"userID\":\"${MAKER_TWO}\",\"securityID\":\"BTCUSDT\",\"algoName\":\"cross\",\"orderIDs\":[\"${batch_one}\",\"${batch_two}\"]}" "${MAKER_TWO}"
 assert_success
 wait_order "RULE-${RUN_ID}-BATCH-ONE" Cancelled
 wait_order "RULE-${RUN_ID}-BATCH-TWO" Cancelled
@@ -300,13 +341,13 @@ SELECT order_id FROM dc.dc_orders WHERE location='${RULE_LOCATION}' AND clord_id
 SQL
 } | mysql_exec dc)"
 [[ -n "${foreign_id}" ]] || die "Could not resolve another user's order for batch-cancel isolation"
-api cancelBatchOrder "{\"location\":\"${RULE_LOCATION}\",\"userID\":\"${MAKER_TWO}\",\"securityID\":\"BTCUSDT\",\"algoName\":\"cross\",\"orderIDs\":[\"${foreign_id}\"]}"
+api cancelBatchOrder "{\"location\":\"${RULE_LOCATION}\",\"userID\":\"${MAKER_TWO}\",\"securityID\":\"BTCUSDT\",\"algoName\":\"cross\",\"orderIDs\":[\"${foreign_id}\"]}" "${MAKER_TWO}"
 assert_success
 wait_order "RULE-${RUN_ID}-STP-MAKER" New
 
 log "Cancelling remaining orders and verifying no active-order or frozen-fund residue."
 for user in "${MAKER_ONE}" "${MAKER_TWO}" "${TAKER}" "${SELF_USER}"; do
-  api cancelAllOrder "{\"UserID\":\"${user}\",\"SecurityID\":\"BTCUSDT\",\"MarketIndicator\":\"4\",\"AlgoName\":\"cross\",\"Location\":\"${RULE_LOCATION}\"}"
+  api cancelAllOrder "{\"UserID\":\"${user}\",\"SecurityID\":\"BTCUSDT\",\"MarketIndicator\":\"4\",\"AlgoName\":\"cross\",\"Location\":\"${RULE_LOCATION}\"}" "${user}"
   assert_success
 done
 
@@ -323,10 +364,10 @@ SQL
 done
 [[ "${active:-1}" == "0" ]] || die "Active orders remained after mass cancel"
 
-api placeOrder "{\"OCType\":\"ClOSE\",\"OrderQty\":\"0.0003\",\"OrdType\":\"Limit\",\"ClOrdID\":\"RULE-${RUN_ID}-CLOSE-SHORT\",\"Terminal\":\"API\",\"AlgoName\":\"cross\",\"Side\":\"Buy\",\"PositionSide\":\"Short\",\"Price\":\"60000\",\"UserID\":\"${MAKER_ONE}\",\"MarketIndicator\":\"4\",\"TimeInForce\":\"GTC\",\"SecurityID\":\"BTCUSDT\",\"ReduceOnly\":\"true\",\"Location\":\"${RULE_LOCATION}\"}"
+api placeOrder "{\"OCType\":\"ClOSE\",\"OrderQty\":\"0.0003\",\"OrdType\":\"Limit\",\"ClOrdID\":\"RULE-${RUN_ID}-CLOSE-SHORT\",\"Terminal\":\"API\",\"AlgoName\":\"cross\",\"Side\":\"Buy\",\"PositionSide\":\"Short\",\"Price\":\"60000\",\"UserID\":\"${MAKER_ONE}\",\"MarketIndicator\":\"4\",\"TimeInForce\":\"GTC\",\"SecurityID\":\"BTCUSDT\",\"ReduceOnly\":\"true\",\"Location\":\"${RULE_LOCATION}\"}" "${MAKER_ONE}"
 assert_success
 wait_order "RULE-${RUN_ID}-CLOSE-SHORT" New
-api placeOrder "{\"OCType\":\"ClOSE\",\"OrderQty\":\"0.0003\",\"OrdType\":\"Limit\",\"ClOrdID\":\"RULE-${RUN_ID}-CLOSE-LONG\",\"Terminal\":\"API\",\"AlgoName\":\"cross\",\"Side\":\"Sell\",\"PositionSide\":\"Long\",\"Price\":\"60000\",\"UserID\":\"${TAKER}\",\"MarketIndicator\":\"4\",\"TimeInForce\":\"GTC\",\"SecurityID\":\"BTCUSDT\",\"ReduceOnly\":\"true\",\"Location\":\"${RULE_LOCATION}\"}"
+api placeOrder "{\"OCType\":\"ClOSE\",\"OrderQty\":\"0.0003\",\"OrdType\":\"Limit\",\"ClOrdID\":\"RULE-${RUN_ID}-CLOSE-LONG\",\"Terminal\":\"API\",\"AlgoName\":\"cross\",\"Side\":\"Sell\",\"PositionSide\":\"Long\",\"Price\":\"60000\",\"UserID\":\"${TAKER}\",\"MarketIndicator\":\"4\",\"TimeInForce\":\"GTC\",\"SecurityID\":\"BTCUSDT\",\"ReduceOnly\":\"true\",\"Location\":\"${RULE_LOCATION}\"}" "${TAKER}"
 assert_success
 wait_order "RULE-${RUN_ID}-CLOSE-SHORT" Filled
 wait_order "RULE-${RUN_ID}-CLOSE-LONG" Filled

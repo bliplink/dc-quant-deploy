@@ -6,6 +6,8 @@ const baseUrl = process.env.LOAD_BASE_URL || 'http://127.0.0.1:18088';
 const location = process.env.LOAD_LOCATION || 'CORE_STRESS';
 const maker = process.env.LOAD_MAKER || 'stressmaker';
 const taker = process.env.LOAD_TAKER || 'stresstaker';
+const makerSession = process.env.LOAD_MAKER_SESSION || '';
+const takerSession = process.env.LOAD_TAKER_SESSION || '';
 const orders = Number(process.env.LOAD_ORDERS || 1000);
 const concurrency = Number(process.env.LOAD_CONCURRENCY || 16);
 const settleMs = Number(process.env.LOAD_SETTLE_MS || 10000);
@@ -18,6 +20,9 @@ if (!Number.isInteger(concurrency) || concurrency < 1) throw new Error('LOAD_CON
 if (!Number.isInteger(requestTimeoutMs) || requestTimeoutMs < 1000) {
   throw new Error('LOAD_REQUEST_TIMEOUT_MS must be an integer of at least 1000');
 }
+if (!makerSession || !takerSession) throw new Error('Authenticated load sessions are required');
+
+const sessions = new Map([[maker, makerSession], [taker, takerSession]]);
 
 const endpoint = `${baseUrl.replace(/\/$/, '')}/httpapi/`;
 
@@ -28,6 +33,8 @@ function percentile(values, ratio) {
 }
 
 async function invoke(method, content) {
+  const sessionId = sessions.get(content.UserID || content.userID);
+  if (!sessionId) throw new Error(`No authenticated session for ${content.UserID || content.userID || 'unknown user'}`);
   const started = process.hrtime.bigint();
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), requestTimeoutMs);
@@ -36,7 +43,7 @@ async function invoke(method, content) {
   try {
     response = await fetch(endpoint, {
       method: 'POST',
-      headers: { 'content-type': 'application/json' },
+      headers: { 'content-type': 'application/json', sessionId },
       body: JSON.stringify({ serverName: 'OrderSvr', method, content }),
       signal: controller.signal
     });

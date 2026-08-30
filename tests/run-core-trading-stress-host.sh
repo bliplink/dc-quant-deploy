@@ -11,12 +11,14 @@ LOAD_ORDERS="${LOAD_ORDERS:-1000}"
 LOAD_CONCURRENCY="${LOAD_CONCURRENCY:-16}"
 LOAD_RUN_ID="${LOAD_RUN_ID:-$(date +%Y%m%d%H%M%S)}"
 LOAD_RUNNER_NAME="${LOAD_RUNNER_NAME:-dc-saas-web-e2e-runner}"
+LOAD_PASSWORD="${LOAD_E2E_PASSWORD:-${E2E_PASSWORD:-}}"
 
 log() { printf '[core-stress] %s\n' "$*"; }
 die() { printf '[core-stress] ERROR: %s\n' "$*" >&2; exit 1; }
 safe_identifier() { [[ "$1" =~ ^[A-Za-z0-9_.-]+$ ]]; }
 
 [[ -r "${ENV_FILE}" ]] || die "Cannot read ${ENV_FILE}"
+[[ -n "${LOAD_PASSWORD}" ]] || die "LOAD_E2E_PASSWORD or E2E_PASSWORD is required"
 for value in "${LOAD_LOCATION}" "${LOAD_MAKER}" "${LOAD_TAKER}" "${LOAD_RUN_ID}"; do
   safe_identifier "${value}" || die "Unsupported identifier: ${value}"
 done
@@ -45,6 +47,31 @@ mysql_exec() {
   docker exec -i -e MYSQL_PWD="${MYSQL_PASSWORD}" dc-saas-mysql mysql -u"${MYSQL_USERNAME}" -N "$@"
 }
 
+password_hash="$(printf '%s' "${LOAD_PASSWORD}" | sha256sum | awk '{print $1}')"
+declare -A SESSION_BY_USER
+
+collision_count="$(mysql_exec -e "
+SELECT COUNT(*) FROM dc.dc_users
+WHERE user_name IN ('${LOAD_MAKER}','${LOAD_TAKER}')
+  AND (user_id<>user_name OR COALESCE(location,'')<>'${LOAD_LOCATION}');" dc)"
+[[ "${collision_count}" == "0" ]] || die "A load-test username belongs to another identity or location"
+
+login_user() {
+  local user="$1" request response token
+  request="$(mktemp)"
+  printf '{"serverName":"LoginSvr","method":"SYS.ATS.LOGIN","content":{"user_id":"%s","user_name":"%s","password":"%s","method":"login","client_type":"WEB","cid":"LOAD_%s","Location":"%s"}}\n' \
+    "${user}" "${user}" "${LOAD_PASSWORD}" "${user}" "${LOAD_LOCATION}" >"${request}"
+  response="$(curl -fsS --max-time 20 -H 'Content-Type: application/json' \
+    --data-binary "@${request}" "http://127.0.0.1:${WEB_LISTEN_PORT}/httpapi/")" || {
+      rm -f "${request}"
+      die "Login failed for ${user}"
+    }
+  rm -f "${request}"
+  token="$(sed -n 's/.*"token"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/p' <<<"${response}")"
+  [[ -n "${token}" ]] || die "Login returned no session token for ${user}: ${response}"
+  SESSION_BY_USER["${user}"]="${token}"
+}
+
 wait_for_port() {
   local port="$1" service="$2" start
   start="$(date +%s)"
@@ -71,10 +98,12 @@ wait_for_route() {
 }
 
 api_order() {
-  local content="$1" request response
+  local content="$1" user="$2" request response token
+  token="${SESSION_BY_USER[${user}]:-}"
+  [[ -n "${token}" ]] || die "No authenticated session for ${user}"
   request="$(mktemp)"
   printf '{"serverName":"OrderSvr","method":"placeOrder","content":%s}\n' "${content}" >"${request}"
-  response="$(curl -fsS --max-time 30 -H 'Content-Type: application/json' --data-binary "@${request}" \
+  response="$(curl -fsS --max-time 30 -H 'Content-Type: application/json' -H "sessionId: ${token}" --data-binary "@${request}" \
     "http://127.0.0.1:${WEB_LISTEN_PORT}/httpapi/")" || {
       rm -f "${request}"
       die "Close-order API request failed"
@@ -104,6 +133,13 @@ INSERT INTO dc.dc_users_symbol_config
 VALUES
   ('${LOAD_MAKER}','BTCUSDT','BTCUSDT',100,'Cross',NOW(),'CORE_STRESS','${LOAD_LOCATION}','4'),
   ('${LOAD_TAKER}','BTCUSDT','BTCUSDT',100,'Cross',NOW(),'CORE_STRESS','${LOAD_LOCATION}','4');
+INSERT INTO dc.dc_users
+  (user_id,user_name,name,password,user_type,enable,create_time,update_time,
+   enable_trade,enable_cash_in,enable_cash_out,close_by,location)
+VALUES
+  ('${LOAD_MAKER}','${LOAD_MAKER}','Stress Maker','${password_hash}','1','1',NOW(),NOW(),'1','1','1','CORE_STRESS','${LOAD_LOCATION}'),
+  ('${LOAD_TAKER}','${LOAD_TAKER}','Stress Taker','${password_hash}','1','1',NOW(),NOW(),'1','1','1','CORE_STRESS','${LOAD_LOCATION}')
+ON DUPLICATE KEY UPDATE password=VALUES(password),enable='1',enable_trade='1',location=VALUES(location),update_time=NOW();
 COMMIT;
 SQL
 } | mysql_exec dc
@@ -115,6 +151,8 @@ wait_for_port "${TRADESVR_GW_PORT}" dc-saas-tradesvr
 docker restart dc-saas-gateway >/dev/null
 wait_for_route OrderSvr
 wait_for_route TDSvr
+login_user "${LOAD_MAKER}"
+login_user "${LOAD_TAKER}"
 
 artifact_dir="${LOAD_ARTIFACT_DIR:-${DEPLOY_ROOT}/e2e-artifacts/stress-${LOAD_RUN_ID}}"
 install -d -m 0750 "${artifact_dir}"
@@ -141,6 +179,7 @@ runner_artifact_rel="${artifact_dir#${runner_artifact_source}/}"
 docker exec -w /work \
   -e LOAD_BASE_URL="http://127.0.0.1:${WEB_LISTEN_PORT}" \
   -e LOAD_LOCATION="${LOAD_LOCATION}" -e LOAD_MAKER="${LOAD_MAKER}" -e LOAD_TAKER="${LOAD_TAKER}" \
+  -e LOAD_MAKER_SESSION="${SESSION_BY_USER[${LOAD_MAKER}]}" -e LOAD_TAKER_SESSION="${SESSION_BY_USER[${LOAD_TAKER}]}" \
   -e LOAD_ORDERS="${LOAD_ORDERS}" -e LOAD_CONCURRENCY="${LOAD_CONCURRENCY}" \
   -e LOAD_REQUEST_TIMEOUT_MS="${LOAD_REQUEST_TIMEOUT_MS:-30000}" \
   -e LOAD_SETTLE_MS="${LOAD_SETTLE_MS:-10000}" \
@@ -260,7 +299,7 @@ SQL
 [[ "${recovery}" == $'1\n1' ]] || die "Restart recovery verification failed: ${recovery}"
 
 log "Closing the recovered positions through reduce-only matching."
-api_order "{\"OCType\":\"ClOSE\",\"OrderQty\":\"${quantity}\",\"OrdType\":\"Limit\",\"ClOrdID\":\"LOAD-${LOAD_RUN_ID}-CLOSE-SHORT\",\"Terminal\":\"API\",\"AlgoName\":\"cross\",\"Side\":\"Buy\",\"PositionSide\":\"Short\",\"Price\":\"60000\",\"UserID\":\"${LOAD_MAKER}\",\"MarketIndicator\":\"4\",\"TimeInForce\":\"GTC\",\"SecurityID\":\"BTCUSDT\",\"ReduceOnly\":\"true\",\"Location\":\"${LOAD_LOCATION}\"}"
+api_order "{\"OCType\":\"ClOSE\",\"OrderQty\":\"${quantity}\",\"OrdType\":\"Limit\",\"ClOrdID\":\"LOAD-${LOAD_RUN_ID}-CLOSE-SHORT\",\"Terminal\":\"API\",\"AlgoName\":\"cross\",\"Side\":\"Buy\",\"PositionSide\":\"Short\",\"Price\":\"60000\",\"UserID\":\"${LOAD_MAKER}\",\"MarketIndicator\":\"4\",\"TimeInForce\":\"GTC\",\"SecurityID\":\"BTCUSDT\",\"ReduceOnly\":\"true\",\"Location\":\"${LOAD_LOCATION}\"}" "${LOAD_MAKER}"
 for _ in $(seq 1 60); do
   close_maker_ready="$({
     cat <<SQL
@@ -272,7 +311,7 @@ SQL
   sleep 1
 done
 [[ "${close_maker_ready:-0}" == "1" ]] || die "Recovered short close order did not rest"
-api_order "{\"OCType\":\"ClOSE\",\"OrderQty\":\"${quantity}\",\"OrdType\":\"Limit\",\"ClOrdID\":\"LOAD-${LOAD_RUN_ID}-CLOSE-LONG\",\"Terminal\":\"API\",\"AlgoName\":\"cross\",\"Side\":\"Sell\",\"PositionSide\":\"Long\",\"Price\":\"60000\",\"UserID\":\"${LOAD_TAKER}\",\"MarketIndicator\":\"4\",\"TimeInForce\":\"GTC\",\"SecurityID\":\"BTCUSDT\",\"ReduceOnly\":\"true\",\"Location\":\"${LOAD_LOCATION}\"}"
+api_order "{\"OCType\":\"ClOSE\",\"OrderQty\":\"${quantity}\",\"OrdType\":\"Limit\",\"ClOrdID\":\"LOAD-${LOAD_RUN_ID}-CLOSE-LONG\",\"Terminal\":\"API\",\"AlgoName\":\"cross\",\"Side\":\"Sell\",\"PositionSide\":\"Long\",\"Price\":\"60000\",\"UserID\":\"${LOAD_TAKER}\",\"MarketIndicator\":\"4\",\"TimeInForce\":\"GTC\",\"SecurityID\":\"BTCUSDT\",\"ReduceOnly\":\"true\",\"Location\":\"${LOAD_LOCATION}\"}" "${LOAD_TAKER}"
 for _ in $(seq 1 120); do
   close_ok="$({
     cat <<SQL
