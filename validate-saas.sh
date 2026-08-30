@@ -75,6 +75,15 @@ for port in "${required_ports[@]}"; do
   grep -Eq "[:.]${port}$" <<<"${listening}" || die "Expected port ${port} is not listening."
 done
 
+for port in "${MYSQL_PORT}" "${CLICKHOUSE_HTTP_PORT}" "${CLICKHOUSE_NATIVE_PORT}" "${ZOOKEEPER_PORT}"; do
+  while IFS= read -r endpoint; do
+    case "${endpoint}" in
+      "127.0.0.1:${port}"|"[::1]:${port}"|"[::ffff:127.0.0.1]:${port}") ;;
+      *) die "Infrastructure port ${port} is exposed on non-loopback endpoint ${endpoint}." ;;
+    esac
+  done < <(ss -lntH "sport = :${port}" | awk '{print $4}')
+done
+
 mysql_table_count="$(
   docker exec -e MYSQL_PWD="${MYSQL_PASSWORD}" dc-saas-mysql mysql -u"${MYSQL_USERNAME}" -Nse "SELECT COUNT(*) FROM information_schema.tables WHERE table_schema='dc';"
 )"
@@ -104,4 +113,5 @@ curl -fsS "http://127.0.0.1:${WEB_LISTEN_PORT}/" | grep -qi '<title>Trade</title
 
 log "SaaS-only compose model verified."
 log "All 13 containers are running; MySQL tables=${mysql_table_count}, location columns=${mysql_location_columns}."
+log "MySQL, ClickHouse, and ZooKeeper are restricted to loopback interfaces."
 log "ClickHouse kline is location-aware and dc-trade-web is healthy."

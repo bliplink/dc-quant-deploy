@@ -32,6 +32,7 @@ services:
       - --collation-server=utf8mb4_0900_ai_ci
       - --default-time-zone=+08:00
       - --port=${MYSQL_PORT:-33306}
+      - --bind-address=127.0.0.1
       - --innodb-buffer-pool-size=512M
       - --max-connections=300
     volumes:
@@ -68,6 +69,7 @@ services:
       - ./clickhouse/users.d/20-saas-memory.xml:/etc/clickhouse-server/users.d/20-saas-memory.xml:ro
       - ${DEPLOY_ROOT}/control/clickhouse-ports.xml:/etc/clickhouse-server/config.d/10-saas-ports.xml:ro
       - ${DEPLOY_ROOT}/control/clickhouse-client.xml:/etc/clickhouse-client/config.xml:ro
+      - ${DEPLOY_ROOT}/control/clickhouse-docker-related.xml:/etc/clickhouse-server/config.d/docker_related_config.xml:ro
     healthcheck:
       test: ["CMD-SHELL", "clickhouse-client --port \"$${SAAS_CLICKHOUSE_NATIVE_PORT}\" --user \"$${CLICKHOUSE_USER}\" --password \"$${CLICKHOUSE_PASSWORD}\" --query 'SELECT 1' >/dev/null 2>&1"]
       interval: 10s
@@ -93,7 +95,7 @@ services:
       ZOO_SERVERS: server.1=localhost:32888:33888;${ZOOKEEPER_PORT:-32181}
       ZOO_4LW_COMMANDS_WHITELIST: ruok,srvr,mntr
       ZOO_ADMINSERVER_ENABLED: "false"
-      ZOO_CFG_EXTRA: authProvider.1=org.apache.zookeeper.server.auth.SASLAuthenticationProvider requireClientAuthScheme=sasl
+      ZOO_CFG_EXTRA: authProvider.1=org.apache.zookeeper.server.auth.SASLAuthenticationProvider requireClientAuthScheme=sasl clientPortAddress=127.0.0.1
       SERVER_JVMFLAGS: -Djava.security.auth.login.config=/conf/jaas.ini
     volumes:
       - ${DEPLOY_ROOT}/data/zookeeper:/data

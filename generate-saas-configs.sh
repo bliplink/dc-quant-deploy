@@ -147,6 +147,17 @@ cat > "${CONTROL_ROOT}/clickhouse-client.xml" <<EOF
 EOF
 chmod 0644 "${CONTROL_ROOT}/clickhouse-client.xml"
 
+# Replace the container image's wildcard listener fragment. All SaaS services
+# use host networking on this single node, so ClickHouse must remain local.
+cat > "${CONTROL_ROOT}/clickhouse-docker-related.xml" <<'EOF'
+<clickhouse>
+    <listen_host>::1</listen_host>
+    <listen_host>127.0.0.1</listen_host>
+    <listen_try>1</listen_try>
+</clickhouse>
+EOF
+chmod 0644 "${CONTROL_ROOT}/clickhouse-docker-related.xml"
+
 cat > "${OVERRIDE_ROOT}/LoginSvr/config/application.properties" <<EOF
 serverKey=SERVER.LoginSvr
 log4j.file=./config/log4j.ini
