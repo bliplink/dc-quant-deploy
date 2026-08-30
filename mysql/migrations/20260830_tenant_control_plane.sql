@@ -89,6 +89,41 @@ CREATE TABLE IF NOT EXISTS dc_tenant_user_role (
   KEY idx_tenant_role_user (location, role_id, status, user_id)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci COMMENT='Tenant scoped RBAC membership';
 
+CREATE TABLE IF NOT EXISTS dc_tenant_robot (
+  location varchar(64) COLLATE utf8mb4_bin NOT NULL,
+  robot_id varchar(64) COLLATE utf8mb4_bin NOT NULL,
+  robot_name varchar(128) NOT NULL,
+  security_id varchar(64) COLLATE utf8mb4_bin NOT NULL,
+  api_user_id varchar(64) COLLATE utf8mb4_bin NOT NULL,
+  api_key varchar(255) COLLATE utf8mb4_bin NOT NULL,
+  quote_source varchar(32) NOT NULL DEFAULT 'APSSVR_INDEX',
+  enabled tinyint(1) NOT NULL DEFAULT 0,
+  bid_levels smallint unsigned NOT NULL DEFAULT 5,
+  ask_levels smallint unsigned NOT NULL DEFAULT 5,
+  level_spread_bps decimal(18,8) NOT NULL DEFAULT 5,
+  level_step_bps decimal(18,8) NOT NULL DEFAULT 2,
+  order_qty decimal(35,16) NOT NULL,
+  max_position_qty decimal(35,16) NOT NULL,
+  refresh_interval_ms int unsigned NOT NULL DEFAULT 1000,
+  stale_price_ms int unsigned NOT NULL DEFAULT 5000,
+  max_deviation_bps decimal(18,8) NOT NULL DEFAULT 100,
+  circuit_breaker_seconds int unsigned NOT NULL DEFAULT 30,
+  hedge_enabled tinyint(1) NOT NULL DEFAULT 0,
+  hedge_venue varchar(64) DEFAULT NULL,
+  hedge_account_ref varchar(255) DEFAULT NULL,
+  strategy_config json DEFAULT NULL,
+  runtime_status varchar(24) NOT NULL DEFAULT 'STOPPED',
+  last_heartbeat_time varchar(30) DEFAULT NULL,
+  create_by varchar(64) NOT NULL,
+  update_by varchar(64) NOT NULL,
+  create_time varchar(30) NOT NULL,
+  update_time varchar(30) NOT NULL,
+  PRIMARY KEY (location, robot_id),
+  UNIQUE KEY uq_tenant_robot_symbol_name (location, security_id, robot_name),
+  KEY idx_tenant_robot_enabled (location, enabled, security_id),
+  KEY idx_tenant_robot_api (location, api_user_id, api_key)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci COMMENT='Tenant scoped market making robot configuration';
+
 CREATE TABLE IF NOT EXISTS dc_tenant_audit_log (
   audit_id varchar(64) COLLATE utf8mb4_bin NOT NULL,
   location varchar(64) COLLATE utf8mb4_bin NOT NULL,
