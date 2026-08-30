@@ -225,6 +225,9 @@ log4j.async=true
 [BNFutures]
 enableBinanceFlag=true
 enableBookTickerFlag=true
+enablePartialDepthFlag=true
+partialDepthLevels=10
+partialDepthSpeedMs=100
 enableSymbolTickerFlag=true
 enableMarkPriceFlag=true
 enableUserDataFlag=${APSSVR_ENABLE_USER_DATA}

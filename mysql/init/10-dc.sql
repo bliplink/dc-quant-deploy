@@ -130,7 +130,8 @@ CREATE TABLE `dc_orders` (
   `info5` varchar(45) DEFAULT NULL,
   `maker` int(11) DEFAULT NULL,
   PRIMARY KEY (`order_id`,`user_id`) USING BTREE,
-  KEY `query_index` (`user_id`,`security_id`,`side`,`ord_type`,`order_id`,`ord_status`) USING BTREE
+  KEY `query_index` (`user_id`,`security_id`,`side`,`ord_type`,`order_id`,`ord_status`) USING BTREE,
+  KEY `idx_robot_sweep` (`location`,`security_id`,`ord_status`,`side`,`price`,`transact_time`) USING BTREE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci ROW_FORMAT=DYNAMIC COMMENT='订单表';
 
 CREATE TABLE `dc_order_idempotency` (

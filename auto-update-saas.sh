@@ -12,7 +12,7 @@ FORCE="false"
 SKIP_GIT_UPDATE="false"
 
 APP_SERVICES=(
-  gateway loginsvr mdsvr apssvr ordersvr tradesvr liqsvr managersvr adminsvr web
+  gateway loginsvr mdsvr apssvr ordersvr tradesvr liqsvr managersvr adminsvr robotsvr web
 )
 
 log() {
@@ -96,6 +96,7 @@ service_image_ref() {
     liqsvr) echo "${LIQSVR_IMAGE_REPOSITORY:-ghcr.io/bliplink/liqsvr}:${LIQSVR_TAG:-saas-crypto}" ;;
     managersvr) echo "${MANAGERSVR_IMAGE_REPOSITORY:-ghcr.io/bliplink/managersvr}:${MANAGERSVR_TAG:-saas-crypto}" ;;
     adminsvr) echo "${ADMINSVR_IMAGE_REPOSITORY:-ghcr.io/bliplink/adminsvr}:${ADMINSVR_TAG:-saas-crypto}" ;;
+    robotsvr) echo "${ROBOTSVR_IMAGE_REPOSITORY:-ghcr.io/bliplink/robotsvr}:${ROBOTSVR_TAG:-saas-crypto}" ;;
     web) echo "${TRADE_WEB_IMAGE_REPOSITORY:-ghcr.io/bliplink/dc-saas-trade-web}:${TRADE_WEB_TAG:-saas-crypto}" ;;
     *) return 1 ;;
   esac
@@ -105,7 +106,7 @@ service_container_name() {
   case "$1" in
     gateway) echo "dc-saas-gateway" ;;
     web) echo "dc-saas-trade-web" ;;
-    loginsvr|mdsvr|apssvr|ordersvr|tradesvr|liqsvr|managersvr|adminsvr)
+    loginsvr|mdsvr|apssvr|ordersvr|tradesvr|liqsvr|managersvr|adminsvr|robotsvr)
       echo "dc-saas-$1"
       ;;
     *) return 1 ;;

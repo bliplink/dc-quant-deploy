@@ -96,10 +96,10 @@ CREATE TABLE IF NOT EXISTS dc_tenant_robot (
   security_id varchar(64) COLLATE utf8mb4_bin NOT NULL,
   api_user_id varchar(64) COLLATE utf8mb4_bin NOT NULL,
   api_key varchar(255) COLLATE utf8mb4_bin NOT NULL,
-  quote_source varchar(32) NOT NULL DEFAULT 'APSSVR_INDEX',
+  quote_source varchar(32) NOT NULL DEFAULT 'APSSVR_BINANCE_DEPTH',
   enabled tinyint(1) NOT NULL DEFAULT 0,
-  bid_levels smallint unsigned NOT NULL DEFAULT 5,
-  ask_levels smallint unsigned NOT NULL DEFAULT 5,
+  bid_levels smallint unsigned NOT NULL DEFAULT 10,
+  ask_levels smallint unsigned NOT NULL DEFAULT 10,
   level_spread_bps decimal(18,8) NOT NULL DEFAULT 5,
   level_step_bps decimal(18,8) NOT NULL DEFAULT 2,
   order_qty decimal(35,16) NOT NULL,
@@ -114,6 +114,12 @@ CREATE TABLE IF NOT EXISTS dc_tenant_robot (
   strategy_config json DEFAULT NULL,
   runtime_status varchar(24) NOT NULL DEFAULT 'STOPPED',
   last_heartbeat_time varchar(30) DEFAULT NULL,
+  runtime_owner varchar(128) DEFAULT NULL,
+  runtime_lease_until datetime(3) DEFAULT NULL,
+  last_error_code varchar(64) DEFAULT NULL,
+  last_error_message varchar(1000) DEFAULT NULL,
+  last_reference_price decimal(35,16) DEFAULT NULL,
+  open_order_count int unsigned NOT NULL DEFAULT 0,
   create_by varchar(64) NOT NULL,
   update_by varchar(64) NOT NULL,
   create_time varchar(30) NOT NULL,
@@ -123,6 +129,31 @@ CREATE TABLE IF NOT EXISTS dc_tenant_robot (
   KEY idx_tenant_robot_enabled (location, enabled, security_id),
   KEY idx_tenant_robot_api (location, api_user_id, api_key)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci COMMENT='Tenant scoped market making robot configuration';
+
+CREATE TABLE IF NOT EXISTS dc_robot_hedge_execution (
+  hedge_id varchar(64) COLLATE utf8mb4_bin NOT NULL,
+  location varchar(64) COLLATE utf8mb4_bin NOT NULL,
+  robot_id varchar(64) COLLATE utf8mb4_bin NOT NULL,
+  security_id varchar(64) COLLATE utf8mb4_bin NOT NULL,
+  venue varchar(64) NOT NULL,
+  account_ref varchar(255) NOT NULL,
+  client_order_id varchar(36) COLLATE utf8mb4_bin NOT NULL,
+  side varchar(8) NOT NULL,
+  requested_qty decimal(35,16) NOT NULL,
+  executed_qty decimal(35,16) NOT NULL DEFAULT 0,
+  target_hedge_position decimal(35,16) NOT NULL,
+  average_price decimal(35,16) DEFAULT NULL,
+  status varchar(24) NOT NULL,
+  external_order_id varchar(128) DEFAULT NULL,
+  external_status varchar(32) DEFAULT NULL,
+  raw_response text DEFAULT NULL,
+  error_message varchar(1000) DEFAULT NULL,
+  request_time datetime(3) NOT NULL,
+  update_time datetime(3) NOT NULL,
+  PRIMARY KEY (hedge_id),
+  UNIQUE KEY uq_robot_hedge_client_order (location,robot_id,client_order_id),
+  KEY idx_robot_hedge_status (location,robot_id,status,request_time)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci COMMENT='Idempotent external hedge execution journal';
 
 CREATE TABLE IF NOT EXISTS dc_tenant_audit_log (
   audit_id varchar(64) COLLATE utf8mb4_bin NOT NULL,

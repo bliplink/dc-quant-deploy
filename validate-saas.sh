@@ -52,7 +52,7 @@ expected_containers=(
   dc-saas-mysql dc-saas-clickhouse dc-saas-zookeeper dc-saas-gateway
   dc-saas-loginsvr dc-saas-mdsvr dc-saas-apssvr dc-saas-ordersvr
   dc-saas-tradesvr dc-saas-liqsvr dc-saas-managersvr dc-saas-adminsvr
-  dc-saas-trade-web
+  dc-saas-robotsvr dc-saas-trade-web
 )
 
 for container in "${expected_containers[@]}"; do
@@ -102,6 +102,16 @@ mysql_location_columns="$(
 (( mysql_location_columns >= 10 )) ||
   die "MySQL location isolation columns are incomplete: ${mysql_location_columns}."
 
+robot_schema_count="$(
+  docker exec -e MYSQL_PWD="${MYSQL_PASSWORD}" dc-saas-mysql mysql -u"${MYSQL_USERNAME}" -Nse "SELECT COUNT(*) FROM information_schema.tables WHERE table_schema='dc' AND table_name='dc_robot_hedge_execution';"
+)"
+[[ "${robot_schema_count}" == "1" ]] || die "Robot hedge execution journal is missing."
+
+robot_runtime_columns="$(
+  docker exec -e MYSQL_PWD="${MYSQL_PASSWORD}" dc-saas-mysql mysql -u"${MYSQL_USERNAME}" -Nse "SELECT COUNT(*) FROM information_schema.columns WHERE table_schema='dc' AND table_name='dc_tenant_robot' AND column_name IN ('quote_source','runtime_owner','runtime_lease_until','last_error_code','last_error_message','last_reference_price','open_order_count');"
+)"
+[[ "${robot_runtime_columns}" == "7" ]] || die "Robot runtime schema is incomplete: ${robot_runtime_columns}/7 columns."
+
 clickhouse_location="$(
   docker exec dc-saas-clickhouse clickhouse-client --port "${CLICKHOUSE_NATIVE_PORT}" --user "${CLICKHOUSE_USERNAME}" --password "${CLICKHOUSE_PASSWORD}" --query "SELECT count() FROM system.columns WHERE database='dc' AND table='kline' AND name='location'"
 )"
@@ -118,6 +128,6 @@ curl -fsS "http://127.0.0.1:${WEB_LISTEN_PORT}/" | grep -qi '<title>Trade</title
   die "dc-trade-web index page is not the trade application."
 
 log "SaaS-only compose model verified."
-log "All 13 containers are running; MySQL tables=${mysql_table_count}, location columns=${mysql_location_columns}."
+log "All 14 containers are running; MySQL tables=${mysql_table_count}, location columns=${mysql_location_columns}."
 log "MySQL, ClickHouse, and ZooKeeper are restricted to loopback interfaces."
 log "ClickHouse kline is location-aware and dc-trade-web is healthy."

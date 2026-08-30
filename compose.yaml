@@ -319,6 +319,46 @@ services:
     mem_limit: ${ADMINSVR_MEMORY_LIMIT:-384m}
     cpus: ${ADMINSVR_CPU_LIMIT:-0.15}
 
+  robotsvr:
+    <<: *java-service-base
+    image: ${ROBOTSVR_IMAGE_REPOSITORY:-ghcr.io/bliplink/robotsvr}:${ROBOTSVR_TAG:-saas-crypto}
+    container_name: dc-saas-robotsvr
+    depends_on:
+      mysql:
+        condition: service_healthy
+      gateway:
+        condition: service_started
+      apssvr:
+        condition: service_started
+      ordersvr:
+        condition: service_started
+    environment:
+      TZ: Asia/Shanghai
+      DEPLOY_ROOT: /srv/dc
+      SERVICE_NAME: RobotSvr
+      MAIN_CLASS: com.app.dc.robot.RobotSvr
+      JAVA_OPTS: ${ROBOTSVR_JAVA_OPTS:--server -Xms32m -Xmx256m -Xmn64m -Djava.security.auth.login.config=../../control/jaas.ini}
+      MYSQL_URL: jdbc:mysql://127.0.0.1:${MYSQL_PORT:-33306}/dc?useUnicode=true&characterEncoding=utf8&useSSL=false&serverTimezone=Asia/Shanghai
+      MYSQL_USERNAME: ${MYSQL_USERNAME:-dc}
+      MYSQL_PASSWORD: ${MYSQL_PASSWORD}
+      GATEWAY_HTTP_URL: http://127.0.0.1:${GW_HTTP_PORT:-33002}/api
+      GATEWAY_HOST: 127.0.0.1
+      GATEWAY_TCP_PORT: ${GW_TCP_PORT:-33000}
+      ROBOT_GATEWAY_USER: ${PLATFORM_ADMIN_USERNAME:-platformadmin}
+      ROBOT_GATEWAY_PASSWORD: ${PLATFORM_ADMIN_PASSWORD}
+      ROBOT_GATEWAY_CLIENT_TYPE: Manager
+      ROBOT_GATEWAY_LOCATION: PLATFORM
+      ROBOT_HEDGE_ACCOUNTS_JSON: ${ROBOT_HEDGE_ACCOUNTS_JSON:-}
+      ROBOT_CONFIG_POLL_MS: ${ROBOT_CONFIG_POLL_MS:-3000}
+      ROBOT_LEASE_SECONDS: ${ROBOT_LEASE_SECONDS:-15}
+      ROBOT_FAILURE_THRESHOLD: ${ROBOT_FAILURE_THRESHOLD:-3}
+    volumes:
+      - ${DEPLOY_ROOT}/control:/srv/dc/control:ro
+      - ${DEPLOY_ROOT}/data:/srv/dc/data
+      - ${DEPLOY_ROOT}/log:/srv/dc/log
+    mem_limit: ${ROBOTSVR_MEMORY_LIMIT:-384m}
+    cpus: ${ROBOTSVR_CPU_LIMIT:-0.20}
+
   web:
     image: ${TRADE_WEB_IMAGE_REPOSITORY:-ghcr.io/bliplink/dc-saas-trade-web}:${TRADE_WEB_TAG:-saas-crypto}
     container_name: dc-saas-trade-web
