@@ -16,6 +16,7 @@ die() { printf '[final-liq-e2e] ERROR: %s\n' "$*" >&2; exit 1; }
 safe_identifier() { [[ "$1" =~ ^[A-Za-z0-9_.-]+$ ]]; }
 
 [[ -r "${ENV_FILE}" ]] || die "Cannot read ${ENV_FILE}"
+[[ -n "${E2E_PASSWORD:-}" ]] || die "E2E_PASSWORD is required"
 for value in "${LIQ_LOCATION}" "${OTHER_LOCATION}" "${LIQ_USER}" "${MAKER_USER}" \
   "${ADL_USER}" "${FOREIGN_USER}"; do
   safe_identifier "${value}" || die "Unsupported identifier: ${value}"
@@ -30,6 +31,25 @@ set +a
 mysql_exec() {
   docker exec -i -e MYSQL_PWD="${MYSQL_PASSWORD}" dc-saas-mysql \
     mysql -u"${MYSQL_USERNAME}" -N "$@"
+}
+
+password_hash="$(printf '%s' "${E2E_PASSWORD}" | sha256sum | awk '{print $1}')"
+
+login_user() {
+  local user="$1" request response token
+  request="$(mktemp)"
+  chmod 0600 "${request}"
+  printf '{"serverName":"LoginSvr","method":"SYS.ATS.LOGIN","content":{"user_id":"%s","user_name":"%s","password":"%s","method":"login","client_type":"WEB","cid":"FINAL_LIQ_E2E_%s","Location":"%s"}}\n' \
+    "${user}" "${user}" "${E2E_PASSWORD}" "${user}" "${LIQ_LOCATION}" >"${request}"
+  response="$(curl -fsS --max-time 30 -H 'Content-Type: application/json' \
+    --data-binary "@${request}" "http://127.0.0.1:${WEB_LISTEN_PORT}/httpapi/")" || {
+      rm -f "${request}"
+      die "Could not authenticate final-liquidation liquidity user ${user}"
+    }
+  rm -f "${request}"
+  token="$(sed -n 's/.*"token"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/p' <<<"${response}")"
+  [[ -n "${token}" ]] || die "Login returned no session token for ${user}: ${response}"
+  printf '%s' "${token}"
 }
 
 wait_for_port() {
@@ -56,6 +76,13 @@ wait_for_route() {
     sleep 2
   done
 }
+
+collision_count="$(mysql_exec -e "
+SELECT COUNT(*) FROM dc.dc_users
+WHERE user_name='${MAKER_USER}'
+  AND (user_id<>user_name OR COALESCE(location,'')<>'${LIQ_LOCATION}');" dc)"
+[[ "${collision_count}" == "0" ]] ||
+  die "Final-liquidation maker username belongs to another identity or location"
 
 log "Preparing final-liquidation, insurance and ADL accounts in ${LIQ_LOCATION}."
 {
@@ -96,6 +123,16 @@ VALUES
   ('${ADL_USER}',10,0.7,0,0,NOW(),'FINAL_LIQ_E2E','${LIQ_LOCATION}'),
   ('${FOREIGN_USER}',10,0.7,0,0,NOW(),'FINAL_LIQ_E2E','${OTHER_LOCATION}');
 
+INSERT INTO dc.dc_users
+  (user_id,user_name,name,password,user_type,enable,create_time,update_time,
+   enable_trade,enable_cash_in,enable_cash_out,close_by,location)
+VALUES
+  ('${MAKER_USER}','${MAKER_USER}','Final Liquidation Maker','${password_hash}','1','1',NOW(),NOW(),
+   '1','1','1','FINAL_LIQ_E2E','${LIQ_LOCATION}')
+ON DUPLICATE KEY UPDATE
+  user_id=VALUES(user_id),name=VALUES(name),password=VALUES(password),enable=VALUES(enable),
+  update_time=VALUES(update_time),enable_trade=VALUES(enable_trade),location=VALUES(location);
+
 INSERT INTO dc.dc_orders_position
   (user_id,security_id,symbol,status,position_type,leverage,
    long_position,long_average,long_used_margin,short_position,short_average,short_used_margin,
@@ -122,13 +159,14 @@ wait_for_port "${TRADESVR_GW_PORT}" dc-saas-tradesvr
 docker restart dc-saas-gateway >/dev/null
 wait_for_route OrderSvr
 wait_for_route TDSvr
+maker_session="$(login_user "${MAKER_USER}")"
 
 maker_request="$(mktemp)"
 trap 'rm -f "${maker_request}"' EXIT
 cat >"${maker_request}" <<JSON
 {"serverName":"OrderSvr","method":"placeOrder","content":{"OCType":"OPEN","OrderQty":"0.0001","OrdType":"Limit","ClOrdID":"FINAL-LIQ-MAKER-$(date +%s%N)","Terminal":"API","AlgoName":"cross","Side":"Buy","Price":"60000","UserID":"${MAKER_USER}","MarketIndicator":"4","TimeInForce":"GTC","SecurityID":"BTCUSDT","Location":"${LIQ_LOCATION}"}}
 JSON
-maker_response="$(curl -fsS --max-time 30 -H 'Content-Type: application/json' \
+maker_response="$(curl -fsS --max-time 30 -H 'Content-Type: application/json' -H "sessionId: ${maker_session}" \
   --data-binary "@${maker_request}" "http://127.0.0.1:${WEB_LISTEN_PORT}/httpapi/")" ||
   die "Could not place final-liquidation liquidity order"
 grep -Eq '"code"[[:space:]]*:[[:space:]]*0' <<<"${maker_response}" ||
