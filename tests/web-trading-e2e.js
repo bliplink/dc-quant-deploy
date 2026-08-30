@@ -106,12 +106,15 @@ async function deposit(page, amount) {
 async function placeLimit(page, side, price, amount) {
   const form = page.locator('.placeOrderWrap');
   await form.getByRole('button', { name: 'Limit', exact: true }).click();
-  const inputs = form.locator('input:visible');
-  if (await inputs.count() !== 2) {
-    throw new Error(`expected two visible limit-order inputs, got ${await inputs.count()}`);
+  const priceInput = form.getByRole('textbox', { name: 'Limit Price', exact: true });
+  const amountInput = form.getByRole('textbox', { name: 'Amount', exact: true });
+  if (await priceInput.count() !== 1 || await amountInput.count() !== 1) {
+    throw new Error(
+      `expected one limit-price and one amount input, got price=${await priceInput.count()} amount=${await amountInput.count()}`
+    );
   }
-  await inputs.nth(0).fill(String(price));
-  await inputs.nth(1).fill(String(amount));
+  await priceInput.fill(String(price));
+  await amountInput.fill(String(amount));
   return invokeFromPage(page, 'placeOrder', () =>
     form.getByRole('button', { name: side }).click()
   );
