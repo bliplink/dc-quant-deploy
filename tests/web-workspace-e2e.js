@@ -83,6 +83,16 @@ function layoutItem(snapshot, breakpoint, key) {
       throw new Error('all workspace panels must expose a drag handle while unlocked');
     }
 
+    await page.locator('.symbolDiv').click();
+    const marketDrawer = page.locator('.ant-drawer');
+    const marketSearch = marketDrawer.getByPlaceholder('Search markets');
+    await marketSearch.waitFor({timeout: 10000});
+    await marketSearch.fill('NO_SUCH_MARKET');
+    await marketDrawer.getByText('No markets found', {exact: true}).waitFor({timeout: 10000});
+    await marketSearch.fill('BTC');
+    await marketDrawer.getByText('BTCUSDT', {exact: true}).click();
+    await marketDrawer.waitFor({state: 'hidden', timeout: 10000});
+
     await page.getByText('Last Price', {exact: true}).first().waitFor({timeout: 10000});
     const buyButton = page.getByRole('button', {name: 'Buy / Long'});
     await buyButton.click();
@@ -193,6 +203,7 @@ function layoutItem(snapshot, breakpoint, key) {
       bilingualLogin: true,
       orderInputValidation: true,
       lastPriceHeader: true,
+      searchableMarketSelector: true,
       professionalTheme: colors,
       artifacts: ['workspace-en.png', 'workspace-zh.png']
     }, null, 2));
