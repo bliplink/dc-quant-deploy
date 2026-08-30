@@ -93,7 +93,7 @@ ensure_env_defaults() {
     printf '\nIMAGE_SOURCE=registry\n' >> "${ENV_FILE}"
   fi
   if ! grep -q '^BUILD_ROOT=' "${ENV_FILE}"; then
-    printf 'BUILD_ROOT=/opt/dc-saas-build\n' >> "${ENV_FILE}"
+    printf 'BUILD_ROOT=/data/dc-saas-build\n' >> "${ENV_FILE}"
   fi
   if ! grep -q '^PLATFORM_ADMIN_USERNAME=' "${ENV_FILE}"; then
     printf 'PLATFORM_ADMIN_USERNAME=platformadmin\n' >> "${ENV_FILE}"
@@ -136,9 +136,44 @@ load_env() {
 }
 
 validate_runtime_root() {
+  local resolved_root resolved_build_root
   [[ "${DEPLOY_ROOT}" == /* ]] || die "DEPLOY_ROOT must be absolute."
-  [[ "${DEPLOY_ROOT}" != "/" ]] || die "DEPLOY_ROOT cannot be /."
-  [[ "${DEPLOY_ROOT}" != "/opt" ]] || die "DEPLOY_ROOT cannot be /opt."
+  resolved_root="$(readlink -m "${DEPLOY_ROOT}")"
+  case "${resolved_root}" in
+    /data/dc-saas-runtime|/opt/dc-saas-runtime) ;;
+    *) die "DEPLOY_ROOT must resolve to /data/dc-saas-runtime or /opt/dc-saas-runtime." ;;
+  esac
+  [[ ! -L "${DEPLOY_ROOT}" ]] || die "DEPLOY_ROOT cannot be a symbolic link."
+  resolved_build_root="$(readlink -m "${BUILD_ROOT:-/data/dc-saas-build}")"
+  case "${resolved_build_root}" in
+    /data/dc-saas-build|/opt/dc-saas-build) ;;
+    *) die "BUILD_ROOT must resolve to /data/dc-saas-build or /opt/dc-saas-build." ;;
+  esac
+}
+
+available_memory_mb() {
+  awk '/^MemAvailable:/ {printf "%d\n", $2 / 1024}' /proc/meminfo
+}
+
+available_disk_gb() {
+  local target="$1"
+  while [[ ! -e "${target}" && "${target}" != "/" ]]; do target="$(dirname "${target}")"; done
+  df -Pk "${target}" | awk 'NR==2 {printf "%d\n", $4 / 1024 / 1024}'
+}
+
+validate_runtime_capacity() {
+  local memory_mb runtime_disk_gb docker_root docker_disk_gb
+  memory_mb="$(available_memory_mb)"
+  runtime_disk_gb="$(available_disk_gb "${DEPLOY_ROOT}")"
+  docker_root="$(docker info --format '{{.DockerRootDir}}')"
+  docker_disk_gb="$(available_disk_gb "${docker_root}")"
+  (( memory_mb >= ${SAAS_MIN_AVAILABLE_MEMORY_MB:-8192} )) ||
+    die "Only ${memory_mb} MiB memory is available; at least ${SAAS_MIN_AVAILABLE_MEMORY_MB:-8192} MiB is required."
+  (( runtime_disk_gb >= ${SAAS_MIN_RUNTIME_DISK_GB:-100} )) ||
+    die "Only ${runtime_disk_gb} GiB is free for ${DEPLOY_ROOT}; at least ${SAAS_MIN_RUNTIME_DISK_GB:-100} GiB is required."
+  (( docker_disk_gb >= ${SAAS_MIN_DOCKER_DISK_GB:-15} )) ||
+    die "Only ${docker_disk_gb} GiB is free below Docker root ${docker_root}; at least ${SAAS_MIN_DOCKER_DISK_GB:-15} GiB is required."
+  log "Capacity preflight passed: ${memory_mb} MiB memory, ${runtime_disk_gb} GiB runtime disk, ${docker_disk_gb} GiB Docker disk available."
 }
 
 port_is_listening() {
@@ -286,6 +321,7 @@ ensure_env_defaults
 ensure_host_runtime
 load_env
 validate_runtime_root
+validate_runtime_capacity
 validate_initial_ports
 prepare_runtime_directories
 "${SCRIPT_DIR}/generate-saas-configs.sh" "${ENV_FILE}"

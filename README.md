@@ -21,7 +21,7 @@ market/K-line data.
 All names, ports, and data paths are isolated from a legacy STC installation:
 
 - Compose project and containers: `dc-saas*`
-- Runtime root: `/opt/dc-saas-runtime`
+- Runtime root: `/data/dc-saas-runtime` on the dedicated local data disk
 - Web: `18088`
 - ZooKeeper: `32181`
 - MySQL: `33306` (loopback only)
@@ -128,10 +128,12 @@ sudo ./uninstall-saas.sh --purge-data
 sudo ./uninstall-saas.sh --purge-data --purge-images
 ```
 
-卸载脚本清理名称前缀 `dc-saas-*`、带 `dc.saas.role` 标签，或明确挂载本仓库测试目录/`/opt/dc-saas-runtime` 的验收容器，同时清理 Compose 项目 `dc-saas` 以及 `dc-saas-*` 前缀的网络和卷（包括 Web E2E 缓存卷）；不会选择量化系统或 `/opt/sumscope`。
+卸载脚本清理名称前缀 `dc-saas-*`、带 `dc.saas.role` 标签，或明确挂载本仓库测试目录/`/data/dc-saas-runtime` 的验收容器，同时清理 Compose 项目 `dc-saas` 以及 `dc-saas-*` 前缀的网络和卷（包括 Web E2E 缓存卷）；不会选择量化系统、`/opt/dc-runtime` 或 `/opt/sumscope`。
 
 The purge command accepts only the exact
-`/opt/dc-saas-runtime` path and never selects `/opt/sumscope`.
+`/data/dc-saas-runtime` or legacy `/opt/dc-saas-runtime` path and never selects
+`/opt/dc-runtime` or `/opt/sumscope`. Image purge removes only the exact SaaS
+tags and never deletes a shared image ID used by the quantitative stack.
 
 Redeploy with the preserved data by running `sudo ./deploy-saas.sh` again.
 

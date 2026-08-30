@@ -19,7 +19,7 @@ set -a
 . "${ENV_FILE}"
 set +a
 
-BUILD_ROOT="${BUILD_ROOT:-/opt/dc-saas-build}"
+BUILD_ROOT="${BUILD_ROOT:-/data/dc-saas-build}"
 MAVEN_BUILD_IMAGE="${MAVEN_BUILD_IMAGE:-docker.m.daocloud.io/library/maven:3.9.9-eclipse-temurin-8}"
 SRC_ROOT="${BUILD_ROOT}/src"
 M2_ROOT="${BUILD_ROOT}/m2"

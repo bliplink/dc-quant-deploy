@@ -5,7 +5,7 @@ SaaS product. Report vulnerabilities privately to the maintainers.
 
 Never commit:
 
-- `.env.prod` or generated files under `/opt/dc-saas-runtime/control`;
+- `.env.prod` or generated files under `/data/dc-saas-runtime/control`;
 - MySQL or ClickHouse passwords;
 - exchange API keys, signing keys, wallet keys, or user credentials;
 - production logs, database files, backups, or customer trading data.

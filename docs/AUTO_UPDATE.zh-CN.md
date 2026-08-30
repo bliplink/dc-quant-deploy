@@ -40,8 +40,8 @@ sudo ./auto-update-saas.sh --force
 
 ## 状态和日志
 
-- 日志：`/opt/dc-saas-runtime/log/auto-update-saas.log`
-- 状态：`/opt/dc-saas-runtime/auto-update/`
+- 日志：`/data/dc-saas-runtime/log/auto-update-saas.log`
+- 状态：`/data/dc-saas-runtime/auto-update/`
 - 最近成功发布：`last-successful.meta`
 - 最近成功 digest 集合：`last-successful.digestset`
 - 等待安静窗口的候选版本：`pending.digestset`

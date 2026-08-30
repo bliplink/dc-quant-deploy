@@ -24,7 +24,7 @@ Without flags, remove only containers whose names start with dc-saas-, plus
 this Compose project's networks and volumes, while preserving MySQL,
 ClickHouse, ZooKeeper, logs, generated config, and images.
 
---purge-data    Also permanently remove /opt/dc-saas-runtime.
+--purge-data    Also permanently remove the validated standalone SaaS runtime root.
 --purge-images  Also remove images referenced by any dc-saas-* container.
 
 The independent quantitative-trading and legacy /opt/sumscope services are
@@ -89,27 +89,12 @@ discover_saas_container_ids() {
   done
 }
 
-saas_container_ids="$(discover_saas_container_ids | sort -u)"
-image_ids=""
 image_refs=""
 if [[ "${PURGE_IMAGES}" == "true" ]]; then
-  image_ids="$(
-    {
-      compose images -q 2>/dev/null || true
-      if [[ -n "${saas_container_ids}" ]]; then
-        for container_id in ${saas_container_ids}; do
-          docker inspect --format '{{.Image}}' "${container_id}" 2>/dev/null || true
-        done
-      fi
-    } | sort -u
-  )"
-  if [[ -n "${image_ids}" ]]; then
-    image_refs="$(
-      for image_id in ${image_ids}; do
-        docker image inspect --format '{{range .RepoTags}}{{println .}}{{end}}' "${image_id}" 2>/dev/null || true
-      done | grep -v '<none>' | sort -u || true
-    )"
-  fi
+  # Remove only the exact image references declared by the SaaS Compose file.
+  # Never delete by image ID: the quant stack may legitimately use another tag
+  # that resolves to the same immutable image.
+  image_refs="$(compose config --images 2>/dev/null | sort -u || true)"
 fi
 
 compose down --volumes --remove-orphans
@@ -144,29 +129,26 @@ fi
 log "Removed all dc-saas-* containers and this Compose project's networks and volumes."
 
 if [[ "${PURGE_IMAGES}" == "true" && -n "${image_refs}" ]]; then
-  # Remove every tag pointing at a captured SaaS image before deleting by ID;
-  # Docker otherwise rejects IDs that have multiple repository references.
+  # Remove only the exact SaaS tags captured from this Compose model.
   # shellcheck disable=SC2086
   docker image rm ${image_refs} || true
 fi
 
-if [[ "${PURGE_IMAGES}" == "true" && -n "${image_ids}" ]]; then
-  # shellcheck disable=SC2086
-  docker image rm ${image_ids} || true
-  log "Removed captured SaaS image references and unreferenced image layers."
-fi
-
 if [[ "${PURGE_DATA}" == "true" ]]; then
   resolved_root="$(readlink -m "${DEPLOY_ROOT}")"
-  [[ "${resolved_root}" == "/opt/dc-saas-runtime" ]] ||
-    die "Refusing data purge outside the exact validated root /opt/dc-saas-runtime (resolved: ${resolved_root})."
+  case "${resolved_root}" in
+    /data/dc-saas-runtime|/opt/dc-saas-runtime) ;;
+    *) die "Refusing data purge outside a validated SaaS runtime root (resolved: ${resolved_root})." ;;
+  esac
   [[ ! -L "${DEPLOY_ROOT}" ]] || die "Refusing to purge a symbolic-link runtime root."
   rm -rf --one-file-system "${resolved_root}"
   log "Permanently removed ${resolved_root}. This data is not recoverable unless separately backed up."
 
-  resolved_build_root="$(readlink -m "${BUILD_ROOT:-/opt/dc-saas-build}")"
-  [[ "${resolved_build_root}" == "/opt/dc-saas-build" ]] ||
-    die "Refusing build-cache purge outside /opt/dc-saas-build (resolved: ${resolved_build_root})."
+  resolved_build_root="$(readlink -m "${BUILD_ROOT:-/data/dc-saas-build}")"
+  case "${resolved_build_root}" in
+    /data/dc-saas-build|/opt/dc-saas-build) ;;
+    *) die "Refusing build-cache purge outside a validated SaaS build root (resolved: ${resolved_build_root})." ;;
+  esac
   [[ ! -L "${resolved_build_root}" ]] || die "Refusing to purge a symbolic-link build root."
   rm -rf --one-file-system "${resolved_build_root}"
   log "Removed the isolated SaaS source and Maven build cache at ${resolved_build_root}."
