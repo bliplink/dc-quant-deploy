@@ -99,17 +99,28 @@ function layoutItem(snapshot, breakpoint, key) {
     await page.getByText('Enter an amount greater than 0.', {exact: true}).waitFor({timeout: 10000});
 
     await page.getByRole('button', {name: 'Limit', exact: true}).click();
-    let orderInputs = page.locator('.placeOrderWrap input:visible');
-    await orderInputs.nth(1).fill('1');
+    await page.getByLabel('Amount').fill('1');
     await buyButton.click();
     await page.getByText('Enter a limit price greater than 0.', {exact: true}).waitFor({timeout: 10000});
 
     await page.getByRole('button', {name: 'Conditional', exact: true}).click();
-    orderInputs = page.locator('.placeOrderWrap input:visible');
-    await orderInputs.nth(1).fill('1');
     await buyButton.click();
     await page.getByText('Enter a trigger price greater than 0.', {exact: true}).waitFor({timeout: 10000});
+    await page.getByLabel('Execution Type').selectOption('Market');
+    if (await page.getByLabel('Limit Price').isVisible()) {
+      throw new Error('conditional market must not display a limit price');
+    }
+    if (!(await page.getByLabel('Time in Force').isDisabled())) {
+      throw new Error('conditional market must force IOC');
+    }
+    await page.getByLabel('Reduce Only').check();
+    if (!(await page.getByLabel('Reduce Only').isChecked())) {
+      throw new Error('reduce-only control did not retain its state');
+    }
     await page.getByRole('button', {name: 'Market', exact: true}).click();
+    await page.getByLabel('Amount').fill('1e2');
+    await buyButton.click();
+    await page.getByText('Enter an amount greater than 0.', {exact: true}).waitFor({timeout: 10000});
 
     const before = await layoutSnapshot(page);
     const chartPanel = panels.nth(0);
@@ -202,6 +213,8 @@ function layoutItem(snapshot, breakpoint, key) {
       languages: ['en', 'zh'],
       bilingualLogin: true,
       orderInputValidation: true,
+      conditionalOrderModes: true,
+      reduceOnlyControl: true,
       lastPriceHeader: true,
       searchableMarketSelector: true,
       professionalTheme: colors,
