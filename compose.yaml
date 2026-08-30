@@ -239,13 +239,15 @@ services:
       DEPLOY_ROOT: /srv/dc
       SERVICE_NAME: TradeSvr
       MAIN_CLASS: TradeSvr
-      JAVA_OPTS: ${TRADESVR_JAVA_OPTS:--server -Xms64m -Xmx384m -Xmn96m -Djava.security.auth.login.config=../../control/jaas.ini}
+      MALLOC_ARENA_MAX: ${TRADESVR_MALLOC_ARENA_MAX:-2}
+      JAVA_OPTS: ${TRADESVR_JAVA_OPTS:--server -Xms64m -Xmx384m -Xmn96m -Xss256k -XX:MaxDirectMemorySize=128m -XX:+ExitOnOutOfMemoryError -Djava.security.auth.login.config=../../control/jaas.ini}
     volumes:
       - ${DEPLOY_ROOT}/control:/srv/dc/control:ro
       - ${DEPLOY_ROOT}/data:/srv/dc/data
       - ${DEPLOY_ROOT}/log:/srv/dc/log
       - ${DEPLOY_ROOT}/control/overrides/TradeSvr/config/application.properties:/srv/dc/dc/TradeSvr/config/application.properties:ro
-    mem_limit: ${TRADESVR_MEMORY_LIMIT:-640m}
+      - ${DEPLOY_ROOT}/control/overrides/TradeSvr/config/log4j.ini:/srv/dc/dc/TradeSvr/config/log4j.ini:ro
+    mem_limit: ${TRADESVR_MEMORY_LIMIT:-896m}
     cpus: ${TRADESVR_CPU_LIMIT:-0.50}
 
   liqsvr:

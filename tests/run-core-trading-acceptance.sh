@@ -132,7 +132,7 @@ dc-saas-loginsvr 256m 402653184
 dc-saas-mdsvr 448m 671088640
 dc-saas-apssvr 448m 671088640
 dc-saas-ordersvr 448m 671088640
-dc-saas-tradesvr 384m 671088640
+dc-saas-tradesvr 384m 939524096
 dc-saas-liqsvr 256m 402653184
 dc-saas-managersvr 256m 402653184
 dc-saas-adminsvr 256m 402653184

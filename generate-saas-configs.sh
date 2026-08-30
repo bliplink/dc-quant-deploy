@@ -292,6 +292,31 @@ dbpool.cfg=../../control/DBPoolConfig.ini
 dbpool.default=MYSQL0
 EOF
 
+# TradeSvr's successful order/execution path is intentionally quieter than the
+# default image configuration. At sustained matching rates those messages are
+# emitted several times per fill to both a file and stdout, creating needless
+# I/O and cgroup page-cache pressure. Warnings, failures and lifecycle events
+# remain at INFO/WARN through the root logger.
+cat > "${OVERRIDE_ROOT}/TradeSvr/config/log4j.ini" <<'EOF'
+log4j.rootLogger=INFO,file,stdout
+
+log4j.appender.file=org.apache.log4j.DailyRollingFileAppender
+log4j.appender.file.File=./log/TradeSvr.log
+log4j.appender.file.Append=true
+log4j.appender.file.layout=org.apache.log4j.PatternLayout
+log4j.appender.file.layout.ConversionPattern=%d{yyyy/MM/dd HH:mm:ss.SSS} %p %m (%C{1}:%L)%n
+
+log4j.appender.stdout=org.apache.log4j.ConsoleAppender
+log4j.appender.stdout.Target=System.out
+log4j.appender.stdout.follow=true
+log4j.appender.stdout.layout=org.apache.log4j.PatternLayout
+log4j.appender.stdout.layout.ConversionPattern=%d{yyyy/MM/dd HH:mm:ss.SSS} %p %m (%C{1}:%L)%n
+
+log4j.logger.com.app.dc.service.check.ProcessOrder=WARN
+log4j.logger.com.app.dc.service.order.OrderManager=WARN
+log4j.logger.com.app.dc.handler.UpdateOrderHandler=WARN
+EOF
+
 cat > "${OVERRIDE_ROOT}/LiqSvr/config/application.properties" <<EOF
 tradeServerKey=SERVER.TradeSvr
 serverKey=SERVER.LiqSvr
