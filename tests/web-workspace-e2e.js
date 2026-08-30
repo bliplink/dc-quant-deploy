@@ -121,6 +121,11 @@ function layoutItem(snapshot, breakpoint, key) {
     await page.getByLabel('Amount').fill('1e2');
     await buyButton.click();
     await page.getByText('Enter an amount greater than 0.', {exact: true}).first().waitFor({timeout: 10000});
+    await page.waitForFunction(
+      () => document.querySelectorAll('.ant-message-notice').length === 0,
+      null,
+      {timeout: 10000}
+    );
 
     const before = await layoutSnapshot(page);
     const chartPanel = panels.nth(0);
