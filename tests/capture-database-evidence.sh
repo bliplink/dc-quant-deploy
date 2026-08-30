@@ -6,12 +6,26 @@ DEPLOY_DIR="$(cd "${SCRIPT_DIR}/.." && pwd)"
 ENV_FILE="${ENV_FILE:-${DEPLOY_DIR}/.env.prod}"
 EVIDENCE_LOCATION="${EVIDENCE_LOCATION:-CORE_E2E}"
 EVIDENCE_RUNNER_NAME="${EVIDENCE_RUNNER_NAME:-dc-saas-web-e2e-runner}"
+EVIDENCE_HOST_LABEL="${EVIDENCE_HOST_LABEL:-$(hostname -f 2>/dev/null || hostname)}"
+EVIDENCE_BUYER="${EVIDENCE_BUYER:-corebuyer}"
+EVIDENCE_SELLER="${EVIDENCE_SELLER:-coreseller}"
+EVIDENCE_STRESS_MAKER="${EVIDENCE_STRESS_MAKER:-stressmaker}"
+EVIDENCE_STRESS_TAKER="${EVIDENCE_STRESS_TAKER:-stresstaker}"
+EVIDENCE_FINAL_LIQUIDATED="${EVIDENCE_FINAL_LIQUIDATED:-final_liquidated}"
+EVIDENCE_FINAL_ADL="${EVIDENCE_FINAL_ADL:-final_adl_high}"
 
 [[ -r "${ENV_FILE}" ]] || { echo "Cannot read ${ENV_FILE}" >&2; exit 1; }
 [[ "${EVIDENCE_LOCATION}" =~ ^[A-Za-z0-9_.-]+$ ]] || {
   echo "Unsupported evidence location: ${EVIDENCE_LOCATION}" >&2
   exit 1
 }
+for identifier in "${EVIDENCE_BUYER}" "${EVIDENCE_SELLER}" "${EVIDENCE_STRESS_MAKER}" \
+  "${EVIDENCE_STRESS_TAKER}" "${EVIDENCE_FINAL_LIQUIDATED}" "${EVIDENCE_FINAL_ADL}"; do
+  [[ "${identifier}" =~ ^[A-Za-z0-9_.-]+$ ]] || {
+    echo "Unsupported evidence user: ${identifier}" >&2
+    exit 1
+  }
+done
 
 set -a
 # shellcheck disable=SC1090
@@ -43,20 +57,21 @@ SELECT b.location,b.user_id,b.balance,b.used_margin,b.freezed_margin,b.freezed_c
 FROM dc_users_balance b LEFT JOIN dc_orders_position p
   ON p.location=b.location AND p.user_id=b.user_id AND p.security_id='BTCUSDT'
 WHERE b.location='${EVIDENCE_LOCATION}'
-  AND b.user_id IN ('corebuyer','coreseller','stressmaker','stresstaker','final_liquidated','final_adl_high','adl_high','adl_low')
+  AND b.user_id IN ('${EVIDENCE_BUYER}','${EVIDENCE_SELLER}','${EVIDENCE_STRESS_MAKER}','${EVIDENCE_STRESS_TAKER}',
+                    '${EVIDENCE_FINAL_LIQUIDATED}','${EVIDENCE_FINAL_ADL}','adl_high','adl_low')
 ORDER BY b.user_id;"
 
 mysql_table "${work_dir}/orders.txt" "
 SELECT location,user_id,order_id,clord_id,oc_type,side,ord_type,timeinforce,price,order_qty,
        cum_qty,leaves_qty,ord_status,reduce_only,close_by,transact_time
 FROM dc_orders WHERE location='${EVIDENCE_LOCATION}'
-  AND user_id IN ('corebuyer','coreseller')
+  AND user_id IN ('${EVIDENCE_BUYER}','${EVIDENCE_SELLER}')
 ORDER BY transact_time DESC LIMIT 12;"
 
 mysql_table "${work_dir}/executions.txt" "
 SELECT location,user_id,order_id,exec_id,oc_type,side,last_px,last_qty,fee,maker,close_by,transact_time
 FROM dc_orders_execorders WHERE location='${EVIDENCE_LOCATION}'
-  AND user_id IN ('corebuyer','coreseller')
+  AND user_id IN ('${EVIDENCE_BUYER}','${EVIDENCE_SELLER}')
 ORDER BY transact_time DESC LIMIT 12;"
 
 mysql_table "${work_dir}/risk.txt" "
@@ -77,7 +92,8 @@ SELECT location,user_id,COUNT(*) posting_rows,
        SUM(source='ADL_REALIZED') adl_realized_rows,
        SUM(source='ADL_ALLOCATION') adl_allocation_rows
 FROM dc_users_posting WHERE location='${EVIDENCE_LOCATION}'
-  AND user_id IN ('corebuyer','coreseller','stressmaker','stresstaker','final_adl_high','adl_high','adl_low')
+  AND user_id IN ('${EVIDENCE_BUYER}','${EVIDENCE_SELLER}','${EVIDENCE_STRESS_MAKER}',
+                  '${EVIDENCE_STRESS_TAKER}','${EVIDENCE_FINAL_ADL}','adl_high','adl_low')
 GROUP BY location,user_id ORDER BY user_id;"
 
 clickhouse_table "${work_dir}/clickhouse.txt" "
@@ -110,7 +126,7 @@ main{width:1540px;margin:0 auto;padding:34px 42px 60px} h1{font-size:30px;margin
 h2{font-size:19px;color:#f0b90b;margin:0 0 12px}code{color:#9dc4ff}pre{margin:0;white-space:pre-wrap;color:#d7dde5;font:13px/1.45 Consolas,monospace}
 .ok{display:inline-block;background:#0ecb81;color:#071a13;border-radius:16px;padding:4px 11px;font-weight:700}
 </style></head><body><main><h1>STC SaaS Crypto 核心交易数据库证据</h1>
-<div class="meta"><span class="ok">REAL DATA / PASS</span>　主机 172.16.97.64　租户 ${EVIDENCE_LOCATION}<br>
+<div class="meta"><span class="ok">REAL DATA / PASS</span>　主机 ${EVIDENCE_HOST_LABEL}　租户 ${EVIDENCE_LOCATION}<br>
 采集时间 ${captured_at}　MySQL ${mysql_version}　ClickHouse ${clickhouse_version}</div>
 HTML
   for section in \
