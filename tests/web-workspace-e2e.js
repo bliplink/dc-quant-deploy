@@ -131,7 +131,10 @@ function layoutItem(snapshot, breakpoint, key) {
 
     await page.mouse.move(handleBox.x + handleBox.width / 2, handleBox.y + handleBox.height / 2);
     await page.mouse.down();
-    await page.mouse.move(handleBox.x + 360, handleBox.y + 250, {steps: 20});
+    // Move the wide chart below the occupied top-row panels. Dropping it into
+    // the order-book/place-order cells is a collision and vertical compaction
+    // legitimately restores the original layout.
+    await page.mouse.move(handleBox.x + handleBox.width / 2, handleBox.y + 720, {steps: 30});
     await page.mouse.up();
     await page.waitForTimeout(800);
 
