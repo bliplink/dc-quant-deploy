@@ -84,6 +84,7 @@ ensure_env_file() {
   set_env_value MYSQL_ROOT_PASSWORD "$(generate_secret)"
   set_env_value CLICKHOUSE_PASSWORD "$(generate_secret)"
   set_env_value LOGIN_DEFAULT_PASSWORD "$(generate_secret)"
+  set_env_value PLATFORM_ADMIN_PASSWORD "$(generate_secret)"
   log "Created ${ENV_FILE} with generated local secrets."
 }
 
@@ -93,6 +94,12 @@ ensure_env_defaults() {
   fi
   if ! grep -q '^BUILD_ROOT=' "${ENV_FILE}"; then
     printf 'BUILD_ROOT=/opt/dc-saas-build\n' >> "${ENV_FILE}"
+  fi
+  if ! grep -q '^PLATFORM_ADMIN_USERNAME=' "${ENV_FILE}"; then
+    printf 'PLATFORM_ADMIN_USERNAME=platformadmin\n' >> "${ENV_FILE}"
+  fi
+  if ! grep -q '^PLATFORM_ADMIN_PASSWORD=' "${ENV_FILE}"; then
+    printf 'PLATFORM_ADMIN_PASSWORD=%s\n' "$(generate_secret)" >> "${ENV_FILE}"
   fi
   migrate_env_value IMAGE_SOURCE local registry
   migrate_env_value GW_IMAGE_REPOSITORY dc-saas/gw ghcr.io/bliplink/gw
@@ -240,6 +247,25 @@ apply_mysql_migrations() {
   done
 }
 
+provision_platform_admin() {
+  [[ "${PLATFORM_ADMIN_USERNAME}" =~ ^[A-Za-z0-9_.@-]{3,64}$ ]] \
+    || die "PLATFORM_ADMIN_USERNAME contains unsupported characters."
+  [[ -n "${PLATFORM_ADMIN_PASSWORD}" && "${PLATFORM_ADMIN_PASSWORD}" != "replace-with-generated-secret" ]] \
+    || die "PLATFORM_ADMIN_PASSWORD must be a generated secret."
+
+  local password_hash
+  password_hash="$(printf '%s' "${PLATFORM_ADMIN_PASSWORD}" | sha256sum | awk '{print $1}')"
+  docker exec -i -e MYSQL_PWD="${MYSQL_ROOT_PASSWORD}" dc-saas-mysql \
+    mysql --protocol=TCP -h127.0.0.1 -P"${MYSQL_PORT}" -uroot dc <<SQL
+INSERT INTO dc_users(user_id,user_name,name,password,user_type,enable,remark,create_time,update_time,
+  enable_trade,enable_cash_in,enable_cash_out,close_by,location)
+VALUES('${PLATFORM_ADMIN_USERNAME}','${PLATFORM_ADMIN_USERNAME}','Platform Administrator','${password_hash}',
+  '1','1','SaaS platform operations',NOW(3),NOW(3),'0','0','0','deploy-saas','PLATFORM')
+ON DUPLICATE KEY UPDATE password=VALUES(password),enable='1',update_time=NOW(3),close_by='deploy-saas';
+SQL
+  log "Platform administrator ${PLATFORM_ADMIN_USERNAME} provisioned for location PLATFORM."
+}
+
 verify_ghcr_access() {
   [[ "${REQUIRE_GHCR_LOGIN:-false}" == "true" ]] || return 0
   if [[ -n "${GHCR_USERNAME:-}" && -n "${GHCR_TOKEN:-}" ]]; then
@@ -289,6 +315,7 @@ wait_for_health dc-saas-mysql 420
 wait_for_health dc-saas-clickhouse 420
 wait_for_health dc-saas-zookeeper 120
 apply_mysql_migrations
+provision_platform_admin
 
 log "Starting the SaaS application services and dc-trade-web."
 compose_up -d
