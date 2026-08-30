@@ -397,7 +397,7 @@ cat > "${OVERRIDE_ROOT}/GW/config/spring-gw-client.xml" <<'EOF'
     <property name="Subscribes">
       <map>
         <entry key="LoginSvr" value="SYS.ATS.LOGIN|1dc.login.apikey"/>
-        <entry key="MDSvr" value="dc.md.kline.**|dc.md.trade.**|dc.md.depth.**"/>
+        <entry key="MDSvr" value="dc.md.kline.**|dc.md.trade.**|dc.md.orderbook.**|dc.md.depth.**"/>
         <entry key="APSSvr" value="dc.aps"/>
       </map>
     </property>

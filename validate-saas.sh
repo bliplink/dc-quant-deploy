@@ -37,6 +37,12 @@ compose() {
   docker compose --env-file "${ENV_FILE}" -f "${SCRIPT_DIR}/compose.yaml" "$@"
 }
 
+gateway_client_config="${DEPLOY_ROOT}/control/overrides/GW/config/spring-gw-client.xml"
+[[ -r "${gateway_client_config}" ]] ||
+  die "Generated GW client configuration is missing: ${gateway_client_config}."
+grep -Fq 'dc.md.orderbook.**' "${gateway_client_config}" ||
+  die "GW is not subscribed to tenant order-book broadcasts (dc.md.orderbook.**)."
+
 services="$(compose config --services)"
 if grep -Eiq '(^|_)(quant|ind|sim|batch|customind)' <<<"${services}"; then
   die "Quantitative-trading services leaked into the SaaS compose model."
