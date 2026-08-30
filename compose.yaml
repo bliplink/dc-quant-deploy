@@ -92,15 +92,21 @@ services:
       TZ: Asia/Shanghai
       # Java services also use host networking. Bind ZooKeeper directly to the
       # isolated SaaS port to avoid the legacy kernel's docker-proxy resets.
-      ZOO_SERVERS: server.1=localhost:32888:33888;${ZOOKEEPER_PORT:-32181}
+      ZOO_SERVERS: server.1=localhost:32888:33888
       ZOO_4LW_COMMANDS_WHITELIST: ruok,srvr,mntr
       ZOO_ADMINSERVER_ENABLED: "false"
-      ZOO_CFG_EXTRA: authProvider.1=org.apache.zookeeper.server.auth.SASLAuthenticationProvider requireClientAuthScheme=sasl clientPortAddress=127.0.0.1
+      ZOO_CFG_EXTRA: authProvider.1=org.apache.zookeeper.server.auth.SASLAuthenticationProvider requireClientAuthScheme=sasl clientPort=${ZOOKEEPER_PORT:-32181} clientPortAddress=127.0.0.1
       SERVER_JVMFLAGS: -Djava.security.auth.login.config=/conf/jaas.ini
     volumes:
       - ${DEPLOY_ROOT}/data/zookeeper:/data
       - ${DEPLOY_ROOT}/log/zookeeper:/datalog
       - ${DEPLOY_ROOT}/control/zookeeper-jaas.ini:/conf/jaas.ini:ro
+    healthcheck:
+      test: ["CMD-SHELL", "zkServer.sh status >/dev/null 2>&1"]
+      interval: 10s
+      timeout: 5s
+      retries: 30
+      start_period: 20s
     mem_limit: ${ZOOKEEPER_MEMORY_LIMIT:-384m}
     cpus: ${ZOOKEEPER_CPU_LIMIT:-0.10}
 

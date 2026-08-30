@@ -57,7 +57,7 @@ for container in "${expected_containers[@]}"; do
   }
 done
 
-for container in dc-saas-mysql dc-saas-clickhouse dc-saas-trade-web; do
+for container in dc-saas-mysql dc-saas-clickhouse dc-saas-zookeeper dc-saas-trade-web; do
   health="$(docker inspect --format '{{.State.Health.Status}}' "${container}" 2>/dev/null || true)"
   [[ "${health}" == "healthy" ]] || die "${container} health is ${health:-missing}."
 done
