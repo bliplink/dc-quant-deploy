@@ -1,0 +1,88 @@
+[core-stress] Pausing LiqSvr so background liquidation cannot alter load-test order flow.
+[core-stress] Preparing isolated load accounts in CORE_HIGH_3000X32_RETRY.
+[core-stress] Reloading the stateful services before the load run.
+[core-stress] Running 3000 resting/cancel and 3000 matched orders at concurrency 32.
+[core-load] resting-order-place: success=3000 failed=0 wallMs=20844.6
+[core-load] mass-cancel: success=1 failed=0 wallMs=3096.2
+[core-load] maker-place: success=3000 failed=0 wallMs=13987.6
+[core-load] taker-match: success=3000 failed=0 wallMs=12896.3
+{
+  "runId": "HIGH_3000X32_RETRY_20260830",
+  "generatedAt": "2026-08-30T14:26:01.485Z",
+  "endpoint": "http://127.0.0.1:18088/httpapi/",
+  "location": "CORE_HIGH_3000X32_RETRY",
+  "maker": "stressm3rt",
+  "taker": "stresst3rt",
+  "orders": 3000,
+  "concurrency": 32,
+  "requestTimeoutMs": 30000,
+  "phases": [
+    {
+      "name": "resting-order-place",
+      "total": 3000,
+      "success": 3000,
+      "failed": 0,
+      "wallMs": 20844.586151,
+      "throughput": 143.92226251304479,
+      "latencyMs": {
+        "min": 14.824125,
+        "p50": 198.0865,
+        "p95": 403.417426,
+        "p99": 802.640664,
+        "max": 1599.236329
+      },
+      "failureSamples": []
+    },
+    {
+      "name": "mass-cancel",
+      "total": 1,
+      "success": 1,
+      "failed": 0,
+      "wallMs": 3096.186883,
+      "throughput": 0,
+      "latencyMs": {
+        "p50": 3095.963127,
+        "p95": 3095.963127,
+        "p99": 3095.963127,
+        "max": 3095.963127
+      },
+      "failureSamples": []
+    },
+    {
+      "name": "maker-place",
+      "total": 3000,
+      "success": 3000,
+      "failed": 0,
+      "wallMs": 13987.581835,
+      "throughput": 214.47595698731436,
+      "latencyMs": {
+        "min": 10.44819,
+        "p50": 115.593209,
+        "p95": 275.9655,
+        "p99": 310.916836,
+        "max": 504.762528
+      },
+      "failureSamples": []
+    },
+    {
+      "name": "taker-match",
+      "total": 3000,
+      "success": 3000,
+      "failed": 0,
+      "wallMs": 12896.250698,
+      "throughput": 232.62575071258902,
+      "latencyMs": {
+        "min": 9.667509,
+        "p50": 108.285543,
+        "p95": 210.927484,
+        "p99": 310.099418,
+        "max": 492.015166
+      },
+      "failureSamples": []
+    }
+  ],
+  "passed": true
+}
+[core-stress] Restarting stateful services to verify persisted recovery.
+[core-stress] Closing the recovered positions through reduce-only matching.
+[core-stress] PASS: load, matching accounting, uniqueness and restart recovery checks succeeded. Artifacts: /data/dc-saas-runtime/e2e-artifacts/stress-HIGH_3000X32_RETRY_20260830

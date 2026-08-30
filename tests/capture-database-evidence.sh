@@ -147,9 +147,17 @@ HTML
 
 docker exec dc-saas-trade-web mkdir -p /usr/share/nginx/html/evidence
 docker cp "${html}" dc-saas-trade-web:/usr/share/nginx/html/evidence/database-evidence.html
+runner_artifact_source="$(docker inspect --format \
+  '{{range .Mounts}}{{if eq .Destination "/artifacts"}}{{.Source}}{{end}}{{end}}' \
+  "${EVIDENCE_RUNNER_NAME}")"
+[[ -n "${runner_artifact_source}" && "${artifact_dir}" == "${runner_artifact_source}"/* ]] || {
+  echo "Evidence directory is outside runner /artifacts mount: ${artifact_dir}" >&2
+  exit 1
+}
+runner_artifact_rel="${artifact_dir#${runner_artifact_source}/}"
 docker exec \
   -e EVIDENCE_URL="http://127.0.0.1:${WEB_LISTEN_PORT}/evidence/database-evidence.html" \
-  -e EVIDENCE_OUTPUT=/artifacts/final-evidence/database-evidence.png \
+  -e EVIDENCE_OUTPUT="/artifacts/${runner_artifact_rel}/database-evidence.png" \
   -e NODE_PATH=/runner/node_modules \
   "${EVIDENCE_RUNNER_NAME}" node /work/capture-evidence-screenshot.js
 

@@ -1,0 +1,77 @@
+{
+  "runId": "POSTFIX2_1000X16_20260830",
+  "generatedAt": "2026-08-30T14:44:26.095Z",
+  "endpoint": "http://127.0.0.1:18088/httpapi/",
+  "location": "POSTFIX2_E2E",
+  "maker": "p2stressmaker",
+  "taker": "p2stresstaker",
+  "orders": 1000,
+  "concurrency": 16,
+  "requestTimeoutMs": 30000,
+  "phases": [
+    {
+      "name": "resting-order-place",
+      "total": 1000,
+      "success": 1000,
+      "failed": 0,
+      "wallMs": 12249.696289,
+      "throughput": 81.63467700811337,
+      "latencyMs": {
+        "min": 11.309329,
+        "p50": 194.084241,
+        "p95": 393.376169,
+        "p99": 813.635619,
+        "max": 902.039873
+      },
+      "failureSamples": []
+    },
+    {
+      "name": "mass-cancel",
+      "total": 1,
+      "success": 1,
+      "failed": 0,
+      "wallMs": 978.549732,
+      "throughput": 0,
+      "latencyMs": {
+        "p50": 978.333877,
+        "p95": 978.333877,
+        "p99": 978.333877,
+        "max": 978.333877
+      },
+      "failureSamples": []
+    },
+    {
+      "name": "maker-place",
+      "total": 1000,
+      "success": 1000,
+      "failed": 0,
+      "wallMs": 6899.969495,
+      "throughput": 144.9281769614548,
+      "latencyMs": {
+        "min": 9.851698,
+        "p50": 100.530177,
+        "p95": 195.851224,
+        "p99": 205.736552,
+        "max": 215.112681
+      },
+      "failureSamples": []
+    },
+    {
+      "name": "taker-match",
+      "total": 1000,
+      "success": 1000,
+      "failed": 0,
+      "wallMs": 6812.840449,
+      "throughput": 146.7816555349952,
+      "latencyMs": {
+        "min": 9.357436,
+        "p50": 100.334761,
+        "p95": 194.057592,
+        "p99": 325.967386,
+        "max": 405.950177
+      },
+      "failureSamples": []
+    }
+  ],
+  "passed": true
+}

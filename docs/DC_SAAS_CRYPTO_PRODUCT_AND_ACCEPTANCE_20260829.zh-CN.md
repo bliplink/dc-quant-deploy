@@ -1,12 +1,12 @@
 # DC SaaS 加密货币永续合约系统产品与验收说明
 
-文档版本：V1.1
+文档版本：V1.2
 
 基线日期：2026-08-30
 
 代码分支：`saas-crypto`
 
-历史核心验收环境：`172.16.97.64`，`location=CORE_E2E`；下一统一部署环境：`172.16.97.105`
+当前生产验证环境：`18.140.45.126`，Compose 项目 `dc-saas`，最终隔离回归 `location=POSTFIX2_E2E`
 
 ## 1. 文档目的与结论
 
@@ -14,7 +14,7 @@
 
 截至本基线，单租户单交易对的永续合约核心闭环已经形成并通过自动化验收：登录、测试入金、限价/市价下单、撤单、撮合、行情、订单与成交查询、资金与持仓、手续费、杠杆和风险档位、资金费、只减仓、止盈止损/OCO、部分强平、最终强平、保险基金和事务型 ADL。
 
-本轮在 64 环境完成 17,100 个压力订单请求、11,400 条双方执行记录和 11,400 条成交资金流水的精确核对；峰值档为 3,000 个挂单、3,000 个 maker 单、3,000 个 taker 单，32 并发，全部成功。五个核心服务共 140 项单元测试全部通过，完整主机验收退出码为 0。
+本轮在生产验证环境完成峰值档 3,000 个挂单、3,000 个 maker 单、3,000 个 taker 单、并发 32 的严格压力门禁：9,000 个订单请求、6,000 条双方执行记录和 6,000 条成交资金流水全部成功并精确核对，随后重启恢复和平仓归零。五个核心服务共 154 项单元测试全部通过。该轮同时发现并修复 TradeSvr 640 MiB cgroup OOM，以及超时重试未返回首次手续费/PnL 导致 OrderSvr 状态未收敛的问题；失败轮次保留为诊断证据，不计为通过。
 
 当前结论是“核心交易功能可供产品验收和继续开发”，不是“可直接承载真实用户资金”。真实资金上线前仍必须完成服务端权威租户、不可变复式账本/持久化事件、生产指数和标记价、私有流、限流、安全合规、高可用、灾备和更高容量门禁。
 
@@ -38,13 +38,13 @@
 - 生产级多活、多可用区和撮合热备。
 - 完整 Binance/Bybit 协议兼容层与官方 SDK 兼容承诺。
 - 已产品化的租户申请、审批、独立域名、租户管理员和 RBAC 控制台。
-- RobotSvr 的正式 SaaS 部署；RobotSvr 架构已规划，但不在当前 64 环境 13 个核心容器内。
+- RobotSvr 的正式 SaaS 部署；RobotSvr 架构已规划，但不在当前生产验证环境 13 个核心容器内。
 
 ## 3. 用户入口与当前账号
 
-- 下一验收 Web 地址：`http://172.16.97.105:18088/#/login?location=CORE_E2E`（部署完成后启用）
-- 用户：`corebuyer` 或 `coreseller`
-- 密码：`WebE2E!20260827`
+- Web 地址：`http://18.140.45.126:18088/#/login?location=POSTFIX2_E2E`
+- 验收用户：`p2buyer` 或 `p2seller`
+- 密码：使用部署时由运维设置的验收密码；文档不保存明文凭据。
 - 页面使用 HTTP，浏览器显示“不安全”是测试环境预期；生产必须启用 HTTPS、HSTS 和可信域名证书。
 
 ### 3.1 专业交易工作区
@@ -60,7 +60,7 @@
 - 切换品种和离开交易页时统一释放订单、成交、持仓、资金、订单簿和行情 WebSocket 订阅，防止重复回报与无效取消订阅异常。
 - 使用深色层级、专业买卖色、紧凑表格和响应式断点，功能布局参考主流永续合约交易终端，但不复制其品牌和专有素材。
 
-Web 源码提交为 `d65a0761e0f7c6d8efc7a2153f1cdbb4bf247d41`，公开镜像为 `ghcr.io/bliplink/dc-saas-trade-web@sha256:26eb5ec02f619398bc72da0562bdef5920f5a15de8b8a65c0f4fbdd3c7954c47`。生产构建、公开镜像构建和匿名拉取验证已通过；本地生产构建截图已归档。下一步在 105 环境完成新界面部署、浏览器自动化和远端截图，不能用本地截图替代远端验收结论。
+Web 源码当前部署基线为 `2ed6e68`，使用公开 `ghcr.io` 镜像。生产环境已完成真实浏览器桌面英文/中文、390×844 手机英文/中文、拖动、缩放、布局持久化、市场抽屉和完整交易链路验收；本报告中的 Web 图片均来自 `18.140.45.126`，不是本地效果图。
 
 ## 4. 总体架构与服务职责
 
@@ -271,9 +271,9 @@ MDSvr snapshot -> 服务端校验 location/topic -> GW 仅登记已确认订阅
 - GW 保持通用转发角色。订阅权限由提供 snapshot 的业务服务校验；校验失败时不返回订阅确认，GW 不加入订阅 Topic，后续广播不会发给该连接。
 - 后续仍需为 depth delta 增加序号、断线快照恢复、乱序检测和可复算的一致性协议。
 
-### 8.3 当前环境行情限制
+### 8.3 当前环境行情状态
 
-64 环境解析 `fstream.binance.com` 后，IPv4 和 IPv6 连接均超时/不可达，APSSvr 会持续重连并记录连接异常。核心验收通过测试标记价和本地行情链路完成，不代表生产外部指数源已可用。
+生产验证环境的 APSSvr 已能持续接收 Binance Futures ticker/bookTicker，并向 MDSvr/GW 发布。Web 自动化同时验证订单簿、最近成交、K 线持久化、Last/Mark/Index 展示；外部单一数据源可用不等于生产指数方案完成，真实资金上线仍需多源加权、中位数/异常值剔除、断源降级和偏离保护。
 
 上线门禁：至少三个独立来源、来源权重、时间戳新鲜度、异常值剔除、中位数/加权指数、断流降级、标记价平滑、价格保护、监控和审计全部通过后，才允许真实资金交易。
 
@@ -350,7 +350,7 @@ MDSvr snapshot -> 服务端校验 location/topic -> GW 仅登记已确认订阅
 - MySQL 主键、唯一键、索引、RocksDB key、缓存 key、锁 key、Topic、幂等键和导出路径全部包含 location。
 - 任何跨 location 的查询、撮合、撤单、订阅、Robot 报单和管理操作必须默认拒绝，并产生安全审计。
 
-## 11. 64 环境部署与运维
+## 11. 生产验证环境部署与运维
 
 ### 11.1 当前核心容器
 
@@ -360,22 +360,24 @@ MDSvr snapshot -> 服务端校验 location/topic -> GW 仅登记已确认订阅
 
 | 服务 | JVM Xmx | 容器上限 |
 |---|---:|---:|
-| GW、LoginSvr、LiqSvr、ManagerSvr、AdminSvr | 512 MiB | 768 MiB |
-| MDSvr、APSSvr、OrderSvr | 768 MiB | 1 GiB |
-| TradeSvr | 640 MiB | 896 MiB |
-| MySQL | - | 2 GiB |
-| ClickHouse | - | 3 GiB |
-| ZooKeeper | - | 512 MiB |
-| Trade Web | - | 512 MiB |
+| GW、LoginSvr、LiqSvr、ManagerSvr、AdminSvr | 256 MiB | 384 MiB |
+| MDSvr、APSSvr、OrderSvr | 448 MiB | 640 MiB |
+| TradeSvr | 384 MiB | 896 MiB |
+| MySQL | - | 1.5 GiB |
+| ClickHouse | - | 2 GiB |
+| ZooKeeper | - | 384 MiB |
+| Trade Web | - | 256 MiB |
 
 最终检查所有核心容器 running，RestartCount=0，OOMKilled=false。
 
 ### 11.3 自动更新
 
-- root cron 每 5 分钟运行 `/root/dc-saas-deploy/auto-update-saas.sh`。
+- SaaS 部署目录为 `/home/ec2-user/dc-saas-deploy`，运行数据为 `/data/dc-saas-runtime`；与同机量化 Compose 项目和数据目录分离。
+- root cron 已安装为每 5 分钟执行 `/home/ec2-user/dc-saas-deploy/auto-update-saas.sh`，只管理 Compose 项目 `dc-saas`，日志位于 `/data/dc-saas-runtime/log/auto-update-saas.log`。
 - 只从公开 GHCR 拉取应用镜像，不自动更新 MySQL、ClickHouse、ZooKeeper。
 - 新镜像需要稳定窗口后成组部署；失败自动恢复上一组镜像。
-- 验收阶段 OrderSvr/TradeSvr 使用完整 sha 标签固定版本，防止 mutable tag 在测试中漂移。
+- 验收报告记录每个运行容器的不可变 image ID；自动更新以整组远端 digest 指纹和稳定窗口判定发布，测试过程中不允许版本漂移。
+- Web 固定为 `source-2ed6e68f3ad45a65cb184b5397abc9f752719721`，自动更新 dry-run 已确认 `runtime_drift=false`，不会把验收版本替换为旧 mutable tag。
 - GitHub 网络偶发 reset/timeout 时，当前运行服务保持不变；源码提交使用直连官方地址重试，不允许 Git 网络问题阻塞开发。
 
 ## 12. 测试与验收结果
@@ -384,20 +386,20 @@ MDSvr snapshot -> 服务端校验 location/topic -> GW 仅登记已确认订阅
 
 | 服务 | 测试数 | 失败 | 错误 |
 |---|---:|---:|---:|
-| OrderSvr | 47 | 0 | 0 |
-| TradeSvr | 55 | 0 | 0 |
+| OrderSvr | 49 | 0 | 0 |
+| TradeSvr | 62 | 0 | 0 |
 | LiqSvr | 11 | 0 | 0 |
-| MDSvr | 7 | 0 | 0 |
+| MDSvr | 12 | 0 | 0 |
 | APSSvr | 20 | 0 | 0 |
-| 合计 | 140 | 0 | 0 |
+| 合计 | 154 | 0 | 0 |
 
 ### 12.2 压力与稳定性
 
 | 轮次 | 并发 | 订单请求 | 执行记录 | 成交流水 | 结果 | 关键性能 |
 |---|---:|---:|---:|---:|---|---|
 | POSTBATCH200 | 4 | 600 | 400 | 400 | PASS | 三阶段约 19.3/19.5/17.6 req/s |
-| POSTBATCH1000 | 16 | 3,000 | 2,000 | 2,000 | PASS | 约 77.0/72.1/78.6 req/s；p99 710/1023/767 ms |
-| POSTBATCH3000 | 32 | 9,000 | 6,000 | 6,000 | PASS | 约 92.1/98.1/80.2 req/s；p99 1088/1562/1765 ms；最大 2.03 s |
+| PROD-1000×16 | 16 | 3,000 | 2,000 | 2,000 | PASS | 挂单/maker/taker 81.6/144.9/146.8 req/s；p99 814/206/326 ms |
+| PROD-3000×32 | 32 | 9,000 | 6,000 | 6,000 | PASS | 挂单/maker/taker 143.9/214.5/232.6 req/s；p99 803/311/310 ms；最大 1.60 s |
 | STABILITY R1 | 8 | 1,500 | 1,000 | 1,000 | PASS | 含状态服务重启恢复与平仓归零 |
 | STABILITY R2 | 8 | 1,500 | 1,000 | 1,000 | PASS | 含状态服务重启恢复与平仓归零 |
 | STABILITY R3 | 8 | 1,500 | 1,000 | 1,000 | PASS | 含状态服务重启恢复与平仓归零 |
@@ -405,9 +407,11 @@ MDSvr snapshot -> 服务端校验 location/topic -> GW 仅登记已确认订阅
 
 每一轮不仅检查 HTTP 成功，还等待并精确核对订单、双方 execution、双方 posting、手续费汇总、余额、持仓、保证金、撤单、订单簿唯一性；随后重启 OrderSvr/TradeSvr，验证恢复一致，再用 reduce-only 对敲平仓并验证占用归零。
 
+生产高压先后执行了两类失败注入式诊断：原 640 MiB TradeSvr 在约第 1,960 笔 taker 成交时被 cgroup OOM；增加受控堆外余量后，首次 3000×32 得到订单 9000/9000、流水 6000/6000，但 OrderSvr 成交回报仅 5229/6000。根因分别修复为 896 MiB 容器上限/原生内存约束/成功路径降噪，以及 TradeSvr 幂等重试返回首次完整 PResult。最终独立 location 重跑达到 9000/6000/6000、0 重启、0 OOM。失败结果与修复后结果均保留日志，避免只报告成功轮次。
+
 ### 12.3 完整业务验收
 
-- 13 个核心容器、34 张 MySQL 表、21 张带 location 的业务表和 Web 健康：PASS。
+- 13 个核心容器、40 张 MySQL 表、26 个 location 字段和 Web 健康：PASS。
 - MySQL/ClickHouse 双 location 隔离：PASS。
 - tick/step/minNotional、GTC/IOC/FOK/PostOnly/FIFO/STP：PASS。
 - ClOrdID 幂等冲突、Replace、Batch Cancel、Mass Cancel：PASS。
@@ -415,32 +419,44 @@ MDSvr snapshot -> 服务端校验 location/topic -> GW 仅登记已确认订阅
 - 部分强平：PASS。
 - 最终强平、1 USDT 保险覆盖、2.0036 USDT ADL、数量步长对齐：PASS。
 - 多候选 ADL 按盈利率和有效杠杆排序、跨 location 不变：PASS。
-- 完整验收日志：`/root/core-trading-acceptance-FINALCORE-R2-20260829045001.log`，退出码 0。
+- 完整验收日志：`/data/dc-saas-runtime/e2e-artifacts/core-full-acceptance-postfix.log`；3000×32 日志：`core-stress-3000x32-retry.log`，退出码 0。
 
 ## 13. 截图证据
 
-### 13.1 新版双语登录页（本地生产构建）
+### 13.1 生产环境桌面交易工作区
 
-![新版专业深色英文登录页](evidence/login-professional-en.png)
+![生产环境英文桌面交易工作区](evidence/workspace-en.png)
 
-### 13.2 Web 交易界面（64 环境历史核心验收）
+![生产环境中文桌面交易工作区](evidence/workspace-zh.png)
+
+### 13.2 生产环境完整 Web 交易链路
 
 ![Web 交易界面、最近成交、账户资金和下单区域](evidence/buyer-trading-flow.png)
 
-### 13.3 Web 第二会话/订单簿界面（64 环境历史核心验收）
+![第二用户成交历史与账户状态](evidence/seller-trade-history.png)
 
-![第二用户会话与订单簿界面](evidence/seller-trade-history.png)
+![订单簿、最近成交、K 线和 Last/Mark/Index 行情](evidence/web-market-data.png)
 
-### 13.4 MySQL、ClickHouse 与容器证据（64 环境历史核心验收）
+### 13.3 生产环境手机交易工作区
+
+![390×844 英文手机交易工作区](evidence/workspace-mobile-en.png)
+
+![390×844 中文手机交易工作区](evidence/workspace-mobile-zh.png)
+
+### 13.4 MySQL、ClickHouse 与容器证据（生产环境）
 
 ![真实数据库查询与运行镜像证据](evidence/database-evidence.png)
 
 证据 SHA-256：
 
-- `login-professional-en.png`：`60ba9c4dbbb0645bf748d07ba4c6be904c526445b3f861e09a1afe8cad3e3aef`
-- `buyer-trading-flow.png`：`7ab70d9a29fcf9e87faf7c73e6532394daade4d304bcd07c44ebcc2d8a4ef3f2`
-- `seller-trade-history.png`：`fde33445d2c9fb351fbe9c035e3017d27455c3f3e081cbaf1e0aa3e98894bd60`
-- `database-evidence.png`：`6d94892d0f94661ed08bd5c5d0b2635bd8486974c0ac359f4e35eb55271fbdbe`
+- `buyer-trading-flow.png`：`19712c9c9c23982daa26f75d0ba66246227e0492b91dd278c549d1d2e9137a7d`
+- `seller-trade-history.png`：`33035bf00a3835e25da14bcc5c9f8fa617093637941b52cac32ffa21f4147ecc`
+- `web-market-data.png`：`130c8669ce9badbfe8dec6c53e7b55fa6ec2adcb10234dbdc0b7d921f6b2155e`
+- `workspace-en.png`：`7891a7b143caed914b358a7350eef32c7273ba29cdf490f27263503059b00667`
+- `workspace-zh.png`：`88b1c9c926e86b2837b862cc2a525a1d29e1984e79ddefe696103300055b906d`
+- `workspace-mobile-en.png`：`ded9008f1509462f02820a7e6d10c87263f3c599c5f597e151736bd56705a693`
+- `workspace-mobile-zh.png`：`b3978c5a7dc17c8222c8d37b0c5b850b67a1707f0aa562f8ace0e85196471cf1`
+- `database-evidence.png`：`13ae3ced4d100e095d751b8a295468964d4c2da8224097affa6ba2bfe1e7d267`
 
 ## 14. 已知边界与剩余风险
 
@@ -448,9 +464,9 @@ MDSvr snapshot -> 服务端校验 location/topic -> GW 仅登记已确认订阅
 |---|---|---|---|
 | P0 | location 仍未由所有服务端链路强制注入 | 登录错租户拒绝；多数交易 key/表已 location 化 | 完成会话权威 location、全 DAO/Topic/缓存/锁攻击测试 |
 | P0 | 资金流水普通成交使用内存异步队列 | 批量 250、失败重试、优雅停机排空、压力精确核对 | 事务 outbox、不可变复式账本、持续对账 |
-| P0 | APS 无法连接 Binance | 64 环境网络不可达，核心测试使用受控标记价 | 修复出站网络并建设多源指数/异常剔除 |
+| P0 | APS 当前仅验证单一外部源 | Binance Futures 实时 ticker/bookTicker 和 Web Mark/Index 已通过 | 建设多源指数、异常剔除、断源降级与偏离保护 |
 | P0 | 无真实钱包和合规 | Deposit 仅测试 | 钱包/KMS/HSM、KYC/AML、提现审批和审计 |
-| P1 | 当前容量距交易所目标较远 | 实测峰值约 98 req/s，p99 最高 1.77 s | 分片单写、异步持久化、性能剖析并达到业务 SLO |
+| P1 | 当前容量距交易所目标较远 | 3000×32 实测 taker 232.6 req/s；挂单阶段 p99 803 ms | 分片单写、异步持久化、性能剖析并达到业务 SLO |
 | P1 | 私有流和深度流未生产化 | 现有 Topic/Snapshot 可用 | 序号、补发、断线恢复、快照+增量一致性 |
 | P1 | 完整账户模式不足 | 核心 long/short 字段和 Cross 配置存在 | 完整单向/双向、全仓/逐仓、统一账户验收 |
 | P1 | 订单产品仍不齐 | TP/SL/OCO 已有核心语义 | 追踪止损、Close on Trigger、SMP group、活动单上限 |
@@ -466,10 +482,10 @@ MDSvr snapshot -> 服务端校验 location/topic -> GW 仅登记已确认订阅
 
 ## 16. 手工验收步骤
 
-1. 打开 Web 地址，使用 `corebuyer / WebE2E!20260827` 登录。
+1. 打开 Web 地址，使用 `p2buyer` 或 `p2seller` 及运维提供的验收密码登录。
 2. 在 Account Info 执行测试 Deposit，并在 Funds 查看流水。
 3. 提交远离盘口的限价单，在 Open Orders 确认后撤单，检查余额冻结完全释放。
-4. 使用两个无痕浏览器分别登录 corebuyer 和 coreseller，以相同价格、相同数量提交相反订单。
+4. 使用两个无痕浏览器分别登录 `p2buyer` 和 `p2seller`，以相同价格、相同数量提交相反订单。
 5. 检查 Recent Trades、Order History、Trade History、Positions 和 Account Info。
 6. 点击 Close，确认生成 Market/IOC/ReduceOnly 平仓并最终无仓位、无活动单、无保证金占用。
 7. 不要在本环境连接真实钱包或投入真实资金。

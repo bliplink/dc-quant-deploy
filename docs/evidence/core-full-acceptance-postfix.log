@@ -1,0 +1,221 @@
+[core-acceptance] Validating the deployed SaaS stack.
+[saas-validate] SaaS-only compose model verified.
+[saas-validate] All 13 containers are running; MySQL tables=40, location columns=26.
+[saas-validate] MySQL, ClickHouse, and ZooKeeper are restricted to loopback interfaces.
+[saas-validate] ClickHouse kline is location-aware and dc-trade-web is healthy.
+[core-acceptance] Running MySQL and ClickHouse location-isolation smoke tests.
+[location-smoke] MySQL transactional rows are isolated by location.
+[location-smoke] ClickHouse stored the same BTCUSDT/1M key independently for two locations.
+[location-smoke] Two-location smoke test passed; temporary rows will be removed.
+[core-acceptance] Running strict order-rule validation in an isolated acceptance location.
+[rules-e2e] Pausing LiqSvr so background liquidation cannot consume deterministic rule-test liquidity.
+[rules-e2e] Preparing deterministic rule-test accounts in POSTFIX2_E2E.
+[rules-e2e] Checking synchronous input and symbol filters.
+[rules-e2e] Checking FOK all-or-none and IOC partial-fill semantics.
+[rules-e2e] Checking Post Only and price-time priority.
+[rules-e2e] Checking default Cancel Taker self-trade prevention.
+[rules-e2e] Checking client-order idempotency and conflict rejection.
+[rules-e2e] Checking atomic cancel-replace and identity-bound batch cancel.
+[rules-e2e] Cancelling remaining orders and verifying no active-order or frozen-fund residue.
+[rules-e2e] PASS: symbol filters, TIF, Post Only, FIFO, STP, idempotency, replace, batch and mass cancel rules succeeded.
+[core-acceptance] Running browser login, deposit, order, cancel, match, market close, history and recent-trade flow in POSTFIX2_E2E.
+[web-e2e-prepare] Prepared clean accounts p2buyer and p2seller for location POSTFIX2_E2E.
+[web-e2e-host] Restarting OrderSvr and TradeSvr on the clean E2E database baseline.
+[web-e2e-host] Restarting GW so it resolves the refreshed OrderSvr and TDSvr routes.
+[web-e2e-host] Login API precheck passed and wrong-location authentication was rejected.
+{
+  "status": "PASS",
+  "location": "POSTFIX2_E2E",
+  "login": [
+    "p2buyer",
+    "p2seller"
+  ],
+  "deposit": "PASS",
+  "cancel": "PASS",
+  "execution": "PASS",
+  "closePosition": "PASS",
+  "buyerTrade": "BTCUSDT\t0.0010\t60000.0\tLimit\t-0.01200000\t0\t2026-08-30 22:36:49.911\t1543751376784449536\te1543751377421983744\tFilled\tBuy",
+  "sellerTrade": "BTCUSDT\t0.0010\t60000.0\tLimit\t-0.03600000\t0\t2026-08-30 22:36:49.980\t1543751377342291968\te1543751377421983745\tFilled\tSell",
+  "recentTrade": "60000.0\n0.0010\n22:36:49",
+  "marketData": {
+    "orderBook": "10000.0\n0.0010\n0.0010",
+    "recentTrade": "60000.0\n0.0010\n22:36:49",
+    "klineRows": 1,
+    "lastPrice": "Last Price\n60000.0",
+    "markPrice": "Mark Price\n78776.3",
+    "indexPrice": "Index Price\n78808.7"
+  }
+}
+[web-e2e-host] Verifying authoritative order, execution and position state in MySQL.
+[web-e2e-host] Browser trading acceptance passed; artifacts: /data/dc-saas-runtime/e2e-artifacts.
+[core-acceptance] Validating the draggable, resizable, persistent and bilingual professional Web workspace.
+{
+  "status": "PASS",
+  "location": "POSTFIX2_E2E",
+  "panels": 5,
+  "draggable": true,
+  "resizable": true,
+  "persisted": true,
+  "lockable": true,
+  "languages": [
+    "en",
+    "zh"
+  ],
+  "bilingualLogin": true,
+  "orderInputValidation": true,
+  "conditionalOrderModes": true,
+  "reduceOnlyControl": true,
+  "lastPriceHeader": true,
+  "searchableMarketSelector": true,
+  "professionalTheme": {
+    "page": "rgb(11, 14, 17)",
+    "buy": "rgb(32, 178, 108)",
+    "sell": "rgb(239, 69, 74)"
+  },
+  "artifacts": [
+    "workspace-en.png",
+    "workspace-zh.png"
+  ]
+}
+[web-workspace-e2e] PASS; artifacts: /data/dc-saas-runtime/e2e-artifacts
+[core-acceptance] Validating the 390px touch-friendly, overflow-free and bilingual mobile trading workspace.
+{
+  "status": "PASS",
+  "location": "POSTFIX2_E2E",
+  "viewport": "390x844",
+  "noHorizontalOverflow": true,
+  "verticallyStackedPanels": 5,
+  "touchFriendlyOrderEntry": true,
+  "responsiveMarketDrawer": true,
+  "mobileAutoLayout": true,
+  "languages": [
+    "en",
+    "zh"
+  ],
+  "artifacts": [
+    "workspace-mobile-en.png",
+    "workspace-mobile-zh.png"
+  ]
+}
+[web-mobile-e2e] PASS; artifacts: /data/dc-saas-runtime/e2e-artifacts
+[core-acceptance] Running LiqSvr partial-liquidation flow in the same POSTFIX2_E2E location.
+[liq-e2e] Preparing controlled partial-liquidation accounts in POSTFIX2_E2E.
+[liq-e2e] Reloading OrderSvr and TradeSvr, then refreshing GW routes.
+[liq-e2e] Restarting LiqSvr so the position and tenant mark-price snapshots trigger liquidation.
+[liq-e2e] PASS: LiqSvr issued a reduce-only Market/IOC partial liquidation and preserved tenant isolation.
+[core-acceptance] Running natural final-liquidation, insurance and step-aligned ADL flow in POSTFIX2_E2E.
+[final-liq-e2e] Preparing final-liquidation, insurance and ADL accounts in POSTFIX2_E2E.
+[final-liq-e2e] Reloading OrderSvr and TradeSvr, then refreshing GW routes.
+[final-liq-e2e] Restarting LiqSvr to trigger a real full liquidation through OrderSvr.
+[final-liq-e2e] Verifying the atomic insurance and step-aligned ADL result for 1543752567304085504.
+[final-liq-e2e] PASS: LiqSvr final liquidation naturally reached matching, insurance and transactional step-aligned ADL.
+[core-acceptance] Running deterministic multi-candidate ADL ranking flow in the same POSTFIX2_E2E location.
+[adl-e2e] Preparing isolated ADL accounts in POSTFIX2_E2E.
+[adl-e2e] Restarting TradeSvr so the controlled balances and positions become its in-memory baseline.
+[adl-e2e] PASS: transactional ADL completed, ranking and balances are correct, foreign tenant stayed untouched.
+[core-acceptance] Refreshing GW routes after the ADL fixture restarted TradeSvr.
+[core-acceptance] Revalidating health after TradeSvr restart and ADL settlement.
+[saas-validate] SaaS-only compose model verified.
+[saas-validate] All 13 containers are running; MySQL tables=40, location columns=26.
+[saas-validate] MySQL, ClickHouse, and ZooKeeper are restricted to loopback interfaces.
+[saas-validate] ClickHouse kline is location-aware and dc-trade-web is healthy.
+[core-acceptance] Running the opt-in full-stack concurrent load and restart-recovery gate.
+[core-stress] Pausing LiqSvr so background liquidation cannot alter load-test order flow.
+[core-stress] Preparing isolated load accounts in POSTFIX2_E2E.
+[core-stress] Reloading the stateful services before the load run.
+[core-stress] Running 1000 resting/cancel and 1000 matched orders at concurrency 16.
+[core-load] resting-order-place: success=1000 failed=0 wallMs=12249.7
+[core-load] mass-cancel: success=1 failed=0 wallMs=978.5
+[core-load] maker-place: success=1000 failed=0 wallMs=6900.0
+[core-load] taker-match: success=1000 failed=0 wallMs=6812.8
+{
+  "runId": "POSTFIX2_1000X16_20260830",
+  "generatedAt": "2026-08-30T14:44:26.095Z",
+  "endpoint": "http://127.0.0.1:18088/httpapi/",
+  "location": "POSTFIX2_E2E",
+  "maker": "p2stressmaker",
+  "taker": "p2stresstaker",
+  "orders": 1000,
+  "concurrency": 16,
+  "requestTimeoutMs": 30000,
+  "phases": [
+    {
+      "name": "resting-order-place",
+      "total": 1000,
+      "success": 1000,
+      "failed": 0,
+      "wallMs": 12249.696289,
+      "throughput": 81.63467700811337,
+      "latencyMs": {
+        "min": 11.309329,
+        "p50": 194.084241,
+        "p95": 393.376169,
+        "p99": 813.635619,
+        "max": 902.039873
+      },
+      "failureSamples": []
+    },
+    {
+      "name": "mass-cancel",
+      "total": 1,
+      "success": 1,
+      "failed": 0,
+      "wallMs": 978.549732,
+      "throughput": 0,
+      "latencyMs": {
+        "p50": 978.333877,
+        "p95": 978.333877,
+        "p99": 978.333877,
+        "max": 978.333877
+      },
+      "failureSamples": []
+    },
+    {
+      "name": "maker-place",
+      "total": 1000,
+      "success": 1000,
+      "failed": 0,
+      "wallMs": 6899.969495,
+      "throughput": 144.9281769614548,
+      "latencyMs": {
+        "min": 9.851698,
+        "p50": 100.530177,
+        "p95": 195.851224,
+        "p99": 205.736552,
+        "max": 215.112681
+      },
+      "failureSamples": []
+    },
+    {
+      "name": "taker-match",
+      "total": 1000,
+      "success": 1000,
+      "failed": 0,
+      "wallMs": 6812.840449,
+      "throughput": 146.7816555349952,
+      "latencyMs": {
+        "min": 9.357436,
+        "p50": 100.334761,
+        "p95": 194.057592,
+        "p99": 325.967386,
+        "max": 405.950177
+      },
+      "failureSamples": []
+    }
+  ],
+  "passed": true
+}
+[core-stress] Restarting stateful services to verify persisted recovery.
+[core-stress] Closing the recovered positions through reduce-only matching.
+[core-stress] PASS: load, matching accounting, uniqueness and restart recovery checks succeeded. Artifacts: /data/dc-saas-runtime/e2e-artifacts/stress-POSTFIX2_1000X16_20260830
+[core-acceptance] Capturing effective JVM heaps and container memory limits.
+[core-acceptance] MEMORY dc-saas-gateway limit_bytes=402653184 effective_xmx=256m
+[core-acceptance] MEMORY dc-saas-loginsvr limit_bytes=402653184 effective_xmx=256m
+[core-acceptance] MEMORY dc-saas-mdsvr limit_bytes=671088640 effective_xmx=448m
+[core-acceptance] MEMORY dc-saas-apssvr limit_bytes=671088640 effective_xmx=448m
+[core-acceptance] MEMORY dc-saas-ordersvr limit_bytes=671088640 effective_xmx=448m
+[core-acceptance] MEMORY dc-saas-tradesvr limit_bytes=939524096 effective_xmx=384m
+[core-acceptance] MEMORY dc-saas-liqsvr limit_bytes=402653184 effective_xmx=256m
+[core-acceptance] MEMORY dc-saas-managersvr limit_bytes=402653184 effective_xmx=256m
+[core-acceptance] MEMORY dc-saas-adminsvr limit_bytes=402653184 effective_xmx=256m
+[core-acceptance] PASS: the complete single-location core trading acceptance flow succeeded.
