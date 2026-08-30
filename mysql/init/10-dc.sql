@@ -487,7 +487,7 @@ CREATE TABLE `dc_user_role` (
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
 
 CREATE TABLE `dc_users` (
-  `user_id` varchar(45) DEFAULT NULL COMMENT '用户id',
+  `user_id` varchar(64) NOT NULL COMMENT '用户id',
   `user_name` varchar(255) NOT NULL DEFAULT '' COMMENT '登录名',
   `name` varchar(64) DEFAULT NULL COMMENT '用户名',
   `password` varchar(64) DEFAULT NULL COMMENT '密码',
@@ -510,9 +510,10 @@ CREATE TABLE `dc_users` (
   `enable_cash_out` varchar(1) DEFAULT NULL COMMENT '是否能提现',
   `referrer` varchar(45) DEFAULT NULL COMMENT '推荐人',
   `close_by` varchar(45) DEFAULT NULL COMMENT '操作人',
-  `location` varchar(45) DEFAULT NULL COMMENT '多实体',
-  PRIMARY KEY (`user_name`) USING BTREE,
-  UNIQUE KEY `user_name` (`user_name`) USING BTREE
+  `location` varchar(64) NOT NULL DEFAULT '0' COMMENT '多实体',
+  PRIMARY KEY (`location`,`user_name`) USING BTREE,
+  UNIQUE KEY `uq_users_location_user_id` (`location`,`user_id`) USING BTREE,
+  KEY `idx_users_user_name` (`user_name`) USING BTREE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8 ROW_FORMAT=DYNAMIC COMMENT='用户表';
 
 CREATE TABLE `dc_users_api` (
