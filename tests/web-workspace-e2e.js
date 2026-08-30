@@ -90,19 +90,53 @@ function layoutItem(snapshot, breakpoint, key) {
     await page.waitForTimeout(800);
 
     const afterBox = await chartPanel.boundingBox();
-    const after = await layoutSnapshot(page);
-    if (!after.key || !after.value || after.value === before.value) {
+    const afterMove = await layoutSnapshot(page);
+    if (!afterMove.key || !afterMove.value || afterMove.value === before.value) {
       throw new Error('dragged layout was not persisted to localStorage');
     }
     if (!afterBox || (Math.abs(afterBox.x - beforeBox.x) < 20 && Math.abs(afterBox.y - beforeBox.y) < 20)) {
       throw new Error('drag gesture did not move the chart panel');
     }
 
+    const beforeResizeBox = await chartPanel.boundingBox();
+    const resizeHandle = chartPanel.locator('.react-resizable-handle');
+    const resizeHandleBox = await resizeHandle.boundingBox();
+    if (!beforeResizeBox || !resizeHandleBox) throw new Error('chart resize handle was not measurable');
+    await page.mouse.move(
+      resizeHandleBox.x + resizeHandleBox.width / 2,
+      resizeHandleBox.y + resizeHandleBox.height / 2
+    );
+    await page.mouse.down();
+    await page.mouse.move(resizeHandleBox.x + 160, resizeHandleBox.y + 84, {steps: 20});
+    await page.mouse.up();
+    await page.waitForTimeout(800);
+    const afterResizeBox = await chartPanel.boundingBox();
+    if (!afterResizeBox ||
+        (Math.abs(afterResizeBox.width - beforeResizeBox.width) < 40 &&
+         Math.abs(afterResizeBox.height - beforeResizeBox.height) < 20)) {
+      throw new Error('resize gesture did not resize the chart panel');
+    }
+    const customized = await layoutSnapshot(page);
+    if (!customized.value || customized.value === afterMove.value) {
+      throw new Error('resized layout was not persisted to localStorage');
+    }
+
+    const colors = await page.evaluate(() => ({
+      page: getComputedStyle(document.querySelector('.tradeWrap')).backgroundColor,
+      buy: getComputedStyle(document.querySelector('.orderBuyBtn')).backgroundColor,
+      sell: getComputedStyle(document.querySelector('.orderSellBtn')).backgroundColor
+    }));
+    if (colors.page !== 'rgb(11, 14, 17)' ||
+        colors.buy !== 'rgb(32, 178, 108)' ||
+        colors.sell !== 'rgb(239, 69, 74)') {
+      throw new Error(`professional trading theme is incomplete: ${JSON.stringify(colors)}`);
+    }
+
     await page.reload({waitUntil: 'domcontentloaded'});
     await page.locator('.tradeGrid').waitFor({timeout: 30000});
     await page.waitForTimeout(1500);
     const reloaded = await layoutSnapshot(page);
-    const savedChart = layoutItem(after, 'lg', 'chart');
+    const savedChart = layoutItem(customized, 'lg', 'chart');
     const reloadedChart = layoutItem(reloaded, 'lg', 'chart');
     if (!savedChart || !reloadedChart ||
         ['x', 'y', 'w', 'h'].some(field => savedChart[field] !== reloadedChart[field])) {
@@ -118,6 +152,7 @@ function layoutItem(snapshot, breakpoint, key) {
     await page.locator('.languageSwitch button').nth(0).click();
     await page.getByRole('button', {name: '编辑布局'}).waitFor({timeout: 10000});
     await page.getByText('订单簿', {exact: true}).first().waitFor({timeout: 10000});
+    await page.getByText('交易品种', {exact: true}).first().waitFor({timeout: 10000});
     await page.screenshot({path: path.join(artifactDir, 'workspace-zh.png'), fullPage: true});
 
     if (pageErrors.length) throw new Error(`page errors: ${JSON.stringify(pageErrors)}`);
@@ -130,6 +165,7 @@ function layoutItem(snapshot, breakpoint, key) {
       persisted: true,
       lockable: true,
       languages: ['en', 'zh'],
+      professionalTheme: colors,
       artifacts: ['workspace-en.png', 'workspace-zh.png']
     }, null, 2));
   } catch (error) {
