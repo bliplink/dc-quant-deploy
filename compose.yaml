@@ -139,7 +139,7 @@ services:
       - ${DEPLOY_ROOT}/log:/srv/dc/log
       - ${DEPLOY_ROOT}/control/overrides/GW/config/spring-tcp-server.xml:/srv/dc/dc/GW/config/spring-tcp-server.xml:ro
       - ${DEPLOY_ROOT}/control/overrides/GW/config/spring-gw-client.xml:/srv/dc/dc/GW/config/spring-gw-client.xml:ro
-    mem_limit: ${GW_MEMORY_LIMIT:-384m}
+    mem_limit: ${GW_MEMORY_LIMIT:-512m}
     cpus: ${GW_CPU_LIMIT:-0.35}
 
   loginsvr:
