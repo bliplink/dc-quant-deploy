@@ -1,12 +1,12 @@
 # DC SaaS 加密货币永续合约系统产品与验收说明
 
-文档版本：V1.4
+文档版本：V1.5
 
-基线日期：2026-08-30
+基线日期：2026-08-31
 
 代码分支：`saas-crypto`
 
-当前生产验证环境：`18.140.45.126`，Compose 项目 `dc-saas`；核心隔离回归 `location=POSTFIX2_E2E`，多租户控制面最终回归 `location=SAASA_E2E_0830160159 / SAASB_E2E_0830160159`
+当前生产验证环境：`18.140.45.126`，Compose 项目 `dc-saas`；核心隔离回归 `location=POSTFIX2_E2E / WEB_E2E`，Robot 最终回归 `location=ROBOT_E2E_20260831100417`，多租户控制面最终回归 `location=SAASA_E2E_0830160159 / SAASB_E2E_0830160159`
 
 ## 1. 文档目的与结论
 
@@ -17,6 +17,8 @@
 本轮在生产验证环境完成峰值档 3,000 个挂单、3,000 个 maker 单、3,000 个 taker 单、并发 32 的严格压力门禁：9,000 个订单请求、6,000 条双方执行记录和 6,000 条成交资金流水全部成功并精确核对，随后重启恢复和平仓归零。五个核心服务共 154 项单元测试全部通过。该轮同时发现并修复 TradeSvr 640 MiB cgroup OOM，以及超时重试未返回首次手续费/PnL 导致 OrderSvr 状态未收敛的问题；失败轮次保留为诊断证据，不计为通过。
 
 2026-08-30 又完成了 SaaS 控制面生产验收：公开试用申请、平台审批、租户初始化、独立 URL、租户内注册、租户管理员、同名用户隔离、品种规则、API Key、流动性 Robot 配置、交易记录、租户设置与审计、暂停和恢复均已形成真实 Web/GW/服务/MySQL 闭环。最终浏览器回归覆盖桌面端和 390×844 手机端。
+
+2026-08-31 完成 WebSocket 登录、专业交易 Web 和 Robot 内部流动性生产验收：错误密码不会建立 WS 业务会话；登录成功后在同一 SID 上完成入金、挂单、撤单、成交、行情、历史和平仓；Robot 基于 APSSvr 的 Binance Futures ticker 合成租户 10+10 档，完成用户吃单后的补档、价差内用户单 IOC 主动成交、租约失败安全撤单和停用清零。真实 Binance 反向对冲因未配置专用外部账户凭据，仍作为明确的后续门禁。
 
 当前结论是“核心交易功能和第一阶段多租户控制面可供产品验收和继续开发”，不是“可直接承载真实用户资金”。真实资金上线前仍必须完成不可变复式账本/持久化事件、生产指数和标记价、私有流、限流、安全合规、高可用、灾备和更高容量门禁；还需继续对 OrderSvr、TradeSvr、MDSvr、LiqSvr 的全部请求、Topic、缓存、锁和持久化键执行系统性跨租户攻击测试。
 
@@ -40,11 +42,11 @@
 - 生产级多活、多可用区和撮合热备。
 - 完整 Binance/Bybit 协议兼容层与官方 SDK 兼容承诺。
 - 自定义域名自动解析、证书自动签发、套餐计费、完整平台 RBAC、KYC 和租户配额计费；当前已交付 location 独立 URL 与第一阶段平台/租户管理控制台。
-- RobotSvr 的正式生产验收；实现、镜像构建、数据库迁移和一键部署编排已完成，但在 RobotSvr GHCR 包切换为 Public 前仍不计入当前生产验证环境 13 个核心容器。
+- RobotSvr 的真实 Binance 反向对冲验收；内部租户报价、补档、主动成交和安全停报已经通过，外部对冲仍需专用测试或小额账户凭据。
 
 ## 3. 用户入口与当前账号
 
-- Web 地址：`http://18.140.45.126:18088/#/login?location=POSTFIX2_E2E`
+- Web 地址：先运行桌面 `start-dc-saas-web.bat` 建立 SSH 隧道，再打开 `http://127.0.0.1:18089/#/login?location=<租户 location>`。
 - 验收用户：`p2buyer` 或 `p2seller`
 - 密码：使用部署时由运维设置的验收密码；文档不保存明文凭据。
 - 页面使用 HTTP，浏览器显示“不安全”是测试环境预期；生产必须启用 HTTPS、HSTS 和可信域名证书。
@@ -54,7 +56,7 @@
 交易端采用专业 USDT 永续合约工作区，保留本系统现有业务字段和服务接口：
 
 - K 线图、订单簿/最近成交、下单、持仓/委托/成交和账户资产共五类面板。
-- 桌面端支持拖动、缩放和自动重排；可以锁定布局防止交易时误操作，也可以一键恢复默认布局。
+- 桌面端支持悬停显示十字光标后直接拖动、右下角缩放和自动重排；不设置单独编辑/锁定模式，保留一键恢复默认布局。
 - 布局按 `location + user_id` 保存在浏览器本地，刷新后恢复，不同租户和用户互不共享。
 - 支持中文和英文切换；行情、下单、表头、方向、订单类型和状态随语言变化，协议标识保持原值。
 - 顶部行情条突出展示最新成交价，并按涨跌方向着色；下单区在请求发出前校验数量、限价和触发价必须为正数。
@@ -62,7 +64,7 @@
 - 切换品种和离开交易页时统一释放订单、成交、持仓、资金、订单簿和行情 WebSocket 订阅，防止重复回报与无效取消订阅异常。
 - 使用深色层级、专业买卖色、紧凑表格和响应式断点，功能布局参考主流永续合约交易终端，但不复制其品牌和专有素材。
 
-Web 源码当前部署基线为 `97b3afe88928fe0c6b26a8564d88ae5168556dba`，运行不可变公开镜像 `source-97b3afe88928fe0c6b26a8564d88ae5168556dba`。生产环境已完成真实浏览器桌面英文/中文、390×844 手机英文/中文、拖动、缩放、布局持久化、市场抽屉、完整交易链路、租户申请/注册和平台/租户管理验收；本报告中的 Web 图片均来自 `18.140.45.126`，不是本地效果图。
+Web 源码当前部署基线为 `04ded17cd3de3a5fb8a5cfd0b25d2cce72ca7676`，运行不可变公开镜像 `source-04ded17cd3de3a5fb8a5cfd0b25d2cce72ca7676`。生产环境已完成 WebSocket 登录、真实浏览器桌面英文/中文、390×844 手机英文/中文、拖动、缩放、布局持久化、市场抽屉、完整交易链路、租户申请/注册和平台/租户管理验收；本报告中的 Web 图片均来自 `18.140.45.126`，不是本地效果图。
 
 ## 4. 总体架构与服务职责
 
@@ -101,7 +103,7 @@ Order/Trade/Login/Admin/Manager/Liq 事务与配置 -> MySQL
 | APSSvr | 外部行情接入、指数计算输入、向 GW/MDSvr 提供指数类行情 | 当前生产验证单一 Binance Futures 外部源；后续按租户指数方案配置多源计算 |
 | AdminSvr | 面向 Web 的租户管理接口：用户、品种、API Key、Robot、交易记录、设置和审计 | location 取自认证会话；跨 location 和非管理员访问已验收拒绝 |
 | ManagerSvr | 平台运营：申请、审批、初始化、生命周期、独立 URL | 仅 PLATFORM 角色可审批和变更租户；操作写审计 |
-| RobotSvr | 租户策略/流动性服务：订阅 APSSvr 的 Binance Futures 10 档深度，使用租户 API Key 向 OrderSvr 提交 PostOnly 报价；价差内用户挂单由 IOC 扫单；内部成交后按净持仓差额经 APSSvr 反向对冲 | 所有配置、订单查询、持仓、扫单和对冲流水均绑定 location + robot + symbol；外部凭据只以环境变量别名注入；代码与本地测试完成，生产容器和真实币安账户对冲待验收 |
+| RobotSvr | 租户策略/流动性服务：订阅 APSSvr 的 Binance Futures ticker/bookTicker，使用租户 API Key 合成并提交 10+10 档 PostOnly 报价；价差内用户挂单由 IOC 主动成交；可按内部净持仓差额触发外部反向对冲 | 配置、订单查询、持仓、主动成交和租约全部绑定 location + robot + symbol；内部流动性已通过生产 E2E；外部凭据只以环境变量别名注入，真实币安账户对冲待验收 |
 
 ## 5. 核心交易业务规则
 
@@ -279,11 +281,11 @@ MDSvr snapshot -> 服务端校验 location/topic -> GW 仅登记已确认订阅
 
 上线门禁：至少三个独立来源、来源权重、时间戳新鲜度、异常值剔除、中位数/加权指数、断流降级、标记价平滑、价格保护、监控和审计全部通过后，才允许真实资金交易。
 
-### 8.4 Robot 流动性与外部对冲规则（实现完成、生产待验收）
+### 8.4 Robot 流动性与外部对冲规则（内部流动性生产通过、外部对冲待凭据）
 
-- APSSvr 订阅 Binance Futures 100 ms partial-depth 10 档并发布 `dc.aps.depth.BNFutures.<symbol>`；RobotSvr 只消费该行情，不绕过 APSSvr 直连行情。
-- 一个 Robot worker 固定绑定 `location + robot_id + security_id + tenant API key`。默认上下各 10 档，价格跟随 Binance 档位，数量使用租户固定值或外部数量缩放值，并继续受 tick、step、最小数量、最小名义金额、单档上限和库存上限约束。
-- 常规报价为 PostOnly，避免 Robot 主动成为 taker。部分成交后按剩余数量而不是原始数量对账，撤旧补新恢复完整档位。行情超时、价格瞬时偏离、连续运行异常、配置停用、服务退出或未决外部对冲都会撤销 Robot 活动单并停止继续报价。
+- APSSvr 接收 Binance Futures ticker/bookTicker，经 GW 的 `dc.bookticker.**` Topic 提供给 RobotSvr；RobotSvr 不绕过 APSSvr 另建外部行情连接。
+- 一个 Robot worker 固定绑定 `location + robot_id + security_id + tenant API key`。默认上下各 10 档，以外部买一/卖一为参考按首档价差和档间距合成价格，并继续受 tick、step、最小数量、最小名义金额、单档上限和库存上限约束。
+- 常规报价为 PostOnly，避免 Robot 主动成为 taker。成交或数量不足后使用有界对账批量撤旧补新，恢复完整档位。行情超时、价格瞬时偏离、连续运行异常、配置停用、服务退出、租约失败或未决外部对冲都会阻止补档、撤销活动单并停止。
 - 用户卖单严格进入外部卖一以内，Robot 才以 Buy IOC 扫单；用户买单严格进入外部买一以内，Robot 才以 Sell IOC 扫单。扫单受最大允许损失 bps、单次最大数量和库存上限约束。外部买一/卖一同价边界不扫，避免 IOC 先打到 Robot 自己的镜像订单。
 - Robot 报价或扫单成交后，以“目标外部仓位 = 租户内 Robot 净持仓的相反数”计算差额，通过 APSSvr 向 Binance Futures 报 Market 对冲单。
 - 外部对冲在发送前先事务写入 `dc_robot_hedge_execution`，使用确定性 clientOrderId。响应不确定时立即停报，并用同一 clientOrderId 查询 Binance；完全成交、部分终态、失败终态分别落 FILLED、PARTIAL、FAILED，未知状态持续阻断，防止重复全量对冲。
@@ -293,10 +295,11 @@ MDSvr snapshot -> 服务端校验 location/topic -> GW 仅登记已确认订阅
 
 ### 9.1 登录
 
-1. 浏览器 URL 携带 location，向 GW 发送 LoginSvr 登录请求。
-2. LoginSvr 按用户和 location 校验凭据。
-3. 成功后建立会话并加载用户信息；错误 location 返回认证失败。
-4. 当前仍需后续把会话中的服务端权威 location 注入所有业务调用，彻底忽略客户端伪造值。
+1. 浏览器 URL 携带 location，建立 WebSocket 后向 GW 发送登录消息；用户名和密码不再通过 HTTP 登录接口提交。
+2. GW 调用 LoginSvr 按用户和 location 校验凭据；错误密码返回 `USER_ACCOUNT_OR_PWD_ERROR`，不建立业务会话。
+3. 成功后 GW 将认证用户、角色和权威 location 绑定到当前 SID；Web 先使用该 SID 加载租户品种，再通过 SPA 路由进入交易页，不 reload 页面。
+4. 站内路由切换保持当前 WS；刷新、关闭页面或连接断开后当前版本要求重新登录。无 Redis 的 MySQL 一次性轮换 token 恢复方案已设计但尚未实现。
+5. 仍需继续完成 Order/Trade/MD/Liq 全攻击面证明，确保任何请求体、Topic、缓存和重放都不能用客户端字段切换 location。
 
 ### 9.2 下单与成交
 
@@ -365,13 +368,14 @@ MDSvr snapshot -> 服务端校验 location/topic -> GW 仅登记已确认订阅
 
 ### 11.1 当前核心容器
 
-核心 13 个容器：MySQL、ClickHouse、ZooKeeper、GW、LoginSvr、MDSvr、APSSvr、OrderSvr、TradeSvr、LiqSvr、ManagerSvr、AdminSvr、Trade Web。Playwright runner 是验收辅助容器，不计入核心 13 个。
+核心 14 个容器：MySQL、ClickHouse、ZooKeeper、GW、LoginSvr、MDSvr、APSSvr、OrderSvr、TradeSvr、LiqSvr、ManagerSvr、AdminSvr、RobotSvr、Trade Web。Playwright runner 是验收辅助容器，不计入核心 14 个。
 
 ### 11.2 内存限制
 
 | 服务 | JVM Xmx | 容器上限 |
 |---|---:|---:|
 | GW、LoginSvr、LiqSvr、ManagerSvr、AdminSvr | 256 MiB | 384 MiB |
+| RobotSvr | 256 MiB | 384 MiB |
 | MDSvr、APSSvr、OrderSvr | 448 MiB | 640 MiB |
 | TradeSvr | 384 MiB | 896 MiB |
 | MySQL | - | 1.5 GiB |
@@ -388,7 +392,7 @@ MDSvr snapshot -> 服务端校验 location/topic -> GW 仅登记已确认订阅
 - 只从公开 GHCR 拉取应用镜像，不自动更新 MySQL、ClickHouse、ZooKeeper。
 - 新镜像需要稳定窗口后成组部署；失败自动恢复上一组镜像。
 - 验收报告记录每个运行容器的不可变 image ID；自动更新以整组远端 digest 指纹和稳定窗口判定发布，测试过程中不允许版本漂移。
-- Web 固定为 `source-97b3afe88928fe0c6b26a8564d88ae5168556dba`；自动更新只替换发生不可变镜像变更的服务，本轮 Web 更新未重启核心交易服务。
+- Web 固定为 `source-04ded17cd3de3a5fb8a5cfd0b25d2cce72ca7676`，RobotSvr 固定为 `sha-62718fd7faa6905a79aeaa4ddbc0397e280e4e51`；自动更新只替换发生不可变镜像变更的服务。
 - GitHub 网络偶发 reset/timeout 时，当前运行服务保持不变；源码提交使用直连官方地址重试，不允许 Git 网络问题阻塞开发。
 
 ## 12. 测试与验收结果
@@ -401,12 +405,12 @@ MDSvr snapshot -> 服务端校验 location/topic -> GW 仅登记已确认订阅
 | TradeSvr | 62 | 0 | 0 |
 | LiqSvr | 11 | 0 | 0 |
 | MDSvr | 12 | 0 | 0 |
-| APSSvr | 20 | 0 | 0 |
+| APSSvr | 22 | 0 | 0 |
 | AdminSvr | 13 | 0 | 0 |
 | ManagerSvr | 7 | 0 | 0 |
 | LoginSvr | 5 | 0 | 0 |
-| RobotSvr | 18 | 0 | 0 |
-| 合计 | 197 | 0 | 0 |
+| RobotSvr | 25 | 0 | 0 |
+| 合计 | 206 | 0 | 0 |
 
 Trade Web 同期执行 `npm run build-prod` 成功；AdminSvr、ManagerSvr、LoginSvr 使用受控小内存 Maven 参数完整运行测试，未通过跳过测试生成镜像。
 
@@ -428,7 +432,7 @@ Trade Web 同期执行 `npm run build-prod` 成功；AdminSvr、ManagerSvr、Log
 
 ### 12.3 完整业务验收
 
-- 13 个核心容器、40 张 MySQL 表、26 个 location 字段和 Web 健康：PASS。
+- 14 个核心容器、41 张 MySQL 表、27 个 location 字段和 Web 健康：PASS。
 - MySQL/ClickHouse 双 location 隔离：PASS。
 - tick/step/minNotional、GTC/IOC/FOK/PostOnly/FIFO/STP：PASS。
 - ClOrdID 幂等冲突、Replace、Batch Cancel、Mass Cancel：PASS。
@@ -451,6 +455,15 @@ Trade Web 同期执行 `npm run build-prod` 成功；AdminSvr、ManagerSvr、Log
 - 测试产物：`/data/dc-saas-runtime/e2e-artifacts/tenant-0830160159`。证据租户按审计要求保留，未执行未经授权的数据删除。
 
 自动化曾在真实 MySQL 暴露历史 `dc_symbol` 数字列包含空字符串，审批复制到 DECIMAL 失败；ManagerSvr 与 AdminSvr 已统一通过 `TRIM / NULLIF / CAST` 规范化旧规则。部署预检还发现运行中主机不应按 8 GiB 可用内存拒绝增量更新，现已拆分总内存 7.5 GiB 与可用内存 2 GiB 门禁。修复后重新构建公开镜像并完成全链路回归。
+
+### 12.5 WebSocket、Web 与 Robot 生产验收
+
+- 正确凭据通过 WebSocket 登录并绑定 SID；错误密码返回 `9005` 且不创建业务会话：PASS。
+- Web 双用户入金、挂单、盘口展示、撤单、撮合、最近成交、订单/成交历史、9 行租户 K 线、Last/Mark/Index 和 ReduceOnly 平仓归零：PASS。
+- 桌面中英文、悬停直接拖动、缩放、恢复布局、图表完整填充；390×844 手机中英文无水平溢出：PASS。
+- Robot `ROBOT_E2E_20260831100417` 生成 10 bid + 10 ask，用户成交 Robot 报价后补档，价差内用户单由 Robot IOC 成交，停用后活动报价为 0：PASS。
+- Robot 汇总 `quotes=80, sweeps=1, fills=1, executions=4, foreign_location_orders=0`；所有 `ROBOT_E2E_%` 测试配置最终禁用/停止，活动测试委托为 0。
+- 真实 Binance 外部反向对冲：未执行，原因是未配置专用外部账户凭据；不得标记为 PASS。
 
 ## 13. 截图证据
 
@@ -516,17 +529,18 @@ Trade Web 同期执行 `npm run build-prod` 成功；AdminSvr、ManagerSvr、Log
 | P0 | 无真实钱包和合规 | Deposit 仅测试 | 钱包/KMS/HSM、KYC/AML、提现审批和审计 |
 | P1 | 当前容量距交易所目标较远 | 3000×32 实测 taker 232.6 req/s；挂单阶段 p99 803 ms | 分片单写、异步持久化、性能剖析并达到业务 SLO |
 | P1 | 私有流和深度流未生产化 | 现有 Topic/Snapshot 可用 | 序号、补发、断线恢复、快照+增量一致性 |
+| P1 | WebSocket 会话刷新后不能恢复 | 登录只走 WebSocket；站内 SPA 路由保持 SID；刷新后安全回到租户登录页 | 按已记录的 MySQL 一次性轮换 resumeToken 方案实现恢复、撤销、改密/停租户失效和多 GW 一致性，不引入 Redis |
 | P1 | 完整账户模式不足 | 核心 long/short 字段和 Cross 配置存在 | 完整单向/双向、全仓/逐仓、统一账户验收 |
 | P1 | 订单产品仍不齐 | TP/SL/OCO 已有核心语义 | 追踪止损、Close on Trigger、SMP group、活动单上限 |
 | P1 | 多租户控制面仍是第一阶段 | 申请、审批、URL、注册、用户、品种、API Key、Robot 配置、交易记录、设置和审计已验收 | 自定义域名/证书、套餐配额、2FA、完整 RBAC、导出审批和平台分权 |
-| P1 | RobotSvr 实现完成但生产证据尚未闭环 | APSSvr 10 档、租户报价、价差内扫单、库存保护、幂等对冲流水和 1 万轮盘口风险测试已完成；公开镜像构建成功 | GHCR 包设为 Public 后执行单 location E2E；使用专用币安测试/小额账户完成真实反向对冲、断网不确定响应和恢复验收 |
+| P1 | Robot 外部反向对冲尚未验收 | APSSvr ticker、租户 10+10 档、成交补档、价差内主动成交、库存保护、租约失败撤单和单 location 生产 E2E 已通过；公开镜像已部署 | 使用专用币安测试/小额账户完成真实反向对冲、部分成交、拒单、断网不确定响应、幂等查询和恢复验收 |
 | P1 | 单机基础设施 | Docker 单机可恢复 | MySQL/ClickHouse/ZK 集群、撮合热备、PITR、灾备演练 |
 
 ## 15. 后续实施顺序
 
 1. 先把核心金融正确性补成生产形态：事务 outbox/复式账本、持续对账、多源指数和标记价、完整账户模式、风险限额、资金费和极端行情回放。
 2. 收口服务端权威 location：完成 Order/Trade/MD/Liq 跨租户请求、订阅、缓存、锁、重放和数据库攻击测试；如需前置防御，以可选 SaaS GW 插件实现，保持通用 GW 独立性。
-3. RobotSvr GHCR 包公开后执行一键增量部署：先验收 APSSvr 10 档与租户上下 10 档重合、用户价差内挂单被扫、成交持仓、停用撤单和跨 location 隔离；再以专用币安账户验收真实反向对冲及不确定响应恢复。随后补齐追踪止损、Close on Trigger、完整账户模式等交易产品。
+3. Robot 内部流动性已经收口；下一步以专用币安账户验收真实反向对冲及不确定响应恢复，并补齐追踪止损、Close on Trigger、完整账户模式等交易产品。
 4. 完成多租户第二阶段：自定义域名/证书、套餐配额、2FA、平台/租户 RBAC、导出审批、品牌资产和用量计费。
 5. 发布版本化 REST/WebSocket API、HMAC/RSA/Ed25519、API Key 权限/IP 白名单、私有流、序号恢复和分层限流。
 6. 完成真实钱包、安全合规、高可用、容量、混沌和灾备后，才进入小额内部真实资金灰度。
@@ -547,6 +561,9 @@ Trade Web 同期执行 `npm run build-prod` 成功；AdminSvr、ManagerSvr、Log
 - 核心验收报告：`docs/CORE_TRADING_ACCEPTANCE_20260828.zh-CN.md`
 - 对标路线图：`docs/BINANCE_BYBIT_ROADMAP.zh-CN.md`
 - 自动更新说明：`docs/AUTO_UPDATE.zh-CN.md`
+- WebSocket 会话恢复设计：`docs/WEBSOCKET_SESSION_RESUME_DESIGN.zh-CN.md`
+- WebSocket 与 Web 验收：`docs/WEBSOCKET_AND_WEB_ACCEPTANCE_20260831.zh-CN.md`
+- Robot 流动性验收：`docs/ROBOT_LIQUIDITY_ACCEPTANCE_20260831.zh-CN.md`
 - 数据库证据原始 HTML：`docs/evidence/database-evidence.html`
 - 压力测试脚本：`tests/run-core-trading-stress-host.sh`
 - 完整验收脚本：`tests/run-core-trading-acceptance.sh`
