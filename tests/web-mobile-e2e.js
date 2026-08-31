@@ -11,15 +11,6 @@ const artifactDir = process.env.E2E_ARTIFACT_DIR || '/artifacts';
 if (!password) throw new Error('E2E_PASSWORD is required');
 fs.mkdirSync(artifactDir, {recursive: true});
 
-function requestMethod(response) {
-  try {
-    const body = response.request().postDataJSON();
-    return body && (body.method || (body.content && body.content.method));
-  } catch (error) {
-    return '';
-  }
-}
-
 async function login(page) {
   await page.goto(`${baseUrl}/#/login?location=${encodeURIComponent(location)}`, {
     waitUntil: 'domcontentloaded'
@@ -31,18 +22,14 @@ async function login(page) {
   const inputs = page.locator('.loginWrap input');
   await inputs.nth(0).fill(username);
   await inputs.nth(1).fill(password);
-  const responsePromise = page.waitForResponse(
-    response => response.url().includes('/httpapi/') && requestMethod(response) === 'SYS.ATS.LOGIN',
-    {timeout: 60000}
-  );
   await page.locator('.loginWrap .ant-btn-primary').click();
-  const response = await responsePromise;
-  const body = await response.json();
-  if (Number(body.code) !== 0 || body.data.user_id !== username || body.data.location !== location) {
-    throw new Error(`login failed: ${JSON.stringify(body)}`);
-  }
+  await page.waitForFunction(() => Boolean(sessionStorage.getItem('loginData')));
   await page.waitForURL(`**/#/trade?location=${encodeURIComponent(location)}`);
   await page.locator('.tradeGrid').waitFor({timeout: 60000});
+  const body = await page.evaluate(() => JSON.parse(sessionStorage.getItem('loginData') || '{}'));
+  if (Number(body.code) !== 0 || body.user_id !== username || body.location !== location) {
+    throw new Error(`websocket login failed: ${JSON.stringify(body)}`);
+  }
   await page.waitForTimeout(2500);
 }
 
