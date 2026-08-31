@@ -15,7 +15,7 @@ async function token(page) {
   return page.evaluate(() => sessionStorage.getItem('ff-dex-token') || '');
 }
 
-async function login(page) {
+async function login(page, browserEvents) {
   await page.goto(`${baseUrl}/#/login?location=${encodeURIComponent(location)}`, {waitUntil: 'domcontentloaded'});
   const inputs = page.locator('.loginWrap input');
   await inputs.nth(0).fill(username);
@@ -34,7 +34,7 @@ async function login(page) {
       buttonDisabled: Boolean(document.querySelector('.loginWrap .ant-btn-primary')?.disabled)
     }));
     await page.screenshot({path: path.join(artifactDir, 'websocket-session-login-failure.png'), fullPage: true});
-    throw new Error(`login did not navigate: ${JSON.stringify(diagnostics)}; ${error.message}`);
+    throw new Error(`login did not navigate: ${JSON.stringify(diagnostics)}; browser=${JSON.stringify(browserEvents)}; ${error.message}`);
   }
   await page.locator('.tradeWrap').waitFor({timeout: 60000});
   await page.waitForFunction(() => Boolean(sessionStorage.getItem('ff-dex-token')));
@@ -95,12 +95,19 @@ function expectRejected(label, result) {
   const context = await browser.newContext({viewport: {width: 1440, height: 900}});
   const page = await context.newPage();
   const browserErrors = [];
+  const browserEvents = [];
   page.on('pageerror', error => browserErrors.push(`pageerror: ${error.message}`));
   page.on('console', message => {
+    browserEvents.push(`console.${message.type()}: ${message.text()}`);
     if (message.type() === 'error') browserErrors.push(`console: ${message.text()}`);
   });
+  page.on('websocket', socket => {
+    browserEvents.push(`websocket.opening: ${socket.url()}`);
+    socket.on('close', () => browserEvents.push(`websocket.closed: ${socket.url()}`));
+    socket.on('socketerror', error => browserEvents.push(`websocket.error: ${error}`));
+  });
   try {
-    await login(page);
+    await login(page, browserEvents);
     const token1 = await token(page);
 
     const remembered = await page.evaluate(() => {
