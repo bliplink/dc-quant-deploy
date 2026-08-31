@@ -1,12 +1,12 @@
 # DC SaaS 加密货币永续合约系统产品与验收说明
 
-文档版本：V1.5
+文档版本：V1.6
 
-基线日期：2026-08-31
+基线日期：2026-09-01
 
 代码分支：`saas-crypto`
 
-当前生产验证环境：`18.140.45.126`，Compose 项目 `dc-saas`；核心隔离回归 `location=POSTFIX2_E2E / WEB_E2E`，Robot 最终回归 `location=ROBOT_E2E_20260831100417`，多租户控制面最终回归 `location=SAASA_E2E_0830160159 / SAASB_E2E_0830160159`
+当前生产验证环境：`18.140.45.126`，Compose 项目 `dc-saas`；核心隔离与压力回归 `location=POSTFIX2_E2E / CORE_E2E`，Robot 持续回归 `location=WEB_E2E`，多租户控制面最终回归 `location=SAASA_E2E_0830160159 / SAASB_E2E_0830160159`
 
 ## 1. 文档目的与结论
 
@@ -15,6 +15,8 @@
 截至本基线，单租户单交易对的永续合约核心闭环已经形成并通过自动化验收：登录、测试入金、限价/市价下单、撤单、撮合、行情、订单与成交查询、资金与持仓、手续费、杠杆和风险档位、资金费、只减仓、止盈止损/OCO、部分强平、最终强平、保险基金和事务型 ADL。
 
 本轮在生产验证环境完成峰值档 3,000 个挂单、3,000 个 maker 单、3,000 个 taker 单、并发 32 的严格压力门禁：9,000 个订单请求、6,000 条双方执行记录和 6,000 条成交资金流水全部成功并精确核对，随后重启恢复和平仓归零。五个核心服务共 154 项单元测试全部通过。该轮同时发现并修复 TradeSvr 640 MiB cgroup OOM，以及超时重试未返回首次手续费/PnL 导致 OrderSvr 状态未收敛的问题；失败轮次保留为诊断证据，不计为通过。
+
+2026-09-01 又按相同 3000×32 门禁复查服务资源边界，发现 `gateway-api` 3.0.1 无界 cached thread pool 可把 TradeSvr 推高到约 4,381 个线程、707 MiB；GW 也存在每连接创建 HTTP 回调工作组的问题。`gateway-api` 3.0.2、TradeSvr 有界 32 worker/10,000 队列和 GW 共享回调组上线后，同规模复测全部业务断言再次通过，TradeSvr 保持 169–170 PID、约 259–279 MiB；GW 稳定在约 107–114 个线程。APSSvr 故障注入进一步验证 Robot 4 秒内 `STALE/0` 安全撤单，并在不重启 GW/RobotSvr 的情况下约 47 秒自动恢复 `RUNNING/20` 和 Web 严格 10+10 档。
 
 2026-08-30 又完成了 SaaS 控制面生产验收：公开试用申请、平台审批、租户初始化、独立 URL、租户内注册、租户管理员、同名用户隔离、品种规则、API Key、流动性 Robot 配置、交易记录、租户设置与审计、暂停和恢复均已形成真实 Web/GW/服务/MySQL 闭环。最终浏览器回归覆盖桌面端和 390×844 手机端。
 
@@ -374,7 +376,8 @@ MDSvr snapshot -> 服务端校验 location/topic -> GW 仅登记已确认订阅
 
 | 服务 | JVM Xmx | 容器上限 |
 |---|---:|---:|
-| GW、LoginSvr、LiqSvr、ManagerSvr、AdminSvr | 256 MiB | 384 MiB |
+| LoginSvr、LiqSvr、ManagerSvr、AdminSvr | 256 MiB | 384 MiB |
+| GW | 256 MiB | 512 MiB |
 | RobotSvr | 256 MiB | 384 MiB |
 | MDSvr、APSSvr、OrderSvr | 448 MiB | 640 MiB |
 | TradeSvr | 384 MiB | 896 MiB |
@@ -385,6 +388,8 @@ MDSvr snapshot -> 服务端校验 location/topic -> GW 仅登记已确认订阅
 
 最终检查所有核心容器 running，RestartCount=0，OOMKilled=false。
 
+GW 额外限制 `-Xss256k -XX:ActiveProcessorCount=2 -XX:MaxDirectMemorySize=128m`；TradeSvr 使用 `gateway.api.workerThreads=32` 和 `gateway.api.workerQueueCapacity=10000`。最终压力撮合阶段 TradeSvr 为 169–170 PID、约 259–279 MiB，GW 干净窗口约 107–114 个线程、208–252 MiB。
+
 ### 11.3 自动更新
 
 - SaaS 部署目录为 `/home/ec2-user/dc-saas-deploy`，运行数据为 `/data/dc-saas-runtime`；与同机量化 Compose 项目和数据目录分离。
@@ -392,7 +397,7 @@ MDSvr snapshot -> 服务端校验 location/topic -> GW 仅登记已确认订阅
 - 只从公开 GHCR 拉取应用镜像，不自动更新 MySQL、ClickHouse、ZooKeeper。
 - 新镜像需要稳定窗口后成组部署；失败自动恢复上一组镜像。
 - 验收报告记录每个运行容器的不可变 image ID；自动更新以整组远端 digest 指纹和稳定窗口判定发布，测试过程中不允许版本漂移。
-- Web 使用公开移动标签 `saas-crypto` 并由自动更新脚本按 registry digest 识别变更；RobotSvr 固定为 `sha-62718fd7faa6905a79aeaa4ddbc0397e280e4e51`。自动更新只替换 digest 实际发生变化的服务。
+- Web 与 GW 使用公开移动标签 `saas-crypto` 并由自动更新脚本按 registry digest 识别变更；当前 GW 源码修订为 `6702148`。RobotSvr 固定为 `sha-06d101d6aed3d4c9859fa77e725aa8102567d8b4`，TradeSvr 固定为 `sha-e97b8cca1e2606e72e34042d7c38eb92e2d800ba`。自动更新只替换 digest 实际发生变化的服务。
 - GitHub 网络偶发 reset/timeout 时，当前运行服务保持不变；源码提交使用直连官方地址重试，不允许 Git 网络问题阻塞开发。
 
 ## 12. 测试与验收结果
@@ -402,15 +407,18 @@ MDSvr snapshot -> 服务端校验 location/topic -> GW 仅登记已确认订阅
 | 服务 | 测试数 | 失败 | 错误 |
 |---|---:|---:|---:|
 | OrderSvr | 49 | 0 | 0 |
-| TradeSvr | 62 | 0 | 0 |
+| TradeSvr | 63 | 0 | 0 |
 | LiqSvr | 11 | 0 | 0 |
 | MDSvr | 12 | 0 | 0 |
 | APSSvr | 22 | 0 | 0 |
 | AdminSvr | 13 | 0 | 0 |
 | ManagerSvr | 7 | 0 | 0 |
 | LoginSvr | 5 | 0 | 0 |
-| RobotSvr | 25 | 0 | 0 |
-| 合计 | 206 | 0 | 0 |
+| RobotSvr | 32 | 0 | 0 |
+| GW | 7 | 0 | 0 |
+| gateway-api | 1 | 0 | 0 |
+| com.app.dc | 7 | 0 | 0 |
+| 合计 | 229 | 0 | 0 |
 
 Trade Web 同期执行 `npm run build-prod` 成功；AdminSvr、ManagerSvr、LoginSvr 使用受控小内存 Maven 参数完整运行测试，未通过跳过测试生成镜像。
 
@@ -421,14 +429,18 @@ Trade Web 同期执行 `npm run build-prod` 成功；AdminSvr、ManagerSvr、Log
 | POSTBATCH200 | 4 | 600 | 400 | 400 | PASS | 三阶段约 19.3/19.5/17.6 req/s |
 | PROD-1000×16 | 16 | 3,000 | 2,000 | 2,000 | PASS | 挂单/maker/taker 81.6/144.9/146.8 req/s；p99 814/206/326 ms |
 | PROD-3000×32 | 32 | 9,000 | 6,000 | 6,000 | PASS | 挂单/maker/taker 143.9/214.5/232.6 req/s；p99 803/311/310 ms；最大 1.60 s |
+| POST-GW-1000×16 | 16 | 3,000 | 2,000 | 2,000 | PASS | 干净基线重跑；所有业务、恢复和平仓断言通过 |
+| BOUNDED-3000×32 | 32 | 9,000 | 6,000 | 6,000 | PASS | 挂单/maker/taker 135.8/205.4/208.6 req/s；p99 692/301/381 ms；TradeSvr 32 worker |
 | STABILITY R1 | 8 | 1,500 | 1,000 | 1,000 | PASS | 含状态服务重启恢复与平仓归零 |
 | STABILITY R2 | 8 | 1,500 | 1,000 | 1,000 | PASS | 含状态服务重启恢复与平仓归零 |
 | STABILITY R3 | 8 | 1,500 | 1,000 | 1,000 | PASS | 含状态服务重启恢复与平仓归零 |
-| 合计 | - | 17,100 | 11,400 | 11,400 | PASS | 无异步拒单、无重复记录、无交叉盘口、无 OOM |
+| 验收轮次合计 | - | 29,100 | 19,400 | 19,400 | PASS | 无异步拒单、无重复记录、无交叉盘口、无 OOM |
 
 每一轮不仅检查 HTTP 成功，还等待并精确核对订单、双方 execution、双方 posting、手续费汇总、余额、持仓、保证金、撤单、订单簿唯一性；随后重启 OrderSvr/TradeSvr，验证恢复一致，再用 reduce-only 对敲平仓并验证占用归零。
 
 生产高压先后执行了两类失败注入式诊断：原 640 MiB TradeSvr 在约第 1,960 笔 taker 成交时被 cgroup OOM；增加受控堆外余量后，首次 3000×32 得到订单 9000/9000、流水 6000/6000，但 OrderSvr 成交回报仅 5229/6000。根因分别修复为 896 MiB 容器上限/原生内存约束/成功路径降噪，以及 TradeSvr 幂等重试返回首次完整 PResult。最终独立 location 重跑达到 9000/6000/6000、0 重启、0 OOM。失败结果与修复后结果均保留日志，避免只报告成功轮次。
+
+2026-09-01 资源复查又发现：修复前 `gateway-api` 无界线程池在 3000×32 撮合期达到约 4,381 个 TradeSvr 线程，即使业务核对全部通过也判定资源门禁失败。升级到 `gateway-api:3.0.2` 并设置 32 worker、10,000 有界队列后，相同压力复测保持 169–170 PID、约 259–279 MiB，业务、重启恢复与 ReduceOnly 平仓再次全部通过。首次 1000×16 被历史活动单污染的轮次不计为系统失败或通过；压力脚本现强制拒绝非空基线。
 
 ### 12.3 完整业务验收
 
@@ -463,6 +475,8 @@ Trade Web 同期执行 `npm run build-prod` 成功；AdminSvr、ManagerSvr、Log
 - 桌面中英文、悬停直接拖动、缩放、恢复布局、图表完整填充；390×844 手机中英文无水平溢出：PASS。
 - Robot `ROBOT_E2E_20260831100417` 生成 10 bid + 10 ask，用户成交 Robot 报价后补档，价差内用户单由 Robot IOC 成交，停用后活动报价为 0：PASS。
 - Robot 汇总 `quotes=80, sweeps=1, fills=1, executions=4, foreign_location_orders=0`；所有 `ROBOT_E2E_%` 测试配置最终禁用/停止，活动测试委托为 0。
+- 常驻 `WEB_E2E` 混合流量最终 305.3 秒干净窗口：接受 416、拒绝 0、数据库缺档 0；真实 Chromium 新增 1,188 个采样，买卖盘最小/最大均为 10/10，缺档 0、页面错误 0：PASS。
+- APSSvr 故障注入：停止后 4 秒内 Robot 从 `RUNNING/20` 进入 `STALE/0` 并安全撤单；恢复 APSSvr 后无需重启 GW/RobotSvr，约 47 秒自动回到 `RUNNING/20` 和数据库/Web 10+10：PASS。
 - 真实 Binance 外部反向对冲：未执行，原因是未配置专用外部账户凭据；不得标记为 PASS。
 
 ## 13. 截图证据
@@ -491,7 +505,11 @@ Trade Web 同期执行 `npm run build-prod` 成功；AdminSvr、ManagerSvr、Log
 
 ![真实数据库查询与运行镜像证据](evidence/database-evidence.png)
 
-### 13.5 多租户申请、注册与管理证据（生产环境）
+### 13.5 Robot 实时盘口与持续行情（生产环境）
+
+![Robot 持续报价、Web 严格 10+10 档与实时行情](evidence/web-market-live-20260901.png)
+
+### 13.6 多租户申请、注册与管理证据（生产环境）
 
 ![公开 SaaS 试用申请](evidence/tenant-application-en.png)
 
@@ -512,7 +530,9 @@ Trade Web 同期执行 `npm run build-prod` 成功；AdminSvr、ManagerSvr、Log
 - `workspace-zh.png`：`88b1c9c926e86b2837b862cc2a525a1d29e1984e79ddefe696103300055b906d`
 - `workspace-mobile-en.png`：`ded9008f1509462f02820a7e6d10c87263f3c599c5f597e151736bd56705a693`
 - `workspace-mobile-zh.png`：`b3978c5a7dc17c8222c8d37b0c5b850b67a1707f0aa562f8ace0e85196471cf1`
-- `database-evidence.png`：`13ae3ced4d100e095d751b8a295468964d4c2da8224097affa6ba2bfe1e7d267`
+- `database-evidence.png`：`5d186655940bd68709d761f0f63395e35aa1004fd2eee782782057277938e5dd`
+- `database-evidence.html`：`73d2753f17d034b071727ad332fad4edf1a557bcbdd61a515aea8afcdac70f5d`
+- `web-market-live-20260901.png`：`2b6dd4add6a3963494ce8c132ed4b24a73e566da797d613f3d6e08237e89ba61`
 - `tenant-application-en.png`：`a0661d1cf673862fe7369274fa664b3d5905f410d00b239e1f53fb7a56e9abb7`
 - `tenant-registration-mobile-en.png`：`f66a33ba34fab0fd3203381daefe00af8f073d7c24e599d7986174482e15071d`
 - `platform-tenant-operations-en.png`：`1b72269c80aa2c17ac1ac91467f1d2fb7f4088cd5d0819fb53fac4949866c55a`
@@ -527,7 +547,7 @@ Trade Web 同期执行 `npm run build-prod` 成功；AdminSvr、ManagerSvr、Log
 | P0 | 资金流水普通成交使用内存异步队列 | 批量 250、失败重试、优雅停机排空、压力精确核对 | 事务 outbox、不可变复式账本、持续对账 |
 | P0 | APS 当前仅验证单一外部源 | Binance Futures 实时 ticker/bookTicker 和 Web Mark/Index 已通过 | 建设多源指数、异常剔除、断源降级与偏离保护 |
 | P0 | 无真实钱包和合规 | Deposit 仅测试 | 钱包/KMS/HSM、KYC/AML、提现审批和审计 |
-| P1 | 当前容量距交易所目标较远 | 3000×32 实测 taker 232.6 req/s；挂单阶段 p99 803 ms | 分片单写、异步持久化、性能剖析并达到业务 SLO |
+| P1 | 当前容量距交易所目标较远 | 有界线程池后 3000×32 实测 taker 208.6 req/s、p99 381 ms；资源无失控 | 分片单写、异步持久化、性能剖析并达到业务 SLO |
 | P1 | 私有流和深度流未生产化 | 现有 Topic/Snapshot 可用 | 序号、补发、断线恢复、快照+增量一致性 |
 | 已完成 | WebSocket 会话恢复 | 无 Redis MySQL 一次性 token 轮换、刷新/真实断线恢复、跨租户拒绝、退出撤销和密码不落盘均已通过生产 E2E | 上真实资金前补 GW/公共组件凭证日志脱敏，并在 HTTPS/WSS 下复验 |
 | P1 | 完整账户模式不足 | 核心 long/short 字段和 Cross 配置存在 | 完整单向/双向、全仓/逐仓、统一账户验收 |
@@ -565,6 +585,8 @@ Trade Web 同期执行 `npm run build-prod` 成功；AdminSvr、ManagerSvr、Log
 - WebSocket 会话恢复验收：`docs/WEBSOCKET_SESSION_RESUME_ACCEPTANCE_20260831.zh-CN.md`
 - WebSocket 与 Web 验收：`docs/WEBSOCKET_AND_WEB_ACCEPTANCE_20260831.zh-CN.md`
 - Robot 流动性验收：`docs/ROBOT_LIQUIDITY_ACCEPTANCE_20260831.zh-CN.md`
+- 核心稳定性与压力验收：`docs/CORE_TRADING_STABILITY_AND_STRESS_ACCEPTANCE_20260901.zh-CN.md`
+- Robot 持续报价与重连加固：`docs/ROBOT_SOAK_HARDENING_20260901.zh-CN.md`
 - 数据库证据原始 HTML：`docs/evidence/database-evidence.html`
 - 压力测试脚本：`tests/run-core-trading-stress-host.sh`
 - 完整验收脚本：`tests/run-core-trading-acceptance.sh`

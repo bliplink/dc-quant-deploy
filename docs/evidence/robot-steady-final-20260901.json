@@ -1,0 +1,29 @@
+{
+  "durationSeconds": 305.3,
+  "delta": {
+    "accepted": 416,
+    "rejected": 0,
+    "databaseGaps": 0,
+    "authRefreshes": 0,
+    "webSamples": 1188,
+    "webGaps": 0,
+    "webPageErrors": 0
+  },
+  "web": {
+    "time": "2026-08-31T20:48:07.148Z",
+    "pid": 1,
+    "samples": 1280,
+    "gapSamples": 0,
+    "minBids": 10,
+    "minAsks": 10,
+    "maxBids": 10,
+    "maxAsks": 10,
+    "pageErrorCount": 0,
+    "status": "sampling"
+  },
+  "gateway": {
+    "restartCount": 0,
+    "oomKilled": false,
+    "running": true
+  }
+}

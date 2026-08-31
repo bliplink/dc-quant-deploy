@@ -1,0 +1,61 @@
+{
+  "durationSeconds": 141.0,
+  "delta": {
+    "accepted": 156,
+    "rejected": 0,
+    "databaseGaps": 0,
+    "authRefreshes": 0,
+    "webSamples": 544,
+    "webGaps": 0,
+    "webPageErrors": 0
+  },
+  "web": {
+    "time": "2026-08-31T21:37:30.110Z",
+    "pid": 1,
+    "samples": 692,
+    "gapSamples": 0,
+    "minBids": 10,
+    "minAsks": 10,
+    "maxBids": 10,
+    "maxAsks": 10,
+    "pageErrorCount": 0,
+    "status": "sampling"
+  },
+  "containers": {
+    "dc-saas-apssvr": {
+      "restartDelta": 0,
+      "oomKilled": false,
+      "status": "running"
+    },
+    "dc-saas-gateway": {
+      "restartDelta": 0,
+      "oomKilled": false,
+      "status": "running"
+    },
+    "dc-saas-ordersvr": {
+      "restartDelta": 0,
+      "oomKilled": false,
+      "status": "running"
+    },
+    "dc-saas-tradesvr": {
+      "restartDelta": 0,
+      "oomKilled": false,
+      "status": "running"
+    },
+    "dc-saas-mdsvr": {
+      "restartDelta": 0,
+      "oomKilled": false,
+      "status": "running"
+    },
+    "dc-saas-robotsvr": {
+      "restartDelta": 0,
+      "oomKilled": false,
+      "status": "running"
+    },
+    "dc-saas-liqsvr": {
+      "restartDelta": 0,
+      "oomKilled": false,
+      "status": "running"
+    }
+  }
+}
