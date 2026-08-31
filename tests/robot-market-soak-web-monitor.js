@@ -73,13 +73,15 @@ async function monitorSession(browser) {
       const ready = sample.bidRows >= 10 && sample.askRows >= 10 && sample.lastPrice && sample.lastPrice !== '--';
       if (ready) {
         everReady = true;
-        minBids = Math.min(minBids, sample.bidRows);
-        minAsks = Math.min(minAsks, sample.askRows);
         if (lastHealthyScreenshotSample === 0 || samples - lastHealthyScreenshotSample >= Math.round(600000 / sampleMs)) {
           await page.screenshot({path: path.join(stateDir, 'web-market-live.png'), fullPage: true});
           lastHealthyScreenshotSample = samples;
           emit({event: 'web_healthy_screenshot', sample, samples, path: 'web-market-live.png'});
         }
+      }
+      if (everReady) {
+        minBids = Math.min(minBids, sample.bidRows);
+        minAsks = Math.min(minAsks, sample.askRows);
       }
       if (everReady && !ready) {
         gapSamples += 1;
