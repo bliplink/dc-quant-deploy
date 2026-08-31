@@ -228,6 +228,9 @@ function layoutItem(snapshot, breakpoint, key) {
     if (!afterBox || (Math.abs(afterBox.x - beforeBox.x) < 20 && Math.abs(afterBox.y - beforeBox.y) < 20)) {
       throw new Error('drag gesture did not move the chart panel');
     }
+    if ((await chartPanel.getAttribute('class') || '').includes('react-draggable-dragging')) {
+      throw new Error('drag gesture did not release after crossing the chart iframe');
+    }
 
     await chartPanel.scrollIntoViewIfNeeded();
     await page.waitForTimeout(300);
