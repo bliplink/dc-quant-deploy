@@ -191,6 +191,8 @@ start_monitor() {
   fi
   if [[ -z "${state}" ]]; then
     docker run -d --name "${MONITOR_CONTAINER}" --restart unless-stopped --network host \
+      --memory "${ROBOT_SOAK_MONITOR_MEMORY_LIMIT:-768m}" \
+      --cpus "${ROBOT_SOAK_MONITOR_CPU_LIMIT:-1.0}" --pids-limit 256 \
       --log-driver json-file --log-opt "max-size=${DOCKER_LOG_MAX_SIZE:-50m}" \
       --log-opt "max-file=${DOCKER_LOG_MAX_FILE:-5}" \
       --label dc.saas.role=robot-web-monitor --label "dc.saas.robot-soak-revision=${revision}" \
