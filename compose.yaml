@@ -132,7 +132,7 @@ services:
       DEPLOY_ROOT: /srv/dc
       SERVICE_NAME: GW
       MAIN_CLASS: GW
-      JAVA_OPTS: ${GW_JAVA_OPTS:--server -Xms64m -Xmx256m -Xmn64m -Djava.security.auth.login.config=../../control/jaas.ini}
+      JAVA_OPTS: ${GW_JAVA_OPTS:--server -Xms64m -Xmx256m -Xmn64m -Xss256k -XX:ActiveProcessorCount=2 -XX:MaxDirectMemorySize=128m -XX:+ExitOnOutOfMemoryError -Djava.security.auth.login.config=../../control/jaas.ini}
     volumes:
       - ${DEPLOY_ROOT}/control:/srv/dc/control:ro
       - ${DEPLOY_ROOT}/data:/srv/dc/data
