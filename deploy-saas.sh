@@ -114,12 +114,13 @@ ensure_env_defaults() {
   migrate_env_value ROBOTSVR_IMAGE_REPOSITORY dc-saas/robotsvr ghcr.io/bliplink/robotsvr
   migrate_env_value TRADE_WEB_IMAGE_REPOSITORY dc-saas/dc-trade-web ghcr.io/bliplink/dc-saas-trade-web
   migrate_env_value TRADE_WEB_IMAGE_REPOSITORY ghcr.io/skt-walter/dc-trade-web ghcr.io/bliplink/dc-saas-trade-web
-  migrate_env_value TRADE_WEB_TAG source-2ed6e68f3ad45a65cb184b5397abc9f752719721 source-6d20d6b9e6361017d7892f8018c7d68a0130e284
-  migrate_env_value TRADE_WEB_TAG source-97b3afe88928fe0c6b26a8564d88ae5168556dba source-6d20d6b9e6361017d7892f8018c7d68a0130e284
-  migrate_env_value TRADE_WEB_TAG source-cbd7e5a12c7a083b30383922263101f1a730cb3a source-6d20d6b9e6361017d7892f8018c7d68a0130e284
-  migrate_env_value TRADE_WEB_TAG source-d383dbff18116090b5dec29fa07757bccc5abb53 source-6d20d6b9e6361017d7892f8018c7d68a0130e284
-  migrate_env_value TRADE_WEB_TAG source-000dd5fde5731e7bd70492b09333985574f1ea0e source-6d20d6b9e6361017d7892f8018c7d68a0130e284
-  migrate_env_value TRADE_WEB_TAG saas-crypto source-6d20d6b9e6361017d7892f8018c7d68a0130e284
+  migrate_env_value TRADE_WEB_TAG source-2ed6e68f3ad45a65cb184b5397abc9f752719721 source-dbf69d5e0090f981eac546681a4a596275a5b22c
+  migrate_env_value TRADE_WEB_TAG source-97b3afe88928fe0c6b26a8564d88ae5168556dba source-dbf69d5e0090f981eac546681a4a596275a5b22c
+  migrate_env_value TRADE_WEB_TAG source-cbd7e5a12c7a083b30383922263101f1a730cb3a source-dbf69d5e0090f981eac546681a4a596275a5b22c
+  migrate_env_value TRADE_WEB_TAG source-d383dbff18116090b5dec29fa07757bccc5abb53 source-dbf69d5e0090f981eac546681a4a596275a5b22c
+  migrate_env_value TRADE_WEB_TAG source-000dd5fde5731e7bd70492b09333985574f1ea0e source-dbf69d5e0090f981eac546681a4a596275a5b22c
+  migrate_env_value TRADE_WEB_TAG source-6d20d6b9e6361017d7892f8018c7d68a0130e284 source-dbf69d5e0090f981eac546681a4a596275a5b22c
+  migrate_env_value TRADE_WEB_TAG saas-crypto source-dbf69d5e0090f981eac546681a4a596275a5b22c
   migrate_env_value REQUIRE_GHCR_LOGIN true false
   if ! grep -q '^SAAS_MIN_TOTAL_MEMORY_MB=' "${ENV_FILE}"; then
     printf 'SAAS_MIN_TOTAL_MEMORY_MB=7680\n' >> "${ENV_FILE}"
