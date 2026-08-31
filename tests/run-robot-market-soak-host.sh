@@ -369,6 +369,7 @@ PY
 }
 
 is_running() { [[ -s "${PID_FILE}" ]] && kill -0 "$(cat "${PID_FILE}")" 2>/dev/null; }
+load_pids() { pgrep -f '^bash (\./tests|/.*/tests)/run-robot-market-soak-host\.sh run$' || true; }
 
 case "${MODE}" in
   run)
@@ -393,11 +394,11 @@ case "${MODE}" in
     log "running pid=$(cat "${PID_FILE}"); monitor=$(docker inspect --format '{{.State.Status}}' "${MONITOR_CONTAINER}")"
     ;;
   stop)
-    pids="$(pgrep -f '[r]un-robot-market-soak-host.sh run' || true)"
+    pids="$(load_pids)"
     if [[ -n "${pids}" ]]; then
       kill ${pids} 2>/dev/null || true
       for _ in $(seq 1 20); do
-        pids="$(pgrep -f '[r]un-robot-market-soak-host.sh run' || true)"
+        pids="$(load_pids)"
         [[ -z "${pids}" ]] && break
         sleep 0.25
       done
