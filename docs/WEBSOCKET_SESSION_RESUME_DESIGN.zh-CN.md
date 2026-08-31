@@ -10,7 +10,7 @@
 - `location` 仍由租户专属 URL 自动带入，Web 不允许用户填写租户。
 - LoginSvr 返回的用户和 `location` 是恢复后的权威身份；Web 只有认证成功后才恢复订阅。
 
-代码基线：LoginSvr `6164727`，dc-trade-web `7421d5d`，GW 零代码改动。
+代码基线：LoginSvr `6164727`，dc-trade-web `d9f69fa`，GW 零代码改动。
 
 ## 2. 无 Redis 的会话模型
 
