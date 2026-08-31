@@ -53,6 +53,7 @@ async function monitorSession(browser) {
   let minBids = Number.MAX_SAFE_INTEGER;
   let minAsks = Number.MAX_SAFE_INTEGER;
   let screenshotWritten = false;
+  let lastHealthyScreenshotSample = 0;
   let everReady = false;
   emit({event: 'web_monitor_connected', location, user});
   try {
@@ -74,6 +75,11 @@ async function monitorSession(browser) {
         everReady = true;
         minBids = Math.min(minBids, sample.bidRows);
         minAsks = Math.min(minAsks, sample.askRows);
+        if (lastHealthyScreenshotSample === 0 || samples - lastHealthyScreenshotSample >= Math.round(600000 / sampleMs)) {
+          await page.screenshot({path: path.join(stateDir, 'web-market-live.png'), fullPage: true});
+          lastHealthyScreenshotSample = samples;
+          emit({event: 'web_healthy_screenshot', sample, samples, path: 'web-market-live.png'});
+        }
       }
       if (everReady && !ready) {
         gapSamples += 1;
