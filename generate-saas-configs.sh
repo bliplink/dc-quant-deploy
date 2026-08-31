@@ -426,7 +426,7 @@ cat > "${OVERRIDE_ROOT}/GW/config/spring-gw-client.xml" <<'EOF'
       <map>
         <entry key="LoginSvr" value="SYS.ATS.LOGIN|1dc.login.apikey"/>
         <entry key="MDSvr" value="dc.md.kline.**|dc.md.trade.**|dc.md.orderbook.**|dc.md.depth.**"/>
-        <entry key="APSSvr" value="dc.aps"/>
+        <entry key="APSSvr" value="dc.aps|dc.aps.**|dc.bookticker.**"/>
       </map>
     </property>
     <property name="securityChecks"><list><ref bean="sqlInjSecurityCheck"/></list></property>
