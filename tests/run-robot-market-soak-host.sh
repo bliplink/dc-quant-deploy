@@ -191,6 +191,8 @@ start_monitor() {
   fi
   if [[ -z "${state}" ]]; then
     docker run -d --name "${MONITOR_CONTAINER}" --restart unless-stopped --network host \
+      --log-driver json-file --log-opt "max-size=${DOCKER_LOG_MAX_SIZE:-50m}" \
+      --log-opt "max-file=${DOCKER_LOG_MAX_FILE:-5}" \
       --label dc.saas.role=robot-web-monitor --label "dc.saas.robot-soak-revision=${revision}" \
       -e ROBOT_SOAK_BASE_URL="http://127.0.0.1:${WEB_LISTEN_PORT}" \
       -e ROBOT_SOAK_LOCATION="${LOCATION}" -e ROBOT_SOAK_VIEWER="${VIEWER}" \

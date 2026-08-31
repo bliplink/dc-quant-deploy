@@ -1,11 +1,18 @@
 name: ${COMPOSE_PROJECT_NAME:-dc-saas}
 
+x-default-logging: &default-logging
+  driver: json-file
+  options:
+    max-size: "${DOCKER_LOG_MAX_SIZE:-50m}"
+    max-file: "${DOCKER_LOG_MAX_FILE:-5}"
+
 x-java-service-base: &java-service-base
   network_mode: host
   restart: unless-stopped
   init: true
   user: "${RUNTIME_UID:-0}:${RUNTIME_GID:-0}"
   stop_grace_period: 30s
+  logging: *default-logging
   environment:
     TZ: Asia/Shanghai
     DEPLOY_ROOT: /srv/dc
@@ -20,6 +27,7 @@ services:
     container_name: dc-saas-mysql
     network_mode: host
     restart: unless-stopped
+    logging: *default-logging
     environment:
       TZ: Asia/Shanghai
       MYSQL_TCP_PORT: ${MYSQL_PORT:-33306}
@@ -52,6 +60,7 @@ services:
     container_name: dc-saas-clickhouse
     network_mode: host
     restart: unless-stopped
+    logging: *default-logging
     security_opt:
       - systempaths=unconfined
     environment:
@@ -84,6 +93,7 @@ services:
     container_name: dc-saas-zookeeper
     network_mode: host
     restart: unless-stopped
+    logging: *default-logging
     # The 97.64 host runs an old 3.10 kernel. Docker 26/runc otherwise rejects
     # the default /sys/fs/cgroup mount while creating this image's container.
     security_opt:
@@ -365,6 +375,7 @@ services:
     container_name: dc-saas-trade-web
     network_mode: host
     restart: unless-stopped
+    logging: *default-logging
     depends_on:
       gateway:
         condition: service_started
