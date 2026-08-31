@@ -181,8 +181,8 @@ async function waitForMarketMetric(page, label) {
 async function verifyKlineAndMarketData(page) {
   // MDSvr deliberately batches ClickHouse writes. The realtime K-line is
   // already sent over WebSocket, so poll the authenticated history endpoint
-  // until the same tenant bar is durable. Do not reload: browser refresh
-  // intentionally requires a fresh WebSocket login until token resume exists.
+  // until the same tenant bar is durable. Session refresh/reconnect behavior
+  // is covered independently by web-session-resume-e2e.js.
   const deadline = Date.now() + 60000;
   let klineBody = null;
   let klineRows = [];
