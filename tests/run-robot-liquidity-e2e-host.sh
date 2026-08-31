@@ -289,10 +289,14 @@ SELECT IF(
   (SELECT ord_status FROM dc_orders WHERE location='${LOCATION}' AND clord_id='${clid}')='Filled'
   AND EXISTS (SELECT 1 FROM dc_orders WHERE location='${LOCATION}' AND user_id='${ROBOT_USER}'
               AND clord_id LIKE '${robot_prefix}%-SW%' AND side='Buy' AND ord_status='Filled')
-  AND EXISTS (SELECT 1 FROM dc_orders_position WHERE location='${LOCATION}' AND user_id='${ROBOT_USER}'
-              AND security_id='BTCUSDT' AND long_position>=0.0001)
-  AND EXISTS (SELECT 1 FROM dc_orders_position WHERE location='${LOCATION}' AND user_id='${TRADER_USER}'
-              AND security_id='BTCUSDT' AND short_position>=0.0001),
+  AND EXISTS (SELECT 1 FROM dc_orders_execorders e WHERE e.location='${LOCATION}'
+              AND e.user_id='${ROBOT_USER}' AND e.side='Buy'
+              AND e.order_id IN (SELECT o.order_id FROM dc_orders o WHERE o.location='${LOCATION}'
+                                 AND o.clord_id LIKE '${robot_prefix}%-SW%'))
+  AND EXISTS (SELECT 1 FROM dc_orders_execorders e WHERE e.location='${LOCATION}'
+              AND e.user_id='${TRADER_USER}' AND e.side='Sell'
+              AND e.order_id=(SELECT o.order_id FROM dc_orders o WHERE o.location='${LOCATION}'
+                              AND o.clord_id='${clid}')),
   1,0);
 SQL
   } | mysql_exec dc)"
@@ -300,7 +304,7 @@ SQL
   sleep 1
 done
 [[ "${sweep_ok}" == "1" ]] || die "Robot did not consume the inside-spread user order"
-log "User order was consumed by Robot IOC and both positions were persisted."
+log "User order was consumed by Robot IOC and both execution records were persisted."
 
 mysql_exec -e "UPDATE dc_tenant_robot SET enabled=0,update_by='robot-e2e',update_time=NOW() WHERE location='${LOCATION}' AND robot_id='${ROBOT_ID}'" dc >/dev/null
 stopped="0"
