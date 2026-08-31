@@ -21,7 +21,21 @@ async function login(page) {
   await inputs.nth(0).fill(username);
   await inputs.nth(1).fill(password);
   await page.locator('.loginWrap .ant-btn-primary').click();
-  await page.waitForURL(`**/#/trade?location=${encodeURIComponent(location)}`, {timeout: 60000});
+  try {
+    await page.waitForURL(`**/#/trade?location=${encodeURIComponent(location)}`, {timeout: 60000});
+  } catch (error) {
+    const diagnostics = await page.evaluate(() => ({
+      url: window.location.href,
+      title: document.title,
+      body: document.body.innerText.slice(0, 1600),
+      sessionToken: sessionStorage.getItem('ff-dex-token'),
+      loginData: sessionStorage.getItem('loginData'),
+      remembered: localStorage.getItem('userRemember'),
+      buttonDisabled: Boolean(document.querySelector('.loginWrap .ant-btn-primary')?.disabled)
+    }));
+    await page.screenshot({path: path.join(artifactDir, 'websocket-session-login-failure.png'), fullPage: true});
+    throw new Error(`login did not navigate: ${JSON.stringify(diagnostics)}; ${error.message}`);
+  }
   await page.locator('.tradeWrap').waitFor({timeout: 60000});
   await page.waitForFunction(() => Boolean(sessionStorage.getItem('ff-dex-token')));
 }
@@ -80,6 +94,11 @@ function expectRejected(label, result) {
   const browser = await chromium.launch({headless: true});
   const context = await browser.newContext({viewport: {width: 1440, height: 900}});
   const page = await context.newPage();
+  const browserErrors = [];
+  page.on('pageerror', error => browserErrors.push(`pageerror: ${error.message}`));
+  page.on('console', message => {
+    if (message.type() === 'error') browserErrors.push(`console: ${message.text()}`);
+  });
   try {
     await login(page);
     const token1 = await token(page);
@@ -91,6 +110,7 @@ function expectRejected(label, result) {
     if (Object.prototype.hasOwnProperty.call(remembered, 'info2')) {
       throw new Error('legacy remembered password was not removed');
     }
+    if (browserErrors.length) throw new Error(`browser errors after login: ${JSON.stringify(browserErrors)}`);
 
     await page.reload({waitUntil: 'domcontentloaded'});
     await page.waitForURL(`**/#/trade?location=${encodeURIComponent(location)}`, {timeout: 60000});
