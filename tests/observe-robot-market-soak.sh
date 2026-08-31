@@ -120,6 +120,9 @@ if [[ -z "${load_pid}" ]] || ! kill -0 "${load_pid}" 2>/dev/null; then issues+=(
 
 monitor_state="$(docker inspect --format '{{.State.Status}}' "${MONITOR_CONTAINER}" 2>/dev/null || echo missing)"
 [[ "${monitor_state}" == "running" ]] || issues+=("web_monitor_${monitor_state}")
+monitor_started_at="$(docker inspect --format '{{.State.StartedAt}}' "${MONITOR_CONTAINER}" 2>/dev/null || true)"
+monitor_started_epoch="$(date -d "${monitor_started_at}" +%s 2>/dev/null || echo 0)"
+monitor_age=$((now_epoch - monitor_started_epoch))
 
 heartbeat_age=-1
 web_state=missing
@@ -139,6 +142,9 @@ d=json.load(open(sys.argv[1]))
 print('\t'.join(str(d.get(k,0)) for k in ('status','samples','gapSamples','minBids','maxBids','minAsks','maxAsks','pageErrorCount')))
 PY
   )
+elif [[ "${monitor_state}" == "running" && "${monitor_started_epoch}" -gt 0 && "${monitor_age}" -le "${WEB_STALE_SECONDS}" ]]; then
+  heartbeat_age="${monitor_age}"
+  web_state=warming
 fi
 (( heartbeat_age >= 0 && heartbeat_age <= WEB_STALE_SECONDS )) || issues+=("web_heartbeat_stale_${heartbeat_age}s")
 [[ "${web_state}" != "error" ]] || issues+=("web_monitor_error")
