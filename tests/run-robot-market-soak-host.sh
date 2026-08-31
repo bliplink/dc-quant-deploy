@@ -209,8 +209,23 @@ start_monitor() {
 }
 
 cancel_all() {
-  local user="$1" token="$2"
-  api_call "{\"serverName\":\"OrderSvr\",\"method\":\"cancelAllOrder\",\"content\":{\"UserID\":\"${user}\",\"SecurityID\":\"BTCUSDT\",\"MarketIndicator\":\"4\",\"AlgoName\":\"robot-soak-user\",\"Location\":\"${LOCATION}\"}}" "${token}" >/dev/null 2>&1 || true
+  local user="$1" token="$2" response ids reply code
+  response="$(api_call "{\"serverName\":\"OrderSvr\",\"method\":\"queryOpenOrder\",\"content\":{\"userid\":\"${user}\",\"securityid\":\"BTCUSDT\",\"Location\":\"${LOCATION}\"}}" "${token}" 2>/dev/null || true)"
+  [[ -n "${response}" ]] || return 0
+  while IFS= read -r ids; do
+    [[ -n "${ids}" ]] || continue
+    reply="$(api_call "{\"serverName\":\"OrderSvr\",\"method\":\"cancelBatchOrder\",\"content\":{\"location\":\"${LOCATION}\",\"userID\":\"${user}\",\"securityID\":\"BTCUSDT\",\"algoName\":\"cross\",\"orderIDs\":${ids}}}" "${token}" 2>/dev/null || true)"
+    code="$(printf '%s' "${reply}" | python3 -c 'import json,sys
+try: print(json.load(sys.stdin).get("code",-1))
+except Exception: print(-1)')"
+    [[ "${code}" == "0" ]] || log "CANCEL_BATCH_REJECT user=${user} code=${code}"
+  done < <(printf '%s' "${response}" | python3 -c 'import json,sys
+try:
+ data=json.load(sys.stdin).get("data") or []
+ ids=[str(x.get("OrderID")) for x in data if str(x.get("ClOrdID") or "").startswith("SOAK-") and x.get("OrderID")]
+ for i in range(0,len(ids),50): print(json.dumps(ids[i:i+50],separators=(",",":")))
+except Exception:
+ pass')
 }
 
 run_loop() {
@@ -220,6 +235,7 @@ run_loop() {
   local user response code cycle=0 rejected=0 accepted=0 gap_samples=0 action_files=() ever_running=0
   local bid_levels ask_levels best_bid best_ask robot_status web_status now clid price token side tenant_tick
   for user in "${TRADERS[@]}"; do tokens["${user}"]="$(login_user "${user}")"; done
+  for user in "${TRADERS[@]}"; do cancel_all "${user}" "${tokens[${user}]}"; done
   tenant_tick="$(mysql_exec -e "SELECT tick_size FROM dc.dc_tenant_symbol WHERE location='${LOCATION}' AND security_id='BTCUSDT';" dc)"
   [[ -n "${tenant_tick}" ]] || die "Tenant BTCUSDT tick size is unavailable"
   if [[ ! -s "${METRICS_FILE}" ]]; then
