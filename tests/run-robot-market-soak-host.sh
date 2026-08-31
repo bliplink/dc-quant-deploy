@@ -380,10 +380,11 @@ case "${MODE}" in
     ;;
   start)
     ensure_secret
-    if ! is_running; then
+    for _ in $(seq 1 15); do
+      is_running && break
       nohup "$0" run >/dev/null 2>&1 &
       sleep 2
-    fi
+    done
     start_monitor
     if [[ -x "${SCRIPT_DIR}/observe-robot-market-soak.sh" ]]; then
       "${SCRIPT_DIR}/observe-robot-market-soak.sh" >/dev/null || log "Observer reported an unhealthy snapshot; see ${STATE_DIR}/alerts.log."
