@@ -152,15 +152,15 @@ INSERT INTO dc_tenant_robot
    max_deviation_bps,circuit_breaker_seconds,hedge_enabled,strategy_config,runtime_status,
    create_by,update_by,create_time,update_time)
 VALUES
-  ('${LOCATION}','${ROBOT_ID}','Binance Depth 10 E2E','BTCUSDT','${ROBOT_USER}','${robot_api_key}',
-   'APSSVR_BINANCE_DEPTH',1,10,10,0,0,0.001,0.1,200,3000,500,5,0,
-   JSON_OBJECT('depth_quantity_mode','FIXED','max_level_qty',0.001,'sweep_user_orders_enabled',true,
+  ('${LOCATION}','${ROBOT_ID}','Binance Ticker 10-Level E2E','BTCUSDT','${ROBOT_USER}','${robot_api_key}',
+   'APSSVR_BINANCE_TICKER',1,10,10,1,1,0.001,0.1,200,3000,500,5,0,
+   JSON_OBJECT('sweep_user_orders_enabled',true,
                'sweep_max_loss_bps',5,'sweep_max_qty',0.001),
    'STOPPED','robot-e2e','robot-e2e',NOW(),NOW());
 SQL
 } | mysql_exec dc
 
-log "Waiting for APSSvr depth and 20 Robot orders."
+log "Waiting for APSSvr Binance book ticker and 20 synthesized Robot orders."
 ready="0"
 for _ in $(seq 1 120); do
   ready="$({
@@ -182,35 +182,46 @@ if [[ "${ready}" != "1" ]]; then
   die "Robot did not reach RUNNING with 20 orders"
 fi
 
-compare_depth() {
+compare_ticker_ladder() {
   local robot_file external_file result
   robot_file="$(mktemp)"; external_file="$(mktemp)"
   mysql_exec -e "SELECT side,price FROM dc_orders WHERE location='${LOCATION}' AND user_id='${ROBOT_USER}' AND clord_id LIKE '${robot_prefix}%' AND clord_id NOT LIKE '${robot_prefix}%-SW%' AND ord_status IN ('New','Partially_Filled') ORDER BY side,price" dc >"${robot_file}"
-  curl -fsS --max-time 10 'https://fapi.binance.com/fapi/v1/depth?symbol=BTCUSDT&limit=10' >"${external_file}" || { rm -f "${robot_file}" "${external_file}"; return 1; }
+  curl -fsS --max-time 10 'https://fapi.binance.com/fapi/v1/ticker/bookTicker?symbol=BTCUSDT' >"${external_file}" || { rm -f "${robot_file}" "${external_file}"; return 1; }
   result="$(python3 - "${robot_file}" "${external_file}" <<'PY'
 import json, sys
 from decimal import Decimal
 rows=[line.rstrip('\n').split('\t') for line in open(sys.argv[1],encoding='utf-8') if line.strip()]
-robot_bids={Decimal(price) for side,price in rows if side.lower()=='buy'}
-robot_asks={Decimal(price) for side,price in rows if side.lower()=='sell'}
+robot_bids=sorted({Decimal(price) for side,price in rows if side.lower()=='buy'}, reverse=True)
+robot_asks=sorted({Decimal(price) for side,price in rows if side.lower()=='sell'})
 book=json.load(open(sys.argv[2],encoding='utf-8'))
-external_bids={Decimal(item[0]) for item in book['bids']}
-external_asks={Decimal(item[0]) for item in book['asks']}
-print(len(robot_bids),len(robot_asks),len(robot_bids & external_bids),len(robot_asks & external_asks))
+external_mid=(Decimal(book['bidPrice'])+Decimal(book['askPrice']))/2
+robot_mid=(robot_bids[0]+robot_asks[0])/2 if robot_bids and robot_asks else Decimal(0)
+deviation_bps=abs(robot_mid-external_mid)*Decimal(10000)/external_mid
+monotonic=(len(robot_bids)==10 and len(robot_asks)==10
+           and all(robot_bids[i]>robot_bids[i+1] for i in range(9))
+           and all(robot_asks[i]<robot_asks[i+1] for i in range(9))
+           and robot_bids[0] < robot_asks[0])
+print(len(robot_bids),len(robot_asks),int(monotonic),deviation_bps)
 PY
 )"
   rm -f "${robot_file}" "${external_file}"
-  read -r robot_bids robot_asks matched_bids matched_asks <<<"${result}"
-  [[ "${robot_bids}" == "10" && "${robot_asks}" == "10" && "${matched_bids}" -ge 8 && "${matched_asks}" -ge 8 ]]
+  read -r robot_bids robot_asks monotonic deviation_bps <<<"${result}"
+  python3 - "${robot_bids}" "${robot_asks}" "${monotonic}" "${deviation_bps}" <<'PY'
+from decimal import Decimal
+import sys
+bids,asks,monotonic=sys.argv[1:4]
+assert bids=='10' and asks=='10' and monotonic=='1'
+assert Decimal(sys.argv[4]) <= Decimal('30')
+PY
 }
 
-depth_matched="0"
+ticker_ladder_ok="0"
 for _ in $(seq 1 30); do
-  if compare_depth; then depth_matched="1"; break; fi
+  if compare_ticker_ladder; then ticker_ladder_ok="1"; break; fi
   sleep 1
 done
-[[ "${depth_matched}" == "1" ]] || die "Robot prices did not overlap at least 8/10 live Binance levels per side"
-log "Binance depth overlap passed: 10 bid/10 ask levels, at least 8 live prices per side matched."
+[[ "${ticker_ladder_ok}" == "1" ]] || die "Robot did not synthesize a valid 10+10 ladder near the live Binance book ticker"
+log "Binance ticker ladder passed: 10 distinct bids + 10 distinct asks, ordered and within 30 bps of live midpoint."
 
 log "Hitting a Robot ask and verifying the partially filled level is replenished."
 robot_filled_before="$(mysql_exec -e "SELECT COALESCE(SUM(cum_qty),0) FROM dc_orders WHERE location='${LOCATION}' AND user_id='${ROBOT_USER}' AND clord_id LIKE '${robot_prefix}%' AND clord_id NOT LIKE '${robot_prefix}%-SW%'" dc)"

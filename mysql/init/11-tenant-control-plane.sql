@@ -96,7 +96,7 @@ CREATE TABLE IF NOT EXISTS dc_tenant_robot (
   security_id varchar(64) COLLATE utf8mb4_bin NOT NULL,
   api_user_id varchar(64) COLLATE utf8mb4_bin NOT NULL,
   api_key varchar(255) COLLATE utf8mb4_bin NOT NULL,
-  quote_source varchar(32) NOT NULL DEFAULT 'APSSVR_BINANCE_DEPTH',
+  quote_source varchar(32) NOT NULL DEFAULT 'APSSVR_BINANCE_TICKER',
   enabled tinyint(1) NOT NULL DEFAULT 0,
   bid_levels smallint unsigned NOT NULL DEFAULT 10,
   ask_levels smallint unsigned NOT NULL DEFAULT 10,

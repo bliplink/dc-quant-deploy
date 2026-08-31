@@ -11,15 +11,6 @@ const artifactDir = process.env.E2E_ARTIFACT_DIR || '/artifacts';
 if (!password) throw new Error('E2E_PASSWORD is required');
 fs.mkdirSync(artifactDir, {recursive: true});
 
-function requestMethod(response) {
-  try {
-    const body = response.request().postDataJSON();
-    return body && (body.method || (body.content && body.content.method));
-  } catch (error) {
-    return '';
-  }
-}
-
 async function verifyTenantRouteBinding(page) {
   await page.goto(`${baseUrl}/#/register?location=${encodeURIComponent(location.toLowerCase())}`, {
     waitUntil: 'domcontentloaded'
@@ -83,17 +74,13 @@ async function login(page) {
   const inputs = page.locator('.loginWrap input');
   await inputs.nth(0).fill(username);
   await inputs.nth(1).fill(password);
-  const responsePromise = page.waitForResponse(
-    response => response.url().includes('/httpapi/') && requestMethod(response) === 'SYS.ATS.LOGIN',
-    {timeout: 60000}
-  );
   await page.locator('.loginWrap .ant-btn-primary').click();
-  const response = await responsePromise;
-  const body = await response.json();
-  if (Number(body.code) !== 0 || body.data.user_id !== username || body.data.location !== location) {
-    throw new Error(`login failed: ${JSON.stringify(body)}`);
-  }
   await page.waitForURL(`**/#/trade?location=${encodeURIComponent(location)}`);
+  const loginSession = await page.evaluate(() => JSON.parse(sessionStorage.getItem('loginData') || '{}'));
+  if (Number(loginSession.code) !== 0 || loginSession.user_id !== username ||
+      String(loginSession.location || '').toUpperCase() !== location) {
+    throw new Error(`websocket login failed: ${JSON.stringify(loginSession)}`);
+  }
   await page.locator('.tradeGrid').waitFor({timeout: 60000});
   await page.waitForTimeout(2500);
 }
@@ -126,25 +113,36 @@ function layoutItem(snapshot, breakpoint, key) {
 
     // Establish a deterministic English default before exercising persistence.
     await page.locator('.languageSwitch button').nth(1).click();
-    await page.evaluate(() => {
-      Object.keys(localStorage)
-        .filter(key => key.startsWith('dc-trade-layout-v1:'))
-        .forEach(key => localStorage.removeItem(key));
-    });
-    await page.reload({waitUntil: 'domcontentloaded'});
-    await page.locator('.tradeGrid').waitFor({timeout: 30000});
-    await page.waitForTimeout(800);
+    const resetLayoutButton = page.getByRole('button', {name: 'Reset layout', exact: true});
+    if (await resetLayoutButton.count() !== 1) throw new Error('reset layout control is missing');
+    await resetLayoutButton.click();
+    await page.waitForTimeout(500);
 
     const panels = page.locator('.tradePanel');
     if (await panels.count() !== 5) throw new Error('expected five trading workspace panels');
     if (await page.locator('.layoutToolbar').count() !== 0 ||
-        await page.getByRole('button', {name: /Lock layout|Reset layout/}).count() !== 0) {
+        await page.getByRole('button', {name: /Lock layout|Customize layout/}).count() !== 0) {
       throw new Error('manual layout edit/lock controls must not be visible');
     }
     if (await page.locator('.panelDragZone').count() !== 5 ||
         await page.locator('.panelDragHandle').count() !== 0) {
       throw new Error('workspace panels must use hover drag zones without persistent handles');
     }
+    await page.waitForFunction(() => {
+      const iframe = document.querySelector('.TVChartContainer iframe');
+      if (!iframe || !iframe.contentDocument) return false;
+      return iframe.contentWindow.getComputedStyle(iframe.contentDocument.documentElement)
+        .getPropertyValue('--tv-color-toolbar-button-text-active').trim() === '#f7a600';
+    }, null, {timeout: 30000});
+    const chartTheme = await page.evaluate(() => {
+      const iframe = document.querySelector('.TVChartContainer iframe');
+      const style = iframe.contentWindow.getComputedStyle(iframe.contentDocument.documentElement);
+      return {
+        activeIcon: style.getPropertyValue('--tv-color-toolbar-button-text-active').trim(),
+        icon: style.getPropertyValue('--tv-color-toolbar-button-text').trim(),
+        pane: style.getPropertyValue('--tv-color-pane-background').trim()
+      };
+    });
 
     await page.locator('.symbolDiv').click();
     const marketDrawer = page.locator('.ant-drawer');
@@ -272,6 +270,8 @@ function layoutItem(snapshot, breakpoint, key) {
     }
 
     await page.reload({waitUntil: 'domcontentloaded'});
+    await page.waitForURL(`**/#/login?location=${encodeURIComponent(location)}`);
+    await login(page);
     await page.locator('.tradeGrid').waitFor({timeout: 30000});
     await page.waitForTimeout(1500);
     const reloaded = await layoutSnapshot(page);
@@ -287,10 +287,18 @@ function layoutItem(snapshot, breakpoint, key) {
     await page.locator('.languageSwitch button').nth(0).click();
     await page.getByText('订单簿', {exact: true}).first().waitFor({timeout: 10000});
     await page.getByText('交易品种', {exact: true}).first().waitFor({timeout: 10000});
-    if (await page.getByRole('button', {name: /编辑布局|锁定布局|恢复默认/}).count() !== 0) {
+    if (await page.getByRole('button', {name: /编辑布局|锁定布局/}).count() !== 0) {
       throw new Error('Chinese manual layout controls must not be visible');
     }
+    const chineseReset = page.getByRole('button', {name: '恢复默认', exact: true});
+    if (await chineseReset.count() !== 1) throw new Error('Chinese reset layout control is missing');
     await page.screenshot({path: path.join(artifactDir, 'workspace-zh.png'), fullPage: true});
+    await chineseReset.click();
+    await page.waitForTimeout(600);
+    const restoredChartBox = await panels.nth(0).boundingBox();
+    if (!restoredChartBox || restoredChartBox.y > 200) {
+      throw new Error(`reset layout did not restore the chart panel: ${JSON.stringify(restoredChartBox)}`);
+    }
 
     if (pageErrors.length) throw new Error(`page errors: ${JSON.stringify(pageErrors)}`);
     console.log(JSON.stringify({
@@ -300,7 +308,9 @@ function layoutItem(snapshot, breakpoint, key) {
       draggable: true,
       resizable: true,
       persisted: true,
+      refreshRequiresWebSocketReauthentication: true,
       hoverDragZone: true,
+      resetLayout: true,
       languages: ['en', 'zh'],
       bilingualLogin: true,
       orderInputValidation: true,
@@ -308,6 +318,7 @@ function layoutItem(snapshot, breakpoint, key) {
       reduceOnlyControl: true,
       tenantBoundRegistration: true,
       chartFillsPanel: {initial: initialChartFill, resized: resizedChartFill},
+      bybitChartTheme: chartTheme,
       lastPriceHeader: true,
       searchableMarketSelector: true,
       professionalTheme: colors,

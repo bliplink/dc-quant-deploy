@@ -23,13 +23,17 @@ CALL dc_robot_add_column('last_error_code', 'last_error_code varchar(64) DEFAULT
 CALL dc_robot_add_column('last_error_message', 'last_error_message varchar(1000) DEFAULT NULL');
 CALL dc_robot_add_column('last_reference_price', 'last_reference_price decimal(35,16) DEFAULT NULL');
 CALL dc_robot_add_column('open_order_count', 'open_order_count int unsigned NOT NULL DEFAULT 0');
-CALL dc_robot_add_column('quote_source', 'quote_source varchar(32) NOT NULL DEFAULT ''APSSVR_BINANCE_DEPTH'' AFTER api_key');
+CALL dc_robot_add_column('quote_source', 'quote_source varchar(32) NOT NULL DEFAULT ''APSSVR_BINANCE_TICKER'' AFTER api_key');
 DROP PROCEDURE dc_robot_add_column;
 
 ALTER TABLE dc_tenant_robot
-  MODIFY quote_source varchar(32) NOT NULL DEFAULT 'APSSVR_BINANCE_DEPTH',
+  MODIFY quote_source varchar(32) NOT NULL DEFAULT 'APSSVR_BINANCE_TICKER',
   MODIFY bid_levels smallint unsigned NOT NULL DEFAULT 10,
   MODIFY ask_levels smallint unsigned NOT NULL DEFAULT 10;
+
+UPDATE dc_tenant_robot
+SET quote_source='APSSVR_BINANCE_TICKER'
+WHERE quote_source='APSSVR_BINANCE_DEPTH';
 
 DROP PROCEDURE IF EXISTS dc_robot_add_index;
 DELIMITER $$
