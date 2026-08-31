@@ -40,6 +40,9 @@ elif [[ "${runner_state}" != running ]]; then
 fi
 
 log "Testing refresh, network reconnect, token replay, tenant mismatch and logout."
+disconnect_marker="${artifact_dir}/websocket-session-disconnect.ready"
+rm -f "${disconnect_marker}"
+trap 'rm -f "${disconnect_marker}"' EXIT
 docker exec \
   -e E2E_BASE_URL="${E2E_BASE_URL}" -e E2E_LOCATION="${E2E_LOCATION}" \
   -e E2E_USER="${E2E_USER}" -e E2E_PASSWORD="${E2E_PASSWORD}" \
@@ -49,4 +52,32 @@ docker exec \
     [[ -f package.json ]] || npm init -y >/dev/null 2>&1
     [[ -d node_modules/playwright ]] || npm install --no-audit --no-fund playwright@1.55.0 >/dev/null
     NODE_PATH=/runner/node_modules node /work/web-session-resume-e2e.js
-  '
+  ' &
+test_pid="$!"
+
+for attempt in $(seq 1 120); do
+  if [[ -f "${disconnect_marker}" ]]; then break; fi
+  if ! kill -0 "${test_pid}" 2>/dev/null; then
+    wait "${test_pid}"
+    die "Browser test exited before the disconnect checkpoint"
+  fi
+  sleep 0.5
+done
+[[ -f "${disconnect_marker}" ]] || {
+  kill "${test_pid}" 2>/dev/null || true
+  wait "${test_pid}" 2>/dev/null || true
+  die "Browser test did not reach the disconnect checkpoint"
+}
+
+log "Restarting only dc-saas-trade-web to drop the active WebSocket without reloading the page."
+docker restart dc-saas-trade-web >/dev/null
+for attempt in $(seq 1 60); do
+  if [[ "$(docker inspect --format '{{.State.Health.Status}}' dc-saas-trade-web 2>/dev/null || true)" == healthy ]]; then
+    break
+  fi
+  sleep 1
+done
+[[ "$(docker inspect --format '{{.State.Health.Status}}' dc-saas-trade-web 2>/dev/null || true)" == healthy ]] ||
+  die "dc-saas-trade-web did not become healthy after disconnect simulation"
+rm -f "${disconnect_marker}"
+wait "${test_pid}"

@@ -10,7 +10,7 @@
 - `location` 仍由租户专属 URL 自动带入，Web 不允许用户填写租户。
 - LoginSvr 返回的用户和 `location` 是恢复后的权威身份；Web 只有认证成功后才恢复订阅。
 
-代码基线：LoginSvr `6164727`，dc-trade-web `d9f69fa`，GW 零代码改动。
+代码基线：LoginSvr `46d411c`，dc-trade-web `d9f69fa`，GW 零代码改动。
 
 ## 2. 无 Redis 的会话模型
 
@@ -23,7 +23,7 @@
 - 用户被禁用、用户更新时间晚于会话创建时间、租户停用或试用到期时拒绝恢复。
 - 显式退出删除当前 `dc_users_session` 记录并清除 LoginSvr 缓存。
 
-当前表以明文随机 token 作为主键，这是复用旧 SID 模型、不做 schema 改造的已知安全约束。生产必须使用 TLS、限制数据库权限、禁止输出 token 日志。若以后要求数据库泄露后 token 仍不可用，应升级为“公开 session_id + 仅保存 resume token 哈希”的独立会话表。
+当前表以明文随机 token 作为主键，这是复用旧 SID 模型、不做 schema 改造的已知安全约束。生产必须使用 TLS 并限制数据库权限。LoginSvr 本次已停止在请求/会话日志中直接打印密码和 token，但既有 GW/公共发布组件仍可能记录完整协议正文，这是上真实资金前必须收口的安全项。若以后要求数据库泄露后 token 仍不可用，应升级为“公开 session_id + 仅保存 resume token 哈希”的独立会话表。
 
 ## 3. 恢复数据流
 

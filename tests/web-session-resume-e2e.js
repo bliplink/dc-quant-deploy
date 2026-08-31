@@ -7,6 +7,7 @@ const location = process.env.E2E_LOCATION || 'WEB_E2E';
 const username = process.env.E2E_USER || 'webbuyer';
 const password = process.env.E2E_PASSWORD;
 const artifactDir = process.env.E2E_ARTIFACT_DIR || '/artifacts';
+const disconnectMarker = path.join(artifactDir, 'websocket-session-disconnect.ready');
 
 if (!password) throw new Error('E2E_PASSWORD is required');
 fs.mkdirSync(artifactDir, {recursive: true});
@@ -129,9 +130,12 @@ function expectRejected(label, result) {
       throw new Error(`rotated token is not authoritative: ${JSON.stringify(currentInfo)}`);
     }
 
-    await context.setOffline(true);
-    await page.waitForTimeout(1200);
-    await context.setOffline(false);
+    fs.writeFileSync(disconnectMarker, `${Date.now()}\n`);
+    const disconnectDeadline = Date.now() + 60000;
+    while (fs.existsSync(disconnectMarker) && Date.now() < disconnectDeadline) {
+      await page.waitForTimeout(250);
+    }
+    if (fs.existsSync(disconnectMarker)) throw new Error('host did not trigger the websocket disconnect');
     const token3 = await waitForRotatedToken(page, token2);
     expectRejected('disconnected token replay', await loginWithToken(page, token2));
     await page.locator('.logoutButton').click();
@@ -153,6 +157,7 @@ function expectRejected(label, result) {
       artifact: 'websocket-session-logout.png'
     }, null, 2));
   } finally {
+    if (fs.existsSync(disconnectMarker)) fs.unlinkSync(disconnectMarker);
     await context.close();
     await browser.close();
   }
