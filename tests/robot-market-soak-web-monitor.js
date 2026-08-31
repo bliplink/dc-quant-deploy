@@ -101,12 +101,20 @@ async function monitorSession(browser) {
   try {
     while (Date.now() - cycleStartedAt < browserCycleMs) {
       const sample = await withTimeout(page.evaluate(() => {
-        const askRows = document.querySelectorAll('.orderBookWrap .showDiv .ask-container > .bid').length;
-        const bidRows = document.querySelectorAll('.orderBookWrap .showDiv .ask-container + div + div > .bid').length;
-        const lastPrice = document.querySelector('.orderBookWrap .showDiv .last-price')?.textContent?.trim() || '';
-        const markPrice = document.querySelector('.orderBookWrap .showDiv .mark-price')?.textContent?.trim() || '';
+        const wrappers = [...document.querySelectorAll('.orderBookWrap')];
+        const visibleWrappers = wrappers.filter(element => {
+          const style = window.getComputedStyle(element);
+          const box = element.getBoundingClientRect();
+          return style.display !== 'none' && style.visibility !== 'hidden' && box.width > 0 && box.height > 0;
+        });
+        const orderBook = visibleWrappers[0];
+        const askRows = orderBook?.querySelectorAll('.showDiv .ask-container > .bid').length || 0;
+        const bidRows = orderBook?.querySelectorAll('.showDiv .ask-container + div + div > .bid').length || 0;
+        const lastPrice = orderBook?.querySelector('.showDiv .last-price')?.textContent?.trim() || '';
+        const markPrice = orderBook?.querySelector('.showDiv .mark-price')?.textContent?.trim() || '';
         const loginData = JSON.parse(sessionStorage.getItem('loginData') || '{}');
-        return {askRows, bidRows, lastPrice, markPrice, userId: loginData.user_id, tenant: loginData.location};
+        return {askRows, bidRows, lastPrice, markPrice, wrapperCount: wrappers.length,
+          visibleWrapperCount: visibleWrappers.length, userId: loginData.user_id, tenant: loginData.location};
       }), operationTimeoutMs, 'page.evaluate');
       if (sample.userId !== user || sample.tenant !== location) {
         throw new Error(`authoritative web session changed: ${JSON.stringify(sample)}`);
