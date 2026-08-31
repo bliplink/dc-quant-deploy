@@ -398,7 +398,7 @@ cat > "${OVERRIDE_ROOT}/GW/config/spring-tcp-server.xml" <<EOF
     <property name="proxy" ref="proxy"/>
     <property name="notify" ref="notify"/>
     <property name="gzip" value="true"/>
-    <property name="login" value="false"/>
+    <property name="login" value="true"/>
   </bean>
   <bean id="tcpConnector" class="com.gateway.connector.tcp.TcpConnector" init-method="init" destroy-method="destroy">
     <property name="tcpSessionManager" ref="tcpSessionManager"/>
