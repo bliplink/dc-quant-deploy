@@ -8,7 +8,7 @@ STATE_DIR="${ROBOT_SOAK_STATE_DIR:-/data/dc-saas-runtime/robot-soak}"
 LOCATION="${ROBOT_SOAK_LOCATION:-WEB_E2E}"
 ROBOT_USER="${ROBOT_SOAK_ROBOT_USER:-robotsoakmaker}"
 ROBOT_ID="${ROBOT_SOAK_ROBOT_ID:-continuous-depth10}"
-VIEWER="${ROBOT_SOAK_VIEWER:-robotsoak01}"
+VIEWER="${ROBOT_SOAK_VIEWER:-${ROBOT_USER}}"
 TRADERS=(robotsoak01 robotsoak02 robotsoak03 robotsoak04)
 PID_FILE="${STATE_DIR}/load.pid"
 LOCK_FILE="${STATE_DIR}/load.lock"
@@ -214,8 +214,10 @@ run_loop() {
   start_monitor
   declare -A tokens
   local user response code cycle=0 rejected=0 accepted=0 gap_samples=0 action_files=() ever_running=0
-  local bid_levels ask_levels best_bid best_ask robot_status web_status now clid price token side
+  local bid_levels ask_levels best_bid best_ask robot_status web_status now clid price token side tenant_tick
   for user in "${TRADERS[@]}"; do tokens["${user}"]="$(login_user "${user}")"; done
+  tenant_tick="$(mysql_exec -e "SELECT tick_size FROM dc.dc_tenant_symbol WHERE location='${LOCATION}' AND security_id='BTCUSDT';" dc)"
+  [[ -n "${tenant_tick}" ]] || die "Tenant BTCUSDT tick size is unavailable"
   if [[ ! -s "${METRICS_FILE}" ]]; then
     printf 'time,bid_levels,ask_levels,robot_status,web_http,accepted,rejected,gap_samples\n' >"${METRICS_FILE}"
   fi
@@ -249,13 +251,14 @@ FROM dc.dc_orders o WHERE o.location='${LOCATION}' AND o.user_id='${ROBOT_USER}'
         elif (( slot == 1 )); then side=Sell; price="${best_bid}"; tif=IOC
         elif (( slot == 2 )); then
           side=Sell; tif=GTC
-          price="$(python3 - "${best_bid}" "${best_ask}" <<'PY'
+          price="$(python3 - "${best_bid}" "${best_ask}" "${tenant_tick}" <<'PY'
 from decimal import Decimal, ROUND_DOWN
 import sys
 b,a=map(Decimal,sys.argv[1:])
-p=((b+a)/2).quantize(Decimal('0.01'),rounding=ROUND_DOWN)
-if p<=b:p=b+Decimal('0.01')
-if p>=a:p=a-Decimal('0.01')
+tick=Decimal(sys.argv[3])
+p=(((b+a)/2)/tick).to_integral_value(rounding=ROUND_DOWN)*tick
+if p<=b:p=b+tick
+if p>=a:p=a-tick
 print(p)
 PY
 )"

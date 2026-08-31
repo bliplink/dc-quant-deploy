@@ -6,7 +6,7 @@ const {chromium} = require('playwright');
 
 const baseUrl = process.env.ROBOT_SOAK_BASE_URL || 'http://127.0.0.1:18088';
 const location = process.env.ROBOT_SOAK_LOCATION || 'WEB_E2E';
-const user = process.env.ROBOT_SOAK_VIEWER || 'robotsoak01';
+const user = process.env.ROBOT_SOAK_VIEWER || 'robotsoakmaker';
 const secretFile = process.env.ROBOT_SOAK_SECRET_FILE || '/secrets/runtime.env';
 const stateDir = process.env.ROBOT_SOAK_STATE_DIR || '/state';
 const sampleMs = Number(process.env.ROBOT_SOAK_WEB_SAMPLE_MS || 250);
