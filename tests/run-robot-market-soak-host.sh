@@ -15,9 +15,13 @@ LOCK_FILE="${STATE_DIR}/load.lock"
 SECRET_FILE="${STATE_DIR}/runtime.env"
 LOG_FILE="${STATE_DIR}/load.log"
 METRICS_FILE="${STATE_DIR}/depth-metrics.csv"
+METRICS_HEADER='time,bid_levels,ask_levels,robot_status,web_http,accepted,rejected,gap_samples,auth_refreshes'
 CACHE_MARKER="${STATE_DIR}/accounts-loaded.marker"
 MONITOR_CONTAINER="${ROBOT_SOAK_MONITOR_CONTAINER:-dc-saas-robot-web-monitor}"
 MONITOR_IMAGE="${ROBOT_SOAK_MONITOR_IMAGE:-mcr.microsoft.com/playwright:v1.55.0-noble}"
+MONITOR_HEARTBEAT_FILE="${STATE_DIR}/web-heartbeat.json"
+MONITOR_STALE_SECONDS="${ROBOT_SOAK_MONITOR_STALE_SECONDS:-150}"
+AUTH_REFRESH_SECONDS="${ROBOT_SOAK_AUTH_REFRESH_SECONDS:-2700}"
 MODE="${1:-status}"
 
 log() { printf '[robot-soak] %s\n' "$*"; }
@@ -31,6 +35,8 @@ safe_identifier "${LOCATION}" || die "Unsafe location"
 safe_identifier "${ROBOT_USER}" || die "Unsafe robot user"
 safe_identifier "${ROBOT_ID}" || die "Unsafe robot id"
 for user in "${TRADERS[@]}"; do safe_identifier "${user}" || die "Unsafe trader user"; done
+[[ "${MONITOR_STALE_SECONDS}" =~ ^[1-9][0-9]*$ ]] || die "ROBOT_SOAK_MONITOR_STALE_SECONDS must be positive"
+[[ "${AUTH_REFRESH_SECONDS}" =~ ^[1-9][0-9]*$ ]] || die "ROBOT_SOAK_AUTH_REFRESH_SECONDS must be positive"
 
 umask 077
 mkdir -p "${STATE_DIR}"
@@ -181,7 +187,7 @@ SQL
 }
 
 start_monitor() {
-  local revision current_revision state
+  local revision current_revision state now heartbeat_time started_at started_epoch
   revision="$(sha256sum "${SCRIPT_DIR}/robot-market-soak-web-monitor.js" | awk '{print $1}')"
   state="$(docker inspect --format '{{.State.Status}}' "${MONITOR_CONTAINER}" 2>/dev/null || true)"
   current_revision="$(docker inspect --format '{{index .Config.Labels "dc.saas.robot-soak-revision"}}' "${MONITOR_CONTAINER}" 2>/dev/null || true)"
@@ -189,7 +195,27 @@ start_monitor() {
     docker rm -f "${MONITOR_CONTAINER}" >/dev/null
     state=""
   fi
+  if [[ "${state}" == "running" ]]; then
+    now="$(date +%s)"
+    if [[ -f "${MONITOR_HEARTBEAT_FILE}" ]]; then
+      heartbeat_time="$(stat -c %Y "${MONITOR_HEARTBEAT_FILE}")"
+      if (( now - heartbeat_time > MONITOR_STALE_SECONDS )); then
+        log "Web monitor heartbeat is stale by $((now - heartbeat_time))s; recreating the monitor container."
+        docker rm -f "${MONITOR_CONTAINER}" >/dev/null
+        state=""
+      fi
+    else
+      started_at="$(docker inspect --format '{{.State.StartedAt}}' "${MONITOR_CONTAINER}" 2>/dev/null || true)"
+      started_epoch="$(date -d "${started_at}" +%s 2>/dev/null || echo "${now}")"
+      if (( now - started_epoch > MONITOR_STALE_SECONDS )); then
+        log "Web monitor produced no heartbeat within ${MONITOR_STALE_SECONDS}s; recreating the monitor container."
+        docker rm -f "${MONITOR_CONTAINER}" >/dev/null
+        state=""
+      fi
+    fi
+  fi
   if [[ -z "${state}" ]]; then
+    rm -f "${MONITOR_HEARTBEAT_FILE}" "${MONITOR_HEARTBEAT_FILE}".*.tmp
     docker run -d --name "${MONITOR_CONTAINER}" --restart unless-stopped --network host \
       --memory "${ROBOT_SOAK_MONITOR_MEMORY_LIMIT:-768m}" \
       --cpus "${ROBOT_SOAK_MONITOR_CPU_LIMIT:-1.0}" --pids-limit 256 \
@@ -198,6 +224,8 @@ start_monitor() {
       --label dc.saas.role=robot-web-monitor --label "dc.saas.robot-soak-revision=${revision}" \
       -e ROBOT_SOAK_BASE_URL="http://127.0.0.1:${WEB_LISTEN_PORT}" \
       -e ROBOT_SOAK_LOCATION="${LOCATION}" -e ROBOT_SOAK_VIEWER="${VIEWER}" \
+      -e ROBOT_SOAK_WEB_BROWSER_CYCLE_MS="${ROBOT_SOAK_WEB_BROWSER_CYCLE_MS:-600000}" \
+      -e ROBOT_SOAK_WEB_OPERATION_TIMEOUT_MS="${ROBOT_SOAK_WEB_OPERATION_TIMEOUT_MS:-15000}" \
       -e ROBOT_SOAK_SECRET_FILE=/secrets/runtime.env -e ROBOT_SOAK_STATE_DIR=/state \
       -v "${SCRIPT_DIR}:/work:ro" -v "${SECRET_FILE}:/secrets/runtime.env:ro" -v "${STATE_DIR}:/state" \
       -v dc-saas-web-e2e-npm-cache:/root/.npm -v dc-saas-web-e2e-runner:/runner \
@@ -231,15 +259,25 @@ except Exception:
 run_loop() {
   provision
   start_monitor
-  declare -A tokens
-  local user response code cycle=0 rejected=0 accepted=0 gap_samples=0 action_files=() ever_running=0
-  local bid_levels ask_levels best_bid best_ask robot_status web_status now clid price token side tenant_tick
-  for user in "${TRADERS[@]}"; do tokens["${user}"]="$(login_user "${user}")"; done
+  declare -A tokens token_login_epoch
+  local user response code message cycle=0 rejected=0 accepted=0 gap_samples=0 auth_refreshes=0 ever_running=0
+  local -a action_files=() action_users=()
+  local bid_levels ask_levels best_bid best_ask robot_status web_status now clid price token side tenant_tick header archive current_epoch
+  for user in "${TRADERS[@]}"; do
+    tokens["${user}"]="$(login_user "${user}")"
+    token_login_epoch["${user}"]="$(date +%s)"
+  done
   for user in "${TRADERS[@]}"; do cancel_all "${user}" "${tokens[${user}]}"; done
   tenant_tick="$(mysql_exec -e "SELECT tick_size FROM dc.dc_tenant_symbol WHERE location='${LOCATION}' AND security_id='BTCUSDT';" dc)"
   [[ -n "${tenant_tick}" ]] || die "Tenant BTCUSDT tick size is unavailable"
+  header="$(head -n 1 "${METRICS_FILE}" 2>/dev/null || true)"
+  if [[ -n "${header}" && "${header}" != "${METRICS_HEADER}" ]]; then
+    archive="${STATE_DIR}/depth-metrics-v1-$(date -u +%Y%m%dT%H%M%SZ).csv"
+    mv "${METRICS_FILE}" "${archive}"
+    log "Archived legacy metrics as ${archive}."
+  fi
   if [[ ! -s "${METRICS_FILE}" ]]; then
-    printf 'time,bid_levels,ask_levels,robot_status,web_http,accepted,rejected,gap_samples\n' >"${METRICS_FILE}"
+    printf '%s\n' "${METRICS_HEADER}" >"${METRICS_FILE}"
   fi
   log "Continuous load started: location=${LOCATION}, robot=${ROBOT_ID}, pid=$$"
   while true; do
@@ -259,12 +297,20 @@ FROM dc.dc_orders o WHERE o.location='${LOCATION}' AND o.user_id='${ROBOT_USER}'
       log "DEPTH_GAP bid=${bid_levels} ask=${ask_levels} status=${robot_status} best=${best_bid}/${best_ask}"
     fi
     now="$(date '+%Y-%m-%dT%H:%M:%S.%3N%z')"
-    printf '%s,%s,%s,%s,%s,%s,%s,%s\n' "${now}" "${bid_levels}" "${ask_levels}" "${robot_status}" "${web_status}" "${accepted}" "${rejected}" "${gap_samples}" >>"${METRICS_FILE}"
+    printf '%s,%s,%s,%s,%s,%s,%s,%s,%s\n' "${now}" "${bid_levels}" "${ask_levels}" "${robot_status}" "${web_status}" "${accepted}" "${rejected}" "${gap_samples}" "${auth_refreshes}" >>"${METRICS_FILE}"
 
     if [[ "${robot_status}" == "RUNNING" && "${best_bid}" != "0" && "${best_ask}" != "0" ]]; then
       action_files=()
+      action_users=()
       for slot in 0 1 2 3; do
         user="${TRADERS[$(((cycle + slot) % ${#TRADERS[@]}))]}"
+        current_epoch="$(date +%s)"
+        if (( current_epoch - ${token_login_epoch[${user}]} >= AUTH_REFRESH_SECONDS )); then
+          tokens["${user}"]="$(login_user "${user}")"
+          token_login_epoch["${user}"]="$(date +%s)"
+          auth_refreshes=$((auth_refreshes + 1))
+          log "SESSION_REFRESH proactive user=${user} count=${auth_refreshes}"
+        fi
         token="${tokens[${user}]}"
         clid="SOAK-$(date +%s)-${cycle}-${slot}"
         if (( slot == 0 )); then side=Buy; price="${best_ask}"; tif=IOC
@@ -286,17 +332,32 @@ PY
         fi
         file="${STATE_DIR}/response-${slot}.json"
         action_files+=("${file}")
+        action_users+=("${user}")
         api_call "{\"serverName\":\"OrderSvr\",\"method\":\"placeOrder\",\"content\":{\"OCType\":\"OPEN\",\"OrderQty\":\"0.0001\",\"OrdType\":\"Limit\",\"ClOrdID\":\"${clid}\",\"Terminal\":\"RobotSoak\",\"AlgoName\":\"robot-soak-user\",\"Side\":\"${side}\",\"Price\":\"${price}\",\"UserID\":\"${user}\",\"MarketIndicator\":\"4\",\"TimeInForce\":\"${tif}\",\"SecurityID\":\"BTCUSDT\",\"Location\":\"${LOCATION}\"}}" "${token}" >"${file}" 2>&1 &
       done
       wait || true
-      for file in "${action_files[@]}"; do
-        code="$(python3 - "${file}" <<'PY'
+      for slot in "${!action_files[@]}"; do
+        file="${action_files[${slot}]}"
+        user="${action_users[${slot}]}"
+        IFS=$'\t' read -r code message < <(python3 - "${file}" <<'PY'
 import json,sys
-try: print(json.load(open(sys.argv[1])).get('code',-1))
-except Exception: print(-1)
+try:
+ d=json.load(open(sys.argv[1]))
+ print(f"{d.get('code',-1)}\t{str(d.get('msg','')).replace(chr(9),' ').replace(chr(10),' ')[:240]}")
+except Exception as e: print(f"-1\t{type(e).__name__}")
 PY
-)"
-        if [[ "${code}" == "0" ]]; then accepted=$((accepted + 1)); else rejected=$((rejected + 1)); fi
+) || true
+        if [[ "${code}" == "0" ]]; then
+          accepted=$((accepted + 1))
+        elif [[ "${code}" == "1004" ]]; then
+          tokens["${user}"]="$(login_user "${user}")"
+          token_login_epoch["${user}"]="$(date +%s)"
+          auth_refreshes=$((auth_refreshes + 1))
+          log "SESSION_REFRESH reactive user=${user} count=${auth_refreshes}"
+        else
+          rejected=$((rejected + 1))
+          log "ORDER_REJECT user=${user} code=${code:-missing} message=${message:-missing}"
+        fi
       done
       if (( cycle % 10 == 9 )); then
         for user in "${TRADERS[@]}"; do cancel_all "${user}" "${tokens[${user}]}"; done
@@ -324,6 +385,9 @@ case "${MODE}" in
       sleep 2
     fi
     start_monitor
+    if [[ -x "${SCRIPT_DIR}/observe-robot-market-soak.sh" ]]; then
+      "${SCRIPT_DIR}/observe-robot-market-soak.sh" >/dev/null || log "Observer reported an unhealthy snapshot; see ${STATE_DIR}/alerts.log."
+    fi
     is_running || die "Load process did not start"
     log "running pid=$(cat "${PID_FILE}"); monitor=$(docker inspect --format '{{.State.Status}}' "${MONITOR_CONTAINER}")"
     ;;

@@ -10,6 +10,14 @@ const user = process.env.ROBOT_SOAK_VIEWER || 'robotsoakmaker';
 const secretFile = process.env.ROBOT_SOAK_SECRET_FILE || '/secrets/runtime.env';
 const stateDir = process.env.ROBOT_SOAK_STATE_DIR || '/state';
 const sampleMs = Number(process.env.ROBOT_SOAK_WEB_SAMPLE_MS || 250);
+const browserCycleMs = Number(process.env.ROBOT_SOAK_WEB_BROWSER_CYCLE_MS || 600000);
+const operationTimeoutMs = Number(process.env.ROBOT_SOAK_WEB_OPERATION_TIMEOUT_MS || 15000);
+const heartbeatFile = path.join(stateDir, 'web-heartbeat.json');
+const webMetricsFile = path.join(stateDir, 'web-metrics.csv');
+
+for (const [name, value] of Object.entries({sampleMs, browserCycleMs, operationTimeoutMs})) {
+  if (!Number.isFinite(value) || value <= 0) throw new Error(`${name} must be a positive number`);
+}
 
 function secret(name) {
   const content = fs.readFileSync(secretFile, 'utf8');
@@ -25,29 +33,61 @@ fs.mkdirSync(stateDir, {recursive: true});
 const sleep = ms => new Promise(resolve => setTimeout(resolve, ms));
 const emit = record => process.stdout.write(`${JSON.stringify({time: new Date().toISOString(), ...record})}\n`);
 
+function withTimeout(promise, timeoutMs, operation) {
+  return new Promise((resolve, reject) => {
+    const timer = setTimeout(() => reject(new Error(`${operation} timed out after ${timeoutMs}ms`)), timeoutMs);
+    promise.then(
+      value => { clearTimeout(timer); resolve(value); },
+      error => { clearTimeout(timer); reject(error); }
+    );
+  });
+}
+
+function writeHeartbeat(record) {
+  const temporary = `${heartbeatFile}.${process.pid}.tmp`;
+  fs.writeFileSync(temporary, `${JSON.stringify({time: new Date().toISOString(), pid: process.pid, ...record})}\n`);
+  fs.renameSync(temporary, heartbeatFile);
+}
+
+function appendWebMetric(record) {
+  if (!fs.existsSync(webMetricsFile) || fs.statSync(webMetricsFile).size === 0) {
+    fs.writeFileSync(webMetricsFile,
+      'time,samples,gap_samples,min_bids,max_bids,min_asks,max_asks,page_errors\n');
+  }
+  fs.appendFileSync(webMetricsFile,
+    `${new Date().toISOString()},${record.samples},${record.gapSamples},${record.minBids},` +
+    `${record.maxBids},${record.minAsks},${record.maxAsks},${record.pageErrorCount}\n`);
+}
+
 async function openTrade(browser) {
   const context = await browser.newContext({viewport: {width: 1920, height: 1080}});
-  const page = await context.newPage();
-  const pageErrors = [];
-  page.on('pageerror', error => pageErrors.push(error.message));
-  page.on('console', message => {
-    if (message.type() === 'error' && !message.text().startsWith('time order violation')) {
-      pageErrors.push(message.text());
-    }
-  });
-  await page.goto(`${baseUrl}/#/login?location=${encodeURIComponent(location)}`, {waitUntil: 'domcontentloaded'});
-  const inputs = page.locator('.loginWrap input');
-  await inputs.nth(0).fill(user);
-  await inputs.nth(1).fill(password);
-  await page.locator('.loginWrap .ant-btn-primary').click();
-  await page.waitForFunction(() => Boolean(sessionStorage.getItem('loginData')), null, {timeout: 30000});
-  await page.waitForURL(`**/#/trade?location=${encodeURIComponent(location)}`, {timeout: 30000});
-  await page.locator('.tradeWrap').waitFor({timeout: 60000});
-  return {context, page, pageErrors};
+  try {
+    const page = await context.newPage();
+    const pageErrors = [];
+    page.on('pageerror', error => pageErrors.push(error.message));
+    page.on('console', message => {
+      if (message.type() === 'error' && !message.text().startsWith('time order violation')) {
+        pageErrors.push(message.text());
+      }
+    });
+    await page.goto(`${baseUrl}/#/login?location=${encodeURIComponent(location)}`, {waitUntil: 'domcontentloaded'});
+    const inputs = page.locator('.loginWrap input');
+    await inputs.nth(0).fill(user);
+    await inputs.nth(1).fill(password);
+    await page.locator('.loginWrap .ant-btn-primary').click();
+    await page.waitForFunction(() => Boolean(sessionStorage.getItem('loginData')), null, {timeout: 30000});
+    await page.waitForURL(`**/#/trade?location=${encodeURIComponent(location)}`, {timeout: 30000});
+    await page.locator('.tradeWrap').waitFor({timeout: 60000});
+    return {context, page, pageErrors};
+  } catch (error) {
+    await withTimeout(context.close(), operationTimeoutMs, 'failed-login context.close').catch(() => {});
+    throw error;
+  }
 }
 
 async function monitorSession(browser) {
   const {context, page, pageErrors} = await openTrade(browser);
+  const cycleStartedAt = Date.now();
   let samples = 0;
   let gapSamples = 0;
   let minBids = Number.MAX_SAFE_INTEGER;
@@ -59,15 +99,15 @@ async function monitorSession(browser) {
   let everReady = false;
   emit({event: 'web_monitor_connected', location, user});
   try {
-    while (true) {
-      const sample = await page.evaluate(() => {
+    while (Date.now() - cycleStartedAt < browserCycleMs) {
+      const sample = await withTimeout(page.evaluate(() => {
         const askRows = document.querySelectorAll('.orderBookWrap .showDiv .ask-container > .bid').length;
         const bidRows = document.querySelectorAll('.orderBookWrap .showDiv .ask-container + div + div > .bid').length;
         const lastPrice = document.querySelector('.orderBookWrap .showDiv .last-price')?.textContent?.trim() || '';
         const markPrice = document.querySelector('.orderBookWrap .showDiv .mark-price')?.textContent?.trim() || '';
         const loginData = JSON.parse(sessionStorage.getItem('loginData') || '{}');
         return {askRows, bidRows, lastPrice, markPrice, userId: loginData.user_id, tenant: loginData.location};
-      });
+      }), operationTimeoutMs, 'page.evaluate');
       if (sample.userId !== user || sample.tenant !== location) {
         throw new Error(`authoritative web session changed: ${JSON.stringify(sample)}`);
       }
@@ -98,29 +138,44 @@ async function monitorSession(browser) {
         emit({event: 'web_monitor_warming', sample, samples});
       }
       if (samples % Math.max(1, Math.round(60000 / sampleMs)) === 0) {
-        emit({event: 'web_minute', samples, gapSamples, minBids, minAsks, maxBids, maxAsks,
-          pageErrors: pageErrors.splice(0)});
+        const minuteErrors = pageErrors.splice(0);
+        const metric = {samples, gapSamples, minBids, minAsks, maxBids, maxAsks,
+          pageErrorCount: minuteErrors.length};
+        appendWebMetric(metric);
+        writeHeartbeat({...metric, status: 'healthy'});
+        emit({event: 'web_minute', ...metric, pageErrors: minuteErrors});
+      } else if (samples % Math.max(1, Math.round(1000 / sampleMs)) === 0) {
+        writeHeartbeat({samples, gapSamples, minBids, minAsks, maxBids, maxAsks,
+          pageErrorCount: pageErrors.length, status: 'sampling'});
       }
       await sleep(sampleMs);
     }
+    emit({event: 'web_browser_cycle_complete', samples, gapSamples, browserCycleMs});
   } finally {
-    await context.close();
+    await withTimeout(context.close(), operationTimeoutMs, 'context.close').catch(error => {
+      emit({event: 'web_context_close_error', error: error.stack || String(error)});
+    });
   }
 }
 
 (async () => {
-  const browser = await chromium.launch({headless: true});
-  try {
-    while (true) {
-      try {
-        await monitorSession(browser);
-      } catch (error) {
-        emit({event: 'web_monitor_error', error: error.stack || String(error)});
-        await sleep(3000);
+  while (true) {
+    let browser;
+    try {
+      browser = await withTimeout(chromium.launch({headless: true}), operationTimeoutMs, 'chromium.launch');
+      await monitorSession(browser);
+    } catch (error) {
+      writeHeartbeat({status: 'error', error: String(error.message || error)});
+      emit({event: 'web_monitor_error', error: error.stack || String(error)});
+    } finally {
+      if (browser) {
+        await withTimeout(browser.close(), operationTimeoutMs, 'browser.close').catch(error => {
+          emit({event: 'web_browser_close_error', error: error.stack || String(error)});
+          process.exit(2);
+        });
       }
     }
-  } finally {
-    await browser.close();
+    await sleep(3000);
   }
 })().catch(error => {
   emit({event: 'web_monitor_fatal', error: error.stack || String(error)});
