@@ -78,18 +78,17 @@ async function login(browser, username) {
   }
   await inputs.nth(0).fill(username);
   await inputs.nth(1).fill(password);
-  const loginBody = await invokeFromPage(page, 'SYS.ATS.LOGIN', () =>
-    page.locator('.loginWrap .ant-btn-primary').click()
-  );
-  if (loginBody.data.user_id !== username) {
-    throw new Error(`login returned unexpected user ${loginBody.data.user_id}`);
-  }
-  if (loginBody.data.location !== location) {
-    throw new Error(`login returned unexpected location ${loginBody.data.location}`);
-  }
+  await page.locator('.loginWrap .ant-btn-primary').click();
   await page.waitForFunction(() => Boolean(sessionStorage.getItem('loginData')));
   await page.waitForURL(`**/#/trade?location=${encodeURIComponent(location)}`);
   await page.locator('.tradeWrap').waitFor({ timeout: 60000 });
+  const loginBody = await page.evaluate(() => JSON.parse(sessionStorage.getItem('loginData') || '{}'));
+  if (loginBody.user_id !== username) {
+    throw new Error(`websocket login returned unexpected user ${loginBody.user_id}`);
+  }
+  if (loginBody.location !== location) {
+    throw new Error(`websocket login returned unexpected location ${loginBody.location}`);
+  }
   await page.waitForTimeout(3000);
   return { context, page, pageErrors };
 }

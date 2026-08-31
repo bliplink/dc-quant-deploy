@@ -11,6 +11,26 @@ const artifactDir = process.env.E2E_ARTIFACT_DIR || '/artifacts';
 if (!password) throw new Error('E2E_PASSWORD is required');
 fs.mkdirSync(artifactDir, {recursive: true});
 
+async function verifyRejectedWebSocketLogin(context) {
+  const page = await context.newPage();
+  try {
+    await page.goto(`${baseUrl}/#/login?location=${encodeURIComponent(location)}`, {
+      waitUntil: 'domcontentloaded'
+    });
+    const inputs = page.locator('.loginWrap input');
+    await inputs.nth(0).fill(username);
+    await inputs.nth(1).fill(`${password}-wrong`);
+    await page.locator('.loginWrap .ant-btn-primary').click();
+    await page.locator('.ant-message-notice').waitFor({timeout: 10000});
+    const session = await page.evaluate(() => sessionStorage.getItem('loginData'));
+    if (session || !page.url().includes('/#/login?location=')) {
+      throw new Error('invalid websocket credentials created an authenticated session');
+    }
+  } finally {
+    await page.close();
+  }
+}
+
 async function verifyTenantRouteBinding(page) {
   await page.goto(`${baseUrl}/#/register?location=${encodeURIComponent(location.toLowerCase())}`, {
     waitUntil: 'domcontentloaded'
@@ -76,12 +96,12 @@ async function login(page) {
   await inputs.nth(1).fill(password);
   await page.locator('.loginWrap .ant-btn-primary').click();
   await page.waitForURL(`**/#/trade?location=${encodeURIComponent(location)}`);
+  await page.locator('.tradeGrid').waitFor({timeout: 60000});
   const loginSession = await page.evaluate(() => JSON.parse(sessionStorage.getItem('loginData') || '{}'));
   if (Number(loginSession.code) !== 0 || loginSession.user_id !== username ||
       String(loginSession.location || '').toUpperCase() !== location) {
     throw new Error(`websocket login failed: ${JSON.stringify(loginSession)}`);
   }
-  await page.locator('.tradeGrid').waitFor({timeout: 60000});
   await page.waitForTimeout(2500);
 }
 
@@ -106,6 +126,7 @@ function layoutItem(snapshot, breakpoint, key) {
   page.on('pageerror', error => pageErrors.push(error.message));
 
   try {
+    await verifyRejectedWebSocketLogin(context);
     await verifyTenantRouteBinding(page);
     await login(page);
     const initialChartFill = await chartFillSnapshot(page);
@@ -309,6 +330,7 @@ function layoutItem(snapshot, breakpoint, key) {
       resizable: true,
       persisted: true,
       refreshRequiresWebSocketReauthentication: true,
+      invalidWebSocketCredentialsRejected: true,
       hoverDragZone: true,
       resetLayout: true,
       languages: ['en', 'zh'],
