@@ -179,22 +179,27 @@ async function waitForMarketMetric(page, label) {
 }
 
 async function verifyKlineAndMarketData(page) {
-  // MDSvr deliberately batches ClickHouse writes.  The realtime K-line is
-  // already sent over WebSocket, but a reload can race the asynchronous
-  // history insert.  Poll the real browser history request until the same
-  // tenant bar is durable instead of accepting a transient empty response.
+  // MDSvr deliberately batches ClickHouse writes. The realtime K-line is
+  // already sent over WebSocket, so poll the authenticated history endpoint
+  // until the same tenant bar is durable. Do not reload: browser refresh
+  // intentionally requires a fresh WebSocket login until token resume exists.
   const deadline = Date.now() + 60000;
   let klineBody = null;
   let klineRows = [];
   do {
-    const klineResponsePromise = page.waitForResponse(
-      response => response.url().includes('/httpapi/') && requestMethod(response) === 'queryKLine',
-      {timeout: 60000}
-    );
-    await page.reload({waitUntil: 'domcontentloaded'});
-    await page.locator('.tradeWrap').waitFor({timeout: 60000});
-    const klineResponse = await klineResponsePromise;
-    klineBody = await klineResponse.json();
+    klineBody = await page.evaluate(async tenant => {
+      const session = JSON.parse(sessionStorage.getItem('loginData') || '{}');
+      const response = await fetch('/httpapi/', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json', sessionId: session.token || session.sid || ''},
+        body: JSON.stringify({
+          serverName: 'MDSvr',
+          method: 'queryKLine',
+          content: {num: 1000, securityID: 'BTCUSDT', text: '5M', Location: tenant}
+        })
+      });
+      return response.json();
+    }, location);
     if (Number(klineBody.code) !== 0) {
       throw new Error(`queryKLine failed: ${JSON.stringify(klineBody)}`);
     }
