@@ -20,6 +20,55 @@ function requestMethod(response) {
   }
 }
 
+async function verifyTenantRouteBinding(page) {
+  await page.goto(`${baseUrl}/#/register?location=${encodeURIComponent(location.toLowerCase())}`, {
+    waitUntil: 'domcontentloaded'
+  });
+  await page.locator('.tenant-route-context').waitFor({timeout: 10000});
+  if (await page.locator('.tenant-route-context strong').innerText() !== location) {
+    throw new Error('registration did not normalize and bind the tenant from the dedicated URL');
+  }
+  if (await page.locator('.tenant-card input').count() !== 5) {
+    throw new Error('registration must not expose an editable tenant/location input');
+  }
+  await page.screenshot({path: path.join(artifactDir, 'register-tenant-bound.png'), fullPage: true});
+
+  await page.goto(`${baseUrl}/#/register`, {waitUntil: 'domcontentloaded'});
+  await page.locator('.tenant-route-context-error').waitFor({timeout: 10000});
+  if (!(await page.locator('.tenant-primary').isDisabled())) {
+    throw new Error('registration must be disabled when the dedicated URL has no tenant');
+  }
+}
+
+async function chartFillSnapshot(page) {
+  return page.evaluate(() => {
+    const chart = document.querySelector('.chartWrap');
+    const panelBody = chart && chart.closest('.tradePanelBody');
+    const header = chart && chart.querySelector('.head');
+    const container = chart && chart.querySelector('.TVChartContainer');
+    const iframe = container && container.querySelector('iframe');
+    if (!chart || !panelBody || !header || !container || !iframe) return null;
+    const height = element => element.getBoundingClientRect().height;
+    return {
+      panelBody: height(panelBody),
+      chart: height(chart),
+      header: height(header),
+      container: height(container),
+      iframe: height(iframe)
+    };
+  });
+}
+
+function assertChartFillsPanel(snapshot) {
+  if (!snapshot ||
+      Math.abs(snapshot.chart - snapshot.panelBody) > 2 ||
+      Math.abs(snapshot.container - (snapshot.chart - snapshot.header)) > 2 ||
+      Math.abs(snapshot.iframe - snapshot.container) > 2 ||
+      snapshot.container < 300) {
+    throw new Error(`TradingView chart does not fill its workspace panel: ${JSON.stringify(snapshot)}`);
+  }
+}
+
 async function login(page) {
   await page.goto(`${baseUrl}/#/login?location=${encodeURIComponent(location)}`, {
     waitUntil: 'domcontentloaded'
@@ -70,7 +119,10 @@ function layoutItem(snapshot, breakpoint, key) {
   page.on('pageerror', error => pageErrors.push(error.message));
 
   try {
+    await verifyTenantRouteBinding(page);
     await login(page);
+    const initialChartFill = await chartFillSnapshot(page);
+    assertChartFillsPanel(initialChartFill);
 
     // Establish a deterministic English default before exercising persistence.
     await page.locator('.languageSwitch button').nth(1).click();
@@ -182,6 +234,9 @@ function layoutItem(snapshot, breakpoint, key) {
     if (!customized.value || customized.value === afterMove.value) {
       throw new Error('resized layout was not persisted to localStorage');
     }
+    await page.waitForTimeout(300);
+    const resizedChartFill = await chartFillSnapshot(page);
+    assertChartFillsPanel(resizedChartFill);
 
     const colors = await page.evaluate(() => ({
       page: getComputedStyle(document.querySelector('.tradeWrap')).backgroundColor,
@@ -231,10 +286,12 @@ function layoutItem(snapshot, breakpoint, key) {
       orderInputValidation: true,
       conditionalOrderModes: true,
       reduceOnlyControl: true,
+      tenantBoundRegistration: true,
+      chartFillsPanel: {initial: initialChartFill, resized: resizedChartFill},
       lastPriceHeader: true,
       searchableMarketSelector: true,
       professionalTheme: colors,
-      artifacts: ['workspace-en.png', 'workspace-zh.png']
+      artifacts: ['register-tenant-bound.png', 'workspace-en.png', 'workspace-zh.png']
     }, null, 2));
   } catch (error) {
     await page.screenshot({path: path.join(artifactDir, 'workspace-failure.png'), fullPage: true}).catch(() => {});
