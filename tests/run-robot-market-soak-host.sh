@@ -14,6 +14,7 @@ PID_FILE="${STATE_DIR}/load.pid"
 SECRET_FILE="${STATE_DIR}/runtime.env"
 LOG_FILE="${STATE_DIR}/load.log"
 METRICS_FILE="${STATE_DIR}/depth-metrics.csv"
+CACHE_MARKER="${STATE_DIR}/accounts-loaded.marker"
 MONITOR_CONTAINER="${ROBOT_SOAK_MONITOR_CONTAINER:-dc-saas-robot-web-monitor}"
 MONITOR_IMAGE="${ROBOT_SOAK_MONITOR_IMAGE:-mcr.microsoft.com/playwright:v1.55.0-noble}"
 MODE="${1:-status}"
@@ -79,7 +80,11 @@ login_user() {
 
 provision() {
   ensure_secret
-  local password_hash collision robot_token robot_api response
+  local password_hash collision robot_token robot_api response initial_load robot_enabled
+  initial_load=0
+  [[ -s "${CACHE_MARKER}" ]] || initial_load=1
+  robot_enabled=1
+  (( initial_load == 1 )) && robot_enabled=0
   password_hash="$(printf '%s' "${ROBOT_SOAK_PASSWORD}" | sha256sum | awk '{print $1}')"
   collision="$(mysql_exec -e "SELECT COUNT(*) FROM dc.dc_users WHERE user_id IN ('${ROBOT_USER}','robotsoak01','robotsoak02','robotsoak03','robotsoak04') AND COALESCE(location,'')<>'${LOCATION}';" dc)"
   [[ "${collision}" == "0" ]] || die "A dedicated Robot soak identity belongs to another location"
@@ -146,16 +151,31 @@ INSERT INTO dc.dc_tenant_robot
    create_by,update_by,create_time,update_time)
 VALUES
   ('${LOCATION}','${ROBOT_ID}','Continuous Binance 10-Level Market','BTCUSDT','${ROBOT_USER}','${robot_api}',
-   'APSSVR_BINANCE_TICKER',1,10,10,2,1,0.001,2,200,3000,500,5,0,
+   'APSSVR_BINANCE_TICKER',${robot_enabled},10,10,2,1,0.001,2,200,3000,500,5,0,
    JSON_OBJECT('sweep_user_orders_enabled',true,'sweep_max_loss_bps',5,'sweep_max_qty',0.001),
    'STOPPED','robot-soak','robot-soak',NOW(),NOW())
 ON DUPLICATE KEY UPDATE
-  api_user_id=VALUES(api_user_id),api_key=VALUES(api_key),quote_source=VALUES(quote_source),enabled=1,
+  api_user_id=VALUES(api_user_id),api_key=VALUES(api_key),quote_source=VALUES(quote_source),enabled=${robot_enabled},
   bid_levels=10,ask_levels=10,level_spread_bps=2,level_step_bps=1,order_qty=0.001,max_position_qty=2,
   refresh_interval_ms=200,stale_price_ms=3000,max_deviation_bps=500,circuit_breaker_seconds=5,
   hedge_enabled=0,strategy_config=VALUES(strategy_config),update_by='robot-soak',update_time=NOW();
 SQL
   } | mysql_exec dc
+
+  if (( initial_load == 1 )); then
+    log "Loading dedicated Robot soak accounts into LoginSvr/OrderSvr/TradeSvr caches once."
+    docker restart dc-saas-loginsvr dc-saas-ordersvr dc-saas-tradesvr >/dev/null
+    sleep 8
+    docker restart dc-saas-gateway >/dev/null
+    for _ in $(seq 1 60); do
+      response="$(api_call '{"serverName":"LoginSvr","method":"__robot_soak_readiness__","content":{}}' 2>/dev/null || true)"
+      if [[ -n "${response}" && "${response}" != *'is not Online'* ]]; then break; fi
+      sleep 2
+    done
+    [[ -n "${response}" && "${response}" != *'is not Online'* ]] || die "LoginSvr did not become routable"
+    printf '%s\n' "$(date -Is)" >"${CACHE_MARKER}"
+    mysql_exec -e "UPDATE dc.dc_tenant_robot SET enabled=1,update_by='robot-soak',update_time=NOW() WHERE location='${LOCATION}' AND robot_id='${ROBOT_ID}';" dc >/dev/null
+  fi
 }
 
 start_monitor() {
