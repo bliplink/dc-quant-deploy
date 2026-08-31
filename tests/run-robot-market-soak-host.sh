@@ -11,6 +11,7 @@ ROBOT_ID="${ROBOT_SOAK_ROBOT_ID:-continuous-depth10}"
 VIEWER="${ROBOT_SOAK_VIEWER:-robotsoak01}"
 TRADERS=(robotsoak01 robotsoak02 robotsoak03 robotsoak04)
 PID_FILE="${STATE_DIR}/load.pid"
+LOCK_FILE="${STATE_DIR}/load.lock"
 SECRET_FILE="${STATE_DIR}/runtime.env"
 LOG_FILE="${STATE_DIR}/load.log"
 METRICS_FILE="${STATE_DIR}/depth-metrics.csv"
@@ -25,6 +26,7 @@ safe_identifier() { [[ "$1" =~ ^[A-Za-z0-9_.-]+$ ]]; }
 
 [[ "$(id -u)" -eq 0 ]] || die "Run as root"
 [[ -r "${ENV_FILE}" ]] || die "Cannot read ${ENV_FILE}"
+command -v flock >/dev/null || die "flock is required"
 safe_identifier "${LOCATION}" || die "Unsafe location"
 safe_identifier "${ROBOT_USER}" || die "Unsafe robot user"
 safe_identifier "${ROBOT_ID}" || die "Unsafe robot id"
@@ -286,6 +288,8 @@ is_running() { [[ -s "${PID_FILE}" ]] && kill -0 "$(cat "${PID_FILE}")" 2>/dev/n
 
 case "${MODE}" in
   run)
+    exec 9>"${LOCK_FILE}"
+    flock -n 9 || exit 0
     printf '%s\n' "$$" >"${PID_FILE}"
     trap 'rm -f "${PID_FILE}"' EXIT
     run_loop >>"${LOG_FILE}" 2>&1
@@ -301,7 +305,17 @@ case "${MODE}" in
     log "running pid=$(cat "${PID_FILE}"); monitor=$(docker inspect --format '{{.State.Status}}' "${MONITOR_CONTAINER}")"
     ;;
   stop)
-    if is_running; then kill "$(cat "${PID_FILE}")"; fi
+    pids="$(pgrep -f '[r]un-robot-market-soak-host.sh run' || true)"
+    if [[ -n "${pids}" ]]; then
+      kill ${pids} 2>/dev/null || true
+      for _ in $(seq 1 20); do
+        pids="$(pgrep -f '[r]un-robot-market-soak-host.sh run' || true)"
+        [[ -z "${pids}" ]] && break
+        sleep 0.25
+      done
+      [[ -z "${pids}" ]] || kill -9 ${pids} 2>/dev/null || true
+    fi
+    rm -f "${PID_FILE}"
     docker rm -f "${MONITOR_CONTAINER}" >/dev/null 2>&1 || true
     log "stopped; Robot configuration remains enabled"
     ;;

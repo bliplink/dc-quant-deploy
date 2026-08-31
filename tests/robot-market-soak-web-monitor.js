@@ -69,10 +69,12 @@ async function monitorSession(browser) {
         throw new Error(`authoritative web session changed: ${JSON.stringify(sample)}`);
       }
       samples += 1;
-      minBids = Math.min(minBids, sample.bidRows);
-      minAsks = Math.min(minAsks, sample.askRows);
       const ready = sample.bidRows >= 10 && sample.askRows >= 10 && sample.lastPrice && sample.lastPrice !== '--';
-      if (ready) everReady = true;
+      if (ready) {
+        everReady = true;
+        minBids = Math.min(minBids, sample.bidRows);
+        minAsks = Math.min(minAsks, sample.askRows);
+      }
       if (everReady && !ready) {
         gapSamples += 1;
         emit({event: 'web_depth_gap', sample, samples, gapSamples});
