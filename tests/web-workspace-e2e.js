@@ -126,13 +126,24 @@ function layoutItem(snapshot, breakpoint, key) {
 
     // Establish a deterministic English default before exercising persistence.
     await page.locator('.languageSwitch button').nth(1).click();
-    await page.getByRole('button', {name: 'Reset layout'}).click();
-    await page.waitForTimeout(500);
+    await page.evaluate(() => {
+      Object.keys(localStorage)
+        .filter(key => key.startsWith('dc-trade-layout-v1:'))
+        .forEach(key => localStorage.removeItem(key));
+    });
+    await page.reload({waitUntil: 'domcontentloaded'});
+    await page.locator('.tradeGrid').waitFor({timeout: 30000});
+    await page.waitForTimeout(800);
 
     const panels = page.locator('.tradePanel');
     if (await panels.count() !== 5) throw new Error('expected five trading workspace panels');
-    if (await page.locator('.panelDragHandle').count() !== 5) {
-      throw new Error('all workspace panels must expose a drag handle while unlocked');
+    if (await page.locator('.layoutToolbar').count() !== 0 ||
+        await page.getByRole('button', {name: /Lock layout|Reset layout/}).count() !== 0) {
+      throw new Error('manual layout edit/lock controls must not be visible');
+    }
+    if (await page.locator('.panelDragZone').count() !== 5 ||
+        await page.locator('.panelDragHandle').count() !== 0) {
+      throw new Error('workspace panels must use hover drag zones without persistent handles');
     }
 
     await page.locator('.symbolDiv').click();
@@ -182,11 +193,19 @@ function layoutItem(snapshot, breakpoint, key) {
     const before = await layoutSnapshot(page);
     const chartPanel = panels.nth(0);
     const beforeBox = await chartPanel.boundingBox();
-    const handle = chartPanel.locator('.panelDragHandle');
+    const handle = chartPanel.locator('.panelDragZone');
     const handleBox = await handle.boundingBox();
     if (!beforeBox || !handleBox) throw new Error('chart panel was not measurable');
 
-    await page.mouse.move(handleBox.x + handleBox.width / 2, handleBox.y + handleBox.height / 2);
+    await handle.hover();
+    await page.waitForTimeout(200);
+    const hoverDragState = await handle.evaluate(element => ({
+      cursor: getComputedStyle(element).cursor,
+      indicatorOpacity: getComputedStyle(element, '::before').opacity
+    }));
+    if (hoverDragState.cursor !== 'move' || Number(hoverDragState.indicatorOpacity) < 0.9) {
+      throw new Error(`hover drag affordance is not visible: ${JSON.stringify(hoverDragState)}`);
+    }
     await page.mouse.down();
     // Move the wide chart below the occupied top-row panels. Dropping it into
     // the order-book/place-order cells is a collision and vertical compaction
@@ -260,16 +279,14 @@ function layoutItem(snapshot, breakpoint, key) {
       throw new Error(`custom layout did not survive reload: ${JSON.stringify({savedChart, reloadedChart})}`);
     }
 
-    await page.getByRole('button', {name: 'Lock layout'}).click();
-    if (await page.locator('.panelDragHandle').count() !== 0) {
-      throw new Error('drag handles remain active after locking the layout');
-    }
     await page.screenshot({path: path.join(artifactDir, 'workspace-en.png'), fullPage: true});
 
     await page.locator('.languageSwitch button').nth(0).click();
-    await page.getByRole('button', {name: '编辑布局'}).waitFor({timeout: 10000});
     await page.getByText('订单簿', {exact: true}).first().waitFor({timeout: 10000});
     await page.getByText('交易品种', {exact: true}).first().waitFor({timeout: 10000});
+    if (await page.getByRole('button', {name: /编辑布局|锁定布局|恢复默认/}).count() !== 0) {
+      throw new Error('Chinese manual layout controls must not be visible');
+    }
     await page.screenshot({path: path.join(artifactDir, 'workspace-zh.png'), fullPage: true});
 
     if (pageErrors.length) throw new Error(`page errors: ${JSON.stringify(pageErrors)}`);
@@ -280,7 +297,7 @@ function layoutItem(snapshot, breakpoint, key) {
       draggable: true,
       resizable: true,
       persisted: true,
-      lockable: true,
+      hoverDragZone: true,
       languages: ['en', 'zh'],
       bilingualLogin: true,
       orderInputValidation: true,
