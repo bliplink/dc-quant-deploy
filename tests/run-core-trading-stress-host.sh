@@ -56,6 +56,22 @@ WHERE user_name IN ('${LOAD_MAKER}','${LOAD_TAKER}')
   AND (user_id<>user_name OR COALESCE(location,'')<>'${LOAD_LOCATION}');" dc)"
 [[ "${collision_count}" == "0" ]] || die "A load-test username belongs to another identity or location"
 
+foreign_active_count="$(mysql_exec -e "
+SELECT COUNT(*) FROM dc.dc_orders
+WHERE location='${LOAD_LOCATION}'
+  AND user_id NOT IN ('${LOAD_MAKER}','${LOAD_TAKER}')
+  AND ord_status IN ('New','Partially_Filled');" dc)"
+if [[ "${foreign_active_count}" != "0" ]]; then
+  foreign_active_sample="$(mysql_exec -e "
+SELECT CONCAT(user_id,':',clord_id,':',side,':',price,':',leaves_qty)
+FROM dc.dc_orders
+WHERE location='${LOAD_LOCATION}'
+  AND user_id NOT IN ('${LOAD_MAKER}','${LOAD_TAKER}')
+  AND ord_status IN ('New','Partially_Filled')
+ORDER BY update_time DESC LIMIT 10;" dc)"
+  die "Load location contains ${foreign_active_count} foreign active orders; clean the isolated baseline first: ${foreign_active_sample}"
+fi
+
 login_user() {
   local user="$1" request response token
   request="$(mktemp)"
