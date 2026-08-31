@@ -112,6 +112,19 @@ VALUES
   ('robotsoak03','BTCUSDT','BTCUSDT',20,'Cross',NOW(),'robot-soak','${LOCATION}','4'),
   ('robotsoak04','BTCUSDT','BTCUSDT',20,'Cross',NOW(),'robot-soak','${LOCATION}','4')
 ON DUPLICATE KEY UPDATE leverage=20,position_type='Cross',update_time=NOW();
+UPDATE dc.dc_tenant_symbol ts
+JOIN dc.dc_symbol s ON s.symbol=ts.security_id
+SET ts.tick_size=COALESCE(ts.tick_size,CAST(s.tick_size AS DECIMAL(36,18))),
+    ts.qty_tick_size=COALESCE(ts.qty_tick_size,CAST(s.qty_tick_size AS DECIMAL(36,18))),
+    ts.min_order_qty=COALESCE(ts.min_order_qty,CAST(s.min_order_qty AS DECIMAL(36,18))),
+    ts.max_order_qty=COALESCE(ts.max_order_qty,CAST(s.max_order_qty AS DECIMAL(36,18))),
+    ts.min_notional=COALESCE(ts.min_notional,CAST(s.min_notional AS DECIMAL(36,18))),
+    ts.market_take_bound=COALESCE(ts.market_take_bound,CAST(s.market_take_bound AS DECIMAL(36,18))),
+    ts.maker_commission=COALESCE(ts.maker_commission,CAST(s.maker_commission AS DECIMAL(36,18))),
+    ts.taker_commission=COALESCE(ts.taker_commission,CAST(s.taker_commission AS DECIMAL(36,18))),
+    ts.funding_interval=COALESCE(ts.funding_interval,s.funding_interval),
+    ts.update_by='robot-soak',ts.update_time=NOW()
+WHERE ts.location='${LOCATION}' AND ts.security_id='BTCUSDT';
 COMMIT;
 SQL
   } | mysql_exec dc
@@ -178,7 +191,7 @@ run_loop() {
   provision
   start_monitor
   declare -A tokens
-  local user response code cycle=0 rejected=0 accepted=0 gap_samples=0 action_files=()
+  local user response code cycle=0 rejected=0 accepted=0 gap_samples=0 action_files=() ever_running=0
   local bid_levels ask_levels best_bid best_ask robot_status web_status now clid price token side
   for user in "${TRADERS[@]}"; do tokens["${user}"]="$(login_user "${user}")"; done
   if [[ ! -s "${METRICS_FILE}" ]]; then
@@ -196,7 +209,8 @@ SELECT
 FROM dc.dc_orders o WHERE o.location='${LOCATION}' AND o.user_id='${ROBOT_USER}'
  AND o.clord_id LIKE 'RBcontinuousd%' AND o.clord_id NOT LIKE '%-SW%';" dc)"
     web_status="$(curl -sS -o /dev/null -w '%{http_code}' --max-time 5 "http://127.0.0.1:${WEB_LISTEN_PORT}/#/trade?location=${LOCATION}" || true)"
-    if (( bid_levels < 10 || ask_levels < 10 )); then
+    [[ "${robot_status}" == "RUNNING" && "${bid_levels}" -ge 10 && "${ask_levels}" -ge 10 ]] && ever_running=1
+    if (( ever_running == 1 && (bid_levels < 10 || ask_levels < 10) )); then
       gap_samples=$((gap_samples + 1))
       log "DEPTH_GAP bid=${bid_levels} ask=${ask_levels} status=${robot_status} best=${best_bid}/${best_ask}"
     fi

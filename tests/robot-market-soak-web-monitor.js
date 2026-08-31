@@ -53,6 +53,7 @@ async function monitorSession(browser) {
   let minBids = Number.MAX_SAFE_INTEGER;
   let minAsks = Number.MAX_SAFE_INTEGER;
   let screenshotWritten = false;
+  let everReady = false;
   emit({event: 'web_monitor_connected', location, user});
   try {
     while (true) {
@@ -71,13 +72,16 @@ async function monitorSession(browser) {
       minBids = Math.min(minBids, sample.bidRows);
       minAsks = Math.min(minAsks, sample.askRows);
       const ready = sample.bidRows >= 10 && sample.askRows >= 10 && sample.lastPrice && sample.lastPrice !== '--';
-      if (!ready) {
+      if (ready) everReady = true;
+      if (everReady && !ready) {
         gapSamples += 1;
         emit({event: 'web_depth_gap', sample, samples, gapSamples});
         if (!screenshotWritten && samples > 20) {
           await page.screenshot({path: path.join(stateDir, 'web-depth-gap.png'), fullPage: true});
           screenshotWritten = true;
         }
+      } else if (!everReady && samples % Math.max(1, Math.round(5000 / sampleMs)) === 0) {
+        emit({event: 'web_monitor_warming', sample, samples});
       }
       if (samples % Math.max(1, Math.round(60000 / sampleMs)) === 0) {
         emit({event: 'web_minute', samples, gapSamples, minBids, minAsks, pageErrors: pageErrors.splice(0)});
