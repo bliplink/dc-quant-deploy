@@ -64,7 +64,7 @@
 - 切换品种和离开交易页时统一释放订单、成交、持仓、资金、订单簿和行情 WebSocket 订阅，防止重复回报与无效取消订阅异常。
 - 使用深色层级、专业买卖色、紧凑表格和响应式断点，功能布局参考主流永续合约交易终端，但不复制其品牌和专有素材。
 
-Web 源码当前部署基线为 `04ded17cd3de3a5fb8a5cfd0b25d2cce72ca7676`，运行不可变公开镜像 `source-04ded17cd3de3a5fb8a5cfd0b25d2cce72ca7676`。生产环境已完成 WebSocket 登录、真实浏览器桌面英文/中文、390×844 手机英文/中文、拖动、缩放、布局持久化、市场抽屉、完整交易链路、租户申请/注册和平台/租户管理验收；本报告中的 Web 图片均来自 `18.140.45.126`，不是本地效果图。
+Web 源码当前部署基线为 `d9f69fa1fa2cf5fa263eecb9fda885014cae9cfa`，运行公开镜像 `ghcr.io/bliplink/dc-saas-trade-web:saas-crypto`（manifest `sha256:01b524a7fe3599441cbbb288d0f4ffd220f276a95bed7ef3adeebf74f958451a`）。生产环境已完成 WebSocket 密码登录、刷新/断线 token 恢复、真实浏览器桌面英文/中文、390×844 手机英文/中文、拖动、缩放、布局持久化、市场抽屉、完整交易链路、租户申请/注册和平台/租户管理验收；本报告中的 Web 图片均来自 `18.140.45.126`，不是本地效果图。
 
 ## 4. 总体架构与服务职责
 
@@ -298,7 +298,7 @@ MDSvr snapshot -> 服务端校验 location/topic -> GW 仅登记已确认订阅
 1. 浏览器 URL 携带 location，建立 WebSocket 后向 GW 发送登录消息；用户名和密码不再通过 HTTP 登录接口提交。
 2. GW 调用 LoginSvr 按用户和 location 校验凭据；错误密码返回 `USER_ACCOUNT_OR_PWD_ERROR`，不建立业务会话。
 3. 成功后 GW 将认证用户、角色和权威 location 绑定到当前 SID；Web 先使用该 SID 加载租户品种，再通过 SPA 路由进入交易页，不 reload 页面。
-4. 站内路由切换保持当前 WS；刷新、关闭页面或连接断开后当前版本要求重新登录。无 Redis 的 MySQL 一次性轮换 token 恢复方案已设计但尚未实现。
+4. 站内路由切换保持当前 WS；刷新或连接断开后使用 MySQL 一次性 token 经原 login 协议恢复，成功后先轮换 token 再恢复订阅。默认关闭标签页即失效本地会话；勾选“保持登录”才允许跨标签页恢复。
 5. 仍需继续完成 Order/Trade/MD/Liq 全攻击面证明，确保任何请求体、Topic、缓存和重放都不能用客户端字段切换 location。
 
 ### 9.2 下单与成交
@@ -392,7 +392,7 @@ MDSvr snapshot -> 服务端校验 location/topic -> GW 仅登记已确认订阅
 - 只从公开 GHCR 拉取应用镜像，不自动更新 MySQL、ClickHouse、ZooKeeper。
 - 新镜像需要稳定窗口后成组部署；失败自动恢复上一组镜像。
 - 验收报告记录每个运行容器的不可变 image ID；自动更新以整组远端 digest 指纹和稳定窗口判定发布，测试过程中不允许版本漂移。
-- Web 固定为 `source-04ded17cd3de3a5fb8a5cfd0b25d2cce72ca7676`，RobotSvr 固定为 `sha-62718fd7faa6905a79aeaa4ddbc0397e280e4e51`；自动更新只替换发生不可变镜像变更的服务。
+- Web 使用公开移动标签 `saas-crypto` 并由自动更新脚本按 registry digest 识别变更；RobotSvr 固定为 `sha-62718fd7faa6905a79aeaa4ddbc0397e280e4e51`。自动更新只替换 digest 实际发生变化的服务。
 - GitHub 网络偶发 reset/timeout 时，当前运行服务保持不变；源码提交使用直连官方地址重试，不允许 Git 网络问题阻塞开发。
 
 ## 12. 测试与验收结果
@@ -529,7 +529,7 @@ Trade Web 同期执行 `npm run build-prod` 成功；AdminSvr、ManagerSvr、Log
 | P0 | 无真实钱包和合规 | Deposit 仅测试 | 钱包/KMS/HSM、KYC/AML、提现审批和审计 |
 | P1 | 当前容量距交易所目标较远 | 3000×32 实测 taker 232.6 req/s；挂单阶段 p99 803 ms | 分片单写、异步持久化、性能剖析并达到业务 SLO |
 | P1 | 私有流和深度流未生产化 | 现有 Topic/Snapshot 可用 | 序号、补发、断线恢复、快照+增量一致性 |
-| P1 | WebSocket 会话刷新后不能恢复 | 登录只走 WebSocket；站内 SPA 路由保持 SID；刷新后安全回到租户登录页 | 按已记录的 MySQL 一次性轮换 resumeToken 方案实现恢复、撤销、改密/停租户失效和多 GW 一致性，不引入 Redis |
+| 已完成 | WebSocket 会话恢复 | 无 Redis MySQL 一次性 token 轮换、刷新/真实断线恢复、跨租户拒绝、退出撤销和密码不落盘均已通过生产 E2E | 上真实资金前补 GW/公共组件凭证日志脱敏，并在 HTTPS/WSS 下复验 |
 | P1 | 完整账户模式不足 | 核心 long/short 字段和 Cross 配置存在 | 完整单向/双向、全仓/逐仓、统一账户验收 |
 | P1 | 订单产品仍不齐 | TP/SL/OCO 已有核心语义 | 追踪止损、Close on Trigger、SMP group、活动单上限 |
 | P1 | 多租户控制面仍是第一阶段 | 申请、审批、URL、注册、用户、品种、API Key、Robot 配置、交易记录、设置和审计已验收 | 自定义域名/证书、套餐配额、2FA、完整 RBAC、导出审批和平台分权 |
@@ -562,6 +562,7 @@ Trade Web 同期执行 `npm run build-prod` 成功；AdminSvr、ManagerSvr、Log
 - 对标路线图：`docs/BINANCE_BYBIT_ROADMAP.zh-CN.md`
 - 自动更新说明：`docs/AUTO_UPDATE.zh-CN.md`
 - WebSocket 会话恢复设计：`docs/WEBSOCKET_SESSION_RESUME_DESIGN.zh-CN.md`
+- WebSocket 会话恢复验收：`docs/WEBSOCKET_SESSION_RESUME_ACCEPTANCE_20260831.zh-CN.md`
 - WebSocket 与 Web 验收：`docs/WEBSOCKET_AND_WEB_ACCEPTANCE_20260831.zh-CN.md`
 - Robot 流动性验收：`docs/ROBOT_LIQUIDITY_ACCEPTANCE_20260831.zh-CN.md`
 - 数据库证据原始 HTML：`docs/evidence/database-evidence.html`
