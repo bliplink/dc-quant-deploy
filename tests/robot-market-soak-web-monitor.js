@@ -52,6 +52,8 @@ async function monitorSession(browser) {
   let gapSamples = 0;
   let minBids = Number.MAX_SAFE_INTEGER;
   let minAsks = Number.MAX_SAFE_INTEGER;
+  let maxBids = 0;
+  let maxAsks = 0;
   let screenshotWritten = false;
   let lastHealthyScreenshotSample = 0;
   let everReady = false;
@@ -70,7 +72,7 @@ async function monitorSession(browser) {
         throw new Error(`authoritative web session changed: ${JSON.stringify(sample)}`);
       }
       samples += 1;
-      const ready = sample.bidRows >= 10 && sample.askRows >= 10 && sample.lastPrice && sample.lastPrice !== '--';
+      const ready = sample.bidRows === 10 && sample.askRows === 10 && sample.lastPrice && sample.lastPrice !== '--';
       if (ready) {
         everReady = true;
         if (lastHealthyScreenshotSample === 0 || samples - lastHealthyScreenshotSample >= Math.round(600000 / sampleMs)) {
@@ -82,6 +84,8 @@ async function monitorSession(browser) {
       if (everReady) {
         minBids = Math.min(minBids, sample.bidRows);
         minAsks = Math.min(minAsks, sample.askRows);
+        maxBids = Math.max(maxBids, sample.bidRows);
+        maxAsks = Math.max(maxAsks, sample.askRows);
       }
       if (everReady && !ready) {
         gapSamples += 1;
@@ -94,7 +98,8 @@ async function monitorSession(browser) {
         emit({event: 'web_monitor_warming', sample, samples});
       }
       if (samples % Math.max(1, Math.round(60000 / sampleMs)) === 0) {
-        emit({event: 'web_minute', samples, gapSamples, minBids, minAsks, pageErrors: pageErrors.splice(0)});
+        emit({event: 'web_minute', samples, gapSamples, minBids, minAsks, maxBids, maxAsks,
+          pageErrors: pageErrors.splice(0)});
       }
       await sleep(sampleMs);
     }
