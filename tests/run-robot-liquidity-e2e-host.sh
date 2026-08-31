@@ -21,6 +21,8 @@ for value in "${RUN_ID}" "${LOCATION}" "${ROBOT_USER}" "${TRADER_USER}" "${ROBOT
   safe_identifier "${value}" || die "Unsupported identifier: ${value}"
 done
 [[ "${LOCATION}" == ROBOT_E2E_* ]] || die "ROBOT_E2E_LOCATION must be an isolated ROBOT_E2E_* location"
+robot_compact="${ROBOT_ID//[^A-Za-z0-9]/}"
+robot_prefix="RB${robot_compact:0:12}-"
 command -v curl >/dev/null || die "curl is required"
 command -v python3 >/dev/null || die "python3 is required"
 command -v openssl >/dev/null || die "openssl is required"
@@ -166,7 +168,8 @@ for _ in $(seq 1 120); do
 SELECT IF(
   (SELECT runtime_status FROM dc_tenant_robot WHERE location='${LOCATION}' AND robot_id='${ROBOT_ID}')='RUNNING'
   AND (SELECT COUNT(*) FROM dc_orders WHERE location='${LOCATION}' AND user_id='${ROBOT_USER}'
-       AND algo_name='robot:${ROBOT_ID}' AND ord_status IN ('New','Partially_Filled'))=20,
+       AND clord_id LIKE '${robot_prefix}%' AND clord_id NOT LIKE '${robot_prefix}%-SW%'
+       AND ord_status IN ('New','Partially_Filled'))=20,
   1,0);
 SQL
   } | mysql_exec dc)"
@@ -182,7 +185,7 @@ fi
 compare_depth() {
   local robot_file external_file result
   robot_file="$(mktemp)"; external_file="$(mktemp)"
-  mysql_exec -e "SELECT side,price FROM dc_orders WHERE location='${LOCATION}' AND user_id='${ROBOT_USER}' AND algo_name='robot:${ROBOT_ID}' AND ord_status IN ('New','Partially_Filled') ORDER BY side,price" dc >"${robot_file}"
+  mysql_exec -e "SELECT side,price FROM dc_orders WHERE location='${LOCATION}' AND user_id='${ROBOT_USER}' AND clord_id LIKE '${robot_prefix}%' AND clord_id NOT LIKE '${robot_prefix}%-SW%' AND ord_status IN ('New','Partially_Filled') ORDER BY side,price" dc >"${robot_file}"
   curl -fsS --max-time 10 'https://fapi.binance.com/fapi/v1/depth?symbol=BTCUSDT&limit=10' >"${external_file}" || { rm -f "${robot_file}" "${external_file}"; return 1; }
   result="$(python3 - "${robot_file}" "${external_file}" <<'PY'
 import json, sys
@@ -210,11 +213,11 @@ done
 log "Binance depth overlap passed: 10 bid/10 ask levels, at least 8 live prices per side matched."
 
 log "Hitting a Robot ask and verifying the partially filled level is replenished."
-robot_filled_before="$(mysql_exec -e "SELECT COALESCE(SUM(cum_qty),0) FROM dc_orders WHERE location='${LOCATION}' AND user_id='${ROBOT_USER}' AND algo_name='robot:${ROBOT_ID}'" dc)"
+robot_filled_before="$(mysql_exec -e "SELECT COALESCE(SUM(cum_qty),0) FROM dc_orders WHERE location='${LOCATION}' AND user_id='${ROBOT_USER}' AND clord_id LIKE '${robot_prefix}%' AND clord_id NOT LIKE '${robot_prefix}%-SW%'" dc)"
 hit_ok="0"
 hit_clid=""
 for attempt in $(seq 1 20); do
-  current_ask="$(mysql_exec -e "SELECT MIN(price) FROM dc_orders WHERE location='${LOCATION}' AND user_id='${ROBOT_USER}' AND algo_name='robot:${ROBOT_ID}' AND side='Sell' AND ord_status IN ('New','Partially_Filled')" dc)"
+  current_ask="$(mysql_exec -e "SELECT MIN(price) FROM dc_orders WHERE location='${LOCATION}' AND user_id='${ROBOT_USER}' AND clord_id LIKE '${robot_prefix}%' AND clord_id NOT LIKE '${robot_prefix}%-SW%' AND side='Sell' AND ord_status IN ('New','Partially_Filled')" dc)"
   [[ -n "${current_ask}" && "${current_ask}" != "NULL" ]] || { sleep 1; continue; }
   hit_clid="ROBOT-HIT-${RUN_ID}-${attempt}"
   hit_response="$(api_call "{\"serverName\":\"OrderSvr\",\"method\":\"placeOrder\",\"content\":{\"OCType\":\"OPEN\",\"OrderQty\":\"0.0001\",\"OrdType\":\"Limit\",\"ClOrdID\":\"${hit_clid}\",\"Terminal\":\"RobotE2E\",\"AlgoName\":\"robot-e2e-hit\",\"Side\":\"Buy\",\"Price\":\"${current_ask}\",\"UserID\":\"${TRADER_USER}\",\"MarketIndicator\":\"4\",\"TimeInForce\":\"IOC\",\"SecurityID\":\"BTCUSDT\",\"Location\":\"${LOCATION}\"}}" "${trader_token}" 2>/dev/null || true)"
@@ -225,7 +228,7 @@ for attempt in $(seq 1 20); do
   for _ in $(seq 1 20); do
     hit_ok="$(mysql_exec -e "SELECT IF(
       (SELECT ord_status FROM dc_orders WHERE location='${LOCATION}' AND clord_id='${hit_clid}')='Filled'
-      AND (SELECT COALESCE(SUM(cum_qty),0) FROM dc_orders WHERE location='${LOCATION}' AND user_id='${ROBOT_USER}' AND algo_name='robot:${ROBOT_ID}') >= ${robot_filled_before}+0.0001,
+      AND (SELECT COALESCE(SUM(cum_qty),0) FROM dc_orders WHERE location='${LOCATION}' AND user_id='${ROBOT_USER}' AND clord_id LIKE '${robot_prefix}%' AND clord_id NOT LIKE '${robot_prefix}%-SW%') >= ${robot_filled_before}+0.0001,
       1,0)" dc)"
     [[ "${hit_ok}" == "1" ]] && break 2
     sleep 0.5
@@ -237,9 +240,11 @@ replenished="0"
 for _ in $(seq 1 60); do
   replenished="$(mysql_exec -e "SELECT IF(
     (SELECT COUNT(*) FROM dc_orders WHERE location='${LOCATION}' AND user_id='${ROBOT_USER}'
-      AND algo_name='robot:${ROBOT_ID}' AND ord_status IN ('New','Partially_Filled'))=20
+      AND clord_id LIKE '${robot_prefix}%' AND clord_id NOT LIKE '${robot_prefix}%-SW%'
+      AND ord_status IN ('New','Partially_Filled'))=20
     AND (SELECT COUNT(*) FROM dc_orders WHERE location='${LOCATION}' AND user_id='${ROBOT_USER}'
-      AND algo_name='robot:${ROBOT_ID}' AND ord_status IN ('New','Partially_Filled')
+      AND clord_id LIKE '${robot_prefix}%' AND clord_id NOT LIKE '${robot_prefix}%-SW%'
+      AND ord_status IN ('New','Partially_Filled')
       AND COALESCE(leaves_qty,0)<>COALESCE(order_qty,0))=0,
     1,0)" dc)"
   [[ "${replenished}" == "1" ]] && break
@@ -248,7 +253,7 @@ done
 [[ "${replenished}" == "1" ]] || die "Robot did not replenish all 20 quote levels after a user fill"
 log "User hit and full 10+10 level replenishment passed (${hit_clid})."
 
-read -r best_bid best_ask <<<"$(mysql_exec -e "SELECT MAX(CASE WHEN side='Buy' THEN price END),MIN(CASE WHEN side='Sell' THEN price END) FROM dc_orders WHERE location='${LOCATION}' AND user_id='${ROBOT_USER}' AND algo_name='robot:${ROBOT_ID}' AND ord_status='New'" dc)"
+read -r best_bid best_ask <<<"$(mysql_exec -e "SELECT MAX(CASE WHEN side='Buy' THEN price END),MIN(CASE WHEN side='Sell' THEN price END) FROM dc_orders WHERE location='${LOCATION}' AND user_id='${ROBOT_USER}' AND clord_id LIKE '${robot_prefix}%' AND clord_id NOT LIKE '${robot_prefix}%-SW%' AND ord_status='New'" dc)"
 inside_price="$(python3 - "${best_bid}" "${best_ask}" <<'PY'
 from decimal import Decimal, ROUND_DOWN
 import sys
@@ -272,7 +277,7 @@ for _ in $(seq 1 60); do
 SELECT IF(
   (SELECT ord_status FROM dc_orders WHERE location='${LOCATION}' AND clord_id='${clid}')='Filled'
   AND EXISTS (SELECT 1 FROM dc_orders WHERE location='${LOCATION}' AND user_id='${ROBOT_USER}'
-              AND algo_name='robot-sweep:${ROBOT_ID}' AND side='Buy' AND ord_status='Filled')
+              AND clord_id LIKE '${robot_prefix}%-SW%' AND side='Buy' AND ord_status='Filled')
   AND EXISTS (SELECT 1 FROM dc_orders_position WHERE location='${LOCATION}' AND user_id='${ROBOT_USER}'
               AND security_id='BTCUSDT' AND long_position>=0.0001)
   AND EXISTS (SELECT 1 FROM dc_orders_position WHERE location='${LOCATION}' AND user_id='${TRADER_USER}'
@@ -294,7 +299,8 @@ for _ in $(seq 1 60); do
 SELECT IF(
   (SELECT runtime_status FROM dc_tenant_robot WHERE location='${LOCATION}' AND robot_id='${ROBOT_ID}')='STOPPED'
   AND (SELECT COUNT(*) FROM dc_orders WHERE location='${LOCATION}' AND user_id='${ROBOT_USER}'
-       AND algo_name='robot:${ROBOT_ID}' AND ord_status IN ('New','Partially_Filled','Pending_Cancel'))=0,
+       AND clord_id LIKE '${robot_prefix}%' AND clord_id NOT LIKE '${robot_prefix}%-SW%'
+       AND ord_status IN ('New','Partially_Filled','Pending_Cancel'))=0,
   1,0);
 SQL
   } | mysql_exec dc)"
@@ -303,7 +309,7 @@ SQL
 done
 [[ "${stopped}" == "1" ]] || die "Disabling Robot did not cancel all live quotes"
 
-summary="$(mysql_exec -e "SELECT CONCAT('quotes=',SUM(algo_name='robot:${ROBOT_ID}'),',sweeps=',SUM(algo_name='robot-sweep:${ROBOT_ID}'),',fills=',SUM(ord_status='Filled')) FROM dc_orders WHERE location='${LOCATION}' AND user_id='${ROBOT_USER}'; SELECT CONCAT('executions=',COUNT(*)) FROM dc_orders_execorders WHERE location='${LOCATION}' AND user_id IN ('${ROBOT_USER}','${TRADER_USER}'); SELECT CONCAT('foreign_location_orders=',COUNT(*)) FROM dc_orders WHERE location<>'${LOCATION}' AND clord_id LIKE '%${RUN_ID}%';" dc)"
+summary="$(mysql_exec -e "SELECT CONCAT('quotes=',SUM(clord_id LIKE '${robot_prefix}%' AND clord_id NOT LIKE '${robot_prefix}%-SW%'),',sweeps=',SUM(clord_id LIKE '${robot_prefix}%-SW%'),',fills=',SUM(ord_status='Filled')) FROM dc_orders WHERE location='${LOCATION}' AND user_id='${ROBOT_USER}'; SELECT CONCAT('executions=',COUNT(*)) FROM dc_orders_execorders WHERE location='${LOCATION}' AND user_id IN ('${ROBOT_USER}','${TRADER_USER}'); SELECT CONCAT('foreign_location_orders=',COUNT(*)) FROM dc_orders WHERE location<>'${LOCATION}' AND clord_id LIKE '%${RUN_ID}%';" dc)"
 grep -Fq 'foreign_location_orders=0' <<<"${summary}" || die "Robot E2E order identifiers leaked into another location"
 log "PASS: ${summary//$'\n'/; }."
 log "Evidence location retained: ${LOCATION}; hedge remained disabled because no external Binance credential was supplied."
