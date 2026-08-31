@@ -254,7 +254,7 @@ FROM dc.dc_orders o WHERE o.location='${LOCATION}' AND o.user_id='${ROBOT_USER}'
           price="$(python3 - "${best_bid}" "${best_ask}" "${tenant_tick}" <<'PY'
 from decimal import Decimal, ROUND_DOWN
 import sys
-b,a=map(Decimal,sys.argv[1:])
+b,a=map(Decimal,sys.argv[1:3])
 tick=Decimal(sys.argv[3])
 p=(((b+a)/2)/tick).to_integral_value(rounding=ROUND_DOWN)*tick
 if p<=b:p=b+tick
