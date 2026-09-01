@@ -119,8 +119,10 @@ async function monitorSession(browser) {
         const lastPrice = orderBook?.querySelector('.showDiv .last-price')?.textContent?.trim() || '';
         const markPrice = orderBook?.querySelector('.showDiv .mark-price')?.textContent?.trim() || '';
         const loginData = JSON.parse(sessionStorage.getItem('loginData') || '{}');
+        const klineStatus = window.__dcKlineStatus || {};
         return {askRows, bidRows, lastPrice, markPrice, wrapperCount: wrappers.length,
-          visibleWrapperCount: visibleWrappers.length, userId: loginData.user_id, tenant: loginData.location};
+          visibleWrapperCount: visibleWrappers.length, userId: loginData.user_id, tenant: loginData.location,
+          chartBars: Number(klineStatus.bars || 0), chartLastTime: Number(klineStatus.lastTime || 0)};
       }), operationTimeoutMs, 'page.evaluate');
       if (sample.userId !== user || sample.tenant !== location) {
         throw new Error(`authoritative web session changed: ${JSON.stringify(sample)}`);
@@ -129,7 +131,9 @@ async function monitorSession(browser) {
       const ready = sample.bidRows === 10 && sample.askRows === 10 && sample.lastPrice && sample.lastPrice !== '--';
       if (ready) {
         everReady = true;
-        if (lastHealthyScreenshotSample === 0 || samples - lastHealthyScreenshotSample >= Math.round(600000 / sampleMs)) {
+        const chartReady = sample.chartBars > 1 && sample.chartLastTime <= Date.now() + 5 * 60 * 1000;
+        if (chartReady && samples >= Math.round(5000 / sampleMs)
+          && (lastHealthyScreenshotSample === 0 || samples - lastHealthyScreenshotSample >= Math.round(600000 / sampleMs))) {
           await page.screenshot({path: path.join(stateDir, 'web-market-live.png'), fullPage: true});
           lastHealthyScreenshotSample = samples;
           emit({event: 'web_healthy_screenshot', sample, samples, path: 'web-market-live.png'});
