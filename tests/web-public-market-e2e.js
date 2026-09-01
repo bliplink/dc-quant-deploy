@@ -54,7 +54,13 @@ function timeout(ms, message) {
       const rows = Array.isArray(body.data)
         ? body.data
         : (body.data && Array.isArray(body.data.data) ? body.data.data : []);
-      klineResponses.push({code: Number(body.code), rows: rows.length});
+      klineResponses.push({
+        code: Number(body.code),
+        rows: rows.length,
+        request: requestBody.content,
+        first: rows[0] || null,
+        last: rows[rows.length - 1] || null
+      });
     } catch (error) {
       klineResponses.push({code: -1, rows: 0, error: error.message});
     }
@@ -73,7 +79,18 @@ function timeout(ms, message) {
     await page.goto(`${baseUrl}/#/trade?location=${encodeURIComponent(location)}`, {
       waitUntil: 'domcontentloaded'
     });
-    await page.locator('.tradeWrap').waitFor({timeout: 60000});
+    try {
+      await page.locator('.tradeWrap').waitFor({timeout: 60000});
+    } catch (error) {
+      const diagnostics = {
+        url: page.url(),
+        title: await page.title(),
+        body: (await page.locator('body').innerText().catch(() => '')).slice(0, 2000),
+        pageErrors
+      };
+      await page.screenshot({path: path.join(artifactDir, 'web-public-render-failure.png'), fullPage: true});
+      fail('public trade page did not render', diagnostics);
+    }
 
     if (page.url().includes('/login')) fail('anonymous market page redirected to login', page.url());
     const session = await page.evaluate(() => ({
@@ -175,7 +192,20 @@ function timeout(ms, message) {
       })(),
       timeout(35000, 'timed out waiting for chart history')
     ]);
-    if (!history) fail('the first chart load did not request durable K-line history', klineResponses);
+    if (!history) {
+      await page.screenshot({path: path.join(artifactDir, 'web-public-history-failure.png'), fullPage: true});
+      fail('the first chart load did not request durable K-line history', {
+        klineResponses,
+        publicMarketResponses,
+        pageErrors
+      });
+    }
+    await page.waitForFunction(() => window.__dcKlineStatus && window.__dcKlineStatus.receivedRows > 1, null, {timeout: 10000});
+    const chartHistory = await page.evaluate(() => window.__dcKlineStatus);
+    if (chartHistory.bars <= 1 || chartHistory.lastTime > Date.now() + 5 * 60 * 1000) {
+      fail('K-line history was returned but not normalized into renderable bars', chartHistory);
+    }
+    await page.waitForTimeout(3000);
 
     const dragZones = page.locator('.panelDragZone');
     if (await dragZones.count() < 5) fail('desktop panels do not expose drag zones', await dragZones.count());
@@ -204,7 +234,7 @@ function timeout(ms, message) {
 
     if (pageErrors.length) fail('public market page raised runtime errors', pageErrors);
     process.stdout.write(`${JSON.stringify({
-      status: 'PASS', location, market, historyRows: history.rows,
+      status: 'PASS', location, market, historyRows: history.rows, historyRequest: history.request, chartHistory,
       navItems, protectedPanels: 3, dragAffordance, registrationTenant: location, screenshot
     }, null, 2)}\n`);
   } finally {
