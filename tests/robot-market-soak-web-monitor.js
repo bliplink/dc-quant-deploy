@@ -64,10 +64,34 @@ async function openTrade(browser) {
   try {
     const page = await context.newPage();
     const pageErrors = [];
+    let lastKlineResponse = null;
     page.on('pageerror', error => pageErrors.push(error.message));
     page.on('console', message => {
       if (message.type() === 'error' && !message.text().startsWith('time order violation')) {
         pageErrors.push(message.text());
+      }
+    });
+    page.on('response', async response => {
+      const request = response.request();
+      if (!request.url().includes('/httpapi/') || request.method() !== 'POST') return;
+      let payload;
+      try {
+        payload = JSON.parse(request.postData() || '{}');
+      } catch (_) {
+        return;
+      }
+      if (payload.serverName !== 'MDSvr' || payload.method !== 'queryKLine') return;
+      try {
+        const body = await response.json();
+        lastKlineResponse = {
+          status: response.status(),
+          code: body && body.code,
+          msg: body && body.msg,
+          rows: Array.isArray(body && body.data) ? body.data.length : -1,
+          request: payload.content
+        };
+      } catch (error) {
+        lastKlineResponse = {status: response.status(), parseError: String(error.message || error)};
       }
     });
     await page.goto(`${baseUrl}/#/login?location=${encodeURIComponent(location)}`, {waitUntil: 'domcontentloaded'});
@@ -78,7 +102,7 @@ async function openTrade(browser) {
     await page.waitForFunction(() => Boolean(sessionStorage.getItem('loginData')), null, {timeout: 30000});
     await page.waitForURL(`**/#/trade?location=${encodeURIComponent(location)}`, {timeout: 30000});
     await page.locator('.tradeWrap').waitFor({timeout: 60000});
-    return {context, page, pageErrors};
+    return {context, page, pageErrors, getLastKlineResponse: () => lastKlineResponse};
   } catch (error) {
     await withTimeout(context.close(), operationTimeoutMs, 'failed-login context.close').catch(() => {});
     throw error;
@@ -86,7 +110,7 @@ async function openTrade(browser) {
 }
 
 async function monitorSession(browser) {
-  const {context, page, pageErrors} = await openTrade(browser);
+  const {context, page, pageErrors, getLastKlineResponse} = await openTrade(browser);
   const cycleStartedAt = Date.now();
   let samples = 0;
   let gapSamples = 0;
@@ -137,6 +161,9 @@ async function monitorSession(browser) {
           await page.screenshot({path: path.join(stateDir, 'web-market-live.png'), fullPage: true});
           lastHealthyScreenshotSample = samples;
           emit({event: 'web_healthy_screenshot', sample, samples, path: 'web-market-live.png'});
+        }
+        if (!chartReady && samples % Math.max(1, Math.round(5000 / sampleMs)) === 0) {
+          emit({event: 'web_chart_warming', sample, samples, klineResponse: getLastKlineResponse()});
         }
       }
       if (everReady) {
