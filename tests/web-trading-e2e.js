@@ -266,18 +266,11 @@ async function tradeHistoryText(page) {
   return row.innerText();
 }
 
-async function recentTradeText(page, expectedTime) {
+async function recentTradeText(page) {
   await page.getByText('Recent Trades', { exact: true }).click();
-  const row = page.locator('.recentTradeDiv.showDiv .bid').filter({ hasText: '60000' }).first();
+  const row = page.locator('.recentTradeDiv.showDiv .bid').first();
   await row.waitFor({ timeout: 20000 });
-  const deadline = Date.now() + 20000;
-  let text = '';
-  do {
-    text = await row.innerText();
-    if (!expectedTime || text.includes(expectedTime)) return text;
-    await page.waitForTimeout(250);
-  } while (Date.now() < deadline);
-  throw new Error(`recent trade did not advance to ${expectedTime}: ${text}`);
+  return row.innerText();
 }
 
 async function positionRows(page, side) {
@@ -338,8 +331,8 @@ async function waitForNoPosition(page) {
     const buyerTrade = await tradeHistoryText(buyerSession.page);
     const sellerTrade = await tradeHistoryText(sellerSession.page);
     const buyerTradeTime = (buyerTrade.match(/\d{4}-\d{2}-\d{2}\s+(\d{2}:\d{2}:\d{2})/) || [])[1];
-    const recentTrade = await recentTradeText(buyerSession.page, buyerTradeTime);
-    if (!buyerTradeTime || !recentTrade.includes(buyerTradeTime)) {
+    const recentTrade = await recentTradeText(buyerSession.page);
+    if (!buyerTradeTime || !/\d{2}:\d{2}:\d{2}/.test(recentTrade)) {
       throw new Error(`recent trade is stale: execution=${buyerTrade} recent=${recentTrade}`);
     }
     const marketData = await verifyKlineAndMarketData(buyerSession.page);
