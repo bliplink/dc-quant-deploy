@@ -149,7 +149,7 @@ fi
 (( heartbeat_age >= 0 && heartbeat_age <= WEB_STALE_SECONDS )) || issues+=("web_heartbeat_stale_${heartbeat_age}s")
 [[ "${web_state}" != "error" ]] || issues+=("web_monitor_error")
 if (( web_samples >= 20 )); then
-  (( web_min_bid == 20 && web_max_bid == 20 && web_min_ask == 20 && web_max_ask == 20 )) ||
+  (( web_min_bid == 10 && web_max_bid == 10 && web_min_ask == 10 && web_max_ask == 10 )) ||
     issues+=("web_depth_${web_min_bid}-${web_max_bid}_${web_min_ask}-${web_max_ask}")
   (( web_gaps == 0 )) || issues+=("web_gap_samples_${web_gaps}")
   (( web_errors == 0 )) || issues+=("web_page_errors_${web_errors}")
