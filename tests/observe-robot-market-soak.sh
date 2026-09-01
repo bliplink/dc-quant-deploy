@@ -149,7 +149,7 @@ fi
 (( heartbeat_age >= 0 && heartbeat_age <= WEB_STALE_SECONDS )) || issues+=("web_heartbeat_stale_${heartbeat_age}s")
 [[ "${web_state}" != "error" ]] || issues+=("web_monitor_error")
 if (( web_samples >= 20 )); then
-  (( web_min_bid == 10 && web_max_bid == 10 && web_min_ask == 10 && web_max_ask == 10 )) ||
+  (( web_min_bid == 20 && web_max_bid == 20 && web_min_ask == 20 && web_max_ask == 20 )) ||
     issues+=("web_depth_${web_min_bid}-${web_max_bid}_${web_min_ask}-${web_max_ask}")
   (( web_gaps == 0 )) || issues+=("web_gap_samples_${web_gaps}")
   (( web_errors == 0 )) || issues+=("web_page_errors_${web_errors}")
@@ -162,7 +162,7 @@ if [[ -n "${metrics_line}" && "${metrics_line}" != time,* ]]; then
 else
   issues+=("load_metrics_missing")
 fi
-(( bid_levels >= 10 && ask_levels >= 10 )) || issues+=("database_depth_${bid_levels}_${ask_levels}")
+(( bid_levels >= 20 && ask_levels >= 20 )) || issues+=("database_depth_${bid_levels}_${ask_levels}")
 [[ "${robot_metric}" == "RUNNING" ]] || issues+=("robot_metric_${robot_metric}")
 [[ "${web_http}" == "200" ]] || issues+=("web_http_${web_http}")
 
@@ -180,7 +180,7 @@ printf '%s %s %s %s\n' "${accepted}" "${rejected}" "${gaps}" "${auth_refreshes}"
 robot_row="$(mysql_exec -e "SELECT runtime_status,open_order_count,COALESCE(last_error_code,''),COALESCE(last_error_message,'') FROM dc.dc_tenant_robot WHERE location='${LOCATION}' AND robot_id='${ROBOT_ID}' LIMIT 1;" dc 2>/dev/null || true)"
 IFS=$'\t' read -r robot_status robot_orders robot_error_code robot_error_message <<<"${robot_row}"
 [[ "${robot_status:-MISSING}" == "RUNNING" ]] || issues+=("robot_status_${robot_status:-MISSING}")
-[[ "${robot_orders:-0}" == "20" ]] || issues+=("robot_open_orders_${robot_orders:-0}")
+[[ "${robot_orders:-0}" == "40" ]] || issues+=("robot_open_orders_${robot_orders:-0}")
 
 snapshot_tmp="${SNAPSHOT_FILE}.$$"
 python3 - "${snapshot_tmp}" "${timestamp}" "${load_pid}" "${monitor_state}" "${heartbeat_age}" \

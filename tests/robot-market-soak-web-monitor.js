@@ -120,7 +120,7 @@ async function monitorSession(browser) {
         throw new Error(`authoritative web session changed: ${JSON.stringify(sample)}`);
       }
       samples += 1;
-      const ready = sample.bidRows === 10 && sample.askRows === 10 && sample.lastPrice && sample.lastPrice !== '--';
+      const ready = sample.bidRows === 20 && sample.askRows === 20 && sample.lastPrice && sample.lastPrice !== '--';
       if (ready) {
         everReady = true;
         if (lastHealthyScreenshotSample === 0 || samples - lastHealthyScreenshotSample >= Math.round(600000 / sampleMs)) {

@@ -88,7 +88,7 @@ login_user() {
 
 provision() {
   ensure_secret
-  local password_hash collision robot_token robot_api response initial_load robot_enabled
+  local password_hash collision robot_token robot_api tape_token tape_api response initial_load robot_enabled
   initial_load=0
   [[ -s "${CACHE_MARKER}" ]] || initial_load=1
   robot_enabled=1
@@ -119,12 +119,12 @@ VALUES
 INSERT INTO dc.dc_users_symbol_config
   (user_id,security_id,symbol,leverage,position_type,update_time,close_by,location,market_indicator)
 VALUES
-  ('${ROBOT_USER}','BTCUSDT','BTCUSDT',20,'Cross',NOW(),'robot-soak','${LOCATION}','4'),
-  ('robotsoak01','BTCUSDT','BTCUSDT',20,'Cross',NOW(),'robot-soak','${LOCATION}','4'),
-  ('robotsoak02','BTCUSDT','BTCUSDT',20,'Cross',NOW(),'robot-soak','${LOCATION}','4'),
-  ('robotsoak03','BTCUSDT','BTCUSDT',20,'Cross',NOW(),'robot-soak','${LOCATION}','4'),
-  ('robotsoak04','BTCUSDT','BTCUSDT',20,'Cross',NOW(),'robot-soak','${LOCATION}','4')
-ON DUPLICATE KEY UPDATE leverage=20,position_type='Cross',update_time=NOW();
+  ('${ROBOT_USER}','BTCUSDT','BTCUSDT',2,'Cross',NOW(),'robot-soak','${LOCATION}','4'),
+  ('robotsoak01','BTCUSDT','BTCUSDT',2,'Cross',NOW(),'robot-soak','${LOCATION}','4'),
+  ('robotsoak02','BTCUSDT','BTCUSDT',2,'Cross',NOW(),'robot-soak','${LOCATION}','4'),
+  ('robotsoak03','BTCUSDT','BTCUSDT',2,'Cross',NOW(),'robot-soak','${LOCATION}','4'),
+  ('robotsoak04','BTCUSDT','BTCUSDT',2,'Cross',NOW(),'robot-soak','${LOCATION}','4')
+ON DUPLICATE KEY UPDATE leverage=2,position_type='Cross',update_time=NOW();
 UPDATE dc.dc_tenant_symbol ts
 JOIN dc.dc_symbol s ON s.symbol=ts.security_id
 SET ts.tick_size=COALESCE(ts.tick_size,CAST(s.tick_size AS DECIMAL(36,18))),
@@ -149,6 +149,13 @@ SQL
     robot_api="$(printf '%s' "${response}" | json_field 'd.get("data",{}).get("api_key","")')"
     [[ -n "${robot_api}" ]] || die "Could not create Robot API key: ${response}"
   fi
+  tape_api="$(mysql_exec -e "SELECT api_key FROM dc.dc_users_api WHERE location='${LOCATION}' AND user_id='robotsoak01' AND enable='1' ORDER BY update_time DESC LIMIT 1;" dc)"
+  if [[ -z "${tape_api}" ]]; then
+    tape_token="$(login_user 'robotsoak01')"
+    response="$(api_call '{"serverName":"LoginSvr","method":"updateApiKey","content":{"cid":"ROBOT_TAPE_KEY","type":"trade","inf1":"Binance volume tape"}}' "${tape_token}")"
+    tape_api="$(printf '%s' "${response}" | json_field 'd.get("data",{}).get("api_key","")')"
+    [[ -n "${tape_api}" ]] || die "Could not create Robot tape API key: ${response}"
+  fi
 
   {
     cat <<SQL
@@ -158,14 +165,18 @@ INSERT INTO dc.dc_tenant_robot
    max_deviation_bps,circuit_breaker_seconds,hedge_enabled,strategy_config,runtime_status,
    create_by,update_by,create_time,update_time)
 VALUES
-  ('${LOCATION}','${ROBOT_ID}','Continuous Binance 10-Level Market','BTCUSDT','${ROBOT_USER}','${robot_api}',
-   'APSSVR_BINANCE_TICKER',${robot_enabled},10,10,2,1,0.001,2,200,3000,500,5,0,
-   JSON_OBJECT('sweep_user_orders_enabled',true,'sweep_max_loss_bps',5,'sweep_max_qty',0.001),
+  ('${LOCATION}','${ROBOT_ID}','Continuous Binance 20-Level Market','BTCUSDT','${ROBOT_USER}','${robot_api}',
+   'APSSVR_BINANCE_DEPTH',${robot_enabled},20,20,2,1,0.001,10,1000,3000,500,5,0,
+   JSON_OBJECT('depth_quantity_mode','NOTIONAL_ZONES','depth_margin_budget',100000,'depth_leverage',2,
+     'depth_zone_levels',JSON_ARRAY(6,6,8),'depth_zone_weights',JSON_ARRAY(3,3,4),
+     'sweep_user_orders_enabled',true,'sweep_max_loss_bps',5,'sweep_max_qty',0.001,
+     'tape_enabled',true,'tape_api_user_id','robotsoak01','tape_api_key','${tape_api}',
+     'tape_volume_scale',0.01,'tape_min_notional',5,'tape_max_notional',1000,'tape_interval_ms',1000),
    'STOPPED','robot-soak','robot-soak',NOW(),NOW())
 ON DUPLICATE KEY UPDATE
   api_user_id=VALUES(api_user_id),api_key=VALUES(api_key),quote_source=VALUES(quote_source),enabled=${robot_enabled},
-  bid_levels=10,ask_levels=10,level_spread_bps=2,level_step_bps=1,order_qty=0.001,max_position_qty=2,
-  refresh_interval_ms=200,stale_price_ms=3000,max_deviation_bps=500,circuit_breaker_seconds=5,
+  bid_levels=20,ask_levels=20,level_spread_bps=2,level_step_bps=1,order_qty=0.001,max_position_qty=10,
+  refresh_interval_ms=1000,stale_price_ms=3000,max_deviation_bps=500,circuit_breaker_seconds=5,
   hedge_enabled=0,strategy_config=VALUES(strategy_config),update_by='robot-soak',update_time=NOW();
 SQL
   } | mysql_exec dc
@@ -291,8 +302,8 @@ SELECT
 FROM dc.dc_orders o WHERE o.location='${LOCATION}' AND o.user_id='${ROBOT_USER}'
  AND o.clord_id LIKE 'RBcontinuousd%' AND o.clord_id NOT LIKE '%-SW%';" dc)"
     web_status="$(curl -sS -o /dev/null -w '%{http_code}' --max-time 5 "http://127.0.0.1:${WEB_LISTEN_PORT}/#/trade?location=${LOCATION}" || true)"
-    [[ "${robot_status}" == "RUNNING" && "${bid_levels}" -ge 10 && "${ask_levels}" -ge 10 ]] && ever_running=1
-    if (( ever_running == 1 && (bid_levels < 10 || ask_levels < 10) )); then
+    [[ "${robot_status}" == "RUNNING" && "${bid_levels}" -ge 20 && "${ask_levels}" -ge 20 ]] && ever_running=1
+    if (( ever_running == 1 && (bid_levels < 20 || ask_levels < 20) )); then
       gap_samples=$((gap_samples + 1))
       log "DEPTH_GAP bid=${bid_levels} ask=${ask_levels} status=${robot_status} best=${best_bid}/${best_ask}"
     fi
