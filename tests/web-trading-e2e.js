@@ -323,7 +323,12 @@ async function waitForNoPosition(page) {
     await deposit(sellerSession.page, '100000');
 
     await placeLimit(buyerSession.page, 'Buy / Long', '10000', '0.001');
-    const restingBid = await waitForRestingBid(buyerSession.page, '10000');
+    const restingRows = await openOrders(buyerSession.page);
+    await restingRows.first().waitFor({timeout: 15000});
+    const restingBid = await restingRows.first().innerText();
+    if (!restingBid.includes('10000') || !restingBid.includes('0.001')) {
+      throw new Error(`resting order is missing from Open Orders: ${restingBid}`);
+    }
     await cancelFirstOpenOrder(buyerSession.page);
 
     await placeLimit(buyerSession.page, 'Buy / Long', '60000', '0.001');
