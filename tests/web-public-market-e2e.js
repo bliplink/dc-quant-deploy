@@ -206,6 +206,14 @@ function timeout(ms, message) {
       fail('K-line history was returned but not normalized into renderable bars', chartHistory);
     }
     await page.waitForTimeout(3000);
+    const chartFrame = page.frames().find(frame => frame !== page.mainFrame());
+    const chartRender = chartFrame ? {
+      text: (await chartFrame.locator('body').innerText()).slice(0, 1000),
+      canvases: await chartFrame.locator('canvas').count()
+    } : null;
+    if (!chartRender || chartRender.canvases < 1 || !/O\d+(?:\.\d+)?H\d+(?:\.\d+)?L\d+(?:\.\d+)?C\d+(?:\.\d+)?/.test(chartRender.text)) {
+      fail('TradingView loaded history but did not paint OHLC candles', chartRender);
+    }
 
     const dragZones = page.locator('.panelDragZone');
     if (await dragZones.count() < 5) fail('desktop panels do not expose drag zones', await dragZones.count());
@@ -234,7 +242,8 @@ function timeout(ms, message) {
 
     if (pageErrors.length) fail('public market page raised runtime errors', pageErrors);
     process.stdout.write(`${JSON.stringify({
-      status: 'PASS', location, market, historyRows: history.rows, historyRequest: history.request, chartHistory,
+      status: 'PASS', location, market, historyRows: history.rows, historyRequest: history.request,
+      chartHistory, chartCanvases: chartRender.canvases,
       navItems, protectedPanels: 3, dragAffordance, registrationTenant: location, screenshot
     }, null, 2)}\n`);
   } finally {
