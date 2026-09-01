@@ -103,7 +103,7 @@ submit_application() {
 
 approve_application() {
   local application_id="$1" location="$2" admin_password="$3" token="$4" payload response
-  payload="$(printf '{"serverName":"ManagerSvr","method":"tenantApproval","content":{"action":"APPROVE","cid":"APPROVE_%s","request_id":"APPROVE_%s","application_id":"%s","expected_version":1,"location":"%s","base_url":"/#/login?location=%s","admin_username":"%s","admin_password":"%s","symbols":["BTCUSDT"],"review_comment":"Automated tenant lifecycle acceptance"}}' \
+  payload="$(printf '{"serverName":"ManagerSvr","method":"tenantApproval","content":{"action":"APPROVE","cid":"APPROVE_%s","request_id":"APPROVE_%s","application_id":"%s","expected_version":1,"location":"%s","base_url":"/#/trade?location=%s","admin_username":"%s","admin_password":"%s","symbols":["BTCUSDT"],"max_registered_users":2,"max_tradable_symbols":1,"review_comment":"Automated tenant lifecycle acceptance"}}' \
     "${location}" "${location}" "${application_id}" "${location}" "${location}" "${E2E_ADMIN_USER}" "${admin_password}")"
   response="$(api_call "${payload}" "${token}")"
   expect_ok "approve ${location}" "${response}"
@@ -161,8 +161,8 @@ user_id_b="$(register_trader "${E2E_LOCATION_B}" "${trader_password_b}" "shared-
 [[ "${user_id_a}" != "${user_id_b}" ]] || die "tenant registrations reused one global user identity"
 log "The same username was registered with separate user IDs in both tenants."
 
-admin_login_a="$(login "${E2E_ADMIN_USER}" "${admin_password_a}" WEB "${E2E_LOCATION_A}" ADMIN_A_E2E)"
-admin_login_b="$(login "${E2E_ADMIN_USER}" "${admin_password_b}" WEB "${E2E_LOCATION_B}" ADMIN_B_E2E)"
+admin_login_a="$(login "${E2E_ADMIN_USER}" "${admin_password_a}" TenantAdmin "${E2E_LOCATION_A}" ADMIN_A_E2E)"
+admin_login_b="$(login "${E2E_ADMIN_USER}" "${admin_password_b}" TenantAdmin "${E2E_LOCATION_B}" ADMIN_B_E2E)"
 trader_login_a="$(login "${E2E_SHARED_USER}" "${trader_password_a}" WEB "${E2E_LOCATION_A}" TRADER_A_E2E)"
 trader_login_b="$(login "${E2E_SHARED_USER}" "${trader_password_b}" WEB "${E2E_LOCATION_B}" TRADER_B_E2E)"
 for login_spec in "admin A|${admin_login_a}" "admin B|${admin_login_b}" "trader A|${trader_login_a}" "trader B|${trader_login_b}"; do
@@ -186,14 +186,26 @@ expect_rejected "admin cross-location request" "${cross_location_response}"
 trader_admin_response="$(api_call "${users_payload}" "${trader_token_a}")"
 expect_rejected "trader tenant-admin request" "${trader_admin_response}"
 
+overflow_payload="$(printf '{"serverName":"AdminSvr","method":"tenantUserRegistration","content":{"action":"REGISTER","cid":"OVERFLOW_%s","request_id":"OVERFLOW_%s","location":"%s","username":"overflowtrader","name":"Quota Overflow Trader","email":"overflow-%s@example.com","password":"%s"}}' \
+  "${E2E_SUFFIX}" "${E2E_SUFFIX}" "${E2E_LOCATION_A}" "${E2E_SUFFIX}" "${trader_password_a}")"
+overflow_response="$(api_call "${overflow_payload}")"
+expect_ok "second customer within registered-user quota" "${overflow_response}"
+overquota_payload="$(printf '{"serverName":"AdminSvr","method":"tenantUserRegistration","content":{"action":"REGISTER","cid":"OVERQUOTA_%s","request_id":"OVERQUOTA_%s","location":"%s","username":"overquotatrader","name":"Over Quota Trader","email":"overquota-%s@example.com","password":"%s"}}' \
+  "${E2E_SUFFIX}" "${E2E_SUFFIX}" "${E2E_LOCATION_A}" "${E2E_SUFFIX}" "${trader_password_a}")"
+overquota_response="$(api_call "${overquota_payload}")"
+expect_rejected "tenant registered-customer quota" "${overquota_response}"
+
 symbols_payload="$(printf '{"serverName":"AdminSvr","method":"tenantSymbolAdmin","content":{"action":"LIST","cid":"SYMBOL_LIST_E2E","location":"%s"}}' "${E2E_LOCATION_A}")"
 symbols_response="$(api_call "${symbols_payload}" "${admin_token_a}")"
 expect_ok "tenant symbol list" "${symbols_response}"
 printf '%s' "${symbols_response}" | python3 -c 'import json,sys; rows=json.load(sys.stdin)["data"]; btc=next(r for r in rows if r["security_id"]=="BTCUSDT"); assert int(btc["configured"]) == 1 and int(btc["enabled"]) == 1'
 
-upsert_payload="$(printf '{"serverName":"AdminSvr","method":"tenantSymbolAdmin","content":{"action":"UPSERT","cid":"SYMBOL_UPSERT_E2E","request_id":"SYMBOL_UPSERT_%s","location":"%s","security_id":"BTCUSDT","enabled":true,"tick_size":"0.1","qty_tick_size":"0.0001","min_order_qty":"0.0001","max_order_qty":"10","min_notional":"5","market_take_bound":"0.05","maker_commission":"0.0002","taker_commission":"0.0006","funding_interval":28800}}' "${E2E_SUFFIX}" "${E2E_LOCATION_A}")"
-upsert_response="$(api_call "${upsert_payload}" "${admin_token_a}")"
-expect_ok "tenant symbol upsert with legacy blank max_price" "${upsert_response}"
+disable_payload="$(printf '{"serverName":"AdminSvr","method":"tenantSymbolAdmin","content":{"action":"DISABLE","cid":"SYMBOL_DISABLE_E2E","request_id":"SYMBOL_DISABLE_%s","location":"%s","security_id":"BTCUSDT"}}' "${E2E_SUFFIX}" "${E2E_LOCATION_A}")"
+disable_response="$(api_call "${disable_payload}" "${admin_token_a}")"
+expect_ok "tenant disables an entitled symbol" "${disable_response}"
+enable_payload="$(printf '{"serverName":"AdminSvr","method":"tenantSymbolAdmin","content":{"action":"ENABLE","cid":"SYMBOL_ENABLE_E2E","request_id":"SYMBOL_ENABLE_%s","location":"%s","security_id":"BTCUSDT"}}' "${E2E_SUFFIX}" "${E2E_LOCATION_A}")"
+enable_response="$(api_call "${enable_payload}" "${admin_token_a}")"
+expect_ok "tenant enables an entitled symbol" "${enable_response}"
 
 orders_payload="$(printf '{"serverName":"AdminSvr","method":"tenantTradeAdmin","content":{"action":"ORDERS","cid":"TRADE_QUERY_E2E","location":"%s","user_id":"%s","page_num":0,"page_size":20}}' "${E2E_LOCATION_A}" "${user_id_a}")"
 orders_response="$(api_call "${orders_payload}" "${admin_token_a}")"
@@ -220,11 +232,13 @@ SELECT CONCAT('tenants=',COUNT(*)) FROM dc_tenant WHERE location IN ('${E2E_LOCA
 SELECT CONCAT('shared_users=',COUNT(*),',distinct_ids=',COUNT(DISTINCT user_id)) FROM dc_users WHERE location IN ('${E2E_LOCATION_A}','${E2E_LOCATION_B}') AND user_name='${E2E_SHARED_USER}';
 SELECT CONCAT('balances=',COUNT(*)) FROM dc_users_balance WHERE location IN ('${E2E_LOCATION_A}','${E2E_LOCATION_B}') AND user_id IN ('${user_id_a}','${user_id_b}');
 SELECT CONCAT('symbols=',COUNT(*)) FROM dc_tenant_symbol WHERE location IN ('${E2E_LOCATION_A}','${E2E_LOCATION_B}') AND security_id='BTCUSDT' AND enabled=1;
+SELECT CONCAT('quota_tenants=',COUNT(*)) FROM dc_tenant WHERE location IN ('${E2E_LOCATION_A}','${E2E_LOCATION_B}') AND JSON_EXTRACT(quotas,'$.max_registered_users')=2 AND JSON_EXTRACT(quotas,'$.max_tradable_symbols')=1;
 SELECT CONCAT('audits=',COUNT(*)) FROM dc_tenant_audit_log WHERE location IN ('${E2E_LOCATION_A}','${E2E_LOCATION_B}');")"
 grep -Fxq 'tenants=2' <<<"${database_summary}" || die "database tenant provisioning assertion failed"
 grep -Fxq 'shared_users=2,distinct_ids=2' <<<"${database_summary}" || die "database identity isolation assertion failed"
 grep -Fxq 'balances=2' <<<"${database_summary}" || die "database account initialization assertion failed"
 grep -Fxq 'symbols=2' <<<"${database_summary}" || die "database product initialization assertion failed"
+grep -Fxq 'quota_tenants=2' <<<"${database_summary}" || die "database tenant quota assertion failed"
 log "Database assertions: ${database_summary//$'\n'/; }."
 log "PASS: application, approval, URLs, registration, RBAC, symbols, records, lifecycle and two-tenant isolation are correct."
 log "Acceptance tenants retained for evidence: ${E2E_LOCATION_A}, ${E2E_LOCATION_B}."

@@ -20,19 +20,20 @@ function screenshotPath(name) {
   return path.join(artifactDir, name);
 }
 
-async function login(page, username, password, location) {
-  await page.goto(`${baseUrl}/#/login?location=${encodeURIComponent(location)}`, {waitUntil: 'domcontentloaded'});
-  const languageButtons = page.locator('.loginLanguageSwitch button');
-  await languageButtons.nth(1).click();
-  await page.getByText('Username', {exact: true}).waitFor({timeout: 15000});
-  const inputs = page.locator('.loginWrap input');
-  await inputs.nth(0).fill(username);
-  await inputs.nth(1).fill(password);
-  await page.locator('.loginWrap .ant-btn-primary').click();
-  await page.waitForURL(`**/#/trade?location=${encodeURIComponent(location)}`, {timeout: 60000});
-  await page.locator('.tradeGrid').waitFor({timeout: 60000});
+async function tenantAdminLogin(page, username, password, location) {
+  await page.goto(`${baseUrl}/#/tenant-login?location=${encodeURIComponent(location)}`, {waitUntil: 'domcontentloaded'});
+  await page.getByRole('heading', {name: 'Tenant Administration Login'}).waitFor({timeout: 15000});
+  const inputs = page.locator('.tenant-card input');
+  if (await inputs.count() !== 3) throw new Error('tenant login must contain location, username and password');
+  if (await inputs.nth(0).inputValue() !== location) throw new Error('tenant login did not prefill the URL location');
+  await inputs.nth(1).fill(username);
+  await inputs.nth(2).fill(password);
+  await page.locator('.tenant-card .ant-btn-primary').click();
+  await page.waitForURL(`**/#/tenant-admin?location=${encodeURIComponent(location)}`, {timeout: 60000});
   const loginData = await page.evaluate(() => JSON.parse(sessionStorage.getItem('loginData') || '{}'));
-  if (loginData.location !== location) throw new Error(`tenant session location mismatch: ${JSON.stringify(loginData)}`);
+  if (loginData.location !== location || loginData.client_type !== 'TenantAdmin') {
+    throw new Error(`tenant administration session mismatch: ${JSON.stringify(loginData)}`);
+  }
 }
 
 (async () => {
@@ -73,8 +74,7 @@ async function login(page, username, password, location) {
     await page.screenshot({path: screenshotPath('platform-tenant-operations-en.png'), fullPage: true});
 
     await page.evaluate(() => sessionStorage.clear());
-    await login(page, adminUser, adminPassword, locationA);
-    await page.goto(`${baseUrl}/#/tenant-admin?location=${encodeURIComponent(locationA)}`, {waitUntil: 'domcontentloaded'});
+    await tenantAdminLogin(page, adminUser, adminPassword, locationA);
     await page.getByRole('heading', {name: 'Tenant Administration'}).waitFor({timeout: 30000});
     await page.getByText(locationA, {exact: true}).waitFor({timeout: 30000});
     await page.getByText('sharedtrader', {exact: true}).waitFor({timeout: 30000});
