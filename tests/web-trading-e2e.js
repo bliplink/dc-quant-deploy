@@ -8,6 +8,7 @@ const password = process.env.E2E_PASSWORD;
 const buyer = process.env.E2E_BUYER || 'webbuyer';
 const seller = process.env.E2E_SELLER || 'webseller';
 const artifactDir = process.env.E2E_ARTIFACT_DIR || '/artifacts';
+const browserExecutable = process.env.E2E_BROWSER_EXECUTABLE;
 const ignoredConsoleErrors = [
   // TradingView rejects late historical bars after a newer snapshot; this does
   // not affect the authenticated order, execution, balance, or recent-trade flow.
@@ -305,7 +306,10 @@ async function waitForNoPosition(page) {
 }
 
 (async () => {
-  const browser = await chromium.launch({ headless: true });
+  const browser = await chromium.launch({
+    headless: true,
+    ...(browserExecutable ? {executablePath: browserExecutable} : {})
+  });
   let buyerSession;
   let sellerSession;
   try {
