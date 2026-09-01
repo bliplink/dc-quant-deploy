@@ -93,6 +93,7 @@ services:
     container_name: dc-saas-zookeeper
     network_mode: host
     restart: unless-stopped
+    init: true
     logging: *default-logging
     # The 97.64 host runs an old 3.10 kernel. Docker 26/runc otherwise rejects
     # the default /sys/fs/cgroup mount while creating this image's container.
@@ -112,7 +113,10 @@ services:
       - ${DEPLOY_ROOT}/log/zookeeper:/datalog
       - ${DEPLOY_ROOT}/control/zookeeper-jaas.ini:/conf/jaas.ini:ro
     healthcheck:
-      test: ["CMD-SHELL", "zkServer.sh status >/dev/null 2>&1"]
+      # zkServer.sh starts a JVM and may outlive Docker's health timeout,
+      # leaving zombies under the Java PID 1. A direct four-letter probe is
+      # faster, exercises the actual client port, and needs no helper JVM.
+      test: ["CMD", "bash", "-c", "exec 3<>/dev/tcp/127.0.0.1/${ZOOKEEPER_PORT:-32181} && printf ruok >&3 && IFS= read -r -N 4 -t 2 reply <&3 && [[ \"$${reply}\" == imok ]]"]
       interval: 10s
       timeout: 5s
       retries: 30
