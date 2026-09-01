@@ -118,6 +118,9 @@ ensure_env_defaults() {
   migrate_env_value ROBOTSVR_IMAGE_REPOSITORY dc-saas/robotsvr ghcr.io/bliplink/robotsvr
   migrate_env_value TRADE_WEB_IMAGE_REPOSITORY dc-saas/dc-trade-web ghcr.io/bliplink/dc-saas-trade-web
   migrate_env_value TRADE_WEB_IMAGE_REPOSITORY ghcr.io/skt-walter/dc-trade-web ghcr.io/bliplink/dc-saas-trade-web
+  if grep -q '^TRADESVR_TAG=sha-' "${ENV_FILE}"; then
+    sed -i 's/^TRADESVR_TAG=sha-.*/TRADESVR_TAG=saas-crypto/' "${ENV_FILE}"
+  fi
   # Public application images use moving saas-crypto tags so the digest-based
   # updater can detect and deploy a new Web build like every other SaaS service.
   for legacy_web_tag in \
