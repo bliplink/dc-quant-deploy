@@ -48,12 +48,20 @@ async function login(browser, username) {
   const context = await browser.newContext({ viewport: { width: 1920, height: 1080 } });
   const page = await context.newPage();
   const pageErrors = [];
+  const publicMarketPollingCalls = [];
   page.on('pageerror', error => pageErrors.push(error.message));
   page.on('console', message => {
     const consoleText = message.text();
     if (message.type() === 'error' && !ignoredConsoleErrors.some(pattern => pattern.test(consoleText))) {
       pageErrors.push(`console: ${consoleText}`);
     }
+  });
+  page.on('request', request => {
+    if (!request.url().includes('/httpapi/')) return;
+    try {
+      const body = request.postDataJSON();
+      if (body && body.method === 'queryPublicMarket') publicMarketPollingCalls.push(body);
+    } catch (_) {}
   });
 
   await page.goto(`${baseUrl}/#/login?location=${encodeURIComponent(location)}`, {
@@ -89,8 +97,20 @@ async function login(browser, username) {
   if (loginBody.location !== location) {
     throw new Error(`websocket login returned unexpected location ${loginBody.location}`);
   }
-  await page.waitForTimeout(3000);
-  return { context, page, pageErrors };
+  await page.waitForFunction(() => {
+    const status = window.__dcRealtimeKlineStatus;
+    return status && status.updates >= 2 && Date.now() - status.receivedAt < 15000;
+  }, null, {timeout: 45000});
+  const realtimeKline = await page.evaluate(() => window.__dcRealtimeKlineStatus);
+  if (!realtimeKline.topic.endsWith(`.${location}`)
+    || realtimeKline.symbol !== 'BTCUSDT'
+    || realtimeKline.time > Date.now() + 5 * 60 * 1000) {
+    throw new Error(`invalid authenticated MDSvr K-line push: ${JSON.stringify(realtimeKline)}`);
+  }
+  if (publicMarketPollingCalls.length) {
+    throw new Error(`authenticated page used public market polling: ${JSON.stringify(publicMarketPollingCalls)}`);
+  }
+  return { context, page, pageErrors, realtimeKline, publicMarketPollingCalls };
 }
 
 async function deposit(page, amount) {
@@ -359,7 +379,12 @@ async function waitForNoPosition(page) {
         orderBook: restingBid,
         recentTrade,
         ...marketData
-      }
+      },
+      realtimeKline: {
+        buyer: buyerSession.realtimeKline,
+        seller: sellerSession.realtimeKline
+      },
+      publicMarketPollingCalls: 0
     }, null, 2));
   } catch (error) {
     if (buyerSession) {
