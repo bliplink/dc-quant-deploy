@@ -85,6 +85,7 @@ ensure_env_file() {
   set_env_value CLICKHOUSE_PASSWORD "$(generate_secret)"
   set_env_value LOGIN_DEFAULT_PASSWORD "$(generate_secret)"
   set_env_value PLATFORM_ADMIN_PASSWORD "$(generate_secret)"
+  set_env_value DC_HEDGE_CREDENTIAL_MASTER_KEY "$(generate_secret)"
   log "Created ${ENV_FILE} with generated local secrets."
 }
 
@@ -100,6 +101,9 @@ ensure_env_defaults() {
   fi
   if ! grep -q '^PLATFORM_ADMIN_PASSWORD=' "${ENV_FILE}"; then
     printf 'PLATFORM_ADMIN_PASSWORD=%s\n' "$(generate_secret)" >> "${ENV_FILE}"
+  fi
+  if ! grep -q '^DC_HEDGE_CREDENTIAL_MASTER_KEY=' "${ENV_FILE}"; then
+    printf 'DC_HEDGE_CREDENTIAL_MASTER_KEY=%s\n' "$(generate_secret)" >> "${ENV_FILE}"
   fi
   migrate_env_value IMAGE_SOURCE local registry
   migrate_env_value GW_IMAGE_REPOSITORY dc-saas/gw ghcr.io/bliplink/gw

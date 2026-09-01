@@ -325,6 +325,7 @@ services:
       SERVICE_NAME: AdminSvr
       MAIN_CLASS: AdminSvr
       JAVA_OPTS: ${ADMINSVR_JAVA_OPTS:--server -Xms64m -Xmx256m -Xmn64m -Djava.security.auth.login.config=../../control/jaas.ini}
+      DC_HEDGE_CREDENTIAL_MASTER_KEY: ${DC_HEDGE_CREDENTIAL_MASTER_KEY}
     volumes:
       - ${DEPLOY_ROOT}/control:/srv/dc/control:ro
       - ${DEPLOY_ROOT}/data:/srv/dc/data
@@ -364,6 +365,7 @@ services:
       ROBOT_GATEWAY_CLIENT_TYPE: Manager
       ROBOT_GATEWAY_LOCATION: PLATFORM
       ROBOT_HEDGE_ACCOUNTS_JSON: ${ROBOT_HEDGE_ACCOUNTS_JSON:-}
+      DC_HEDGE_CREDENTIAL_MASTER_KEY: ${DC_HEDGE_CREDENTIAL_MASTER_KEY}
       ROBOT_CONFIG_POLL_MS: ${ROBOT_CONFIG_POLL_MS:-3000}
       ROBOT_LEASE_SECONDS: ${ROBOT_LEASE_SECONDS:-15}
       ROBOT_FAILURE_THRESHOLD: ${ROBOT_FAILURE_THRESHOLD:-3}
