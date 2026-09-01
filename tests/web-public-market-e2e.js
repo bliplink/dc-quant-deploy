@@ -249,6 +249,17 @@ function timeout(ms, message) {
       fail('TradingView loaded history but did not paint OHLC candles', chartRender);
     }
 
+    await page.waitForFunction(() => {
+      const status = window.__dcRealtimeKlineStatus;
+      return status && status.updates >= 2 && Date.now() - status.receivedAt < 15000;
+    }, null, {timeout: 45000});
+    const realtimeKline = await page.evaluate(() => window.__dcRealtimeKlineStatus);
+    if (!realtimeKline.topic.endsWith(`.${location}`)
+      || realtimeKline.symbol !== 'BTCUSDT'
+      || realtimeKline.time > Date.now() + 5 * 60 * 1000) {
+      fail('MDSvr realtime K-line push has an invalid tenant, symbol or timestamp', realtimeKline);
+    }
+
     const dragZones = page.locator('.panelDragZone');
     if (await dragZones.count() < 5) fail('desktop panels do not expose drag zones', await dragZones.count());
     await dragZones.first().hover();
@@ -278,6 +289,7 @@ function timeout(ms, message) {
     process.stdout.write(`${JSON.stringify({
       status: 'PASS', location, market, historyRows: history.rows, historyRequest: history.request,
       chartHistory, chartCanvases: chartRender.canvases,
+      realtimeKline,
       navItems, protectedPanels: 2, publicOrderActions: 2, publicMarketPollingCalls: 0, depthScreenshot,
       dragAffordance, registrationTenant: location, screenshot
     }, null, 2)}\n`);
