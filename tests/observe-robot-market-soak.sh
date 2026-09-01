@@ -97,7 +97,7 @@ write_hourly_summary() {
     status=NO_DATA
   else
     if (( db_samples == 0 || min_bid < 20 || min_ask < 20 || http_bad > 0 || rejected_delta > 0 || gap_delta > 0 )); then status=FAIL; fi
-    if (( web_minutes == 0 || web_min_bid != 20 || web_max_bid != 20 || web_min_ask != 20 || web_max_ask != 20 || web_gap_delta > 0 || web_errors > 0 )); then status=FAIL; fi
+    if (( web_minutes == 0 || web_min_bid != 10 || web_max_bid != 10 || web_min_ask != 10 || web_max_ask != 10 || web_gap_delta > 0 || web_errors > 0 )); then status=FAIL; fi
   fi
   if [[ ! -s "${SUMMARY_FILE}" ]]; then
     printf '%s\n' 'hour_utc,db_samples,min_bid,max_bid,min_ask,max_ask,http_bad,accepted,rejected,gaps,auth_refreshes,web_minutes,web_min_bid,web_max_bid,web_min_ask,web_max_ask,web_gaps,web_errors,status' >"${SUMMARY_FILE}"
