@@ -107,9 +107,14 @@ function timeout(ms, message) {
     }
 
     const loginPanels = page.locator('.loginRequiredPanel');
-    if (await loginPanels.count() !== 3) fail('private trading panels are not protected', await loginPanels.count());
-    for (let index = 0; index < 3; index += 1) {
+    if (await loginPanels.count() !== 2) fail('private account panels are not protected', await loginPanels.count());
+    for (let index = 0; index < 2; index += 1) {
       await loginPanels.nth(index).waitFor({state: 'visible', timeout: 15000});
+    }
+    const publicOrderActions = page.locator('.placeOrderWrap.publicMode .publicOrderActions');
+    await publicOrderActions.waitFor({state: 'visible', timeout: 15000});
+    if (await publicOrderActions.locator('button').count() !== 2) {
+      fail('public order panel does not expose register and login actions');
     }
 
     try {
@@ -140,6 +145,10 @@ function timeout(ms, message) {
       await page.screenshot({path: path.join(artifactDir, 'web-public-market-failure.png'), fullPage: true});
       fail('anonymous order book did not become ready', {diagnostics, publicMarketResponses, pageErrors});
     }
+    if (publicMarketResponses.length) {
+      fail('anonymous market page used polling snapshot API instead of MDSvr websocket subscriptions',
+        publicMarketResponses);
+    }
 
     const market = await page.evaluate(() => {
       const wrappers = [...document.querySelectorAll('.orderBookWrap')].filter(element => {
@@ -166,12 +175,24 @@ function timeout(ms, message) {
           opacity: getComputedStyle(element).opacity
         };
       };
+      const depthView = selector => [...(orderBook?.querySelectorAll(selector) || [])].map(element => {
+        const row = element.getBoundingClientRect();
+        const depth = getComputedStyle(element, '::before');
+        return {
+          rowWidth: row.width,
+          barWidth: Number.parseFloat(depth.width) || 0,
+          color: depth.backgroundColor,
+          transition: depth.transitionDuration
+        };
+      });
       return {
         bids: orderBook?.querySelectorAll('.showDiv .ask-container + div + div > .bid').length || 0,
         asks: orderBook?.querySelectorAll('.showDiv .ask-container > .bid').length || 0,
         lastPrice: orderBook?.querySelector('.showDiv .last-price')?.textContent?.trim() || '',
         bidSample: rowView(orderBook?.querySelector('.showDiv .ask-container + div + div > .bid')),
-        askSample: rowView(orderBook?.querySelector('.showDiv .ask-container > .bid'))
+        askSample: rowView(orderBook?.querySelector('.showDiv .ask-container > .bid')),
+        bidDepth: depthView('.showDiv .ask-container + div + div > .order-book-row--bid'),
+        askDepth: depthView('.showDiv .ask-container > .order-book-row--ask')
       };
     });
     if (!market.bidSample || !market.askSample
@@ -179,6 +200,19 @@ function timeout(ms, message) {
       || market.bidSample.visibleHeight < 10 || market.askSample.visibleHeight < 10) {
       fail('order book rows exist but are not visibly laid out', market);
     }
+    for (const [side, bars] of [['bid', market.bidDepth], ['ask', market.askDepth]]) {
+      const rowWidth = bars[0]?.rowWidth || 0;
+      const maxBarWidth = Math.max(0, ...bars.map(item => item.barWidth));
+      if (bars.length !== 10 || bars.some(item => item.barWidth <= 0 || item.barWidth > item.rowWidth + 1)
+        || maxBarWidth < rowWidth * 0.95 || bars.some(item => item.transition === '0s')) {
+        fail(`${side} cumulative depth bars are not visibly scaled and animated`, bars);
+      }
+    }
+    if (market.bidDepth[0].color === market.askDepth[0].color) {
+      fail('bid and ask cumulative depth bars do not use distinct colors', market);
+    }
+    const depthScreenshot = path.join(artifactDir, 'web-order-book-depth.png');
+    await page.screenshot({path: depthScreenshot, fullPage: true});
 
     await page.locator('.TVChartContainer iframe').waitFor({state: 'visible', timeout: 60000});
     const history = await Promise.race([
@@ -244,7 +278,8 @@ function timeout(ms, message) {
     process.stdout.write(`${JSON.stringify({
       status: 'PASS', location, market, historyRows: history.rows, historyRequest: history.request,
       chartHistory, chartCanvases: chartRender.canvases,
-      navItems, protectedPanels: 3, dragAffordance, registrationTenant: location, screenshot
+      navItems, protectedPanels: 2, publicOrderActions: 2, publicMarketPollingCalls: 0, depthScreenshot,
+      dragAffordance, registrationTenant: location, screenshot
     }, null, 2)}\n`);
   } finally {
     await context.close();
