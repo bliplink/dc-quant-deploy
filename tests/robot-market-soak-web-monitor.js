@@ -108,8 +108,14 @@ async function monitorSession(browser) {
           return style.display !== 'none' && style.visibility !== 'hidden' && box.width > 0 && box.height > 0;
         });
         const orderBook = visibleWrappers[0];
-        const askRows = orderBook?.querySelectorAll('.showDiv .ask-container > .bid').length || 0;
-        const bidRows = orderBook?.querySelectorAll('.showDiv .ask-container + div + div > .bid').length || 0;
+        const visibleRows = selector => [...(orderBook?.querySelectorAll(selector) || [])].filter(element => {
+          const row = element.getBoundingClientRect();
+          const container = element.parentElement?.getBoundingClientRect();
+          if (!container || row.width <= 0 || row.height <= 0 || container.height <= 0) return false;
+          return Math.min(row.bottom, container.bottom) - Math.max(row.top, container.top) >= 10;
+        }).length;
+        const askRows = visibleRows('.showDiv .ask-container > .bid');
+        const bidRows = visibleRows('.showDiv .ask-container + div + div > .bid');
         const lastPrice = orderBook?.querySelector('.showDiv .last-price')?.textContent?.trim() || '';
         const markPrice = orderBook?.querySelector('.showDiv .mark-price')?.textContent?.trim() || '';
         const loginData = JSON.parse(sessionStorage.getItem('loginData') || '{}');
