@@ -15,7 +15,7 @@ LOCK_FILE="${STATE_DIR}/load.lock"
 SECRET_FILE="${STATE_DIR}/runtime.env"
 LOG_FILE="${STATE_DIR}/load.log"
 METRICS_FILE="${STATE_DIR}/depth-metrics.csv"
-METRICS_HEADER='time,bid_levels,ask_levels,robot_status,web_http,accepted,rejected,gap_samples,auth_refreshes'
+METRICS_HEADER='time,active_bid_levels,active_ask_levels,robot_status,web_http,accepted,rejected,gap_samples,auth_refreshes'
 CACHE_MARKER="${STATE_DIR}/accounts-loaded.marker"
 MONITOR_CONTAINER="${ROBOT_SOAK_MONITOR_CONTAINER:-dc-saas-robot-web-monitor}"
 MONITOR_IMAGE="${ROBOT_SOAK_MONITOR_IMAGE:-mcr.microsoft.com/playwright:v1.55.0-noble}"
@@ -273,12 +273,13 @@ run_loop() {
   declare -A tokens token_login_epoch
   local user response code message cycle=0 rejected=0 accepted=0 gap_samples=0 auth_refreshes=0 ever_running=0
   local -a action_files=() action_users=()
-  local bid_levels ask_levels best_bid best_ask robot_status web_status now clid price token side tenant_tick header archive current_epoch
+  local bid_levels ask_levels best_bid best_ask robot_status web_status now clid price token side tenant_tick header archive current_epoch robot_token robot_orders_response
   for user in "${TRADERS[@]}"; do
     tokens["${user}"]="$(login_user "${user}")"
     token_login_epoch["${user}"]="$(date +%s)"
   done
   for user in "${TRADERS[@]}"; do cancel_all "${user}" "${tokens[${user}]}"; done
+  robot_token="$(login_user "${ROBOT_USER}")"
   tenant_tick="$(mysql_exec -e "SELECT tick_size FROM dc.dc_tenant_symbol WHERE location='${LOCATION}' AND security_id='BTCUSDT';" dc)"
   [[ -n "${tenant_tick}" ]] || die "Tenant BTCUSDT tick size is unavailable"
   header="$(head -n 1 "${METRICS_FILE}" 2>/dev/null || true)"
@@ -292,20 +293,31 @@ run_loop() {
   fi
   log "Continuous load started: location=${LOCATION}, robot=${ROBOT_ID}, pid=$$"
   while true; do
-    read -r bid_levels ask_levels best_bid best_ask robot_status <<<"$(mysql_exec -e "
-SELECT
- COUNT(DISTINCT CASE WHEN o.side='Buy' AND o.ord_status IN ('New','Partially_Filled') THEN o.price END),
- COUNT(DISTINCT CASE WHEN o.side='Sell' AND o.ord_status IN ('New','Partially_Filled') THEN o.price END),
- COALESCE(MAX(CASE WHEN o.side='Buy' AND o.ord_status IN ('New','Partially_Filled') THEN o.price END),0),
- COALESCE(MIN(CASE WHEN o.side='Sell' AND o.ord_status IN ('New','Partially_Filled') THEN o.price END),0),
- COALESCE((SELECT runtime_status FROM dc.dc_tenant_robot r WHERE r.location='${LOCATION}' AND r.robot_id='${ROBOT_ID}'),'MISSING')
-FROM dc.dc_orders o WHERE o.location='${LOCATION}' AND o.user_id='${ROBOT_USER}'
- AND o.clord_id LIKE 'RBcontinuousd%' AND o.clord_id NOT LIKE '%-SW%';" dc)"
+    robot_orders_response="$(api_call "{\"serverName\":\"OrderSvr\",\"method\":\"queryOpenOrder\",\"content\":{\"userid\":\"${ROBOT_USER}\",\"securityid\":\"BTCUSDT\",\"Location\":\"${LOCATION}\"}}" "${robot_token}" 2>/dev/null || true)"
+    read -r bid_levels ask_levels best_bid best_ask <<<"$(printf '%s' "${robot_orders_response}" | python3 -c 'import json,sys
+try:
+ d=json.load(sys.stdin); rows=d.get("data") or []
+ def field(row,*names):
+  for name in names:
+   if name in row and row[name] is not None: return str(row[name])
+  return ""
+ own=[]
+ for row in rows:
+  clid=field(row,"ClOrdID","clOrdID","clord_id")
+  status=field(row,"OrdStatus","ordStatus","ord_status")
+  if clid.startswith("RBcontinuousd") and "-SW" not in clid and status in ("New","Partially_Filled"):
+   own.append(row)
+ bids=sorted({field(x,"Price","price") for x in own if field(x,"Side","side").lower()=="buy" and field(x,"Price","price")},key=float)
+ asks=sorted({field(x,"Price","price") for x in own if field(x,"Side","side").lower()=="sell" and field(x,"Price","price")},key=float)
+ print(len(bids),len(asks),bids[-1] if bids else 0,asks[0] if asks else 0)
+except Exception:
+ print(0,0,0,0)')"
+    robot_status="$(mysql_exec -e "SELECT COALESCE(runtime_status,'MISSING') FROM dc.dc_tenant_robot WHERE location='${LOCATION}' AND robot_id='${ROBOT_ID}' LIMIT 1;" dc)"
     web_status="$(curl -sS -o /dev/null -w '%{http_code}' --max-time 5 "http://127.0.0.1:${WEB_LISTEN_PORT}/#/trade?location=${LOCATION}" || true)"
     [[ "${robot_status}" == "RUNNING" && "${bid_levels}" -ge 20 && "${ask_levels}" -ge 20 ]] && ever_running=1
     if (( ever_running == 1 && (bid_levels < 20 || ask_levels < 20) )); then
       gap_samples=$((gap_samples + 1))
-      log "DEPTH_GAP bid=${bid_levels} ask=${ask_levels} status=${robot_status} best=${best_bid}/${best_ask}"
+      log "ACTIVE_DEPTH_GAP bid=${bid_levels} ask=${ask_levels} status=${robot_status} best=${best_bid}/${best_ask}"
     fi
     now="$(date '+%Y-%m-%dT%H:%M:%S.%3N%z')"
     printf '%s,%s,%s,%s,%s,%s,%s,%s,%s\n' "${now}" "${bid_levels}" "${ask_levels}" "${robot_status}" "${web_status}" "${accepted}" "${rejected}" "${gap_samples}" "${auth_refreshes}" >>"${METRICS_FILE}"
