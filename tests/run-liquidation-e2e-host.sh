@@ -9,6 +9,8 @@ OTHER_LOCATION="${LIQ_E2E_OTHER_LOCATION:-${LIQ_LOCATION}_FOREIGN}"
 LIQ_USER="${LIQ_E2E_USER:-liq_trigger}"
 MAKER_USER="${LIQ_E2E_MAKER:-liq_maker}"
 FOREIGN_USER="${LIQ_E2E_FOREIGN_USER:-liq_foreign}"
+maker_request=""
+liq_test_stopped="false"
 
 log() { printf '[liq-e2e] %s\n' "$*"; }
 die() { printf '[liq-e2e] ERROR: %s\n' "$*" >&2; exit 1; }
@@ -31,6 +33,14 @@ mysql_exec() {
   docker exec -i -e MYSQL_PWD="${MYSQL_PASSWORD}" dc-saas-mysql \
     mysql -u"${MYSQL_USERNAME}" -N "$@"
 }
+
+cleanup() {
+  [[ -z "${maker_request}" ]] || rm -f "${maker_request}"
+  if [[ "${liq_test_stopped}" == "true" ]]; then
+    docker start dc-saas-liqsvr >/dev/null 2>&1 || true
+  fi
+}
+trap cleanup EXIT
 
 query_mark_price() {
   local response
@@ -110,6 +120,10 @@ print(f"{entry:f}\t{scale:.16f}\t{entry * Decimal('0.00004'):.16f}")
 PY
 )"
 
+log "Stopping LiqSvr while the deterministic risk fixture is loaded."
+docker stop dc-saas-liqsvr >/dev/null
+liq_test_stopped="true"
+
 log "Preparing controlled partial-liquidation accounts in ${LIQ_LOCATION} at live MarkPrice ${fixture_mark}."
 {
   cat <<SQL
@@ -168,7 +182,6 @@ wait_for_route TDSvr
 maker_session="$(login_user "${MAKER_USER}")"
 
 maker_request="$(mktemp)"
-trap 'rm -f "${maker_request}"' EXIT
 cat >"${maker_request}" <<JSON
 {"serverName":"OrderSvr","method":"placeOrder","content":{"OCType":"OPEN","OrderQty":"0.001","OrdType":"Limit","ClOrdID":"LIQ-E2E-MAKER-$(date +%s%N)","Terminal":"API","AlgoName":"cross","Side":"Buy","Price":"${entry_price}","UserID":"${MAKER_USER}","MarketIndicator":"4","TimeInForce":"GTC","SecurityID":"BTCUSDT","Location":"${LIQ_LOCATION}"}}
 JSON
@@ -203,8 +216,9 @@ then
   die "Dynamic fixture is not unsafe after risk refresh: mark=${current_mark}, longLiq=${current_liq}"
 fi
 
-log "Restarting LiqSvr so the position and tenant mark-price snapshots trigger liquidation."
-docker restart dc-saas-liqsvr >/dev/null
+log "Starting LiqSvr so the position and tenant mark-price snapshots trigger liquidation."
+docker start dc-saas-liqsvr >/dev/null
+liq_test_stopped="false"
 
 liquidation_count="0"
 for _ in $(seq 1 90); do
