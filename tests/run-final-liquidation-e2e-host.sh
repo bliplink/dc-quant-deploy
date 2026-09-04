@@ -11,6 +11,8 @@ MAKER_USER="${FINAL_LIQ_E2E_MAKER:-final_maker}"
 ADL_USER="${FINAL_LIQ_E2E_ADL_USER:-final_adl_high}"
 FOREIGN_USER="${FINAL_LIQ_E2E_FOREIGN_USER:-final_adl_foreign}"
 ADL_AVERAGE="${FINAL_LIQ_E2E_ADL_AVERAGE:-1000000}"
+maker_request=""
+liq_test_stopped="false"
 
 log() { printf '[final-liq-e2e] %s\n' "$*"; }
 die() { printf '[final-liq-e2e] ERROR: %s\n' "$*" >&2; exit 1; }
@@ -35,6 +37,14 @@ mysql_exec() {
   docker exec -i -e MYSQL_PWD="${MYSQL_PASSWORD}" dc-saas-mysql \
     mysql -u"${MYSQL_USERNAME}" -N "$@"
 }
+
+cleanup() {
+  [[ -z "${maker_request}" ]] || rm -f "${maker_request}"
+  if [[ "${liq_test_stopped}" == "true" ]]; then
+    docker start dc-saas-liqsvr >/dev/null 2>&1 || true
+  fi
+}
+trap cleanup EXIT
 
 password_hash="$(printf '%s' "${E2E_PASSWORD}" | sha256sum | awk '{print $1}')"
 
@@ -86,6 +96,10 @@ WHERE user_name='${MAKER_USER}'
   AND (user_id<>user_name OR COALESCE(location,'')<>'${LIQ_LOCATION}');" dc)"
 [[ "${collision_count}" == "0" ]] ||
   die "Final-liquidation maker username belongs to another identity or location"
+
+log "Stopping LiqSvr while the deterministic final-liquidation fixture is loaded."
+docker stop dc-saas-liqsvr >/dev/null
+liq_test_stopped="true"
 
 log "Preparing final-liquidation, insurance and ADL accounts in ${LIQ_LOCATION}."
 {
@@ -165,7 +179,6 @@ wait_for_route TDSvr
 maker_session="$(login_user "${MAKER_USER}")"
 
 maker_request="$(mktemp)"
-trap 'rm -f "${maker_request}"' EXIT
 cat >"${maker_request}" <<JSON
 {"serverName":"OrderSvr","method":"placeOrder","content":{"OCType":"OPEN","OrderQty":"0.0001","OrdType":"Limit","ClOrdID":"FINAL-LIQ-MAKER-$(date +%s%N)","Terminal":"API","AlgoName":"cross","Side":"Buy","Price":"60000","UserID":"${MAKER_USER}","MarketIndicator":"4","TimeInForce":"GTC","SecurityID":"BTCUSDT","Location":"${LIQ_LOCATION}"}}
 JSON
@@ -188,8 +201,9 @@ SQL
 done
 [[ "${maker_open}" == "1" ]] || die "Liquidity order did not rest in the order book"
 
-log "Restarting LiqSvr to trigger a real full liquidation through OrderSvr."
-docker restart dc-saas-liqsvr >/dev/null
+log "Starting LiqSvr to trigger a real full liquidation through OrderSvr."
+docker start dc-saas-liqsvr >/dev/null
+liq_test_stopped="false"
 
 liquidation_order_id=""
 for _ in $(seq 1 90); do
