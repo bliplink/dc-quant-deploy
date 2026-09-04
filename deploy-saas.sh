@@ -6,6 +6,8 @@ ENV_FILE="${ENV_FILE:-${SCRIPT_DIR}/.env.prod}"
 LOCK_FILE="${SAAS_AUTO_UPDATE_LOCK_FILE:-/tmp/dc-saas-auto-update.lock}"
 SKIP_HOST_PREPARE="false"
 SKIP_PULL="false"
+ROBOT_IDENTITY_CHANGED="false"
+LOGIN_CONTAINER_EXISTED="false"
 
 log() {
   printf '[saas-deploy] %s\n' "$*"
@@ -390,8 +392,14 @@ provision_robot_runtime_identity() {
   [[ "${ROBOT_RUNTIME_API_SECRET}" =~ ^[A-Za-z0-9]{32,64}$ ]] \
     || die "ROBOT_RUNTIME_API_SECRET must contain 32-64 alphanumeric characters."
 
-  local password_hash
+  local password_hash identity_count
   password_hash="$(printf '%s' "${ROBOT_RUNTIME_API_SECRET}" | sha256sum | awk '{print $1}')"
+  identity_count="$(docker exec -e MYSQL_PWD="${MYSQL_ROOT_PASSWORD}" dc-saas-mysql \
+    mysql --protocol=TCP -h127.0.0.1 -P"${MYSQL_PORT}" -uroot -N dc -e \
+    "SELECT COUNT(*) FROM dc_users_api WHERE location='${ROBOT_RUNTIME_LOCATION}' \
+      AND user_id='${ROBOT_RUNTIME_USER_ID}' AND api_key='${ROBOT_RUNTIME_API_KEY}' \
+      AND secret_key='${ROBOT_RUNTIME_API_SECRET}' AND enable='1';")"
+  [[ "${identity_count}" == "1" ]] || ROBOT_IDENTITY_CHANGED="true"
   docker exec -i -e MYSQL_PWD="${MYSQL_ROOT_PASSWORD}" dc-saas-mysql \
     mysql --protocol=TCP -h127.0.0.1 -P"${MYSQL_PORT}" -uroot dc <<SQL
 INSERT INTO dc_users(user_id,user_name,name,password,user_type,enable,remark,create_time,update_time,
@@ -456,6 +464,10 @@ else
   die "IMAGE_SOURCE must be local or registry."
 fi
 
+if docker inspect dc-saas-loginsvr >/dev/null 2>&1; then
+  LOGIN_CONTAINER_EXISTED="true"
+fi
+
 log "Starting isolated MySQL, ClickHouse, and ZooKeeper."
 compose_up -d mysql clickhouse zookeeper
 wait_for_health dc-saas-mysql 420
@@ -466,18 +478,17 @@ apply_mysql_migrations
 provision_platform_admin
 provision_robot_runtime_identity
 
-# ApiKeyService loads its in-memory key map when LoginSvr starts.  During an
-# upgrade the container may already be running, so refresh it after provisioning
-# the dedicated Robot key.  Fresh installs have no container yet and are started
-# normally below.
-if docker inspect dc-saas-loginsvr >/dev/null 2>&1; then
-  log "Refreshing LoginSvr so the dedicated Robot runtime key is active."
-  compose_up -d --no-deps --force-recreate loginsvr
-  wait_for_port "${LOGINSVR_HTTP_PORT}" loginsvr 180
-fi
-
 log "Starting the SaaS application services and dc-trade-web."
 compose_up -d
+# ApiKeyService loads its in-memory key map when LoginSvr starts.  Restart it
+# only when provisioning actually changed the Robot credential.  The previous
+# pre-compose force-recreate made the following full `compose up` recreate the
+# same host-network container a second time and could race its released HTTP
+# port on slower production hosts.
+if [[ "${ROBOT_IDENTITY_CHANGED}" == "true" && "${LOGIN_CONTAINER_EXISTED}" == "true" ]]; then
+  log "Robot runtime identity changed; restarting LoginSvr once to reload API keys."
+  docker restart dc-saas-loginsvr >/dev/null
+fi
 wait_for_health dc-saas-trade-web 300
 wait_for_port "${GW_TCP_PORT}" gateway 120
 wait_for_port "${LOGINSVR_GW_PORT}" loginsvr 120
