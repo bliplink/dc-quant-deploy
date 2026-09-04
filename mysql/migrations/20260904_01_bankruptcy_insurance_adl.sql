@@ -10,6 +10,17 @@ CREATE TABLE IF NOT EXISTS dc_insurance_fund (
     PRIMARY KEY (location, security_id)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
+-- Earlier SaaS releases already created dc_insurance_fund with narrower
+-- varchar/decimal columns and a varchar timestamp.  CREATE TABLE IF NOT EXISTS
+-- deliberately leaves that legacy shape untouched, so normalize it explicitly
+-- before TradeSvr enables bankruptcy v2.  Existing production timestamps use
+-- the MySQL-compatible yyyy-MM-dd HH:mm:ss.SSS representation.
+ALTER TABLE dc_insurance_fund
+    MODIFY COLUMN location VARCHAR(64) NOT NULL,
+    MODIFY COLUMN security_id VARCHAR(64) NOT NULL,
+    MODIFY COLUMN balance DECIMAL(36,18) NOT NULL DEFAULT 0,
+    MODIFY COLUMN update_time DATETIME(3) NOT NULL;
+
 CREATE TABLE IF NOT EXISTS dc_insurance_position (
     location          VARCHAR(64)  NOT NULL,
     security_id       VARCHAR(64)  NOT NULL,
