@@ -270,8 +270,8 @@ assert abs(position_margin - account_margin) <= epsilon
 assert Decimal('0') < position_margin < initial_margin
 assert last_qty == Decimal('0.001')
 assert abs(last_px - entry) <= Decimal('0.1')
-assert fee > 0 and abs(realized) <= epsilon
-assert abs(balance - (initial_balance - fee)) <= epsilon
+assert fee < 0 and abs(realized) <= epsilon
+assert abs(balance - (initial_balance + fee)) <= epsilon
 assert foreign_qty == Decimal('0.004')
 assert abs(foreign_balance - initial_balance) <= epsilon
 PY
