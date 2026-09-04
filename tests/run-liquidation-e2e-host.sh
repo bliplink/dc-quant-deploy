@@ -16,6 +16,7 @@ safe_identifier() { [[ "$1" =~ ^[A-Za-z0-9_.-]+$ ]]; }
 
 [[ -r "${ENV_FILE}" ]] || die "Cannot read ${ENV_FILE}"
 [[ -n "${E2E_PASSWORD:-}" ]] || die "E2E_PASSWORD is required"
+command -v python3 >/dev/null 2>&1 || die "python3 is required"
 for value in "${LIQ_LOCATION}" "${OTHER_LOCATION}" "${LIQ_USER}" "${MAKER_USER}" "${FOREIGN_USER}"; do
   safe_identifier "${value}" || die "Unsupported identifier: ${value}"
 done
@@ -29,6 +30,22 @@ set +a
 mysql_exec() {
   docker exec -i -e MYSQL_PWD="${MYSQL_PASSWORD}" dc-saas-mysql \
     mysql -u"${MYSQL_USERNAME}" -N "$@"
+}
+
+query_mark_price() {
+  local response
+  response="$(curl -fsS --max-time 30 -H 'Content-Type: application/json' \
+    --data "{\"serverName\":\"MDSvr\",\"method\":\"queryPublicMarket\",\"content\":{\"securityID\":\"BTCUSDT\",\"Location\":\"${LIQ_LOCATION}\"}}" \
+    "http://127.0.0.1:${WEB_LISTEN_PORT}/httpapi/")" ||
+    die "Could not query the current tenant MarkPrice"
+  printf '%s' "${response}" | python3 -c '
+import json,sys
+from decimal import Decimal
+d=json.load(sys.stdin)
+value=Decimal(str(d["data"]["ticker"]["MarkPrice"]))
+assert value > 0
+print(value)
+' || die "MDSvr returned no positive tenant MarkPrice: ${response}"
 }
 
 password_hash="$(printf '%s' "${E2E_PASSWORD}" | sha256sum | awk '{print $1}')"
@@ -82,7 +99,18 @@ WHERE user_name='${MAKER_USER}'
 [[ "${collision_count}" == "0" ]] ||
   die "Liquidation maker username belongs to another identity or location"
 
-log "Preparing controlled partial-liquidation accounts in ${LIQ_LOCATION}."
+fixture_mark="$(query_mark_price)"
+IFS=$'\t' read -r entry_price initial_balance initial_margin <<<"$(python3 - "${fixture_mark}" <<'PY'
+from decimal import Decimal, ROUND_HALF_UP
+import sys
+mark = Decimal(sys.argv[1])
+entry = mark.quantize(Decimal('0.1'), rounding=ROUND_HALF_UP)
+scale = entry / Decimal('60000')
+print(f"{entry:f}\t{scale:.16f}\t{entry * Decimal('0.00004'):.16f}")
+PY
+)"
+
+log "Preparing controlled partial-liquidation accounts in ${LIQ_LOCATION} at live MarkPrice ${fixture_mark}."
 {
   cat <<SQL
 START TRANSACTION;
@@ -102,9 +130,9 @@ DELETE FROM dc.dc_users_balance WHERE location IN ('${LIQ_LOCATION}','${OTHER_LO
 INSERT INTO dc.dc_users_balance
   (user_id,balance,used_margin,freezed_margin,freezed_commission,update_time,close_by,location)
 VALUES
-  ('${LIQ_USER}',1,2.4,0,0,NOW(),'LIQ_E2E','${LIQ_LOCATION}'),
+  ('${LIQ_USER}',${initial_balance},${initial_margin},0,0,NOW(),'LIQ_E2E','${LIQ_LOCATION}'),
   ('${MAKER_USER}',100000,0,0,0,NOW(),'LIQ_E2E','${LIQ_LOCATION}'),
-  ('${FOREIGN_USER}',1,2.4,0,0,NOW(),'LIQ_E2E','${OTHER_LOCATION}');
+  ('${FOREIGN_USER}',${initial_balance},${initial_margin},0,0,NOW(),'LIQ_E2E','${OTHER_LOCATION}');
 
 INSERT INTO dc.dc_users
   (user_id,user_name,name,password,user_type,enable,create_time,update_time,
@@ -123,9 +151,9 @@ INSERT INTO dc.dc_orders_position
    update_time,close_by,location)
 VALUES
   ('${LIQ_USER}','BTCUSDT','BTCUSDT',0,'Cross',100,
-   0.004,60000,2.4,0,0,0,0,0,999999,0,NOW(),'LIQ_E2E','${LIQ_LOCATION}'),
+   0.004,${entry_price},${initial_margin},0,0,0,0,0,999999,0,NOW(),'LIQ_E2E','${LIQ_LOCATION}'),
   ('${FOREIGN_USER}','BTCUSDT','BTCUSDT',0,'Cross',100,
-   0.004,60000,2.4,0,0,0,0,0,999999,0,NOW(),'LIQ_E2E','${OTHER_LOCATION}');
+   0.004,${entry_price},${initial_margin},0,0,0,0,0,999999,0,NOW(),'LIQ_E2E','${OTHER_LOCATION}');
 COMMIT;
 SQL
 } | mysql_exec dc
@@ -142,7 +170,7 @@ maker_session="$(login_user "${MAKER_USER}")"
 maker_request="$(mktemp)"
 trap 'rm -f "${maker_request}"' EXIT
 cat >"${maker_request}" <<JSON
-{"serverName":"OrderSvr","method":"placeOrder","content":{"OCType":"OPEN","OrderQty":"0.001","OrdType":"Limit","ClOrdID":"LIQ-E2E-MAKER-$(date +%s%N)","Terminal":"API","AlgoName":"cross","Side":"Buy","Price":"60000","UserID":"${MAKER_USER}","MarketIndicator":"4","TimeInForce":"GTC","SecurityID":"BTCUSDT","Location":"${LIQ_LOCATION}"}}
+{"serverName":"OrderSvr","method":"placeOrder","content":{"OCType":"OPEN","OrderQty":"0.001","OrdType":"Limit","ClOrdID":"LIQ-E2E-MAKER-$(date +%s%N)","Terminal":"API","AlgoName":"cross","Side":"Buy","Price":"${entry_price}","UserID":"${MAKER_USER}","MarketIndicator":"4","TimeInForce":"GTC","SecurityID":"BTCUSDT","Location":"${LIQ_LOCATION}"}}
 JSON
 maker_response="$(curl -fsS --max-time 30 -H 'Content-Type: application/json' -H "sessionId: ${maker_session}" \
   --data-binary "@${maker_request}" "http://127.0.0.1:${WEB_LISTEN_PORT}/httpapi/")" ||
@@ -161,6 +189,19 @@ SQL
   sleep 1
 done
 [[ "${maker_open:-0}" == "1" ]] || die "Liquidity order did not rest in the order book"
+
+current_mark="$(query_mark_price)"
+current_liq="$(mysql_exec -e "SELECT long_liq_price FROM dc.dc_orders_position
+WHERE location='${LIQ_LOCATION}' AND user_id='${LIQ_USER}' AND security_id='BTCUSDT';" dc)"
+if ! python3 - "${current_mark}" "${current_liq}" <<'PY'
+from decimal import Decimal
+import sys
+mark, liq = map(Decimal, sys.argv[1:])
+assert liq > 0 and mark <= liq
+PY
+then
+  die "Dynamic fixture is not unsafe after risk refresh: mark=${current_mark}, longLiq=${current_liq}"
+fi
 
 log "Restarting LiqSvr so the position and tenant mark-price snapshots trigger liquidation."
 docker restart dc-saas-liqsvr >/dev/null
@@ -188,19 +229,40 @@ SELECT p.long_position,p.long_used_margin,b.used_margin,b.balance
 FROM dc.dc_orders_position p
 JOIN dc.dc_users_balance b ON b.location=p.location AND b.user_id=p.user_id
 WHERE p.location='${LIQ_LOCATION}' AND p.user_id='${LIQ_USER}' AND p.security_id='BTCUSDT';
-SELECT COUNT(*) FROM dc.dc_orders_execorders WHERE location='${LIQ_LOCATION}' AND user_id='${LIQ_USER}'
-  AND UPPER(oc_type)='CLOSE' AND last_qty=0.001;
-SELECT long_position FROM dc.dc_orders_position
-WHERE location='${OTHER_LOCATION}' AND user_id='${FOREIGN_USER}' AND security_id='BTCUSDT';
+SELECT last_qty,last_px,fee,realized_pnl FROM dc.dc_orders_execorders
+WHERE location='${LIQ_LOCATION}' AND user_id='${LIQ_USER}' AND UPPER(oc_type)='CLOSE'
+ORDER BY create_time DESC LIMIT 1;
+SELECT p.long_position,b.balance FROM dc.dc_orders_position p
+JOIN dc.dc_users_balance b ON b.location=p.location AND b.user_id=p.user_id
+WHERE p.location='${OTHER_LOCATION}' AND p.user_id='${FOREIGN_USER}' AND p.security_id='BTCUSDT';
 SQL
 } | mysql_exec dc)"
 mapfile -t rows <<<"${verification}"
 [[ "${#rows[@]}" -eq 3 ]] || die "Unexpected liquidation verification output: ${verification}"
-# Remaining margin includes the reserved taker fee for closing the remaining
-# position: 0.003 * 60000 / 100 + 0.003 * 59400 * 0.0006 = 1.90692.
-[[ "${rows[0]}" == $'0.003000000\t1.906920000\t1.9069200000000000\t0.9640000000000000' ]] ||
-  die "Partial liquidation balance/position mismatch: ${rows[0]}"
-[[ "${rows[1]}" == "1" ]] || die "Liquidation execution was not persisted: ${rows[1]}"
-[[ "${rows[2]}" == "0.004000000" ]] || die "Foreign-tenant position was modified: ${rows[2]}"
+if ! python3 - "${rows[0]}" "${rows[1]}" "${rows[2]}" "${entry_price}" \
+  "${initial_balance}" "${initial_margin}" <<'PY'
+from decimal import Decimal
+import sys
 
-log "PASS: LiqSvr issued a reduce-only Market/IOC partial liquidation and preserved tenant isolation."
+position, execution, foreign = (row.split('\t') for row in sys.argv[1:4])
+entry, initial_balance, initial_margin = map(Decimal, sys.argv[4:7])
+qty, position_margin, account_margin, balance = map(Decimal, position)
+last_qty, last_px, fee, realized = map(Decimal, execution)
+foreign_qty, foreign_balance = map(Decimal, foreign)
+epsilon = Decimal('0.00000001')
+
+assert qty == Decimal('0.003')
+assert abs(position_margin - account_margin) <= epsilon
+assert Decimal('0') < position_margin < initial_margin
+assert last_qty == Decimal('0.001')
+assert abs(last_px - entry) <= Decimal('0.1')
+assert fee > 0 and abs(realized) <= epsilon
+assert abs(balance - (initial_balance - fee)) <= epsilon
+assert foreign_qty == Decimal('0.004')
+assert abs(foreign_balance - initial_balance) <= epsilon
+PY
+then
+  die "Partial liquidation balance/position or tenant-isolation mismatch: ${verification}"
+fi
+
+log "PASS: LiqSvr issued a live-price-driven reduce-only Market/IOC partial liquidation and preserved tenant isolation."
