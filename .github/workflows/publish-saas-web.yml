@@ -15,7 +15,7 @@ env:
   REGISTRY: ghcr.io
   IMAGE_NAME: bliplink/dc-saas-trade-web
   SOURCE_BRANCH: saas-crypto
-  SOURCE_REV: 5a3b1836feef31b0ca6d6585c08943a52037aaa2
+  SOURCE_REV: b12250405387243b8b7d6799d622bd0132d46c5f
   PUBLIC_SOURCE_URL: https://github.com/bliplink/dc-quant-deploy
 
 jobs:
