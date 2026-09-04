@@ -58,6 +58,22 @@ generate_secret() {
   openssl rand -hex 24
 }
 
+ensure_generated_env_secret() {
+  local key="$1"
+  local current=""
+  if grep -q "^${key}=" "${ENV_FILE}"; then
+    current="$(sed -n "s/^${key}=//p" "${ENV_FILE}" | tail -n 1)"
+  fi
+  if [[ -n "${current}" && "${current}" != "replace-with-generated-secret" ]]; then
+    return 0
+  fi
+  if grep -q "^${key}=" "${ENV_FILE}"; then
+    set_env_value "${key}" "$(generate_secret)"
+  else
+    printf '%s=%s\n' "${key}" "$(generate_secret)" >> "${ENV_FILE}"
+  fi
+}
+
 set_env_value() {
   local key="$1"
   local value="$2"
@@ -86,6 +102,8 @@ ensure_env_file() {
   set_env_value LOGIN_DEFAULT_PASSWORD "$(generate_secret)"
   set_env_value PLATFORM_ADMIN_PASSWORD "$(generate_secret)"
   set_env_value DC_HEDGE_CREDENTIAL_MASTER_KEY "$(generate_secret)"
+  set_env_value ROBOT_RUNTIME_API_KEY "$(generate_secret)"
+  set_env_value ROBOT_RUNTIME_API_SECRET "$(generate_secret)"
   log "Created ${ENV_FILE} with generated local secrets."
 }
 
@@ -105,6 +123,14 @@ ensure_env_defaults() {
   if ! grep -q '^DC_HEDGE_CREDENTIAL_MASTER_KEY=' "${ENV_FILE}"; then
     printf 'DC_HEDGE_CREDENTIAL_MASTER_KEY=%s\n' "$(generate_secret)" >> "${ENV_FILE}"
   fi
+  if ! grep -q '^ROBOT_RUNTIME_LOCATION=' "${ENV_FILE}"; then
+    printf 'ROBOT_RUNTIME_LOCATION=PLATFORM\n' >> "${ENV_FILE}"
+  fi
+  if ! grep -q '^ROBOT_RUNTIME_USER_ID=' "${ENV_FILE}"; then
+    printf 'ROBOT_RUNTIME_USER_ID=robotsvr\n' >> "${ENV_FILE}"
+  fi
+  ensure_generated_env_secret ROBOT_RUNTIME_API_KEY
+  ensure_generated_env_secret ROBOT_RUNTIME_API_SECRET
   migrate_env_value IMAGE_SOURCE local registry
   migrate_env_value GW_IMAGE_REPOSITORY dc-saas/gw ghcr.io/bliplink/gw
   migrate_env_value LOGINSVR_IMAGE_REPOSITORY dc-saas/loginsvr ghcr.io/bliplink/loginsvr
@@ -354,6 +380,38 @@ SQL
   log "Platform administrator ${PLATFORM_ADMIN_USERNAME} provisioned for location PLATFORM."
 }
 
+provision_robot_runtime_identity() {
+  [[ "${ROBOT_RUNTIME_LOCATION}" =~ ^[A-Za-z0-9_.@-]{1,64}$ ]] \
+    || die "ROBOT_RUNTIME_LOCATION contains unsupported characters."
+  [[ "${ROBOT_RUNTIME_USER_ID}" =~ ^[A-Za-z0-9_.@-]{3,45}$ ]] \
+    || die "ROBOT_RUNTIME_USER_ID contains unsupported characters."
+  [[ "${ROBOT_RUNTIME_API_KEY}" =~ ^[A-Za-z0-9]{32,64}$ ]] \
+    || die "ROBOT_RUNTIME_API_KEY must contain 32-64 alphanumeric characters."
+  [[ "${ROBOT_RUNTIME_API_SECRET}" =~ ^[A-Za-z0-9]{32,64}$ ]] \
+    || die "ROBOT_RUNTIME_API_SECRET must contain 32-64 alphanumeric characters."
+
+  local password_hash
+  password_hash="$(printf '%s' "${ROBOT_RUNTIME_API_SECRET}" | sha256sum | awk '{print $1}')"
+  docker exec -i -e MYSQL_PWD="${MYSQL_ROOT_PASSWORD}" dc-saas-mysql \
+    mysql --protocol=TCP -h127.0.0.1 -P"${MYSQL_PORT}" -uroot dc <<SQL
+INSERT INTO dc_users(user_id,user_name,name,password,user_type,enable,remark,create_time,update_time,
+  enable_trade,enable_cash_in,enable_cash_out,close_by,location)
+VALUES('${ROBOT_RUNTIME_USER_ID}','${ROBOT_RUNTIME_USER_ID}','Robot Runtime','${password_hash}',
+  '1','1','Internal GW-only Robot runtime',NOW(3),NOW(3),'0','0','0','deploy-saas','${ROBOT_RUNTIME_LOCATION}')
+ON DUPLICATE KEY UPDATE password=VALUES(password),enable='1',update_time=NOW(3),close_by='deploy-saas';
+UPDATE dc_users_api SET enable='0',update_time=DATE_FORMAT(NOW(3),'%Y-%m-%d %H:%i:%s.%f'),close_by='deploy-saas'
+WHERE location='${ROBOT_RUNTIME_LOCATION}' AND user_id='${ROBOT_RUNTIME_USER_ID}'
+  AND api_key<>'${ROBOT_RUNTIME_API_KEY}';
+INSERT INTO dc_users_api(user_id,type,api_key,secret_key,enable,create_time,update_time,close_by,inf1,location)
+VALUES('${ROBOT_RUNTIME_USER_ID}','ROBOT_RUNTIME','${ROBOT_RUNTIME_API_KEY}','${ROBOT_RUNTIME_API_SECRET}',
+  '1',DATE_FORMAT(NOW(3),'%Y-%m-%d %H:%i:%s.%f'),DATE_FORMAT(NOW(3),'%Y-%m-%d %H:%i:%s.%f'),
+  'deploy-saas','GW-only Robot runtime','${ROBOT_RUNTIME_LOCATION}')
+ON DUPLICATE KEY UPDATE secret_key=VALUES(secret_key),enable='1',update_time=VALUES(update_time),
+  close_by='deploy-saas',location=VALUES(location);
+SQL
+  log "Dedicated Robot runtime identity ${ROBOT_RUNTIME_LOCATION}/${ROBOT_RUNTIME_USER_ID} provisioned."
+}
+
 verify_ghcr_access() {
   [[ "${REQUIRE_GHCR_LOGIN:-false}" == "true" ]] || return 0
   if [[ -n "${GHCR_USERNAME:-}" && -n "${GHCR_TOKEN:-}" ]]; then
@@ -406,6 +464,17 @@ wait_for_health dc-saas-zookeeper 120
 ensure_zookeeper_service_root
 apply_mysql_migrations
 provision_platform_admin
+provision_robot_runtime_identity
+
+# ApiKeyService loads its in-memory key map when LoginSvr starts.  During an
+# upgrade the container may already be running, so refresh it after provisioning
+# the dedicated Robot key.  Fresh installs have no container yet and are started
+# normally below.
+if docker inspect dc-saas-loginsvr >/dev/null 2>&1; then
+  log "Refreshing LoginSvr so the dedicated Robot runtime key is active."
+  compose_up -d --no-deps --force-recreate loginsvr
+  wait_for_port "${LOGINSVR_HTTP_PORT}" loginsvr 180
+fi
 
 log "Starting the SaaS application services and dc-trade-web."
 compose_up -d

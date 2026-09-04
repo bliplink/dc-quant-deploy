@@ -112,6 +112,12 @@ robot_runtime_columns="$(
 )"
 [[ "${robot_runtime_columns}" == "7" ]] || die "Robot runtime schema is incomplete: ${robot_runtime_columns}/7 columns."
 
+robot_runtime_identity_count="$(
+  docker exec -e MYSQL_PWD="${MYSQL_PASSWORD}" dc-saas-mysql mysql -u"${MYSQL_USERNAME}" -Nse \
+    "SELECT COUNT(*) FROM dc.dc_users_api WHERE location='${ROBOT_RUNTIME_LOCATION}' AND user_id='${ROBOT_RUNTIME_USER_ID}' AND api_key='${ROBOT_RUNTIME_API_KEY}' AND enable='1' AND secret_key IS NOT NULL;"
+)"
+[[ "${robot_runtime_identity_count}" == "1" ]] || die "Dedicated Robot runtime API identity is missing or disabled."
+
 clickhouse_location="$(
   docker exec dc-saas-clickhouse clickhouse-client --port "${CLICKHOUSE_NATIVE_PORT}" --user "${CLICKHOUSE_USERNAME}" --password "${CLICKHOUSE_PASSWORD}" --query "SELECT count() FROM system.columns WHERE database='dc' AND table='kline' AND name='location'"
 )"

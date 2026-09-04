@@ -302,6 +302,8 @@ services:
       SERVICE_NAME: ManagerSvr
       MAIN_CLASS: ManagerSvr
       JAVA_OPTS: ${MANAGERSVR_JAVA_OPTS:--server -Xms64m -Xmx256m -Xmn64m -Djava.security.auth.login.config=../../control/jaas.ini}
+      ROBOT_RUNTIME_LOCATION: ${ROBOT_RUNTIME_LOCATION:-PLATFORM}
+      ROBOT_RUNTIME_USER_ID: ${ROBOT_RUNTIME_USER_ID:-robotsvr}
     volumes:
       - ${DEPLOY_ROOT}/control:/srv/dc/control:ro
       - ${DEPLOY_ROOT}/data:/srv/dc/data
@@ -353,19 +355,17 @@ services:
       SERVICE_NAME: RobotSvr
       MAIN_CLASS: com.app.dc.robot.RobotSvr
       JAVA_OPTS: ${ROBOTSVR_JAVA_OPTS:--server -Xms32m -Xmx256m -Xmn64m -Djava.security.auth.login.config=../../control/jaas.ini}
-      MYSQL_URL: jdbc:mysql://127.0.0.1:${MYSQL_PORT:-33306}/dc?useUnicode=true&characterEncoding=utf8&useSSL=false&serverTimezone=Asia/Shanghai
-      MYSQL_USERNAME: ${MYSQL_USERNAME:-dc}
-      MYSQL_PASSWORD: ${MYSQL_PASSWORD}
       GATEWAY_HTTP_URL: http://127.0.0.1:${GW_HTTP_PORT:-33002}/api
-      LOGIN_HTTP_URL: http://127.0.0.1:${LOGINSVR_HTTP_PORT:-33990}/dc/user/getUserByApiKey
       GATEWAY_HOST: 127.0.0.1
       GATEWAY_TCP_PORT: ${GW_TCP_PORT:-33000}
       ROBOT_GATEWAY_USER: ${PLATFORM_ADMIN_USERNAME:-platformadmin}
       ROBOT_GATEWAY_PASSWORD: ${PLATFORM_ADMIN_PASSWORD}
       ROBOT_GATEWAY_CLIENT_TYPE: Manager
       ROBOT_GATEWAY_LOCATION: PLATFORM
-      ROBOT_HEDGE_ACCOUNTS_JSON: ${ROBOT_HEDGE_ACCOUNTS_JSON:-}
-      DC_HEDGE_CREDENTIAL_MASTER_KEY: ${DC_HEDGE_CREDENTIAL_MASTER_KEY}
+      ROBOT_RUNTIME_LOCATION: ${ROBOT_RUNTIME_LOCATION:-PLATFORM}
+      ROBOT_RUNTIME_USER_ID: ${ROBOT_RUNTIME_USER_ID:-robotsvr}
+      ROBOT_RUNTIME_API_KEY: ${ROBOT_RUNTIME_API_KEY}
+      ROBOT_RUNTIME_API_SECRET: ${ROBOT_RUNTIME_API_SECRET}
       ROBOT_CONFIG_POLL_MS: ${ROBOT_CONFIG_POLL_MS:-3000}
       ROBOT_LEASE_SECONDS: ${ROBOT_LEASE_SECONDS:-15}
       ROBOT_FAILURE_THRESHOLD: ${ROBOT_FAILURE_THRESHOLD:-3}
