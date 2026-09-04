@@ -19,11 +19,24 @@ die() {
 
 [[ -r "${ENV_FILE}" ]] || die "Cannot read ${ENV_FILE}"
 [[ -n "${E2E_PASSWORD:-}" ]] || die "E2E_PASSWORD is required"
+[[ "${CORE_LOCATION}" == *_E2E ]] ||
+  die "CORE_E2E_LOCATION must be an isolated *_E2E location"
 
 set -a
 # shellcheck disable=SC1090
 . "${ENV_FILE}"
 set +a
+
+wait_for_port() {
+  local port="$1" service="$2" start
+  start="$(date +%s)"
+  until ss -lnt | awk 'NR > 1 {print $4}' | grep -Eq "[:.]${port}$"; do
+    if (( $(date +%s) - start >= 120 )); then
+      die "${service} did not listen on ${port}"
+    fi
+    sleep 2
+  done
+}
 
 wait_for_gateway_route() {
   local server_name="$1" start request_file response
@@ -46,6 +59,21 @@ wait_for_gateway_route() {
     sleep 2
   done
 }
+
+log "Waiting for all core service ports before validating the deployed SaaS stack."
+while read -r port service; do
+  wait_for_port "${port}" "${service}"
+done <<PORTS
+${GW_TCP_PORT} gateway
+${LOGINSVR_GW_PORT} loginsvr
+${MDSVR_GW_PORT} mdsvr
+${APSSVR_GW_PORT} apssvr
+${ORDERSVR_GW_PORT} ordersvr
+${TRADESVR_GW_PORT} tradesvr
+${LIQSVR_GW_PORT} liqsvr
+${MANAGERSVR_GW_PORT} managersvr
+${ADMINSVR_GW_PORT} adminsvr
+PORTS
 
 log "Validating the deployed SaaS stack."
 "${DEPLOY_DIR}/validate-saas.sh" --env-file "${ENV_FILE}"

@@ -98,20 +98,32 @@ async function login(browser, username) {
   if (loginBody.location !== location) {
     throw new Error(`websocket login returned unexpected location ${loginBody.location}`);
   }
-  await page.waitForFunction(() => {
+  // A newly provisioned tenant has no market-derived candle until its first
+  // execution.  Validate the MDSvr WebSocket push after the deterministic
+  // match below instead of requiring synthetic/polled data at login time.
+  const realtimeKline = null;
+  if (publicMarketPollingCalls.length) {
+    throw new Error(`authenticated page used public market polling: ${JSON.stringify(publicMarketPollingCalls)}`);
+  }
+  return { context, page, pageErrors, realtimeKline, publicMarketPollingCalls };
+}
+
+async function waitForRealtimeKline(session) {
+  await session.page.waitForFunction(() => {
     const status = window.__dcRealtimeKlineStatus;
-    return status && status.updates >= 2 && Date.now() - status.receivedAt < 15000;
+    return status && status.updates >= 1 && Date.now() - status.receivedAt < 15000;
   }, null, {timeout: 45000});
-  const realtimeKline = await page.evaluate(() => window.__dcRealtimeKlineStatus);
+  const realtimeKline = await session.page.evaluate(() => window.__dcRealtimeKlineStatus);
   if (!realtimeKline.topic.endsWith(`.${location}`)
     || realtimeKline.symbol !== 'BTCUSDT'
     || realtimeKline.time > Date.now() + 5 * 60 * 1000) {
     throw new Error(`invalid authenticated MDSvr K-line push: ${JSON.stringify(realtimeKline)}`);
   }
-  if (publicMarketPollingCalls.length) {
-    throw new Error(`authenticated page used public market polling: ${JSON.stringify(publicMarketPollingCalls)}`);
+  if (session.publicMarketPollingCalls.length) {
+    throw new Error(`authenticated page used public market polling: ${JSON.stringify(session.publicMarketPollingCalls)}`);
   }
-  return { context, page, pageErrors, realtimeKline, publicMarketPollingCalls };
+  session.realtimeKline = realtimeKline;
+  return realtimeKline;
 }
 
 async function deposit(page, amount) {
@@ -327,6 +339,14 @@ async function waitForNoPosition(page) {
     await placeLimit(buyerSession.page, 'Buy / Long', '60000', '0.001');
     await (await openOrders(buyerSession.page)).first().waitFor({ timeout: 15000 });
     await placeLimit(sellerSession.page, 'Sell / Short', '60000', '0.001');
+
+    // The first tenant execution is the authoritative source for this clean
+    // location's candle.  Both authenticated clients must receive the MDSvr
+    // push directly over WebSocket; no public-market polling is permitted.
+    await Promise.all([
+      waitForRealtimeKline(buyerSession),
+      waitForRealtimeKline(sellerSession)
+    ]);
 
     const buyerTrade = await tradeHistoryText(buyerSession.page);
     const sellerTrade = await tradeHistoryText(sellerSession.page);
