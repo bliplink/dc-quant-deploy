@@ -109,6 +109,11 @@ START TRANSACTION;
 -- run-adl-e2e-host.sh intentionally leaves its reduced candidate positions in
 -- place as evidence; remove those named test fixtures before constructing this
 -- single-candidate final-liquidation scenario so repeated suites are isolated.
+DELETE FROM dc.dc_adl_execution_v2 WHERE location IN ('${LIQ_LOCATION}','${OTHER_LOCATION}')
+  AND (liquidated_user_id='${LIQ_USER}' OR candidate_user_id IN ('${ADL_USER}','${FOREIGN_USER}'));
+DELETE FROM dc.dc_bankruptcy_transfer WHERE location IN ('${LIQ_LOCATION}','${OTHER_LOCATION}')
+  AND user_id='${LIQ_USER}';
+DELETE FROM dc.dc_insurance_position WHERE location='${LIQ_LOCATION}' AND security_id='BTCUSDT';
 DELETE FROM dc.dc_users_posting WHERE location IN ('${LIQ_LOCATION}','${OTHER_LOCATION}')
   AND user_id IN ('${LIQ_USER}','${MAKER_USER}','${ADL_USER}','${FOREIGN_USER}',
                   'adl_liquidated','adl_high','adl_low','adl_foreign');
@@ -135,7 +140,7 @@ DELETE FROM dc.dc_insurance_fund WHERE location='${LIQ_LOCATION}' AND security_i
 INSERT INTO dc.dc_users_balance
   (user_id,balance,used_margin,freezed_margin,freezed_commission,update_time,close_by,location)
 VALUES
-  ('${LIQ_USER}',1,0.1,0,0,NOW(),'FINAL_LIQ_E2E','${LIQ_LOCATION}'),
+  ('${LIQ_USER}',2,0.2,0,0,NOW(),'FINAL_LIQ_E2E','${LIQ_LOCATION}'),
   ('${MAKER_USER}',100000,0,0,0,NOW(),'FINAL_LIQ_E2E','${LIQ_LOCATION}'),
   ('${ADL_USER}',10,0.7,0,0,NOW(),'FINAL_LIQ_E2E','${LIQ_LOCATION}'),
   ('${FOREIGN_USER}',10,0.7,0,0,NOW(),'FINAL_LIQ_E2E','${OTHER_LOCATION}');
@@ -157,14 +162,14 @@ INSERT INTO dc.dc_orders_position
    update_time,close_by,location)
 VALUES
   ('${LIQ_USER}','BTCUSDT','BTCUSDT',0,'Cross',100,
-   0.0001,100000,0.1,0,0,0,0,0,999999,0,NOW(),'FINAL_LIQ_E2E','${LIQ_LOCATION}'),
+   0.0002,100000,0.2,0,0,0,0,0,999999,0,NOW(),'FINAL_LIQ_E2E','${LIQ_LOCATION}'),
   ('${ADL_USER}','BTCUSDT','BTCUSDT',0,'Cross',100,
    0,0,0,0.001,${ADL_AVERAGE},0.7,0,0,0,0,NOW(),'FINAL_LIQ_E2E','${LIQ_LOCATION}'),
   ('${FOREIGN_USER}','BTCUSDT','BTCUSDT',0,'Cross',100,
    0,0,0,0.001,70000,0.7,0,0,0,0,NOW(),'FINAL_LIQ_E2E','${OTHER_LOCATION}');
 
 INSERT INTO dc.dc_insurance_fund(location,security_id,balance,update_time)
-VALUES('${LIQ_LOCATION}','BTCUSDT',1,NOW());
+VALUES('${LIQ_LOCATION}','BTCUSDT',9,NOW());
 COMMIT;
 SQL
 } | mysql_exec dc
@@ -180,7 +185,7 @@ maker_session="$(login_user "${MAKER_USER}")"
 
 maker_request="$(mktemp)"
 cat >"${maker_request}" <<JSON
-{"serverName":"OrderSvr","method":"placeOrder","content":{"OCType":"OPEN","OrderQty":"0.0001","OrdType":"Limit","ClOrdID":"FINAL-LIQ-MAKER-$(date +%s%N)","Terminal":"API","AlgoName":"cross","Side":"Buy","Price":"60000","UserID":"${MAKER_USER}","MarketIndicator":"4","TimeInForce":"GTC","SecurityID":"BTCUSDT","Location":"${LIQ_LOCATION}"}}
+{"serverName":"OrderSvr","method":"placeOrder","content":{"OCType":"OPEN","OrderQty":"0.0002","OrdType":"Limit","ClOrdID":"FINAL-LIQ-MAKER-$(date +%s%N)","Terminal":"API","AlgoName":"cross","Side":"Buy","Price":"60000","UserID":"${MAKER_USER}","MarketIndicator":"4","TimeInForce":"GTC","SecurityID":"BTCUSDT","Location":"${LIQ_LOCATION}"}}
 JSON
 maker_response="$(curl -fsS --max-time 30 -H 'Content-Type: application/json' -H "sessionId: ${maker_session}" \
   --data-binary "@${maker_request}" "http://127.0.0.1:${WEB_LISTEN_PORT}/httpapi/")" ||
@@ -193,7 +198,7 @@ for _ in $(seq 1 30); do
   maker_open="$({
     cat <<SQL
 SELECT COUNT(*) FROM dc.dc_orders WHERE location='${LIQ_LOCATION}' AND user_id='${MAKER_USER}'
-  AND security_id='BTCUSDT' AND ord_status='New' AND leaves_qty=0.0001;
+  AND security_id='BTCUSDT' AND ord_status='New' AND leaves_qty=0.0002;
 SQL
   } | mysql_exec dc)"
   [[ "${maker_open}" == "1" ]] && break
@@ -201,7 +206,7 @@ SQL
 done
 [[ "${maker_open}" == "1" ]] || die "Liquidity order did not rest in the order book"
 
-log "Starting LiqSvr to trigger a real full liquidation through OrderSvr."
+log "Starting LiqSvr to trigger bankruptcy-bounded final liquidation through OrderSvr."
 docker start dc-saas-liqsvr >/dev/null
 liq_test_stopped="false"
 
@@ -211,7 +216,7 @@ for _ in $(seq 1 90); do
     cat <<SQL
 SELECT order_id FROM dc.dc_orders WHERE location='${LIQ_LOCATION}' AND user_id='${LIQ_USER}'
   AND security_id='BTCUSDT' AND UPPER(oc_type)='CLOSE' AND reduce_only=1
-  AND ord_type='Market' AND timeinforce='IOC' AND close_by='liq' AND ord_status='Filled'
+  AND ord_type='Limit' AND timeinforce='IOC' AND close_by='liq_v2' AND ord_status='Cancelled'
 ORDER BY transact_time DESC LIMIT 1;
 SQL
   } | mysql_exec dc)"
@@ -221,24 +226,38 @@ done
 if [[ -z "${liquidation_order_id}" ]]; then
   docker logs --tail 200 dc-saas-liqsvr >&2 || true
   docker logs --tail 200 dc-saas-tradesvr >&2 || true
-  die "LiqSvr did not create a filled final reduce-only Market/IOC liquidation order"
+  die "LiqSvr did not create a bankruptcy-bounded final reduce-only Limit/IOC order"
 fi
 
-log "Verifying the atomic insurance and step-aligned ADL result for ${liquidation_order_id}."
+completed="0"
+for _ in $(seq 1 60); do
+  completed="$(mysql_exec -e "SELECT COUNT(*) FROM dc.dc_bankruptcy_transfer
+    WHERE location='${LIQ_LOCATION}' AND liquidation_order_id='${liquidation_order_id}'
+      AND liquidation_side='Sell' AND status='ADL_DONE';" dc)"
+  [[ "${completed}" == "1" ]] && break
+  sleep 2
+done
+[[ "${completed}" == "1" ]] || {
+  docker logs --tail 200 dc-saas-liqsvr >&2 || true
+  docker logs --tail 200 dc-saas-tradesvr >&2 || true
+  die "Bankruptcy takeover and position ADL did not complete"
+}
+
+log "Verifying atomic insurance takeover, audit totals and step-aligned ADL for ${liquidation_order_id}."
 verification="$({
   cat <<SQL
-SELECT IF(d.status='COMPLETED' AND ABS(d.deficit_amount-3.0036)<0.00000001
-          AND ABS(d.covered_amount-1)<0.00000001 AND ABS(d.uncovered_amount-2.0036)<0.00000001
-          AND ABS(d.adl_covered_amount-2.0036)<0.00000001 AND ABS(d.remaining_amount)<0.00000001
-          AND e.status='COMPLETED' AND e.candidate_count=1,1,0)
-FROM dc.dc_liquidation_deficit d JOIN dc.dc_adl_event e
-  ON e.location=d.location AND e.liquidation_order_id=d.liquidation_order_id
-WHERE d.location='${LIQ_LOCATION}' AND d.liquidation_order_id='${liquidation_order_id}';
-SELECT IF(rank_no=1 AND candidate_user_id='${ADL_USER}' AND position_side='SHORT'
-          AND ABS(reduced_quantity-0.0001)<0.00000001
-          AND ABS(realized_pnl-((${ADL_AVERAGE}-reference_price)*0.0001))<0.00000001
-          AND ABS(allocated_amount-2.0036)<0.00000001,1,0)
-FROM dc.dc_adl_ledger
+SELECT IF(t.status='ADL_DONE' AND ABS(t.requested_quantity-0.0002)<0.00000001
+          AND ABS(t.insurance_quantity-0.0001)<0.00000001
+          AND ABS(t.adl_quantity-0.0001)<0.00000001
+          AND ABS(t.insurance_notional-(t.bankruptcy_price*0.0001))<0.00000001
+          AND ABS(t.settlement_pnl-((t.bankruptcy_price-100000)*0.0002))<0.00000001,1,0)
+FROM dc.dc_bankruptcy_transfer t
+WHERE t.location='${LIQ_LOCATION}' AND t.liquidation_order_id='${liquidation_order_id}'
+  AND t.liquidation_side='Sell';
+SELECT IF(rank_no=1 AND candidate_user_id='${ADL_USER}' AND candidate_position_side='SHORT'
+          AND ABS(quantity-0.0001)<0.00000001
+          AND ABS(realized_pnl-((${ADL_AVERAGE}-execution_price)*0.0001))<0.00000001,1,0)
+FROM dc.dc_adl_execution_v2
 WHERE location='${LIQ_LOCATION}' AND liquidation_order_id='${liquidation_order_id}';
 SELECT IF(ABS(p.long_position)<0.00000001 AND ABS(p.long_used_margin)<0.00000001
           AND ABS(b.balance)<0.00000001 AND ABS(b.used_margin)<0.00000001,1,0)
@@ -246,27 +265,34 @@ FROM dc.dc_orders_position p JOIN dc.dc_users_balance b
   ON b.location=p.location AND b.user_id=p.user_id
 WHERE p.location='${LIQ_LOCATION}' AND p.user_id='${LIQ_USER}' AND p.security_id='BTCUSDT';
 SELECT IF(ABS(p.short_position-0.0009)<0.00000001 AND ABS(p.short_used_margin-0.63)<0.00000001
-          AND ABS(b.balance-(10+l.realized_pnl-l.allocated_amount))<0.00000001
+          AND ABS(b.balance-(10+l.realized_pnl))<0.00000001
           AND ABS(b.used_margin-0.63)<0.00000001,1,0)
 FROM dc.dc_orders_position p JOIN dc.dc_users_balance b
   ON b.location=p.location AND b.user_id=p.user_id
-JOIN dc.dc_adl_ledger l
+JOIN dc.dc_adl_execution_v2 l
   ON l.location=p.location AND l.candidate_user_id=p.user_id
   AND l.liquidation_order_id='${liquidation_order_id}'
 WHERE p.location='${LIQ_LOCATION}' AND p.user_id='${ADL_USER}' AND p.security_id='BTCUSDT';
-SELECT IF(ABS(balance)<0.00000001,1,0) FROM dc.dc_insurance_fund
-WHERE location='${LIQ_LOCATION}' AND security_id='BTCUSDT';
+SELECT IF(ABS(f.balance)<0.00000001 AND ABS(p.quantity-0.0001)<0.00000001
+          AND ABS(p.average_price-t.bankruptcy_price)<0.00000001
+          AND ABS(p.reserved_notional-t.insurance_notional)<0.00000001,1,0)
+FROM dc.dc_insurance_fund f JOIN dc.dc_insurance_position p
+  ON p.location=f.location AND p.security_id=f.security_id AND p.position_side='LONG'
+JOIN dc.dc_bankruptcy_transfer t
+  ON t.location=f.location AND t.security_id=f.security_id
+  AND t.liquidation_order_id='${liquidation_order_id}'
+WHERE f.location='${LIQ_LOCATION}' AND f.security_id='BTCUSDT';
 SELECT IF(ABS(p.short_position-0.001)<0.00000001 AND ABS(p.short_used_margin-0.7)<0.00000001
           AND ABS(b.balance-10)<0.00000001 AND ABS(b.used_margin-0.7)<0.00000001,1,0)
 FROM dc.dc_orders_position p JOIN dc.dc_users_balance b
   ON b.location=p.location AND b.user_id=p.user_id
 WHERE p.location='${OTHER_LOCATION}' AND p.user_id='${FOREIGN_USER}' AND p.security_id='BTCUSDT';
-SELECT IF(COUNT(*)=1,1,0) FROM dc.dc_orders_execorders
+SELECT IF(COUNT(*)=0,1,0) FROM dc.dc_orders_execorders
 WHERE location='${LIQ_LOCATION}' AND user_id='${LIQ_USER}' AND order_id='${liquidation_order_id}'
-  AND UPPER(oc_type)='CLOSE' AND last_qty=0.0001;
-SELECT IF(COUNT(*)=2,1,0) FROM dc.dc_users_posting
-WHERE location='${LIQ_LOCATION}' AND user_id='${ADL_USER}' AND source_id='${liquidation_order_id}'
-  AND source IN ('ADL_REALIZED','ADL_ALLOCATION') AND close_by='ADL';
+  AND UPPER(oc_type)='CLOSE';
+SELECT IF(COUNT(*)=1,1,0) FROM dc.dc_users_posting
+WHERE location='${LIQ_LOCATION}' AND user_id='${LIQ_USER}' AND source_id='${liquidation_order_id}'
+  AND source='BankruptcyTransfer';
 SQL
 } | mysql_exec dc)"
 mapfile -t checks <<<"${verification}"
@@ -276,4 +302,4 @@ for index in "${!checks[@]}"; do
     die "Final-liquidation verification check $((index + 1)) failed for ${liquidation_order_id}"
 done
 
-log "PASS: LiqSvr final liquidation naturally reached matching, insurance and transactional step-aligned ADL."
+log "PASS: final IOC/Limit respected bankruptcy price and residual risk completed transactional insurance/ADL v2."
