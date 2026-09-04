@@ -82,3 +82,9 @@ CREATE TABLE IF NOT EXISTS dc_adl_execution_v2 (
     KEY idx_adl_candidate (location, candidate_user_id, security_id),
     KEY idx_adl_market_time (location, security_id, create_time)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+-- ADL execution identifiers are durable 128-character business references and
+-- are also used as posting source IDs.  The legacy 45-character column rejects
+-- an otherwise atomic ADL transaction.
+ALTER TABLE dc_users_posting
+    MODIFY COLUMN source_id VARCHAR(128) DEFAULT NULL COMMENT '来源id';

@@ -618,7 +618,7 @@ CREATE TABLE `dc_users_posting` (
   `type` int(11) NOT NULL COMMENT '类型,1：充值，2：提现，3：手续费，4：资金费，5：盈亏，6：赠金发放，7：赠金销毁，8：返佣',
   `amount` varchar(45) NOT NULL COMMENT '金额',
   `source` varchar(45) DEFAULT NULL COMMENT '来源',
-  `source_id` varchar(45) DEFAULT NULL COMMENT '来源id',
+  `source_id` varchar(128) DEFAULT NULL COMMENT '来源id',
   `remark` varchar(45) DEFAULT NULL COMMENT '备注信息',
   `create_time` varchar(35) DEFAULT NULL COMMENT '创建时间',
   `update_time` varchar(30) DEFAULT NULL COMMENT '更新时间',
