@@ -277,7 +277,7 @@ run_loop() {
   declare -A tokens token_login_epoch
   local user response code message cycle=0 rejected=0 accepted=0 gap_samples=0 auth_refreshes=0 ever_running=0
   local -a action_files=() action_users=()
-  local bid_levels ask_levels best_bid best_ask robot_status web_status now clid price token side tenant_tick header archive current_epoch robot_token robot_token_login_epoch robot_orders_response robot_query_code
+  local bid_levels ask_levels best_bid best_ask robot_status web_status now clid price token side tenant_tick header archive current_epoch robot_token robot_token_login_epoch robot_orders_response robot_query_code refreshed_token
   for user in "${TRADERS[@]}"; do
     tokens["${user}"]="$(login_user "${user}")"
     token_login_epoch["${user}"]="$(date +%s)"
@@ -300,21 +300,33 @@ run_loop() {
   while true; do
     current_epoch="$(date +%s)"
     if (( current_epoch - robot_token_login_epoch >= AUTH_REFRESH_SECONDS )); then
-      robot_token="$(login_user "${ROBOT_USER}")"
-      robot_token_login_epoch="${current_epoch}"
-      auth_refreshes=$((auth_refreshes + 1))
-      log "SESSION_REFRESH proactive user=${ROBOT_USER} count=${auth_refreshes}"
+      if refreshed_token="$(login_user "${ROBOT_USER}" 2>/dev/null)"; then
+        robot_token="${refreshed_token}"
+        robot_token_login_epoch="${current_epoch}"
+        auth_refreshes=$((auth_refreshes + 1))
+        log "SESSION_REFRESH proactive user=${ROBOT_USER} count=${auth_refreshes}"
+      else
+        log "SESSION_REFRESH_RETRY user=${ROBOT_USER} reason=gateway_unavailable"
+        sleep 1
+        continue
+      fi
     fi
     robot_orders_response="$(api_call "{\"serverName\":\"OrderSvr\",\"method\":\"queryOpenOrder\",\"content\":{\"userid\":\"${ROBOT_USER}\",\"securityid\":\"BTCUSDT\",\"Location\":\"${LOCATION}\"}}" "${robot_token}" 2>/dev/null || true)"
     robot_query_code="$(printf '%s' "${robot_orders_response}" | python3 -c 'import json,sys
 try: print(json.load(sys.stdin).get("code",-1))
 except Exception: print(-1)')"
     if [[ "${robot_query_code}" != "0" ]]; then
-      robot_token="$(login_user "${ROBOT_USER}")"
-      robot_token_login_epoch="$(date +%s)"
-      auth_refreshes=$((auth_refreshes + 1))
-      log "SESSION_REFRESH reactive user=${ROBOT_USER} code=${robot_query_code} count=${auth_refreshes}"
-      robot_orders_response="$(api_call "{\"serverName\":\"OrderSvr\",\"method\":\"queryOpenOrder\",\"content\":{\"userid\":\"${ROBOT_USER}\",\"securityid\":\"BTCUSDT\",\"Location\":\"${LOCATION}\"}}" "${robot_token}" 2>/dev/null || true)"
+      if refreshed_token="$(login_user "${ROBOT_USER}" 2>/dev/null)"; then
+        robot_token="${refreshed_token}"
+        robot_token_login_epoch="$(date +%s)"
+        auth_refreshes=$((auth_refreshes + 1))
+        log "SESSION_REFRESH reactive user=${ROBOT_USER} code=${robot_query_code} count=${auth_refreshes}"
+        robot_orders_response="$(api_call "{\"serverName\":\"OrderSvr\",\"method\":\"queryOpenOrder\",\"content\":{\"userid\":\"${ROBOT_USER}\",\"securityid\":\"BTCUSDT\",\"Location\":\"${LOCATION}\"}}" "${robot_token}" 2>/dev/null || true)"
+      else
+        log "SESSION_REFRESH_RETRY user=${ROBOT_USER} code=${robot_query_code} reason=gateway_unavailable"
+        sleep 1
+        continue
+      fi
     fi
     read -r bid_levels ask_levels best_bid best_ask <<<"$(printf '%s' "${robot_orders_response}" | python3 -c 'import json,sys
 try:
@@ -351,10 +363,15 @@ except Exception:
         user="${TRADERS[$(((cycle + slot) % ${#TRADERS[@]}))]}"
         current_epoch="$(date +%s)"
         if (( current_epoch - ${token_login_epoch[${user}]} >= AUTH_REFRESH_SECONDS )); then
-          tokens["${user}"]="$(login_user "${user}")"
-          token_login_epoch["${user}"]="$(date +%s)"
-          auth_refreshes=$((auth_refreshes + 1))
-          log "SESSION_REFRESH proactive user=${user} count=${auth_refreshes}"
+          if refreshed_token="$(login_user "${user}" 2>/dev/null)"; then
+            tokens["${user}"]="${refreshed_token}"
+            token_login_epoch["${user}"]="$(date +%s)"
+            auth_refreshes=$((auth_refreshes + 1))
+            log "SESSION_REFRESH proactive user=${user} count=${auth_refreshes}"
+          else
+            log "SESSION_REFRESH_RETRY user=${user} reason=gateway_unavailable"
+            continue
+          fi
         fi
         token="${tokens[${user}]}"
         clid="SOAK-$(date +%s)-${cycle}-${slot}"
@@ -395,10 +412,14 @@ PY
         if [[ "${code}" == "0" ]]; then
           accepted=$((accepted + 1))
         elif [[ "${code}" == "1004" ]]; then
-          tokens["${user}"]="$(login_user "${user}")"
-          token_login_epoch["${user}"]="$(date +%s)"
-          auth_refreshes=$((auth_refreshes + 1))
-          log "SESSION_REFRESH reactive user=${user} count=${auth_refreshes}"
+          if refreshed_token="$(login_user "${user}" 2>/dev/null)"; then
+            tokens["${user}"]="${refreshed_token}"
+            token_login_epoch["${user}"]="$(date +%s)"
+            auth_refreshes=$((auth_refreshes + 1))
+            log "SESSION_REFRESH reactive user=${user} count=${auth_refreshes}"
+          else
+            log "SESSION_REFRESH_RETRY user=${user} reason=gateway_unavailable"
+          fi
         else
           rejected=$((rejected + 1))
           log "ORDER_REJECT user=${user} code=${code:-missing} message=${message:-missing}"
