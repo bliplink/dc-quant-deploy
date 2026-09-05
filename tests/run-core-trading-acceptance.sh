@@ -150,6 +150,8 @@ if [[ "${RUN_CORE_STRESS:-false}" == "true" ]]; then
   log "Running the opt-in full-stack concurrent load and restart-recovery gate."
   ENV_FILE="${ENV_FILE}" \
   LOAD_LOCATION="${CORE_LOCATION}" \
+  LOAD_MAKER="${CORE_BUYER}_stressmaker" \
+  LOAD_TAKER="${CORE_BUYER}_stresstaker" \
     "${SCRIPT_DIR}/run-core-trading-stress-host.sh"
 fi
 
