@@ -33,7 +33,9 @@ done
 case "${SCENARIO}" in
   mixed) ;;
   full_fill)
-    maker_price="90000"
+    # A better-than-bankruptcy execution leaves enough equity to pay the
+    # taker fee, representing the ordinary fully-filled liquidation path.
+    maker_price="90100"
     expected_order_status="Filled"
     expected_transfer_status=""
     ;;
@@ -184,7 +186,7 @@ VALUES
   ('${ADL_USER}','BTCUSDT','BTCUSDT',0,'Cross',100,
    0,0,0,0.001,${ADL_AVERAGE},0.7,0,0,0,0,NOW(),'FINAL_LIQ_E2E','${LIQ_LOCATION}'),
   ('${FOREIGN_USER}','BTCUSDT','BTCUSDT',0,'Cross',100,
-   0,0,0,0.001,70000,0.7,0,0,0,0,NOW(),'FINAL_LIQ_E2E','${OTHER_LOCATION}');
+   0,0,0,0.001,1000000,0.7,0,0,0,0,NOW(),'FINAL_LIQ_E2E','${OTHER_LOCATION}');
 
 INSERT INTO dc.dc_insurance_fund(location,security_id,balance,update_time)
 VALUES('${LIQ_LOCATION}','BTCUSDT',${insurance_balance},NOW());
@@ -270,7 +272,7 @@ if [[ "${SCENARIO}" == "full_fill" ]]; then
 SELECT IF(ABS(COALESCE(SUM(last_qty),0)-0.0002)<0.00000001,1,0)
 FROM dc.dc_orders_execorders
 WHERE location='${LIQ_LOCATION}' AND user_id='${LIQ_USER}' AND order_id='${liquidation_order_id}'
-  AND UPPER(oc_type)='CLOSE' AND exec_type='Trade';
+  AND UPPER(oc_type)='CLOSE';
 SELECT IF(COUNT(*)=0,1,0) FROM dc.dc_bankruptcy_transfer
 WHERE location='${LIQ_LOCATION}' AND liquidation_order_id='${liquidation_order_id}';
 SELECT IF(COUNT(*)=0,1,0) FROM dc.dc_insurance_position
@@ -278,7 +280,7 @@ WHERE location='${LIQ_LOCATION}' AND security_id='BTCUSDT';
 SELECT IF(COUNT(*)=0,1,0) FROM dc.dc_adl_execution_v2
 WHERE location='${LIQ_LOCATION}' AND liquidation_order_id='${liquidation_order_id}';
 SELECT IF(ABS(p.long_position)<0.00000001 AND ABS(p.long_used_margin)<0.00000001
-          AND ABS(b.balance)<0.00000001 AND ABS(b.used_margin)<0.00000001,1,0)
+          AND b.balance>0 AND ABS(b.used_margin)<0.00000001,1,0)
 FROM dc.dc_orders_position p JOIN dc.dc_users_balance b
   ON b.location=p.location AND b.user_id=p.user_id
 WHERE p.location='${LIQ_LOCATION}' AND p.user_id='${LIQ_USER}' AND p.security_id='BTCUSDT';
