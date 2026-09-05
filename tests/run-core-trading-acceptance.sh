@@ -154,7 +154,21 @@ if [[ "${RUN_CORE_STRESS:-false}" == "true" ]]; then
 fi
 
 log "Capturing effective JVM heaps and container memory limits."
-while read -r container expected_xmx expected_memory; do
+memory_limit_bytes() {
+  local value="$1"
+  if [[ "${value}" =~ ^([0-9]+)[mM]$ ]]; then
+    echo $((10#${BASH_REMATCH[1]} * 1024 * 1024))
+  elif [[ "${value}" =~ ^([0-9]+)[gG]$ ]]; then
+    echo $((10#${BASH_REMATCH[1]} * 1024 * 1024 * 1024))
+  elif [[ "${value}" =~ ^[0-9]+$ ]]; then
+    echo "${value}"
+  else
+    die "Unsupported memory-limit format: ${value}"
+  fi
+}
+
+while read -r container expected_xmx configured_memory; do
+  expected_memory="$(memory_limit_bytes "${configured_memory}")"
   java_command="$(docker exec "${container}" sh -c "ps -ef | grep '[j]ava' | head -n 1")"
   memory_bytes="$(docker inspect --format '{{.HostConfig.Memory}}' "${container}")"
   [[ -n "${java_command}" && "${memory_bytes}" =~ ^[1-9][0-9]+$ ]] ||
@@ -165,16 +179,17 @@ while read -r container expected_xmx expected_memory; do
     die "Memory limit for ${container} is ${memory_bytes}, expected ${expected_memory}"
   printf '[core-acceptance] MEMORY %s limit_bytes=%s effective_xmx=%s\n' \
     "${container}" "${memory_bytes}" "${expected_xmx}"
-done <<'MEMORY_EXPECTATIONS'
-dc-saas-gateway 256m 402653184
-dc-saas-loginsvr 256m 402653184
-dc-saas-mdsvr 448m 671088640
-dc-saas-apssvr 448m 671088640
-dc-saas-ordersvr 448m 671088640
-dc-saas-tradesvr 384m 939524096
-dc-saas-liqsvr 256m 402653184
-dc-saas-managersvr 256m 402653184
-dc-saas-adminsvr 256m 402653184
+done <<MEMORY_EXPECTATIONS
+dc-saas-gateway 256m ${GW_MEMORY_LIMIT:-512m}
+dc-saas-loginsvr 256m ${LOGINSVR_MEMORY_LIMIT:-384m}
+dc-saas-mdsvr 448m ${MDSVR_MEMORY_LIMIT:-640m}
+dc-saas-apssvr 448m ${APSSVR_MEMORY_LIMIT:-640m}
+dc-saas-ordersvr 448m ${ORDERSVR_MEMORY_LIMIT:-640m}
+dc-saas-tradesvr 384m ${TRADESVR_MEMORY_LIMIT:-896m}
+dc-saas-liqsvr 256m ${LIQSVR_MEMORY_LIMIT:-384m}
+dc-saas-managersvr 256m ${MANAGERSVR_MEMORY_LIMIT:-384m}
+dc-saas-adminsvr 256m ${ADMINSVR_MEMORY_LIMIT:-384m}
+dc-saas-robotsvr 256m ${ROBOTSVR_MEMORY_LIMIT:-384m}
 MEMORY_EXPECTATIONS
 
 log "PASS: the complete single-location core trading acceptance flow succeeded."
