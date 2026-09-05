@@ -30,6 +30,7 @@ async function tenantAdminLogin(page, username, password, location) {
   await inputs.nth(2).fill(password);
   await page.locator('.tenant-card .ant-btn-primary').click();
   await page.waitForURL(`**/#/tenant-admin?location=${encodeURIComponent(location)}`, {timeout: 60000});
+  await page.getByRole('heading', {name: 'Tenant Administration'}).waitFor({timeout: 60000});
   const loginData = await page.evaluate(() => JSON.parse(sessionStorage.getItem('loginData') || '{}'));
   if (loginData.location !== location || loginData.client_type !== 'TenantAdmin') {
     throw new Error(`tenant administration session mismatch: ${JSON.stringify(loginData)}`);
