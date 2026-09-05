@@ -84,6 +84,10 @@ ENV_FILE="${ENV_FILE}" "${DEPLOY_DIR}/smoke-test-location.sh"
 log "Running strict order-rule validation in an isolated acceptance location."
 ENV_FILE="${ENV_FILE}" \
 RULE_E2E_LOCATION="${CORE_LOCATION}" \
+RULE_E2E_MAKER_ONE="${CORE_BUYER}_rulemaker1" \
+RULE_E2E_MAKER_TWO="${CORE_BUYER}_rulemaker2" \
+RULE_E2E_TAKER="${CORE_BUYER}_ruletaker" \
+RULE_E2E_SELF_USER="${CORE_BUYER}_ruleself" \
   "${SCRIPT_DIR}/run-trading-rules-e2e-host.sh"
 
 log "Running browser login, deposit, order, cancel, match, market close, history and recent-trade flow in ${CORE_LOCATION}."
@@ -112,12 +116,19 @@ log "Running LiqSvr partial-liquidation flow in the same ${CORE_LOCATION} locati
 ENV_FILE="${ENV_FILE}" \
 LIQ_E2E_LOCATION="${CORE_LOCATION}" \
 LIQ_E2E_OTHER_LOCATION="${CORE_LOCATION}_FOREIGN" \
+LIQ_E2E_USER="${CORE_BUYER}_liq" \
+LIQ_E2E_MAKER="${CORE_BUYER}_liqmaker" \
+LIQ_E2E_FOREIGN_USER="${CORE_BUYER}_liqforeign" \
   "${SCRIPT_DIR}/run-liquidation-e2e-host.sh"
 
 log "Running natural final-liquidation, insurance and step-aligned ADL flow in ${CORE_LOCATION}."
 ENV_FILE="${ENV_FILE}" \
 FINAL_LIQ_E2E_LOCATION="${CORE_LOCATION}" \
 FINAL_LIQ_E2E_OTHER_LOCATION="${CORE_LOCATION}_FOREIGN" \
+FINAL_LIQ_E2E_USER="${CORE_BUYER}_final" \
+FINAL_LIQ_E2E_MAKER="${CORE_BUYER}_finalmaker" \
+FINAL_LIQ_E2E_ADL_USER="${CORE_BUYER}_finaladl" \
+FINAL_LIQ_E2E_FOREIGN_USER="${CORE_BUYER}_finalforeign" \
   "${SCRIPT_DIR}/run-final-liquidation-e2e-host.sh"
 
 log "Running deterministic multi-candidate ADL ranking flow in the same ${CORE_LOCATION} location."
