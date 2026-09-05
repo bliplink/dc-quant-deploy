@@ -166,7 +166,7 @@ INSERT INTO dc.dc_tenant_robot
    create_by,update_by,create_time,update_time)
 VALUES
   ('${LOCATION}','${ROBOT_ID}','Continuous Binance 20-Level Market','BTCUSDT','${ROBOT_USER}','${robot_api}',
-   'APSSVR_BINANCE_DEPTH',${robot_enabled},20,20,2,1,0.001,10,1000,3000,500,5,0,
+   'APSSVR_BINANCE_TICKER',${robot_enabled},20,20,2,1,0.001,10,1000,3000,500,5,0,
    JSON_OBJECT('depth_quantity_mode','NOTIONAL_ZONES','depth_margin_budget',100000,'depth_leverage',2,
      'depth_zone_levels',JSON_ARRAY(6,6,8),'depth_zone_weights',JSON_ARRAY(3,3,4),
      'sweep_user_orders_enabled',true,'sweep_max_loss_bps',5,'sweep_max_qty',0.001,
