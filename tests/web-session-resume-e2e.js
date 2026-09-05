@@ -139,8 +139,9 @@ function expectRejected(label, result) {
     const token3 = await waitForRotatedToken(page, token2);
     expectRejected('disconnected token replay', await loginWithToken(page, token2));
     await page.locator('.logoutButton').click();
-    await page.waitForURL(`**/#/login?location=${encodeURIComponent(location)}`, {timeout: 30000});
+    await page.waitForURL(`**/#/trade?location=${encodeURIComponent(location)}`, {timeout: 30000});
     await page.waitForFunction(() => !sessionStorage.getItem('ff-dex-token'));
+    await page.locator('.publicActions').waitFor({state: 'visible', timeout: 30000});
     expectRejected('logged-out token reuse', await userInfo(page, token3));
 
     await page.screenshot({path: path.join(artifactDir, 'websocket-session-logout.png'), fullPage: true});
