@@ -8,7 +8,7 @@ STATE_DIR="${ROBOT_SOAK_STATE_DIR:-/data/dc-saas-runtime/robot-soak}"
 LOCATION="${ROBOT_SOAK_LOCATION:-WEB_E2E}"
 ROBOT_USER="${ROBOT_SOAK_ROBOT_USER:-robotsoakmaker}"
 ROBOT_ID="${ROBOT_SOAK_ROBOT_ID:-continuous-depth10}"
-VIEWER="${ROBOT_SOAK_VIEWER:-${ROBOT_USER}}"
+VIEWER="${ROBOT_SOAK_VIEWER:-robotsoakviewer}"
 TRADERS=(robotsoak01 robotsoak02 robotsoak03 robotsoak04)
 PID_FILE="${STATE_DIR}/load.pid"
 LOCK_FILE="${STATE_DIR}/load.lock"
@@ -34,6 +34,7 @@ command -v flock >/dev/null || die "flock is required"
 safe_identifier "${LOCATION}" || die "Unsafe location"
 safe_identifier "${ROBOT_USER}" || die "Unsafe robot user"
 safe_identifier "${ROBOT_ID}" || die "Unsafe robot id"
+safe_identifier "${VIEWER}" || die "Unsafe viewer user"
 for user in "${TRADERS[@]}"; do safe_identifier "${user}" || die "Unsafe trader user"; done
 [[ "${MONITOR_STALE_SECONDS}" =~ ^[1-9][0-9]*$ ]] || die "ROBOT_SOAK_MONITOR_STALE_SECONDS must be positive"
 [[ "${AUTH_REFRESH_SECONDS}" =~ ^[1-9][0-9]*$ ]] || die "ROBOT_SOAK_AUTH_REFRESH_SECONDS must be positive"
@@ -94,7 +95,7 @@ provision() {
   robot_enabled=1
   (( initial_load == 1 )) && robot_enabled=0
   password_hash="$(printf '%s' "${ROBOT_SOAK_PASSWORD}" | sha256sum | awk '{print $1}')"
-  collision="$(mysql_exec -e "SELECT COUNT(*) FROM dc.dc_users WHERE user_id IN ('${ROBOT_USER}','robotsoak01','robotsoak02','robotsoak03','robotsoak04') AND COALESCE(location,'')<>'${LOCATION}';" dc)"
+  collision="$(mysql_exec -e "SELECT COUNT(*) FROM dc.dc_users WHERE user_id IN ('${ROBOT_USER}','${VIEWER}','robotsoak01','robotsoak02','robotsoak03','robotsoak04') AND COALESCE(location,'')<>'${LOCATION}';" dc)"
   [[ "${collision}" == "0" ]] || die "A dedicated Robot soak identity belongs to another location"
   {
     cat <<SQL
@@ -103,6 +104,7 @@ INSERT INTO dc.dc_users
   (user_id,user_name,name,password,user_type,enable,create_time,update_time,enable_trade,enable_cash_in,enable_cash_out,close_by,location)
 VALUES
   ('${ROBOT_USER}','${ROBOT_USER}','Continuous Robot Maker','${password_hash}','1','1',NOW(),NOW(),'1','1','1','robot-soak','${LOCATION}'),
+  ('${VIEWER}','${VIEWER}','Robot Soak Web Viewer','${password_hash}','1','1',NOW(),NOW(),'0','0','0','robot-soak','${LOCATION}'),
   ('robotsoak01','robotsoak01','Robot Soak Trader 01','${password_hash}','1','1',NOW(),NOW(),'1','1','1','robot-soak','${LOCATION}'),
   ('robotsoak02','robotsoak02','Robot Soak Trader 02','${password_hash}','1','1',NOW(),NOW(),'1','1','1','robot-soak','${LOCATION}'),
   ('robotsoak03','robotsoak03','Robot Soak Trader 03','${password_hash}','1','1',NOW(),NOW(),'1','1','1','robot-soak','${LOCATION}'),
@@ -112,6 +114,7 @@ INSERT IGNORE INTO dc.dc_users_balance
   (user_id,balance,used_margin,freezed_margin,freezed_commission,update_time,close_by,location)
 VALUES
   ('${ROBOT_USER}',1000000,0,0,0,NOW(),'robot-soak','${LOCATION}'),
+  ('${VIEWER}',0,0,0,0,NOW(),'robot-soak','${LOCATION}'),
   ('robotsoak01',1000000,0,0,0,NOW(),'robot-soak','${LOCATION}'),
   ('robotsoak02',1000000,0,0,0,NOW(),'robot-soak','${LOCATION}'),
   ('robotsoak03',1000000,0,0,0,NOW(),'robot-soak','${LOCATION}'),
@@ -120,6 +123,7 @@ INSERT INTO dc.dc_users_symbol_config
   (user_id,security_id,symbol,leverage,position_type,update_time,close_by,location,market_indicator)
 VALUES
   ('${ROBOT_USER}','BTCUSDT','BTCUSDT',2,'Cross',NOW(),'robot-soak','${LOCATION}','4'),
+  ('${VIEWER}','BTCUSDT','BTCUSDT',2,'Cross',NOW(),'robot-soak','${LOCATION}','4'),
   ('robotsoak01','BTCUSDT','BTCUSDT',2,'Cross',NOW(),'robot-soak','${LOCATION}','4'),
   ('robotsoak02','BTCUSDT','BTCUSDT',2,'Cross',NOW(),'robot-soak','${LOCATION}','4'),
   ('robotsoak03','BTCUSDT','BTCUSDT',2,'Cross',NOW(),'robot-soak','${LOCATION}','4'),
