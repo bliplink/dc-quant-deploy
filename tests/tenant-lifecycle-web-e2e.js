@@ -55,7 +55,13 @@ async function tenantAdminLogin(page, username, password, location) {
     await page.locator('.tenant-language button').nth(1).click();
     await page.getByRole('heading', {name: 'Create Trading Account'}).waitFor({timeout: 15000});
     const registerInputs = page.locator('.tenant-card input');
-    if (await registerInputs.nth(0).inputValue() !== locationA) throw new Error('dedicated URL did not bind registration location');
+    if (await registerInputs.count() !== 5) {
+      throw new Error('registration must not expose an editable tenant/location input');
+    }
+    const boundLocation = (await page.locator('.tenant-route-context strong').textContent() || '').trim();
+    if (boundLocation !== locationA) {
+      throw new Error(`dedicated URL did not bind registration location: ${boundLocation}`);
+    }
     await page.screenshot({path: screenshotPath('tenant-registration-mobile-en.png'), fullPage: true});
 
     await page.setViewportSize({width: 1600, height: 1000});
