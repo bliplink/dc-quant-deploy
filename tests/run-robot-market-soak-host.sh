@@ -22,6 +22,7 @@ MONITOR_IMAGE="${ROBOT_SOAK_MONITOR_IMAGE:-mcr.microsoft.com/playwright:v1.55.0-
 MONITOR_HEARTBEAT_FILE="${STATE_DIR}/web-heartbeat.json"
 MONITOR_STALE_SECONDS="${ROBOT_SOAK_MONITOR_STALE_SECONDS:-150}"
 AUTH_REFRESH_SECONDS="${ROBOT_SOAK_AUTH_REFRESH_SECONDS:-2700}"
+VISIBLE_DEPTH="${ROBOT_SOAK_VISIBLE_DEPTH:-10}"
 MODE="${1:-status}"
 
 log() { printf '[robot-soak] %s\n' "$*"; }
@@ -38,6 +39,7 @@ safe_identifier "${VIEWER}" || die "Unsafe viewer user"
 for user in "${TRADERS[@]}"; do safe_identifier "${user}" || die "Unsafe trader user"; done
 [[ "${MONITOR_STALE_SECONDS}" =~ ^[1-9][0-9]*$ ]] || die "ROBOT_SOAK_MONITOR_STALE_SECONDS must be positive"
 [[ "${AUTH_REFRESH_SECONDS}" =~ ^[1-9][0-9]*$ ]] || die "ROBOT_SOAK_AUTH_REFRESH_SECONDS must be positive"
+[[ "${VISIBLE_DEPTH}" =~ ^[1-9][0-9]*$ ]] || die "ROBOT_SOAK_VISIBLE_DEPTH must be positive"
 
 umask 077
 mkdir -p "${STATE_DIR}"
@@ -278,15 +280,13 @@ run_loop() {
   local user response code message cycle=0 rejected=0 accepted=0 gap_samples=0 auth_refreshes=0 ever_running=0
   local last_rebalance_epoch=0 rebalance_attempts=0
   local -a action_files=() action_users=()
-  local bid_levels ask_levels best_bid best_ask robot_status web_status now clid price token side tenant_tick header archive current_epoch robot_token robot_token_login_epoch robot_orders_response robot_query_code refreshed_token
+  local bid_levels ask_levels best_bid best_ask robot_status web_status now clid price token side tenant_tick header archive current_epoch public_market_response public_market_code refreshed_token
   local rebalance_user rebalance_side rebalance_price rebalance_clid rebalance_reply rebalance_code
   for user in "${TRADERS[@]}"; do
     tokens["${user}"]="$(login_user "${user}")"
     token_login_epoch["${user}"]="$(date +%s)"
   done
   for user in "${TRADERS[@]}"; do cancel_all "${user}" "${tokens[${user}]}"; done
-  robot_token="$(login_user "${ROBOT_USER}")"
-  robot_token_login_epoch="$(date +%s)"
   tenant_tick="$(mysql_exec -e "SELECT tick_size FROM dc.dc_tenant_symbol WHERE location='${LOCATION}' AND security_id='BTCUSDT';" dc)"
   [[ -n "${tenant_tick}" ]] || die "Tenant BTCUSDT tick size is unavailable"
   header="$(head -n 1 "${METRICS_FILE}" 2>/dev/null || true)"
@@ -301,57 +301,35 @@ run_loop() {
   log "Continuous load started: location=${LOCATION}, robot=${ROBOT_ID}, pid=$$"
   while true; do
     current_epoch="$(date +%s)"
-    if (( current_epoch - robot_token_login_epoch >= AUTH_REFRESH_SECONDS )); then
-      if refreshed_token="$(login_user "${ROBOT_USER}" 2>/dev/null)"; then
-        robot_token="${refreshed_token}"
-        robot_token_login_epoch="${current_epoch}"
-        auth_refreshes=$((auth_refreshes + 1))
-        log "SESSION_REFRESH proactive user=${ROBOT_USER} count=${auth_refreshes}"
-      else
-        log "SESSION_REFRESH_RETRY user=${ROBOT_USER} reason=gateway_unavailable"
-        sleep 1
-        continue
-      fi
-    fi
-    robot_orders_response="$(api_call "{\"serverName\":\"OrderSvr\",\"method\":\"queryOpenOrder\",\"content\":{\"userid\":\"${ROBOT_USER}\",\"securityid\":\"BTCUSDT\",\"Location\":\"${LOCATION}\"}}" "${robot_token}" 2>/dev/null || true)"
-    robot_query_code="$(printf '%s' "${robot_orders_response}" | python3 -c 'import json,sys
+    # Observe the tenant-visible MDSvr snapshot instead of logging in as the
+    # Robot trading user. LoginSvr currently rotates the existing user session
+    # on a new login; the old probe therefore invalidated RobotSvr's API session
+    # every refresh cycle and created an avoidable quote-recovery window.
+    public_market_response="$(api_call "{\"serverName\":\"MDSvr\",\"method\":\"queryPublicMarket\",\"content\":{\"securityID\":\"BTCUSDT\",\"location\":\"${LOCATION}\"}}" 2>/dev/null || true)"
+    public_market_code="$(printf '%s' "${public_market_response}" | python3 -c 'import json,sys
 try: print(json.load(sys.stdin).get("code",-1))
 except Exception: print(-1)')"
-    if [[ "${robot_query_code}" != "0" ]]; then
-      if refreshed_token="$(login_user "${ROBOT_USER}" 2>/dev/null)"; then
-        robot_token="${refreshed_token}"
-        robot_token_login_epoch="$(date +%s)"
-        auth_refreshes=$((auth_refreshes + 1))
-        log "SESSION_REFRESH reactive user=${ROBOT_USER} code=${robot_query_code} count=${auth_refreshes}"
-        robot_orders_response="$(api_call "{\"serverName\":\"OrderSvr\",\"method\":\"queryOpenOrder\",\"content\":{\"userid\":\"${ROBOT_USER}\",\"securityid\":\"BTCUSDT\",\"Location\":\"${LOCATION}\"}}" "${robot_token}" 2>/dev/null || true)"
-      else
-        log "SESSION_REFRESH_RETRY user=${ROBOT_USER} code=${robot_query_code} reason=gateway_unavailable"
-        sleep 1
-        continue
-      fi
+    if [[ "${public_market_code}" != "0" ]]; then
+      log "PUBLIC_MARKET_RETRY code=${public_market_code} reason=gateway_unavailable"
+      sleep 1
+      continue
     fi
-    read -r bid_levels ask_levels best_bid best_ask <<<"$(printf '%s' "${robot_orders_response}" | python3 -c 'import json,sys
+    read -r bid_levels ask_levels best_bid best_ask <<<"$(printf '%s' "${public_market_response}" | python3 -c 'import json,sys
 try:
- d=json.load(sys.stdin); rows=d.get("data") or []
+ d=json.load(sys.stdin); rows=((d.get("data") or {}).get("orderBook") or {}).get("NoMDEntries") or []
  def field(row,*names):
   for name in names:
    if name in row and row[name] is not None: return str(row[name])
   return ""
- own=[]
- for row in rows:
-  clid=field(row,"ClOrdID","clOrdID","clord_id")
-  status=field(row,"OrdStatus","ordStatus","ord_status")
-  if clid.startswith("RBcontinuousd") and "-SW" not in clid and status in ("New","Partially_Filled"):
-   own.append(row)
- bids=sorted({field(x,"Price","price") for x in own if field(x,"Side","side").lower()=="buy" and field(x,"Price","price")},key=float)
- asks=sorted({field(x,"Price","price") for x in own if field(x,"Side","side").lower()=="sell" and field(x,"Price","price")},key=float)
+ bids=sorted({field(x,"MDEntryPx","mdEntryPx","price") for x in rows if field(x,"MDEntryType","mdEntryType")=="0" and field(x,"MDEntryPx","mdEntryPx","price")},key=float)
+ asks=sorted({field(x,"MDEntryPx","mdEntryPx","price") for x in rows if field(x,"MDEntryType","mdEntryType")=="1" and field(x,"MDEntryPx","mdEntryPx","price")},key=float)
  print(len(bids),len(asks),bids[-1] if bids else 0,asks[0] if asks else 0)
 except Exception:
  print(0,0,0,0)')"
     robot_status="$(mysql_exec -e "SELECT COALESCE(runtime_status,'MISSING') FROM dc.dc_tenant_robot WHERE location='${LOCATION}' AND robot_id='${ROBOT_ID}' LIMIT 1;" dc)"
     web_status="$(curl -sS -o /dev/null -w '%{http_code}' --max-time 5 "http://127.0.0.1:${WEB_LISTEN_PORT}/#/trade?location=${LOCATION}" || true)"
-    [[ "${robot_status}" == "RUNNING" && "${bid_levels}" -ge 20 && "${ask_levels}" -ge 20 ]] && ever_running=1
-    if (( ever_running == 1 && (bid_levels < 20 || ask_levels < 20) )); then
+    [[ "${robot_status}" == "RUNNING" && "${bid_levels}" -ge VISIBLE_DEPTH && "${ask_levels}" -ge VISIBLE_DEPTH ]] && ever_running=1
+    if (( ever_running == 1 && (bid_levels < VISIBLE_DEPTH || ask_levels < VISIBLE_DEPTH) )); then
       gap_samples=$((gap_samples + 1))
       log "ACTIVE_DEPTH_GAP bid=${bid_levels} ask=${ask_levels} status=${robot_status} best=${best_bid}/${best_ask}"
     fi

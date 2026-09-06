@@ -20,6 +20,7 @@ ALERT_LOG="${STATE_DIR}/alerts.log"
 LOCK_FILE="${STATE_DIR}/observer.lock"
 MONITOR_CONTAINER="${ROBOT_SOAK_MONITOR_CONTAINER:-dc-saas-robot-web-monitor}"
 WEB_STALE_SECONDS="${ROBOT_SOAK_MONITOR_STALE_SECONDS:-150}"
+VISIBLE_DEPTH="${ROBOT_SOAK_VISIBLE_DEPTH:-10}"
 
 log() { printf '[robot-observer] %s\n' "$*"; }
 die() { printf '[robot-observer] ERROR: %s\n' "$*" >&2; exit 1; }
@@ -27,6 +28,7 @@ die() { printf '[robot-observer] ERROR: %s\n' "$*" >&2; exit 1; }
 [[ "$(id -u)" -eq 0 ]] || die "Run as root"
 [[ -r "${ENV_FILE}" ]] || die "Cannot read ${ENV_FILE}"
 [[ "${WEB_STALE_SECONDS}" =~ ^[1-9][0-9]*$ ]] || die "ROBOT_SOAK_MONITOR_STALE_SECONDS must be positive"
+[[ "${VISIBLE_DEPTH}" =~ ^[1-9][0-9]*$ ]] || die "ROBOT_SOAK_VISIBLE_DEPTH must be positive"
 mkdir -p "${STATE_DIR}"
 touch "${ALERT_LOG}" "${LOCK_FILE}"
 chmod 600 "${ALERT_LOG}"
@@ -97,7 +99,7 @@ write_hourly_summary() {
   if (( active_samples == 0 && web_minutes == 0 )); then
     status=NO_DATA
   else
-    if (( active_samples == 0 || min_bid < 20 || min_ask < 20 || http_bad > 0 || rejected_delta > 0 || gap_delta > 0 )); then status=FAIL; fi
+    if (( active_samples == 0 || min_bid < VISIBLE_DEPTH || min_ask < VISIBLE_DEPTH || http_bad > 0 || rejected_delta > 0 || gap_delta > 0 )); then status=FAIL; fi
     if (( web_minutes == 0 || web_min_bid != 10 || web_max_bid != 10 || web_min_ask != 10 || web_max_ask != 10 || web_gap_delta > 0 || web_errors > 0 )); then status=FAIL; fi
   fi
   if [[ ! -s "${SUMMARY_FILE}" ]]; then
@@ -163,7 +165,7 @@ if [[ -n "${metrics_line}" && "${metrics_line}" != time,* ]]; then
 else
   issues+=("load_metrics_missing")
 fi
-(( bid_levels >= 20 && ask_levels >= 20 )) || issues+=("active_order_depth_${bid_levels}_${ask_levels}")
+(( bid_levels >= VISIBLE_DEPTH && ask_levels >= VISIBLE_DEPTH )) || issues+=("visible_market_depth_${bid_levels}_${ask_levels}")
 [[ "${robot_metric}" == "RUNNING" ]] || issues+=("robot_metric_${robot_metric}")
 [[ "${web_http}" == "200" ]] || issues+=("web_http_${web_http}")
 
