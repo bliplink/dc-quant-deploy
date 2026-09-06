@@ -372,6 +372,76 @@ assert_success
 wait_order "RULE-${RUN_ID}-CLOSE-SHORT" Filled
 wait_order "RULE-${RUN_ID}-CLOSE-LONG" Filled
 
+log "Checking attached TP/SL creation, last-price trigger, OCO sibling cancel and reduce-only close."
+place "${MAKER_ONE}" Sell 0.0003 60400 GTC "RULE-${RUN_ID}-BRACKET-MAKER"; assert_success
+wait_order "RULE-${RUN_ID}-BRACKET-MAKER" New
+api placeOrder "{\"OCType\":\"OPEN\",\"OrderQty\":\"0.0003\",\"OrdType\":\"Limit\",\"ClOrdID\":\"RULE-${RUN_ID}-BRACKET-OPEN\",\"Terminal\":\"API\",\"AlgoName\":\"cross\",\"Side\":\"Buy\",\"Price\":\"60400\",\"UserID\":\"${TAKER}\",\"MarketIndicator\":\"4\",\"TimeInForce\":\"GTC\",\"SecurityID\":\"BTCUSDT\",\"ReduceOnly\":\"false\",\"TakeProfitPrice\":\"60500\",\"StopLossPrice\":\"60300\",\"TriggerType\":\"LastPrice\",\"Location\":\"${RULE_LOCATION}\"}" "${TAKER}"
+assert_success
+wait_order "RULE-${RUN_ID}-BRACKET-OPEN" Filled
+bracket_parent_id="$({
+  cat <<SQL
+SELECT order_id FROM dc.dc_orders WHERE location='${RULE_LOCATION}' AND clord_id='RULE-${RUN_ID}-BRACKET-OPEN' LIMIT 1;
+SQL
+} | mysql_exec dc)"
+[[ -n "${bracket_parent_id}" ]] || die "Could not resolve bracket parent order"
+
+for _ in $(seq 1 60); do
+  bracket_children="$({
+    cat <<SQL
+SELECT COUNT(*) FROM dc.dc_orders WHERE location='${RULE_LOCATION}' AND user_id='${TAKER}'
+  AND ref_order_id='${bracket_parent_id}' AND close_by IN ('takeProfit','stopLoss')
+  AND ord_status='Untriggered' AND reduce_only=1 AND position_side='Long';
+SQL
+  } | mysql_exec dc)"
+  [[ "${bracket_children}" == "2" ]] && break
+  sleep 1
+done
+[[ "${bracket_children:-0}" == "2" ]] || die "Attached TP/SL pair was not created as an untriggered reduce-only OCO pair"
+
+# Leave twice the driver quantity at the TP price: the first half produces the
+# location-scoped last price, while the second half fills the internally
+# generated reduce-only TP close order.
+place "${MAKER_TWO}" Buy 0.0006 60500 GTC "RULE-${RUN_ID}-TP-LIQUIDITY"; assert_success
+wait_order "RULE-${RUN_ID}-TP-LIQUIDITY" New
+place "${MAKER_ONE}" Sell 0.0003 60500 GTC "RULE-${RUN_ID}-TP-DRIVER"; assert_success
+wait_order "RULE-${RUN_ID}-TP-DRIVER" Filled
+
+for _ in $(seq 1 90); do
+  protection_state="$({
+    cat <<SQL
+SELECT CONCAT(
+  SUM(close_by='takeProfit' AND ref_order_id='${bracket_parent_id}' AND ord_status='Triggered'),',',
+  SUM(close_by='stopLoss' AND ref_order_id='${bracket_parent_id}' AND ord_status='Cancelled'),',',
+  SUM(close_by='takeProfit' AND ref_order_id IN (
+    SELECT order_id FROM dc.dc_orders WHERE location='${RULE_LOCATION}' AND ref_order_id='${bracket_parent_id}' AND close_by='takeProfit'
+  ) AND ord_status='Filled'),',',
+  SUM(close_by IN ('takeProfit','stopLoss') AND ord_status IN ('New','Partially_Filled','Untriggered'))
+) FROM dc.dc_orders WHERE location='${RULE_LOCATION}' AND user_id='${TAKER}';
+SQL
+  } | mysql_exec dc)"
+  [[ "${protection_state}" == "1,1,1,0" ]] && break
+  sleep 1
+done
+[[ "${protection_state:-}" == "1,1,1,0" ]] || die "TP trigger/OCO close state mismatch: ${protection_state:-empty}"
+
+taker_flat="$({
+  cat <<SQL
+SELECT IF(COUNT(*)=1,1,0) FROM dc.dc_orders_position
+WHERE location='${RULE_LOCATION}' AND user_id='${TAKER}' AND security_id='BTCUSDT'
+  AND ABS(long_position)<0.00000001 AND ABS(long_used_margin)<0.00000001;
+SQL
+} | mysql_exec dc)"
+[[ "${taker_flat}" == "1" ]] || die "Triggered TP did not flatten the protected long position"
+
+# Flatten the deterministic counterpart positions created by the trigger test.
+api placeOrder "{\"OCType\":\"ClOSE\",\"OrderQty\":\"0.0006\",\"OrdType\":\"Limit\",\"ClOrdID\":\"RULE-${RUN_ID}-BRACKET-CLOSE-SHORT\",\"Terminal\":\"API\",\"AlgoName\":\"cross\",\"Side\":\"Buy\",\"PositionSide\":\"Short\",\"Price\":\"60500\",\"UserID\":\"${MAKER_ONE}\",\"MarketIndicator\":\"4\",\"TimeInForce\":\"GTC\",\"SecurityID\":\"BTCUSDT\",\"ReduceOnly\":\"true\",\"Location\":\"${RULE_LOCATION}\"}" "${MAKER_ONE}"
+assert_success
+wait_order "RULE-${RUN_ID}-BRACKET-CLOSE-SHORT" New
+api placeOrder "{\"OCType\":\"ClOSE\",\"OrderQty\":\"0.0006\",\"OrdType\":\"Limit\",\"ClOrdID\":\"RULE-${RUN_ID}-BRACKET-CLOSE-LONG\",\"Terminal\":\"API\",\"AlgoName\":\"cross\",\"Side\":\"Sell\",\"PositionSide\":\"Long\",\"Price\":\"60500\",\"UserID\":\"${MAKER_TWO}\",\"MarketIndicator\":\"4\",\"TimeInForce\":\"GTC\",\"SecurityID\":\"BTCUSDT\",\"ReduceOnly\":\"true\",\"Location\":\"${RULE_LOCATION}\"}" "${MAKER_TWO}"
+assert_success
+wait_order "RULE-${RUN_ID}-BRACKET-CLOSE-SHORT" Filled
+wait_order "RULE-${RUN_ID}-BRACKET-CLOSE-LONG" Filled
+
 funds_ok="$({
   cat <<SQL
 SELECT IF(COUNT(*)=4,1,0) FROM dc.dc_users_balance
@@ -389,4 +459,4 @@ SQL
 } | mysql_exec dc)"
 [[ "${funds_ok}" == $'1\n1\n1' ]] || die "Final rule-test accounting checks failed: ${funds_ok}"
 
-log "PASS: symbol filters, TIF, Post Only, FIFO, STP, idempotency, replace, batch and mass cancel rules succeeded."
+log "PASS: symbol filters, TIF, Post Only, FIFO, STP, idempotency, replace, batch/mass cancel and attached TP/SL OCO rules succeeded."
