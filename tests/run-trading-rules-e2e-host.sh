@@ -397,6 +397,23 @@ SQL
   sleep 1
 done
 [[ "${bracket_children:-0}" == "2" ]] || die "Attached TP/SL pair was not created as an untriggered reduce-only OCO pair"
+protection_ids="$({
+  cat <<SQL
+SELECT CONCAT(
+  MAX(IF(close_by='takeProfit',order_id,'')),',',
+  MAX(IF(close_by='stopLoss',order_id,''))
+) FROM dc.dc_orders WHERE location='${RULE_LOCATION}' AND user_id='${TAKER}'
+  AND ref_order_id='${bracket_parent_id}' AND close_by IN ('takeProfit','stopLoss');
+SQL
+} | mysql_exec dc)"
+tp_order_id="${protection_ids%%,*}"
+sl_order_id="${protection_ids#*,}"
+[[ -n "${tp_order_id}" && -n "${sl_order_id}" ]] || die "Could not resolve attached TP/SL order IDs"
+
+# Conditional orders subscribe to the tenant's MDSvr stream on first match.
+# Wait until that async subscribe-with-image handshake is established before
+# generating the price event this case is intended to test.
+sleep 3
 
 # Leave twice the driver quantity at the TP price: the first half produces the
 # location-scoped last price, while the second half fills the internally
@@ -406,17 +423,17 @@ wait_order "RULE-${RUN_ID}-TP-LIQUIDITY" New
 place "${MAKER_ONE}" Sell 0.0003 60500 GTC "RULE-${RUN_ID}-TP-DRIVER"; assert_success
 wait_order "RULE-${RUN_ID}-TP-DRIVER" Filled
 
-for _ in $(seq 1 90); do
+for _ in $(seq 1 30); do
   protection_state="$({
     cat <<SQL
 SELECT CONCAT(
-  SUM(close_by='takeProfit' AND ref_order_id='${bracket_parent_id}' AND ord_status='Triggered'),',',
-  SUM(close_by='stopLoss' AND ref_order_id='${bracket_parent_id}' AND ord_status='Cancelled'),',',
-  SUM(close_by='takeProfit' AND ref_order_id IN (
-    SELECT order_id FROM dc.dc_orders WHERE location='${RULE_LOCATION}' AND ref_order_id='${bracket_parent_id}' AND close_by='takeProfit'
-  ) AND ord_status='Filled'),',',
-  SUM(close_by IN ('takeProfit','stopLoss') AND ord_status IN ('New','Partially_Filled','Untriggered'))
-) FROM dc.dc_orders WHERE location='${RULE_LOCATION}' AND user_id='${TAKER}';
+  SUM(order_id='${tp_order_id}' AND ord_status='Triggered'),',',
+  SUM(order_id='${sl_order_id}' AND ord_status='Cancelled'),',',
+  SUM(ref_order_id='${tp_order_id}' AND ord_status='Filled'),',',
+  SUM((order_id IN ('${tp_order_id}','${sl_order_id}') OR ref_order_id IN ('${tp_order_id}','${sl_order_id}'))
+    AND ord_status IN ('New','Partially_Filled','Untriggered'))
+) FROM dc.dc_orders WHERE location='${RULE_LOCATION}' AND user_id='${TAKER}'
+  AND (order_id IN ('${tp_order_id}','${sl_order_id}') OR ref_order_id IN ('${tp_order_id}','${sl_order_id}'));
 SQL
   } | mysql_exec dc)"
   [[ "${protection_state}" == "1,1,1,0" ]] && break
