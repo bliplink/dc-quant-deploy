@@ -276,8 +276,10 @@ run_loop() {
   start_monitor
   declare -A tokens token_login_epoch
   local user response code message cycle=0 rejected=0 accepted=0 gap_samples=0 auth_refreshes=0 ever_running=0
+  local last_rebalance_epoch=0 rebalance_attempts=0
   local -a action_files=() action_users=()
   local bid_levels ask_levels best_bid best_ask robot_status web_status now clid price token side tenant_tick header archive current_epoch robot_token robot_token_login_epoch robot_orders_response robot_query_code refreshed_token
+  local rebalance_user rebalance_side rebalance_price rebalance_clid rebalance_reply rebalance_code
   for user in "${TRADERS[@]}"; do
     tokens["${user}"]="$(login_user "${user}")"
     token_login_epoch["${user}"]="$(date +%s)"
@@ -355,6 +357,76 @@ except Exception:
     fi
     now="$(date '+%Y-%m-%dT%H:%M:%S.%3N%z')"
     printf '%s,%s,%s,%s,%s,%s,%s,%s,%s\n' "${now}" "${bid_levels}" "${ask_levels}" "${robot_status}" "${web_status}" "${accepted}" "${rejected}" "${gap_samples}" "${auth_refreshes}" >>"${METRICS_FILE}"
+
+    # A max-position guard intentionally removes the inventory-increasing side.
+    # The soak traffic used to stop at that point, so no independent user ever
+    # traded the remaining side to bring the maker back inside its limit. Use a
+    # non-tape test account to consume a small amount of the remaining Robot
+    # depth, then let the normal quote loop restore both sides. This is strictly
+    # an E2E fixture action; RobotSvr's production position limit is unchanged.
+    if [[ "${robot_status}" == "RUNNING" ]] \
+        && { [[ "${bid_levels}" == "0" && "${best_ask}" != "0" ]] \
+          || [[ "${ask_levels}" == "0" && "${best_bid}" != "0" ]]; } \
+        && (( current_epoch - last_rebalance_epoch >= 15 )); then
+      rebalance_user="${TRADERS[3]}"
+      if (( current_epoch - ${token_login_epoch[${rebalance_user}]} >= AUTH_REFRESH_SECONDS )); then
+        if refreshed_token="$(login_user "${rebalance_user}" 2>/dev/null)"; then
+          tokens["${rebalance_user}"]="${refreshed_token}"
+          token_login_epoch["${rebalance_user}"]="${current_epoch}"
+          auth_refreshes=$((auth_refreshes + 1))
+          log "SESSION_REFRESH proactive user=${rebalance_user} count=${auth_refreshes}"
+        else
+          log "INVENTORY_REBALANCE_RETRY user=${rebalance_user} reason=gateway_unavailable"
+          sleep 1
+          continue
+        fi
+      fi
+      token="${tokens[${rebalance_user}]}"
+      cancel_all "${rebalance_user}" "${token}"
+      if [[ "${bid_levels}" == "0" ]]; then
+        rebalance_side="Buy"
+        rebalance_price="$(python3 - "${best_ask}" "${tenant_tick}" <<'PY'
+from decimal import Decimal, ROUND_UP
+import sys
+p, tick = Decimal(sys.argv[1]), Decimal(sys.argv[2])
+limit = ((p * Decimal('1.01')) / tick).to_integral_value(rounding=ROUND_UP) * tick
+print(format(limit, 'f'))
+PY
+)"
+      else
+        rebalance_side="Sell"
+        rebalance_price="$(python3 - "${best_bid}" "${tenant_tick}" <<'PY'
+from decimal import Decimal, ROUND_DOWN
+import sys
+p, tick = Decimal(sys.argv[1]), Decimal(sys.argv[2])
+limit = ((p * Decimal('0.99')) / tick).to_integral_value(rounding=ROUND_DOWN) * tick
+print(format(limit, 'f'))
+PY
+)"
+      fi
+      rebalance_clid="SOAK-REBALANCE-$(date +%s)-${rebalance_attempts}"
+      rebalance_reply="$(api_call "{\"serverName\":\"OrderSvr\",\"method\":\"placeOrder\",\"content\":{\"OCType\":\"OPEN\",\"OrderQty\":\"0.05\",\"OrdType\":\"Limit\",\"ClOrdID\":\"${rebalance_clid}\",\"Terminal\":\"RobotSoak\",\"AlgoName\":\"robot-soak-rebalance\",\"Side\":\"${rebalance_side}\",\"Price\":\"${rebalance_price}\",\"UserID\":\"${rebalance_user}\",\"MarketIndicator\":\"4\",\"TimeInForce\":\"IOC\",\"SecurityID\":\"BTCUSDT\",\"Location\":\"${LOCATION}\"}}" "${token}" 2>/dev/null || true)"
+      rebalance_code="$(printf '%s' "${rebalance_reply}" | python3 -c 'import json,sys
+try: print(json.load(sys.stdin).get("code",-1))
+except Exception: print(-1)')"
+      rebalance_attempts=$((rebalance_attempts + 1))
+      if [[ "${rebalance_code}" == "0" ]]; then
+        accepted=$((accepted + 1))
+        last_rebalance_epoch="${current_epoch}"
+        log "INVENTORY_REBALANCE_ACCEPTED user=${rebalance_user} side=${rebalance_side} price=${rebalance_price} clid=${rebalance_clid}"
+      elif [[ "${rebalance_code}" == "1004" ]]; then
+        if refreshed_token="$(login_user "${rebalance_user}" 2>/dev/null)"; then
+          tokens["${rebalance_user}"]="${refreshed_token}"
+          token_login_epoch["${rebalance_user}"]="$(date +%s)"
+          auth_refreshes=$((auth_refreshes + 1))
+          log "SESSION_REFRESH reactive user=${rebalance_user} count=${auth_refreshes}"
+        fi
+      else
+        rejected=$((rejected + 1))
+        last_rebalance_epoch="${current_epoch}"
+        log "INVENTORY_REBALANCE_REJECT user=${rebalance_user} side=${rebalance_side} code=${rebalance_code}"
+      fi
+    fi
 
     if [[ "${robot_status}" == "RUNNING" && "${best_bid}" != "0" && "${best_ask}" != "0" ]]; then
       action_files=()
