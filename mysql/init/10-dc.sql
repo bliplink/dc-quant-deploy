@@ -100,6 +100,7 @@ CREATE TABLE `dc_orders` (
   `security_id` varchar(32) DEFAULT NULL COMMENT '产品代码',
   `symbol` varchar(32) DEFAULT NULL COMMENT '产品名称',
   `clord_id` varchar(255) DEFAULT NULL COMMENT '外部传入订单号',
+  `ref_order_id` varchar(255) DEFAULT NULL COMMENT 'OCO、改单的父订单号',
   `side` varchar(32) DEFAULT NULL COMMENT '订单方向: 1~做多, 2~做空',
   `ord_type` varchar(45) DEFAULT NULL COMMENT '订单类型',
   `timeinforce` varchar(45) DEFAULT NULL COMMENT 'GTC,IOC,FOK,PostOnly',
@@ -131,6 +132,7 @@ CREATE TABLE `dc_orders` (
   `maker` int(11) DEFAULT NULL,
   PRIMARY KEY (`order_id`,`user_id`) USING BTREE,
   KEY `query_index` (`user_id`,`security_id`,`side`,`ord_type`,`order_id`,`ord_status`) USING BTREE,
+  KEY `idx_order_ref` (`location`,`user_id`,`ref_order_id`,`close_by`,`ord_status`) USING BTREE,
   KEY `idx_robot_sweep` (`location`,`security_id`,`ord_status`,`side`,`price`,`transact_time`) USING BTREE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci ROW_FORMAT=DYNAMIC COMMENT='订单表';
 
