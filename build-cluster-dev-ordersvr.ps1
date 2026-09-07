@@ -63,10 +63,19 @@ function Get-GitRevision([string]$ProjectPath) {
     return $revision.Trim()
 }
 
+function Get-GitCommitTimestamp([string]$ProjectPath) {
+    $timestamp = (& git -C $ProjectPath show -s --format=%cI HEAD 2>$null)
+    if ($LASTEXITCODE -ne 0 -or [string]::IsNullOrWhiteSpace($timestamp)) {
+        throw "Cannot read Git commit timestamp from $ProjectPath"
+    }
+    return $timestamp.Trim()
+}
+
 function Invoke-Maven([string]$ProjectPath, [string[]]$Goals) {
     $arguments = @(
         "-B",
-        "-Dmaven.repo.local=$MavenRepository"
+        "-Dmaven.repo.local=$MavenRepository",
+        "-Dproject.build.outputTimestamp=$BuildOutputTimestamp"
     ) + $Goals
     Write-Step "Maven $ProjectPath -> $($Goals -join ' ')"
     & $MavenExecutable -f (Join-Path $ProjectPath "pom.xml") @arguments
@@ -103,6 +112,7 @@ if ($orderDcVersion -ne $dcCoordinate.Version) {
 }
 
 $commonRevision = Get-GitRevision $CommonLibrarySource
+$BuildOutputTimestamp = Get-GitCommitTimestamp $CommonLibrarySource
 $dcRevision = Get-GitRevision $DcCommonSource
 $orderRevision = Get-GitRevision $OrderSvrSource
 $imageTag = "cluster-dev-$orderRevision-common-$commonRevision"
@@ -112,6 +122,7 @@ $buildDate = [DateTime]::UtcNow.ToString("yyyy-MM-ddTHH:mm:ssZ")
 New-Item -ItemType Directory -Force -Path $MavenRepository | Out-Null
 Write-Step "Isolated Maven repository: $MavenRepository"
 Write-Step "Common: $commonGav @ $commonRevision"
+Write-Step "Reproducible build timestamp: $BuildOutputTimestamp"
 Write-Step "DC common: $dcGav @ $dcRevision"
 Write-Step "OrderSvr: $($orderCoordinate.GroupId):$($orderCoordinate.ArtifactId):$($orderCoordinate.Version) @ $orderRevision"
 
@@ -181,6 +192,7 @@ $manifestDirectory = Join-Path $PSScriptRoot ".cluster-dev"
 New-Item -ItemType Directory -Force -Path $manifestDirectory | Out-Null
 $manifest = [ordered]@{
     builtAtUtc = $buildDate
+    outputTimestamp = $BuildOutputTimestamp
     image = $imageRef
     dockerBuildSkipped = [bool]$SkipDockerBuild
     common = [ordered]@{
@@ -245,6 +257,7 @@ if ($IncludeGateway) {
     }
     $gatewayManifest = [ordered]@{
         builtAtUtc = $buildDate
+        outputTimestamp = $BuildOutputTimestamp
         image = $gatewayImageRef
         dockerBuildSkipped = [bool]$SkipDockerBuild
         common = [ordered]@{

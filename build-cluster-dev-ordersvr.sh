@@ -77,6 +77,7 @@ dc_artifact="$(pom_value "${DC_COMMON_SOURCE}" project.artifactId)"
 dc_version="$(pom_value "${DC_COMMON_SOURCE}" project.version)"
 
 common_revision="$(git_revision "${COMMON_LIBRARY_SOURCE}")"
+build_output_timestamp="$(git -C "${COMMON_LIBRARY_SOURCE}" show -s --format=%cI HEAD)"
 dc_revision="$(git_revision "${DC_COMMON_SOURCE}")"
 ordersvr_revision="$(git_revision "${ORDERSVR_SOURCE}")"
 common_gav="${common_group}:${common_artifact}:${common_version}"
@@ -86,21 +87,23 @@ build_date="$(date -u '+%Y-%m-%dT%H:%M:%SZ')"
 
 log "Isolated Maven repository: ${M2_ROOT}"
 log "Common: ${common_gav} @ ${common_revision}"
+log "Reproducible build timestamp: ${build_output_timestamp}"
 log "DC common: ${dc_gav} @ ${dc_revision}"
 log "OrderSvr revision: ${ordersvr_revision}"
 
 if [[ "${SKIP_MAVEN_BUILD}" != "true" ]]; then
   test_arg="-DskipTests=false"
   [[ "${SKIP_TESTS}" != "true" ]] || test_arg="-Dmaven.test.skip=true"
-  maven "${COMMON_LIBRARY_SOURCE}" clean install "${test_arg}"
-  maven "${DC_COMMON_SOURCE}" clean install "${test_arg}"
+  maven "${COMMON_LIBRARY_SOURCE}" clean install -Dproject.build.outputTimestamp="${build_output_timestamp}" "${test_arg}"
+  maven "${DC_COMMON_SOURCE}" clean install -Dproject.build.outputTimestamp="${build_output_timestamp}" "${test_arg}"
   maven "${ORDERSVR_SOURCE}" clean package dependency:copy-dependencies \
-    -DoutputDirectory=target/dependency "${test_arg}"
+    -DoutputDirectory=target/dependency -Dproject.build.outputTimestamp="${build_output_timestamp}" "${test_arg}"
   if [[ "${INCLUDE_GATEWAY}" == "true" ]]; then
     gateway_version="$(pom_value "${GATEWAY_LIBRARY_SOURCE}" project.version)"
-    maven "${GATEWAY_LIBRARY_SOURCE}" clean install "${test_arg}"
+    maven "${GATEWAY_LIBRARY_SOURCE}" clean install -Dproject.build.outputTimestamp="${build_output_timestamp}" "${test_arg}"
     maven "${GATEWAY_IMAGE_SOURCE}" clean package dependency:copy-dependencies \
-      -DoutputDirectory=target/dependency -Dgateway.version="${gateway_version}" "${test_arg}"
+      -DoutputDirectory=target/dependency -Dgateway.version="${gateway_version}" \
+      -Dproject.build.outputTimestamp="${build_output_timestamp}" "${test_arg}"
   fi
 else
   log "Reusing existing Maven outputs; dependency identity checks remain enabled"
@@ -133,6 +136,7 @@ fi
 manifest="${SCRIPT_DIR}/.cluster-dev/ordersvr-build-manifest.env"
 {
   printf 'BUILD_DATE=%s\n' "${build_date}"
+  printf 'BUILD_OUTPUT_TIMESTAMP=%s\n' "${build_output_timestamp}"
   printf 'ORDERSVR_IMAGE=%s\n' "${image_ref}"
   printf 'ORDERSVR_REVISION=%s\n' "${ordersvr_revision}"
   printf 'DC_COMMON_GAV=%s\n' "${dc_gav}"
@@ -181,6 +185,7 @@ if [[ "${INCLUDE_GATEWAY}" == "true" ]]; then
   gateway_manifest="${SCRIPT_DIR}/.cluster-dev/gw-build-manifest.env"
   {
     printf 'BUILD_DATE=%s\n' "${build_date}"
+    printf 'BUILD_OUTPUT_TIMESTAMP=%s\n' "${build_output_timestamp}"
     printf 'GW_IMAGE=%s\n' "${gateway_image_ref}"
     printf 'GW_WRAPPER_REVISION=%s\n' "${gateway_image_revision}"
     printf 'GATEWAY_GAV=%s\n' "${gateway_group}:${gateway_artifact}:${gateway_version}"

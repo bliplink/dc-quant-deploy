@@ -23,6 +23,7 @@ OrderSvr 不是直接引用 `com.app.common`，而是通过 `com.app.dc` 传递�
 - 每个运行产物只能包含一个 `com.app.common` JAR。
 - 同一轮 OrderSvr 和 GW 构建必须包含相同 SHA256 的 Common JAR。
 - 镜像标签包含服务和 Common commit，镜像 Label 保存完整来源信息。
+- Maven归档时间戳固定为Common commit时间，保证相同源码和工具链可重复生成相同JAR。
 - 不覆盖 `saas-crypto`、`latest` 或正式版本标签。
 - 不使用 volume 覆盖容器运行时 JAR。
 - 本地开发镜像不得加入生产自动更新任务。
