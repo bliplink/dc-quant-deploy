@@ -66,7 +66,20 @@ run_load() {
     set_assignment "${P027}" P027 "${epoch}" OrderSvrA OrderSvrB
     set_assignment "${P132}" P132 "$((epoch + 1))" OrderSvrB OrderSvrA
   fi
-  sleep 3
+  wait_route() {
+    local symbol="$1" deadline=$((SECONDS + 60)) response probe_id
+    probe_id="ROUTE-${RUN_ID}-${mode}-${iteration}-${symbol}"
+    while (( SECONDS < deadline )); do
+      response="$(curl -sS --max-time 10 -H 'Content-Type: application/json' \
+        --data-binary "{\"serverName\":\"OrderSvr\",\"method\":\"__cluster_perf_probe__\",\"content\":{\"ClOrdID\":\"${probe_id}\",\"Location\":\"WEB_E2E\",\"MarketIndicator\":\"4\",\"SecurityID\":\"${symbol}\"}}" \
+        "http://${GW_HOST}:${GW_PORT}" || true)"
+      if [[ "${response}" == *'"code":0'* ]]; then return 0; fi
+      sleep 1
+    done
+    die "${mode}/${iteration}: route ${symbol} did not become ready; last response=${response}"
+  }
+  wait_route BTCUSDT
+  wait_route ETHUSDT
   local load_id="PERF-${RUN_ID}-${mode}-${iteration}"
   local output="${EVIDENCE}/${mode}-${iteration}.json"
   log "Running ${mode} iteration ${iteration}"

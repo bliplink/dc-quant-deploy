@@ -45,9 +45,15 @@ def request(args, index, warmup=False):
         conn = connection(args.host, args.port, args.timeout)
         conn.request("POST", "/", body=body, headers={"Content-Type": "application/json"})
         response = conn.getresponse()
-        response.read()
-        ok = 200 <= response.status < 300
-        error = "" if ok else "HTTP_%d" % response.status
+        response_body = response.read()
+        try:
+            value = json.loads(response_body.decode("utf-8"))
+        except Exception:
+            value = {}
+        code = value.get("code")
+        ok = 200 <= response.status < 300 and str(code) == "0"
+        error = "" if ok else "HTTP_%d_CODE_%s:%s" % (
+            response.status, code, response_body[:200].decode("utf-8", errors="replace"))
     except Exception as exc:
         ok = False
         error = type(exc).__name__ + ":" + str(exc)
