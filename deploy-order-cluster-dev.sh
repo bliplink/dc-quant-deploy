@@ -195,9 +195,11 @@ Partition.OrderSvr.EnforceFence=true
 Partition.OrderSvrA.Count=256
 Partition.OrderSvrA.Root=/dc/cluster/ordersvr-dev/partitions
 Partition.OrderSvrA.EnforceFence=true
+Partition.OrderSvrA.EnforceReadiness=true
 Partition.OrderSvrB.Count=256
 Partition.OrderSvrB.Root=/dc/cluster/ordersvr-dev/partitions
 Partition.OrderSvrB.EnforceFence=true
+Partition.OrderSvrB.EnforceReadiness=true
 EOF
 
 write_order_config() {
@@ -212,14 +214,19 @@ order.cluster.serviceName=SERVER.OrderSvr
 order.cluster.journal.enabled=true
 order.cluster.journal.required=true
 order.cluster.journalDir=../../data/${node}/journal
-order.cluster.state.enabled=false
-order.cluster.state.required=false
-order.cluster.state.replication.required=false
-order.cluster.commit.enabled=false
-order.cluster.commit.required=false
-order.cluster.snapshot.enabled=false
+order.cluster.state.enabled=true
+order.cluster.state.required=true
+order.cluster.state.replication.required=true
+order.cluster.commit.enabled=true
+order.cluster.commit.required=true
+order.cluster.snapshot.enabled=true
 order.cluster.snapshotDir=../../data/${node}/snapshot
-order.cluster.lifecycle.enabled=false
+order.cluster.snapshot.barrier.enabled=true
+order.cluster.snapshot.barrier.required=true
+order.cluster.snapshot.barrier.acquireTimeoutMillis=10000
+order.cluster.snapshot.promotionBarrier.required=true
+order.cluster.lifecycle.enabled=true
+order.cluster.lifecycle.bootstrap.enabled=true
 order.cluster.lifecycle.pollMillis=1000
 order.cluster.lifecycle.retryMillis=5000
 order.cluster.perfProbe.enabled=true
@@ -229,6 +236,7 @@ order.cluster.replication.bindHost=127.0.0.1
 order.cluster.replication.port=${replication_port}
 order.cluster.replication.requestTimeoutMs=10000
 order.cluster.replication.catchupBatchRecords=256
+order.cluster.replication.crossEpochSnapshotRebase.enabled=true
 order.cluster.replication.peers=OrderSvrA=127.0.0.1:19111,OrderSvrB=127.0.0.1:19112
 order.cluster.defaultMarketIndicator=4
 order.tenantSymbolRules.enabled=false

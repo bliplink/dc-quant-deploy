@@ -36,14 +36,21 @@ restore_primary() {
 }
 trap restore_primary EXIT
 
-request_command() {
-  local name="$1" event_id="$2"
-  local payload
-  payload="{\"serverName\":\"OrderSvr\",\"method\":\"placeOrder\",\"content\":{\"OCType\":\"CLOSE\",\"OrderQty\":\"0.001\",\"OrdType\":\"Limit\",\"ClOrdID\":\"${event_id}\",\"Terminal\":\"ClusterRoleE2E\",\"CloseBy\":\"liq\",\"Side\":\"Buy\",\"Price\":\"100\",\"UserID\":\"cluster-e2e\",\"MarketIndicator\":\"4\",\"TimeInForce\":\"GTC\",\"SecurityID\":\"BTCUSDT\",\"Location\":\"WEB_E2E\",\"ReduceOnly\":\"true\"}}"
+wait_ready_probe() {
+  local name="$1" event_id="$2" deadline=$((SECONDS + 90)) response
+  local payload="{\"serverName\":\"OrderSvr\",\"method\":\"__cluster_perf_probe__\",\"content\":{\"ClOrdID\":\"${event_id}\",\"Location\":\"WEB_E2E\",\"MarketIndicator\":\"4\",\"SecurityID\":\"BTCUSDT\"}}"
   printf '%s\n' "${payload}" | sudo tee "${EVIDENCE_DIR}/${name}.request.json" >/dev/null
-  sudo curl --silent --show-error --max-time 15 -H 'Content-Type: application/json' \
-    --data-binary "@${EVIDENCE_DIR}/${name}.request.json" "${GW_URL}" |
-    sudo tee "${EVIDENCE_DIR}/${name}.response.json" >/dev/null
+  while (( SECONDS < deadline )); do
+    response="$(sudo curl --silent --show-error --max-time 15 -H 'Content-Type: application/json' \
+      --data-binary "@${EVIDENCE_DIR}/${name}.request.json" "${GW_URL}" || true)"
+    if [[ "${response}" == *'"code":0'* ]]; then
+      printf '%s\n' "${response}" | sudo tee "${EVIDENCE_DIR}/${name}.response.json" >/dev/null
+      return 0
+    fi
+    sleep 1
+  done
+  printf '%s\n' "${response:-}" | sudo tee "${EVIDENCE_DIR}/${name}.response.json" >/dev/null
+  die "${event_id} did not pass the partition readiness gate; last response=${response:-empty}"
 }
 
 wait_record() {
@@ -55,6 +62,15 @@ wait_record() {
     sleep 1
   done
   die "${event_id} was not recorded by ${node} with synchronous replica ACK"
+}
+
+archive_count() {
+  local node="$1" path="${ORDER_CLUSTER_DEV_ROOT}/data/${node}/journal/.archive"
+  if ! sudo test -d "${path}"; then
+    printf '0\n'
+    return
+  fi
+  sudo find "${path}" -mindepth 1 -maxdepth 1 -type d | sudo wc -l
 }
 
 for container in dc-saas-cluster-zookeeper dc-saas-cluster-ordersvr-a dc-saas-cluster-ordersvr-b dc-saas-cluster-gateway; do
@@ -71,20 +87,25 @@ ORDER_B_START_LINE="$(( $(sudo wc -l "${ORDER_B_LOG}" | awk '{print $1}') + 1 ))
 
 B_EVENT_ID="ROLE-B-${RUN_ID}"
 A_EVENT_ID="ROLE-A-${RUN_ID}"
+A_ARCHIVES_BEFORE="$(archive_count OrderSvrA)"
+B_ARCHIVES_BEFORE="$(archive_count OrderSvrB)"
 
 log "Promoting OrderSvrB for P027 at epoch ${B_PRIMARY_EPOCH}"
 RESTORE_REQUIRED=true
 set_assignment "${B_PRIMARY_EPOCH}" OrderSvrB OrderSvrA
-sleep 3
-request_command order-on-b "${B_EVENT_ID}"
+wait_ready_probe order-on-b "${B_EVENT_ID}"
 wait_record "${ORDER_B_LOG}" OrderSvrB "${B_PRIMARY_EPOCH}" "${B_EVENT_ID}"
 
 log "Returning P027 to OrderSvrA at epoch ${A_PRIMARY_EPOCH}"
 set_assignment "${A_PRIMARY_EPOCH}" OrderSvrA OrderSvrB
-sleep 3
-request_command order-on-a "${A_EVENT_ID}"
+wait_ready_probe order-on-a "${A_EVENT_ID}"
 wait_record "${ORDER_A_LOG}" OrderSvrA "${A_PRIMARY_EPOCH}" "${A_EVENT_ID}"
 RESTORE_REQUIRED=false
+
+A_ARCHIVES_AFTER="$(archive_count OrderSvrA)"
+B_ARCHIVES_AFTER="$(archive_count OrderSvrB)"
+(( A_ARCHIVES_AFTER > A_ARCHIVES_BEFORE )) || die 'OrderSvrA did not archive its old-epoch journal during rebase'
+(( B_ARCHIVES_AFTER > B_ARCHIVES_BEFORE )) || die 'OrderSvrB did not archive its old-epoch journal during rebase'
 
 sudo tail -n "+${GW_START_LINE}" "${GW_LOG}" >"/tmp/order-cluster-role-gw-${RUN_ID}.log"
 sudo tail -n "+${ORDER_A_START_LINE}" "${ORDER_A_LOG}" >"/tmp/order-cluster-role-a-${RUN_ID}.log"
@@ -98,6 +119,10 @@ if sudo grep -Eq 'REPLICATION_(FAILED|TIMEOUT)|replicaStatus:(FAILED|TIMEOUT)' \
   "${EVIDENCE_DIR}/ordersvr-a.log" "${EVIDENCE_DIR}/ordersvr-b.log"; then
   die 'replication failure appeared during role reversal'
 fi
+sudo grep -Eq "ORDER_PARTITION_PROMOTION_READY node:OrderSvrB, partition:P027, epoch:${B_PRIMARY_EPOCH}" \
+  "${EVIDENCE_DIR}/ordersvr-b.log" || die 'OrderSvrB readiness did not follow recovery and promotion barrier'
+sudo grep -Eq "ORDER_PARTITION_PROMOTION_READY node:OrderSvrA, partition:P027, epoch:${A_PRIMARY_EPOCH}" \
+  "${EVIDENCE_DIR}/ordersvr-a.log" || die 'OrderSvrA readiness did not follow recovery and promotion barrier'
 if sudo grep -q 'Port:33036' "${EVIDENCE_DIR}/gateway.log"; then
   die 'isolated GW connected to the existing production OrderSvr port'
 fi
@@ -116,6 +141,12 @@ cat <<EOF | sudo tee "${EVIDENCE_DIR}/result.json" >/dev/null
   "orderImage": "${order_image}",
   "gwImage": "${gw_image}",
   "partition": "P027",
+  "readinessFence": "PASS",
+  "crossEpochSnapshotRebase": "PASS",
+  "archiveCounts": {
+    "OrderSvrA": {"before":${A_ARCHIVES_BEFORE},"after":${A_ARCHIVES_AFTER}},
+    "OrderSvrB": {"before":${B_ARCHIVES_BEFORE},"after":${B_ARCHIVES_AFTER}}
+  },
   "transitions": [
     {"epoch":${B_PRIMARY_EPOCH},"primary":"OrderSvrB","replica":"OrderSvrA","eventId":"${B_EVENT_ID}","replicaStatus":"OK"},
     {"epoch":${A_PRIMARY_EPOCH},"primary":"OrderSvrA","replica":"OrderSvrB","eventId":"${A_EVENT_ID}","replicaStatus":"OK"}
