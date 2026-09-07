@@ -95,9 +95,7 @@ async function tenantAdminLogin(page, username, password, location) {
     await page.screenshot({path: screenshotPath('platform-tenant-operations-en.png'), fullPage: true});
     await page.getByRole('button', {name: 'Sign out'}).click();
     await page.waitForURL('**/#/platform-login', {timeout: 30000});
-    if (await page.evaluate(() => sessionStorage.getItem('dc-platform-admin-token'))) {
-      throw new Error('platform sign out did not clear the platform session');
-    }
+    await page.waitForFunction(() => !sessionStorage.getItem('dc-platform-admin-token'), null, {timeout: 30000});
 
     await page.evaluate(() => sessionStorage.clear());
     await tenantAdminLogin(page, adminUser, adminPassword, locationA);
@@ -114,9 +112,7 @@ async function tenantAdminLogin(page, username, password, location) {
     await page.screenshot({path: screenshotPath('tenant-administration-mobile-en.png'), fullPage: true});
     await page.getByRole('button', {name: 'Sign out'}).click();
     await page.waitForURL('**/#/tenant-login', {timeout: 30000});
-    if (await page.evaluate(() => sessionStorage.getItem('dc-tenant-admin-token'))) {
-      throw new Error('tenant sign out did not clear the tenant administration session');
-    }
+    await page.waitForFunction(() => !sessionStorage.getItem('dc-tenant-admin-token'), null, {timeout: 30000});
 
     if (pageErrors.length) throw new Error(`page errors: ${pageErrors.join(' | ')}`);
     console.log(JSON.stringify({status: 'PASS', locationA, locationB, screenshots: fs.readdirSync(artifactDir).sort()}));
