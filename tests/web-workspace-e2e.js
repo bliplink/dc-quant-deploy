@@ -140,6 +140,9 @@ function layoutItem(snapshot, breakpoint, key) {
       throw new Error(`margin mode and leverage are not visible in order entry: ${await configPill.innerText()}`);
     }
     await page.locator('.positionModePill').waitFor({state: 'visible', timeout: 10000});
+    if (await page.locator('.tifSelect').inputValue() !== 'IOC') {
+      throw new Error('default market order must use IOC time in force');
+    }
     await configPill.click();
     const configModal = page.locator('.tradeConfigModal');
     await configModal.getByText('Margin mode', {exact: true}).waitFor({timeout: 10000});
@@ -392,6 +395,7 @@ function layoutItem(snapshot, breakpoint, key) {
       languages: ['en', 'zh'],
       bilingualLogin: true,
       orderInputValidation: true,
+      defaultMarketTimeInForce: 'IOC',
       conditionalOrderModes: true,
       reduceOnlyControl: true,
       authoritativeRiskLimits: true,
