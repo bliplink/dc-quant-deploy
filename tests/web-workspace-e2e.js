@@ -134,6 +134,18 @@ function layoutItem(snapshot, breakpoint, key) {
 
     // Establish a deterministic English default before exercising persistence.
     await page.locator('.languageSwitch button').nth(1).click();
+    const configPill = page.locator('.tradeConfigPill');
+    await configPill.waitFor({state: 'visible', timeout: 10000});
+    if (!/(Cross|Isolated)/.test(await configPill.innerText()) || !/x/.test(await configPill.innerText())) {
+      throw new Error(`margin mode and leverage are not visible in order entry: ${await configPill.innerText()}`);
+    }
+    await page.locator('.positionModePill').waitFor({state: 'visible', timeout: 10000});
+    await configPill.click();
+    const configModal = page.locator('.tradeConfigModal');
+    await configModal.getByText('Margin Mode', {exact: true}).waitFor({timeout: 10000});
+    await configModal.getByText('Leverage', {exact: true}).waitFor({timeout: 10000});
+    await configModal.getByText('Position Mode', {exact: true}).waitFor({timeout: 10000});
+    await configModal.getByRole('button', {name: 'Cancel', exact: true}).click();
     const resetLayoutButton = page.getByRole('button', {name: 'Reset layout', exact: true});
     if (await resetLayoutButton.count() !== 1) throw new Error('reset layout control is missing');
     await resetLayoutButton.click();

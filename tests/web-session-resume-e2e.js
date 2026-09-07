@@ -132,11 +132,18 @@ function expectRejected(label, result) {
 
     fs.writeFileSync(disconnectMarker, `${Date.now()}\n`);
     const disconnectDeadline = Date.now() + 60000;
+    let reconnectBannerObserved = false;
     while (fs.existsSync(disconnectMarker) && Date.now() < disconnectDeadline) {
+      const banner = page.locator('.connectionBanner--reconnecting');
+      if (await banner.count() && await banner.isVisible().catch(() => false)) {
+        reconnectBannerObserved = true;
+      }
       await page.waitForTimeout(250);
     }
     if (fs.existsSync(disconnectMarker)) throw new Error('host did not trigger the websocket disconnect');
+    if (!reconnectBannerObserved) throw new Error('live market reconnect banner was not visible during transport loss');
     const token3 = await waitForRotatedToken(page, token2);
+    await page.locator('.connectionBanner').waitFor({state: 'hidden', timeout: 30000});
     expectRejected('disconnected token replay', await loginWithToken(page, token2));
     await page.locator('.logoutButton').click();
     await page.waitForURL(`**/#/trade?location=${encodeURIComponent(location)}`, {timeout: 30000});
@@ -151,6 +158,7 @@ function expectRejected(label, result) {
       user: username,
       refreshResume: true,
       disconnectResume: true,
+      reconnectBannerObserved,
       oneTimeRotation: true,
       crossLocationRejected: true,
       logoutRevoked: true,
