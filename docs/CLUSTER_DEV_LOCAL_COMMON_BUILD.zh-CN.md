@@ -154,3 +154,17 @@ sudo ./resume-saas-auto-update.sh --confirm-registry-images-restored
 ```
 
 正式发布不得直接复用本地 Maven 缓存或本地镜像。
+
+## 2026-09-07本地验证记录
+
+- Common commit：`c5189948b1d8`
+- OrderSvr commit：`9c94559d5cd0`
+- GW library commit：`6702148f925c`
+- GW wrapper commit：`d8ab7047129c`
+- 固定构建时间戳：`2026-09-07T18:46:56+08:00`
+- Common JAR SHA256：`6c55150b335f9d6eb991a177b10e2a341e7fbbd402ba1fa701cee55cd09777d3`
+- Common测试：5项通过，0失败，0错误
+- Common→com.app.dc→OrderSvr→gateway→GW wrapper完整Maven构建：通过
+- OrderSvr/GW Common JAR数量：各1个
+- OrderSvr/GW Common JAR SHA256：一致
+- Docker镜像和Compose运行验证：本机无Docker CLI，待Docker主机执行
