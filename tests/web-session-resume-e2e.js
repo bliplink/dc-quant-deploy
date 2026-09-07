@@ -146,11 +146,38 @@ function expectRejected(label, result) {
     const token3 = await waitForRotatedToken(page, token2);
     await page.locator('.connectionBanner').waitFor({state: 'hidden', timeout: 30000});
     expectRejected('disconnected token replay', await loginWithToken(page, token2));
+    const socketsBeforeLogout = {
+      opened: browserEvents.filter(event => event.startsWith('websocket.opening:')).length,
+      closed: browserEvents.filter(event => event.startsWith('websocket.closed:')).length
+    };
     await page.locator('.logoutButton').click();
     await page.waitForURL(`**/#/trade?location=${encodeURIComponent(location)}`, {timeout: 30000});
     await page.waitForFunction(() => !sessionStorage.getItem('ff-dex-token'));
     await page.locator('.publicActions').waitFor({state: 'visible', timeout: 30000});
+    await page.locator('.connectionBanner').waitFor({state: 'hidden', timeout: 30000});
     expectRejected('logged-out token reuse', await userInfo(page, token3));
+    await page.waitForTimeout(2000);
+    const socketsAfterLogout = {
+      opened: browserEvents.filter(event => event.startsWith('websocket.opening:')).length,
+      closed: browserEvents.filter(event => event.startsWith('websocket.closed:')).length
+    };
+    if (socketsAfterLogout.opened !== socketsBeforeLogout.opened || socketsAfterLogout.closed !== socketsBeforeLogout.closed) {
+      throw new Error(`logout replaced the live market websocket: before=${JSON.stringify(socketsBeforeLogout)} after=${JSON.stringify(socketsAfterLogout)}`);
+    }
+    const publicMarket = await page.evaluate(() => {
+      const orderBook = [...document.querySelectorAll('.orderBookWrap')].find(element => {
+        const rect = element.getBoundingClientRect();
+        return rect.width > 0 && rect.height > 0;
+      });
+      return {
+        asks: orderBook?.querySelectorAll('.showDiv .ask-container > .bid').length || 0,
+        bids: orderBook?.querySelectorAll('.showDiv .ask-container + div + div > .bid').length || 0,
+        lastPrice: orderBook?.querySelector('.showDiv .last-price')?.textContent?.trim() || ''
+      };
+    });
+    if (publicMarket.asks !== 10 || publicMarket.bids !== 10 || !publicMarket.lastPrice || publicMarket.lastPrice === '--') {
+      throw new Error(`public market was not preserved after logout: ${JSON.stringify(publicMarket)}`);
+    }
 
     await page.screenshot({path: path.join(artifactDir, 'websocket-session-logout.png'), fullPage: true});
     console.log(JSON.stringify({
@@ -163,6 +190,8 @@ function expectRejected(label, result) {
       oneTimeRotation: true,
       crossLocationRejected: true,
       logoutRevoked: true,
+      logoutSocketPreserved: true,
+      publicMarketAfterLogout: true,
       passwordPersisted: false,
       artifact: 'websocket-session-logout.png'
     }, null, 2));
