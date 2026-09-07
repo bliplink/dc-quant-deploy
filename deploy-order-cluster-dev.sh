@@ -6,6 +6,9 @@ COMPOSE_FILE="${SCRIPT_DIR}/compose.order-cluster-dev.yaml"
 PROJECT_NAME="dc-saas-order-cluster-dev"
 ORDER_CLUSTER_DEV_ROOT="${ORDER_CLUSTER_DEV_ROOT:-/data/dc-saas-order-cluster-dev}"
 SAAS_CONTROL_ROOT="${SAAS_CONTROL_ROOT:-/data/dc-saas-runtime/control}"
+DEPLOY_STATE_DIR="${ORDER_CLUSTER_DEV_ROOT}/deploy-state"
+LAST_SUCCESSFUL_MANIFEST="${DEPLOY_STATE_DIR}/last-successful.env"
+ROLLBACK_MANIFEST="${DEPLOY_STATE_DIR}/rollback.env"
 ZOOKEEPER_CONTAINER="${ZOOKEEPER_CONTAINER:-dc-saas-cluster-zookeeper}"
 ZOOKEEPER_ENDPOINT="${ZOOKEEPER_ENDPOINT:-127.0.0.1:32182}"
 
@@ -34,6 +37,11 @@ embedded_common_hash() {
     "set -- /srv/dc/dc/${service}/lib/com.app.common-*.jar; [ \"\$#\" -eq 1 ] && sha256sum \"\$1\" | awk '{print \$1}'"
 }
 
+manifest_value() {
+  local file="$1" key="$2"
+  sudo awk -F= -v key="${key}" '$1 == key { sub(/^[^=]*=/, ""); print; exit }' "${file}"
+}
+
 wait_port() {
   local port="$1" name="$2" deadline=$((SECONDS + 90))
   while (( SECONDS < deadline )); do
@@ -50,6 +58,14 @@ wait_port() {
 [[ -n "${GW_CLUSTER_DEV_IMAGE:-}" ]] || die 'GW_CLUSTER_DEV_IMAGE is required'
 require_order_image "${ORDERSVR_CLUSTER_DEV_IMAGE}"
 require_gw_image "${GW_CLUSTER_DEV_IMAGE}"
+previous_order_image=""
+previous_gw_image=""
+if sudo test -r "${LAST_SUCCESSFUL_MANIFEST}"; then
+  previous_order_image="$(manifest_value "${LAST_SUCCESSFUL_MANIFEST}" ORDERSVR_CLUSTER_DEV_IMAGE)"
+  previous_gw_image="$(manifest_value "${LAST_SUCCESSFUL_MANIFEST}" GW_CLUSTER_DEV_IMAGE)"
+  require_order_image "${previous_order_image}"
+  require_gw_image "${previous_gw_image}"
+fi
 [[ -f "${COMPOSE_FILE}" ]] || die "missing ${COMPOSE_FILE}"
 sudo test -r "${SAAS_CONTROL_ROOT}/dc.dat" || die 'existing SaaS dc.dat is unavailable'
 sudo test -r "${SAAS_CONTROL_ROOT}/jaas.ini" || die 'existing SaaS jaas.ini is unavailable'
@@ -254,7 +270,8 @@ EOF
 
 sudo install -d -m 0750 "${ORDER_CLUSTER_DEV_ROOT}/control" "${ORDER_CLUSTER_DEV_ROOT}/data" "${ORDER_CLUSTER_DEV_ROOT}/log" \
   "${ORDER_CLUSTER_DEV_ROOT}/zookeeper/data" "${ORDER_CLUSTER_DEV_ROOT}/zookeeper/datalog" "${ORDER_CLUSTER_DEV_ROOT}/zookeeper/logs" \
-  "${ORDER_CLUSTER_DEV_ROOT}/nodes/OrderSvrA" "${ORDER_CLUSTER_DEV_ROOT}/nodes/OrderSvrB" "${ORDER_CLUSTER_DEV_ROOT}/gateway" "${ORDER_CLUSTER_DEV_ROOT}/evidence"
+  "${ORDER_CLUSTER_DEV_ROOT}/nodes/OrderSvrA" "${ORDER_CLUSTER_DEV_ROOT}/nodes/OrderSvrB" "${ORDER_CLUSTER_DEV_ROOT}/gateway" \
+  "${ORDER_CLUSTER_DEV_ROOT}/evidence" "${DEPLOY_STATE_DIR}"
 sudo install -m 0600 "${SAAS_CONTROL_ROOT}/dc.dat" "${ORDER_CLUSTER_DEV_ROOT}/control/dc.dat"
 sudo install -m 0600 "${SAAS_CONTROL_ROOT}/jaas.ini" "${ORDER_CLUSTER_DEV_ROOT}/control/jaas.ini"
 sudo install -m 0644 "${tmp_root}/control/ATSConfig.ini" "${ORDER_CLUSTER_DEV_ROOT}/control/ATSConfig.ini"
@@ -277,9 +294,7 @@ create /dc/cluster x
 create /dc/cluster/ordersvr-dev x
 create /dc/cluster/ordersvr-dev/partitions x
 create /dc/cluster/ordersvr-dev/partitions/P027 {"partitionId":"P027","epoch":1,"primary":"OrderSvrA","replica":"OrderSvrB","state":"READY"}
-set /dc/cluster/ordersvr-dev/partitions/P027 {"partitionId":"P027","epoch":1,"primary":"OrderSvrA","replica":"OrderSvrB","state":"READY"}
 create /dc/cluster/ordersvr-dev/partitions/P132 {"partitionId":"P132","epoch":1,"primary":"OrderSvrB","replica":"OrderSvrA","state":"READY"}
-set /dc/cluster/ordersvr-dev/partitions/P132 {"partitionId":"P132","epoch":1,"primary":"OrderSvrB","replica":"OrderSvrA","state":"READY"}
 quit
 EOF
 
@@ -291,5 +306,25 @@ wait_port 19111 'OrderSvrA replication'
 wait_port 19112 'OrderSvrB replication'
 wait_port 33302 'cluster development GW HTTP'
 
+write_manifest() {
+  local target="$1" order_image="$2" gw_image="$3"
+  cat >"${tmp_root}/deployment.env" <<EOF
+ORDERSVR_CLUSTER_DEV_IMAGE=${order_image}
+GW_CLUSTER_DEV_IMAGE=${gw_image}
+DEPLOYED_AT_UTC=$(date -u +%Y-%m-%dT%H:%M:%SZ)
+COMMON_REVISION=${order_common_revision}
+COMMON_JAR_SHA256=${order_common_hash}
+EOF
+  sudo install -m 0640 "${tmp_root}/deployment.env" "${target}"
+}
+
+if [[ -n "${previous_order_image}" && -n "${previous_gw_image}" ]] &&
+  [[ "${previous_order_image}" != "${ORDERSVR_CLUSTER_DEV_IMAGE}" ||
+     "${previous_gw_image}" != "${GW_CLUSTER_DEV_IMAGE}" ]]; then
+  sudo install -m 0640 "${LAST_SUCCESSFUL_MANIFEST}" "${ROLLBACK_MANIFEST}"
+fi
+write_manifest "${LAST_SUCCESSFUL_MANIFEST}" "${ORDERSVR_CLUSTER_DEV_IMAGE}" "${GW_CLUSTER_DEV_IMAGE}"
+
 log "READY: GW=http://127.0.0.1:33302, Common=${order_common_revision}, SHA256=${order_common_hash}"
 log "Run tests with: sudo -E ${SCRIPT_DIR}/tests/run-order-cluster-ab-host.sh"
+log "Rollback with: ${SCRIPT_DIR}/rollback-order-cluster-dev.sh"
