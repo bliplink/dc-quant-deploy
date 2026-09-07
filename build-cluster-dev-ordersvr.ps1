@@ -3,9 +3,13 @@ param(
     [string]$CommonLibrarySource = "E:\sourcecode\dc\com.app.common",
     [string]$DcCommonSource = (Join-Path $PSScriptRoot "..\com.app.dc"),
     [string]$OrderSvrSource = (Join-Path $PSScriptRoot "..\ordersvr"),
+    [string]$GatewayLibrarySource = (Join-Path $PSScriptRoot "..\gateway\gateway"),
+    [string]$GatewayImageSource = (Join-Path $PSScriptRoot "..\gw-image"),
     [string]$MavenRepository = (Join-Path $PSScriptRoot ".cluster-dev\m2"),
     [string]$MavenExecutable = "D:\IntelliJ IDEA 2025.3.3\plugins\maven\lib\maven3\bin\mvn.cmd",
     [string]$ImageRepository = "dc-saas/ordersvr",
+    [string]$GatewayImageRepository = "dc-saas/gw",
+    [switch]$IncludeGateway,
     [switch]$SkipTests,
     [switch]$SkipMavenBuild,
     [switch]$SkipDockerBuild
@@ -75,6 +79,10 @@ Assert-Path $MavenExecutable "Maven executable"
 Assert-Path $CommonLibrarySource "com.app.common source"
 Assert-Path $DcCommonSource "com.app.dc source"
 Assert-Path $OrderSvrSource "OrderSvr source"
+if ($IncludeGateway) {
+    Assert-Path $GatewayLibrarySource "gateway library source"
+    Assert-Path $GatewayImageSource "GW image source"
+}
 if (-not $SkipDockerBuild -and $null -eq (Get-Command docker -ErrorAction SilentlyContinue)) {
     throw "Docker CLI is required unless -SkipDockerBuild is specified"
 }
@@ -118,6 +126,22 @@ if (-not $SkipMavenBuild) {
         "-DoutputDirectory=target/dependency",
         $testArgument
     )
+    if ($IncludeGateway) {
+        $gatewayCoordinate = Get-PomCoordinate $GatewayLibrarySource
+        $gatewayCommonVersion = Get-DependencyVersion $GatewayLibrarySource $commonCoordinate.GroupId $commonCoordinate.ArtifactId
+        if ($gatewayCommonVersion -ne $commonCoordinate.Version) {
+            throw "GAV mismatch: gateway requests $gatewayCommonVersion but local com.app.common is $($commonCoordinate.Version)"
+        }
+        Invoke-Maven $GatewayLibrarySource @("clean", "install", $testArgument)
+        Invoke-Maven $GatewayImageSource @(
+            "clean",
+            "package",
+            "dependency:copy-dependencies",
+            "-DoutputDirectory=target/dependency",
+            "-Dgateway.version=$($gatewayCoordinate.Version)",
+            $testArgument
+        )
+    }
 } else {
     Write-Step "Reusing existing Maven outputs; dependency identity checks remain enabled"
 }
@@ -182,3 +206,63 @@ $manifest | ConvertTo-Json -Depth 5 | Set-Content -LiteralPath $manifestPath -En
 Write-Step "Build manifest: $manifestPath"
 Write-Step "Image: $imageRef"
 Write-Step "Common JAR SHA-256: $commonJarHash"
+
+if ($IncludeGateway) {
+    $gatewayCoordinate = Get-PomCoordinate $GatewayLibrarySource
+    $gatewayRevision = Get-GitRevision $GatewayLibrarySource
+    $gatewayImageRevision = Get-GitRevision $GatewayImageSource
+    $gatewayDependencyDirectory = Join-Path $GatewayImageSource "target\dependency"
+    $gatewayCommonJars = @(Get-ChildItem -LiteralPath $gatewayDependencyDirectory -File -Filter "$($commonCoordinate.ArtifactId)-*.jar")
+    $gatewayLibraryJars = @(Get-ChildItem -LiteralPath $gatewayDependencyDirectory -File -Filter "$($gatewayCoordinate.ArtifactId)-*.jar")
+    if ($gatewayCommonJars.Count -ne 1) {
+        throw "Expected exactly one $($commonCoordinate.ArtifactId) JAR in $gatewayDependencyDirectory, found $($gatewayCommonJars.Count)"
+    }
+    if ($gatewayLibraryJars.Count -ne 1) {
+        throw "Expected exactly one $($gatewayCoordinate.ArtifactId) JAR in $gatewayDependencyDirectory, found $($gatewayLibraryJars.Count)"
+    }
+    $gatewayCommonJarHash = (Get-FileHash -LiteralPath $gatewayCommonJars[0].FullName -Algorithm SHA256).Hash.ToLowerInvariant()
+    if ($gatewayCommonJarHash -ne $commonJarHash) {
+        throw "GW and OrderSvr contain different com.app.common JARs"
+    }
+    $gatewayLibraryJarHash = (Get-FileHash -LiteralPath $gatewayLibraryJars[0].FullName -Algorithm SHA256).Hash.ToLowerInvariant()
+    $gatewayImageRef = "${GatewayImageRepository}:cluster-dev-$gatewayImageRevision-gateway-$gatewayRevision-common-$commonRevision"
+    if (-not $SkipDockerBuild) {
+        Write-Step "Building immutable development image $gatewayImageRef"
+        & docker build `
+            --build-arg "REPO_URL=https://github.com/bliplink/gw" `
+            --build-arg "SERVICE_REVISION=$gatewayImageRevision" `
+            --build-arg "GATEWAY_REVISION=$gatewayRevision" `
+            --build-arg "COMMON_REVISION=$commonRevision" `
+            --build-arg "COMMON_GAV=$commonGav" `
+            --build-arg "BUILD_DATE=$buildDate" `
+            --label "dc.common.jar.sha256=$gatewayCommonJarHash" `
+            --label "dc.gateway.jar.sha256=$gatewayLibraryJarHash" `
+            --tag $gatewayImageRef `
+            $GatewayImageSource
+        if ($LASTEXITCODE -ne 0) {
+            throw "Docker build failed for $gatewayImageRef"
+        }
+    }
+    $gatewayManifest = [ordered]@{
+        builtAtUtc = $buildDate
+        image = $gatewayImageRef
+        dockerBuildSkipped = [bool]$SkipDockerBuild
+        common = [ordered]@{
+            gav = $commonGav
+            revision = $commonRevision
+            jar = $gatewayCommonJars[0].Name
+            sha256 = $gatewayCommonJarHash
+        }
+        gateway = [ordered]@{
+            gav = "$($gatewayCoordinate.GroupId):$($gatewayCoordinate.ArtifactId):$($gatewayCoordinate.Version)"
+            revision = $gatewayRevision
+            jar = $gatewayLibraryJars[0].Name
+            sha256 = $gatewayLibraryJarHash
+        }
+        wrapperRevision = $gatewayImageRevision
+    }
+    $gatewayManifestPath = Join-Path $manifestDirectory "gw-build-manifest.json"
+    $gatewayManifest | ConvertTo-Json -Depth 5 | Set-Content -LiteralPath $gatewayManifestPath -Encoding UTF8
+    Write-Step "GW build manifest: $gatewayManifestPath"
+    Write-Step "GW image: $gatewayImageRef"
+}

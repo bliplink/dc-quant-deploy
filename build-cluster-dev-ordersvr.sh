@@ -6,9 +6,13 @@ WORKSPACE_ROOT="${WORKSPACE_ROOT:-$(cd "${SCRIPT_DIR}/.." && pwd)}"
 COMMON_LIBRARY_SOURCE="${COMMON_LIBRARY_SOURCE:-${WORKSPACE_ROOT}/com.app.common}"
 DC_COMMON_SOURCE="${DC_COMMON_SOURCE:-${WORKSPACE_ROOT}/com.app.dc}"
 ORDERSVR_SOURCE="${ORDERSVR_SOURCE:-${WORKSPACE_ROOT}/ordersvr}"
+GATEWAY_LIBRARY_SOURCE="${GATEWAY_LIBRARY_SOURCE:-${WORKSPACE_ROOT}/gateway/gateway}"
+GATEWAY_IMAGE_SOURCE="${GATEWAY_IMAGE_SOURCE:-${WORKSPACE_ROOT}/gw-image}"
 M2_ROOT="${M2_ROOT:-${SCRIPT_DIR}/.cluster-dev/m2-linux}"
 MAVEN_BUILD_IMAGE="${MAVEN_BUILD_IMAGE:-maven:3.9.11-eclipse-temurin-8}"
 IMAGE_REPOSITORY="${IMAGE_REPOSITORY:-dc-saas/ordersvr}"
+GATEWAY_IMAGE_REPOSITORY="${GATEWAY_IMAGE_REPOSITORY:-dc-saas/gw}"
+INCLUDE_GATEWAY="${INCLUDE_GATEWAY:-false}"
 SKIP_TESTS="${SKIP_TESTS:-false}"
 SKIP_MAVEN_BUILD="${SKIP_MAVEN_BUILD:-false}"
 SKIP_DOCKER_BUILD="${SKIP_DOCKER_BUILD:-false}"
@@ -59,6 +63,10 @@ require_command sha256sum
 require_directory "${COMMON_LIBRARY_SOURCE}" "com.app.common source"
 require_directory "${DC_COMMON_SOURCE}" "com.app.dc source"
 require_directory "${ORDERSVR_SOURCE}" "OrderSvr source"
+if [[ "${INCLUDE_GATEWAY}" == "true" ]]; then
+  require_directory "${GATEWAY_LIBRARY_SOURCE}" "gateway library source"
+  require_directory "${GATEWAY_IMAGE_SOURCE}" "GW image source"
+fi
 install -d -m 0750 "${M2_ROOT}" "${SCRIPT_DIR}/.cluster-dev"
 
 common_group="$(pom_value "${COMMON_LIBRARY_SOURCE}" project.groupId)"
@@ -88,6 +96,12 @@ if [[ "${SKIP_MAVEN_BUILD}" != "true" ]]; then
   maven "${DC_COMMON_SOURCE}" clean install "${test_arg}"
   maven "${ORDERSVR_SOURCE}" clean package dependency:copy-dependencies \
     -DoutputDirectory=target/dependency "${test_arg}"
+  if [[ "${INCLUDE_GATEWAY}" == "true" ]]; then
+    gateway_version="$(pom_value "${GATEWAY_LIBRARY_SOURCE}" project.version)"
+    maven "${GATEWAY_LIBRARY_SOURCE}" clean install "${test_arg}"
+    maven "${GATEWAY_IMAGE_SOURCE}" clean package dependency:copy-dependencies \
+      -DoutputDirectory=target/dependency -Dgateway.version="${gateway_version}" "${test_arg}"
+  fi
 else
   log "Reusing existing Maven outputs; dependency identity checks remain enabled"
 fi
@@ -132,3 +146,50 @@ manifest="${SCRIPT_DIR}/.cluster-dev/ordersvr-build-manifest.env"
 log "Build manifest: ${manifest}"
 log "Image: ${image_ref}"
 log "Common JAR SHA-256: ${common_jar_hash}"
+
+if [[ "${INCLUDE_GATEWAY}" == "true" ]]; then
+  gateway_group="$(pom_value "${GATEWAY_LIBRARY_SOURCE}" project.groupId)"
+  gateway_artifact="$(pom_value "${GATEWAY_LIBRARY_SOURCE}" project.artifactId)"
+  gateway_version="$(pom_value "${GATEWAY_LIBRARY_SOURCE}" project.version)"
+  gateway_revision="$(git_revision "${GATEWAY_LIBRARY_SOURCE}")"
+  gateway_image_revision="$(git_revision "${GATEWAY_IMAGE_SOURCE}")"
+  gateway_dependency_dir="${GATEWAY_IMAGE_SOURCE}/target/dependency"
+  mapfile -t gateway_common_jars < <(find "${gateway_dependency_dir}" -maxdepth 1 -type f -name "${common_artifact}-*.jar" -print)
+  mapfile -t gateway_jars < <(find "${gateway_dependency_dir}" -maxdepth 1 -type f -name "${gateway_artifact}-*.jar" -print)
+  [[ "${#gateway_common_jars[@]}" -eq 1 ]] || die "Expected exactly one ${common_artifact} JAR in GW, found ${#gateway_common_jars[@]}"
+  [[ "${#gateway_jars[@]}" -eq 1 ]] || die "Expected exactly one ${gateway_artifact} JAR in GW, found ${#gateway_jars[@]}"
+  gateway_common_hash="$(sha256sum "${gateway_common_jars[0]}" | awk '{print $1}')"
+  [[ "${gateway_common_hash}" == "${common_jar_hash}" ]] || die "GW and OrderSvr contain different com.app.common JARs"
+  gateway_jar_hash="$(sha256sum "${gateway_jars[0]}" | awk '{print $1}')"
+  gateway_image_ref="${GATEWAY_IMAGE_REPOSITORY}:cluster-dev-${gateway_image_revision}-gateway-${gateway_revision}-common-${common_revision}"
+
+  if [[ "${SKIP_DOCKER_BUILD}" != "true" ]]; then
+    log "Building immutable development image ${gateway_image_ref}"
+    docker build \
+      --build-arg REPO_URL=https://github.com/bliplink/gw \
+      --build-arg SERVICE_REVISION="${gateway_image_revision}" \
+      --build-arg GATEWAY_REVISION="${gateway_revision}" \
+      --build-arg COMMON_REVISION="${common_revision}" \
+      --build-arg COMMON_GAV="${common_gav}" \
+      --build-arg BUILD_DATE="${build_date}" \
+      --label dc.common.jar.sha256="${gateway_common_hash}" \
+      --label dc.gateway.jar.sha256="${gateway_jar_hash}" \
+      --tag "${gateway_image_ref}" \
+      "${GATEWAY_IMAGE_SOURCE}"
+  fi
+
+  gateway_manifest="${SCRIPT_DIR}/.cluster-dev/gw-build-manifest.env"
+  {
+    printf 'BUILD_DATE=%s\n' "${build_date}"
+    printf 'GW_IMAGE=%s\n' "${gateway_image_ref}"
+    printf 'GW_WRAPPER_REVISION=%s\n' "${gateway_image_revision}"
+    printf 'GATEWAY_GAV=%s\n' "${gateway_group}:${gateway_artifact}:${gateway_version}"
+    printf 'GATEWAY_REVISION=%s\n' "${gateway_revision}"
+    printf 'GATEWAY_JAR_SHA256=%s\n' "${gateway_jar_hash}"
+    printf 'COMMON_GAV=%s\n' "${common_gav}"
+    printf 'COMMON_REVISION=%s\n' "${common_revision}"
+    printf 'COMMON_JAR_SHA256=%s\n' "${gateway_common_hash}"
+  } > "${gateway_manifest}"
+  log "GW build manifest: ${gateway_manifest}"
+  log "GW image: ${gateway_image_ref}"
+fi
