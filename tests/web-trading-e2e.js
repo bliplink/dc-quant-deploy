@@ -309,8 +309,11 @@ async function positionRows(page, side) {
 async function closeFirstPosition(page, side) {
   const rows = await positionRows(page, side);
   await rows.first().waitFor({ timeout: 15000 });
+  await rows.first().getByText('Close', { exact: true }).click();
+  const modal = page.locator('.closePositionModal').filter({ hasText: 'Close position' }).first();
+  await modal.waitFor({ timeout: 15000 });
   await invokeFromPage(page, 'placeOrder', () =>
-    rows.first().getByText('Close', { exact: true }).click()
+    modal.locator('.ant-modal-footer .ant-btn-primary').click()
   );
 }
 
