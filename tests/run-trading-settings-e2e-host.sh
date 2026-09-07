@@ -24,7 +24,9 @@ set -a
 . "${ENV_FILE}"
 set +a
 
-"${SCRIPT_DIR}/prepare-web-trading-e2e.sh" >/dev/null
+E2E_BUYER="${E2E_USER}" \
+E2E_SELLER="${E2E_USER}_peer" \
+  "${SCRIPT_DIR}/prepare-web-trading-e2e.sh" >/dev/null
 
 api_call() {
   local server="$1" method="$2" content="$3" token="${4:-}"
@@ -37,7 +39,8 @@ api_call() {
 
 json_value() {
   local expression="$1"
-  python3 -c 'import json,sys; d=json.load(sys.stdin); value=eval(sys.argv[1],{"d":d}); print(str(value).lower() if isinstance(value,bool) else value)' "${expression}"
+  shift
+  python3 -c 'import json,sys; d=json.load(sys.stdin); value=eval(sys.argv[1],{"d":d,"sys":sys}); print(str(value).lower() if isinstance(value,bool) else value)' "${expression}" "$@"
 }
 
 expect_ok() {
@@ -60,6 +63,9 @@ login_response="$(curl -fsS --max-time 30 -H 'Content-Type: application/json' --
 rm -f "${login_request}"
 token="$(printf '%s' "${login_response}" | json_value '(d.get("data") or {}).get("token",d.get("token",""))')"
 [[ -n "${token}" ]] || die "Login returned no token"
+
+funding_response="$(api_call TDSvr cashIn "{\"UserID\":\"${E2E_USER}\",\"Amount\":\"100000\",\"Location\":\"${E2E_LOCATION}\"}" "${token}")"
+expect_ok "account funding" "${funding_response}"
 
 config_response="$(api_call TradeSvr getSymbolConfig '{"SecurityID":"BTCUSDT"}' "${token}")"
 expect_ok "initial configuration query" "${config_response}"
@@ -118,8 +124,12 @@ expect_ok "resting order placement" "${order_response}"
 
 locked=false
 for _ in $(seq 1 30); do
+  open_orders_response="$(api_call OrderSvr queryOpenOrder '{"securityid":"BTCUSDT"}' "${token}")"
+  expect_ok "active order query" "${open_orders_response}"
+  active_order_count="$(printf '%s' "${open_orders_response}" | json_value 'sum(1 for x in (d.get("data") or []) if x.get("ClOrdID")==sys.argv[2])' "${clord_id}")"
   config_response="$(api_call TradeSvr getSymbolConfig '{"SecurityID":"BTCUSDT"}' "${token}")"
-  if [[ "$(printf '%s' "${config_response}" | json_value 'd["data"]["hasOpenOrders"]')" == true ]]; then
+  if [[ "${active_order_count}" == "1" ]] && \
+     [[ "$(printf '%s' "${config_response}" | json_value 'd["data"]["hasOpenOrders"]')" == true ]]; then
     locked=true
     break
   fi
