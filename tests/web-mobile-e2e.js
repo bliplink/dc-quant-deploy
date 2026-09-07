@@ -35,9 +35,10 @@ async function login(page) {
 
 async function viewportMetrics(page) {
   return page.evaluate(() => {
-    const panelBoxes = [...document.querySelectorAll('.tradePanel')].map((panel) => {
+    const panels = [...document.querySelectorAll('.tradePanel')];
+    const panelBoxes = panels.filter(panel => getComputedStyle(panel).display !== 'none').map((panel) => {
       const rect = panel.getBoundingClientRect();
-      return {left: rect.left, right: rect.right, width: rect.width, top: rect.top};
+      return {key: panel.dataset.panelKey, left: rect.left, right: rect.right, width: rect.width, top: rect.top};
     });
     const button = document.querySelector('.orderBuyBtn');
     const amount = document.querySelector('[aria-label="Amount"]');
@@ -48,7 +49,10 @@ async function viewportMetrics(page) {
       documentWidth: document.documentElement.scrollWidth,
       bodyWidth: document.body.scrollWidth,
       panelBoxes,
-      panelCount: panelBoxes.length,
+      panelCount: panels.length,
+      visiblePanelCount: panelBoxes.length,
+      mobileNavigationCount: document.querySelectorAll('.mobileTradeNavigation button').length,
+      mobileTradeBarVisible: Boolean(document.querySelector('.mobileTradeBar')),
       dragHandleCount: document.querySelectorAll('.panelDragHandle').length,
       header: header ? header.getBoundingClientRect().toJSON() : null,
       symbol: symbol ? symbol.getBoundingClientRect().toJSON() : null,
@@ -62,13 +66,13 @@ function assertResponsive(metrics, viewportWidth) {
   if (metrics.documentWidth > viewportWidth + 1 || metrics.bodyWidth > viewportWidth + 1) {
     throw new Error(`page has horizontal overflow: ${JSON.stringify(metrics)}`);
   }
-  if (metrics.panelCount !== 5) throw new Error(`expected five panels: ${JSON.stringify(metrics)}`);
+  if (metrics.panelCount !== 5 || metrics.visiblePanelCount !== 1) {
+    throw new Error(`mobile workspace must keep five modules but show one tab at a time: ${JSON.stringify(metrics)}`);
+  }
   const outside = metrics.panelBoxes.filter(box => box.left < -1 || box.right > viewportWidth + 1);
   if (outside.length) throw new Error(`panels overflow viewport: ${JSON.stringify(outside)}`);
-  for (let index = 1; index < metrics.panelBoxes.length; index += 1) {
-    if (metrics.panelBoxes[index].top <= metrics.panelBoxes[index - 1].top) {
-      throw new Error(`mobile panels are not vertically stacked: ${JSON.stringify(metrics.panelBoxes)}`);
-    }
+  if (metrics.mobileNavigationCount !== 4 || !metrics.mobileTradeBarVisible) {
+    throw new Error(`mobile tab navigation or fixed trade actions are missing: ${JSON.stringify(metrics)}`);
   }
   if (!metrics.header || metrics.header.left < -1 || metrics.header.right > viewportWidth + 1) {
     throw new Error(`header overflows viewport: ${JSON.stringify(metrics.header)}`);
@@ -104,6 +108,14 @@ function assertResponsive(metrics, viewportWidth) {
     const metrics = await viewportMetrics(page);
     assertResponsive(metrics, 390);
 
+    await page.getByRole('button', {name: 'Order Book', exact: true}).tap();
+    await page.waitForFunction(() => {
+      const visible = [...document.querySelectorAll('.tradePanel')]
+        .filter(panel => getComputedStyle(panel).display !== 'none');
+      return visible.length === 1 && visible[0].dataset.panelKey === 'orderbook';
+    });
+    await page.getByRole('button', {name: 'Chart', exact: true}).tap();
+
     await page.locator('.symbolDiv').tap();
     const drawer = page.locator('.ant-drawer');
     await drawer.getByPlaceholder('Search markets').waitFor({timeout: 10000});
@@ -115,11 +127,16 @@ function assertResponsive(metrics, viewportWidth) {
     await drawer.getByText('BTCUSDT', {exact: true}).tap();
     await drawer.waitFor({state: 'hidden', timeout: 10000});
 
-    const placeOrder = page.locator('.placeOrderWrap');
+    await page.locator('.mobileTradeBar .buy').tap();
+    const placeOrder = page.locator('[data-panel-key="place-order"] .placeOrderWrap');
+    await placeOrder.waitFor({state: 'visible', timeout: 10000});
+    if (!(await placeOrder.evaluate(node => node.classList.contains('intentBuy')))) {
+      throw new Error('mobile buy action did not open a buy-focused order ticket');
+    }
     await placeOrder.scrollIntoViewIfNeeded();
-    await page.getByRole('button', {name: 'Market', exact: true}).tap();
-    await page.getByLabel('Amount').fill('0.001');
-    if (!(await page.getByRole('button', {name: 'Buy / Long'}).isVisible())) {
+    await placeOrder.getByRole('button', {name: 'Market', exact: true}).tap();
+    await placeOrder.getByLabel('Amount').fill('0.001');
+    if (!(await placeOrder.getByRole('button', {name: 'Buy / Long'}).isVisible())) {
       throw new Error('mobile order action is not reachable');
     }
 
@@ -134,7 +151,9 @@ function assertResponsive(metrics, viewportWidth) {
       location,
       viewport: '390x844',
       noHorizontalOverflow: true,
-      verticallyStackedPanels: 5,
+      tabbedTradingModules: 5,
+      visibleModulesAtOnce: 1,
+      fixedBuySellActions: true,
       touchFriendlyOrderEntry: true,
       responsiveMarketDrawer: true,
       mobileAutoLayout: true,
