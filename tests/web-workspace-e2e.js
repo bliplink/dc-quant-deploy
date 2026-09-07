@@ -98,7 +98,8 @@ async function login(page) {
   await page.waitForURL(`**/#/trade?location=${encodeURIComponent(location)}`);
   await page.locator('.tradeGrid').waitFor({timeout: 60000});
   const loginSession = await page.evaluate(() => JSON.parse(sessionStorage.getItem('loginData') || '{}'));
-  if (Number(loginSession.code) !== 0 || loginSession.user_id !== username ||
+  const authenticatedUsername = loginSession.user_name || loginSession.user_id;
+  if (Number(loginSession.code) !== 0 || authenticatedUsername !== username || !loginSession.user_id ||
       String(loginSession.location || '').toUpperCase() !== location) {
     throw new Error(`websocket login failed: ${JSON.stringify(loginSession)}`);
   }
