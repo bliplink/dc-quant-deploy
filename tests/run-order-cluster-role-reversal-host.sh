@@ -65,7 +65,8 @@ wait_record() {
 }
 
 archive_count() {
-  local node="$1" path="${ORDER_CLUSTER_DEV_ROOT}/data/${node}/journal/.archive"
+  local node="$1"
+  local path="${ORDER_CLUSTER_DEV_ROOT}/data/${node}/journal/.archive"
   if ! sudo test -d "${path}"; then
     printf '0\n'
     return
