@@ -33,13 +33,10 @@ def request(args, index, warmup=False):
     prefix = "WARM-%s" % args.run_id if warmup else "MEASURE-%s" % args.run_id
     payload = {
         "serverName": "OrderSvr",
-        "method": "placeOrder",
+        "method": "__cluster_perf_probe__",
         "content": {
-            "OCType": "CLOSE", "OrderQty": "0.001", "OrdType": "Limit",
             "ClOrdID": "%s-%07d" % (prefix, index), "Terminal": "ClusterPerf",
-            "CloseBy": "liq", "Side": "Buy", "Price": "100",
-            "UserID": "cluster-perf", "MarketIndicator": "4", "TimeInForce": "GTC",
-            "SecurityID": symbol, "Location": "WEB_E2E", "ReduceOnly": "true",
+            "MarketIndicator": "4", "SecurityID": symbol, "Location": "WEB_E2E",
         },
     }
     body = json.dumps(payload, separators=(",", ":")).encode("utf-8")

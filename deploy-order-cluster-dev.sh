@@ -222,6 +222,7 @@ order.cluster.snapshotDir=../../data/${node}/snapshot
 order.cluster.lifecycle.enabled=false
 order.cluster.lifecycle.pollMillis=1000
 order.cluster.lifecycle.retryMillis=5000
+order.cluster.perfProbe.enabled=true
 order.cluster.replication.enabled=true
 order.cluster.replication.required=true
 order.cluster.replication.bindHost=127.0.0.1
