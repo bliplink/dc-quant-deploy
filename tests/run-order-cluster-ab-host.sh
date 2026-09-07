@@ -32,14 +32,30 @@ request() {
     sudo tee "${EVIDENCE_DIR}/${name}.response.json" >/dev/null
 }
 
+request_until_recorded() {
+  local name="$1" payload="$2" log_file="$3" pattern="$4" deadline=$((SECONDS + 60))
+  while (( SECONDS < deadline )); do
+    request "${name}" "${payload}" || true
+    if sudo grep -Eq "${pattern}" "${log_file}"; then
+      return 0
+    fi
+    sleep 1
+  done
+  die "${name} was not routed and synchronously replicated before the startup deadline"
+}
+
 log 'Triggering physical node connections through logical OrderSvr partition routing'
 request probe-btc '{"serverName":"OrderSvr","method":"__cluster_route_readiness__","content":{"Location":"WEB_E2E","MarketIndicator":"4","SecurityID":"BTCUSDT"}}' || true
 request probe-eth '{"serverName":"OrderSvr","method":"__cluster_route_readiness__","content":{"Location":"WEB_E2E","MarketIndicator":"4","SecurityID":"ETHUSDT"}}' || true
 
 btc_clid="HOST-AB-BTC-${RUN_ID}"
 eth_clid="HOST-AB-ETH-${RUN_ID}"
-request order-btc "{\"serverName\":\"OrderSvr\",\"method\":\"placeOrder\",\"content\":{\"OCType\":\"CLOSE\",\"OrderQty\":\"0.001\",\"OrdType\":\"Limit\",\"ClOrdID\":\"${btc_clid}\",\"Terminal\":\"ClusterE2E\",\"CloseBy\":\"liq\",\"Side\":\"Buy\",\"Price\":\"100\",\"UserID\":\"cluster-e2e\",\"MarketIndicator\":\"4\",\"TimeInForce\":\"GTC\",\"SecurityID\":\"BTCUSDT\",\"Location\":\"WEB_E2E\",\"ReduceOnly\":\"true\"}}"
-request order-eth "{\"serverName\":\"OrderSvr\",\"method\":\"placeOrder\",\"content\":{\"OCType\":\"CLOSE\",\"OrderQty\":\"0.001\",\"OrdType\":\"Limit\",\"ClOrdID\":\"${eth_clid}\",\"Terminal\":\"ClusterE2E\",\"CloseBy\":\"liq\",\"Side\":\"Buy\",\"Price\":\"100\",\"UserID\":\"cluster-e2e\",\"MarketIndicator\":\"4\",\"TimeInForce\":\"GTC\",\"SecurityID\":\"ETHUSDT\",\"Location\":\"WEB_E2E\",\"ReduceOnly\":\"true\"}}"
+btc_payload="{\"serverName\":\"OrderSvr\",\"method\":\"placeOrder\",\"content\":{\"OCType\":\"CLOSE\",\"OrderQty\":\"0.001\",\"OrdType\":\"Limit\",\"ClOrdID\":\"${btc_clid}\",\"Terminal\":\"ClusterE2E\",\"CloseBy\":\"liq\",\"Side\":\"Buy\",\"Price\":\"100\",\"UserID\":\"cluster-e2e\",\"MarketIndicator\":\"4\",\"TimeInForce\":\"GTC\",\"SecurityID\":\"BTCUSDT\",\"Location\":\"WEB_E2E\",\"ReduceOnly\":\"true\"}}"
+eth_payload="{\"serverName\":\"OrderSvr\",\"method\":\"placeOrder\",\"content\":{\"OCType\":\"CLOSE\",\"OrderQty\":\"0.001\",\"OrdType\":\"Limit\",\"ClOrdID\":\"${eth_clid}\",\"Terminal\":\"ClusterE2E\",\"CloseBy\":\"liq\",\"Side\":\"Buy\",\"Price\":\"100\",\"UserID\":\"cluster-e2e\",\"MarketIndicator\":\"4\",\"TimeInForce\":\"GTC\",\"SecurityID\":\"ETHUSDT\",\"Location\":\"WEB_E2E\",\"ReduceOnly\":\"true\"}}"
+request_until_recorded order-btc "${btc_payload}" "${ORDER_A_LOG}" \
+  "ORDER_CLUSTER_COMMAND_RECORDED node:OrderSvrA, partition:P027.*eventId:${btc_clid}.*replicaStatus:OK"
+request_until_recorded order-eth "${eth_payload}" "${ORDER_B_LOG}" \
+  "ORDER_CLUSTER_COMMAND_RECORDED node:OrderSvrB, partition:P132.*eventId:${eth_clid}.*replicaStatus:OK"
 
 sleep 2
 sudo tail -n "+${GW_START_LINE}" "${GW_LOG}" >"/tmp/order-cluster-gw-${RUN_ID}.log"
