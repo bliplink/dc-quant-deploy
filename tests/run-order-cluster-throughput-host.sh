@@ -9,6 +9,7 @@ GW_PORT="${ORDER_CLUSTER_GW_PORT:-33302}"
 REQUESTS="${ORDER_CLUSTER_PERF_REQUESTS:-2000}"
 CONCURRENCY="${ORDER_CLUSTER_PERF_CONCURRENCY:-32}"
 WARMUP="${ORDER_CLUSTER_PERF_WARMUP:-200}"
+SEQUENCE="${ORDER_CLUSTER_PERF_SEQUENCE:-ABBA}"
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 LOAD_SCRIPT="${SCRIPT_DIR}/order-cluster-throughput-load.py"
 P027="/dc/cluster/ordersvr-dev/partitions/P027"
@@ -77,15 +78,26 @@ run_load() {
   [[ "${recorded}" -eq "${REQUESTS}" ]] || die "${mode}/${iteration}: expected ${REQUESTS} recorded commands, found ${recorded}"
 }
 
-# ABBA order reduces warm-JVM and background-noise bias on a single host.
-run_load single-primary 1 "${BASE_EPOCH}"
-run_load split-primary 1 "$((BASE_EPOCH + 10))"
-run_load split-primary 2 "$((BASE_EPOCH + 20))"
-run_load single-primary 2 "$((BASE_EPOCH + 30))"
+# A second run can use BAAB to counterbalance warm-JVM and host-load drift.
+case "${SEQUENCE}" in
+  ABBA)
+    run_load single-primary 1 "${BASE_EPOCH}"
+    run_load split-primary 1 "$((BASE_EPOCH + 10))"
+    run_load split-primary 2 "$((BASE_EPOCH + 20))"
+    run_load single-primary 2 "$((BASE_EPOCH + 30))"
+    ;;
+  BAAB)
+    run_load split-primary 1 "${BASE_EPOCH}"
+    run_load single-primary 1 "$((BASE_EPOCH + 10))"
+    run_load single-primary 2 "$((BASE_EPOCH + 20))"
+    run_load split-primary 2 "$((BASE_EPOCH + 30))"
+    ;;
+  *) die 'ORDER_CLUSTER_PERF_SEQUENCE must be ABBA or BAAB' ;;
+esac
 
-python3 - "${EVIDENCE}" "${RUN_ID}" "${STARTED_AT}" "${REQUESTS}" "${CONCURRENCY}" <<'PY'
+python3 - "${EVIDENCE}" "${RUN_ID}" "${STARTED_AT}" "${REQUESTS}" "${CONCURRENCY}" "${SEQUENCE}" <<'PY'
 import json, os, statistics, sys
-root, run_id, started_at, requests, concurrency = sys.argv[1:]
+root, run_id, started_at, requests, concurrency, sequence = sys.argv[1:]
 def load(mode):
     result = []
     for index in (1, 2):
@@ -100,7 +112,7 @@ report = {
   "result": "PASS", "scope": "gw-routing-order-shadow-journal-synchronous-replication",
   "businessOrderAcceptance": "NOT_TESTED", "runId": run_id, "startedAtUtc": started_at,
   "requestsPerRun": int(requests), "concurrency": int(concurrency),
-  "method": "ABBA two-run median on the same host",
+  "method": "two-run median on the same host", "sequence": sequence,
   "singlePrimary": {"medianTps": baseline_tps, "runs": baseline},
   "splitPrimary": {"medianTps": split_tps, "runs": split},
   "tpsChangePercent": change,
