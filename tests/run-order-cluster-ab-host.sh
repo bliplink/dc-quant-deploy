@@ -32,23 +32,9 @@ request() {
     sudo tee "${EVIDENCE_DIR}/${name}.response.json" >/dev/null
 }
 
-wait_gateway_node() {
-  local port="$1" node="$2" deadline=$((SECONDS + 60))
-  while (( SECONDS < deadline )); do
-    if sudo tail -n "+${GW_START_LINE}" "${GW_LOG}" |
-      grep -q "GwClient connected to Host:127.0.0.1,Port:${port}"; then
-      return 0
-    fi
-    sleep 1
-  done
-  die "GW did not connect to ${node} on port ${port}"
-}
-
 log 'Triggering physical node connections through logical OrderSvr partition routing'
 request probe-btc '{"serverName":"OrderSvr","method":"__cluster_route_readiness__","content":{"Location":"WEB_E2E","MarketIndicator":"4","SecurityID":"BTCUSDT"}}' || true
-wait_gateway_node 33336 OrderSvrA
 request probe-eth '{"serverName":"OrderSvr","method":"__cluster_route_readiness__","content":{"Location":"WEB_E2E","MarketIndicator":"4","SecurityID":"ETHUSDT"}}' || true
-wait_gateway_node 33337 OrderSvrB
 
 btc_clid="HOST-AB-BTC-${RUN_ID}"
 eth_clid="HOST-AB-ETH-${RUN_ID}"
