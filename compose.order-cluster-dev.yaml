@@ -1,0 +1,70 @@
+services:
+  ordersvr-a:
+    image: ${ORDERSVR_CLUSTER_DEV_IMAGE:?set ORDERSVR_CLUSTER_DEV_IMAGE}
+    pull_policy: always
+    container_name: dc-saas-cluster-ordersvr-a
+    network_mode: host
+    restart: unless-stopped
+    init: true
+    environment:
+      TZ: Asia/Shanghai
+      DEPLOY_ROOT: /srv/dc
+      SERVICE_NAME: OrderSvr
+      MAIN_CLASS: OrderSvr
+      JAVA_OPTS: ${ORDER_CLUSTER_JAVA_OPTS:--server -Xms32m -Xmx256m -Xmn64m -Xss256k -XX:+ExitOnOutOfMemoryError -Djava.security.auth.login.config=../../control/jaas.ini}
+    volumes:
+      - ${ORDER_CLUSTER_DEV_ROOT:-/data/dc-saas-order-cluster-dev}/control:/srv/dc/control:ro
+      - ${ORDER_CLUSTER_DEV_ROOT:-/data/dc-saas-order-cluster-dev}/data:/srv/dc/data
+      - ${ORDER_CLUSTER_DEV_ROOT:-/data/dc-saas-order-cluster-dev}/log:/srv/dc/log
+      - ${ORDER_CLUSTER_DEV_ROOT:-/data/dc-saas-order-cluster-dev}/nodes/OrderSvrA/application.properties:/srv/dc/dc/OrderSvr/config/application.properties:ro
+      - ${ORDER_CLUSTER_DEV_ROOT:-/data/dc-saas-order-cluster-dev}/nodes/OrderSvrA/log4j.ini:/srv/dc/dc/OrderSvr/config/log4j.ini:ro
+    mem_limit: ${ORDER_CLUSTER_MEMORY_LIMIT:-384m}
+    cpus: ${ORDER_CLUSTER_CPU_LIMIT:-0.30}
+
+  ordersvr-b:
+    image: ${ORDERSVR_CLUSTER_DEV_IMAGE:?set ORDERSVR_CLUSTER_DEV_IMAGE}
+    pull_policy: always
+    container_name: dc-saas-cluster-ordersvr-b
+    network_mode: host
+    restart: unless-stopped
+    init: true
+    environment:
+      TZ: Asia/Shanghai
+      DEPLOY_ROOT: /srv/dc
+      SERVICE_NAME: OrderSvr
+      MAIN_CLASS: OrderSvr
+      JAVA_OPTS: ${ORDER_CLUSTER_JAVA_OPTS:--server -Xms32m -Xmx256m -Xmn64m -Xss256k -XX:+ExitOnOutOfMemoryError -Djava.security.auth.login.config=../../control/jaas.ini}
+    volumes:
+      - ${ORDER_CLUSTER_DEV_ROOT:-/data/dc-saas-order-cluster-dev}/control:/srv/dc/control:ro
+      - ${ORDER_CLUSTER_DEV_ROOT:-/data/dc-saas-order-cluster-dev}/data:/srv/dc/data
+      - ${ORDER_CLUSTER_DEV_ROOT:-/data/dc-saas-order-cluster-dev}/log:/srv/dc/log
+      - ${ORDER_CLUSTER_DEV_ROOT:-/data/dc-saas-order-cluster-dev}/nodes/OrderSvrB/application.properties:/srv/dc/dc/OrderSvr/config/application.properties:ro
+      - ${ORDER_CLUSTER_DEV_ROOT:-/data/dc-saas-order-cluster-dev}/nodes/OrderSvrB/log4j.ini:/srv/dc/dc/OrderSvr/config/log4j.ini:ro
+    mem_limit: ${ORDER_CLUSTER_MEMORY_LIMIT:-384m}
+    cpus: ${ORDER_CLUSTER_CPU_LIMIT:-0.30}
+
+  gateway:
+    image: ${GW_CLUSTER_DEV_IMAGE:?set GW_CLUSTER_DEV_IMAGE}
+    pull_policy: always
+    container_name: dc-saas-cluster-gateway
+    network_mode: host
+    restart: unless-stopped
+    init: true
+    depends_on:
+      - ordersvr-a
+      - ordersvr-b
+    environment:
+      TZ: Asia/Shanghai
+      DEPLOY_ROOT: /srv/dc
+      SERVICE_NAME: GW
+      MAIN_CLASS: GW
+      JAVA_OPTS: ${ORDER_CLUSTER_GW_JAVA_OPTS:--server -Xms32m -Xmx192m -Xmn48m -Xss256k -XX:MaxDirectMemorySize=96m -XX:+ExitOnOutOfMemoryError -Djava.security.auth.login.config=../../control/jaas.ini}
+    volumes:
+      - ${ORDER_CLUSTER_DEV_ROOT:-/data/dc-saas-order-cluster-dev}/control:/srv/dc/control:ro
+      - ${ORDER_CLUSTER_DEV_ROOT:-/data/dc-saas-order-cluster-dev}/data:/srv/dc/data
+      - ${ORDER_CLUSTER_DEV_ROOT:-/data/dc-saas-order-cluster-dev}/log:/srv/dc/log
+      - ${ORDER_CLUSTER_DEV_ROOT:-/data/dc-saas-order-cluster-dev}/gateway/spring-config.xml:/srv/dc/dc/GW/config/spring-config.xml:ro
+      - ${ORDER_CLUSTER_DEV_ROOT:-/data/dc-saas-order-cluster-dev}/gateway/spring-gw-client.xml:/srv/dc/dc/GW/config/spring-gw-client.xml:ro
+      - ${ORDER_CLUSTER_DEV_ROOT:-/data/dc-saas-order-cluster-dev}/gateway/spring-tcp-server.xml:/srv/dc/dc/GW/config/spring-tcp-server.xml:ro
+    mem_limit: ${ORDER_CLUSTER_GW_MEMORY_LIMIT:-320m}
+    cpus: ${ORDER_CLUSTER_GW_CPU_LIMIT:-0.25}
