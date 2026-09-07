@@ -146,9 +146,10 @@ function layoutItem(snapshot, breakpoint, key) {
     }
     await configPill.click();
     const configModal = page.locator('.tradeConfigModal');
-    await configModal.getByText('Margin mode', {exact: true}).waitFor({timeout: 10000});
-    await configModal.getByText('Leverage', {exact: true}).waitFor({timeout: 10000});
-    await configModal.getByText('Risk limit', {exact: true}).waitFor({timeout: 10000});
+    const configSectionTitles = configModal.locator('.configSectionTitle');
+    await configSectionTitles.filter({hasText: 'Margin mode'}).waitFor({timeout: 10000});
+    await configSectionTitles.filter({hasText: 'Leverage'}).waitFor({timeout: 10000});
+    await configSectionTitles.filter({hasText: 'Risk limit'}).waitFor({timeout: 10000});
     await configModal.getByText('Maximum position value at selected leverage', {exact: true}).waitFor({timeout: 10000});
     if (await configModal.locator('.configSummary > div').count() !== 3) {
       throw new Error('trade configuration summary must show margin, leverage and position modes');
@@ -164,7 +165,7 @@ function layoutItem(snapshot, breakpoint, key) {
     if (!maximumNotionalText || maximumNotionalText.indexOf('--') >= 0) {
       throw new Error(`maximum position value is unavailable: ${maximumNotionalText}`);
     }
-    await configModal.getByText('Position mode', {exact: true}).waitFor({timeout: 10000});
+    await configSectionTitles.filter({hasText: 'Position mode'}).waitFor({timeout: 10000});
     await page.screenshot({path: path.join(artifactDir, 'trade-config-dialog-en.png'), fullPage: true});
     await configModal.getByRole('button', {name: 'Cancel', exact: true}).click();
 
