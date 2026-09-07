@@ -187,6 +187,36 @@ function layoutItem(snapshot, breakpoint, key) {
     await marketDrawer.getByText('BTCUSDT', {exact: true}).click();
     await marketDrawer.waitFor({state: 'hidden', timeout: 10000});
 
+    const bothBookButton = page.getByRole('button', {name: 'Show asks and bids', exact: true});
+    const askBookButton = page.getByRole('button', {name: 'Show asks only', exact: true});
+    const bidBookButton = page.getByRole('button', {name: 'Show bids only', exact: true});
+    await bothBookButton.waitFor({state: 'visible', timeout: 10000});
+    if (await askBookButton.count() !== 1 || await bidBookButton.count() !== 1) {
+      throw new Error('order book view controls are incomplete');
+    }
+    await askBookButton.click();
+    if (await page.locator('.bookViewport .order-book-row--bid').count() !== 0 ||
+        await page.locator('.bookViewport .order-book-row--ask').count() === 0) {
+      throw new Error('ask-only order book view is incorrect');
+    }
+    await bidBookButton.click();
+    if (await page.locator('.bookViewport .order-book-row--ask').count() !== 0 ||
+        await page.locator('.bookViewport .order-book-row--bid').count() === 0) {
+      throw new Error('bid-only order book view is incorrect');
+    }
+    await bothBookButton.click();
+    const grouping = page.getByLabel('Price grouping');
+    const groupingOptions = await grouping.locator('option').evaluateAll(options => options.map(option => option.value));
+    if (groupingOptions.length < 2) throw new Error(`price grouping choices are incomplete: ${groupingOptions}`);
+    await grouping.selectOption(groupingOptions[1]);
+    const selectedBookPrice = (await page.locator('.order-book-row--ask').last().locator('.ask-price').innerText()).trim();
+    await page.locator('.order-book-row--ask').last().click();
+    const selectedLimitPrice = await page.getByLabel('Limit Price').inputValue();
+    if (!selectedLimitPrice || Number(selectedLimitPrice) !== Number(selectedBookPrice)) {
+      throw new Error(`order book price did not populate the limit form: ${selectedBookPrice} -> ${selectedLimitPrice}`);
+    }
+    await page.getByLabel('Limit Price').fill('');
+
     await page.getByText('Last Price', {exact: true}).first().waitFor({timeout: 10000});
     const buyButton = page.locator('.orderBuyBtn');
     await buyButton.waitFor({state: 'visible', timeout: 10000});
@@ -359,6 +389,9 @@ function layoutItem(snapshot, breakpoint, key) {
       chartFillsPanel: {initial: initialChartFill, resized: resizedChartFill},
       bybitChartTheme: chartTheme,
       lastPriceHeader: true,
+      orderBookViews: ['both', 'ask', 'bid'],
+      orderBookPriceGrouping: true,
+      orderBookPriceToLimitForm: true,
       searchableMarketSelector: true,
       professionalTheme: colors,
       artifacts: ['register-tenant-bound.png', 'workspace-en.png', 'workspace-zh.png']
