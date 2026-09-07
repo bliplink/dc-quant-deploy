@@ -83,6 +83,14 @@ dc-saas/gw:cluster-dev-<wrapper-sha>-gateway-<gateway-sha>-common-<common-sha>
 
 Linux脚本输出对应的 `.env` 清单。`.cluster-dev/` 已加入 `.gitignore`，不得提交 Maven 缓存或本地构建产物。
 
+Linux镜像构建完成后，先执行静态镜像验收，不启动业务服务：
+
+```bash
+./verify-cluster-dev-images.sh
+```
+
+该检查会读取构建清单，核对镜像Label，进入镜像检查Common JAR数量和SHA256，并确认OrderSvr/GW使用同一个Common二进制文件。
+
 ## 镜像核验
 
 ```bash
