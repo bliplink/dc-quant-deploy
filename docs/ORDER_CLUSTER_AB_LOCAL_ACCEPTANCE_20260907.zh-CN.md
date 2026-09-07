@@ -54,15 +54,47 @@ ORDER_CLUSTER_COMMAND_RECORDED node:OrderSvrB, partition:P132, epoch:1, seq:1, r
 .\tests\run-order-cluster-ab-local.ps1 -SkipBuild
 ```
 
+## 服务器隔离集群验收（18.140.45.126）
+
+服务器已使用独立 Compose project `dc-saas-order-cluster-dev`、独立 ZooKeeper `127.0.0.1:32182`、独立端口和 `/data/dc-saas-order-cluster-dev` 数据目录完成部署。现有量化和 SaaS 的 GW、OrderSvr 容器未替换、未重启、未接流量。
+
+本轮服务器版本：
+
+- Common：`811eeeca05b33e77017081cf08178a3993c88919`
+- OrderSvr：`ff25f5bba2f6a3fce151ae7572f66c3d41a8237e`
+- Deploy：`4f4fe0d`
+- OrderSvr 镜像：`ghcr.io/bliplink/ordersvr:cluster-dev-ff25f5b`
+- GW 镜像：`ghcr.io/bliplink/ordersvr:gw-cluster-dev-ff25f5b`
+- OrderSvr 镜像摘要：`sha256:6b8af27ca96f22cf1a13125255d8838cb23a5dd8d5b436bd809caa1aa9d29382`
+- GW 镜像摘要：`sha256:c0fddd26ce468f914a996c7ca6122efe456f96497050b7a8627c782047114fdf`
+- 两个镜像内嵌 Common JAR SHA-256：`816f3d672421e0bc21cb17f1be1feec1e678fded53af0c1ce5ef12edc0d976fc`
+
+验证结果：
+
+1. OrderSvr 本地全量测试 112 项全部通过；GitHub Actions 的 Common、OrderSvr 测试/镜像和 GW 镜像任务全部通过。
+2. 服务器 A/B 分区路由与同步复制通过：BTCUSDT 的 P027 为 A 主/B 备，ETHUSDT 的 P132 为 B 主/A 备，两个方向均为 `replicaStatus:OK`。
+3. P027 在线角色反转通过：epoch 单调递增，先 A→B，再 B→A，两个方向均通过 GW 逻辑服务路由并取得同步副本 ACK；最终恢复 A 主/B 备。
+4. 隔离 GW 未连接现有 SaaS OrderSvr 的 33036 端口；租户交易规则数据库刷新在两台隔离 OrderSvr 上均关闭，本轮增量日志无相应刷新异常。
+5. A/B/GW 测试可重复运行；测试不再依赖仅在首次启动时出现的连接日志。
+
+机器可读证据：
+
+```text
+/data/dc-saas-order-cluster-dev/evidence/20260907-141740/result.json
+/data/dc-saas-order-cluster-dev/evidence/20260907-140321-role-reversal/result.json
+```
+
+上述两个结果的 `businessOrderAcceptance` 均为 `NOT_TESTED`。隔离栈故意不接 LoginSvr、AdminSvr、TradeSvr、资金和行情；测试请求用于验证分区命令进入正确物理节点并同步复制，不能据此宣称真实交易下单成功。
+
 ## 尚未完成的集群验收
 
 以下项目不能因本次联测通过而宣称完成：
 
-1. ZooKeeper 角色变更到 OrderSvr 自动恢复/自动提升的生产生命周期尚未接通。
-2. 主节点停止、备节点补齐日志、提升、原主恢复后的 fencing 和回切尚未做进程级故障演练。
+1. ZooKeeper 在线角色变更已经验证，但由故障检测器自动生成角色变更、OrderSvr 自动恢复/自动提升的生产生命周期尚未接通。
+2. 当前 `state/commit/snapshot` 在隔离部署中仍关闭，因此尚未注入主节点宕机；备节点补齐业务状态、提升、原主恢复后的 fencing 和回切不能宣称完成。
 3. 当前 Common/Gateway 集群依赖尚未正式发布 Maven Central，开发产物不得替换生产正式依赖。
-4. Docker 双实例覆盖、服务器资源限制、持久化目录、健康检查和一键回滚仍需在隔离服务器环境验证。
-5. 带真实 MySQL 资金、撮合、成交、TradeSvr 回报以及 Web/Robot 流量的完整业务回归，需要在服务器隔离栈完成。
+4. Docker 双实例、服务器资源限制和持久化目录已完成隔离验证；容器健康检查、故障自动化与一键回滚仍需补齐。
+5. 带真实 LoginSvr/MySQL 资金、撮合、成交、TradeSvr 回报以及 Web/Robot 流量的完整业务回归，需要在服务器隔离栈完成。
 
 ## 下一步发布边界
 
