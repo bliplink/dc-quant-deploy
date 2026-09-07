@@ -144,6 +144,15 @@ function layoutItem(snapshot, breakpoint, key) {
     const configModal = page.locator('.tradeConfigModal');
     await configModal.getByText('Margin mode', {exact: true}).waitFor({timeout: 10000});
     await configModal.getByText('Leverage', {exact: true}).waitFor({timeout: 10000});
+    await configModal.getByText('Risk limit', {exact: true}).waitFor({timeout: 10000});
+    await configModal.getByText('Maximum position value at selected leverage', {exact: true}).waitFor({timeout: 10000});
+    if (await configModal.locator('.riskTierRow').count() < 1) {
+      throw new Error('authoritative risk tier table is missing');
+    }
+    const maximumNotionalText = await configModal.locator('.riskLimitSummary strong').innerText();
+    if (!maximumNotionalText || maximumNotionalText.indexOf('--') >= 0) {
+      throw new Error(`maximum position value is unavailable: ${maximumNotionalText}`);
+    }
     await configModal.getByText('Position mode', {exact: true}).waitFor({timeout: 10000});
     await configModal.getByRole('button', {name: 'Cancel', exact: true}).click();
     const resetLayoutButton = page.getByRole('button', {name: 'Reset layout', exact: true});
@@ -385,6 +394,7 @@ function layoutItem(snapshot, breakpoint, key) {
       orderInputValidation: true,
       conditionalOrderModes: true,
       reduceOnlyControl: true,
+      authoritativeRiskLimits: true,
       tenantBoundRegistration: true,
       chartFillsPanel: {initial: initialChartFill, resized: resizedChartFill},
       bybitChartTheme: chartTheme,

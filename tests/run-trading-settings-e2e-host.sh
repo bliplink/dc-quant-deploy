@@ -73,6 +73,12 @@ original_leverage="$(printf '%s' "${config_response}" | json_value 'd["data"]["l
 original_position_type="$(printf '%s' "${config_response}" | json_value 'd["data"]["positionType"]')"
 original_position_way="$(printf '%s' "${config_response}" | json_value 'd["data"]["positionWayType"]')"
 max_leverage="$(printf '%s' "${config_response}" | json_value 'd["data"]["maxLeverage"]')"
+risk_tier_count="$(printf '%s' "${config_response}" | json_value 'len(d["data"].get("riskTiers") or [])')"
+[[ "${risk_tier_count}" -ge 1 ]] || die "No authoritative risk tiers returned: ${config_response}"
+[[ "$(printf '%s' "${config_response}" | json_value 'all(int(x["maxLeverage"]) >= 1 and float(x["maintenanceMarginRate"]) >= 0 for x in d["data"]["riskTiers"])')" == true ]] ||
+  die "Invalid risk tier values returned: ${config_response}"
+[[ "$(printf '%s' "${config_response}" | json_value 'd["data"]["riskTiers"][0]["notionalFloor"]')" == 0 ]] ||
+  die "First risk tier must begin at zero: ${config_response}"
 
 target_leverage=5
 (( max_leverage >= target_leverage )) || target_leverage="${max_leverage}"
@@ -160,4 +166,4 @@ response="$(api_call TradeSvr setPositionType "{\"SecurityID\":\"BTCUSDT\",\"Pos
 response="$(api_call TradeSvr setLeverage "{\"SecurityID\":\"BTCUSDT\",\"Leverage\":${original_leverage}}" "${token}")"; expect_ok "restore leverage" "${response}"
 restored=1
 
-log "PASS location=${E2E_LOCATION} user=${E2E_USER} leverage=${target_leverage} margin=${target_position_type} positionMode=${target_position_way} activeOrderLock=true restored=true"
+log "PASS location=${E2E_LOCATION} user=${E2E_USER} leverage=${target_leverage} margin=${target_position_type} positionMode=${target_position_way} riskTiers=${risk_tier_count} activeOrderLock=true restored=true"
