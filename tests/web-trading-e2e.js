@@ -45,6 +45,18 @@ async function invokeFromPage(page, method, action) {
   return body;
 }
 
+async function gatewayCall(page, serverName, method, content) {
+  return page.evaluate(async request => {
+    const login = JSON.parse(sessionStorage.getItem('loginData') || '{}');
+    const response = await fetch('/httpapi/', {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json', sessionId: login.token || login.sid || ''},
+      body: JSON.stringify(request)
+    });
+    return response.json();
+  }, {serverName, method, content});
+}
+
 async function login(browser, username) {
   const context = await browser.newContext({ viewport: { width: 1920, height: 1080 } });
   const page = await context.newPage();
@@ -361,6 +373,25 @@ async function waitForNoPosition(page) {
       fullPage: true
     });
 
+    const reduceOnlyPreview = await gatewayCall(buyerSession.page, 'TradeSvr', 'previewOrder', {
+      SecurityID: 'BTCUSDT',
+      Side: 'Sell',
+      OrderType: 'Market',
+      InputMode: 'Quantity',
+      InputValue: '',
+      Percentage: 50,
+      ReduceOnly: true,
+      PositionSide: 'Long'
+    });
+    if (Number(reduceOnlyPreview.code) !== 0 || !reduceOnlyPreview.data ||
+        String(reduceOnlyPreview.data.valid).toLowerCase() !== 'true' ||
+        Number(reduceOnlyPreview.data.maximumCloseQuantity) !== 0.001 ||
+        Number(reduceOnlyPreview.data.quantity) !== 0.0005 ||
+        Number(reduceOnlyPreview.data.initialMargin) !== 0 ||
+        reduceOnlyPreview.data.riskPreviewMode !== 'REDUCE_ONLY_NO_NEW_RISK') {
+      throw new Error(`reduce-only close preview is incorrect: ${JSON.stringify(reduceOnlyPreview)}`);
+    }
+
     // Rest an offsetting buy for the short account, then exercise the Web
     // reduce-only Market/IOC close action for the long account. The same match
     // closes both sides and leaves the acceptance location flat.
@@ -394,6 +425,7 @@ async function waitForNoPosition(page) {
       cancel: 'PASS',
       execution: 'PASS',
       closePosition: 'PASS',
+      reduceOnlyPreview: 'PASS',
       buyerTrade,
       sellerTrade,
       recentTrade,

@@ -258,6 +258,10 @@ function layoutItem(snapshot, breakpoint, key) {
     if (!(await page.getByLabel('Reduce Only').isChecked())) {
       throw new Error('reduce-only control did not retain its state');
     }
+    await page.getByText('Max close quantity', {exact: true}).waitFor({timeout: 10000});
+    if (await page.getByRole('button', {name: 'Order cost', exact: true}).count() !== 0) {
+      throw new Error('reduce-only form must not offer opening-cost sizing');
+    }
     await page.getByRole('button', {name: 'Market', exact: true}).click();
     await page.getByLabel('Amount').fill('1e2');
     await buyButton.click();
@@ -398,6 +402,7 @@ function layoutItem(snapshot, breakpoint, key) {
       defaultMarketTimeInForce: 'IOC',
       conditionalOrderModes: true,
       reduceOnlyControl: true,
+      reduceOnlyCloseSizing: true,
       authoritativeRiskLimits: true,
       tenantBoundRegistration: true,
       chartFillsPanel: {initial: initialChartFill, resized: resizedChartFill},
