@@ -133,6 +133,30 @@ curl -fsS "http://127.0.0.1:${WEB_LISTEN_PORT}/healthz" | grep -q '^ok$' ||
 curl -fsS "http://127.0.0.1:${WEB_LISTEN_PORT}/" | grep -qi '<title>Trade</title>' ||
   die "dc-trade-web index page is not the trade application."
 
+wait_for_gateway_route() {
+  local server="$1" response start
+  start="$(date +%s)"
+  while true; do
+    response="$(curl -sS --max-time 10 -H 'Content-Type: application/json' \
+      --data "{\"serverName\":\"${server}\",\"method\":\"getSymbolConfig\",\"content\":{\"SecurityID\":\"BTCUSDT\"}}" \
+      "http://127.0.0.1:${WEB_LISTEN_PORT}/httpapi/" 2>/dev/null || true)"
+    if [[ -n "${response}" && "${response}" != *"SERVER.${server} is not Online"* ]]; then
+      log "GW route ${server}: online"
+      return 0
+    fi
+    if (( $(date +%s) - start >= 120 )); then
+      die "GW route ${server} did not become online after 120 seconds."
+    fi
+    sleep 3
+  done
+}
+
+# TradeSvr exposes authenticated configuration endpoints by its instance name,
+# while balance/funding compatibility endpoints use its TDSvr service alias.
+# Both routes converge asynchronously after a rolling container/GW update.
+wait_for_gateway_route TradeSvr
+wait_for_gateway_route TDSvr
+
 log "SaaS-only compose model verified."
 log "All 14 containers are running; MySQL tables=${mysql_table_count}, location columns=${mysql_location_columns}."
 log "MySQL, ClickHouse, and ZooKeeper are restricted to loopback interfaces."

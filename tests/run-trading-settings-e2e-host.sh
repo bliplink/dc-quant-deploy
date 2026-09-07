@@ -55,6 +55,19 @@ expect_rejected() {
   [[ "${code}" != "0" ]] || die "${label} unexpectedly succeeded: ${response}"
 }
 
+wait_for_route() {
+  local server="$1" response
+  for _ in $(seq 1 40); do
+    response="$(api_call "${server}" getSymbolConfig '{"SecurityID":"BTCUSDT"}' 2>/dev/null || true)"
+    [[ -n "${response}" && "${response}" != *"SERVER.${server} is not Online"* ]] && return 0
+    sleep 3
+  done
+  die "Gateway route ${server} did not become online"
+}
+
+wait_for_route TradeSvr
+wait_for_route TDSvr
+
 login_request="$(mktemp)"
 printf '{"serverName":"LoginSvr","method":"SYS.ATS.LOGIN","content":{"user_id":"%s","user_name":"%s","password":"%s","method":"login","client_type":"WEB","cid":"SETTINGS_%s","Location":"%s"}}\n' \
   "${E2E_USER}" "${E2E_USER}" "${E2E_PASSWORD}" "${RUN_ID}" "${E2E_LOCATION}" >"${login_request}"
