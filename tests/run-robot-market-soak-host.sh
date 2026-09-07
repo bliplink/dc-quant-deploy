@@ -23,6 +23,11 @@ MONITOR_HEARTBEAT_FILE="${STATE_DIR}/web-heartbeat.json"
 MONITOR_STALE_SECONDS="${ROBOT_SOAK_MONITOR_STALE_SECONDS:-150}"
 AUTH_REFRESH_SECONDS="${ROBOT_SOAK_AUTH_REFRESH_SECONDS:-2700}"
 VISIBLE_DEPTH="${ROBOT_SOAK_VISIBLE_DEPTH:-10}"
+# WEB_E2E deliberately replays scaled Binance turnover without an external
+# hedge account. Keep its synthetic inventory ceiling far enough away that the
+# QuoteEngine hard risk stop is not mistaken for a quote-replacement gap. Real
+# tenants retain their configured max_position_qty and should enable hedging.
+MAX_POSITION_QTY="${ROBOT_SOAK_MAX_POSITION_QTY:-1000}"
 MODE="${1:-status}"
 
 log() { printf '[robot-soak] %s\n' "$*"; }
@@ -40,6 +45,7 @@ for user in "${TRADERS[@]}"; do safe_identifier "${user}" || die "Unsafe trader 
 [[ "${MONITOR_STALE_SECONDS}" =~ ^[1-9][0-9]*$ ]] || die "ROBOT_SOAK_MONITOR_STALE_SECONDS must be positive"
 [[ "${AUTH_REFRESH_SECONDS}" =~ ^[1-9][0-9]*$ ]] || die "ROBOT_SOAK_AUTH_REFRESH_SECONDS must be positive"
 [[ "${VISIBLE_DEPTH}" =~ ^[1-9][0-9]*$ ]] || die "ROBOT_SOAK_VISIBLE_DEPTH must be positive"
+[[ "${MAX_POSITION_QTY}" =~ ^[1-9][0-9]*([.][0-9]+)?$ ]] || die "ROBOT_SOAK_MAX_POSITION_QTY must be positive"
 
 umask 077
 mkdir -p "${STATE_DIR}"
@@ -172,7 +178,7 @@ INSERT INTO dc.dc_tenant_robot
    create_by,update_by,create_time,update_time)
 VALUES
   ('${LOCATION}','${ROBOT_ID}','Continuous Binance 20-Level Market','BTCUSDT','${ROBOT_USER}','${robot_api}',
-   'APSSVR_BINANCE_TICKER',${robot_enabled},20,20,2,1,0.001,10,1000,3000,500,5,0,
+   'APSSVR_BINANCE_TICKER',${robot_enabled},20,20,2,1,0.001,${MAX_POSITION_QTY},1000,3000,500,5,0,
    JSON_OBJECT('depth_quantity_mode','NOTIONAL_ZONES','depth_margin_budget',100000,'depth_leverage',2,
      'depth_zone_levels',JSON_ARRAY(6,6,8),'depth_zone_weights',JSON_ARRAY(3,3,4),
      'sweep_user_orders_enabled',true,'sweep_max_loss_bps',5,'sweep_max_qty',0.001,
@@ -181,7 +187,7 @@ VALUES
    'STOPPED','robot-soak','robot-soak',NOW(),NOW())
 ON DUPLICATE KEY UPDATE
   api_user_id=VALUES(api_user_id),api_key=VALUES(api_key),quote_source=VALUES(quote_source),enabled=${robot_enabled},
-  bid_levels=20,ask_levels=20,level_spread_bps=2,level_step_bps=1,order_qty=0.001,max_position_qty=10,
+  bid_levels=20,ask_levels=20,level_spread_bps=2,level_step_bps=1,order_qty=0.001,max_position_qty=${MAX_POSITION_QTY},
   refresh_interval_ms=1000,stale_price_ms=3000,max_deviation_bps=500,circuit_breaker_seconds=5,
   hedge_enabled=0,strategy_config=VALUES(strategy_config),update_by='robot-soak',update_time=NOW();
 SQL
