@@ -142,9 +142,9 @@ function layoutItem(snapshot, breakpoint, key) {
     await page.locator('.positionModePill').waitFor({state: 'visible', timeout: 10000});
     await configPill.click();
     const configModal = page.locator('.tradeConfigModal');
-    await configModal.getByText('Margin Mode', {exact: true}).waitFor({timeout: 10000});
+    await configModal.getByText('Margin mode', {exact: true}).waitFor({timeout: 10000});
     await configModal.getByText('Leverage', {exact: true}).waitFor({timeout: 10000});
-    await configModal.getByText('Position Mode', {exact: true}).waitFor({timeout: 10000});
+    await configModal.getByText('Position mode', {exact: true}).waitFor({timeout: 10000});
     await configModal.getByRole('button', {name: 'Cancel', exact: true}).click();
     const resetLayoutButton = page.getByRole('button', {name: 'Reset layout', exact: true});
     if (await resetLayoutButton.count() !== 1) throw new Error('reset layout control is missing');
