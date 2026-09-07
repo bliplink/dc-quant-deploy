@@ -176,7 +176,12 @@ function layoutItem(snapshot, breakpoint, key) {
     await marketDrawer.waitFor({state: 'hidden', timeout: 10000});
 
     await page.getByText('Last Price', {exact: true}).first().waitFor({timeout: 10000});
-    const buyButton = page.getByRole('button', {name: 'Buy / Long'});
+    const buyButton = page.locator('.orderBuyBtn');
+    await buyButton.waitFor({state: 'visible', timeout: 10000});
+    const buyLabel = (await buyButton.innerText()).trim();
+    if (!['Buy / Long', 'Open Long'].includes(buyLabel)) {
+      throw new Error(`unexpected buy action label: ${buyLabel}`);
+    }
     await buyButton.click();
     await page.getByText('Enter an amount greater than 0.', {exact: true}).first().waitFor({timeout: 10000});
 
