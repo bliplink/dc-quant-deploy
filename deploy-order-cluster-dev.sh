@@ -180,7 +180,7 @@ order.cluster.replication.enabled=true
 order.cluster.replication.required=true
 order.cluster.replication.bindHost=127.0.0.1
 order.cluster.replication.port=${replication_port}
-order.cluster.replication.requestTimeoutMs=3000
+order.cluster.replication.requestTimeoutMs=10000
 order.cluster.replication.catchupBatchRecords=256
 order.cluster.replication.peers=OrderSvrA=127.0.0.1:19111,OrderSvrB=127.0.0.1:19112
 order.cluster.defaultMarketIndicator=4

@@ -52,8 +52,8 @@ wait_gateway_node 33337 OrderSvrB
 
 btc_clid="HOST-AB-BTC-${RUN_ID}"
 eth_clid="HOST-AB-ETH-${RUN_ID}"
-request order-btc "{\"serverName\":\"OrderSvr\",\"method\":\"placeOrder\",\"content\":{\"OCType\":\"OPEN\",\"OrderQty\":\"0.001\",\"OrdType\":\"Limit\",\"ClOrdID\":\"${btc_clid}\",\"Terminal\":\"ClusterE2E\",\"CloseBy\":\"liq\",\"Side\":\"Buy\",\"Price\":\"100\",\"UserID\":\"cluster-e2e\",\"MarketIndicator\":\"4\",\"TimeInForce\":\"GTC\",\"SecurityID\":\"BTCUSDT\",\"Location\":\"WEB_E2E\",\"ReduceOnly\":\"true\"}}"
-request order-eth "{\"serverName\":\"OrderSvr\",\"method\":\"placeOrder\",\"content\":{\"OCType\":\"OPEN\",\"OrderQty\":\"0.001\",\"OrdType\":\"Limit\",\"ClOrdID\":\"${eth_clid}\",\"Terminal\":\"ClusterE2E\",\"CloseBy\":\"liq\",\"Side\":\"Buy\",\"Price\":\"100\",\"UserID\":\"cluster-e2e\",\"MarketIndicator\":\"4\",\"TimeInForce\":\"GTC\",\"SecurityID\":\"ETHUSDT\",\"Location\":\"WEB_E2E\",\"ReduceOnly\":\"true\"}}"
+request order-btc "{\"serverName\":\"OrderSvr\",\"method\":\"placeOrder\",\"content\":{\"OCType\":\"CLOSE\",\"OrderQty\":\"0.001\",\"OrdType\":\"Limit\",\"ClOrdID\":\"${btc_clid}\",\"Terminal\":\"ClusterE2E\",\"CloseBy\":\"liq\",\"Side\":\"Buy\",\"Price\":\"100\",\"UserID\":\"cluster-e2e\",\"MarketIndicator\":\"4\",\"TimeInForce\":\"GTC\",\"SecurityID\":\"BTCUSDT\",\"Location\":\"WEB_E2E\",\"ReduceOnly\":\"true\"}}"
+request order-eth "{\"serverName\":\"OrderSvr\",\"method\":\"placeOrder\",\"content\":{\"OCType\":\"CLOSE\",\"OrderQty\":\"0.001\",\"OrdType\":\"Limit\",\"ClOrdID\":\"${eth_clid}\",\"Terminal\":\"ClusterE2E\",\"CloseBy\":\"liq\",\"Side\":\"Buy\",\"Price\":\"100\",\"UserID\":\"cluster-e2e\",\"MarketIndicator\":\"4\",\"TimeInForce\":\"GTC\",\"SecurityID\":\"ETHUSDT\",\"Location\":\"WEB_E2E\",\"ReduceOnly\":\"true\"}}"
 
 sleep 2
 sudo tail -n "+${GW_START_LINE}" "${GW_LOG}" >"/tmp/order-cluster-gw-${RUN_ID}.log"
