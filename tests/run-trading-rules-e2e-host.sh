@@ -27,6 +27,10 @@ set -a
 . "${ENV_FILE}"
 set +a
 
+order_config="${DEPLOY_ROOT}/control/overrides/OrderSvr/config/application.properties"
+grep -Eq '^enableMarketPrice=true$' "${order_config}" ||
+  die "OrderSvr enableMarketPrice=true is required for conditional-order lifecycle testing"
+
 liq_was_running="$(docker inspect --format '{{.State.Running}}' dc-saas-liqsvr 2>/dev/null || true)"
 restore_liqsvr() {
   if [[ "${liq_was_running}" == "true" ]]; then
