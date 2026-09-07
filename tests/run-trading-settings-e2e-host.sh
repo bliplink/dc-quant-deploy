@@ -52,8 +52,13 @@ expect_rejected() {
   [[ "${code}" != "0" ]] || die "${label} unexpectedly succeeded: ${response}"
 }
 
-login_response="$(api_call LoginSvr SYS.ATS.LOGIN "{\"user_id\":\"${E2E_USER}\",\"user_name\":\"${E2E_USER}\",\"password\":\"${E2E_PASSWORD}\",\"method\":\"login\",\"client_type\":\"WEB\",\"cid\":\"SETTINGS_${RUN_ID}\",\"Location\":\"${E2E_LOCATION}\"}")"
-token="$(printf '%s' "${login_response}" | json_value 'd.get("token","")')"
+login_request="$(mktemp)"
+printf '{"serverName":"LoginSvr","method":"SYS.ATS.LOGIN","content":{"user_id":"%s","user_name":"%s","password":"%s","method":"login","client_type":"WEB","cid":"SETTINGS_%s","Location":"%s"}}\n' \
+  "${E2E_USER}" "${E2E_USER}" "${E2E_PASSWORD}" "${RUN_ID}" "${E2E_LOCATION}" >"${login_request}"
+login_response="$(curl -fsS --max-time 30 -H 'Content-Type: application/json' --data-binary "@${login_request}" \
+  "http://127.0.0.1:${WEB_LISTEN_PORT}/httpapi/")"
+rm -f "${login_request}"
+token="$(printf '%s' "${login_response}" | json_value '(d.get("data") or {}).get("token",d.get("token",""))')"
 [[ -n "${token}" ]] || die "Login returned no token"
 
 config_response="$(api_call TradeSvr getSymbolConfig '{"SecurityID":"BTCUSDT"}' "${token}")"
