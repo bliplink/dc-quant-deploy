@@ -132,7 +132,8 @@ async function monitorSession(browser) {
           return style.display !== 'none' && style.visibility !== 'hidden' && box.width > 0 && box.height > 0;
         });
         const orderBook = visibleWrappers[0];
-        const visibleRows = selector => [...(orderBook?.querySelectorAll(selector) || [])].filter(element => {
+        const allRows = selector => [...(orderBook?.querySelectorAll(selector) || [])];
+        const visibleRows = selector => allRows(selector).filter(element => {
           const row = element.getBoundingClientRect();
           const container = element.parentElement?.getBoundingClientRect();
           if (!container || row.width <= 0 || row.height <= 0 || container.height <= 0) return false;
@@ -140,11 +141,13 @@ async function monitorSession(browser) {
         }).length;
         const askRows = visibleRows('.showDiv .ask-container > .bid');
         const bidRows = visibleRows('.showDiv .ask-container + div + div > .bid');
+        const askDomRows = allRows('.showDiv .ask-container > .bid').length;
+        const bidDomRows = allRows('.showDiv .ask-container + div + div > .bid').length;
         const lastPrice = orderBook?.querySelector('.showDiv .last-price')?.textContent?.trim() || '';
         const markPrice = orderBook?.querySelector('.showDiv .mark-price')?.textContent?.trim() || '';
         const loginData = JSON.parse(sessionStorage.getItem('loginData') || '{}');
         const klineStatus = window.__dcKlineStatus || {};
-        return {askRows, bidRows, lastPrice, markPrice, wrapperCount: wrappers.length,
+        return {askRows, bidRows, askDomRows, bidDomRows, lastPrice, markPrice, wrapperCount: wrappers.length,
           visibleWrapperCount: visibleWrappers.length, userId: loginData.user_id, tenant: loginData.location,
           chartBars: Number(klineStatus.bars || 0), chartLastTime: Number(klineStatus.lastTime || 0)};
       }), operationTimeoutMs, 'page.evaluate');
