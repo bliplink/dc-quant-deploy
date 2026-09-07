@@ -149,6 +149,13 @@ function layoutItem(snapshot, breakpoint, key) {
     await configModal.getByText('Leverage', {exact: true}).waitFor({timeout: 10000});
     await configModal.getByText('Risk limit', {exact: true}).waitFor({timeout: 10000});
     await configModal.getByText('Maximum position value at selected leverage', {exact: true}).waitFor({timeout: 10000});
+    if (await configModal.locator('.configSummary > div').count() !== 3) {
+      throw new Error('trade configuration summary must show margin, leverage and position modes');
+    }
+    if (await configModal.locator('.leveragePresets button').count() < 5 ||
+        await configModal.locator('.ant-input-number').count() !== 1) {
+      throw new Error('professional leverage input and preset controls are incomplete');
+    }
     if (await configModal.locator('.riskTierRow').count() < 1) {
       throw new Error('authoritative risk tier table is missing');
     }
@@ -157,7 +164,22 @@ function layoutItem(snapshot, breakpoint, key) {
       throw new Error(`maximum position value is unavailable: ${maximumNotionalText}`);
     }
     await configModal.getByText('Position mode', {exact: true}).waitFor({timeout: 10000});
+    await page.screenshot({path: path.join(artifactDir, 'trade-config-dialog-en.png'), fullPage: true});
     await configModal.getByRole('button', {name: 'Cancel', exact: true}).click();
+
+    await page.getByText('Deposit', {exact: true}).click();
+    const fundingModal = page.locator('.fundingModal');
+    await fundingModal.getByText('Deposit', {exact: true}).waitFor({timeout: 10000});
+    if (await fundingModal.locator('.fundingQuickAmounts button').count() !== 3 ||
+        await fundingModal.locator('.fundingAmountInput').count() !== 1) {
+      throw new Error('deposit dialog amount and quick-select controls are incomplete');
+    }
+    await fundingModal.getByPlaceholder('0.00').fill('100');
+    if (!(await fundingModal.getByRole('button', {name: 'Confirm Deposit', exact: true}).isEnabled())) {
+      throw new Error('deposit confirmation did not enable for a valid amount');
+    }
+    await page.screenshot({path: path.join(artifactDir, 'funding-dialog-en.png'), fullPage: true});
+    await fundingModal.getByRole('button', {name: 'Cancel', exact: true}).click();
     const resetLayoutButton = page.getByRole('button', {name: 'Reset layout', exact: true});
     if (await resetLayoutButton.count() !== 1) throw new Error('reset layout control is missing');
     await resetLayoutButton.click();
@@ -401,6 +423,7 @@ function layoutItem(snapshot, breakpoint, key) {
       orderInputValidation: true,
       defaultMarketTimeInForce: 'IOC',
       conditionalOrderModes: true,
+      professionalTradeDialogs: ['leverage', 'deposit'],
       reduceOnlyControl: true,
       reduceOnlyCloseSizing: true,
       authoritativeRiskLimits: true,
@@ -413,7 +436,7 @@ function layoutItem(snapshot, breakpoint, key) {
       orderBookPriceToLimitForm: true,
       searchableMarketSelector: true,
       professionalTheme: colors,
-      artifacts: ['register-tenant-bound.png', 'workspace-en.png', 'workspace-zh.png']
+      artifacts: ['register-tenant-bound.png', 'trade-config-dialog-en.png', 'funding-dialog-en.png', 'workspace-en.png', 'workspace-zh.png']
     }, null, 2));
   } catch (error) {
     await page.screenshot({path: path.join(artifactDir, 'workspace-failure.png'), fullPage: true}).catch(() => {});
