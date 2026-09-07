@@ -27,7 +27,8 @@ async function login(page) {
   await page.waitForURL(`**/#/trade?location=${encodeURIComponent(location)}`);
   await page.locator('.tradeGrid').waitFor({timeout: 60000});
   const body = await page.evaluate(() => JSON.parse(sessionStorage.getItem('loginData') || '{}'));
-  if (Number(body.code) !== 0 || body.user_id !== username || body.location !== location) {
+  const authenticatedUsername = body.user_name || body.user_id;
+  if (Number(body.code) !== 0 || authenticatedUsername !== username || !body.user_id || body.location !== location) {
     throw new Error(`websocket login failed: ${JSON.stringify(body)}`);
   }
   await page.waitForTimeout(2500);
@@ -104,6 +105,12 @@ function assertResponsive(metrics, viewportWidth) {
 
     const metrics = await viewportMetrics(page);
     assertResponsive(metrics, 390);
+    const logoutButton = page.locator('.logoutButton');
+    await logoutButton.waitFor({state: 'visible', timeout: 10000});
+    const logoutBox = await logoutButton.boundingBox();
+    if (!logoutBox || logoutBox.width < 32 || logoutBox.height < 28) {
+      throw new Error(`mobile sign-out control is not touch reachable: ${JSON.stringify(logoutBox)}`);
+    }
 
     await page.getByRole('button', {name: 'Order Book', exact: true}).tap();
     await page.waitForFunction(() => {
@@ -155,6 +162,7 @@ function assertResponsive(metrics, viewportWidth) {
       tabbedTradingModules: 5,
       visibleModulesAtOnce: 1,
       fixedBuySellActions: true,
+      mobileSignOut: true,
       touchFriendlyOrderEntry: true,
       responsiveMarketDrawer: true,
       mobileAutoLayout: true,

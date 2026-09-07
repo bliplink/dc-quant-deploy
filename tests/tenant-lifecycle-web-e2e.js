@@ -50,6 +50,9 @@ async function tenantAdminLogin(page, username, password, location) {
   page.on('pageerror', error => pageErrors.push(error.message));
 
   try {
+    await page.goto(`${baseUrl}/#/trade`, {waitUntil: 'domcontentloaded'});
+    await page.waitForURL('**/#/tenant', {timeout: 15000});
+
     await page.goto(`${baseUrl}/#/tenant`, {waitUntil: 'domcontentloaded'});
     await page.locator('.tenant-language button').nth(1).click();
     await page.getByRole('heading', {name: 'Tenant Services'}).waitFor({timeout: 15000});
