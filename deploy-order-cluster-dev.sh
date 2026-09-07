@@ -270,6 +270,7 @@ wait_port 32182 'cluster development ZooKeeper'
 log 'Seeding isolated partition assignments in the cluster development ZooKeeper'
 cat <<'EOF' | sudo docker exec -i \
   "${ZOOKEEPER_CONTAINER}" zkCli.sh -server "${ZOOKEEPER_ENDPOINT}" >/tmp/order-cluster-dev-zk-seed.log 2>&1
+create /MDTService x
 create /dc x
 create /dc/cluster x
 create /dc/cluster/ordersvr-dev x
