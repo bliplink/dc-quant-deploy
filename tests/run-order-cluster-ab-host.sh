@@ -54,8 +54,9 @@ sudo grep -Eq "ORDER_CLUSTER_COMMAND_RECORDED node:OrderSvrA, partition:P027.*ev
   die 'BTCUSDT did not route to OrderSvrA with synchronous replica ACK'
 sudo grep -Eq "ORDER_CLUSTER_COMMAND_RECORDED node:OrderSvrB, partition:P132.*eventId:${eth_clid}.*replicaStatus:OK" "${EVIDENCE_DIR}/ordersvr-b.log" ||
   die 'ETHUSDT did not route to OrderSvrB with synchronous replica ACK'
-sudo grep -q 'Cluster.Zookeeper.Hosts=127.0.0.1:32182' "${EVIDENCE_DIR}/gateway.log" ||
-  die 'GW did not use the isolated cluster development ZooKeeper'
+sudo grep -qx 'Cluster.Zookeeper.Hosts=127.0.0.1:32182' \
+  "${ORDER_CLUSTER_DEV_ROOT}/control/ATSConfig.ini" ||
+  die 'GW configuration does not use the isolated cluster development ZooKeeper'
 if sudo grep -q 'Port:33036' "${EVIDENCE_DIR}/gateway.log"; then
   die 'GW connected to the existing production OrderSvr port'
 fi
