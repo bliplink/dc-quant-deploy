@@ -101,7 +101,7 @@ function timeout(ms, message) {
 
     await page.locator('.publicActions').waitFor({state: 'visible', timeout: 15000});
     const navItems = await page.locator('.head-user .navItem').allInnerTexts();
-    if (!navItems.includes('Trade') || !navItems.includes('Apply')) fail('public navigation is incomplete', navItems);
+    if (!navItems.includes('Trade') || !navItems.includes('Tenant Services')) fail('public navigation is incomplete', navItems);
     if (navItems.includes('Tenant Admin') || navItems.includes('Derivatives')) {
       fail('public user can see a restricted navigation item', navItems);
     }
