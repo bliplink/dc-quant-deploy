@@ -453,10 +453,10 @@ main() {
 
   if [[ "${deploy_needed}" == "true" ]]; then
     log "Applying migrations and recreating changed containers as one SaaS release."
-    if ! SAAS_DEPLOY_LOCK_HELD=true COMPOSE_PULL_PARALLEL_LIMIT=1 COMPOSE_UP_PARALLEL_LIMIT=1 \
+    if ! SAAS_DEPLOY_LOCK_HELD=true SAAS_CHANGED_SERVICES="${changed_services[*]}" COMPOSE_PULL_PARALLEL_LIMIT=1 COMPOSE_UP_PARALLEL_LIMIT=1 \
       "${DEPLOY_SCRIPT}" --skip-host-prepare --skip-pull; then
       log "New release validation failed; starting image rollback." >&2
-      if rollback_images && SAAS_DEPLOY_LOCK_HELD=true COMPOSE_PULL_PARALLEL_LIMIT=1 COMPOSE_UP_PARALLEL_LIMIT=1 \
+      if rollback_images && SAAS_DEPLOY_LOCK_HELD=true SAAS_CHANGED_SERVICES="${changed_services[*]}" COMPOSE_PULL_PARALLEL_LIMIT=1 COMPOSE_UP_PARALLEL_LIMIT=1 \
         "${DEPLOY_SCRIPT}" --skip-host-prepare --skip-pull; then
         log "Previous application images were restored successfully." >&2
       else

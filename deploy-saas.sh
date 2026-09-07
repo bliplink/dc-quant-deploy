@@ -8,6 +8,7 @@ SKIP_HOST_PREPARE="false"
 SKIP_PULL="false"
 ROBOT_IDENTITY_CHANGED="false"
 LOGIN_CONTAINER_EXISTED="false"
+SAAS_CHANGED_SERVICES="${SAAS_CHANGED_SERVICES:-}"
 
 log() {
   printf '[saas-deploy] %s\n' "$*"
@@ -341,6 +342,18 @@ wait_for_port() {
   log "${service_name}: listening on ${port}"
 }
 
+gateway_routes_need_refresh() {
+  local service
+  # A direct/manual deployment has no changed-service manifest, so choose the
+  # safe full-deploy behavior. The auto updater supplies the exact set and can
+  # skip a needless GW restart for a Web-only release.
+  [[ -n "${SAAS_CHANGED_SERVICES}" ]] || return 0
+  for service in loginsvr mdsvr apssvr ordersvr tradesvr liqsvr managersvr adminsvr robotsvr; do
+    [[ " ${SAAS_CHANGED_SERVICES} " == *" ${service} "* ]] && return 0
+  done
+  return 1
+}
+
 apply_mysql_migrations() {
   local migration
   local migrations=()
@@ -500,6 +513,16 @@ wait_for_port "${TRADESVR_GW_PORT}" tradesvr 120
 wait_for_port "${LIQSVR_GW_PORT}" liqsvr 120
 wait_for_port "${MANAGERSVR_GW_PORT}" managersvr 120
 wait_for_port "${ADMINSVR_GW_PORT}" adminsvr 120
+
+# GW caches both service aliases (for example TDSvr) and direct instance
+# names (TradeSvr). A backend container recreation can change its host-network
+# registration before both cache entries converge. Refresh only after every
+# backend listener is ready, then validate both names through the public API.
+if gateway_routes_need_refresh; then
+  log "Backend services changed; refreshing GW service and alias routes."
+  docker restart dc-saas-gateway >/dev/null
+  wait_for_port "${GW_TCP_PORT}" gateway 120
+fi
 
 "${SCRIPT_DIR}/validate-saas.sh" --env-file "${ENV_FILE}"
 log "DC SaaS is ready at http://$(hostname -I | awk '{print $1}'):${WEB_LISTEN_PORT}/"
