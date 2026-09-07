@@ -12,10 +12,16 @@ ZOOKEEPER_ENDPOINT="${ZOOKEEPER_ENDPOINT:-127.0.0.1:32181}"
 log() { printf '[order-cluster-dev] %s\n' "$*"; }
 die() { printf '[order-cluster-dev] ERROR: %s\n' "$*" >&2; exit 1; }
 
-require_image() {
-  local image="$1" expected="$2"
-  [[ "${image}" =~ ^ghcr\.io/bliplink/${expected}:cluster-dev-[0-9a-f]{7,40}$ ]] ||
-    die "refusing non-immutable ${expected} image: ${image}"
+require_order_image() {
+  local image="$1"
+  [[ "${image}" =~ ^ghcr\.io/bliplink/ordersvr:cluster-dev-[0-9a-f]{7,40}$ ]] ||
+    die "refusing non-immutable OrderSvr image: ${image}"
+}
+
+require_gw_image() {
+  local image="$1"
+  [[ "${image}" =~ ^ghcr\.io/bliplink/ordersvr:gw-cluster-dev-[0-9a-f]{7,40}$ ]] ||
+    die "refusing non-immutable GW development image: ${image}"
 }
 
 image_label() {
@@ -42,8 +48,8 @@ wait_port() {
 
 [[ -n "${ORDERSVR_CLUSTER_DEV_IMAGE:-}" ]] || die 'ORDERSVR_CLUSTER_DEV_IMAGE is required'
 [[ -n "${GW_CLUSTER_DEV_IMAGE:-}" ]] || die 'GW_CLUSTER_DEV_IMAGE is required'
-require_image "${ORDERSVR_CLUSTER_DEV_IMAGE}" ordersvr
-require_image "${GW_CLUSTER_DEV_IMAGE}" gw
+require_order_image "${ORDERSVR_CLUSTER_DEV_IMAGE}"
+require_gw_image "${GW_CLUSTER_DEV_IMAGE}"
 [[ -f "${COMPOSE_FILE}" ]] || die "missing ${COMPOSE_FILE}"
 sudo test -r "${SAAS_CONTROL_ROOT}/dc.dat" || die 'existing SaaS dc.dat is unavailable'
 sudo test -r "${SAAS_CONTROL_ROOT}/jaas.ini" || die 'existing SaaS jaas.ini is unavailable'
