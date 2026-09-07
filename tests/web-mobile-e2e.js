@@ -80,9 +80,6 @@ function assertResponsive(metrics, viewportWidth) {
   if (!metrics.symbol || metrics.symbol.left < -1 || metrics.symbol.right > viewportWidth + 1) {
     throw new Error(`market summary overflows viewport: ${JSON.stringify(metrics.symbol)}`);
   }
-  if (metrics.buyButtonHeight < 40 || metrics.amountInputHeight < 36) {
-    throw new Error(`order controls are not touch friendly: ${JSON.stringify(metrics)}`);
-  }
   if (metrics.dragHandleCount !== 0) {
     throw new Error('mobile auto-layout must not expose accidental drag handles');
   }
@@ -138,6 +135,10 @@ function assertResponsive(metrics, viewportWidth) {
     await placeOrder.getByLabel('Amount').fill('0.001');
     if (!(await placeOrder.getByRole('button', {name: 'Buy / Long'}).isVisible())) {
       throw new Error('mobile order action is not reachable');
+    }
+    const orderMetrics = await viewportMetrics(page);
+    if (orderMetrics.buyButtonHeight < 40 || orderMetrics.amountInputHeight < 36) {
+      throw new Error(`order controls are not touch friendly: ${JSON.stringify(orderMetrics)}`);
     }
 
     await page.screenshot({path: path.join(artifactDir, 'workspace-mobile-en.png'), fullPage: true});
