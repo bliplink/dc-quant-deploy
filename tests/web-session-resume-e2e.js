@@ -120,6 +120,11 @@ function expectRejected(label, result) {
     }
     if (browserErrors.length) throw new Error(`browser errors after login: ${JSON.stringify(browserErrors)}`);
 
+    await page.locator('.marketHealthStrip--live').waitFor({state: 'visible', timeout: 30000});
+    const openingButtonsReady = await page.locator('.orderBtn:visible').evaluateAll(buttons =>
+      buttons.length === 2 && buttons.every(button => !button.disabled));
+    if (!openingButtonsReady) throw new Error('opening buttons did not become available with live market data');
+
     await page.reload({waitUntil: 'domcontentloaded'});
     await page.waitForURL(`**/#/trade?location=${encodeURIComponent(location)}`, {timeout: 60000});
     const token2 = await waitForRotatedToken(page, token1);
@@ -130,21 +135,34 @@ function expectRejected(label, result) {
     if (Number(currentInfo.code) !== 0 || authoritativeUsername !== username || !currentInfo.data.user_id || currentInfo.data.location !== location) {
       throw new Error(`rotated token is not authoritative: ${JSON.stringify(currentInfo)}`);
     }
+    await page.locator('.marketHealthStrip--live').waitFor({state: 'visible', timeout: 30000});
 
     fs.writeFileSync(disconnectMarker, `${Date.now()}\n`);
     const disconnectDeadline = Date.now() + 60000;
     let reconnectBannerObserved = false;
+    let marketBlockedObserved = false;
     while (fs.existsSync(disconnectMarker) && Date.now() < disconnectDeadline) {
       const banner = page.locator('.connectionBanner--reconnecting');
       if (await banner.count() && await banner.isVisible().catch(() => false)) {
         reconnectBannerObserved = true;
       }
+      const blockedStrip = page.locator('.marketHealthStrip--blocked');
+      if (await blockedStrip.count() && await blockedStrip.isVisible().catch(() => false)) {
+        const openingButtonsBlocked = await page.locator('.orderBtn:visible').evaluateAll(buttons =>
+          buttons.length === 2 && buttons.every(button => button.disabled));
+        if (openingButtonsBlocked) marketBlockedObserved = true;
+      }
       await page.waitForTimeout(250);
     }
     if (fs.existsSync(disconnectMarker)) throw new Error('host did not trigger the websocket disconnect');
     if (!reconnectBannerObserved) throw new Error('live market reconnect banner was not visible during transport loss');
+    if (!marketBlockedObserved) throw new Error('opening orders were not disabled during market transport loss');
     const token3 = await waitForRotatedToken(page, token2);
     await page.locator('.connectionBanner').waitFor({state: 'hidden', timeout: 30000});
+    await page.locator('.marketHealthStrip--live').waitFor({state: 'visible', timeout: 30000});
+    const openingButtonsRestored = await page.locator('.orderBtn:visible').evaluateAll(buttons =>
+      buttons.length === 2 && buttons.every(button => !button.disabled));
+    if (!openingButtonsRestored) throw new Error('opening buttons were not restored after live market recovery');
     expectRejected('disconnected token replay', await loginWithToken(page, token2));
     const socketsBeforeLogout = {
       opened: browserEvents.filter(event => event.startsWith('websocket.opening:')).length,
@@ -188,6 +206,7 @@ function expectRejected(label, result) {
       refreshResume: true,
       disconnectResume: true,
       reconnectBannerObserved,
+      marketOpenProtection: true,
       oneTimeRotation: true,
       crossLocationRejected: true,
       logoutRevoked: true,
