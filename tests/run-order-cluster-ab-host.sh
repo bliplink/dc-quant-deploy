@@ -76,18 +76,32 @@ fi
 if sudo grep -Eq 'REPLICATION_(FAILED|TIMEOUT)|replicaStatus:(FAILED|TIMEOUT)' "${EVIDENCE_DIR}/ordersvr-a.log" "${EVIDENCE_DIR}/ordersvr-b.log"; then
   die 'replication failure appeared in OrderSvr logs'
 fi
+for config_file in \
+  "${ORDER_CLUSTER_DEV_ROOT}/nodes/OrderSvrA/application.properties" \
+  "${ORDER_CLUSTER_DEV_ROOT}/nodes/OrderSvrB/application.properties"; do
+  sudo grep -qx 'order.tenantSymbolRules.enabled=false' "${config_file}" ||
+    die "tenant symbol rule database refresh is not disabled in ${config_file}"
+done
+if sudo grep -q 'Failed to refresh tenant symbol rules' \
+  "${EVIDENCE_DIR}/ordersvr-a.log" "${EVIDENCE_DIR}/ordersvr-b.log"; then
+  die 'tenant symbol rule database refresh failure appeared in current-run logs'
+fi
 
 order_image="$(sudo docker inspect -f '{{.Config.Image}}' dc-saas-cluster-ordersvr-a)"
 gw_image="$(sudo docker inspect -f '{{.Config.Image}}' dc-saas-cluster-gateway)"
 cat <<EOF | sudo tee "${EVIDENCE_DIR}/result.json" >/dev/null
 {
   "result": "PASS",
+  "scope": "partition-routing-and-shadow-command-replication",
+  "businessOrderAcceptance": "NOT_TESTED",
+  "businessOrderExclusion": "isolated stack intentionally has no LoginSvr, AdminSvr, TradeSvr, funds or market data",
   "runId": "${RUN_ID}",
   "startedAtUtc": "${STARTED_AT}",
   "orderImage": "${order_image}",
   "gwImage": "${gw_image}",
   "logicalService": "OrderSvr",
   "registryEndpoint": "127.0.0.1:32182",
+  "tenantSymbolRuleDatabaseRefresh": "DISABLED",
   "productionOrderPortObserved": false,
   "routes": [
     {"key":"WEB_E2E/4/BTCUSDT","partition":"P027","primary":"OrderSvrA","replica":"OrderSvrB","replicaStatus":"OK"},
