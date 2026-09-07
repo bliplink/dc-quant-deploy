@@ -62,7 +62,7 @@ ORDER_CLUSTER_COMMAND_RECORDED node:OrderSvrB, partition:P132, epoch:1, seq:1, r
 
 - Common：`811eeeca05b33e77017081cf08178a3993c88919`
 - OrderSvr：`ff25f5bba2f6a3fce151ae7572f66c3d41a8237e`
-- Deploy：`4f4fe0d`
+- Deploy：`289793a`
 - OrderSvr 镜像：`ghcr.io/bliplink/ordersvr:cluster-dev-ff25f5b`
 - GW 镜像：`ghcr.io/bliplink/ordersvr:gw-cluster-dev-ff25f5b`
 - OrderSvr 镜像摘要：`sha256:6b8af27ca96f22cf1a13125255d8838cb23a5dd8d5b436bd809caa1aa9d29382`
@@ -76,12 +76,16 @@ ORDER_CLUSTER_COMMAND_RECORDED node:OrderSvrB, partition:P132, epoch:1, seq:1, r
 3. P027 在线角色反转通过：epoch 单调递增，先 A→B，再 B→A，两个方向均通过 GW 逻辑服务路由并取得同步副本 ACK；最终恢复 A 主/B 备。
 4. 隔离 GW 未连接现有 SaaS OrderSvr 的 33036 端口；租户交易规则数据库刷新在两台隔离 OrderSvr 上均关闭，本轮增量日志无相应刷新异常。
 5. A/B/GW 测试可重复运行；测试不再依赖仅在首次启动时出现的连接日志。
+6. 重装不会覆盖已有 ZooKeeper assignment。P027 在连续重装、上一版切换和回滚后仍保持 epoch `178878980152156`，未回退到初始值 1。
+7. 不可变镜像一键回滚通过：先从 `ff25f5b` 切换到 `59774b6`，再由 `rollback-order-cluster-dev.sh` 恢复 `ff25f5b`；最终 A/B 路由与同步复制复测通过。
 
 机器可读证据：
 
 ```text
-/data/dc-saas-order-cluster-dev/evidence/20260907-141740/result.json
+/data/dc-saas-order-cluster-dev/evidence/20260907-143511/result.json
 /data/dc-saas-order-cluster-dev/evidence/20260907-140321-role-reversal/result.json
+/data/dc-saas-order-cluster-dev/deploy-state/last-successful.env
+/data/dc-saas-order-cluster-dev/deploy-state/rollback.env
 ```
 
 上述两个结果的 `businessOrderAcceptance` 均为 `NOT_TESTED`。隔离栈故意不接 LoginSvr、AdminSvr、TradeSvr、资金和行情；测试请求用于验证分区命令进入正确物理节点并同步复制，不能据此宣称真实交易下单成功。
@@ -93,7 +97,7 @@ ORDER_CLUSTER_COMMAND_RECORDED node:OrderSvrB, partition:P132, epoch:1, seq:1, r
 1. ZooKeeper 在线角色变更已经验证，但由故障检测器自动生成角色变更、OrderSvr 自动恢复/自动提升的生产生命周期尚未接通。
 2. 当前 `state/commit/snapshot` 在隔离部署中仍关闭，因此尚未注入主节点宕机；备节点补齐业务状态、提升、原主恢复后的 fencing 和回切不能宣称完成。
 3. 当前 Common/Gateway 集群依赖尚未正式发布 Maven Central，开发产物不得替换生产正式依赖。
-4. Docker 双实例、服务器资源限制和持久化目录已完成隔离验证；容器健康检查、故障自动化与一键回滚仍需补齐。
+4. Docker 双实例、服务器资源限制、持久化目录和一键回滚已完成隔离验证；容器健康检查与故障自动化仍需补齐。
 5. 带真实 LoginSvr/MySQL 资金、撮合、成交、TradeSvr 回报以及 Web/Robot 流量的完整业务回归，需要在服务器隔离栈完成。
 
 ## 下一步发布边界
