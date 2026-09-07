@@ -54,6 +54,23 @@ wait_port() {
   die "${name} did not listen on 127.0.0.1:${port}"
 }
 
+wait_healthy() {
+  local container="$1" deadline=$((SECONDS + 150)) status
+  while (( SECONDS < deadline )); do
+    status="$(sudo docker inspect -f '{{if .State.Health}}{{.State.Health.Status}}{{else}}missing{{end}}' \
+      "${container}" 2>/dev/null || true)"
+    if [[ "${status}" == healthy ]]; then
+      return 0
+    fi
+    if [[ "${status}" == unhealthy ]]; then
+      sudo docker inspect -f '{{range .State.Health.Log}}{{println .Output}}{{end}}' "${container}" >&2 || true
+      die "${container} became unhealthy"
+    fi
+    sleep 2
+  done
+  die "${container} did not become healthy before the startup deadline"
+}
+
 ensure_znode() {
   local path="$1" data="$2"
   if sudo docker exec "${ZOOKEEPER_CONTAINER}" zkCli.sh -server "${ZOOKEEPER_ENDPOINT}" \
@@ -294,6 +311,7 @@ sudo install -m 0644 "${tmp_root}/gateway/"*.xml "${ORDER_CLUSTER_DEV_ROOT}/gate
 log 'Starting the isolated cluster development ZooKeeper'
 sudo -E docker compose -p "${PROJECT_NAME}" -f "${COMPOSE_FILE}" up -d zookeeper
 wait_port 32182 'cluster development ZooKeeper'
+wait_healthy "${ZOOKEEPER_CONTAINER}"
 
 log 'Seeding isolated partition assignments in the cluster development ZooKeeper'
 : >/tmp/order-cluster-dev-zk-seed.log
@@ -316,6 +334,9 @@ wait_port 33337 OrderSvrB
 wait_port 19111 'OrderSvrA replication'
 wait_port 19112 'OrderSvrB replication'
 wait_port 33302 'cluster development GW HTTP'
+wait_healthy dc-saas-cluster-ordersvr-a
+wait_healthy dc-saas-cluster-ordersvr-b
+wait_healthy dc-saas-cluster-gateway
 
 write_manifest() {
   local target="$1" order_image="$2" gw_image="$3"
