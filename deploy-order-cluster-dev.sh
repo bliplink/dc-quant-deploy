@@ -54,6 +54,16 @@ wait_port() {
   die "${name} did not listen on 127.0.0.1:${port}"
 }
 
+ensure_znode() {
+  local path="$1" data="$2"
+  if sudo docker exec "${ZOOKEEPER_CONTAINER}" zkCli.sh -server "${ZOOKEEPER_ENDPOINT}" \
+    get "${path}" >/dev/null 2>&1; then
+    return 0
+  fi
+  sudo docker exec "${ZOOKEEPER_CONTAINER}" zkCli.sh -server "${ZOOKEEPER_ENDPOINT}" \
+    create "${path}" "${data}" >>/tmp/order-cluster-dev-zk-seed.log 2>&1
+}
+
 [[ -n "${ORDERSVR_CLUSTER_DEV_IMAGE:-}" ]] || die 'ORDERSVR_CLUSTER_DEV_IMAGE is required'
 [[ -n "${GW_CLUSTER_DEV_IMAGE:-}" ]] || die 'GW_CLUSTER_DEV_IMAGE is required'
 require_order_image "${ORDERSVR_CLUSTER_DEV_IMAGE}"
@@ -286,17 +296,18 @@ sudo -E docker compose -p "${PROJECT_NAME}" -f "${COMPOSE_FILE}" up -d zookeeper
 wait_port 32182 'cluster development ZooKeeper'
 
 log 'Seeding isolated partition assignments in the cluster development ZooKeeper'
-cat <<'EOF' | sudo docker exec -i \
-  "${ZOOKEEPER_CONTAINER}" zkCli.sh -server "${ZOOKEEPER_ENDPOINT}" >/tmp/order-cluster-dev-zk-seed.log 2>&1
-create /MDTService x
-create /dc x
-create /dc/cluster x
-create /dc/cluster/ordersvr-dev x
-create /dc/cluster/ordersvr-dev/partitions x
-create /dc/cluster/ordersvr-dev/partitions/P027 {"partitionId":"P027","epoch":1,"primary":"OrderSvrA","replica":"OrderSvrB","state":"READY"}
-create /dc/cluster/ordersvr-dev/partitions/P132 {"partitionId":"P132","epoch":1,"primary":"OrderSvrB","replica":"OrderSvrA","state":"READY"}
-quit
-EOF
+: >/tmp/order-cluster-dev-zk-seed.log
+ensure_znode /MDTService x
+ensure_znode /dc x
+ensure_znode /dc/cluster x
+ensure_znode /dc/cluster/ordersvr-dev x
+ensure_znode /dc/cluster/ordersvr-dev/partitions x
+# Existing assignments are deliberately read-only here. Reinstalling must never
+# decrease a fencing epoch or silently overwrite a control-plane role change.
+ensure_znode /dc/cluster/ordersvr-dev/partitions/P027 \
+  '{"partitionId":"P027","epoch":1,"primary":"OrderSvrA","replica":"OrderSvrB","state":"READY"}'
+ensure_znode /dc/cluster/ordersvr-dev/partitions/P132 \
+  '{"partitionId":"P132","epoch":1,"primary":"OrderSvrB","replica":"OrderSvrA","state":"READY"}'
 
 log 'Starting isolated OrderSvr A/B and GW containers'
 sudo -E docker compose -p "${PROJECT_NAME}" -f "${COMPOSE_FILE}" up -d
