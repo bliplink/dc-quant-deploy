@@ -1,0 +1,134 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+WORKSPACE_ROOT="${WORKSPACE_ROOT:-$(cd "${SCRIPT_DIR}/.." && pwd)}"
+COMMON_LIBRARY_SOURCE="${COMMON_LIBRARY_SOURCE:-${WORKSPACE_ROOT}/com.app.common}"
+DC_COMMON_SOURCE="${DC_COMMON_SOURCE:-${WORKSPACE_ROOT}/com.app.dc}"
+ORDERSVR_SOURCE="${ORDERSVR_SOURCE:-${WORKSPACE_ROOT}/ordersvr}"
+M2_ROOT="${M2_ROOT:-${SCRIPT_DIR}/.cluster-dev/m2-linux}"
+MAVEN_BUILD_IMAGE="${MAVEN_BUILD_IMAGE:-maven:3.9.11-eclipse-temurin-8}"
+IMAGE_REPOSITORY="${IMAGE_REPOSITORY:-dc-saas/ordersvr}"
+SKIP_TESTS="${SKIP_TESTS:-false}"
+SKIP_MAVEN_BUILD="${SKIP_MAVEN_BUILD:-false}"
+SKIP_DOCKER_BUILD="${SKIP_DOCKER_BUILD:-false}"
+
+log() {
+  printf '[cluster-dev] %s\n' "$*"
+}
+
+die() {
+  printf '[cluster-dev] ERROR: %s\n' "$*" >&2
+  exit 1
+}
+
+require_directory() {
+  [[ -d "$1" ]] || die "$2 does not exist: $1"
+}
+
+require_command() {
+  command -v "$1" >/dev/null 2>&1 || die "Missing required command: $1"
+}
+
+git_revision() {
+  git -C "$1" rev-parse --short=12 HEAD
+}
+
+maven() {
+  local source_dir="$1"
+  shift
+  docker run --rm \
+    --memory="${MAVEN_MEMORY_LIMIT:-3g}" \
+    -e MAVEN_OPTS="${MAVEN_OPTS:--Xms64m -Xmx1024m -XX:+UseSerialGC}" \
+    -v "${M2_ROOT}:/root/.m2:Z" \
+    -v "${source_dir}:/workspace:Z" \
+    -w /workspace \
+    "${MAVEN_BUILD_IMAGE}" mvn -B "$@"
+}
+
+pom_value() {
+  local source_dir="$1"
+  local expression="$2"
+  maven "${source_dir}" help:evaluate -Dexpression="${expression}" -q -DforceStdout |
+    tr -d '\r' | tail -n 1
+}
+
+require_command docker
+require_command git
+require_command sha256sum
+require_directory "${COMMON_LIBRARY_SOURCE}" "com.app.common source"
+require_directory "${DC_COMMON_SOURCE}" "com.app.dc source"
+require_directory "${ORDERSVR_SOURCE}" "OrderSvr source"
+install -d -m 0750 "${M2_ROOT}" "${SCRIPT_DIR}/.cluster-dev"
+
+common_group="$(pom_value "${COMMON_LIBRARY_SOURCE}" project.groupId)"
+common_artifact="$(pom_value "${COMMON_LIBRARY_SOURCE}" project.artifactId)"
+common_version="$(pom_value "${COMMON_LIBRARY_SOURCE}" project.version)"
+dc_group="$(pom_value "${DC_COMMON_SOURCE}" project.groupId)"
+dc_artifact="$(pom_value "${DC_COMMON_SOURCE}" project.artifactId)"
+dc_version="$(pom_value "${DC_COMMON_SOURCE}" project.version)"
+
+common_revision="$(git_revision "${COMMON_LIBRARY_SOURCE}")"
+dc_revision="$(git_revision "${DC_COMMON_SOURCE}")"
+ordersvr_revision="$(git_revision "${ORDERSVR_SOURCE}")"
+common_gav="${common_group}:${common_artifact}:${common_version}"
+dc_gav="${dc_group}:${dc_artifact}:${dc_version}"
+image_ref="${IMAGE_REPOSITORY}:cluster-dev-${ordersvr_revision}-common-${common_revision}"
+build_date="$(date -u '+%Y-%m-%dT%H:%M:%SZ')"
+
+log "Isolated Maven repository: ${M2_ROOT}"
+log "Common: ${common_gav} @ ${common_revision}"
+log "DC common: ${dc_gav} @ ${dc_revision}"
+log "OrderSvr revision: ${ordersvr_revision}"
+
+if [[ "${SKIP_MAVEN_BUILD}" != "true" ]]; then
+  test_arg="-DskipTests=false"
+  [[ "${SKIP_TESTS}" != "true" ]] || test_arg="-Dmaven.test.skip=true"
+  maven "${COMMON_LIBRARY_SOURCE}" clean install "${test_arg}"
+  maven "${DC_COMMON_SOURCE}" clean install "${test_arg}"
+  maven "${ORDERSVR_SOURCE}" clean package dependency:copy-dependencies \
+    -DoutputDirectory=target/dependency "${test_arg}"
+else
+  log "Reusing existing Maven outputs; dependency identity checks remain enabled"
+fi
+
+dependency_dir="${ORDERSVR_SOURCE}/target/dependency"
+mapfile -t common_jars < <(find "${dependency_dir}" -maxdepth 1 -type f -name "${common_artifact}-*.jar" -print)
+mapfile -t dc_jars < <(find "${dependency_dir}" -maxdepth 1 -type f -name "${dc_artifact}-*.jar" -print)
+[[ "${#common_jars[@]}" -eq 1 ]] || die "Expected exactly one ${common_artifact} JAR, found ${#common_jars[@]}"
+[[ "${#dc_jars[@]}" -eq 1 ]] || die "Expected exactly one ${dc_artifact} JAR, found ${#dc_jars[@]}"
+
+common_jar_hash="$(sha256sum "${common_jars[0]}" | awk '{print $1}')"
+dc_jar_hash="$(sha256sum "${dc_jars[0]}" | awk '{print $1}')"
+
+if [[ "${SKIP_DOCKER_BUILD}" != "true" ]]; then
+  log "Building immutable development image ${image_ref}"
+  docker build \
+    --build-arg REPO_URL=https://github.com/bliplink/com.app.dc.ordersvr \
+    --build-arg SERVICE_REVISION="${ordersvr_revision}" \
+    --build-arg COMMON_REVISION="${common_revision}" \
+    --build-arg COMMON_GAV="${common_gav}" \
+    --build-arg BUILD_DATE="${build_date}" \
+    --label dc.common.jar.sha256="${common_jar_hash}" \
+    --label dc.dc-common.revision="${dc_revision}" \
+    --label dc.dc-common.jar.sha256="${dc_jar_hash}" \
+    --tag "${image_ref}" \
+    "${ORDERSVR_SOURCE}"
+fi
+
+manifest="${SCRIPT_DIR}/.cluster-dev/ordersvr-build-manifest.env"
+{
+  printf 'BUILD_DATE=%s\n' "${build_date}"
+  printf 'ORDERSVR_IMAGE=%s\n' "${image_ref}"
+  printf 'ORDERSVR_REVISION=%s\n' "${ordersvr_revision}"
+  printf 'DC_COMMON_GAV=%s\n' "${dc_gav}"
+  printf 'DC_COMMON_REVISION=%s\n' "${dc_revision}"
+  printf 'DC_COMMON_JAR_SHA256=%s\n' "${dc_jar_hash}"
+  printf 'COMMON_GAV=%s\n' "${common_gav}"
+  printf 'COMMON_REVISION=%s\n' "${common_revision}"
+  printf 'COMMON_JAR_SHA256=%s\n' "${common_jar_hash}"
+} > "${manifest}"
+
+log "Build manifest: ${manifest}"
+log "Image: ${image_ref}"
+log "Common JAR SHA-256: ${common_jar_hash}"
