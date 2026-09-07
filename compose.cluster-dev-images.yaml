@@ -1,0 +1,8 @@
+services:
+  gateway:
+    image: ${GW_CLUSTER_DEV_IMAGE:?set GW_CLUSTER_DEV_IMAGE to a locally built immutable tag}
+    pull_policy: never
+
+  ordersvr:
+    image: ${ORDERSVR_CLUSTER_DEV_IMAGE:?set ORDERSVR_CLUSTER_DEV_IMAGE to a locally built immutable tag}
+    pull_policy: never

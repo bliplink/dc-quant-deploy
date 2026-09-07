@@ -316,6 +316,12 @@ main() {
   FAILURE_FILE="${STATE_DIR}/failure.state"
   ROLLBACK_FILE="${STATE_DIR}/rollback.images"
   HISTORY_FILE="${STATE_DIR}/last-successful.meta"
+  PAUSE_FILE="${SAAS_AUTO_UPDATE_PAUSE_FILE:-${DEPLOY_ROOT}/auto-update.paused}"
+
+  if [[ -f "${PAUSE_FILE}" ]]; then
+    log "Automatic deployment is paused by ${PAUSE_FILE}; local development images remain untouched."
+    exit 0
+  fi
 
   QUIET_SECONDS="${SAAS_AUTO_UPDATE_QUIET_SECONDS:-300}"
   PULL_TIMEOUT_SECONDS="${SAAS_AUTO_UPDATE_PULL_TIMEOUT_SECONDS:-600}"

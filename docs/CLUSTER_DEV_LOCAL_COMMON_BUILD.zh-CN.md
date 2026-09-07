@@ -98,6 +98,30 @@ docker run --rm --entrypoint sh "$ORDERSVR_IMAGE" -c \
 3. `dc.common.revision` 与计划验证的 Common commit 一致；
 4. OrderSvr 与 GW 的 `dc.common.jar.sha256` 完全相同。
 
+## 单实例开发环境部署
+
+在具备 Docker 的隔离开发环境中，可以先将现有单实例 GW、OrderSvr 替换为本地镜像：
+
+```bash
+sudo ./deploy-cluster-dev-images.sh
+```
+
+该脚本会：
+
+1. 从 `.cluster-dev/*-build-manifest.env` 读取不可变镜像标签；
+2. 确认两个镜像已存在于本机；
+3. 使用 `compose.cluster-dev-images.yaml` 和 `pull_policy: never`；
+4. 创建 `${DEPLOY_ROOT}/auto-update.paused`，阻止定时任务将本地镜像覆盖回 GHCR；
+5. 只重建 GW 和 OrderSvr，并核对容器实际镜像。
+
+完成测试后，应先使用正常 `compose.yaml` 和 `.env.prod` 恢复两个官方仓库镜像。确认容器已经运行官方镜像后，再解除自动更新暂停：
+
+```bash
+sudo ./resume-saas-auto-update.sh --confirm-registry-images-restored
+```
+
+恢复脚本会核对运行中 GW、OrderSvr 的镜像名称；仍在运行本地开发镜像时拒绝解除暂停。
+
 ## 双OrderSvr部署前置门槛
 
 双实例 Compose 覆盖只有在分区集群分支同步后才能启用。必须先确认该分支定义的节点标识、监听端口、ZooKeeper路径、分区键和主备/分片语义，禁止根据旧版 `serverKey=SERVER.OrderSvr` 猜测配置，否则同机两个实例可能端口冲突或形成双主。
