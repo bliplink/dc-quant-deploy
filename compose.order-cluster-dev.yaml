@@ -1,4 +1,25 @@
 services:
+  zookeeper:
+    image: zookeeper:3.8.4
+    pull_policy: always
+    container_name: dc-saas-cluster-zookeeper
+    network_mode: host
+    restart: unless-stopped
+    environment:
+      TZ: Asia/Shanghai
+      ZOO_ADMINSERVER_ENABLED: "false"
+      ZOO_4LW_COMMANDS_WHITELIST: ruok,srvr,mntr
+      ZOO_STANDALONE_ENABLED: "true"
+      ZOO_SERVERS: server.1=localhost:32889:33889
+      ZOO_CFG_EXTRA: clientPort=32182 clientPortAddress=127.0.0.1
+      JVMFLAGS: -Xms32m -Xmx128m
+    volumes:
+      - ${ORDER_CLUSTER_DEV_ROOT:-/data/dc-saas-order-cluster-dev}/zookeeper/data:/data
+      - ${ORDER_CLUSTER_DEV_ROOT:-/data/dc-saas-order-cluster-dev}/zookeeper/datalog:/datalog
+      - ${ORDER_CLUSTER_DEV_ROOT:-/data/dc-saas-order-cluster-dev}/zookeeper/logs:/logs
+    mem_limit: ${ORDER_CLUSTER_ZOOKEEPER_MEMORY_LIMIT:-256m}
+    cpus: ${ORDER_CLUSTER_ZOOKEEPER_CPU_LIMIT:-0.20}
+
   ordersvr-a:
     image: ${ORDERSVR_CLUSTER_DEV_IMAGE:?set ORDERSVR_CLUSTER_DEV_IMAGE}
     pull_policy: always
@@ -11,7 +32,7 @@ services:
       DEPLOY_ROOT: /srv/dc
       SERVICE_NAME: OrderSvr
       MAIN_CLASS: OrderSvr
-      JAVA_OPTS: ${ORDER_CLUSTER_JAVA_OPTS:--server -Xms32m -Xmx256m -Xmn64m -Xss256k -XX:+ExitOnOutOfMemoryError -Djava.security.auth.login.config=../../control/jaas.ini}
+      JAVA_OPTS: ${ORDER_CLUSTER_JAVA_OPTS:--server -Xms32m -Xmx256m -Xmn64m -Xss256k -XX:+ExitOnOutOfMemoryError -Dzookeeper.sasl.client=false -Djava.security.auth.login.config=../../control/jaas.ini}
     volumes:
       - ${ORDER_CLUSTER_DEV_ROOT:-/data/dc-saas-order-cluster-dev}/control:/srv/dc/control:ro
       - ${ORDER_CLUSTER_DEV_ROOT:-/data/dc-saas-order-cluster-dev}/data:/srv/dc/data
@@ -33,7 +54,7 @@ services:
       DEPLOY_ROOT: /srv/dc
       SERVICE_NAME: OrderSvr
       MAIN_CLASS: OrderSvr
-      JAVA_OPTS: ${ORDER_CLUSTER_JAVA_OPTS:--server -Xms32m -Xmx256m -Xmn64m -Xss256k -XX:+ExitOnOutOfMemoryError -Djava.security.auth.login.config=../../control/jaas.ini}
+      JAVA_OPTS: ${ORDER_CLUSTER_JAVA_OPTS:--server -Xms32m -Xmx256m -Xmn64m -Xss256k -XX:+ExitOnOutOfMemoryError -Dzookeeper.sasl.client=false -Djava.security.auth.login.config=../../control/jaas.ini}
     volumes:
       - ${ORDER_CLUSTER_DEV_ROOT:-/data/dc-saas-order-cluster-dev}/control:/srv/dc/control:ro
       - ${ORDER_CLUSTER_DEV_ROOT:-/data/dc-saas-order-cluster-dev}/data:/srv/dc/data
@@ -58,7 +79,7 @@ services:
       DEPLOY_ROOT: /srv/dc
       SERVICE_NAME: GW
       MAIN_CLASS: GW
-      JAVA_OPTS: ${ORDER_CLUSTER_GW_JAVA_OPTS:--server -Xms32m -Xmx192m -Xmn48m -Xss256k -XX:MaxDirectMemorySize=96m -XX:+ExitOnOutOfMemoryError -Djava.security.auth.login.config=../../control/jaas.ini}
+      JAVA_OPTS: ${ORDER_CLUSTER_GW_JAVA_OPTS:--server -Xms32m -Xmx192m -Xmn48m -Xss256k -XX:MaxDirectMemorySize=96m -XX:+ExitOnOutOfMemoryError -Dzookeeper.sasl.client=false -Djava.security.auth.login.config=../../control/jaas.ini}
     volumes:
       - ${ORDER_CLUSTER_DEV_ROOT:-/data/dc-saas-order-cluster-dev}/control:/srv/dc/control:ro
       - ${ORDER_CLUSTER_DEV_ROOT:-/data/dc-saas-order-cluster-dev}/data:/srv/dc/data

@@ -6,8 +6,8 @@ COMPOSE_FILE="${SCRIPT_DIR}/compose.order-cluster-dev.yaml"
 PROJECT_NAME="dc-saas-order-cluster-dev"
 ORDER_CLUSTER_DEV_ROOT="${ORDER_CLUSTER_DEV_ROOT:-/data/dc-saas-order-cluster-dev}"
 SAAS_CONTROL_ROOT="${SAAS_CONTROL_ROOT:-/data/dc-saas-runtime/control}"
-ZOOKEEPER_CONTAINER="${ZOOKEEPER_CONTAINER:-dc-saas-zookeeper}"
-ZOOKEEPER_ENDPOINT="${ZOOKEEPER_ENDPOINT:-127.0.0.1:32181}"
+ZOOKEEPER_CONTAINER="${ZOOKEEPER_CONTAINER:-dc-saas-cluster-zookeeper}"
+ZOOKEEPER_ENDPOINT="${ZOOKEEPER_ENDPOINT:-127.0.0.1:32182}"
 
 log() { printf '[order-cluster-dev] %s\n' "$*"; }
 die() { printf '[order-cluster-dev] ERROR: %s\n' "$*" >&2; exit 1; }
@@ -53,7 +53,6 @@ require_gw_image "${GW_CLUSTER_DEV_IMAGE}"
 [[ -f "${COMPOSE_FILE}" ]] || die "missing ${COMPOSE_FILE}"
 sudo test -r "${SAAS_CONTROL_ROOT}/dc.dat" || die 'existing SaaS dc.dat is unavailable'
 sudo test -r "${SAAS_CONTROL_ROOT}/jaas.ini" || die 'existing SaaS jaas.ini is unavailable'
-sudo docker inspect "${ZOOKEEPER_CONTAINER}" >/dev/null 2>&1 || die "${ZOOKEEPER_CONTAINER} is not running"
 
 log 'Pulling immutable cluster development images'
 sudo docker pull "${ORDERSVR_CLUSTER_DEV_IMAGE}"
@@ -73,7 +72,7 @@ gw_common_hash="$(image_label "${GW_CLUSTER_DEV_IMAGE}" dc.common.jar.sha256)"
 export ORDER_CLUSTER_DEV_ROOT ORDERSVR_CLUSTER_DEV_IMAGE GW_CLUSTER_DEV_IMAGE
 sudo -E docker compose -p "${PROJECT_NAME}" -f "${COMPOSE_FILE}" down --remove-orphans >/dev/null 2>&1 || true
 
-for port in 33300 33301 33302 33336 33337 19111 19112; do
+for port in 32182 32889 33889 33300 33301 33302 33336 33337 19111 19112; do
   if sudo ss -ltnH "sport = :${port}" | grep -q .; then
     die "TCP port ${port} is already in use"
   fi
@@ -253,6 +252,7 @@ cat >"${tmp_root}/gateway/spring-tcp-server.xml" <<'EOF'
 EOF
 
 sudo install -d -m 0750 "${ORDER_CLUSTER_DEV_ROOT}/control" "${ORDER_CLUSTER_DEV_ROOT}/data" "${ORDER_CLUSTER_DEV_ROOT}/log" \
+  "${ORDER_CLUSTER_DEV_ROOT}/zookeeper/data" "${ORDER_CLUSTER_DEV_ROOT}/zookeeper/datalog" "${ORDER_CLUSTER_DEV_ROOT}/zookeeper/logs" \
   "${ORDER_CLUSTER_DEV_ROOT}/nodes/OrderSvrA" "${ORDER_CLUSTER_DEV_ROOT}/nodes/OrderSvrB" "${ORDER_CLUSTER_DEV_ROOT}/gateway" "${ORDER_CLUSTER_DEV_ROOT}/evidence"
 sudo install -m 0600 "${SAAS_CONTROL_ROOT}/dc.dat" "${ORDER_CLUSTER_DEV_ROOT}/control/dc.dat"
 sudo install -m 0600 "${SAAS_CONTROL_ROOT}/jaas.ini" "${ORDER_CLUSTER_DEV_ROOT}/control/jaas.ini"
@@ -263,10 +263,12 @@ sudo install -m 0644 "${tmp_root}/nodes/OrderSvrA/log4j.ini" "${ORDER_CLUSTER_DE
 sudo install -m 0644 "${tmp_root}/nodes/OrderSvrB/log4j.ini" "${ORDER_CLUSTER_DEV_ROOT}/nodes/OrderSvrB/log4j.ini"
 sudo install -m 0644 "${tmp_root}/gateway/"*.xml "${ORDER_CLUSTER_DEV_ROOT}/gateway/"
 
-log 'Seeding isolated partition assignments in the existing SaaS ZooKeeper'
+log 'Starting the isolated cluster development ZooKeeper'
+sudo -E docker compose -p "${PROJECT_NAME}" -f "${COMPOSE_FILE}" up -d zookeeper
+wait_port 32182 'cluster development ZooKeeper'
+
+log 'Seeding isolated partition assignments in the cluster development ZooKeeper'
 cat <<'EOF' | sudo docker exec -i \
-  -e CLIENT_JVMFLAGS=-Djava.security.auth.login.config=/conf/jaas.ini \
-  -e JVMFLAGS=-Djava.security.auth.login.config=/conf/jaas.ini \
   "${ZOOKEEPER_CONTAINER}" zkCli.sh -server "${ZOOKEEPER_ENDPOINT}" >/tmp/order-cluster-dev-zk-seed.log 2>&1
 create /dc x
 create /dc/cluster x
