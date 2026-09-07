@@ -150,19 +150,13 @@ ensure_env_defaults() {
   if grep -q '^TRADESVR_TAG=sha-' "${ENV_FILE}"; then
     sed -i 's/^TRADESVR_TAG=sha-.*/TRADESVR_TAG=saas-crypto/' "${ENV_FILE}"
   fi
-  # Public application images use moving saas-crypto tags so the digest-based
-  # updater can detect and deploy a new Web build like every other SaaS service.
-  for legacy_web_tag in \
-    source-2ed6e68f3ad45a65cb184b5397abc9f752719721 \
-    source-97b3afe88928fe0c6b26a8564d88ae5168556dba \
-    source-cbd7e5a12c7a083b30383922263101f1a730cb3a \
-    source-d383dbff18116090b5dec29fa07757bccc5abb53 \
-    source-000dd5fde5731e7bd70492b09333985574f1ea0e \
-    source-6d20d6b9e6361017d7892f8018c7d68a0130e284 \
-    source-dbf69d5e0090f981eac546681a4a596275a5b22c \
-    source-04ded17cd3de3a5fb8a5cfd0b25d2cce72ca7676; do
-    migrate_env_value TRADE_WEB_TAG "${legacy_web_tag}" saas-crypto
-  done
+  # Public application images use the moving saas-crypto tag so the
+  # digest-based updater can detect each newly published Web build. Migrate
+  # every historical source/CI pin instead of maintaining an ever-growing
+  # release-specific allow-list.
+  if grep -Eq '^TRADE_WEB_TAG=(source-|sha-)' "${ENV_FILE}"; then
+    sed -i 's/^TRADE_WEB_TAG=.*/TRADE_WEB_TAG=saas-crypto/' "${ENV_FILE}"
+  fi
   migrate_env_value REQUIRE_GHCR_LOGIN true false
   if ! grep -q '^SAAS_MIN_TOTAL_MEMORY_MB=' "${ENV_FILE}"; then
     printf 'SAAS_MIN_TOTAL_MEMORY_MB=7680\n' >> "${ENV_FILE}"
