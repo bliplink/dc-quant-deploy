@@ -150,6 +150,7 @@ function expectRejected(label, result) {
       opened: browserEvents.filter(event => event.startsWith('websocket.opening:')).length,
       closed: browserEvents.filter(event => event.startsWith('websocket.closed:')).length
     };
+    const logoutEventIndex = browserEvents.length;
     await page.locator('.logoutButton').click();
     await page.waitForURL(`**/#/trade?location=${encodeURIComponent(location)}`, {timeout: 30000});
     await page.waitForFunction(() => !sessionStorage.getItem('ff-dex-token'));
@@ -162,7 +163,7 @@ function expectRejected(label, result) {
       closed: browserEvents.filter(event => event.startsWith('websocket.closed:')).length
     };
     if (socketsAfterLogout.opened !== socketsBeforeLogout.opened || socketsAfterLogout.closed !== socketsBeforeLogout.closed) {
-      throw new Error(`logout replaced the live market websocket: before=${JSON.stringify(socketsBeforeLogout)} after=${JSON.stringify(socketsAfterLogout)}`);
+      throw new Error(`logout replaced the live market websocket: before=${JSON.stringify(socketsBeforeLogout)} after=${JSON.stringify(socketsAfterLogout)} events=${JSON.stringify(browserEvents.slice(logoutEventIndex))}`);
     }
     const publicMarket = await page.evaluate(() => {
       const orderBook = [...document.querySelectorAll('.orderBookWrap')].find(element => {
