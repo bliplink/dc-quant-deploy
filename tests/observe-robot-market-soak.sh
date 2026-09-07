@@ -183,7 +183,13 @@ printf '%s %s %s %s\n' "${accepted}" "${rejected}" "${gaps}" "${auth_refreshes}"
 robot_row="$(mysql_exec -e "SELECT runtime_status,open_order_count,COALESCE(last_error_code,''),COALESCE(last_error_message,'') FROM dc.dc_tenant_robot WHERE location='${LOCATION}' AND robot_id='${ROBOT_ID}' LIMIT 1;" dc 2>/dev/null || true)"
 IFS=$'\t' read -r robot_status robot_orders robot_error_code robot_error_message <<<"${robot_row}"
 [[ "${robot_status:-MISSING}" == "RUNNING" ]] || issues+=("robot_status_${robot_status:-MISSING}")
-[[ "${robot_orders:-0}" == "40" ]] || issues+=("robot_open_orders_${robot_orders:-0}")
+# Bridge-first replacement intentionally places the new 20+20 levels before
+# cancelling the old set. A heartbeat can therefore observe 41..80 orders for
+# one cycle even though the public Top-10 remains continuous. Fewer than the
+# configured 40 means missing coverage; more than 80 means stale accumulation.
+if (( ${robot_orders:-0} < 40 || ${robot_orders:-0} > 80 )); then
+  issues+=("robot_open_orders_${robot_orders:-0}")
+fi
 persisted_robot_active="$(mysql_exec -e "SELECT COUNT(*) FROM dc.dc_orders WHERE location='${LOCATION}' AND user_id='${ROBOT_USER}' AND clord_id LIKE 'RBcontinuousd%' AND ord_status IN ('New','Partially_Filled','Pending_Cancel');" dc 2>/dev/null || echo -1)"
 [[ "${persisted_robot_active}" == "0" ]] || issues+=("persisted_robot_active_orders_${persisted_robot_active}")
 
