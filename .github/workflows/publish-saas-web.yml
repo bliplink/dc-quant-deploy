@@ -16,6 +16,7 @@ env:
   IMAGE_NAME: bliplink/dc-saas-trade-web
   SOURCE_BRANCH: saas-crypto
   # Pin every image to a reviewed source commit that already exists remotely.
+  # Immutable private-source revision published as the standalone public image.
   SOURCE_REV: e450dce9be657f9e926c5058f2584ab1b6f4588f
   PUBLIC_SOURCE_URL: https://github.com/bliplink/dc-quant-deploy
 
