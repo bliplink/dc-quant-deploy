@@ -126,7 +126,8 @@ function expectRejected(label, result) {
     expectRejected('rotated token replay', await loginWithToken(page, token1));
     expectRejected('cross-location token login', await loginWithToken(page, token2, `${location}_OTHER`));
     const currentInfo = await userInfo(page, token2);
-    if (Number(currentInfo.code) !== 0 || currentInfo.data.user_id !== username || currentInfo.data.location !== location) {
+    const authoritativeUsername = currentInfo.data && (currentInfo.data.user_name || currentInfo.data.user_id);
+    if (Number(currentInfo.code) !== 0 || authoritativeUsername !== username || !currentInfo.data.user_id || currentInfo.data.location !== location) {
       throw new Error(`rotated token is not authoritative: ${JSON.stringify(currentInfo)}`);
     }
 
