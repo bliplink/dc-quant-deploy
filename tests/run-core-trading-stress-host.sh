@@ -9,6 +9,7 @@ LOAD_MAKER="${LOAD_MAKER:-stressmaker}"
 LOAD_TAKER="${LOAD_TAKER:-stresstaker}"
 LOAD_ORDERS="${LOAD_ORDERS:-1000}"
 LOAD_CONCURRENCY="${LOAD_CONCURRENCY:-16}"
+LOAD_RELOAD_BEFORE="${LOAD_RELOAD_BEFORE:-true}"
 LOAD_RUN_ID="${LOAD_RUN_ID:-$(date +%Y%m%d%H%M%S)}"
 LOAD_RUNNER_NAME="${LOAD_RUNNER_NAME:-dc-saas-web-e2e-runner}"
 LOAD_PASSWORD="${LOAD_E2E_PASSWORD:-${E2E_PASSWORD:-}}"
@@ -24,6 +25,8 @@ for value in "${LOAD_LOCATION}" "${LOAD_MAKER}" "${LOAD_TAKER}" "${LOAD_RUN_ID}"
 done
 [[ "${LOAD_ORDERS}" =~ ^[1-9][0-9]*$ ]] || die "LOAD_ORDERS must be a positive integer"
 [[ "${LOAD_CONCURRENCY}" =~ ^[1-9][0-9]*$ ]] || die "LOAD_CONCURRENCY must be a positive integer"
+[[ "${LOAD_RELOAD_BEFORE}" == true || "${LOAD_RELOAD_BEFORE}" == false ]] ||
+  die "LOAD_RELOAD_BEFORE must be true or false"
 [[ "${LOAD_MAKER}" != "${LOAD_TAKER}" ]] || die "Load users must differ"
 
 set -a
@@ -183,15 +186,19 @@ COMMIT;
 SQL
 } | mysql_exec dc
 
-log "Reloading the stateful services before the load run."
-docker restart "${order_containers[@]}" dc-saas-tradesvr >/dev/null
-wait_for_port "${ORDERSVR_GW_PORT}" dc-saas-ordersvr
-if [[ "${ORDER_CLUSTER_ENABLED:-false}" == "true" ]]; then
-  wait_for_port "${ORDERSVR_B_GW_PORT}" dc-saas-ordersvr-b
+if [[ "${LOAD_RELOAD_BEFORE}" == true ]]; then
+  log "Reloading the stateful services before the load run."
+  docker restart "${order_containers[@]}" dc-saas-tradesvr >/dev/null
+  wait_for_port "${ORDERSVR_GW_PORT}" dc-saas-ordersvr
+  if [[ "${ORDER_CLUSTER_ENABLED:-false}" == "true" ]]; then
+    wait_for_port "${ORDERSVR_B_GW_PORT}" dc-saas-ordersvr-b
+  fi
+  recover_order_cluster
+  wait_for_port "${TRADESVR_GW_PORT}" dc-saas-tradesvr
+  docker restart dc-saas-gateway >/dev/null
+else
+  log "Using the already verified stateful-service epoch without a redundant pre-load restart."
 fi
-recover_order_cluster
-wait_for_port "${TRADESVR_GW_PORT}" dc-saas-tradesvr
-docker restart dc-saas-gateway >/dev/null
 wait_for_route OrderSvr
 wait_for_route TDSvr
 login_user "${LOAD_MAKER}"
@@ -243,7 +250,7 @@ SELECT COUNT(*) FROM dc.dc_orders WHERE location='${LOAD_LOCATION}'
   AND user_id IN ('${LOAD_MAKER}','${LOAD_TAKER}') AND clord_id LIKE 'LOAD-${LOAD_RUN_ID}-%'
   AND ord_status='Rejected';
 SELECT COUNT(*) FROM dc.dc_users_posting WHERE location='${LOAD_LOCATION}'
-  AND user_id IN ('${LOAD_MAKER}','${LOAD_TAKER}');
+  AND user_id IN ('${LOAD_MAKER}','${LOAD_TAKER}') AND source='Trade';
 SQL
   } | mysql_exec dc)"
   mapfile -t progress <<<"${persisted}"
@@ -286,16 +293,20 @@ SELECT IF(COUNT(*)=$((LOAD_ORDERS * 2)),1,0) FROM dc.dc_orders WHERE location='$
 SELECT IF(COUNT(*)=${expected_exec},1,0) FROM dc.dc_orders_execorders WHERE location='${LOAD_LOCATION}'
   AND user_id IN ('${LOAD_MAKER}','${LOAD_TAKER}');
 SELECT IF(COUNT(*)=${LOAD_ORDERS} AND ABS(SUM(CAST(amount AS DECIMAL(35,9)))+${maker_fee})<0.00000001,1,0)
-FROM dc.dc_users_posting WHERE location='${LOAD_LOCATION}' AND user_id='${LOAD_MAKER}';
+FROM dc.dc_users_posting WHERE location='${LOAD_LOCATION}' AND user_id='${LOAD_MAKER}' AND source='Trade';
 SELECT IF(COUNT(*)=${LOAD_ORDERS} AND ABS(SUM(CAST(amount AS DECIMAL(35,9)))+${taker_fee})<0.00000001,1,0)
-FROM dc.dc_users_posting WHERE location='${LOAD_LOCATION}' AND user_id='${LOAD_TAKER}';
+FROM dc.dc_users_posting WHERE location='${LOAD_LOCATION}' AND user_id='${LOAD_TAKER}' AND source='Trade';
 SELECT IF(ABS(p.short_position-${quantity})<0.00000001 AND ABS(p.short_used_margin-${maker_margin})<0.00000001
-          AND ABS(b.balance-(1000000-${maker_fee}))<0.00000001 AND ABS(b.used_margin-${maker_margin})<0.00000001
+          AND ABS(b.balance-(1000000+COALESCE((SELECT SUM(CAST(x.amount AS DECIMAL(35,9)))
+              FROM dc.dc_users_posting x WHERE x.location=p.location AND x.user_id=p.user_id),0)))<0.00000001
+          AND ABS(b.used_margin-${maker_margin})<0.00000001
           AND ABS(b.freezed_margin)<0.00000001 AND ABS(b.freezed_commission)<0.00000001,1,0)
 FROM dc.dc_orders_position p JOIN dc.dc_users_balance b ON b.location=p.location AND b.user_id=p.user_id
 WHERE p.location='${LOAD_LOCATION}' AND p.user_id='${LOAD_MAKER}' AND p.security_id='BTCUSDT';
 SELECT IF(ABS(p.long_position-${quantity})<0.00000001 AND ABS(p.long_used_margin-${taker_margin})<0.00000001
-          AND ABS(b.balance-(1000000-${taker_fee}))<0.00000001 AND ABS(b.used_margin-${taker_margin})<0.00000001
+          AND ABS(b.balance-(1000000+COALESCE((SELECT SUM(CAST(x.amount AS DECIMAL(35,9)))
+              FROM dc.dc_users_posting x WHERE x.location=p.location AND x.user_id=p.user_id),0)))<0.00000001
+          AND ABS(b.used_margin-${taker_margin})<0.00000001
           AND ABS(b.freezed_margin)<0.00000001 AND ABS(b.freezed_commission)<0.00000001,1,0)
 FROM dc.dc_orders_position p JOIN dc.dc_users_balance b ON b.location=p.location AND b.user_id=p.user_id
 WHERE p.location='${LOAD_LOCATION}' AND p.user_id='${LOAD_TAKER}' AND p.security_id='BTCUSDT';
@@ -317,7 +328,21 @@ SQL
 mapfile -t checks <<<"${verification}"
 [[ "${#checks[@]}" -eq 10 ]] || die "Unexpected load verification output: ${verification}"
 for index in "${!checks[@]}"; do
-  [[ "${checks[${index}]}" == "1" ]] || die "Load verification check $((index + 1)) failed"
+  if [[ "${checks[${index}]}" != "1" ]]; then
+    diagnostics="$({
+      cat <<SQL
+SELECT CONCAT('balance=',user_id,':',balance,':',used_margin,':',freezed_margin,':',freezed_commission)
+FROM dc.dc_users_balance WHERE location='${LOAD_LOCATION}' AND user_id IN ('${LOAD_MAKER}','${LOAD_TAKER}') ORDER BY user_id;
+SELECT CONCAT('position=',user_id,':',long_position,':',short_position,':',long_used_margin,':',short_used_margin)
+FROM dc.dc_orders_position WHERE location='${LOAD_LOCATION}' AND user_id IN ('${LOAD_MAKER}','${LOAD_TAKER}')
+  AND security_id='BTCUSDT' ORDER BY user_id;
+SELECT CONCAT('posting=',user_id,':',source,':',COUNT(*),':',SUM(CAST(amount AS DECIMAL(35,9))))
+FROM dc.dc_users_posting WHERE location='${LOAD_LOCATION}' AND user_id IN ('${LOAD_MAKER}','${LOAD_TAKER}')
+GROUP BY user_id,source ORDER BY user_id,source;
+SQL
+    } | mysql_exec dc)"
+    die "Load verification check $((index + 1)) failed: ${diagnostics}"
+  fi
 done
 
 log "Restarting stateful services to verify persisted recovery."
