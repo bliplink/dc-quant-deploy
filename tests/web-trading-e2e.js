@@ -165,6 +165,18 @@ async function placeLimit(page, side, price, amount) {
   );
 }
 
+async function placeReduceOnlyLimit(page, side, price, amount) {
+  const form = page.locator('.placeOrderWrap');
+  await form.getByRole('button', { name: 'Limit', exact: true }).click();
+  const reduceOnly = form.getByRole('checkbox', { name: 'Reduce Only', exact: true });
+  if (!(await reduceOnly.isChecked())) await reduceOnly.check();
+  await form.getByRole('textbox', { name: 'Limit Price', exact: true }).fill(String(price));
+  await form.getByRole('textbox', { name: 'Amount', exact: true }).fill(String(amount));
+  return invokeFromPage(page, 'placeOrder', () =>
+    form.getByRole('button', { name: side, exact: true }).click()
+  );
+}
+
 async function openOrders(page) {
   // The live order book continuously relayouts this section. Force the tab
   // click after resolving the exact visible control so Playwright does not
@@ -398,7 +410,7 @@ async function waitForNoPosition(page) {
     // Rest an offsetting buy for the short account, then exercise the Web
     // reduce-only Market/IOC close action for the long account. The same match
     // closes both sides and leaves the acceptance location flat.
-    await placeLimit(sellerSession.page, 'Buy / Long', '60000', '0.001');
+    await placeReduceOnlyLimit(sellerSession.page, 'Close Short', '60000', '0.001');
     await (await openOrders(sellerSession.page)).first().waitFor({ timeout: 15000 });
     await closeFirstPosition(buyerSession.page, 'Long');
     await waitForNoPosition(buyerSession.page);
