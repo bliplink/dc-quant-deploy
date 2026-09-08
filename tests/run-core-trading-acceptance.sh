@@ -74,6 +74,9 @@ ${LIQSVR_GW_PORT} liqsvr
 ${MANAGERSVR_GW_PORT} managersvr
 ${ADMINSVR_GW_PORT} adminsvr
 PORTS
+if [[ "${ORDER_CLUSTER_ENABLED:-false}" == "true" ]]; then
+  wait_for_port "${ORDERSVR_B_GW_PORT}" ordersvr-b
+fi
 
 log "Validating the deployed SaaS stack."
 "${DEPLOY_DIR}/validate-saas.sh" --env-file "${ENV_FILE}"
@@ -193,5 +196,17 @@ dc-saas-managersvr 256m ${MANAGERSVR_MEMORY_LIMIT:-384m}
 dc-saas-adminsvr 256m ${ADMINSVR_MEMORY_LIMIT:-384m}
 dc-saas-robotsvr 256m ${ROBOTSVR_MEMORY_LIMIT:-384m}
 MEMORY_EXPECTATIONS
+
+if [[ "${ORDER_CLUSTER_ENABLED:-false}" == "true" ]]; then
+  expected_memory="$(memory_limit_bytes "${ORDERSVR_B_MEMORY_LIMIT:-640m}")"
+  java_command="$(docker exec dc-saas-ordersvr-b sh -c "ps -ef | grep '[j]ava' | head -n 1")"
+  memory_bytes="$(docker inspect --format '{{.HostConfig.Memory}}' dc-saas-ordersvr-b)"
+  grep -Fq -- '-Xmx448m' <<<"${java_command}" ||
+    die "Effective JVM heap for dc-saas-ordersvr-b is not -Xmx448m: ${java_command}"
+  (( memory_bytes == expected_memory )) ||
+    die "Memory limit for dc-saas-ordersvr-b is ${memory_bytes}, expected ${expected_memory}"
+  printf '[core-acceptance] MEMORY %s limit_bytes=%s effective_xmx=%s\n' \
+    dc-saas-ordersvr-b "${memory_bytes}" 448m
+fi
 
 log "PASS: the complete single-location core trading acceptance flow succeeded."

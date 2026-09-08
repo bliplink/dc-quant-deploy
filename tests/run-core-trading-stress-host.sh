@@ -31,6 +31,11 @@ set -a
 . "${ENV_FILE}"
 set +a
 
+order_containers=(dc-saas-ordersvr)
+if [[ "${ORDER_CLUSTER_ENABLED:-false}" == "true" ]]; then
+  order_containers+=(dc-saas-ordersvr-b)
+fi
+
 liq_was_running="$(docker inspect --format '{{.State.Running}}' dc-saas-liqsvr 2>/dev/null || true)"
 restore_liqsvr() {
   if [[ "${liq_was_running}" == "true" ]]; then
@@ -161,8 +166,11 @@ SQL
 } | mysql_exec dc
 
 log "Reloading the stateful services before the load run."
-docker restart dc-saas-ordersvr dc-saas-tradesvr >/dev/null
+docker restart "${order_containers[@]}" dc-saas-tradesvr >/dev/null
 wait_for_port "${ORDERSVR_GW_PORT}" dc-saas-ordersvr
+if [[ "${ORDER_CLUSTER_ENABLED:-false}" == "true" ]]; then
+  wait_for_port "${ORDERSVR_B_GW_PORT}" dc-saas-ordersvr-b
+fi
 wait_for_port "${TRADESVR_GW_PORT}" dc-saas-tradesvr
 docker restart dc-saas-gateway >/dev/null
 wait_for_route OrderSvr
@@ -173,7 +181,7 @@ login_user "${LOAD_TAKER}"
 artifact_dir="${LOAD_ARTIFACT_DIR:-${DEPLOY_ROOT}/e2e-artifacts/stress-${LOAD_RUN_ID}}"
 install -d -m 0750 "${artifact_dir}"
 before_stats="$(docker stats --no-stream --format '{{.Name}}\t{{.CPUPerc}}\t{{.MemUsage}}' \
-  dc-saas-gateway dc-saas-ordersvr dc-saas-tradesvr dc-saas-mdsvr)"
+  dc-saas-gateway "${order_containers[@]}" dc-saas-tradesvr dc-saas-mdsvr)"
 printf '%s\n' "${before_stats}" >"${artifact_dir}/container-stats-before.tsv"
 
 log "Running ${LOAD_ORDERS} resting/cancel and ${LOAD_ORDERS} matched orders at concurrency ${LOAD_CONCURRENCY}."
@@ -294,8 +302,11 @@ for index in "${!checks[@]}"; do
 done
 
 log "Restarting stateful services to verify persisted recovery."
-docker restart dc-saas-ordersvr dc-saas-tradesvr >/dev/null
+docker restart "${order_containers[@]}" dc-saas-tradesvr >/dev/null
 wait_for_port "${ORDERSVR_GW_PORT}" dc-saas-ordersvr
+if [[ "${ORDER_CLUSTER_ENABLED:-false}" == "true" ]]; then
+  wait_for_port "${ORDERSVR_B_GW_PORT}" dc-saas-ordersvr-b
+fi
 wait_for_port "${TRADESVR_GW_PORT}" dc-saas-tradesvr
 docker restart dc-saas-gateway >/dev/null
 wait_for_route OrderSvr
@@ -347,10 +358,10 @@ done
 [[ "${close_ok:-0}" == "1" ]] || die "Recovered positions did not close cleanly"
 
 docker stats --no-stream --format '{{.Name}}\t{{.CPUPerc}}\t{{.MemUsage}}' \
-  dc-saas-gateway dc-saas-ordersvr dc-saas-tradesvr dc-saas-mdsvr \
+  dc-saas-gateway "${order_containers[@]}" dc-saas-tradesvr dc-saas-mdsvr \
   >"${artifact_dir}/container-stats-after.tsv"
 docker inspect --format '{{.Name}}\t{{.RestartCount}}\t{{.State.OOMKilled}}\t{{.State.Status}}' \
-  dc-saas-gateway dc-saas-ordersvr dc-saas-tradesvr dc-saas-mdsvr \
+  dc-saas-gateway "${order_containers[@]}" dc-saas-tradesvr dc-saas-mdsvr \
   >"${artifact_dir}/container-health-after.tsv"
 if grep -Eq $'\ttrue\t|\texited$|\tdead$' "${artifact_dir}/container-health-after.tsv"; then
   die "A core container was OOM-killed or stopped during load"
