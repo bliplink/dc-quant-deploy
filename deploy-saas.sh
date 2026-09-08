@@ -406,7 +406,14 @@ ensure_order_cluster_assignments() {
   status="$?"
   set -e
   rm -f -- "${commands}"
-  if (( status != 0 )) || grep -Eq 'KeeperErrorCode = (NoAuth|InvalidACL|ConnectionLoss|SessionExpired)' <<<"${output}"; then
+  if grep -Eq 'KeeperErrorCode = (NoAuth|InvalidACL|ConnectionLoss|SessionExpired)' <<<"${output}"; then
+    printf '%s\n' "${output}" >&2
+    die "Could not initialize OrderSvr partition assignments (exit ${status})."
+  fi
+  # zkCli exits with code 1 when any create command encounters NodeExists.
+  # Re-running deployment against an initialized cluster is expected to hit
+  # that condition, so rely on the authoritative child-count check below.
+  if (( status != 0 )) && ! grep -Fq 'Node already exists:' <<<"${output}"; then
     printf '%s\n' "${output}" >&2
     die "Could not initialize OrderSvr partition assignments (exit ${status})."
   fi
