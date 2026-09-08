@@ -77,7 +77,7 @@ log 'Deploying the main SaaS stack with OrderSvr A/B enabled.'
 if ! ENV_FILE="${ENV_FILE}" "${SCRIPT_DIR}/deploy-saas.sh" "${deploy_args[@]}"; then
   log 'Cluster deployment failed; restoring the standalone environment.'
   install -m 0600 "${BASELINE_ENV}" "${ENV_FILE}"
-  docker rm -f dc-saas-ordersvr-b >/dev/null 2>&1 || true
+  docker rm -f dc-saas-ordersvr-b dc-saas-projectionsvr >/dev/null 2>&1 || true
   ENV_FILE="${ENV_FILE}" "${SCRIPT_DIR}/deploy-saas.sh" --skip-host-prepare --skip-pull ||
     die 'Automatic standalone rollback also failed; manual recovery is required.'
   die 'Cluster deployment failed and the standalone stack was restored.'
