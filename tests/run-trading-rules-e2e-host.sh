@@ -27,6 +27,9 @@ set -a
 . "${ENV_FILE}"
 set +a
 
+# shellcheck source=restart-order-trade-e2e.sh
+. "${SCRIPT_DIR}/restart-order-trade-e2e.sh"
+
 order_config="${DEPLOY_ROOT}/control/overrides/OrderSvr/config/application.properties"
 grep -Eq '^enableMarketPrice=true$' "${order_config}" ||
   die "OrderSvr enableMarketPrice=true is required for conditional-order lifecycle testing"
@@ -94,7 +97,8 @@ wait_for_route() {
     response="$(curl -fsS --max-time 10 -H 'Content-Type: application/json' \
       --data "{\"serverName\":\"${server}\",\"method\":\"__rules_readiness__\",\"content\":${content}}" \
       "http://127.0.0.1:${WEB_LISTEN_PORT}/httpapi/" 2>/dev/null || true)"
-    if [[ -n "${response}" ]] && ! grep -Fq 'is not Online' <<<"${response}"; then return 0; fi
+    if [[ -n "${response}" ]] &&
+       ! grep -Eq 'is not Online|PARTITION_NOT_READY|STALE_PARTITION' <<<"${response}"; then return 0; fi
     if (( $(date +%s) - start >= 120 )); then die "${server} did not become routable"; fi
     sleep 2
   done
@@ -195,9 +199,7 @@ COMMIT;
 SQL
 } | mysql_exec dc
 
-docker restart dc-saas-ordersvr dc-saas-tradesvr >/dev/null
-wait_for_port "${ORDERSVR_GW_PORT}" dc-saas-ordersvr
-wait_for_port "${TRADESVR_GW_PORT}" dc-saas-tradesvr
+restart_order_trade_for_e2e
 docker restart dc-saas-gateway >/dev/null
 wait_for_route OrderSvr
 wait_for_route TDSvr

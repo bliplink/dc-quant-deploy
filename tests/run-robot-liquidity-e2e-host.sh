@@ -35,6 +35,9 @@ set -a
 . "${ENV_FILE}"
 set +a
 
+# shellcheck source=restart-order-trade-e2e.sh
+. "${SCRIPT_DIR}/restart-order-trade-e2e.sh"
+
 mysql_exec() {
   docker exec -i -e MYSQL_PWD="${MYSQL_PASSWORD}" dc-saas-mysql \
     mysql -u"${MYSQL_USERNAME}" -N "$@"
@@ -82,7 +85,8 @@ wait_for_route() {
   fi
   while true; do
     response="$(api_call "{\"serverName\":\"${server}\",\"method\":\"__robot_e2e_readiness__\",\"content\":${content}}" 2>/dev/null || true)"
-    if [[ -n "${response}" ]] && ! grep -Fq 'is not Online' <<<"${response}"; then return 0; fi
+    if [[ -n "${response}" ]] &&
+       ! grep -Eq 'is not Online|PARTITION_NOT_READY|STALE_PARTITION' <<<"${response}"; then return 0; fi
     if (( $(date +%s) - start >= 120 )); then die "${server} did not become routable"; fi
     sleep 2
   done
@@ -129,15 +133,16 @@ SQL
 } | mysql_exec dc
 
 if is_true "${RESTART_SERVICES}"; then
-  if docker inspect dc-saas-ordersvr-b >/dev/null 2>&1; then
-    die "ROBOT_E2E_RESTART_SERVICES=true is unsafe with clustered OrderSvr; rerun with false"
-  fi
-  docker restart dc-saas-loginsvr dc-saas-ordersvr dc-saas-tradesvr >/dev/null
+  docker restart dc-saas-loginsvr >/dev/null
+  restart_order_trade_for_e2e
 else
   log "Keeping running services so clustered OrderSvr partition epochs remain valid."
 fi
 wait_for_port "${LOGINSVR_GW_PORT}" dc-saas-loginsvr
 wait_for_port "${ORDERSVR_GW_PORT}" dc-saas-ordersvr
+if [[ "${ORDER_CLUSTER_ENABLED:-false}" == "true" ]]; then
+  wait_for_port "${ORDERSVR_B_GW_PORT}" dc-saas-ordersvr-b
+fi
 wait_for_port "${TRADESVR_GW_PORT}" dc-saas-tradesvr
 if is_true "${RESTART_SERVICES}"; then
   docker restart dc-saas-gateway >/dev/null
