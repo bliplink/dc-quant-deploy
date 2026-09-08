@@ -99,11 +99,11 @@ fi
 wait_for_port "${ORDERSVR_GW_PORT}" dc-saas-ordersvr
 wait_for_port "${TRADESVR_GW_PORT}" dc-saas-tradesvr
 if is_true "${E2E_RESTART_SERVICES}"; then
-  log "Restarting GW so it resolves the refreshed OrderSvr and TDSvr routes."
+  log "Restarting GW so it resolves the refreshed OrderSvr and TradeSvr routes."
   docker restart dc-saas-gateway >/dev/null
 fi
 wait_for_gateway_route OrderSvr
-wait_for_gateway_route TDSvr
+wait_for_gateway_route TradeSvr
 
 login_api_check() {
   local user="$1"

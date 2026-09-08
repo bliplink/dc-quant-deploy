@@ -141,7 +141,7 @@ ADL_E2E_REFERENCE_PRICE=60000 \
 log "Refreshing GW routes after the ADL fixture restarted TradeSvr."
 docker restart dc-saas-gateway >/dev/null
 wait_for_gateway_route OrderSvr
-wait_for_gateway_route TDSvr
+wait_for_gateway_route TradeSvr
 
 log "Revalidating health after TradeSvr restart and ADL settlement."
 "${DEPLOY_DIR}/validate-saas.sh" --env-file "${ENV_FILE}"

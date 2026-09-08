@@ -197,7 +197,7 @@ wait_for_port "${ORDERSVR_GW_PORT}" dc-saas-ordersvr
 wait_for_port "${TRADESVR_GW_PORT}" dc-saas-tradesvr
 docker restart dc-saas-gateway >/dev/null
 wait_for_route OrderSvr
-wait_for_route TDSvr
+wait_for_route TradeSvr
 # MDSvr registers its OrderSvr execution subscriptions during startup. Rebuild
 # those subscriptions after the deterministic GW restart above so this test
 # exercises the same live trade -> tenant market -> conditional-order path used

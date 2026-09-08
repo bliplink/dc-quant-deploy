@@ -66,7 +66,7 @@ wait_for_route() {
 }
 
 wait_for_route TradeSvr
-wait_for_route TDSvr
+wait_for_route TradeSvr
 
 login_request="$(mktemp)"
 printf '{"serverName":"LoginSvr","method":"SYS.ATS.LOGIN","content":{"user_id":"%s","user_name":"%s","password":"%s","method":"login","client_type":"WEB","cid":"SETTINGS_%s","Location":"%s"}}\n' \
@@ -77,7 +77,7 @@ rm -f "${login_request}"
 token="$(printf '%s' "${login_response}" | json_value '(d.get("data") or {}).get("token",d.get("token",""))')"
 [[ -n "${token}" ]] || die "Login returned no token"
 
-funding_response="$(api_call TDSvr cashIn "{\"UserID\":\"${E2E_USER}\",\"Amount\":\"100000\",\"Location\":\"${E2E_LOCATION}\"}" "${token}")"
+funding_response="$(api_call TradeSvr cashIn "{\"UserID\":\"${E2E_USER}\",\"Amount\":\"100000\",\"Location\":\"${E2E_LOCATION}\"}" "${token}")"
 expect_ok "account funding" "${funding_response}"
 
 config_response="$(api_call TradeSvr getSymbolConfig '{"SecurityID":"BTCUSDT"}' "${token}")"

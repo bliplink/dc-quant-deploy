@@ -166,7 +166,7 @@ wait_for_port "${ORDERSVR_GW_PORT}" dc-saas-ordersvr
 wait_for_port "${TRADESVR_GW_PORT}" dc-saas-tradesvr
 docker restart dc-saas-gateway >/dev/null
 wait_for_route OrderSvr
-wait_for_route TDSvr
+wait_for_route TradeSvr
 login_user "${LOAD_MAKER}"
 login_user "${LOAD_TAKER}"
 
@@ -299,7 +299,7 @@ wait_for_port "${ORDERSVR_GW_PORT}" dc-saas-ordersvr
 wait_for_port "${TRADESVR_GW_PORT}" dc-saas-tradesvr
 docker restart dc-saas-gateway >/dev/null
 wait_for_route OrderSvr
-wait_for_route TDSvr
+wait_for_route TradeSvr
 
 recovery="$({
   cat <<SQL
