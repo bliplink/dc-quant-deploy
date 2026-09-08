@@ -10,9 +10,11 @@ ROBOT_USER="${ROBOT_E2E_ROBOT_USER:-robotmaker}"
 TRADER_USER="${ROBOT_E2E_TRADER_USER:-robottrader}"
 ROBOT_ID="${ROBOT_E2E_ROBOT_ID:-depth10}"
 PASSWORD="${ROBOT_E2E_PASSWORD:-$(openssl rand -hex 16)}"
+RESTART_SERVICES="${ROBOT_E2E_RESTART_SERVICES:-true}"
 
 log() { printf '[robot-e2e] %s\n' "$*"; }
 die() { printf '[robot-e2e] ERROR: %s\n' "$*" >&2; exit 1; }
+is_true() { [[ "$1" == "true" || "$1" == "1" || "$1" == "yes" ]]; }
 safe_identifier() { [[ "$1" =~ ^[A-Za-z0-9_.-]+$ ]]; }
 
 [[ "$(id -u)" -eq 0 ]] || die "Run with sudo so the protected environment can be read"
@@ -73,10 +75,13 @@ wait_for_port() {
 }
 
 wait_for_route() {
-  local server="$1" start response
+  local server="$1" start response content='{}'
   start="$(date +%s)"
+  if [[ "${server}" == "OrderSvr" ]]; then
+    content="{\"Location\":\"${LOCATION}\",\"MarketIndicator\":\"4\",\"SecurityID\":\"BTCUSDT\"}"
+  fi
   while true; do
-    response="$(api_call "{\"serverName\":\"${server}\",\"method\":\"__robot_e2e_readiness__\",\"content\":{}}" 2>/dev/null || true)"
+    response="$(api_call "{\"serverName\":\"${server}\",\"method\":\"__robot_e2e_readiness__\",\"content\":${content}}" 2>/dev/null || true)"
     if [[ -n "${response}" ]] && ! grep -Fq 'is not Online' <<<"${response}"; then return 0; fi
     if (( $(date +%s) - start >= 120 )); then die "${server} did not become routable"; fi
     sleep 2
@@ -128,11 +133,20 @@ COMMIT;
 SQL
 } | mysql_exec dc
 
-docker restart dc-saas-loginsvr dc-saas-ordersvr dc-saas-tradesvr >/dev/null
+if is_true "${RESTART_SERVICES}"; then
+  if docker inspect dc-saas-ordersvr-b >/dev/null 2>&1; then
+    die "ROBOT_E2E_RESTART_SERVICES=true is unsafe with clustered OrderSvr; rerun with false"
+  fi
+  docker restart dc-saas-loginsvr dc-saas-ordersvr dc-saas-tradesvr >/dev/null
+else
+  log "Keeping running services so clustered OrderSvr partition epochs remain valid."
+fi
 wait_for_port "${LOGINSVR_GW_PORT}" dc-saas-loginsvr
 wait_for_port "${ORDERSVR_GW_PORT}" dc-saas-ordersvr
 wait_for_port "${TRADESVR_GW_PORT}" dc-saas-tradesvr
-docker restart dc-saas-gateway >/dev/null
+if is_true "${RESTART_SERVICES}"; then
+  docker restart dc-saas-gateway >/dev/null
+fi
 wait_for_port "${GW_TCP_PORT}" dc-saas-gateway
 wait_for_route LoginSvr
 wait_for_route OrderSvr
