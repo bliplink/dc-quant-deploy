@@ -85,11 +85,14 @@ wait_for_port() {
 }
 
 wait_for_route() {
-  local server="$1" start response
+  local server="$1" start response content='{}'
   start="$(date +%s)"
+  if [[ "${server}" == "OrderSvr" ]]; then
+    content="{\"Location\":\"${RULE_LOCATION}\",\"MarketIndicator\":\"4\",\"SecurityID\":\"BTCUSDT\"}"
+  fi
   while true; do
     response="$(curl -fsS --max-time 10 -H 'Content-Type: application/json' \
-      --data "{\"serverName\":\"${server}\",\"method\":\"__rules_readiness__\",\"content\":{}}" \
+      --data "{\"serverName\":\"${server}\",\"method\":\"__rules_readiness__\",\"content\":${content}}" \
       "http://127.0.0.1:${WEB_LISTEN_PORT}/httpapi/" 2>/dev/null || true)"
     if [[ -n "${response}" ]] && ! grep -Fq 'is not Online' <<<"${response}"; then return 0; fi
     if (( $(date +%s) - start >= 120 )); then die "${server} did not become routable"; fi
