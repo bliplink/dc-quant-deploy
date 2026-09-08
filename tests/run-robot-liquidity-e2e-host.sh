@@ -119,11 +119,6 @@ INSERT INTO dc_users
 VALUES
   ('${ROBOT_USER}','${ROBOT_USER}','Robot Maker','${password_hash}','1','1',NOW(),NOW(),'1','1','1','robot-e2e','${LOCATION}'),
   ('${TRADER_USER}','${TRADER_USER}','Robot Test Trader','${password_hash}','1','1',NOW(),NOW(),'1','1','1','robot-e2e','${LOCATION}');
-INSERT INTO dc_users_balance
-  (user_id,balance,used_margin,freezed_margin,freezed_commission,update_time,close_by,location)
-VALUES
-  ('${ROBOT_USER}',1000000,0,0,0,NOW(),'robot-e2e','${LOCATION}'),
-  ('${TRADER_USER}',1000000,0,0,0,NOW(),'robot-e2e','${LOCATION}');
 INSERT INTO dc_users_symbol_config
   (user_id,security_id,symbol,leverage,position_type,update_time,close_by,location,market_indicator)
 VALUES
@@ -153,6 +148,12 @@ wait_for_route OrderSvr
 
 robot_token="$(login "${ROBOT_USER}")"
 trader_token="$(login "${TRADER_USER}")"
+
+robot_funding_response="$(api_call "{\"serverName\":\"TDSvr\",\"method\":\"cashIn\",\"content\":{\"UserID\":\"${ROBOT_USER}\",\"Amount\":\"1000000\",\"Location\":\"${LOCATION}\"}}" "${robot_token}")"
+expect_ok "fund robot account" "${robot_funding_response}"
+trader_funding_response="$(api_call "{\"serverName\":\"TDSvr\",\"method\":\"cashIn\",\"content\":{\"UserID\":\"${TRADER_USER}\",\"Amount\":\"1000000\",\"Location\":\"${LOCATION}\"}}" "${trader_token}")"
+expect_ok "fund trader account" "${trader_funding_response}"
+log "Funded Robot and trader through the authoritative GW-to-TDSvr path."
 
 robot_open_orders() {
   api_call "{\"serverName\":\"OrderSvr\",\"method\":\"queryOpenOrder\",\"content\":{\"securityid\":\"BTCUSDT\",\"userid\":\"${ROBOT_USER}\"}}" "${robot_token}"
