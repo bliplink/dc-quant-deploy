@@ -3,6 +3,7 @@ param(
     [string]$CommonLibrarySource = "E:\sourcecode\dc\com.app.common",
     [string]$DcCommonSource = (Join-Path $PSScriptRoot "..\com.app.dc"),
     [string]$OrderSvrSource = (Join-Path $PSScriptRoot "..\ordersvr"),
+    [string]$ProjectionSvrSource = (Join-Path $PSScriptRoot "..\projectionsvr"),
     [string]$GatewayLibrarySource = (Join-Path $PSScriptRoot "..\gateway\gateway"),
     [string]$GatewayImageSource = (Join-Path $PSScriptRoot "..\gw-image"),
     [string]$MdSvrSource = (Join-Path $PSScriptRoot "..\mdsvr"),
@@ -15,6 +16,7 @@ param(
     [string]$MdSvrImageRepository = "dc-saas/mdsvr",
     [string]$TradeSvrImageRepository = "dc-saas/tradesvr",
     [string]$LiqSvrImageRepository = "dc-saas/liqsvr",
+    [string]$ProjectionSvrImageRepository = "dc-saas/projectionsvr",
     [switch]$IncludeGateway,
     [switch]$IncludeCoreConsumers,
     [switch]$PushImages,
@@ -101,6 +103,7 @@ if ($IncludeGateway) {
     Assert-Path $GatewayImageSource "GW image source"
 }
 if ($IncludeCoreConsumers) {
+    Assert-Path $ProjectionSvrSource "ProjectionSvr source"
     Assert-Path $MdSvrSource "MDSvr source"
     Assert-Path $TradeSvrSource "TradeSvr source"
     Assert-Path $LiqSvrSource "LiqSvr source"
@@ -167,7 +170,7 @@ if (-not $SkipMavenBuild) {
         )
     }
     if ($IncludeCoreConsumers) {
-        foreach ($serviceSource in @($MdSvrSource, $TradeSvrSource, $LiqSvrSource)) {
+        foreach ($serviceSource in @($ProjectionSvrSource, $MdSvrSource, $TradeSvrSource, $LiqSvrSource)) {
             $serviceCoordinate = Get-PomCoordinate $serviceSource
             $serviceDcVersion = Get-DependencyVersion $serviceSource $dcCoordinate.GroupId $dcCoordinate.ArtifactId
             if ($serviceDcVersion -ne $dcCoordinate.Version) {
@@ -311,6 +314,7 @@ if ($IncludeGateway) {
 
 if ($IncludeCoreConsumers) {
     $consumerSpecs = @(
+        [ordered]@{ Name = "ProjectionSvr"; Source = $ProjectionSvrSource; Repository = $ProjectionSvrImageRepository; RepoUrl = "https://github.com/bliplink/com-app-dc-projectionsvr" },
         [ordered]@{ Name = "MDSvr"; Source = $MdSvrSource; Repository = $MdSvrImageRepository; RepoUrl = "https://github.com/bliplink/com.app.dc.mdsvr" },
         [ordered]@{ Name = "TradeSvr"; Source = $TradeSvrSource; Repository = $TradeSvrImageRepository; RepoUrl = "https://github.com/bliplink/com.app.dc.tradesvr" },
         [ordered]@{ Name = "LiqSvr"; Source = $LiqSvrSource; Repository = $LiqSvrImageRepository; RepoUrl = "https://github.com/bliplink/com.app.dc.liqsvr" }

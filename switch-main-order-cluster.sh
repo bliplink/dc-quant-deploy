@@ -14,16 +14,16 @@ die() { printf '[order-cluster-switch] ERROR: %s\n' "$*" >&2; exit 1; }
 [[ "${EUID}" -eq 0 ]] || die 'Run as root or with sudo.'
 [[ -r "${ENV_FILE}" ]] || die "Cannot read ${ENV_FILE}"
 
-for name in ORDER_CLUSTER_GW_IMAGE ORDER_CLUSTER_ORDERSVR_IMAGE ORDER_CLUSTER_MDSVR_IMAGE \
-  ORDER_CLUSTER_TRADESVR_IMAGE ORDER_CLUSTER_LIQSVR_IMAGE; do
+for name in ORDER_CLUSTER_GW_IMAGE ORDER_CLUSTER_ORDERSVR_IMAGE ORDER_CLUSTER_PROJECTIONSVR_IMAGE \
+  ORDER_CLUSTER_MDSVR_IMAGE ORDER_CLUSTER_TRADESVR_IMAGE ORDER_CLUSTER_LIQSVR_IMAGE; do
   [[ "${!name:-}" == ghcr.io/*:cluster-dev-* ]] || die "${name} must be an immutable cluster-dev image reference"
 done
 
 deploy_args=(--skip-host-prepare)
 if [[ "${ORDER_CLUSTER_LOCAL_IMAGES:-false}" == "true" ]]; then
   deploy_args+=(--skip-pull)
-  for name in ORDER_CLUSTER_GW_IMAGE ORDER_CLUSTER_ORDERSVR_IMAGE ORDER_CLUSTER_MDSVR_IMAGE \
-    ORDER_CLUSTER_TRADESVR_IMAGE ORDER_CLUSTER_LIQSVR_IMAGE; do
+  for name in ORDER_CLUSTER_GW_IMAGE ORDER_CLUSTER_ORDERSVR_IMAGE ORDER_CLUSTER_PROJECTIONSVR_IMAGE \
+    ORDER_CLUSTER_MDSVR_IMAGE ORDER_CLUSTER_TRADESVR_IMAGE ORDER_CLUSTER_LIQSVR_IMAGE; do
     docker image inspect "${!name}" >/dev/null 2>&1 ||
       die "Local cluster image is missing: ${!name}"
   done
@@ -62,6 +62,7 @@ fi
 
 set_image GW "${ORDER_CLUSTER_GW_IMAGE}"
 set_image ORDERSVR "${ORDER_CLUSTER_ORDERSVR_IMAGE}"
+set_image PROJECTIONSVR "${ORDER_CLUSTER_PROJECTIONSVR_IMAGE}"
 set_image MDSVR "${ORDER_CLUSTER_MDSVR_IMAGE}"
 set_image TRADESVR "${ORDER_CLUSTER_TRADESVR_IMAGE}"
 set_image LIQSVR "${ORDER_CLUSTER_LIQSVR_IMAGE}"

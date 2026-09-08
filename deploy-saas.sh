@@ -129,6 +129,9 @@ ensure_env_defaults() {
   if ! grep -q '^ORDERSVR_B_REPLICATION_PORT=' "${ENV_FILE}"; then
     printf 'ORDERSVR_B_REPLICATION_PORT=19122\n' >> "${ENV_FILE}"
   fi
+  if ! grep -q '^PROJECTIONSVR_GW_PORT=' "${ENV_FILE}"; then
+    printf 'PROJECTIONSVR_GW_PORT=33042\n' >> "${ENV_FILE}"
+  fi
   if ! grep -q '^PLATFORM_ADMIN_USERNAME=' "${ENV_FILE}"; then
     printf 'PLATFORM_ADMIN_USERNAME=platformadmin\n' >> "${ENV_FILE}"
   fi
@@ -261,7 +264,7 @@ validate_initial_ports() {
   existing="$(docker ps -a --format '{{.Names}}' | grep '^dc-saas-' || true)"
   [[ -z "${existing}" ]] || return 0
 
-  local ports=("${MYSQL_PORT}" "${CLICKHOUSE_HTTP_PORT}" "${CLICKHOUSE_NATIVE_PORT}" "${ZOOKEEPER_PORT}" "${ZOOKEEPER_JMX_PORT}" "${GW_TCP_PORT}" "${GW_WEBSOCKET_PORT}" "${GW_HTTP_PORT}" "${LOGINSVR_HTTP_PORT}" "${LOGINSVR_GW_PORT}" "${MDSVR_GW_PORT}" "${APSSVR_GW_PORT}" "${ORDERSVR_GW_PORT}" "${TRADESVR_GW_PORT}" "${LIQSVR_GW_PORT}" "${MANAGERSVR_GW_PORT}" "${ADMINSVR_GW_PORT}" "${WEB_LISTEN_PORT}")
+  local ports=("${MYSQL_PORT}" "${CLICKHOUSE_HTTP_PORT}" "${CLICKHOUSE_NATIVE_PORT}" "${ZOOKEEPER_PORT}" "${ZOOKEEPER_JMX_PORT}" "${GW_TCP_PORT}" "${GW_WEBSOCKET_PORT}" "${GW_HTTP_PORT}" "${LOGINSVR_HTTP_PORT}" "${LOGINSVR_GW_PORT}" "${MDSVR_GW_PORT}" "${APSSVR_GW_PORT}" "${ORDERSVR_GW_PORT}" "${PROJECTIONSVR_GW_PORT:-33042}" "${TRADESVR_GW_PORT}" "${LIQSVR_GW_PORT}" "${MANAGERSVR_GW_PORT}" "${ADMINSVR_GW_PORT}" "${WEB_LISTEN_PORT}")
   if [[ "${ORDER_CLUSTER_ENABLED:-false}" == "true" ]]; then
     ports+=("${ORDERSVR_B_GW_PORT}" "${ORDERSVR_A_REPLICATION_PORT}" "${ORDERSVR_B_REPLICATION_PORT}")
   fi
@@ -301,6 +304,7 @@ verify_order_cluster_images() {
   local specs=(
     "gateway|${GW_IMAGE_REPOSITORY}:${GW_TAG}"
     "ordersvr|${ORDERSVR_IMAGE_REPOSITORY}:${ORDERSVR_TAG}"
+    "projectionsvr|${PROJECTIONSVR_IMAGE_REPOSITORY}:${PROJECTIONSVR_TAG}"
     "mdsvr|${MDSVR_IMAGE_REPOSITORY}:${MDSVR_TAG}"
     "tradesvr|${TRADESVR_IMAGE_REPOSITORY}:${TRADESVR_TAG}"
     "liqsvr|${LIQSVR_IMAGE_REPOSITORY}:${LIQSVR_TAG}"
@@ -458,7 +462,7 @@ gateway_routes_need_refresh() {
   # safe full-deploy behavior. The auto updater supplies the exact set and can
   # skip a needless GW restart for a Web-only release.
   [[ -n "${SAAS_CHANGED_SERVICES}" ]] || return 0
-  for service in loginsvr mdsvr apssvr ordersvr tradesvr liqsvr managersvr adminsvr robotsvr; do
+  for service in loginsvr mdsvr apssvr ordersvr projectionsvr tradesvr liqsvr managersvr adminsvr robotsvr; do
     [[ " ${SAAS_CHANGED_SERVICES} " == *" ${service} "* ]] && return 0
   done
   return 1
@@ -627,6 +631,9 @@ if [[ "${ORDER_CLUSTER_ENABLED:-false}" == "true" ]]; then
   wait_for_port "${ORDERSVR_B_REPLICATION_PORT}" ordersvr-b 180
 fi
 wait_for_order_cluster_readiness
+if [[ "${ORDER_CLUSTER_ENABLED:-false}" == "true" ]]; then
+  wait_for_port "${PROJECTIONSVR_GW_PORT:-33042}" projectionsvr 120
+fi
 wait_for_port "${TRADESVR_GW_PORT}" tradesvr 120
 wait_for_port "${LIQSVR_GW_PORT}" liqsvr 120
 wait_for_port "${MANAGERSVR_GW_PORT}" managersvr 120

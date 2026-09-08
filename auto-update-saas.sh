@@ -92,6 +92,7 @@ service_image_ref() {
     mdsvr) echo "${MDSVR_IMAGE_REPOSITORY:-ghcr.io/bliplink/mdsvr}:${MDSVR_TAG:-saas-crypto}" ;;
     apssvr) echo "${APSSVR_IMAGE_REPOSITORY:-ghcr.io/bliplink/apssvr}:${APSSVR_TAG:-saas-crypto}" ;;
     ordersvr) echo "${ORDERSVR_IMAGE_REPOSITORY:-ghcr.io/bliplink/ordersvr}:${ORDERSVR_TAG:-saas-crypto}" ;;
+    projectionsvr) echo "${PROJECTIONSVR_IMAGE_REPOSITORY:-ghcr.io/bliplink/com-app-dc-projectionsvr}:${PROJECTIONSVR_TAG:-saas-crypto}" ;;
     tradesvr) echo "${TRADESVR_IMAGE_REPOSITORY:-ghcr.io/bliplink/tradesvr}:${TRADESVR_TAG:-saas-crypto}" ;;
     liqsvr) echo "${LIQSVR_IMAGE_REPOSITORY:-ghcr.io/bliplink/liqsvr}:${LIQSVR_TAG:-saas-crypto}" ;;
     managersvr) echo "${MANAGERSVR_IMAGE_REPOSITORY:-ghcr.io/bliplink/managersvr}:${MANAGERSVR_TAG:-saas-crypto}" ;;
@@ -106,7 +107,7 @@ service_container_name() {
   case "$1" in
     gateway) echo "dc-saas-gateway" ;;
     web) echo "dc-saas-trade-web" ;;
-    loginsvr|mdsvr|apssvr|ordersvr|tradesvr|liqsvr|managersvr|adminsvr|robotsvr)
+    loginsvr|mdsvr|apssvr|ordersvr|projectionsvr|tradesvr|liqsvr|managersvr|adminsvr|robotsvr)
       echo "dc-saas-$1"
       ;;
     *) return 1 ;;
@@ -304,6 +305,10 @@ main() {
   # shellcheck disable=SC1090
   . "${ENV_FILE}"
   set +a
+
+  if [[ "${ORDER_CLUSTER_ENABLED:-false}" == "true" ]]; then
+    APP_SERVICES+=(projectionsvr)
+  fi
 
   [[ "${IMAGE_SOURCE:-registry}" == "registry" ]] ||
     die "Automatic image deployment requires IMAGE_SOURCE=registry."

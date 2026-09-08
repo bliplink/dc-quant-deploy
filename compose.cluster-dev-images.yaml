@@ -6,3 +6,7 @@ services:
   ordersvr:
     image: ${ORDERSVR_CLUSTER_DEV_IMAGE:?set ORDERSVR_CLUSTER_DEV_IMAGE to a locally built immutable tag}
     pull_policy: never
+
+  projectionsvr:
+    image: ${PROJECTIONSVR_CLUSTER_DEV_IMAGE:?set PROJECTIONSVR_CLUSTER_DEV_IMAGE to a locally built immutable tag}
+    pull_policy: never

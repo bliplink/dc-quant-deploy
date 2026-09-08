@@ -263,6 +263,30 @@ services:
     mem_limit: ${ORDERSVR_B_MEMORY_LIMIT:-640m}
     cpus: ${ORDERSVR_B_CPU_LIMIT:-0.50}
 
+  projectionsvr:
+    <<: *java-service-base
+    profiles: ["order-cluster"]
+    image: ${PROJECTIONSVR_IMAGE_REPOSITORY:-ghcr.io/bliplink/com-app-dc-projectionsvr}:${PROJECTIONSVR_TAG:-saas-crypto}
+    container_name: dc-saas-projectionsvr
+    depends_on:
+      mysql:
+        condition: service_healthy
+      zookeeper:
+        condition: service_started
+    environment:
+      TZ: Asia/Shanghai
+      DEPLOY_ROOT: /srv/dc
+      SERVICE_NAME: ProjectionSvr
+      MAIN_CLASS: ProjectionSvr
+      JAVA_OPTS: ${PROJECTIONSVR_JAVA_OPTS:--server -Xms32m -Xmx192m -Xmn48m -Djava.security.auth.login.config=../../control/jaas.ini}
+    volumes:
+      - ${DEPLOY_ROOT}/control:/srv/dc/control:ro
+      - ${DEPLOY_ROOT}/data:/srv/dc/data
+      - ${DEPLOY_ROOT}/log:/srv/dc/log
+      - ${DEPLOY_ROOT}/control/overrides/ProjectionSvr/config/application.properties:/srv/dc/dc/ProjectionSvr/config/application.properties:ro
+    mem_limit: ${PROJECTIONSVR_MEMORY_LIMIT:-320m}
+    cpus: ${PROJECTIONSVR_CPU_LIMIT:-0.20}
+
   tradesvr:
     <<: *java-service-base
     image: ${TRADESVR_IMAGE_REPOSITORY:-ghcr.io/bliplink/tradesvr}:${TRADESVR_TAG:-saas-crypto}

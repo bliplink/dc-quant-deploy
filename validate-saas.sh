@@ -60,7 +60,7 @@ expected_containers=(
   dc-saas-robotsvr dc-saas-trade-web
 )
 if [[ "${ORDER_CLUSTER_ENABLED:-false}" == "true" ]]; then
-  expected_containers+=(dc-saas-ordersvr-b)
+  expected_containers+=(dc-saas-ordersvr-b dc-saas-projectionsvr)
 fi
 
 for container in "${expected_containers[@]}"; do
@@ -84,7 +84,7 @@ required_ports=(
   "${MANAGERSVR_GW_PORT}" "${ADMINSVR_GW_PORT}" "${WEB_LISTEN_PORT}"
 )
 if [[ "${ORDER_CLUSTER_ENABLED:-false}" == "true" ]]; then
-  required_ports+=("${ORDERSVR_B_GW_PORT}" "${ORDERSVR_A_REPLICATION_PORT}" "${ORDERSVR_B_REPLICATION_PORT}")
+  required_ports+=("${ORDERSVR_B_GW_PORT}" "${ORDERSVR_A_REPLICATION_PORT}" "${ORDERSVR_B_REPLICATION_PORT}" "${PROJECTIONSVR_GW_PORT:-33042}")
   grep -Fq 'LBConfig.OrderSvr=Partition' "${DEPLOY_ROOT}/control/ATSConfig.ini" ||
     die "OrderSvr partition load balancing is not enabled in ATSConfig.ini."
   grep -Fq 'serverKey=SERVER.OrderSvrA' \

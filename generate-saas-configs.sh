@@ -39,6 +39,7 @@ for name in "${required_vars[@]}"; do
 done
 
 ORDER_CLUSTER_ENABLED="${ORDER_CLUSTER_ENABLED:-false}"
+PROJECTIONSVR_GW_PORT="${PROJECTIONSVR_GW_PORT:-33042}"
 if [[ "${ORDER_CLUSTER_ENABLED}" == "true" ]]; then
   for name in ORDERSVR_B_GW_PORT ORDERSVR_A_REPLICATION_PORT ORDERSVR_B_REPLICATION_PORT; do
     [[ -n "${!name:-}" ]] || die "Missing required cluster variable: ${name}"
@@ -49,7 +50,7 @@ CONTROL_ROOT="${DEPLOY_ROOT}/control"
 OVERRIDE_ROOT="${CONTROL_ROOT}/overrides"
 umask 077
 
-install -d -m 0750 "${CONTROL_ROOT}" "${OVERRIDE_ROOT}/GW/config" "${OVERRIDE_ROOT}/LoginSvr/config" "${OVERRIDE_ROOT}/MDSvr/config" "${OVERRIDE_ROOT}/APSSvr/config" "${OVERRIDE_ROOT}/OrderSvr/config" "${OVERRIDE_ROOT}/OrderSvrA/config" "${OVERRIDE_ROOT}/OrderSvrB/config" "${OVERRIDE_ROOT}/TradeSvr/config" "${OVERRIDE_ROOT}/LiqSvr/config" "${OVERRIDE_ROOT}/ManagerSvr/config" "${OVERRIDE_ROOT}/AdminSvr/config"
+install -d -m 0750 "${CONTROL_ROOT}" "${OVERRIDE_ROOT}/GW/config" "${OVERRIDE_ROOT}/LoginSvr/config" "${OVERRIDE_ROOT}/MDSvr/config" "${OVERRIDE_ROOT}/APSSvr/config" "${OVERRIDE_ROOT}/OrderSvr/config" "${OVERRIDE_ROOT}/OrderSvrA/config" "${OVERRIDE_ROOT}/OrderSvrB/config" "${OVERRIDE_ROOT}/ProjectionSvr/config" "${OVERRIDE_ROOT}/TradeSvr/config" "${OVERRIDE_ROOT}/LiqSvr/config" "${OVERRIDE_ROOT}/ManagerSvr/config" "${OVERRIDE_ROOT}/AdminSvr/config"
 
 cat > "${CONTROL_ROOT}/DBPoolConfig.ini" <<EOF
 [DBPOOL]
@@ -144,6 +145,7 @@ append_server LoginSvr LoginSvr "${LOGINSVR_GW_PORT}" LoginSvr
 append_server AdminSvr AdminSvr "${ADMINSVR_GW_PORT}" AdminSvr
 append_server LiqSvr LiqSvr "${LIQSVR_GW_PORT}" LiqSvr
 append_server ManagerSvr ManagerSvr "${MANAGERSVR_GW_PORT}" ManagerSvr
+append_server ProjectionSvr ProjectionSvr "${PROJECTIONSVR_GW_PORT}" ProjectionSvr
 
 if [[ "${ORDER_CLUSTER_ENABLED}" == "true" ]]; then
   cat >> "${CONTROL_ROOT}/ATSConfig.ini" <<'EOF'
@@ -329,7 +331,7 @@ EOF
 write_cluster_order_config() {
   local node="$1" replication_port="$2"
   cat > "${OVERRIDE_ROOT}/${node}/config/application.properties" <<EOF
-dbType=mysql
+dbType=rockdb
 execOrderType=trade
 orderStorePath=../../data/${node}/store
 serverKey=SERVER.${node}
@@ -363,6 +365,11 @@ order.cluster.replication.catchupBatchRecords=256
 order.cluster.replication.crossEpochSnapshotRebase.enabled=true
 order.cluster.replication.peers=OrderSvrA=127.0.0.1:${ORDERSVR_A_REPLICATION_PORT},OrderSvrB=127.0.0.1:${ORDERSVR_B_REPLICATION_PORT}
 order.cluster.defaultMarketIndicator=4
+order.projection.enabled=true
+order.projection.serverKey=SERVER.ProjectionSvr
+order.projection.pollMillis=500
+order.projection.batchSize=64
+order.projection.readBatchRecords=512
 order.tenantSymbolRules.enabled=true
 enableMarketPrice=true
 enableSaveDBDemo=false
@@ -383,6 +390,17 @@ dbpool.cfg=../../control/DBPoolConfig.ini
 dbpool.default=MYSQL0
 EOF
 }
+
+cat > "${OVERRIDE_ROOT}/ProjectionSvr/config/application.properties" <<EOF
+serverKey=SERVER.ProjectionSvr
+log4j.file=./config/log4j.ini
+log4j.thread=1
+log4j.writeTime=true
+log4j.async=true
+dbpool.cfg=../../control/DBPoolConfig.ini
+dbpool.default=MYSQL0
+projection.saveDemo=false
+EOF
 
 if [[ "${ORDER_CLUSTER_ENABLED}" == "true" ]]; then
   write_cluster_order_config OrderSvrA "${ORDERSVR_A_REPLICATION_PORT}"
