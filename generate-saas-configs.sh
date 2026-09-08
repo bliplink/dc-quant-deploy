@@ -39,11 +39,25 @@ for name in "${required_vars[@]}"; do
 done
 
 ORDER_CLUSTER_ENABLED="${ORDER_CLUSTER_ENABLED:-false}"
+ORDER_CLUSTER_REPLICATION_CONSISTENCY_MODE="${ORDER_CLUSTER_REPLICATION_CONSISTENCY_MODE:-SYNC_PER_RECORD}"
+ORDER_CLUSTER_REPLICATION_BATCH_MAX_RECORDS="${ORDER_CLUSTER_REPLICATION_BATCH_MAX_RECORDS:-64}"
+ORDER_CLUSTER_REPLICATION_BATCH_MAX_WAIT_MICROS="${ORDER_CLUSTER_REPLICATION_BATCH_MAX_WAIT_MICROS:-1000}"
+ORDER_CLUSTER_REPLICATION_BATCH_THREADS="${ORDER_CLUSTER_REPLICATION_BATCH_THREADS:-2}"
 PROJECTIONSVR_GW_PORT="${PROJECTIONSVR_GW_PORT:-33042}"
 if [[ "${ORDER_CLUSTER_ENABLED}" == "true" ]]; then
   for name in ORDERSVR_B_GW_PORT ORDERSVR_A_REPLICATION_PORT ORDERSVR_B_REPLICATION_PORT; do
     [[ -n "${!name:-}" ]] || die "Missing required cluster variable: ${name}"
   done
+  case "${ORDER_CLUSTER_REPLICATION_CONSISTENCY_MODE}" in
+    SYNC_PER_RECORD|SYNC_BATCHED) ;;
+    *) die "ORDER_CLUSTER_REPLICATION_CONSISTENCY_MODE must be SYNC_PER_RECORD or SYNC_BATCHED" ;;
+  esac
+  [[ "${ORDER_CLUSTER_REPLICATION_BATCH_MAX_RECORDS}" =~ ^[1-9][0-9]*$ ]] ||
+    die "ORDER_CLUSTER_REPLICATION_BATCH_MAX_RECORDS must be a positive integer"
+  [[ "${ORDER_CLUSTER_REPLICATION_BATCH_MAX_WAIT_MICROS}" =~ ^[0-9]+$ ]] ||
+    die "ORDER_CLUSTER_REPLICATION_BATCH_MAX_WAIT_MICROS must be a non-negative integer"
+  [[ "${ORDER_CLUSTER_REPLICATION_BATCH_THREADS}" =~ ^[1-9][0-9]*$ ]] ||
+    die "ORDER_CLUSTER_REPLICATION_BATCH_THREADS must be a positive integer"
 fi
 
 CONTROL_ROOT="${DEPLOY_ROOT}/control"
@@ -362,6 +376,10 @@ order.cluster.replication.required=true
 order.cluster.replication.bindHost=127.0.0.1
 order.cluster.replication.port=${replication_port}
 order.cluster.replication.requestTimeoutMs=10000
+order.cluster.replication.consistencyMode=${ORDER_CLUSTER_REPLICATION_CONSISTENCY_MODE}
+order.cluster.replication.batch.maxRecords=${ORDER_CLUSTER_REPLICATION_BATCH_MAX_RECORDS}
+order.cluster.replication.batch.maxWaitMicros=${ORDER_CLUSTER_REPLICATION_BATCH_MAX_WAIT_MICROS}
+order.cluster.replication.batch.threads=${ORDER_CLUSTER_REPLICATION_BATCH_THREADS}
 order.cluster.replication.catchupBatchRecords=256
 order.cluster.replication.crossEpochSnapshotRebase.enabled=true
 order.cluster.replication.peers=OrderSvrA=127.0.0.1:${ORDERSVR_A_REPLICATION_PORT},OrderSvrB=127.0.0.1:${ORDERSVR_B_REPLICATION_PORT}

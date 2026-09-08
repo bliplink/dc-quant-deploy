@@ -11,6 +11,10 @@ LAST_SUCCESSFUL_MANIFEST="${DEPLOY_STATE_DIR}/last-successful.env"
 ROLLBACK_MANIFEST="${DEPLOY_STATE_DIR}/rollback.env"
 ZOOKEEPER_CONTAINER="${ZOOKEEPER_CONTAINER:-dc-saas-cluster-zookeeper}"
 ZOOKEEPER_ENDPOINT="${ZOOKEEPER_ENDPOINT:-127.0.0.1:32182}"
+ORDER_CLUSTER_REPLICATION_CONSISTENCY_MODE="${ORDER_CLUSTER_REPLICATION_CONSISTENCY_MODE:-SYNC_PER_RECORD}"
+ORDER_CLUSTER_REPLICATION_BATCH_MAX_RECORDS="${ORDER_CLUSTER_REPLICATION_BATCH_MAX_RECORDS:-64}"
+ORDER_CLUSTER_REPLICATION_BATCH_MAX_WAIT_MICROS="${ORDER_CLUSTER_REPLICATION_BATCH_MAX_WAIT_MICROS:-1000}"
+ORDER_CLUSTER_REPLICATION_BATCH_THREADS="${ORDER_CLUSTER_REPLICATION_BATCH_THREADS:-2}"
 
 log() { printf '[order-cluster-dev] %s\n' "$*"; }
 die() { printf '[order-cluster-dev] ERROR: %s\n' "$*" >&2; exit 1; }
@@ -236,6 +240,10 @@ order.cluster.replication.required=true
 order.cluster.replication.bindHost=127.0.0.1
 order.cluster.replication.port=${replication_port}
 order.cluster.replication.requestTimeoutMs=10000
+order.cluster.replication.consistencyMode=${ORDER_CLUSTER_REPLICATION_CONSISTENCY_MODE}
+order.cluster.replication.batch.maxRecords=${ORDER_CLUSTER_REPLICATION_BATCH_MAX_RECORDS}
+order.cluster.replication.batch.maxWaitMicros=${ORDER_CLUSTER_REPLICATION_BATCH_MAX_WAIT_MICROS}
+order.cluster.replication.batch.threads=${ORDER_CLUSTER_REPLICATION_BATCH_THREADS}
 order.cluster.replication.catchupBatchRecords=256
 order.cluster.replication.crossEpochSnapshotRebase.enabled=true
 order.cluster.replication.peers=OrderSvrA=127.0.0.1:19111,OrderSvrB=127.0.0.1:19112
