@@ -39,12 +39,15 @@ wait_for_port() {
 }
 
 wait_for_gateway_route() {
-  local server_name="$1" start request_file response
+  local server_name="$1" start request_file response content='{}'
   start="$(date +%s)"
   request_file="$(mktemp)"
   chmod 0600 "${request_file}"
-  printf '{"serverName":"%s","method":"__e2e_readiness__","content":{}}\n' \
-    "${server_name}" >"${request_file}"
+  if [[ "${server_name}" == "OrderSvr" ]]; then
+    content="{\"Location\":\"${CORE_LOCATION}\",\"MarketIndicator\":\"4\",\"SecurityID\":\"BTCUSDT\"}"
+  fi
+  printf '{"serverName":"%s","method":"__e2e_readiness__","content":%s}\n' \
+    "${server_name}" "${content}" >"${request_file}"
   while true; do
     response="$(curl -fsS --max-time 10 -H 'Content-Type: application/json' \
       --data-binary "@${request_file}" "http://127.0.0.1:${WEB_LISTEN_PORT}/httpapi/" 2>/dev/null || true)"
