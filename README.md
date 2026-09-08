@@ -54,6 +54,13 @@ references and run:
 sudo -E ./switch-main-order-cluster.sh
 ```
 
+When the immutable development images were built directly on the validation
+host and have not yet been published to GHCR, set
+`ORDER_CLUSTER_LOCAL_IMAGES=true`. The switch verifies that all five images
+exist locally and invokes the normal deploy flow with `--skip-pull`. Formal
+release still requires publishing the shared Maven artifacts and public GHCR
+images first.
+
 The switch pauses automatic moving-tag updates, saves the complete standalone
 environment under the runtime deploy-state directory, initializes 256 fenced
 ZooKeeper partitions, waits until all partitions have recovered, and then runs

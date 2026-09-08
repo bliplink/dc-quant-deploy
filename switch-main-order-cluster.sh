@@ -16,8 +16,19 @@ die() { printf '[order-cluster-switch] ERROR: %s\n' "$*" >&2; exit 1; }
 
 for name in ORDER_CLUSTER_GW_IMAGE ORDER_CLUSTER_ORDERSVR_IMAGE ORDER_CLUSTER_MDSVR_IMAGE \
   ORDER_CLUSTER_TRADESVR_IMAGE ORDER_CLUSTER_LIQSVR_IMAGE; do
-  [[ "${!name:-}" == ghcr.io/*:cluster-dev-* ]] || die "${name} must be an immutable public GHCR cluster-dev image"
+  [[ "${!name:-}" == ghcr.io/*:cluster-dev-* ]] || die "${name} must be an immutable cluster-dev image reference"
 done
+
+deploy_args=(--skip-host-prepare)
+if [[ "${ORDER_CLUSTER_LOCAL_IMAGES:-false}" == "true" ]]; then
+  deploy_args+=(--skip-pull)
+  for name in ORDER_CLUSTER_GW_IMAGE ORDER_CLUSTER_ORDERSVR_IMAGE ORDER_CLUSTER_MDSVR_IMAGE \
+    ORDER_CLUSTER_TRADESVR_IMAGE ORDER_CLUSTER_LIQSVR_IMAGE; do
+    docker image inspect "${!name}" >/dev/null 2>&1 ||
+      die "Local cluster image is missing: ${!name}"
+  done
+  log 'Using locally built immutable cluster images; registry pull is disabled for this cutover.'
+fi
 
 set_env() {
   local key="$1" value="$2"
@@ -62,7 +73,7 @@ set_env ORDERSVR_A_REPLICATION_PORT "${ORDERSVR_A_REPLICATION_PORT:-19121}"
 set_env ORDERSVR_B_REPLICATION_PORT "${ORDERSVR_B_REPLICATION_PORT:-19122}"
 
 log 'Deploying the main SaaS stack with OrderSvr A/B enabled.'
-if ! ENV_FILE="${ENV_FILE}" "${SCRIPT_DIR}/deploy-saas.sh" --skip-host-prepare; then
+if ! ENV_FILE="${ENV_FILE}" "${SCRIPT_DIR}/deploy-saas.sh" "${deploy_args[@]}"; then
   log 'Cluster deployment failed; restoring the standalone environment.'
   install -m 0600 "${BASELINE_ENV}" "${ENV_FILE}"
   docker rm -f dc-saas-ordersvr-b >/dev/null 2>&1 || true
