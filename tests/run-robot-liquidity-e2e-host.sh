@@ -156,7 +156,7 @@ expect_ok "fund trader account" "${trader_funding_response}"
 log "Funded Robot and trader through the authoritative GW-to-TDSvr path."
 
 robot_open_orders() {
-  api_call "{\"serverName\":\"OrderSvr\",\"method\":\"queryOpenOrder\",\"content\":{\"securityid\":\"BTCUSDT\",\"userid\":\"${ROBOT_USER}\"}}" "${robot_token}"
+  api_call "{\"serverName\":\"OrderSvr\",\"method\":\"queryOpenOrder\",\"content\":{\"securityid\":\"BTCUSDT\",\"userid\":\"${ROBOT_USER}\",\"Location\":\"${LOCATION}\",\"MarketIndicator\":\"4\",\"SecurityID\":\"BTCUSDT\"}}" "${robot_token}"
 }
 
 robot_open_value() {
