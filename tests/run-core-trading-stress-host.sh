@@ -118,6 +118,13 @@ wait_for_route() {
   done
 }
 
+recover_order_cluster() {
+  [[ "${ORDER_CLUSTER_ENABLED:-false}" == "true" ]] || return 0
+  local recovery_script="${SCRIPT_DIR}/recover-order-cluster-partitions-host.sh"
+  [[ -x "${recovery_script}" ]] || die "Missing executable cluster recovery script: ${recovery_script}"
+  ORDER_CLUSTER_ZK_SERVER="127.0.0.1:${ZOOKEEPER_PORT}" "${recovery_script}"
+}
+
 api_order() {
   local content="$1" user="$2" request response token
   token="${SESSION_BY_USER[${user}]:-}"
@@ -171,6 +178,7 @@ wait_for_port "${ORDERSVR_GW_PORT}" dc-saas-ordersvr
 if [[ "${ORDER_CLUSTER_ENABLED:-false}" == "true" ]]; then
   wait_for_port "${ORDERSVR_B_GW_PORT}" dc-saas-ordersvr-b
 fi
+recover_order_cluster
 wait_for_port "${TRADESVR_GW_PORT}" dc-saas-tradesvr
 docker restart dc-saas-gateway >/dev/null
 wait_for_route OrderSvr
@@ -307,6 +315,7 @@ wait_for_port "${ORDERSVR_GW_PORT}" dc-saas-ordersvr
 if [[ "${ORDER_CLUSTER_ENABLED:-false}" == "true" ]]; then
   wait_for_port "${ORDERSVR_B_GW_PORT}" dc-saas-ordersvr-b
 fi
+recover_order_cluster
 wait_for_port "${TRADESVR_GW_PORT}" dc-saas-tradesvr
 docker restart dc-saas-gateway >/dev/null
 wait_for_route OrderSvr
