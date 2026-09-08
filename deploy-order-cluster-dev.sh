@@ -230,6 +230,7 @@ order.cluster.lifecycle.bootstrap.enabled=true
 order.cluster.lifecycle.pollMillis=1000
 order.cluster.lifecycle.retryMillis=5000
 order.cluster.perfProbe.enabled=true
+order.cluster.recovery.rollbackUncommittedTail.enabled=true
 order.cluster.replication.enabled=true
 order.cluster.replication.required=true
 order.cluster.replication.bindHost=127.0.0.1

@@ -37,15 +37,23 @@ if [[ "${ORDER_CLUSTER_ENABLED:-false}" == "true" ]]; then
 fi
 
 liq_was_running="$(docker inspect --format '{{.State.Running}}' dc-saas-liqsvr 2>/dev/null || true)"
-restore_liqsvr() {
+robot_was_running="$(docker inspect --format '{{.State.Running}}' dc-saas-robotsvr 2>/dev/null || true)"
+restore_background_services() {
   if [[ "${liq_was_running}" == "true" ]]; then
     timeout 120 docker start dc-saas-liqsvr >/dev/null 2>&1 || true
   fi
+  if [[ "${robot_was_running}" == "true" ]]; then
+    timeout 120 docker start dc-saas-robotsvr >/dev/null 2>&1 || true
+  fi
 }
-trap restore_liqsvr EXIT
+trap restore_background_services EXIT
 if [[ "${liq_was_running}" == "true" ]]; then
   log "Pausing LiqSvr so background liquidation cannot alter load-test order flow."
   docker stop dc-saas-liqsvr >/dev/null
+fi
+if [[ "${robot_was_running}" == "true" ]]; then
+  log "Pausing RobotSvr so quote replacement cannot overlap the partition recovery fence."
+  docker stop dc-saas-robotsvr >/dev/null
 fi
 
 mysql_exec() {
