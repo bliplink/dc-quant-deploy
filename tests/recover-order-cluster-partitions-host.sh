@@ -104,7 +104,8 @@ container_for_node() {
 partition_ready() {
   local container="$1" node="$2" partition_id="$3" since="$4"
   docker logs --since "${since}" "${container}" 2>&1 |
-    grep -Fq "ORDER_PARTITION_PROMOTION_READY node:${node}, partition:${partition_id}, epoch:${target_epoch}"
+    grep -F "ORDER_PARTITION_PROMOTION_READY node:${node}, partition:${partition_id}, epoch:${target_epoch}" \
+      >/dev/null
 }
 
 mapfile -t assignment_rows <"${assignments_tsv}"
