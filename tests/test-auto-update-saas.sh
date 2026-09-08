@@ -12,6 +12,7 @@ for script in \
   "${SCRIPT_DIR}/auto-update-saas.sh" \
   "${SCRIPT_DIR}/install-auto-update-cron.sh" \
   "${SCRIPT_DIR}/deploy-saas.sh" \
+  "${SCRIPT_DIR}/tests/recover-order-cluster-partitions-host.sh" \
   "${SCRIPT_DIR}/uninstall-saas.sh"; do
   bash -n "${script}"
 done
@@ -38,5 +39,7 @@ grep -q 'SAAS_DEPLOY_LOCK_HELD=true' "${updater}" || fail "deploy lock handoff i
 grep -q '^if \[\[ "${BASH_SOURCE\[0\]}" == "\$0" \]\]; then$' "${updater}" || fail "source-safe main guard is missing"
 grep -q 'SAAS_AUTO_UPDATE_DEPLOY_REPO=true' "${SCRIPT_DIR}/.env.example" || fail "environment defaults are missing"
 grep -q 'AUTO_UPDATE.zh-CN.md' "${SCRIPT_DIR}/README.md" || fail "operator documentation is not linked"
+grep -q '^recover_order_cluster_if_needed$' "${SCRIPT_DIR}/deploy-saas.sh" || fail "staged OrderSvr recovery is not invoked"
+grep -q 'docker logs --since "${a_started}"' "${SCRIPT_DIR}/deploy-saas.sh" || fail "OrderSvr readiness is not scoped to the current process incarnation"
 
 printf 'PASS: SaaS auto-update static checks\n'

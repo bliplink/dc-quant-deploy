@@ -447,9 +447,7 @@ wait_for_order_cluster_readiness() {
   local start count
   start="$(date +%s)"
   while true; do
-    count="$({ docker logs dc-saas-ordersvr 2>&1 || true; docker logs dc-saas-ordersvr-b 2>&1 || true; } |
-      grep -E 'ORDER_PARTITION_(BOOTSTRAP|PROMOTION)_READY' |
-      grep -oE 'partition:P[0-9]{3}' | sort -u | wc -l | tr -d ' ')"
+    count="$(current_order_cluster_ready_count)"
     if [[ "${count}" == "256" ]]; then
       log "OrderSvr A/B readiness complete: 256/256 partitions."
       return 0
@@ -461,6 +459,46 @@ wait_for_order_cluster_readiness() {
     fi
     sleep 2
   done
+}
+
+current_order_cluster_ready_count() {
+  local a_started b_started
+  a_started="$(docker inspect --format '{{.State.StartedAt}}' dc-saas-ordersvr 2>/dev/null || true)"
+  b_started="$(docker inspect --format '{{.State.StartedAt}}' dc-saas-ordersvr-b 2>/dev/null || true)"
+  if [[ -z "${a_started}" || -z "${b_started}" ]]; then
+    printf '0\n'
+    return 0
+  fi
+  {
+    docker logs --since "${a_started}" dc-saas-ordersvr 2>&1 || true
+    docker logs --since "${b_started}" dc-saas-ordersvr-b 2>&1 || true
+  } | awk '
+    /ORDER_PARTITION_(BOOTSTRAP|PROMOTION)_READY/ {
+      if (match($0, /partition:P[0-9][0-9][0-9]/)) print substr($0, RSTART + 10, 4)
+    }
+  ' | sort -u | wc -l | tr -d ' '
+}
+
+recover_order_cluster_if_needed() {
+  [[ "${ORDER_CLUSTER_ENABLED:-false}" == "true" ]] || return 0
+  local count attempt recovery_script
+  recovery_script="${SCRIPT_DIR}/tests/recover-order-cluster-partitions-host.sh"
+  [[ -x "${recovery_script}" ]] || die "Missing executable OrderSvr recovery script: ${recovery_script}"
+
+  # A brand-new empty cluster may finish its bootstrap without an epoch change.
+  # Give that path a short window, but do not accept READY lines retained from a
+  # prior process incarnation after Docker restarts a failed JVM.
+  for attempt in $(seq 1 15); do
+    count="$(current_order_cluster_ready_count)"
+    [[ "${count}" == "256" ]] && {
+      log "OrderSvr A/B are already ready in the current container incarnations."
+      return 0
+    }
+    sleep 2
+  done
+
+  log "OrderSvr A/B current-incarnation readiness is ${count:-0}/256; starting staged epoch recovery."
+  ORDER_CLUSTER_ZK_SERVER="127.0.0.1:${ZOOKEEPER_PORT}" "${recovery_script}"
 }
 
 gateway_routes_need_refresh() {
@@ -637,6 +675,7 @@ if [[ "${ORDER_CLUSTER_ENABLED:-false}" == "true" ]]; then
   wait_for_port "${ORDERSVR_A_REPLICATION_PORT}" ordersvr 180
   wait_for_port "${ORDERSVR_B_REPLICATION_PORT}" ordersvr-b 180
 fi
+recover_order_cluster_if_needed
 wait_for_order_cluster_readiness
 if [[ "${ORDER_CLUSTER_ENABLED:-false}" == "true" ]]; then
   wait_for_port "${PROJECTIONSVR_GW_PORT:-33042}" projectionsvr 120
