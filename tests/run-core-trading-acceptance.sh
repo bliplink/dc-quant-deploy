@@ -192,7 +192,7 @@ dc-saas-gateway 256m ${GW_MEMORY_LIMIT:-512m}
 dc-saas-loginsvr 256m ${LOGINSVR_MEMORY_LIMIT:-384m}
 dc-saas-mdsvr 448m ${MDSVR_MEMORY_LIMIT:-640m}
 dc-saas-apssvr 448m ${APSSVR_MEMORY_LIMIT:-640m}
-dc-saas-ordersvr 448m ${ORDERSVR_MEMORY_LIMIT:-640m}
+dc-saas-ordersvr 1024m ${ORDERSVR_MEMORY_LIMIT:-1536m}
 dc-saas-tradesvr 384m ${TRADESVR_MEMORY_LIMIT:-896m}
 dc-saas-liqsvr 256m ${LIQSVR_MEMORY_LIMIT:-384m}
 dc-saas-managersvr 256m ${MANAGERSVR_MEMORY_LIMIT:-384m}
@@ -201,15 +201,15 @@ dc-saas-robotsvr 256m ${ROBOTSVR_MEMORY_LIMIT:-384m}
 MEMORY_EXPECTATIONS
 
 if [[ "${ORDER_CLUSTER_ENABLED:-false}" == "true" ]]; then
-  expected_memory="$(memory_limit_bytes "${ORDERSVR_B_MEMORY_LIMIT:-640m}")"
+  expected_memory="$(memory_limit_bytes "${ORDERSVR_B_MEMORY_LIMIT:-1536m}")"
   java_command="$(docker exec dc-saas-ordersvr-b sh -c "ps -ef | grep '[j]ava' | head -n 1")"
   memory_bytes="$(docker inspect --format '{{.HostConfig.Memory}}' dc-saas-ordersvr-b)"
-  grep -Fq -- '-Xmx448m' <<<"${java_command}" ||
-    die "Effective JVM heap for dc-saas-ordersvr-b is not -Xmx448m: ${java_command}"
+  grep -Fq -- '-Xmx1024m' <<<"${java_command}" ||
+    die "Effective JVM heap for dc-saas-ordersvr-b is not -Xmx1024m: ${java_command}"
   (( memory_bytes == expected_memory )) ||
     die "Memory limit for dc-saas-ordersvr-b is ${memory_bytes}, expected ${expected_memory}"
   printf '[core-acceptance] MEMORY %s limit_bytes=%s effective_xmx=%s\n' \
-    dc-saas-ordersvr-b "${memory_bytes}" 448m
+    dc-saas-ordersvr-b "${memory_bytes}" 1024m
 fi
 
 log "PASS: the complete single-location core trading acceptance flow succeeded."
