@@ -355,6 +355,11 @@ async function waitForNoPosition(page) {
     await deposit(sellerSession.page, '100000');
 
     await placeLimit(buyerSession.page, 'Buy / Long', '10000', '0.001');
+    // Keep the isolated tenant's book live while exercising cancellation.
+    // Without a Robot this far ask is the only remaining liquidity after the
+    // bid is cancelled, and correctly prevents the market-health gate from
+    // treating the fresh test tenant as an empty/stale market.
+    await placeLimit(sellerSession.page, 'Sell / Short', '100000', '0.001');
     const restingRows = await openOrders(buyerSession.page);
     await restingRows.first().waitFor({timeout: 15000});
     const restingBid = await restingRows.first().innerText();
@@ -415,6 +420,7 @@ async function waitForNoPosition(page) {
     await closeFirstPosition(buyerSession.page, 'Long');
     await waitForNoPosition(buyerSession.page);
     await waitForNoPosition(sellerSession.page);
+    await cancelFirstOpenOrder(sellerSession.page);
 
     await buyerSession.page.screenshot({
       path: path.join(artifactDir, 'buyer-trading-flow.png'),
