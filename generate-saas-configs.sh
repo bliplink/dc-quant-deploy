@@ -38,11 +38,18 @@ for name in "${required_vars[@]}"; do
   [[ -n "${!name:-}" ]] || die "Missing required variable: ${name}"
 done
 
+ORDER_CLUSTER_ENABLED="${ORDER_CLUSTER_ENABLED:-false}"
+if [[ "${ORDER_CLUSTER_ENABLED}" == "true" ]]; then
+  for name in ORDERSVR_B_GW_PORT ORDERSVR_A_REPLICATION_PORT ORDERSVR_B_REPLICATION_PORT; do
+    [[ -n "${!name:-}" ]] || die "Missing required cluster variable: ${name}"
+  done
+fi
+
 CONTROL_ROOT="${DEPLOY_ROOT}/control"
 OVERRIDE_ROOT="${CONTROL_ROOT}/overrides"
 umask 077
 
-install -d -m 0750 "${CONTROL_ROOT}" "${OVERRIDE_ROOT}/GW/config" "${OVERRIDE_ROOT}/LoginSvr/config" "${OVERRIDE_ROOT}/MDSvr/config" "${OVERRIDE_ROOT}/APSSvr/config" "${OVERRIDE_ROOT}/OrderSvr/config" "${OVERRIDE_ROOT}/TradeSvr/config" "${OVERRIDE_ROOT}/LiqSvr/config" "${OVERRIDE_ROOT}/ManagerSvr/config" "${OVERRIDE_ROOT}/AdminSvr/config"
+install -d -m 0750 "${CONTROL_ROOT}" "${OVERRIDE_ROOT}/GW/config" "${OVERRIDE_ROOT}/LoginSvr/config" "${OVERRIDE_ROOT}/MDSvr/config" "${OVERRIDE_ROOT}/APSSvr/config" "${OVERRIDE_ROOT}/OrderSvr/config" "${OVERRIDE_ROOT}/OrderSvrA/config" "${OVERRIDE_ROOT}/OrderSvrB/config" "${OVERRIDE_ROOT}/TradeSvr/config" "${OVERRIDE_ROOT}/LiqSvr/config" "${OVERRIDE_ROOT}/ManagerSvr/config" "${OVERRIDE_ROOT}/AdminSvr/config"
 
 cat > "${CONTROL_ROOT}/DBPoolConfig.ini" <<EOF
 [DBPOOL]
@@ -114,7 +121,22 @@ SERVER.${key}.RegisterServerList=REGISTER.Svr1
 EOF
 }
 
-append_server OrderSvr OrderSvr "${ORDERSVR_GW_PORT}" OrderSvr
+if [[ "${ORDER_CLUSTER_ENABLED}" == "true" ]]; then
+  cat >> "${CONTROL_ROOT}/ATSConfig.ini" <<EOF
+
+SERVER.OrderSvr.Name=OrderSvr
+SERVER.OrderSvr.Host=127.0.0.1:33999
+SERVER.OrderSvr.RegType=0
+SERVER.OrderSvr.RegisterEnable=1
+SERVER.OrderSvr.LBFactor=1
+SERVER.OrderSvr.ServiceName=OrderSvr
+SERVER.OrderSvr.RegisterServerList=REGISTER.Svr1
+EOF
+  append_server OrderSvrA OrderSvrA "${ORDERSVR_GW_PORT}" OrderSvrA
+  append_server OrderSvrB OrderSvrB "${ORDERSVR_B_GW_PORT}" OrderSvrB
+else
+  append_server OrderSvr OrderSvr "${ORDERSVR_GW_PORT}" OrderSvr
+fi
 append_server APSSvr APSSvr "${APSSVR_GW_PORT}" APSSvr
 append_server TradeSvr TradeSvr "${TRADESVR_GW_PORT}" TDSvr
 append_server MDSvr MDSvr "${MDSVR_GW_PORT}" MDSvr
@@ -122,6 +144,32 @@ append_server LoginSvr LoginSvr "${LOGINSVR_GW_PORT}" LoginSvr
 append_server AdminSvr AdminSvr "${ADMINSVR_GW_PORT}" AdminSvr
 append_server LiqSvr LiqSvr "${LIQSVR_GW_PORT}" LiqSvr
 append_server ManagerSvr ManagerSvr "${MANAGERSVR_GW_PORT}" ManagerSvr
+
+if [[ "${ORDER_CLUSTER_ENABLED}" == "true" ]]; then
+  cat >> "${CONTROL_ROOT}/ATSConfig.ini" <<'EOF'
+
+LBConfig.OrderSvr=Partition
+Cluster.Enabled=true
+Cluster.OrderSvr.Enabled=true
+Cluster.OrderSvrA.Enabled=true
+Cluster.OrderSvrB.Enabled=true
+Partition.OrderSvr.Count=256
+Partition.OrderSvr.Fields=location,marketIndicator,securityID
+Partition.OrderSvr.Alias.location=Location
+Partition.OrderSvr.Alias.marketIndicator=MarketIndicator
+Partition.OrderSvr.Alias.securityID=SecurityID,securityId
+Partition.OrderSvr.Root=/dc/cluster/ordersvr/partitions
+Partition.OrderSvr.EnforceFence=true
+Partition.OrderSvrA.Count=256
+Partition.OrderSvrA.Root=/dc/cluster/ordersvr/partitions
+Partition.OrderSvrA.EnforceFence=true
+Partition.OrderSvrA.EnforceReadiness=true
+Partition.OrderSvrB.Count=256
+Partition.OrderSvrB.Root=/dc/cluster/ordersvr/partitions
+Partition.OrderSvrB.EnforceFence=true
+Partition.OrderSvrB.EnforceReadiness=true
+EOF
+fi
 
 install -m 0600 "${SCRIPT_DIR}/control.prod/jaas.ini" "${CONTROL_ROOT}/jaas.ini"
 # The official image drops from root to its zookeeper user before starting.
@@ -277,6 +325,69 @@ log4j.async=true
 dbpool.cfg=../../control/DBPoolConfig.ini
 dbpool.default=MYSQL0
 EOF
+
+write_cluster_order_config() {
+  local node="$1" replication_port="$2"
+  cat > "${OVERRIDE_ROOT}/${node}/config/application.properties" <<EOF
+dbType=mysql
+execOrderType=trade
+orderStorePath=../../data/${node}/store
+serverKey=SERVER.${node}
+tradeServerKey=SERVER.TradeSvr
+order.cluster.serviceName=SERVER.OrderSvr
+order.cluster.journal.enabled=true
+order.cluster.journal.required=true
+order.cluster.journalDir=../../data/${node}/journal
+order.cluster.state.enabled=true
+order.cluster.state.required=true
+order.cluster.state.replication.required=true
+order.cluster.commit.enabled=true
+order.cluster.commit.required=true
+order.cluster.snapshot.enabled=true
+order.cluster.snapshotDir=../../data/${node}/snapshot
+order.cluster.snapshot.barrier.enabled=true
+order.cluster.snapshot.barrier.required=true
+order.cluster.snapshot.barrier.acquireTimeoutMillis=10000
+order.cluster.snapshot.promotionBarrier.required=true
+order.cluster.lifecycle.enabled=true
+order.cluster.lifecycle.bootstrap.enabled=true
+order.cluster.lifecycle.pollMillis=1000
+order.cluster.lifecycle.retryMillis=5000
+order.cluster.perfProbe.enabled=false
+order.cluster.replication.enabled=true
+order.cluster.replication.required=true
+order.cluster.replication.bindHost=127.0.0.1
+order.cluster.replication.port=${replication_port}
+order.cluster.replication.requestTimeoutMs=10000
+order.cluster.replication.catchupBatchRecords=256
+order.cluster.replication.crossEpochSnapshotRebase.enabled=true
+order.cluster.replication.peers=OrderSvrA=127.0.0.1:${ORDERSVR_A_REPLICATION_PORT},OrderSvrB=127.0.0.1:${ORDERSVR_B_REPLICATION_PORT}
+order.cluster.defaultMarketIndicator=4
+order.tenantSymbolRules.enabled=true
+enableMarketPrice=true
+enableSaveDBDemo=false
+enableDepthDiff=true
+enableFullOrderBookOnChange=true
+fullOrderBookPublishIntervalMs=1000
+depthDiffPublishIntervalMs=200
+bookTickerPublishOnQtyChange=true
+bookTickerPublishIntervalMs=0
+order.selfTradePreventionMode=${ORDER_SELF_TRADE_PREVENTION_MODE:-CANCEL_TAKER}
+enablePerfStats=true
+perfStatsPeriodSeconds=10
+log4j.file=./config/log4j.ini
+log4j.thread=1
+log4j.writeTime=true
+log4j.async=true
+dbpool.cfg=../../control/DBPoolConfig.ini
+dbpool.default=MYSQL0
+EOF
+}
+
+if [[ "${ORDER_CLUSTER_ENABLED}" == "true" ]]; then
+  write_cluster_order_config OrderSvrA "${ORDERSVR_A_REPLICATION_PORT}"
+  write_cluster_order_config OrderSvrB "${ORDERSVR_B_REPLICATION_PORT}"
+fi
 
 cat > "${OVERRIDE_ROOT}/TradeSvr/config/application.properties" <<EOF
 [Cron]

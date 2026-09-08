@@ -235,9 +235,33 @@ services:
       - ${DEPLOY_ROOT}/control:/srv/dc/control:ro
       - ${DEPLOY_ROOT}/data:/srv/dc/data
       - ${DEPLOY_ROOT}/log:/srv/dc/log
-      - ${DEPLOY_ROOT}/control/overrides/OrderSvr/config/application.properties:/srv/dc/dc/OrderSvr/config/application.properties:ro
+      - ${DEPLOY_ROOT}/control/overrides/${ORDERSVR_CONFIG_NAME:-OrderSvr}/config/application.properties:/srv/dc/dc/OrderSvr/config/application.properties:ro
     mem_limit: ${ORDERSVR_MEMORY_LIMIT:-640m}
     cpus: ${ORDERSVR_CPU_LIMIT:-0.50}
+
+  ordersvr-b:
+    <<: *java-service-base
+    profiles: ["order-cluster"]
+    image: ${ORDERSVR_IMAGE_REPOSITORY:-ghcr.io/bliplink/ordersvr}:${ORDERSVR_TAG:-saas-crypto}
+    container_name: dc-saas-ordersvr-b
+    depends_on:
+      mysql:
+        condition: service_healthy
+      zookeeper:
+        condition: service_started
+    environment:
+      TZ: Asia/Shanghai
+      DEPLOY_ROOT: /srv/dc
+      SERVICE_NAME: OrderSvr
+      MAIN_CLASS: OrderSvr
+      JAVA_OPTS: ${ORDERSVR_JAVA_OPTS:--server -Xms64m -Xmx448m -Xmn112m -Djava.security.auth.login.config=../../control/jaas.ini}
+    volumes:
+      - ${DEPLOY_ROOT}/control:/srv/dc/control:ro
+      - ${DEPLOY_ROOT}/data:/srv/dc/data
+      - ${DEPLOY_ROOT}/log:/srv/dc/log
+      - ${DEPLOY_ROOT}/control/overrides/OrderSvrB/config/application.properties:/srv/dc/dc/OrderSvr/config/application.properties:ro
+    mem_limit: ${ORDERSVR_B_MEMORY_LIMIT:-640m}
+    cpus: ${ORDERSVR_B_CPU_LIMIT:-0.50}
 
   tradesvr:
     <<: *java-service-base

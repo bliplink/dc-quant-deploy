@@ -8,11 +8,19 @@ DC_COMMON_SOURCE="${DC_COMMON_SOURCE:-${WORKSPACE_ROOT}/com.app.dc}"
 ORDERSVR_SOURCE="${ORDERSVR_SOURCE:-${WORKSPACE_ROOT}/ordersvr}"
 GATEWAY_LIBRARY_SOURCE="${GATEWAY_LIBRARY_SOURCE:-${WORKSPACE_ROOT}/gateway/gateway}"
 GATEWAY_IMAGE_SOURCE="${GATEWAY_IMAGE_SOURCE:-${WORKSPACE_ROOT}/gw-image}"
+MDSVR_SOURCE="${MDSVR_SOURCE:-${WORKSPACE_ROOT}/mdsvr}"
+TRADESVR_SOURCE="${TRADESVR_SOURCE:-${WORKSPACE_ROOT}/tradesvr}"
+LIQSVR_SOURCE="${LIQSVR_SOURCE:-${WORKSPACE_ROOT}/liqsvr}"
 M2_ROOT="${M2_ROOT:-${SCRIPT_DIR}/.cluster-dev/m2-linux}"
 MAVEN_BUILD_IMAGE="${MAVEN_BUILD_IMAGE:-maven:3.9.11-eclipse-temurin-8}"
 IMAGE_REPOSITORY="${IMAGE_REPOSITORY:-dc-saas/ordersvr}"
 GATEWAY_IMAGE_REPOSITORY="${GATEWAY_IMAGE_REPOSITORY:-dc-saas/gw}"
+MDSVR_IMAGE_REPOSITORY="${MDSVR_IMAGE_REPOSITORY:-dc-saas/mdsvr}"
+TRADESVR_IMAGE_REPOSITORY="${TRADESVR_IMAGE_REPOSITORY:-dc-saas/tradesvr}"
+LIQSVR_IMAGE_REPOSITORY="${LIQSVR_IMAGE_REPOSITORY:-dc-saas/liqsvr}"
 INCLUDE_GATEWAY="${INCLUDE_GATEWAY:-false}"
+INCLUDE_CORE_CONSUMERS="${INCLUDE_CORE_CONSUMERS:-false}"
+PUSH_IMAGES="${PUSH_IMAGES:-false}"
 SKIP_TESTS="${SKIP_TESTS:-false}"
 SKIP_MAVEN_BUILD="${SKIP_MAVEN_BUILD:-false}"
 SKIP_DOCKER_BUILD="${SKIP_DOCKER_BUILD:-false}"
@@ -67,6 +75,11 @@ if [[ "${INCLUDE_GATEWAY}" == "true" ]]; then
   require_directory "${GATEWAY_LIBRARY_SOURCE}" "gateway library source"
   require_directory "${GATEWAY_IMAGE_SOURCE}" "GW image source"
 fi
+if [[ "${INCLUDE_CORE_CONSUMERS}" == "true" ]]; then
+  require_directory "${MDSVR_SOURCE}" "MDSvr source"
+  require_directory "${TRADESVR_SOURCE}" "TradeSvr source"
+  require_directory "${LIQSVR_SOURCE}" "LiqSvr source"
+fi
 install -d -m 0750 "${M2_ROOT}" "${SCRIPT_DIR}/.cluster-dev"
 
 common_group="$(pom_value "${COMMON_LIBRARY_SOURCE}" project.groupId)"
@@ -104,6 +117,12 @@ if [[ "${SKIP_MAVEN_BUILD}" != "true" ]]; then
     maven "${GATEWAY_IMAGE_SOURCE}" clean package dependency:copy-dependencies \
       -DoutputDirectory=target/dependency -Dgateway.version="${gateway_version}" \
       -Dproject.build.outputTimestamp="${build_output_timestamp}" "${test_arg}"
+  fi
+  if [[ "${INCLUDE_CORE_CONSUMERS}" == "true" ]]; then
+    for service_source in "${MDSVR_SOURCE}" "${TRADESVR_SOURCE}" "${LIQSVR_SOURCE}"; do
+      maven "${service_source}" clean package dependency:copy-dependencies \
+        -DoutputDirectory=target/dependency -Dproject.build.outputTimestamp="${build_output_timestamp}" "${test_arg}"
+    done
   fi
 else
   log "Reusing existing Maven outputs; dependency identity checks remain enabled"
@@ -197,4 +216,55 @@ if [[ "${INCLUDE_GATEWAY}" == "true" ]]; then
   } > "${gateway_manifest}"
   log "GW build manifest: ${gateway_manifest}"
   log "GW image: ${gateway_image_ref}"
+fi
+
+if [[ "${INCLUDE_CORE_CONSUMERS}" == "true" ]]; then
+  consumer_manifest="${SCRIPT_DIR}/.cluster-dev/order-cluster-consumer-build-manifest.env"
+  : > "${consumer_manifest}"
+  printf 'BUILD_DATE=%s\nCOMMON_REVISION=%s\nCOMMON_JAR_SHA256=%s\n' \
+    "${build_date}" "${common_revision}" "${common_jar_hash}" >> "${consumer_manifest}"
+  while IFS='|' read -r service source repository repo_url; do
+    revision="$(git_revision "${source}")"
+    dependency_dir="${source}/target/dependency"
+    mapfile -t embedded_common < <(find "${dependency_dir}" -maxdepth 1 -type f -name "${common_artifact}-*.jar" -print)
+    [[ "${#embedded_common[@]}" -eq 1 ]] ||
+      die "Expected exactly one ${common_artifact} JAR in ${service}, found ${#embedded_common[@]}"
+    embedded_hash="$(sha256sum "${embedded_common[0]}" | awk '{print $1}')"
+    [[ "${embedded_hash}" == "${common_jar_hash}" ]] ||
+      die "${service} and OrderSvr contain different com.app.common JARs"
+    consumer_image="${repository}:cluster-dev-${revision}-common-${common_revision}"
+    if [[ "${SKIP_DOCKER_BUILD}" != "true" ]]; then
+      log "Building immutable development image ${consumer_image}"
+      docker build \
+        --build-arg REPO_URL="${repo_url}" \
+        --label dc.service.revision="${revision}" \
+        --label dc.common.revision="${common_revision}" \
+        --label dc.common.gav="${common_gav}" \
+        --label dc.common.jar.sha256="${common_jar_hash}" \
+        --label dc.dc-common.revision="${dc_revision}" \
+        --label dc.dc-common.jar.sha256="${dc_jar_hash}" \
+        --tag "${consumer_image}" "${source}"
+      if [[ "${PUSH_IMAGES}" == "true" ]]; then
+        log "Pushing ${consumer_image}"
+        docker push "${consumer_image}"
+      fi
+    fi
+    printf '%s_IMAGE=%s\n%s_REVISION=%s\n' \
+      "${service^^}" "${consumer_image}" "${service^^}" "${revision}" >> "${consumer_manifest}"
+    log "${service} image: ${consumer_image}"
+  done <<EOF
+MDSvr|${MDSVR_SOURCE}|${MDSVR_IMAGE_REPOSITORY}|https://github.com/bliplink/com.app.dc.mdsvr
+TradeSvr|${TRADESVR_SOURCE}|${TRADESVR_IMAGE_REPOSITORY}|https://github.com/bliplink/com.app.dc.tradesvr
+LiqSvr|${LIQSVR_SOURCE}|${LIQSVR_IMAGE_REPOSITORY}|https://github.com/bliplink/com.app.dc.liqsvr
+EOF
+  log "Core consumer manifest: ${consumer_manifest}"
+fi
+
+if [[ "${PUSH_IMAGES}" == "true" && "${SKIP_DOCKER_BUILD}" != "true" ]]; then
+  log "Pushing ${image_ref}"
+  docker push "${image_ref}"
+  if [[ "${INCLUDE_GATEWAY}" == "true" ]]; then
+    log "Pushing ${gateway_image_ref}"
+    docker push "${gateway_image_ref}"
+  fi
 fi

@@ -5,11 +5,19 @@ param(
     [string]$OrderSvrSource = (Join-Path $PSScriptRoot "..\ordersvr"),
     [string]$GatewayLibrarySource = (Join-Path $PSScriptRoot "..\gateway\gateway"),
     [string]$GatewayImageSource = (Join-Path $PSScriptRoot "..\gw-image"),
+    [string]$MdSvrSource = (Join-Path $PSScriptRoot "..\mdsvr"),
+    [string]$TradeSvrSource = (Join-Path $PSScriptRoot "..\tradesvr"),
+    [string]$LiqSvrSource = (Join-Path $PSScriptRoot "..\liqsvr"),
     [string]$MavenRepository = (Join-Path $PSScriptRoot ".cluster-dev\m2"),
     [string]$MavenExecutable = "D:\IntelliJ IDEA 2025.3.3\plugins\maven\lib\maven3\bin\mvn.cmd",
     [string]$ImageRepository = "dc-saas/ordersvr",
     [string]$GatewayImageRepository = "dc-saas/gw",
+    [string]$MdSvrImageRepository = "dc-saas/mdsvr",
+    [string]$TradeSvrImageRepository = "dc-saas/tradesvr",
+    [string]$LiqSvrImageRepository = "dc-saas/liqsvr",
     [switch]$IncludeGateway,
+    [switch]$IncludeCoreConsumers,
+    [switch]$PushImages,
     [switch]$SkipTests,
     [switch]$SkipMavenBuild,
     [switch]$SkipDockerBuild
@@ -92,6 +100,11 @@ if ($IncludeGateway) {
     Assert-Path $GatewayLibrarySource "gateway library source"
     Assert-Path $GatewayImageSource "GW image source"
 }
+if ($IncludeCoreConsumers) {
+    Assert-Path $MdSvrSource "MDSvr source"
+    Assert-Path $TradeSvrSource "TradeSvr source"
+    Assert-Path $LiqSvrSource "LiqSvr source"
+}
 if (-not $SkipDockerBuild -and $null -eq (Get-Command docker -ErrorAction SilentlyContinue)) {
     throw "Docker CLI is required unless -SkipDockerBuild is specified"
 }
@@ -152,6 +165,22 @@ if (-not $SkipMavenBuild) {
             "-Dgateway.version=$($gatewayCoordinate.Version)",
             $testArgument
         )
+    }
+    if ($IncludeCoreConsumers) {
+        foreach ($serviceSource in @($MdSvrSource, $TradeSvrSource, $LiqSvrSource)) {
+            $serviceCoordinate = Get-PomCoordinate $serviceSource
+            $serviceDcVersion = Get-DependencyVersion $serviceSource $dcCoordinate.GroupId $dcCoordinate.ArtifactId
+            if ($serviceDcVersion -ne $dcCoordinate.Version) {
+                throw "GAV mismatch: $($serviceCoordinate.ArtifactId) requests $serviceDcVersion but local com.app.dc is $($dcCoordinate.Version)"
+            }
+            Invoke-Maven $serviceSource @(
+                "clean",
+                "package",
+                "dependency:copy-dependencies",
+                "-DoutputDirectory=target/dependency",
+                $testArgument
+            )
+        }
     }
 } else {
     Write-Step "Reusing existing Maven outputs; dependency identity checks remain enabled"
@@ -278,4 +307,75 @@ if ($IncludeGateway) {
     $gatewayManifest | ConvertTo-Json -Depth 5 | Set-Content -LiteralPath $gatewayManifestPath -Encoding UTF8
     Write-Step "GW build manifest: $gatewayManifestPath"
     Write-Step "GW image: $gatewayImageRef"
+}
+
+if ($IncludeCoreConsumers) {
+    $consumerSpecs = @(
+        [ordered]@{ Name = "MDSvr"; Source = $MdSvrSource; Repository = $MdSvrImageRepository; RepoUrl = "https://github.com/bliplink/com.app.dc.mdsvr" },
+        [ordered]@{ Name = "TradeSvr"; Source = $TradeSvrSource; Repository = $TradeSvrImageRepository; RepoUrl = "https://github.com/bliplink/com.app.dc.tradesvr" },
+        [ordered]@{ Name = "LiqSvr"; Source = $LiqSvrSource; Repository = $LiqSvrImageRepository; RepoUrl = "https://github.com/bliplink/com.app.dc.liqsvr" }
+    )
+    $consumerManifest = [ordered]@{
+        builtAtUtc = $buildDate
+        commonRevision = $commonRevision
+        commonJarSha256 = $commonJarHash
+        images = @()
+    }
+    foreach ($spec in $consumerSpecs) {
+        $revision = Get-GitRevision $spec.Source
+        $dependencyDirectory = Join-Path $spec.Source "target\dependency"
+        $embeddedCommon = @(Get-ChildItem -LiteralPath $dependencyDirectory -File -Filter "$($commonCoordinate.ArtifactId)-*.jar")
+        if ($embeddedCommon.Count -ne 1) {
+            throw "Expected exactly one $($commonCoordinate.ArtifactId) JAR in $dependencyDirectory, found $($embeddedCommon.Count)"
+        }
+        $embeddedHash = (Get-FileHash -LiteralPath $embeddedCommon[0].FullName -Algorithm SHA256).Hash.ToLowerInvariant()
+        if ($embeddedHash -ne $commonJarHash) {
+            throw "$($spec.Name) and OrderSvr contain different com.app.common JARs"
+        }
+        $consumerImage = "$($spec.Repository):cluster-dev-$revision-common-$commonRevision"
+        if (-not $SkipDockerBuild) {
+            Write-Step "Building immutable development image $consumerImage"
+            & docker build `
+                --build-arg "REPO_URL=$($spec.RepoUrl)" `
+                --label "dc.service.revision=$revision" `
+                --label "dc.common.revision=$commonRevision" `
+                --label "dc.common.gav=$commonGav" `
+                --label "dc.common.jar.sha256=$commonJarHash" `
+                --label "dc.dc-common.revision=$dcRevision" `
+                --label "dc.dc-common.jar.sha256=$dcJarHash" `
+                --tag $consumerImage `
+                $spec.Source
+            if ($LASTEXITCODE -ne 0) {
+                throw "Docker build failed for $consumerImage"
+            }
+            if ($PushImages) {
+                Write-Step "Pushing $consumerImage"
+                & docker push $consumerImage
+                if ($LASTEXITCODE -ne 0) {
+                    throw "Docker push failed for $consumerImage"
+                }
+            }
+        }
+        $consumerManifest.images += [ordered]@{
+            service = $spec.Name
+            revision = $revision
+            image = $consumerImage
+            commonJarSha256 = $embeddedHash
+        }
+        Write-Step "$($spec.Name) image: $consumerImage"
+    }
+    $consumerManifestPath = Join-Path $manifestDirectory "order-cluster-consumer-build-manifest.json"
+    $consumerManifest | ConvertTo-Json -Depth 5 | Set-Content -LiteralPath $consumerManifestPath -Encoding UTF8
+    Write-Step "Core consumer manifest: $consumerManifestPath"
+}
+
+if ($PushImages -and -not $SkipDockerBuild) {
+    Write-Step "Pushing $imageRef"
+    & docker push $imageRef
+    if ($LASTEXITCODE -ne 0) { throw "Docker push failed for $imageRef" }
+    if ($IncludeGateway) {
+        Write-Step "Pushing $gatewayImageRef"
+        & docker push $gatewayImageRef
+        if ($LASTEXITCODE -ne 0) { throw "Docker push failed for $gatewayImageRef" }
+    }
 }
