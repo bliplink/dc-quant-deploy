@@ -71,7 +71,7 @@ run_load() {
     probe_id="ROUTE-${RUN_ID}-${mode}-${iteration}-${symbol}"
     while (( SECONDS < deadline )); do
       response="$(curl -sS --max-time 10 -H 'Content-Type: application/json' \
-        --data-binary "{\"serverName\":\"OrderSvr\",\"method\":\"__cluster_perf_probe__\",\"content\":{\"ClOrdID\":\"${probe_id}\",\"Location\":\"WEB_E2E\",\"MarketIndicator\":\"4\",\"SecurityID\":\"${symbol}\"}}" \
+        --data-binary "{\"serverName\":\"OrderSvr\",\"method\":\"__cluster_perf_probe__\",\"key\":\"WEB_E2E\\u001f4\\u001f${symbol}\",\"content\":{\"ClOrdID\":\"${probe_id}\",\"Location\":\"WEB_E2E\",\"MarketIndicator\":\"4\",\"SecurityID\":\"${symbol}\"}}" \
         "http://${GW_HOST}:${GW_PORT}" || true)"
       if [[ "${response}" == *'"code":0'* ]]; then return 0; fi
       sleep 1

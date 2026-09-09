@@ -99,7 +99,7 @@ print(f"snapshots={expected * 2} semantic_pairs_equal={expected} uppercase_SN=0"
 PY
 
 route_response="$(curl -fsS --max-time 10 -H 'Content-Type: application/json' \
-  --data '{"serverName":"OrderSvr","method":"__cluster_state_verify__","content":{"Location":"CLUSTER_VERIFY","MarketIndicator":"4","SecurityID":"BTCUSDT"}}' \
+  --data '{"serverName":"OrderSvr","method":"__cluster_state_verify__","key":"CLUSTER_VERIFY\u001f4\u001fBTCUSDT","content":{"Location":"CLUSTER_VERIFY","MarketIndicator":"4","SecurityID":"BTCUSDT"}}' \
   "http://127.0.0.1:${WEB_PORT}/httpapi/")"
 grep -Fq 'is not Online' <<<"${route_response}" && die 'logical OrderSvr route is offline'
 grep -Fq 'handler:__cluster_state_verify__ does not exist.' <<<"${route_response}" \

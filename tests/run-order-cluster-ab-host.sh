@@ -45,13 +45,16 @@ request_until_recorded() {
 }
 
 log 'Triggering physical node connections through logical OrderSvr partition routing'
-request probe-btc '{"serverName":"OrderSvr","method":"__cluster_route_readiness__","content":{"Location":"WEB_E2E","MarketIndicator":"4","SecurityID":"BTCUSDT"}}' || true
-request probe-eth '{"serverName":"OrderSvr","method":"__cluster_route_readiness__","content":{"Location":"WEB_E2E","MarketIndicator":"4","SecurityID":"ETHUSDT"}}' || true
+request probe-btc '{"serverName":"OrderSvr","method":"__cluster_route_readiness__","key":"WEB_E2E\u001f4\u001fBTCUSDT","content":{"Location":"WEB_E2E","MarketIndicator":"4","SecurityID":"BTCUSDT"}}' || true
+request probe-eth '{"serverName":"OrderSvr","method":"__cluster_route_readiness__","key":"WEB_E2E\u001f4\u001fETHUSDT","content":{"Location":"WEB_E2E","MarketIndicator":"4","SecurityID":"ETHUSDT"}}' || true
+request missing-key '{"serverName":"OrderSvr","method":"__cluster_route_readiness__","content":{"Location":"WEB_E2E","MarketIndicator":"4","SecurityID":"BTCUSDT"}}' || true
+sudo grep -Fq 'PARTITION_ROUTING_KEY_REQUIRED' "${EVIDENCE_DIR}/missing-key.response.json" ||
+  die 'OrderSvr request without v2 key was not rejected'
 
 btc_clid="HOST-AB-BTC-${RUN_ID}"
 eth_clid="HOST-AB-ETH-${RUN_ID}"
-btc_payload="{\"serverName\":\"OrderSvr\",\"method\":\"placeOrder\",\"content\":{\"OCType\":\"CLOSE\",\"OrderQty\":\"0.001\",\"OrdType\":\"Limit\",\"ClOrdID\":\"${btc_clid}\",\"Terminal\":\"ClusterE2E\",\"CloseBy\":\"liq\",\"Side\":\"Buy\",\"Price\":\"100\",\"UserID\":\"cluster-e2e\",\"MarketIndicator\":\"4\",\"TimeInForce\":\"GTC\",\"SecurityID\":\"BTCUSDT\",\"Location\":\"WEB_E2E\",\"ReduceOnly\":\"true\"}}"
-eth_payload="{\"serverName\":\"OrderSvr\",\"method\":\"placeOrder\",\"content\":{\"OCType\":\"CLOSE\",\"OrderQty\":\"0.001\",\"OrdType\":\"Limit\",\"ClOrdID\":\"${eth_clid}\",\"Terminal\":\"ClusterE2E\",\"CloseBy\":\"liq\",\"Side\":\"Buy\",\"Price\":\"100\",\"UserID\":\"cluster-e2e\",\"MarketIndicator\":\"4\",\"TimeInForce\":\"GTC\",\"SecurityID\":\"ETHUSDT\",\"Location\":\"WEB_E2E\",\"ReduceOnly\":\"true\"}}"
+btc_payload="{\"serverName\":\"OrderSvr\",\"method\":\"placeOrder\",\"key\":\"WEB_E2E\\u001f4\\u001fBTCUSDT\",\"content\":{\"OCType\":\"ClOSE\",\"OrderQty\":\"0.001\",\"OrdType\":\"Limit\",\"ClOrdID\":\"${btc_clid}\",\"Terminal\":\"ClusterE2E\",\"CloseBy\":\"liq\",\"Side\":\"Buy\",\"Price\":\"100\",\"UserID\":\"cluster-e2e\",\"MarketIndicator\":\"4\",\"TimeInForce\":\"GTC\",\"SecurityID\":\"BTCUSDT\",\"Location\":\"WEB_E2E\",\"ReduceOnly\":\"true\"}}"
+eth_payload="{\"serverName\":\"OrderSvr\",\"method\":\"placeOrder\",\"key\":\"WEB_E2E\\u001f4\\u001fETHUSDT\",\"content\":{\"OCType\":\"ClOSE\",\"OrderQty\":\"0.001\",\"OrdType\":\"Limit\",\"ClOrdID\":\"${eth_clid}\",\"Terminal\":\"ClusterE2E\",\"CloseBy\":\"liq\",\"Side\":\"Buy\",\"Price\":\"100\",\"UserID\":\"cluster-e2e\",\"MarketIndicator\":\"4\",\"TimeInForce\":\"GTC\",\"SecurityID\":\"ETHUSDT\",\"Location\":\"WEB_E2E\",\"ReduceOnly\":\"true\"}}"
 request_until_recorded order-btc "${btc_payload}" "${ORDER_A_LOG}" \
   "ORDER_CLUSTER_COMMAND_RECORDED node:OrderSvrA, partition:P027.*eventId:${btc_clid}.*replicaStatus:OK"
 request_until_recorded order-eth "${eth_payload}" "${ORDER_B_LOG}" \

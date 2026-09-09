@@ -55,15 +55,16 @@ wait_for_port() {
 }
 
 wait_for_gateway_route() {
-  local server_name="$1" start request_file response content='{}'
+  local server_name="$1" start request_file response content='{}' key=''
   start="$(date +%s)"
   request_file="$(mktemp)"
   chmod 0600 "${request_file}"
   if [[ "${server_name}" == "OrderSvr" ]]; then
     content="{\"Location\":\"${E2E_LOCATION}\",\"MarketIndicator\":\"4\",\"SecurityID\":\"BTCUSDT\"}"
+    key=",\"key\":\"${E2E_LOCATION}\\u001f4\\u001fBTCUSDT\""
   fi
-  printf '{"serverName":"%s","method":"__e2e_readiness__","content":%s}\n' \
-    "${server_name}" "${content}" >"${request_file}"
+  printf '{"serverName":"%s","method":"__e2e_readiness__"%s,"content":%s}\n' \
+    "${server_name}" "${key}" "${content}" >"${request_file}"
   while true; do
     response="$(curl -fsS --max-time 10 -H 'Content-Type: application/json' \
       --data-binary "@${request_file}" "${E2E_BASE_URL}/httpapi/" 2>/dev/null || true)"
@@ -108,8 +109,7 @@ if [[ "${ORDER_CLUSTER_ENABLED:-false}" == "true" ]]; then
 fi
 wait_for_port "${TRADESVR_GW_PORT}" dc-saas-tradesvr
 if is_true "${E2E_RESTART_SERVICES}"; then
-  log "Restarting GW so it resolves the refreshed OrderSvr and TDSvr routes."
-  docker restart dc-saas-gateway >/dev/null
+  log "Waiting for the running GW to reconnect to refreshed OrderSvr and TDSvr routes."
 fi
 wait_for_gateway_route OrderSvr
 wait_for_gateway_route TDSvr

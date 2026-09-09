@@ -9,7 +9,7 @@
 - OrderSvrA：容器 `dc-saas-ordersvr`，GW 端口 `33036`，复制端口 `19121`。
 - OrderSvrB：容器 `dc-saas-ordersvr-b`，GW 端口 `33041`，复制端口 `19122`。
 - ZooKeeper：`dc-saas-zookeeper`，分区根路径 `/dc/cluster/ordersvr/partitions`。
-- 逻辑服务名仍为 `OrderSvr`；GW 根据 `location + marketIndicator + securityID` 计算分区并路由到物理 A/B。
+- 逻辑服务名仍为 `OrderSvr`；调用方在 v2 `Proto.key`（HTTP 为外层 `key`）提供由 `location + marketIndicator + securityID` 组成的逻辑键，Common 计算分区并路由到物理 A/B。
 - 共 256 个分区 `P000..P255`。当前 A、B 各承担 128 个 Primary，另一节点作为 Replica。
 - 当前一致性模式为 `SYNC_BATCHED`：每批最多 64 条，最长聚合等待 1000 微秒，2 个批处理线程。
 - journal、state、commit、snapshot、promotion barrier、replication 和 readiness 均为 required。
@@ -21,11 +21,16 @@
 
 ### 2.1 路由与 fencing
 
-1. GW 从请求提取 `location + marketIndicator + securityID`。
-2. `PartitionHasher` 将组合键稳定映射到 `P000..P255`。
-3. GW 读取 ZooKeeper assignment：`partitionId / epoch / primary / replica / state`。
-4. 只有 `state=READY` 才允许路由；否则返回 `PARTITION_NOT_READY`。
-5. OrderSvr 再校验本节点确实是当前 epoch 的 Primary。旧 Primary 或旧 epoch 请求会被拒绝，防止双主写入。
+1. 业务调用方用 Common 的组合规则生成逻辑键：`location + U+001F + marketIndicator + U+001F + securityID`。
+2. v2 TCP 请求把逻辑键写入 `Proto.key`；HTTP 请求把它写在与 `serverName/method/content` 同级的外层 `key`。GW 只透传 `content`，不解析订单 JSON。
+3. Common 的 `PartitionHasher` 将逻辑键稳定映射到 `P000..P255`，并读取 ZooKeeper assignment：`partitionId / epoch / primary / replica / state`。
+4. Common 使用统一 `PartitionRouteMetadataCodec` 把 `logicalKey / partitionId / epoch` 编码为 v2 内部 fencing token。业务服务不得自行拼 token。
+5. 只有 `state=READY` 才允许路由；否则请求失败。缺少 key 返回 `PARTITION_ROUTING_KEY_REQUIRED`，不从 `content` 兜底提取。
+6. OrderSvr 从 v2 `Proto.key` 解码 token，再校验逻辑键哈希、当前 epoch、Primary 和 readiness。旧 Primary、旧 epoch 或篡改 token 都会被拒绝。
+
+v1 协议不支持 `key`，本次改造不修改 v1 报文格式。启用 OrderSvr 分区的调用链必须使用 v2。订阅和全局活动订单恢复使用 Common 的显式多 Primary API，不以“缺少 key”隐式广播。
+
+启用集群时，共享 `ATSConfig.ini` 必须设置 `ProtoVersion=2`；`generate-saas-configs.sh` 和集群校验脚本会生成并强制检查该值。关闭集群时仍生成 `ProtoVersion=1`，不改变独立部署的旧协议行为。
 
 ### 2.2 写入与复制
 
@@ -122,8 +127,7 @@ sudo bash -lc '
 set -euo pipefail
 source /home/ec2-user/dc-saas-deploy/.env.prod
 
-# 1. 先停止入口，防止恢复期间继续接单。
-docker stop dc-saas-gateway
+# 1. GW 保持运行。OrderSvr 不可写期间，请求必须明确失败，不能绕到旧节点。
 
 # 2. 只启动或重启故障节点。下面示例为 A；B 故障时替换容器名。
 docker restart dc-saas-ordersvr
@@ -145,26 +149,25 @@ done
 ORDER_CLUSTER_ZK_SERVER="127.0.0.1:${ZOOKEEPER_PORT}" \
   bash /home/ec2-user/dc-saas-order-cluster-dev-deploy/tests/recover-order-cluster-partitions-host.sh
 
-# 4. 先验证 256 分区和 A/B 快照，再恢复 GW。
+# 4. 验证 256 分区和 A/B 快照。GW 会自动刷新后端连接和 assignment。
 WEB_LISTEN_PORT="$WEB_LISTEN_PORT" \
 ORDER_CLUSTER_DATA_ROOT=/data/dc-saas-runtime/data \
   bash /home/ec2-user/dc-saas-order-cluster-dev-deploy/tests/verify-order-cluster-state-host.sh
 
-docker start dc-saas-gateway
 '
 ```
 
-GW 启动后继续轮询逻辑路由。后端重新连接存在短暂传播时间，出现一次 `SERVER.OrderSvr is not Online` 不能立即判定恢复失败，但不能在路由尚未恢复时开放流量。
+GW 在整个恢复窗口保持运行。后端重新连接存在短暂传播时间，出现一次 `SERVER.OrderSvr is not Online` 不能立即判定恢复失败；但在逻辑路由恢复前，订单请求必须保持失败，其他服务不应受影响。
 
 ## 6. 计划内重启或版本发布
 
 1. 先确认无进行中的 E2E、压测、批量撤单或 Robot 配置切换。
-2. 停 GW，避免新订单进入恢复窗口。
+2. 保持 GW 运行，停止 OrderSvrA/B。此时订单请求应返回离线或未就绪，不能成功写入；登录和非订单服务继续工作。
 3. 同时更新 OrderSvrA/B，两个节点必须使用同一个不可变镜像。
-4. 等待 A/B 业务和复制端口。
+4. 启动 A/B，等待业务和复制端口。
 5. 执行 `recover-order-cluster-partitions-host.sh`，让 epoch 单调增加。
-6. 执行 `verify-order-cluster-state-host.sh`。
-7. 启动/刷新 GW，验证逻辑路由、登录、下单、撤单、成交、Projection、Trade、MD、Liq、Robot 和 Web。
+6. 执行 `verify-order-cluster-state-host.sh`；GW 自动恢复逻辑路由，不需要为 OrderSvr 维护而重启。
+7. 验证登录、下单、撤单、成交、Projection、Trade、MD、Liq、Robot 和 Web。
 
 正式发布顺序：
 
@@ -174,11 +177,13 @@ GW 启动后继续轮询逻辑路由。后端重新连接存在短暂传播时�
 4. 再构建 OrderSvr/GW 正式不可变镜像并部署 A/B/GW。
 5. 禁止只升级 OrderSvr 或只升级 GW，避免 partition hash、assignment/readiness 协议不一致。
 
+本次从 JSON 元数据迁移到 v2 `Proto.key` 时，GW/Common/OrderSvr 是一个协议发布单元。单实例 GW 更新不可实现严格零中断；要求 GW 零停机时，必须先提供至少两个受负载均衡保护的 GW 实例并滚动更新。日常仅维护 OrderSvr 时不停止 GW。
+
 ## 7. 数据异常和恢复禁区
 
 出现 snapshot mismatch、journal gap、epoch mismatch 或 `RECOVERY_FAILED` 时：
 
-1. 立即停 GW，保留 fail-closed。
+1. 保持 GW 运行，但停止 OrderSvrA/B，确认订单请求 fail-closed；不要影响登录和其他无关服务。
 2. 不删除任何 journal、snapshot、`.archive` 或 ZooKeeper assignment。
 3. 备份以下目录：
 
@@ -199,14 +204,15 @@ GW 启动后继续轮询逻辑路由。后端重新连接存在短暂传播时�
 - 禁止把 epoch 改小或重置为 1。
 - 禁止把 `RECOVERING` 直接手改为 `READY`。
 - 禁止在未确认 commit watermark 时复制单侧 journal 覆盖另一侧。
-- 禁止在 A/B snapshot 不一致时启动 GW。
+- 禁止在 A/B snapshot 不一致时启动 OrderSvr 订单流量；GW 可继续为其他服务提供入口。
 - 禁止用直接删除 MySQL 订单代替 OrderSvr API 撤单；OrderSvr journal 仍可能恢复该活动单。
 
 ## 8. 常见症状定位
 
 | 症状 | 优先检查 | 处理 |
 |---|---|---|
-| 所有订单返回 `PARTITION_NOT_READY` | ZooKeeper 256 assignments、A/B promotion 日志 | 停 GW，修复缺失节点，执行 staged epoch recovery |
+| 所有订单返回 `PARTITION_NOT_READY` | ZooKeeper 256 assignments、A/B promotion 日志 | 保持 GW，停止 A/B 订单流量，修复缺失节点并执行 staged epoch recovery |
+| 所有订单返回 `PARTITION_ROUTING_KEY_REQUIRED` | 调用方是否使用 v2，并设置 `Proto.key`/HTTP 外层 `key` | 修复调用方；禁止恢复 JSON body 提取兜底 |
 | 只有部分租户/币种失败 | 用 `location + market + security` 定位 partition | 检查该 partition 的 epoch、Primary、Replica、snapshot 和日志 |
 | `STALE_PARTITION` 或旧 Primary 拒绝 | GW/Order 当前 assignment epoch 是否一致 | 不重试写旧节点；等待路由刷新或推进新 epoch recovery |
 | `replication request failed` | Replica 容器、19121/19122、ACK timeout | 恢复 Replica，不允许单副本降级 |

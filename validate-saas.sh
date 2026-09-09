@@ -85,6 +85,8 @@ required_ports=(
 )
 if [[ "${ORDER_CLUSTER_ENABLED:-false}" == "true" ]]; then
   required_ports+=("${ORDERSVR_B_GW_PORT}" "${ORDERSVR_A_REPLICATION_PORT}" "${ORDERSVR_B_REPLICATION_PORT}" "${PROJECTIONSVR_GW_PORT:-33042}")
+  grep -Fqx 'ProtoVersion=2' "${DEPLOY_ROOT}/control/ATSConfig.ini" ||
+    die "OrderSvr partition routing requires ProtoVersion=2."
   grep -Fq 'LBConfig.OrderSvr=Partition' "${DEPLOY_ROOT}/control/ATSConfig.ini" ||
     die "OrderSvr partition load balancing is not enabled in ATSConfig.ini."
   grep -Fq 'serverKey=SERVER.OrderSvrA' \

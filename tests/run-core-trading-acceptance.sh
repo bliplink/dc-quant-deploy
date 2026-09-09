@@ -39,15 +39,16 @@ wait_for_port() {
 }
 
 wait_for_gateway_route() {
-  local server_name="$1" start request_file response content='{}'
+  local server_name="$1" start request_file response content='{}' key=''
   start="$(date +%s)"
   request_file="$(mktemp)"
   chmod 0600 "${request_file}"
   if [[ "${server_name}" == "OrderSvr" ]]; then
     content="{\"Location\":\"${CORE_LOCATION}\",\"MarketIndicator\":\"4\",\"SecurityID\":\"BTCUSDT\"}"
+    key=",\"key\":\"${CORE_LOCATION}\\u001f4\\u001fBTCUSDT\""
   fi
-  printf '{"serverName":"%s","method":"__e2e_readiness__","content":%s}\n' \
-    "${server_name}" "${content}" >"${request_file}"
+  printf '{"serverName":"%s","method":"__e2e_readiness__"%s,"content":%s}\n' \
+    "${server_name}" "${key}" "${content}" >"${request_file}"
   while true; do
     response="$(curl -fsS --max-time 10 -H 'Content-Type: application/json' \
       --data-binary "@${request_file}" "http://127.0.0.1:${WEB_LISTEN_PORT}/httpapi/" 2>/dev/null || true)"
@@ -145,8 +146,7 @@ ADL_E2E_OTHER_LOCATION="${CORE_LOCATION}_FOREIGN" \
 ADL_E2E_REFERENCE_PRICE=60000 \
   "${SCRIPT_DIR}/run-adl-e2e-host.sh"
 
-log "Refreshing GW routes after the ADL fixture restarted TradeSvr."
-docker restart dc-saas-gateway >/dev/null
+log "Waiting for the running GW to reconnect after the ADL fixture restarted TradeSvr."
 wait_for_gateway_route OrderSvr
 wait_for_gateway_route TDSvr
 

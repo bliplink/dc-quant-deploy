@@ -7,8 +7,7 @@ restart_order_trade_for_e2e() {
     local recovery_script="${SCRIPT_DIR}/recover-order-cluster-partitions-host.sh"
     [[ -x "${recovery_script}" ]] ||
       die "Missing executable cluster recovery script: ${recovery_script}"
-    log "Stopping GW while clustered OrderSvr partitions are restarted and recovered."
-    docker stop -t 30 dc-saas-gateway >/dev/null
+    log "Keeping GW online while clustered OrderSvr A/B and TradeSvr restart."
     log "Restarting clustered OrderSvr A/B and TradeSvr on the clean E2E baseline."
     docker restart dc-saas-ordersvr dc-saas-ordersvr-b dc-saas-tradesvr >/dev/null
     wait_for_port "${ORDERSVR_GW_PORT}" dc-saas-ordersvr

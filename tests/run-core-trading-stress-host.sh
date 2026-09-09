@@ -117,14 +117,15 @@ wait_for_port() {
 }
 
 wait_for_route() {
-  local server="$1" start response content='{}'
+  local server="$1" start response content='{}' key=''
   start="$(date +%s)"
   if [[ "${server}" == "OrderSvr" ]]; then
     content="{\"Location\":\"${LOAD_LOCATION}\",\"MarketIndicator\":\"4\",\"SecurityID\":\"BTCUSDT\"}"
+    key=",\"key\":\"${LOAD_LOCATION}\\u001f4\\u001fBTCUSDT\""
   fi
   while true; do
     response="$(curl -fsS --max-time 10 -H 'Content-Type: application/json' \
-      --data "{\"serverName\":\"${server}\",\"method\":\"__load_readiness__\",\"content\":${content}}" \
+      --data "{\"serverName\":\"${server}\",\"method\":\"__load_readiness__\"${key},\"content\":${content}}" \
       "http://127.0.0.1:${WEB_LISTEN_PORT}/httpapi/" 2>/dev/null || true)"
     if [[ -n "${response}" ]] && ! grep -Fq 'is not Online' <<<"${response}"; then return 0; fi
     if (( $(date +%s) - start >= 120 )); then die "${server} did not become routable"; fi
@@ -144,7 +145,8 @@ api_order() {
   token="${SESSION_BY_USER[${user}]:-}"
   [[ -n "${token}" ]] || die "No authenticated session for ${user}"
   request="$(mktemp)"
-  printf '{"serverName":"OrderSvr","method":"placeOrder","content":%s}\n' "${content}" >"${request}"
+  printf '{"serverName":"OrderSvr","method":"placeOrder","key":"%s\\u001f4\\u001fBTCUSDT","content":%s}\n' \
+    "${LOAD_LOCATION}" "${content}" >"${request}"
   response="$(curl -fsS --max-time 30 -H 'Content-Type: application/json' -H "sessionId: ${token}" --data-binary "@${request}" \
     "http://127.0.0.1:${WEB_LISTEN_PORT}/httpapi/")" || {
       rm -f "${request}"
@@ -195,7 +197,7 @@ if [[ "${LOAD_RELOAD_BEFORE}" == true ]]; then
   fi
   recover_order_cluster
   wait_for_port "${TRADESVR_GW_PORT}" dc-saas-tradesvr
-  docker restart dc-saas-gateway >/dev/null
+  log "Waiting for the running GW to reconnect to the restarted services."
 else
   log "Using the already verified stateful-service epoch without a redundant pre-load restart."
 fi
@@ -353,7 +355,7 @@ if [[ "${ORDER_CLUSTER_ENABLED:-false}" == "true" ]]; then
 fi
 recover_order_cluster
 wait_for_port "${TRADESVR_GW_PORT}" dc-saas-tradesvr
-docker restart dc-saas-gateway >/dev/null
+log "Waiting for the running GW to reconnect to the recovered services."
 wait_for_route OrderSvr
 wait_for_route TDSvr
 

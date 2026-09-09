@@ -38,7 +38,7 @@ trap restore_primary EXIT
 
 wait_ready_probe() {
   local name="$1" event_id="$2" deadline=$((SECONDS + 90)) response
-  local payload="{\"serverName\":\"OrderSvr\",\"method\":\"__cluster_perf_probe__\",\"content\":{\"ClOrdID\":\"${event_id}\",\"Location\":\"WEB_E2E\",\"MarketIndicator\":\"4\",\"SecurityID\":\"BTCUSDT\"}}"
+  local payload="{\"serverName\":\"OrderSvr\",\"method\":\"__cluster_perf_probe__\",\"key\":\"WEB_E2E\\u001f4\\u001fBTCUSDT\",\"content\":{\"ClOrdID\":\"${event_id}\",\"Location\":\"WEB_E2E\",\"MarketIndicator\":\"4\",\"SecurityID\":\"BTCUSDT\"}}"
   printf '%s\n' "${payload}" | sudo tee "${EVIDENCE_DIR}/${name}.request.json" >/dev/null
   while (( SECONDS < deadline )); do
     response="$(sudo curl --silent --show-error --max-time 15 -H 'Content-Type: application/json' \

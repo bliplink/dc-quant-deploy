@@ -39,6 +39,7 @@ for name in "${required_vars[@]}"; do
 done
 
 ORDER_CLUSTER_ENABLED="${ORDER_CLUSTER_ENABLED:-false}"
+PROTO_VERSION=1
 ORDER_CLUSTER_REPLICATION_CONSISTENCY_MODE="${ORDER_CLUSTER_REPLICATION_CONSISTENCY_MODE:-SYNC_PER_RECORD}"
 ORDER_CLUSTER_REPLICATION_BATCH_MAX_RECORDS="${ORDER_CLUSTER_REPLICATION_BATCH_MAX_RECORDS:-64}"
 ORDER_CLUSTER_REPLICATION_BATCH_MAX_WAIT_MICROS="${ORDER_CLUSTER_REPLICATION_BATCH_MAX_WAIT_MICROS:-1000}"
@@ -47,6 +48,7 @@ ORDER_CLUSTER_REPLICATION_ASYNC_RETRY_MILLIS="${ORDER_CLUSTER_REPLICATION_ASYNC_
 ORDER_CLUSTER_REPLICATION_ASYNC_MAX_PENDING_RECORDS="${ORDER_CLUSTER_REPLICATION_ASYNC_MAX_PENDING_RECORDS:-8192}"
 PROJECTIONSVR_GW_PORT="${PROJECTIONSVR_GW_PORT:-33042}"
 if [[ "${ORDER_CLUSTER_ENABLED}" == "true" ]]; then
+  PROTO_VERSION=2
   for name in ORDERSVR_B_GW_PORT ORDERSVR_A_REPLICATION_PORT ORDERSVR_B_REPLICATION_PORT; do
     [[ -n "${!name:-}" ]] || die "Missing required cluster variable: ${name}"
   done
@@ -123,6 +125,7 @@ REGISTER.Svr1.Name=REGISTER1
 REGISTER.Svr1.Host=127.0.0.1:${ZOOKEEPER_PORT}
 
 NetType=dps
+ProtoVersion=${PROTO_VERSION}
 EOF
 
 append_server() {
@@ -176,10 +179,6 @@ Cluster.OrderSvr.Enabled=true
 Cluster.OrderSvrA.Enabled=true
 Cluster.OrderSvrB.Enabled=true
 Partition.OrderSvr.Count=256
-Partition.OrderSvr.Fields=location,marketIndicator,securityID
-Partition.OrderSvr.Alias.location=Location
-Partition.OrderSvr.Alias.marketIndicator=MarketIndicator
-Partition.OrderSvr.Alias.securityID=SecurityID,securityId
 Partition.OrderSvr.Root=/dc/cluster/ordersvr/partitions
 Partition.OrderSvr.EnforceFence=true
 Partition.OrderSvrA.Count=256
@@ -581,7 +580,7 @@ cat > "${OVERRIDE_ROOT}/GW/config/spring-gw-client.xml" <<'EOF'
     <property name="Subscribes">
       <map>
         <entry key="LoginSvr" value="SYS.ATS.LOGIN|1dc.login.apikey"/>
-        <entry key="MDSvr" value="dc.md.kline.**|dc.md.trade.**|dc.md.orderbook.**|dc.md.depth.**"/>
+        <entry key="MDSvr" value="dc.md.kline.**|dc.md.trade.**|dc.md.market.trade.**|dc.md.orderbook.**|dc.md.depth.**"/>
         <entry key="APSSvr" value="dc.aps|dc.aps.**|dc.bookticker.**|dc.trade.**"/>
       </map>
     </property>

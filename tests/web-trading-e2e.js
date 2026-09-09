@@ -54,7 +54,15 @@ async function gatewayCall(page, serverName, method, content) {
       body: JSON.stringify(request)
     });
     return response.json();
-  }, {serverName, method, content});
+  }, {
+    serverName,
+    method,
+    key: serverName === 'OrderSvr'
+      ? [content.Location || content.location, content.MarketIndicator || content.marketIndicator,
+        content.SecurityID || content.securityID || content.securityid].map(String).join('\u001f')
+      : undefined,
+    content
+  });
 }
 
 async function login(browser, username) {

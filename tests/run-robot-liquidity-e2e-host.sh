@@ -37,6 +37,8 @@ set +a
 
 # shellcheck source=restart-order-trade-e2e.sh
 . "${SCRIPT_DIR}/restart-order-trade-e2e.sh"
+# shellcheck source=order-routing-key.sh
+. "${SCRIPT_DIR}/order-routing-key.sh"
 
 mysql_exec() {
   docker exec -i -e MYSQL_PWD="${MYSQL_PASSWORD}" dc-saas-mysql \
@@ -45,6 +47,7 @@ mysql_exec() {
 
 api_call() {
   local payload="$1" token="${2:-}"
+  payload="$(dc_attach_order_routing_key "${payload}" "${LOCATION}" 4 BTCUSDT)"
   if [[ -n "${token}" ]]; then
     curl -fsS --max-time 30 -H 'Content-Type: application/json' -H "sessionId: ${token}" \
       --data "${payload}" "http://127.0.0.1:${WEB_LISTEN_PORT}/httpapi/"
@@ -145,7 +148,7 @@ if [[ "${ORDER_CLUSTER_ENABLED:-false}" == "true" ]]; then
 fi
 wait_for_port "${TRADESVR_GW_PORT}" dc-saas-tradesvr
 if is_true "${RESTART_SERVICES}"; then
-  docker restart dc-saas-gateway >/dev/null
+  log "Waiting for the running GW to reconnect to the restarted services."
 fi
 wait_for_port "${GW_TCP_PORT}" dc-saas-gateway
 wait_for_route LoginSvr

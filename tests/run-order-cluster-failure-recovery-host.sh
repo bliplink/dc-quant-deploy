@@ -58,7 +58,7 @@ wait_log() {
 probe() {
   local event_id="$1"
   sudo curl --silent --show-error --max-time 15 -H 'Content-Type: application/json' \
-    --data-binary "{\"serverName\":\"OrderSvr\",\"method\":\"__cluster_perf_probe__\",\"content\":{\"ClOrdID\":\"${event_id}\",\"Location\":\"WEB_E2E\",\"MarketIndicator\":\"4\",\"SecurityID\":\"BTCUSDT\"}}" \
+    --data-binary "{\"serverName\":\"OrderSvr\",\"method\":\"__cluster_perf_probe__\",\"key\":\"WEB_E2E\\u001f4\\u001fBTCUSDT\",\"content\":{\"ClOrdID\":\"${event_id}\",\"Location\":\"WEB_E2E\",\"MarketIndicator\":\"4\",\"SecurityID\":\"BTCUSDT\"}}" \
     "${GW_URL}" || true
 }
 

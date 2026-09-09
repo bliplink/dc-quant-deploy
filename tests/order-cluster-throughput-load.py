@@ -34,6 +34,7 @@ def request(args, index, warmup=False):
     payload = {
         "serverName": "OrderSvr",
         "method": "__cluster_perf_probe__",
+        "key": "\x1f".join(("WEB_E2E", "4", symbol)),
         "content": {
             "ClOrdID": "%s-%07d" % (prefix, index), "Terminal": "ClusterPerf",
             "MarketIndicator": "4", "SecurityID": symbol, "Location": "WEB_E2E",

@@ -44,7 +44,12 @@ async function invoke(method, content) {
     response = await fetch(endpoint, {
       method: 'POST',
       headers: { 'content-type': 'application/json', sessionId },
-      body: JSON.stringify({ serverName: 'OrderSvr', method, content }),
+      body: JSON.stringify({
+        serverName: 'OrderSvr',
+        method,
+        key: [content.Location, content.MarketIndicator, content.SecurityID].map(String).join('\u001f'),
+        content
+      }),
       signal: controller.signal
     });
     body = await response.text();

@@ -222,10 +222,6 @@ Cluster.OrderSvrA.Enabled=true
 Cluster.OrderSvrB.Enabled=true
 
 Partition.OrderSvr.Count=256
-Partition.OrderSvr.Fields=location,marketIndicator,securityID
-Partition.OrderSvr.Alias.location=Location
-Partition.OrderSvr.Alias.marketIndicator=MarketIndicator
-Partition.OrderSvr.Alias.securityID=SecurityID,securityId
 Partition.OrderSvr.Root=/dc/cluster/ordersvr/partitions
 Partition.OrderSvr.EnforceFence=true
 
@@ -389,7 +385,8 @@ try {
         @{ Symbol="ETHUSDT"; Port=33236; Node="OrderSvrB" }
     )) {
         $probePayload = @{
-            serverName="OrderSvr"; method="__cluster_route_readiness__"; content=@{
+            serverName="OrderSvr"; method="__cluster_route_readiness__"
+            key=("WEB_E2E" + [char]31 + "4" + [char]31 + $probe.Symbol); content=@{
                 Location="WEB_E2E"; MarketIndicator="4"; SecurityID=$probe.Symbol
             }
         } | ConvertTo-Json -Depth 5 -Compress
@@ -406,7 +403,8 @@ try {
     )
     foreach ($request in $requests) {
         $payload = @{
-            serverName="OrderSvr"; method="placeOrder"; content=@{
+            serverName="OrderSvr"; method="placeOrder"
+            key=("WEB_E2E" + [char]31 + "4" + [char]31 + $request.Symbol); content=@{
                 OCType="OPEN"; OrderQty="0.001"; OrdType="Limit"; ClOrdID=$request.ClOrdId
                 Terminal="ClusterE2E"; CloseBy="liq"; AlgoName="cross"; Side="Buy"; Price="100"
                 UserID="cluster-e2e"; MarketIndicator="4"; TimeInForce="GTC"
