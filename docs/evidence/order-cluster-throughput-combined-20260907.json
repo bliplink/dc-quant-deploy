@@ -1,0 +1,36 @@
+{
+  "result": "PASS",
+  "scope": "gw-routing-order-shadow-journal-synchronous-replication",
+  "businessOrderAcceptance": "NOT_TESTED",
+  "requests": 8000,
+  "failed": 0,
+  "concurrency": 8,
+  "sampleRequests": 1000,
+  "sequences": [
+    "ABBA",
+    "BAAB"
+  ],
+  "singlePrimary": {
+    "samplesTps": [
+      163.83567819578866,
+      248.86479452948592,
+      67.4979503867689,
+      249.29397540478502
+    ],
+    "medianTps": 206.3502363626373,
+    "meanTps": 182.37309962920713
+  },
+  "splitPrimary": {
+    "samplesTps": [
+      151.1642343495092,
+      134.96382516884287,
+      78.19720967988047,
+      49.2784176772937
+    ],
+    "medianTps": 106.58051742436167,
+    "meanTps": 103.40092171888156
+  },
+  "medianTpsChangePercent": -48.34969937371023,
+  "meanTpsChangePercent": -43.30253643266923,
+  "verdict": "DECREASED_ON_SINGLE_HOST"
+}

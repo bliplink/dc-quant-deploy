@@ -39,16 +39,21 @@ wait_for_port() {
 }
 
 wait_for_gateway_route() {
-  local server_name="$1" start request_file response
+  local server_name="$1" start request_file response content='{}' key=''
   start="$(date +%s)"
   request_file="$(mktemp)"
   chmod 0600 "${request_file}"
-  printf '{"serverName":"%s","method":"__e2e_readiness__","content":{}}\n' \
-    "${server_name}" >"${request_file}"
+  if [[ "${server_name}" == "OrderSvr" ]]; then
+    content="{\"Location\":\"${CORE_LOCATION}\",\"MarketIndicator\":\"4\",\"SecurityID\":\"BTCUSDT\"}"
+    key=",\"key\":\"${CORE_LOCATION}\\u001f4\\u001fBTCUSDT\""
+  fi
+  printf '{"serverName":"%s","method":"__e2e_readiness__"%s,"content":%s}\n' \
+    "${server_name}" "${key}" "${content}" >"${request_file}"
   while true; do
     response="$(curl -fsS --max-time 10 -H 'Content-Type: application/json' \
       --data-binary "@${request_file}" "http://127.0.0.1:${WEB_LISTEN_PORT}/httpapi/" 2>/dev/null || true)"
-    if [[ -n "${response}" ]] && ! grep -Fq 'is not Online' <<<"${response}"; then
+    if [[ -n "${response}" ]] &&
+       ! grep -Eq 'is not Online|PARTITION_NOT_READY|STALE_PARTITION' <<<"${response}"; then
       rm -f "${request_file}"
       return 0
     fi
@@ -74,6 +79,9 @@ ${LIQSVR_GW_PORT} liqsvr
 ${MANAGERSVR_GW_PORT} managersvr
 ${ADMINSVR_GW_PORT} adminsvr
 PORTS
+if [[ "${ORDER_CLUSTER_ENABLED:-false}" == "true" ]]; then
+  wait_for_port "${ORDERSVR_B_GW_PORT}" ordersvr-b
+fi
 
 log "Validating the deployed SaaS stack."
 "${DEPLOY_DIR}/validate-saas.sh" --env-file "${ENV_FILE}"
@@ -138,8 +146,7 @@ ADL_E2E_OTHER_LOCATION="${CORE_LOCATION}_FOREIGN" \
 ADL_E2E_REFERENCE_PRICE=60000 \
   "${SCRIPT_DIR}/run-adl-e2e-host.sh"
 
-log "Refreshing GW routes after the ADL fixture restarted TradeSvr."
-docker restart dc-saas-gateway >/dev/null
+log "Waiting for the running GW to reconnect after the ADL fixture restarted TradeSvr."
 wait_for_gateway_route OrderSvr
 wait_for_gateway_route TradeSvr
 
@@ -186,12 +193,24 @@ dc-saas-gateway 256m ${GW_MEMORY_LIMIT:-512m}
 dc-saas-loginsvr 256m ${LOGINSVR_MEMORY_LIMIT:-384m}
 dc-saas-mdsvr 448m ${MDSVR_MEMORY_LIMIT:-640m}
 dc-saas-apssvr 448m ${APSSVR_MEMORY_LIMIT:-640m}
-dc-saas-ordersvr 448m ${ORDERSVR_MEMORY_LIMIT:-640m}
+dc-saas-ordersvr 1024m ${ORDERSVR_MEMORY_LIMIT:-1536m}
 dc-saas-tradesvr 384m ${TRADESVR_MEMORY_LIMIT:-896m}
 dc-saas-liqsvr 256m ${LIQSVR_MEMORY_LIMIT:-384m}
 dc-saas-managersvr 256m ${MANAGERSVR_MEMORY_LIMIT:-384m}
 dc-saas-adminsvr 256m ${ADMINSVR_MEMORY_LIMIT:-384m}
 dc-saas-robotsvr 256m ${ROBOTSVR_MEMORY_LIMIT:-384m}
 MEMORY_EXPECTATIONS
+
+if [[ "${ORDER_CLUSTER_ENABLED:-false}" == "true" ]]; then
+  expected_memory="$(memory_limit_bytes "${ORDERSVR_B_MEMORY_LIMIT:-1536m}")"
+  java_command="$(docker exec dc-saas-ordersvr-b sh -c "ps -ef | grep '[j]ava' | head -n 1")"
+  memory_bytes="$(docker inspect --format '{{.HostConfig.Memory}}' dc-saas-ordersvr-b)"
+  grep -Fq -- '-Xmx1024m' <<<"${java_command}" ||
+    die "Effective JVM heap for dc-saas-ordersvr-b is not -Xmx1024m: ${java_command}"
+  (( memory_bytes == expected_memory )) ||
+    die "Memory limit for dc-saas-ordersvr-b is ${memory_bytes}, expected ${expected_memory}"
+  printf '[core-acceptance] MEMORY %s limit_bytes=%s effective_xmx=%s\n' \
+    dc-saas-ordersvr-b "${memory_bytes}" 1024m
+fi
 
 log "PASS: the complete single-location core trading acceptance flow succeeded."

@@ -53,6 +53,9 @@ set -a
 . "${ENV_FILE}"
 set +a
 
+# shellcheck source=restart-order-trade-e2e.sh
+. "${SCRIPT_DIR}/restart-order-trade-e2e.sh"
+
 mysql_exec() {
   docker exec -i -e MYSQL_PWD="${MYSQL_PASSWORD}" dc-saas-mysql \
     mysql -u"${MYSQL_USERNAME}" -N "$@"
@@ -98,13 +101,18 @@ wait_for_port() {
 }
 
 wait_for_route() {
-  local server="$1" start response
+  local server="$1" start response content='{}' key=''
   start="$(date +%s)"
+  if [[ "${server}" == "OrderSvr" ]]; then
+    content="{\"Location\":\"${LIQ_LOCATION}\",\"MarketIndicator\":\"4\",\"SecurityID\":\"BTCUSDT\"}"
+    key=",\"key\":\"${LIQ_LOCATION}\\u001f4\\u001fBTCUSDT\""
+  fi
   while true; do
     response="$(curl -fsS --max-time 10 -H 'Content-Type: application/json' \
-      --data "{\"serverName\":\"${server}\",\"method\":\"__e2e_readiness__\",\"content\":{}}" \
+      --data "{\"serverName\":\"${server}\",\"method\":\"__e2e_readiness__\"${key},\"content\":${content}}" \
       "http://127.0.0.1:${WEB_LISTEN_PORT}/httpapi/" 2>/dev/null || true)"
-    if [[ -n "${response}" ]] && ! grep -Fq 'is not Online' <<<"${response}"; then return 0; fi
+    if [[ -n "${response}" ]] &&
+       ! grep -Eq 'is not Online|PARTITION_NOT_READY|STALE_PARTITION' <<<"${response}"; then return 0; fi
     if (( $(date +%s) - start >= 120 )); then die "${server} did not become routable"; fi
     sleep 2
   done
@@ -194,18 +202,15 @@ COMMIT;
 SQL
 } | mysql_exec dc
 
-log "Reloading OrderSvr and TradeSvr, then refreshing GW routes."
-docker restart dc-saas-ordersvr dc-saas-tradesvr >/dev/null
-wait_for_port "${ORDERSVR_GW_PORT}" dc-saas-ordersvr
-wait_for_port "${TRADESVR_GW_PORT}" dc-saas-tradesvr
-docker restart dc-saas-gateway >/dev/null
+log "Reloading OrderSvr and TradeSvr while GW remains online."
+restart_order_trade_for_e2e
 wait_for_route OrderSvr
 wait_for_route TradeSvr
 maker_session="$(login_user "${MAKER_USER}")"
 
 maker_request="$(mktemp)"
 cat >"${maker_request}" <<JSON
-{"serverName":"OrderSvr","method":"placeOrder","content":{"OCType":"OPEN","OrderQty":"0.0002","OrdType":"Limit","ClOrdID":"FINAL-LIQ-MAKER-$(date +%s%N)","Terminal":"API","AlgoName":"cross","Side":"Buy","Price":"${maker_price}","UserID":"${MAKER_USER}","MarketIndicator":"4","TimeInForce":"GTC","SecurityID":"BTCUSDT","Location":"${LIQ_LOCATION}"}}
+{"serverName":"OrderSvr","method":"placeOrder","key":"${LIQ_LOCATION}\u001f4\u001fBTCUSDT","content":{"OCType":"OPEN","OrderQty":"0.0002","OrdType":"Limit","ClOrdID":"FINAL-LIQ-MAKER-$(date +%s%N)","Terminal":"API","AlgoName":"cross","Side":"Buy","Price":"${maker_price}","UserID":"${MAKER_USER}","MarketIndicator":"4","TimeInForce":"GTC","SecurityID":"BTCUSDT","Location":"${LIQ_LOCATION}"}}
 JSON
 maker_response="$(curl -fsS --max-time 30 -H 'Content-Type: application/json' -H "sessionId: ${maker_session}" \
   --data-binary "@${maker_request}" "http://127.0.0.1:${WEB_LISTEN_PORT}/httpapi/")" ||

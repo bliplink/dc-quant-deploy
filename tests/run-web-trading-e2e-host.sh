@@ -34,6 +34,9 @@ set -a
 . "${ENV_FILE}"
 set +a
 
+# shellcheck source=restart-order-trade-e2e.sh
+. "${SCRIPT_DIR}/restart-order-trade-e2e.sh"
+
 mysql_exec() {
   docker exec -i -e MYSQL_PWD="${MYSQL_PASSWORD}" dc-saas-mysql \
     mysql -u"${MYSQL_USERNAME}" -N "$@"
@@ -52,16 +55,21 @@ wait_for_port() {
 }
 
 wait_for_gateway_route() {
-  local server_name="$1" start request_file response
+  local server_name="$1" start request_file response content='{}' key=''
   start="$(date +%s)"
   request_file="$(mktemp)"
   chmod 0600 "${request_file}"
-  printf '{"serverName":"%s","method":"__e2e_readiness__","content":{}}\n' \
-    "${server_name}" >"${request_file}"
+  if [[ "${server_name}" == "OrderSvr" ]]; then
+    content="{\"Location\":\"${E2E_LOCATION}\",\"MarketIndicator\":\"4\",\"SecurityID\":\"BTCUSDT\"}"
+    key=",\"key\":\"${E2E_LOCATION}\\u001f4\\u001fBTCUSDT\""
+  fi
+  printf '{"serverName":"%s","method":"__e2e_readiness__"%s,"content":%s}\n' \
+    "${server_name}" "${key}" "${content}" >"${request_file}"
   while true; do
     response="$(curl -fsS --max-time 10 -H 'Content-Type: application/json' \
       --data-binary "@${request_file}" "${E2E_BASE_URL}/httpapi/" 2>/dev/null || true)"
-    if [[ -n "${response}" ]] && ! grep -Fq 'is not Online' <<<"${response}"; then
+    if [[ -n "${response}" ]] &&
+       ! grep -Eq 'is not Online|PARTITION_NOT_READY|STALE_PARTITION' <<<"${response}"; then
       rm -f "${request_file}"
       return 0
     fi
@@ -91,16 +99,17 @@ else
 fi
 
 if is_true "${E2E_RESTART_SERVICES}"; then
-  log "Restarting OrderSvr and TradeSvr on the clean E2E database baseline."
-  docker restart dc-saas-ordersvr dc-saas-tradesvr >/dev/null
+  restart_order_trade_for_e2e
 else
   log "Keeping running trading services; only readiness will be checked."
 fi
 wait_for_port "${ORDERSVR_GW_PORT}" dc-saas-ordersvr
+if [[ "${ORDER_CLUSTER_ENABLED:-false}" == "true" ]]; then
+  wait_for_port "${ORDERSVR_B_GW_PORT}" dc-saas-ordersvr-b
+fi
 wait_for_port "${TRADESVR_GW_PORT}" dc-saas-tradesvr
 if is_true "${E2E_RESTART_SERVICES}"; then
-  log "Restarting GW so it resolves the refreshed OrderSvr and TradeSvr routes."
-  docker restart dc-saas-gateway >/dev/null
+  log "Waiting for the running GW to reconnect to refreshed OrderSvr and TradeSvr routes."
 fi
 wait_for_gateway_route OrderSvr
 wait_for_gateway_route TradeSvr

@@ -24,16 +24,22 @@ set -a
 . "${ENV_FILE}"
 set +a
 
+# shellcheck source=order-routing-key.sh
+. "${SCRIPT_DIR}/order-routing-key.sh"
+
 E2E_BUYER="${E2E_USER}" \
 E2E_SELLER="${E2E_USER}_peer" \
   "${SCRIPT_DIR}/prepare-web-trading-e2e.sh" >/dev/null
 
 api_call() {
   local server="$1" method="$2" content="$3" token="${4:-}"
+  local payload
   local -a headers=(-H 'Content-Type: application/json')
   [[ -z "${token}" ]] || headers+=(-H "sessionId: ${token}")
+  payload="$(dc_attach_order_routing_key "{\"serverName\":\"${server}\",\"method\":\"${method}\",\"content\":${content}}" \
+    "${E2E_LOCATION}" 4 BTCUSDT)"
   curl -fsS --max-time 30 "${headers[@]}" \
-    --data "{\"serverName\":\"${server}\",\"method\":\"${method}\",\"content\":${content}}" \
+    --data "${payload}" \
     "http://127.0.0.1:${WEB_LISTEN_PORT}/httpapi/"
 }
 

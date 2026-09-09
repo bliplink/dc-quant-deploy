@@ -105,6 +105,7 @@ build_java_image() {
 sync_repo common https://github.com/bliplink/com.app.dc.git saas-crypto
 sync_repo connector https://github.com/bliplink/binance-futures-connector.git main
 sync_repo ordersvr https://github.com/bliplink/com.app.dc.ordersvr.git saas-crypto
+sync_repo projectionsvr https://github.com/bliplink/com-app-dc-projectionsvr.git saas-crypto
 sync_repo tradesvr https://github.com/bliplink/com.app.dc.tradesvr.git saas-crypto
 sync_repo liqsvr https://github.com/bliplink/com.app.dc.liqsvr.git saas-crypto
 sync_repo mdsvr https://github.com/bliplink/com.app.dc.mdsvr.git saas-crypto
@@ -123,6 +124,7 @@ run_maven "${SRC_ROOT}/common" clean install -DskipTests
 run_maven "${SRC_ROOT}/connector" clean install -DskipTests
 
 build_java_image ordersvr "${ORDERSVR_IMAGE_REPOSITORY:-dc-saas/ordersvr}:${ORDERSVR_TAG:-saas-crypto}"
+build_java_image projectionsvr "${PROJECTIONSVR_IMAGE_REPOSITORY:-dc-saas/projectionsvr}:${PROJECTIONSVR_TAG:-saas-crypto}"
 build_java_image tradesvr "${TRADESVR_IMAGE_REPOSITORY:-dc-saas/tradesvr}:${TRADESVR_TAG:-saas-crypto}"
 build_java_image liqsvr "${LIQSVR_IMAGE_REPOSITORY:-dc-saas/liqsvr}:${LIQSVR_TAG:-saas-crypto}"
 build_java_image mdsvr "${MDSVR_IMAGE_REPOSITORY:-dc-saas/mdsvr}:${MDSVR_TAG:-saas-crypto}"

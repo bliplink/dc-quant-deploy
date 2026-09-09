@@ -57,6 +57,23 @@ set -a
 . "${ENV_FILE}"
 set +a
 
+wait_for_port() {
+  local port="$1" container="$2" start
+  start="$(date +%s)"
+  until ss -lnt | awk 'NR > 1 {print $4}' | grep -Eq "[:.]${port}$"; do
+    if (( $(date +%s) - start >= 120 )); then
+      docker logs --tail 120 "${container}" >&2 || true
+      die "${container} did not listen on ${port}"
+    fi
+    sleep 2
+  done
+}
+
+# shellcheck source=restart-order-trade-e2e.sh
+. "${SCRIPT_DIR}/restart-order-trade-e2e.sh"
+# shellcheck source=order-routing-key.sh
+. "${SCRIPT_DIR}/order-routing-key.sh"
+
 mysql_exec() {
   docker exec -i -e MYSQL_PWD="${MYSQL_PASSWORD}" dc-saas-mysql \
     mysql -u"${MYSQL_USERNAME}" -N "$@"
@@ -64,6 +81,7 @@ mysql_exec() {
 
 api_call() {
   local payload="$1" token="${2:-}"
+  payload="$(dc_attach_order_routing_key "${payload}" "${LOCATION}" 4 BTCUSDT)"
   if [[ -n "${token}" ]]; then
     curl -fsS --max-time 20 -H 'Content-Type: application/json' -H "sessionId: ${token}" \
       --data "${payload}" "http://127.0.0.1:${WEB_LISTEN_PORT}/httpapi/"
@@ -195,15 +213,19 @@ SQL
 
   if (( initial_load == 1 )); then
     log "Loading dedicated Robot soak accounts into LoginSvr/OrderSvr/TradeSvr caches once."
-    docker restart dc-saas-loginsvr dc-saas-ordersvr dc-saas-tradesvr >/dev/null
-    sleep 8
-    docker restart dc-saas-gateway >/dev/null
+    docker restart dc-saas-loginsvr >/dev/null
+    restart_order_trade_for_e2e
+    wait_for_port "${LOGINSVR_GW_PORT}" dc-saas-loginsvr
+    log "Waiting for the running GW to reconnect to the reloaded services."
     for _ in $(seq 1 60); do
       response="$(api_call '{"serverName":"LoginSvr","method":"__robot_soak_readiness__","content":{}}' 2>/dev/null || true)"
-      if [[ -n "${response}" && "${response}" != *'is not Online'* ]]; then break; fi
+      if [[ -n "${response}" ]] &&
+         ! grep -Eq 'is not Online|PARTITION_NOT_READY|STALE_PARTITION' <<<"${response}"; then break; fi
       sleep 2
     done
-    [[ -n "${response}" && "${response}" != *'is not Online'* ]] || die "LoginSvr did not become routable"
+    [[ -n "${response}" ]] &&
+      ! grep -Eq 'is not Online|PARTITION_NOT_READY|STALE_PARTITION' <<<"${response}" ||
+      die "LoginSvr did not become routable"
     printf '%s\n' "$(date -Is)" >"${CACHE_MARKER}"
     mysql_exec -e "UPDATE dc.dc_tenant_robot SET enabled=1,update_by='robot-soak',update_time=NOW() WHERE location='${LOCATION}' AND robot_id='${ROBOT_ID}';" dc >/dev/null
   fi

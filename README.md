@@ -37,6 +37,42 @@ cd /root/dc-saas-deploy
 sudo ./deploy-saas.sh
 ```
 
+### OrderSvr A/B development cutover
+
+The main SaaS stack can run the logical `OrderSvr` on two partitioned physical
+nodes while continuing to use the existing LoginSvr, TradeSvr, MDSvr, APSSvr,
+LiqSvr, MySQL and ClickHouse services. The switch is deliberately opt-in and
+requires GW, OrderSvr, MDSvr, TradeSvr and LiqSvr images that embed the same
+cluster-capable `com.app.common` JAR.
+
+Build those immutable images with `build-cluster-dev-ordersvr.sh` (or the
+PowerShell equivalent) using `INCLUDE_GATEWAY=true` and
+`INCLUDE_CORE_CONSUMERS=true`. Supply the five resulting public GHCR image
+references and run:
+
+```bash
+sudo -E ./switch-main-order-cluster.sh
+```
+
+When the immutable development images were built directly on the validation
+host and have not yet been published to GHCR, set
+`ORDER_CLUSTER_LOCAL_IMAGES=true`. The switch verifies that all five images
+exist locally and invokes the normal deploy flow with `--skip-pull`. Formal
+release still requires publishing the shared Maven artifacts and public GHCR
+images first.
+
+The switch pauses automatic moving-tag updates, saves the complete standalone
+environment under the runtime deploy-state directory, initializes 256 fenced
+ZooKeeper partitions, waits until all partitions have recovered, and then runs
+the normal SaaS validator. To return to the saved single-node configuration:
+
+```bash
+sudo ./rollback-main-order-cluster.sh
+```
+
+Rollback removes only the second container; journals and snapshots are retained
+for diagnosis.
+
 The first run:
 
 1. installs Docker Engine and Compose when absent;

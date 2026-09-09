@@ -16,3 +16,4 @@ clickhouse/data/
 clickhouse/log/
 __pycache__/
 *.py[cod]
+.cluster-dev/

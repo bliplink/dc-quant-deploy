@@ -27,6 +27,9 @@ set -a
 . "${ENV_FILE}"
 set +a
 
+# shellcheck source=restart-order-trade-e2e.sh
+. "${SCRIPT_DIR}/restart-order-trade-e2e.sh"
+
 order_config="${DEPLOY_ROOT}/control/overrides/OrderSvr/config/application.properties"
 grep -Eq '^enableMarketPrice=true$' "${order_config}" ||
   die "OrderSvr enableMarketPrice=true is required for conditional-order lifecycle testing"
@@ -85,13 +88,18 @@ wait_for_port() {
 }
 
 wait_for_route() {
-  local server="$1" start response
+  local server="$1" start response content='{}' key=''
   start="$(date +%s)"
+  if [[ "${server}" == "OrderSvr" ]]; then
+    content="{\"Location\":\"${RULE_LOCATION}\",\"MarketIndicator\":\"4\",\"SecurityID\":\"BTCUSDT\"}"
+    key=",\"key\":\"${RULE_LOCATION}\\u001f4\\u001fBTCUSDT\""
+  fi
   while true; do
     response="$(curl -fsS --max-time 10 -H 'Content-Type: application/json' \
-      --data "{\"serverName\":\"${server}\",\"method\":\"__rules_readiness__\",\"content\":{}}" \
+      --data "{\"serverName\":\"${server}\",\"method\":\"__rules_readiness__\"${key},\"content\":${content}}" \
       "http://127.0.0.1:${WEB_LISTEN_PORT}/httpapi/" 2>/dev/null || true)"
-    if [[ -n "${response}" ]] && ! grep -Fq 'is not Online' <<<"${response}"; then return 0; fi
+    if [[ -n "${response}" ]] &&
+       ! grep -Eq 'is not Online|PARTITION_NOT_READY|STALE_PARTITION' <<<"${response}"; then return 0; fi
     if (( $(date +%s) - start >= 120 )); then die "${server} did not become routable"; fi
     sleep 2
   done
@@ -103,7 +111,8 @@ api() {
   token="${SESSION_BY_USER[${user}]:-}"
   [[ -n "${token}" ]] || die "No authenticated session for ${user}"
   request="$(mktemp)"
-  printf '{"serverName":"OrderSvr","method":"%s","content":%s}\n' "${method}" "${content}" >"${request}"
+  printf '{"serverName":"OrderSvr","method":"%s","key":"%s\\u001f4\\u001fBTCUSDT","content":%s}\n' \
+    "${method}" "${RULE_LOCATION}" "${content}" >"${request}"
   API_RESPONSE="$(curl -fsS --max-time 30 -H 'Content-Type: application/json' -H "sessionId: ${token}" \
     --data-binary "@${request}" "http://127.0.0.1:${WEB_LISTEN_PORT}/httpapi/")" || {
       rm -f "${request}"
@@ -192,18 +201,11 @@ COMMIT;
 SQL
 } | mysql_exec dc
 
-docker restart dc-saas-ordersvr dc-saas-tradesvr >/dev/null
-wait_for_port "${ORDERSVR_GW_PORT}" dc-saas-ordersvr
-wait_for_port "${TRADESVR_GW_PORT}" dc-saas-tradesvr
-docker restart dc-saas-gateway >/dev/null
+restart_order_trade_for_e2e
 wait_for_route OrderSvr
 wait_for_route TradeSvr
-# MDSvr registers its OrderSvr execution subscriptions during startup. Rebuild
-# those subscriptions after the deterministic GW restart above so this test
-# exercises the same live trade -> tenant market -> conditional-order path used
-# in production, rather than relying on a subscription owned by the old GW
-# process.
-docker restart dc-saas-mdsvr >/dev/null
+# Keep MDSvr online as well. Its Common client must restore OrderSvr execution
+# subscriptions when the A/B connections return.
 wait_for_route MDSvr
 for user in "${MAKER_ONE}" "${MAKER_TWO}" "${TAKER}" "${SELF_USER}"; do
   login_user "${user}"

@@ -117,6 +117,21 @@ ensure_env_defaults() {
   if ! grep -q '^BUILD_ROOT=' "${ENV_FILE}"; then
     printf 'BUILD_ROOT=/data/dc-saas-build\n' >> "${ENV_FILE}"
   fi
+  if ! grep -q '^ORDER_CLUSTER_ENABLED=' "${ENV_FILE}"; then
+    printf 'ORDER_CLUSTER_ENABLED=false\n' >> "${ENV_FILE}"
+  fi
+  if ! grep -q '^ORDERSVR_B_GW_PORT=' "${ENV_FILE}"; then
+    printf 'ORDERSVR_B_GW_PORT=33041\n' >> "${ENV_FILE}"
+  fi
+  if ! grep -q '^ORDERSVR_A_REPLICATION_PORT=' "${ENV_FILE}"; then
+    printf 'ORDERSVR_A_REPLICATION_PORT=19121\n' >> "${ENV_FILE}"
+  fi
+  if ! grep -q '^ORDERSVR_B_REPLICATION_PORT=' "${ENV_FILE}"; then
+    printf 'ORDERSVR_B_REPLICATION_PORT=19122\n' >> "${ENV_FILE}"
+  fi
+  if ! grep -q '^PROJECTIONSVR_GW_PORT=' "${ENV_FILE}"; then
+    printf 'PROJECTIONSVR_GW_PORT=33042\n' >> "${ENV_FILE}"
+  fi
   if ! grep -q '^PLATFORM_ADMIN_USERNAME=' "${ENV_FILE}"; then
     printf 'PLATFORM_ADMIN_USERNAME=platformadmin\n' >> "${ENV_FILE}"
   fi
@@ -181,6 +196,14 @@ load_env() {
   # shellcheck disable=SC1090
   . "${ENV_FILE}"
   set +a
+
+  if [[ "${ORDER_CLUSTER_ENABLED:-false}" == "true" ]]; then
+    export COMPOSE_PROFILES=order-cluster
+    export ORDERSVR_CONFIG_NAME=OrderSvrA
+  else
+    export COMPOSE_PROFILES=""
+    export ORDERSVR_CONFIG_NAME=OrderSvr
+  fi
 }
 
 validate_runtime_root() {
@@ -241,7 +264,11 @@ validate_initial_ports() {
   existing="$(docker ps -a --format '{{.Names}}' | grep '^dc-saas-' || true)"
   [[ -z "${existing}" ]] || return 0
 
-  for port in "${MYSQL_PORT}" "${CLICKHOUSE_HTTP_PORT}" "${CLICKHOUSE_NATIVE_PORT}" "${ZOOKEEPER_PORT}" "${ZOOKEEPER_JMX_PORT}" "${GW_TCP_PORT}" "${GW_WEBSOCKET_PORT}" "${GW_HTTP_PORT}" "${LOGINSVR_HTTP_PORT}" "${LOGINSVR_GW_PORT}" "${MDSVR_GW_PORT}" "${APSSVR_GW_PORT}" "${ORDERSVR_GW_PORT}" "${TRADESVR_GW_PORT}" "${LIQSVR_GW_PORT}" "${MANAGERSVR_GW_PORT}" "${ADMINSVR_GW_PORT}" "${WEB_LISTEN_PORT}"; do
+  local ports=("${MYSQL_PORT}" "${CLICKHOUSE_HTTP_PORT}" "${CLICKHOUSE_NATIVE_PORT}" "${ZOOKEEPER_PORT}" "${ZOOKEEPER_JMX_PORT}" "${GW_TCP_PORT}" "${GW_WEBSOCKET_PORT}" "${GW_HTTP_PORT}" "${LOGINSVR_HTTP_PORT}" "${LOGINSVR_GW_PORT}" "${MDSVR_GW_PORT}" "${APSSVR_GW_PORT}" "${ORDERSVR_GW_PORT}" "${PROJECTIONSVR_GW_PORT:-33042}" "${TRADESVR_GW_PORT}" "${LIQSVR_GW_PORT}" "${MANAGERSVR_GW_PORT}" "${ADMINSVR_GW_PORT}" "${WEB_LISTEN_PORT}")
+  if [[ "${ORDER_CLUSTER_ENABLED:-false}" == "true" ]]; then
+    ports+=("${ORDERSVR_B_GW_PORT}" "${ORDERSVR_A_REPLICATION_PORT}" "${ORDERSVR_B_REPLICATION_PORT}")
+  fi
+  for port in "${ports[@]}"; do
     if port_is_listening "${port}"; then
       die "Port ${port} is already in use. Existing non-SaaS services were not changed."
     fi
@@ -269,6 +296,37 @@ compose_up() {
   # layers at the same time. Faster hosts may override this value.
   COMPOSE_PARALLEL_LIMIT="${COMPOSE_UP_PARALLEL_LIMIT:-1}" \
     docker compose --env-file "${ENV_FILE}" -f "${SCRIPT_DIR}/compose.yaml" up "$@"
+}
+
+verify_order_cluster_images() {
+  [[ "${ORDER_CLUSTER_ENABLED:-false}" == "true" ]] || return 0
+  local expected_hash="" expected_revision="" spec name image hash revision
+  local specs=(
+    "gateway|${GW_IMAGE_REPOSITORY}:${GW_TAG}"
+    "ordersvr|${ORDERSVR_IMAGE_REPOSITORY}:${ORDERSVR_TAG}"
+    "projectionsvr|${PROJECTIONSVR_IMAGE_REPOSITORY}:${PROJECTIONSVR_TAG}"
+    "mdsvr|${MDSVR_IMAGE_REPOSITORY}:${MDSVR_TAG}"
+    "tradesvr|${TRADESVR_IMAGE_REPOSITORY}:${TRADESVR_TAG}"
+    "liqsvr|${LIQSVR_IMAGE_REPOSITORY}:${LIQSVR_TAG}"
+  )
+  for spec in "${specs[@]}"; do
+    name="${spec%%|*}"
+    image="${spec#*|}"
+    [[ "${image##*:}" == cluster-dev-* ]] ||
+      die "${name} must use an immutable cluster-dev image while ORDER_CLUSTER_ENABLED=true: ${image}"
+    hash="$(docker image inspect "${image}" --format '{{index .Config.Labels "dc.common.jar.sha256"}}' 2>/dev/null || true)"
+    revision="$(docker image inspect "${image}" --format '{{index .Config.Labels "dc.common.revision"}}' 2>/dev/null || true)"
+    [[ "${hash}" =~ ^[0-9a-f]{64}$ ]] || die "${name} cluster image has no Common SHA-256 label: ${image}"
+    [[ -n "${revision}" && "${revision}" != "unknown" ]] || die "${name} cluster image has no Common revision label: ${image}"
+    if [[ -z "${expected_hash}" ]]; then
+      expected_hash="${hash}"
+      expected_revision="${revision}"
+    else
+      [[ "${hash}" == "${expected_hash}" ]] || die "${name} embeds a different Common JAR."
+      [[ "${revision}" == "${expected_revision}" ]] || die "${name} embeds a different Common revision."
+    fi
+  done
+  log "Cluster image identity verified: Common ${expected_revision}, SHA-256 ${expected_hash}."
 }
 
 wait_for_health() {
@@ -319,6 +377,54 @@ ensure_zookeeper_service_root() {
   die "Could not initialize /MDTService in ZooKeeper (exit ${status})."
 }
 
+ensure_order_cluster_assignments() {
+  [[ "${ORDER_CLUSTER_ENABLED:-false}" == "true" ]] || return 0
+  local commands output status count partition node replica
+  commands="$(mktemp)"
+  {
+    printf 'create /dc x\n'
+    printf 'create /dc/cluster x\n'
+    printf 'create /dc/cluster/ordersvr x\n'
+    printf 'create /dc/cluster/ordersvr/partitions x\n'
+    for ((partition=0; partition<256; partition++)); do
+      if (( partition % 2 == 0 )); then
+        node=OrderSvrA
+        replica=OrderSvrB
+      else
+        node=OrderSvrB
+        replica=OrderSvrA
+      fi
+      printf 'create /dc/cluster/ordersvr/partitions/P%03d {"partitionId":"P%03d","epoch":1,"primary":"%s","replica":"%s","state":"READY"}\n' \
+        "${partition}" "${partition}" "${node}" "${replica}"
+    done
+    printf 'quit\n'
+  } > "${commands}"
+  set +e
+  output="$(docker exec -i \
+    -e CLIENT_JVMFLAGS=-Djava.security.auth.login.config=/conf/jaas.ini \
+    dc-saas-zookeeper zkCli.sh -server "127.0.0.1:${ZOOKEEPER_PORT}" < "${commands}" 2>&1)"
+  status="$?"
+  set -e
+  rm -f -- "${commands}"
+  if grep -Eq 'KeeperErrorCode = (NoAuth|InvalidACL|ConnectionLoss|SessionExpired)' <<<"${output}"; then
+    printf '%s\n' "${output}" >&2
+    die "Could not initialize OrderSvr partition assignments (exit ${status})."
+  fi
+  # zkCli exits with code 1 when any create command encounters NodeExists.
+  # Re-running deployment against an initialized cluster is expected to hit
+  # that condition, so rely on the authoritative child-count check below.
+  if (( status != 0 )) && ! grep -Fq 'Node already exists:' <<<"${output}"; then
+    printf '%s\n' "${output}" >&2
+    die "Could not initialize OrderSvr partition assignments (exit ${status})."
+  fi
+  output="$({ printf 'ls /dc/cluster/ordersvr/partitions\nquit\n'; } | docker exec -i \
+    -e CLIENT_JVMFLAGS=-Djava.security.auth.login.config=/conf/jaas.ini \
+    dc-saas-zookeeper zkCli.sh -server "127.0.0.1:${ZOOKEEPER_PORT}" 2>&1)"
+  count="$(grep -oE 'P[0-9]{3}' <<<"${output}" | sort -u | wc -l | tr -d ' ')"
+  [[ "${count}" == "256" ]] || die "Expected 256 OrderSvr assignments, found ${count}."
+  log "ZooKeeper OrderSvr assignments are ready: 256 partitions, alternating A/B primaries."
+}
+
 wait_for_port() {
   local port="$1"
   local service_name="$2"
@@ -336,13 +442,72 @@ wait_for_port() {
   log "${service_name}: listening on ${port}"
 }
 
+wait_for_order_cluster_readiness() {
+  [[ "${ORDER_CLUSTER_ENABLED:-false}" == "true" ]] || return 0
+  local start count
+  start="$(date +%s)"
+  while true; do
+    count="$(current_order_cluster_ready_count)"
+    if [[ "${count}" == "256" ]]; then
+      log "OrderSvr A/B readiness complete: 256/256 partitions."
+      return 0
+    fi
+    if (( $(date +%s) - start >= 300 )); then
+      docker logs --tail 100 dc-saas-ordersvr >&2 || true
+      docker logs --tail 100 dc-saas-ordersvr-b >&2 || true
+      die "Timed out waiting for OrderSvr A/B readiness: ${count:-0}/256 partitions."
+    fi
+    sleep 2
+  done
+}
+
+current_order_cluster_ready_count() {
+  local a_started b_started
+  a_started="$(docker inspect --format '{{.State.StartedAt}}' dc-saas-ordersvr 2>/dev/null || true)"
+  b_started="$(docker inspect --format '{{.State.StartedAt}}' dc-saas-ordersvr-b 2>/dev/null || true)"
+  if [[ -z "${a_started}" || -z "${b_started}" ]]; then
+    printf '0\n'
+    return 0
+  fi
+  {
+    docker logs --since "${a_started}" dc-saas-ordersvr 2>&1 || true
+    docker logs --since "${b_started}" dc-saas-ordersvr-b 2>&1 || true
+  } | awk '
+    /ORDER_PARTITION_(BOOTSTRAP|PROMOTION)_READY/ {
+      if (match($0, /partition:P[0-9][0-9][0-9]/)) print substr($0, RSTART + 10, 4)
+    }
+  ' | sort -u | wc -l | tr -d ' '
+}
+
+recover_order_cluster_if_needed() {
+  [[ "${ORDER_CLUSTER_ENABLED:-false}" == "true" ]] || return 0
+  local count attempt recovery_script
+  recovery_script="${SCRIPT_DIR}/tests/recover-order-cluster-partitions-host.sh"
+  [[ -x "${recovery_script}" ]] || die "Missing executable OrderSvr recovery script: ${recovery_script}"
+
+  # A brand-new empty cluster may finish its bootstrap without an epoch change.
+  # Give that path a short window, but do not accept READY lines retained from a
+  # prior process incarnation after Docker restarts a failed JVM.
+  for attempt in $(seq 1 15); do
+    count="$(current_order_cluster_ready_count)"
+    [[ "${count}" == "256" ]] && {
+      log "OrderSvr A/B are already ready in the current container incarnations."
+      return 0
+    }
+    sleep 2
+  done
+
+  log "OrderSvr A/B current-incarnation readiness is ${count:-0}/256; starting staged epoch recovery."
+  ORDER_CLUSTER_ZK_SERVER="127.0.0.1:${ZOOKEEPER_PORT}" "${recovery_script}"
+}
+
 gateway_routes_need_refresh() {
   local service
   # A direct/manual deployment has no changed-service manifest, so choose the
   # safe full-deploy behavior. The auto updater supplies the exact set and can
   # skip a needless GW restart for a Web-only release.
   [[ -n "${SAAS_CHANGED_SERVICES}" ]] || return 0
-  for service in loginsvr mdsvr apssvr ordersvr tradesvr liqsvr managersvr adminsvr robotsvr; do
+  for service in loginsvr mdsvr apssvr ordersvr projectionsvr tradesvr liqsvr managersvr adminsvr robotsvr; do
     [[ " ${SAAS_CHANGED_SERVICES} " == *" ${service} "* ]] && return 0
   done
   return 1
@@ -470,6 +635,7 @@ elif [[ "${IMAGE_SOURCE}" == "registry" ]]; then
 else
   die "IMAGE_SOURCE must be local or registry."
 fi
+verify_order_cluster_images
 
 if docker inspect dc-saas-loginsvr >/dev/null 2>&1; then
   LOGIN_CONTAINER_EXISTED="true"
@@ -480,7 +646,8 @@ compose_up -d mysql clickhouse zookeeper
 wait_for_health dc-saas-mysql 420
 wait_for_health dc-saas-clickhouse 420
 wait_for_health dc-saas-zookeeper 120
-ensure_zookeeper_service_root
+  ensure_zookeeper_service_root
+  ensure_order_cluster_assignments
 apply_mysql_migrations
 provision_platform_admin
 provision_robot_runtime_identity
@@ -503,6 +670,16 @@ wait_for_port "${LOGINSVR_HTTP_PORT}" loginsvr 180
 wait_for_port "${MDSVR_GW_PORT}" mdsvr 120
 wait_for_port "${APSSVR_GW_PORT}" apssvr 120
 wait_for_port "${ORDERSVR_GW_PORT}" ordersvr 120
+if [[ "${ORDER_CLUSTER_ENABLED:-false}" == "true" ]]; then
+  wait_for_port "${ORDERSVR_B_GW_PORT}" ordersvr-b 180
+  wait_for_port "${ORDERSVR_A_REPLICATION_PORT}" ordersvr 180
+  wait_for_port "${ORDERSVR_B_REPLICATION_PORT}" ordersvr-b 180
+fi
+recover_order_cluster_if_needed
+wait_for_order_cluster_readiness
+if [[ "${ORDER_CLUSTER_ENABLED:-false}" == "true" ]]; then
+  wait_for_port "${PROJECTIONSVR_GW_PORT:-33042}" projectionsvr 120
+fi
 wait_for_port "${TRADESVR_GW_PORT}" tradesvr 120
 wait_for_port "${LIQSVR_GW_PORT}" liqsvr 120
 wait_for_port "${MANAGERSVR_GW_PORT}" managersvr 120

@@ -54,7 +54,15 @@ async function gatewayCall(page, serverName, method, content) {
       body: JSON.stringify(request)
     });
     return response.json();
-  }, {serverName, method, content});
+  }, {
+    serverName,
+    method,
+    key: serverName === 'OrderSvr'
+      ? [content.Location || content.location, content.MarketIndicator || content.marketIndicator,
+        content.SecurityID || content.securityID || content.securityid].map(String).join('\u001f')
+      : undefined,
+    content
+  });
 }
 
 async function login(browser, username) {
@@ -162,6 +170,18 @@ async function placeLimit(page, side, price, amount) {
   await amountInput.fill(String(amount));
   return invokeFromPage(page, 'placeOrder', () =>
     form.getByRole('button', { name: side }).click()
+  );
+}
+
+async function placeReduceOnlyLimit(page, side, price, amount) {
+  const form = page.locator('.placeOrderWrap');
+  await form.getByRole('button', { name: 'Limit', exact: true }).click();
+  const reduceOnly = form.getByRole('checkbox', { name: 'Reduce Only', exact: true });
+  if (!(await reduceOnly.isChecked())) await reduceOnly.check();
+  await form.getByRole('textbox', { name: 'Limit Price', exact: true }).fill(String(price));
+  await form.getByRole('textbox', { name: 'Amount', exact: true }).fill(String(amount));
+  return invokeFromPage(page, 'placeOrder', () =>
+    form.getByRole('button', { name: side, exact: true }).click()
   );
 }
 
@@ -343,6 +363,11 @@ async function waitForNoPosition(page) {
     await deposit(sellerSession.page, '100000');
 
     await placeLimit(buyerSession.page, 'Buy / Long', '10000', '0.001');
+    // Keep the isolated tenant's book live while exercising cancellation.
+    // Without a Robot this far ask is the only remaining liquidity after the
+    // bid is cancelled, and correctly prevents the market-health gate from
+    // treating the fresh test tenant as an empty/stale market.
+    await placeLimit(sellerSession.page, 'Sell / Short', '100000', '0.001');
     const restingRows = await openOrders(buyerSession.page);
     await restingRows.first().waitFor({timeout: 15000});
     const restingBid = await restingRows.first().innerText();
@@ -398,11 +423,12 @@ async function waitForNoPosition(page) {
     // Rest an offsetting buy for the short account, then exercise the Web
     // reduce-only Market/IOC close action for the long account. The same match
     // closes both sides and leaves the acceptance location flat.
-    await placeLimit(sellerSession.page, 'Buy / Long', '60000', '0.001');
+    await placeReduceOnlyLimit(sellerSession.page, 'Close Short', '60000', '0.001');
     await (await openOrders(sellerSession.page)).first().waitFor({ timeout: 15000 });
     await closeFirstPosition(buyerSession.page, 'Long');
     await waitForNoPosition(buyerSession.page);
     await waitForNoPosition(sellerSession.page);
+    await cancelFirstOpenOrder(sellerSession.page);
 
     await buyerSession.page.screenshot({
       path: path.join(artifactDir, 'buyer-trading-flow.png'),

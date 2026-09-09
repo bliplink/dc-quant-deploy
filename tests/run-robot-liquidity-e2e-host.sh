@@ -10,9 +10,11 @@ ROBOT_USER="${ROBOT_E2E_ROBOT_USER:-robotmaker}"
 TRADER_USER="${ROBOT_E2E_TRADER_USER:-robottrader}"
 ROBOT_ID="${ROBOT_E2E_ROBOT_ID:-depth10}"
 PASSWORD="${ROBOT_E2E_PASSWORD:-$(openssl rand -hex 16)}"
+RESTART_SERVICES="${ROBOT_E2E_RESTART_SERVICES:-true}"
 
 log() { printf '[robot-e2e] %s\n' "$*"; }
 die() { printf '[robot-e2e] ERROR: %s\n' "$*" >&2; exit 1; }
+is_true() { [[ "$1" == "true" || "$1" == "1" || "$1" == "yes" ]]; }
 safe_identifier() { [[ "$1" =~ ^[A-Za-z0-9_.-]+$ ]]; }
 
 [[ "$(id -u)" -eq 0 ]] || die "Run with sudo so the protected environment can be read"
@@ -33,6 +35,11 @@ set -a
 . "${ENV_FILE}"
 set +a
 
+# shellcheck source=restart-order-trade-e2e.sh
+. "${SCRIPT_DIR}/restart-order-trade-e2e.sh"
+# shellcheck source=order-routing-key.sh
+. "${SCRIPT_DIR}/order-routing-key.sh"
+
 mysql_exec() {
   docker exec -i -e MYSQL_PWD="${MYSQL_PASSWORD}" dc-saas-mysql \
     mysql -u"${MYSQL_USERNAME}" -N "$@"
@@ -40,6 +47,7 @@ mysql_exec() {
 
 api_call() {
   local payload="$1" token="${2:-}"
+  payload="$(dc_attach_order_routing_key "${payload}" "${LOCATION}" 4 BTCUSDT)"
   if [[ -n "${token}" ]]; then
     curl -fsS --max-time 30 -H 'Content-Type: application/json' -H "sessionId: ${token}" \
       --data "${payload}" "http://127.0.0.1:${WEB_LISTEN_PORT}/httpapi/"
@@ -73,11 +81,15 @@ wait_for_port() {
 }
 
 wait_for_route() {
-  local server="$1" start response
+  local server="$1" start response content='{}'
   start="$(date +%s)"
+  if [[ "${server}" == "OrderSvr" ]]; then
+    content="{\"Location\":\"${LOCATION}\",\"MarketIndicator\":\"4\",\"SecurityID\":\"BTCUSDT\"}"
+  fi
   while true; do
-    response="$(api_call "{\"serverName\":\"${server}\",\"method\":\"__robot_e2e_readiness__\",\"content\":{}}" 2>/dev/null || true)"
-    if [[ -n "${response}" ]] && ! grep -Fq 'is not Online' <<<"${response}"; then return 0; fi
+    response="$(api_call "{\"serverName\":\"${server}\",\"method\":\"__robot_e2e_readiness__\",\"content\":${content}}" 2>/dev/null || true)"
+    if [[ -n "${response}" ]] &&
+       ! grep -Eq 'is not Online|PARTITION_NOT_READY|STALE_PARTITION' <<<"${response}"; then return 0; fi
     if (( $(date +%s) - start >= 120 )); then die "${server} did not become routable"; fi
     sleep 2
   done
@@ -114,11 +126,6 @@ INSERT INTO dc_users
 VALUES
   ('${ROBOT_USER}','${ROBOT_USER}','Robot Maker','${password_hash}','1','1',NOW(),NOW(),'1','1','1','robot-e2e','${LOCATION}'),
   ('${TRADER_USER}','${TRADER_USER}','Robot Test Trader','${password_hash}','1','1',NOW(),NOW(),'1','1','1','robot-e2e','${LOCATION}');
-INSERT INTO dc_users_balance
-  (user_id,balance,used_margin,freezed_margin,freezed_commission,update_time,close_by,location)
-VALUES
-  ('${ROBOT_USER}',1000000,0,0,0,NOW(),'robot-e2e','${LOCATION}'),
-  ('${TRADER_USER}',1000000,0,0,0,NOW(),'robot-e2e','${LOCATION}');
 INSERT INTO dc_users_symbol_config
   (user_id,security_id,symbol,leverage,position_type,update_time,close_by,location,market_indicator)
 VALUES
@@ -128,11 +135,21 @@ COMMIT;
 SQL
 } | mysql_exec dc
 
-docker restart dc-saas-loginsvr dc-saas-ordersvr dc-saas-tradesvr >/dev/null
+if is_true "${RESTART_SERVICES}"; then
+  docker restart dc-saas-loginsvr >/dev/null
+  restart_order_trade_for_e2e
+else
+  log "Keeping running services so clustered OrderSvr partition epochs remain valid."
+fi
 wait_for_port "${LOGINSVR_GW_PORT}" dc-saas-loginsvr
 wait_for_port "${ORDERSVR_GW_PORT}" dc-saas-ordersvr
+if [[ "${ORDER_CLUSTER_ENABLED:-false}" == "true" ]]; then
+  wait_for_port "${ORDERSVR_B_GW_PORT}" dc-saas-ordersvr-b
+fi
 wait_for_port "${TRADESVR_GW_PORT}" dc-saas-tradesvr
-docker restart dc-saas-gateway >/dev/null
+if is_true "${RESTART_SERVICES}"; then
+  log "Waiting for the running GW to reconnect to the restarted services."
+fi
 wait_for_port "${GW_TCP_PORT}" dc-saas-gateway
 wait_for_route LoginSvr
 wait_for_route OrderSvr
@@ -140,8 +157,14 @@ wait_for_route OrderSvr
 robot_token="$(login "${ROBOT_USER}")"
 trader_token="$(login "${TRADER_USER}")"
 
+robot_funding_response="$(api_call "{\"serverName\":\"TDSvr\",\"method\":\"cashIn\",\"content\":{\"UserID\":\"${ROBOT_USER}\",\"Amount\":\"1000000\",\"Location\":\"${LOCATION}\"}}" "${robot_token}")"
+expect_ok "fund robot account" "${robot_funding_response}"
+trader_funding_response="$(api_call "{\"serverName\":\"TDSvr\",\"method\":\"cashIn\",\"content\":{\"UserID\":\"${TRADER_USER}\",\"Amount\":\"1000000\",\"Location\":\"${LOCATION}\"}}" "${trader_token}")"
+expect_ok "fund trader account" "${trader_funding_response}"
+log "Funded Robot and trader through the authoritative GW-to-TDSvr path."
+
 robot_open_orders() {
-  api_call "{\"serverName\":\"OrderSvr\",\"method\":\"queryOpenOrder\",\"content\":{\"securityid\":\"BTCUSDT\",\"userid\":\"${ROBOT_USER}\"}}" "${robot_token}"
+  api_call "{\"serverName\":\"OrderSvr\",\"method\":\"queryOpenOrder\",\"content\":{\"securityid\":\"BTCUSDT\",\"userid\":\"${ROBOT_USER}\",\"Location\":\"${LOCATION}\",\"MarketIndicator\":\"4\",\"SecurityID\":\"BTCUSDT\"}}" "${robot_token}"
 }
 
 robot_open_value() {

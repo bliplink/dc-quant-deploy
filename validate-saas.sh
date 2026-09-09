@@ -33,6 +33,11 @@ set -a
 . "${ENV_FILE}"
 set +a
 
+if [[ "${ORDER_CLUSTER_ENABLED:-false}" == "true" ]]; then
+  export COMPOSE_PROFILES=order-cluster
+  export ORDERSVR_CONFIG_NAME=OrderSvrA
+fi
+
 compose() {
   docker compose --env-file "${ENV_FILE}" -f "${SCRIPT_DIR}/compose.yaml" "$@"
 }
@@ -54,6 +59,9 @@ expected_containers=(
   dc-saas-tradesvr dc-saas-liqsvr dc-saas-managersvr dc-saas-adminsvr
   dc-saas-robotsvr dc-saas-trade-web
 )
+if [[ "${ORDER_CLUSTER_ENABLED:-false}" == "true" ]]; then
+  expected_containers+=(dc-saas-ordersvr-b dc-saas-projectionsvr)
+fi
 
 for container in "${expected_containers[@]}"; do
   state="$(docker inspect --format '{{.State.Status}}' "${container}" 2>/dev/null || true)"
@@ -75,6 +83,19 @@ required_ports=(
   "${ORDERSVR_GW_PORT}" "${TRADESVR_GW_PORT}" "${LIQSVR_GW_PORT}"
   "${MANAGERSVR_GW_PORT}" "${ADMINSVR_GW_PORT}" "${WEB_LISTEN_PORT}"
 )
+if [[ "${ORDER_CLUSTER_ENABLED:-false}" == "true" ]]; then
+  required_ports+=("${ORDERSVR_B_GW_PORT}" "${ORDERSVR_A_REPLICATION_PORT}" "${ORDERSVR_B_REPLICATION_PORT}" "${PROJECTIONSVR_GW_PORT:-33042}")
+  grep -Fqx 'ProtoVersion=2' "${DEPLOY_ROOT}/control/ATSConfig.ini" ||
+    die "OrderSvr partition routing requires ProtoVersion=2."
+  grep -Fq 'LBConfig.OrderSvr=Partition' "${DEPLOY_ROOT}/control/ATSConfig.ini" ||
+    die "OrderSvr partition load balancing is not enabled in ATSConfig.ini."
+  grep -Fq 'serverKey=SERVER.OrderSvrA' \
+    "${DEPLOY_ROOT}/control/overrides/OrderSvrA/config/application.properties" ||
+    die "OrderSvrA cluster configuration is missing."
+  grep -Fq 'serverKey=SERVER.OrderSvrB' \
+    "${DEPLOY_ROOT}/control/overrides/OrderSvrB/config/application.properties" ||
+    die "OrderSvrB cluster configuration is missing."
+fi
 
 listening="$(ss -lnt | awk 'NR > 1 {print $4}')"
 for port in "${required_ports[@]}"; do

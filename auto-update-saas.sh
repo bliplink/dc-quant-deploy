@@ -92,6 +92,7 @@ service_image_ref() {
     mdsvr) echo "${MDSVR_IMAGE_REPOSITORY:-ghcr.io/bliplink/mdsvr}:${MDSVR_TAG:-saas-crypto}" ;;
     apssvr) echo "${APSSVR_IMAGE_REPOSITORY:-ghcr.io/bliplink/apssvr}:${APSSVR_TAG:-saas-crypto}" ;;
     ordersvr) echo "${ORDERSVR_IMAGE_REPOSITORY:-ghcr.io/bliplink/ordersvr}:${ORDERSVR_TAG:-saas-crypto}" ;;
+    projectionsvr) echo "${PROJECTIONSVR_IMAGE_REPOSITORY:-ghcr.io/bliplink/com-app-dc-projectionsvr}:${PROJECTIONSVR_TAG:-saas-crypto}" ;;
     tradesvr) echo "${TRADESVR_IMAGE_REPOSITORY:-ghcr.io/bliplink/tradesvr}:${TRADESVR_TAG:-saas-crypto}" ;;
     liqsvr) echo "${LIQSVR_IMAGE_REPOSITORY:-ghcr.io/bliplink/liqsvr}:${LIQSVR_TAG:-saas-crypto}" ;;
     managersvr) echo "${MANAGERSVR_IMAGE_REPOSITORY:-ghcr.io/bliplink/managersvr}:${MANAGERSVR_TAG:-saas-crypto}" ;;
@@ -106,7 +107,7 @@ service_container_name() {
   case "$1" in
     gateway) echo "dc-saas-gateway" ;;
     web) echo "dc-saas-trade-web" ;;
-    loginsvr|mdsvr|apssvr|ordersvr|tradesvr|liqsvr|managersvr|adminsvr|robotsvr)
+    loginsvr|mdsvr|apssvr|ordersvr|projectionsvr|tradesvr|liqsvr|managersvr|adminsvr|robotsvr)
       echo "dc-saas-$1"
       ;;
     *) return 1 ;;
@@ -305,6 +306,10 @@ main() {
   . "${ENV_FILE}"
   set +a
 
+  if [[ "${ORDER_CLUSTER_ENABLED:-false}" == "true" ]]; then
+    APP_SERVICES+=(projectionsvr)
+  fi
+
   [[ "${IMAGE_SOURCE:-registry}" == "registry" ]] ||
     die "Automatic image deployment requires IMAGE_SOURCE=registry."
   : "${DEPLOY_ROOT:?DEPLOY_ROOT is required}"
@@ -316,6 +321,12 @@ main() {
   FAILURE_FILE="${STATE_DIR}/failure.state"
   ROLLBACK_FILE="${STATE_DIR}/rollback.images"
   HISTORY_FILE="${STATE_DIR}/last-successful.meta"
+  PAUSE_FILE="${SAAS_AUTO_UPDATE_PAUSE_FILE:-${DEPLOY_ROOT}/auto-update.paused}"
+
+  if [[ -f "${PAUSE_FILE}" ]]; then
+    log "Automatic deployment is paused by ${PAUSE_FILE}; local development images remain untouched."
+    exit 0
+  fi
 
   QUIET_SECONDS="${SAAS_AUTO_UPDATE_QUIET_SECONDS:-300}"
   PULL_TIMEOUT_SECONDS="${SAAS_AUTO_UPDATE_PULL_TIMEOUT_SECONDS:-600}"
