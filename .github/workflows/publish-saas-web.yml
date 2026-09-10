@@ -17,7 +17,7 @@ env:
   SOURCE_BRANCH: saas-crypto
   # Pin every image to a reviewed source commit that already exists remotely.
   # Immutable private-source revision published as the standalone public image.
-  SOURCE_REV: c3eae3fdc4781cb9f15052ee3084c0a9f58c0d7a
+  SOURCE_REV: e7454ee847dff780894f9cd73b2b29d1cf4d1fa5
   PUBLIC_SOURCE_URL: https://github.com/bliplink/dc-quant-deploy
 
 jobs:

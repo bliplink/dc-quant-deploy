@@ -29,12 +29,7 @@ async function login(browser, username, location) {
 }
 
 async function historyRow(page, tabName) {
-  const tab = page.locator('.orderWrap .ant-tabs-tab').filter({hasText: tabName}).first();
-  await tab.click({force: true});
-  await page.waitForFunction(name => {
-    const active = document.querySelector('.orderWrap .ant-tabs-tab-active');
-    return active && active.textContent.trim() === name;
-  }, tabName);
+  await page.locator('.orderWrap').getByText(tabName, {exact: true}).click({force: true});
   const pane = page.locator('.orderWrap .ant-tabs-tabpane-active');
   const row = pane.locator('.ant-table-tbody tr')
     .filter({hasText: 'BTCUSDT'})
