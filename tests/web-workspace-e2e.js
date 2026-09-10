@@ -231,20 +231,22 @@ function layoutItem(snapshot, breakpoint, key) {
       throw new Error('order book view controls are incomplete');
     }
     await askBookButton.click();
-    if (await page.locator('.bookViewport .order-book-row--bid').count() !== 0 ||
-        await page.locator('.bookViewport .order-book-row--ask').count() === 0) {
+    await page.locator('.bookViewport--ask').waitFor({state: 'visible', timeout: 10000});
+    if (await page.locator('.bookViewport .order-book-row--bid').count() !== 0) {
       throw new Error('ask-only order book view is incorrect');
     }
     await bidBookButton.click();
-    if (await page.locator('.bookViewport .order-book-row--ask').count() !== 0 ||
-        await page.locator('.bookViewport .order-book-row--bid').count() === 0) {
+    await page.locator('.bookViewport--bid').waitFor({state: 'visible', timeout: 10000});
+    if (await page.locator('.bookViewport .order-book-row--ask').count() !== 0) {
       throw new Error('bid-only order book view is incorrect');
     }
     await bothBookButton.click();
+    await page.locator('.bookViewport--both').waitFor({state: 'visible', timeout: 10000});
     const grouping = page.getByLabel('Price grouping');
     const groupingOptions = await grouping.locator('option').evaluateAll(options => options.map(option => option.value));
     if (groupingOptions.length < 2) throw new Error(`price grouping choices are incomplete: ${groupingOptions}`);
     await grouping.selectOption(groupingOptions[1]);
+    await page.locator('.order-book-row--ask').last().waitFor({state: 'visible', timeout: 30000});
     const selectedBookPrice = (await page.locator('.order-book-row--ask').last().locator('.ask-price').innerText()).trim();
     await page.locator('.order-book-row--ask').last().click();
     const selectedLimitPrice = await page.getByLabel('Limit Price').inputValue();
