@@ -108,7 +108,7 @@ async function login(page) {
 
 async function layoutSnapshot(page) {
   return page.evaluate(() => {
-    const key = Object.keys(localStorage).find(item => item.startsWith('dc-trade-layout-v1:'));
+    const key = Object.keys(localStorage).find(item => item.startsWith('dc-trade-layout-v2:'));
     return {key, value: key ? localStorage.getItem(key) : null};
   });
 }
