@@ -135,9 +135,17 @@ wait_for_route() {
 
 recover_order_cluster() {
   [[ "${ORDER_CLUSTER_ENABLED:-false}" == "true" ]] || return 0
+  local restart_after_fence="${1:-false}"
   local recovery_script="${SCRIPT_DIR}/recover-order-cluster-partitions-host.sh"
   [[ -x "${recovery_script}" ]] || die "Missing executable cluster recovery script: ${recovery_script}"
-  ORDER_CLUSTER_ZK_SERVER="127.0.0.1:${ZOOKEEPER_PORT}" "${recovery_script}"
+  ORDER_CLUSTER_ZK_SERVER="127.0.0.1:${ZOOKEEPER_PORT}" \
+    ORDER_CLUSTER_RESTART_AFTER_FENCE="${restart_after_fence}" \
+    ORDER_CLUSTER_A_GW_PORT="${ORDERSVR_GW_PORT}" \
+    ORDER_CLUSTER_B_GW_PORT="${ORDERSVR_B_GW_PORT}" \
+    ORDER_CLUSTER_A_REPLICATION_PORT="${ORDERSVR_A_REPLICATION_PORT}" \
+    ORDER_CLUSTER_B_REPLICATION_PORT="${ORDERSVR_B_REPLICATION_PORT}" \
+    ORDER_CLUSTER_TRADE_GW_PORT="${TRADESVR_GW_PORT}" \
+    "${recovery_script}"
 }
 
 api_order() {
@@ -190,13 +198,13 @@ SQL
 
 if [[ "${LOAD_RELOAD_BEFORE}" == true ]]; then
   log "Reloading the stateful services before the load run."
-  docker restart "${order_containers[@]}" dc-saas-tradesvr >/dev/null
-  wait_for_port "${ORDERSVR_GW_PORT}" dc-saas-ordersvr
   if [[ "${ORDER_CLUSTER_ENABLED:-false}" == "true" ]]; then
-    wait_for_port "${ORDERSVR_B_GW_PORT}" dc-saas-ordersvr-b
+    recover_order_cluster true
+  else
+    docker restart "${order_containers[@]}" dc-saas-tradesvr >/dev/null
+    wait_for_port "${ORDERSVR_GW_PORT}" dc-saas-ordersvr
+    wait_for_port "${TRADESVR_GW_PORT}" dc-saas-tradesvr
   fi
-  recover_order_cluster
-  wait_for_port "${TRADESVR_GW_PORT}" dc-saas-tradesvr
   log "Waiting for the running GW to reconnect to the restarted services."
 else
   log "Using the already verified stateful-service epoch without a redundant pre-load restart."
@@ -348,13 +356,13 @@ SQL
 done
 
 log "Restarting stateful services to verify persisted recovery."
-docker restart "${order_containers[@]}" dc-saas-tradesvr >/dev/null
-wait_for_port "${ORDERSVR_GW_PORT}" dc-saas-ordersvr
 if [[ "${ORDER_CLUSTER_ENABLED:-false}" == "true" ]]; then
-  wait_for_port "${ORDERSVR_B_GW_PORT}" dc-saas-ordersvr-b
+  recover_order_cluster true
+else
+  docker restart "${order_containers[@]}" dc-saas-tradesvr >/dev/null
+  wait_for_port "${ORDERSVR_GW_PORT}" dc-saas-ordersvr
+  wait_for_port "${TRADESVR_GW_PORT}" dc-saas-tradesvr
 fi
-recover_order_cluster
-wait_for_port "${TRADESVR_GW_PORT}" dc-saas-tradesvr
 log "Waiting for the running GW to reconnect to the recovered services."
 wait_for_route OrderSvr
 wait_for_route TradeSvr

@@ -13,6 +13,8 @@ for script in \
   "${SCRIPT_DIR}/install-auto-update-cron.sh" \
   "${SCRIPT_DIR}/deploy-saas.sh" \
   "${SCRIPT_DIR}/tests/recover-order-cluster-partitions-host.sh" \
+  "${SCRIPT_DIR}/tests/restart-order-trade-e2e.sh" \
+  "${SCRIPT_DIR}/tests/run-core-trading-stress-host.sh" \
   "${SCRIPT_DIR}/uninstall-saas.sh"; do
   bash -n "${script}"
 done
@@ -41,5 +43,10 @@ grep -q 'SAAS_AUTO_UPDATE_DEPLOY_REPO=true' "${SCRIPT_DIR}/.env.example" || fail
 grep -q 'AUTO_UPDATE.zh-CN.md' "${SCRIPT_DIR}/README.md" || fail "operator documentation is not linked"
 grep -q '^recover_order_cluster_if_needed$' "${SCRIPT_DIR}/deploy-saas.sh" || fail "staged OrderSvr recovery is not invoked"
 grep -q 'docker logs --since "${a_started}"' "${SCRIPT_DIR}/deploy-saas.sh" || fail "OrderSvr readiness is not scoped to the current process incarnation"
+grep -q 'ORDER_CLUSTER_RESTART_AFTER_FENCE=true' "${SCRIPT_DIR}/tests/restart-order-trade-e2e.sh" ||
+  fail "E2E restart does not fence the new epoch before restarting OrderSvr"
+grep -q 'Fence confirmed; restarting OrderSvr A/B and TradeSvr' \
+  "${SCRIPT_DIR}/tests/recover-order-cluster-partitions-host.sh" ||
+  fail "cluster recovery does not own the fenced restart boundary"
 
 printf 'PASS: SaaS auto-update static checks\n'

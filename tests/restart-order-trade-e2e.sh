@@ -16,14 +16,15 @@ restart_order_trade_for_e2e() {
       local recovery_script="${SCRIPT_DIR}/recover-order-cluster-partitions-host.sh"
       [[ -x "${recovery_script}" ]] ||
         die "Missing executable cluster recovery script: ${recovery_script}"
-      log "Keeping GW online while clustered OrderSvr A/B and TradeSvr restart."
-      log "Restarting clustered OrderSvr A/B and TradeSvr on the clean E2E baseline."
-      docker restart dc-saas-ordersvr dc-saas-ordersvr-b dc-saas-tradesvr >/dev/null
-      wait_for_port "${ORDERSVR_GW_PORT}" dc-saas-ordersvr
-      wait_for_port "${ORDERSVR_B_GW_PORT}" dc-saas-ordersvr-b
-      wait_for_port "${ORDERSVR_A_REPLICATION_PORT}" dc-saas-ordersvr
-      wait_for_port "${ORDERSVR_B_REPLICATION_PORT}" dc-saas-ordersvr-b
-      ORDER_CLUSTER_ZK_SERVER="127.0.0.1:${ZOOKEEPER_PORT}" "${recovery_script}"
+      log "Keeping GW online while the recovery script fences, restarts and restores clustered OrderSvr A/B."
+      ORDER_CLUSTER_ZK_SERVER="127.0.0.1:${ZOOKEEPER_PORT}" \
+        ORDER_CLUSTER_RESTART_AFTER_FENCE=true \
+        ORDER_CLUSTER_A_GW_PORT="${ORDERSVR_GW_PORT}" \
+        ORDER_CLUSTER_B_GW_PORT="${ORDERSVR_B_GW_PORT}" \
+        ORDER_CLUSTER_A_REPLICATION_PORT="${ORDERSVR_A_REPLICATION_PORT}" \
+        ORDER_CLUSTER_B_REPLICATION_PORT="${ORDERSVR_B_REPLICATION_PORT}" \
+        ORDER_CLUSTER_TRADE_GW_PORT="${TRADESVR_GW_PORT}" \
+        "${recovery_script}"
     else
       log "Restarting OrderSvr and TradeSvr on the clean E2E baseline."
       docker restart dc-saas-ordersvr dc-saas-tradesvr >/dev/null

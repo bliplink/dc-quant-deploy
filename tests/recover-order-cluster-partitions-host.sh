@@ -9,6 +9,13 @@ ORDER_B_CONTAINER="${ORDER_CLUSTER_B_CONTAINER:-dc-saas-ordersvr-b}"
 EXPECTED_PARTITIONS="${ORDER_CLUSTER_PARTITION_COUNT:-256}"
 ASSIGNMENT_SETTLE_SECONDS="${ORDER_CLUSTER_ASSIGNMENT_SETTLE_SECONDS:-5}"
 PARTITION_READY_TIMEOUT_SECONDS="${ORDER_CLUSTER_PARTITION_READY_TIMEOUT_SECONDS:-180}"
+RESTART_AFTER_FENCE="${ORDER_CLUSTER_RESTART_AFTER_FENCE:-false}"
+TRADE_CONTAINER="${ORDER_CLUSTER_TRADE_CONTAINER:-dc-saas-tradesvr}"
+ORDER_A_GW_PORT="${ORDER_CLUSTER_A_GW_PORT:-33036}"
+ORDER_B_GW_PORT="${ORDER_CLUSTER_B_GW_PORT:-33041}"
+ORDER_A_REPLICATION_PORT="${ORDER_CLUSTER_A_REPLICATION_PORT:-19121}"
+ORDER_B_REPLICATION_PORT="${ORDER_CLUSTER_B_REPLICATION_PORT:-19122}"
+TRADE_GW_PORT="${ORDER_CLUSTER_TRADE_GW_PORT:-33037}"
 
 log() { printf '[order-cluster-recovery] %s\n' "$*"; }
 die() { printf '[order-cluster-recovery] ERROR: %s\n' "$*" >&2; exit 1; }
@@ -16,9 +23,14 @@ die() { printf '[order-cluster-recovery] ERROR: %s\n' "$*" >&2; exit 1; }
 [[ "$(id -u)" -eq 0 ]] || die 'Run with sudo so Docker and protected runtime files are accessible'
 command -v docker >/dev/null || die 'docker is required'
 command -v python3 >/dev/null || die 'python3 is required'
+[[ "${RESTART_AFTER_FENCE}" == true || "${RESTART_AFTER_FENCE}" == false ]] ||
+  die 'ORDER_CLUSTER_RESTART_AFTER_FENCE must be true or false'
 for container in "${ZK_CONTAINER}" "${ORDER_A_CONTAINER}" "${ORDER_B_CONTAINER}"; do
   docker inspect "${container}" >/dev/null 2>&1 || die "Missing container ${container}"
 done
+if [[ "${RESTART_AFTER_FENCE}" == true ]]; then
+  docker inspect "${TRADE_CONTAINER}" >/dev/null 2>&1 || die "Missing container ${TRADE_CONTAINER}"
+fi
 
 work_dir="$(mktemp -d)"
 zk_input="${work_dir}/snapshot.commands"
@@ -91,6 +103,37 @@ until grep -Fq "\"partitionId\":\"${last_partition}\",\"epoch\":${target_epoch}"
   (( SECONDS < fence_deadline )) || die 'ZooKeeper did not confirm the fenced assignment set'
   sleep 1
 done
+
+wait_for_tcp() {
+  local port="$1" label="$2" deadline=$((SECONDS + 180))
+  until python3 - "${port}" <<'PY'
+import socket
+import sys
+
+sock = socket.socket()
+sock.settimeout(1)
+try:
+    sock.connect(("127.0.0.1", int(sys.argv[1])))
+except OSError:
+    raise SystemExit(1)
+finally:
+    sock.close()
+PY
+  do
+    (( SECONDS < deadline )) || die "${label} did not listen on port ${port} after the fenced restart"
+    sleep 2
+  done
+}
+
+if [[ "${RESTART_AFTER_FENCE}" == true ]]; then
+  log "Fence confirmed; restarting OrderSvr A/B and TradeSvr inside epoch ${target_epoch}."
+  docker restart "${ORDER_A_CONTAINER}" "${ORDER_B_CONTAINER}" "${TRADE_CONTAINER}" >/dev/null
+  wait_for_tcp "${ORDER_A_GW_PORT}" "${ORDER_A_CONTAINER} gateway"
+  wait_for_tcp "${ORDER_B_GW_PORT}" "${ORDER_B_CONTAINER} gateway"
+  wait_for_tcp "${ORDER_A_REPLICATION_PORT}" "${ORDER_A_CONTAINER} replication"
+  wait_for_tcp "${ORDER_B_REPLICATION_PORT}" "${ORDER_B_CONTAINER} replication"
+  wait_for_tcp "${TRADE_GW_PORT}" "${TRADE_CONTAINER} gateway"
+fi
 sleep "${ASSIGNMENT_SETTLE_SECONDS}"
 
 container_for_node() {
