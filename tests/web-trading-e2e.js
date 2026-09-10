@@ -1,5 +1,6 @@
 const fs = require('fs');
 const path = require('path');
+const zlib = require('zlib');
 const { chromium } = require('playwright');
 
 const baseUrl = process.env.E2E_BASE_URL || 'http://127.0.0.1:18088';
@@ -28,7 +29,11 @@ function decodeWebSocketFrame(payload) {
     const packetLength = bytes.readInt32BE(0);
     const sessionLength = bytes.readInt32BE(16);
     if (packetLength > bytes.length || sessionLength < 0 || 20 + sessionLength > packetLength) return null;
-    const bodyText = bytes.subarray(20 + sessionLength, packetLength).toString('utf8');
+    let bodyBytes = bytes.subarray(20 + sessionLength, packetLength);
+    if (bodyBytes.length >= 2 && bodyBytes[0] === 0x1f && bodyBytes[1] === 0x8b) {
+      bodyBytes = zlib.gunzipSync(bodyBytes);
+    }
+    const bodyText = bodyBytes.toString('utf8');
     return {
       format: bytes.readInt16BE(10),
       seq: bytes.readInt32BE(12),
