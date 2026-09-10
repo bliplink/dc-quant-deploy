@@ -21,25 +21,67 @@ if (!password) {
 
 fs.mkdirSync(artifactDir, { recursive: true });
 
-function requestMethod(response) {
+function decodeWebSocketFrame(payload) {
   try {
-    const body = response.request().postDataJSON();
-    return body && (body.method || (body.content && body.content.method));
+    const bytes = Buffer.isBuffer(payload) ? payload : Buffer.from(payload);
+    if (bytes.length < 20) return null;
+    const packetLength = bytes.readInt32BE(0);
+    const sessionLength = bytes.readInt32BE(16);
+    if (packetLength > bytes.length || sessionLength < 0 || 20 + sessionLength > packetLength) return null;
+    const bodyText = bytes.subarray(20 + sessionLength, packetLength).toString('utf8');
+    return {
+      format: bytes.readInt16BE(10),
+      seq: bytes.readInt32BE(12),
+      body: bodyText ? JSON.parse(bodyText) : null
+    };
   } catch (error) {
-    return '';
+    return null;
   }
 }
 
+const websocketTrackers = new WeakMap();
+
+function trackWebSocket(page) {
+  const tracker = {frames: []};
+  websocketTrackers.set(page, tracker);
+  page.on('websocket', socket => {
+    socket.on('framesent', event => {
+      const frame = decodeWebSocketFrame(event.payload);
+      if (frame) tracker.frames.push({...frame, direction: 'sent'});
+    });
+    socket.on('framereceived', event => {
+      const frame = decodeWebSocketFrame(event.payload);
+      if (frame) tracker.frames.push({...frame, direction: 'received'});
+    });
+  });
+  return tracker;
+}
+
 async function invokeFromPage(page, method, action) {
-  const [response] = await Promise.all([
-    page.waitForResponse(
-      candidate => candidate.url().includes('/httpapi/') && requestMethod(candidate) === method,
-      { timeout: 60000 }
-    ),
-    action()
-  ]);
-  const body = await response.json();
-  if (Number(body.code) !== 0) {
+  const tracker = websocketTrackers.get(page);
+  if (!tracker) throw new Error('WebSocket tracker is not initialized');
+  const startIndex = tracker.frames.length;
+  await action();
+  const deadline = Date.now() + 60000;
+  let request;
+  while (!request && Date.now() < deadline) {
+    request = tracker.frames.slice(startIndex).find(frame =>
+      frame.direction === 'sent' && frame.body && frame.body.method === method
+    );
+    if (!request) await page.waitForTimeout(50);
+  }
+  if (!request) throw new Error(`WebSocket request ${method} was not sent`);
+  let response;
+  while (!response && Date.now() < deadline) {
+    response = tracker.frames.slice(startIndex).find(frame =>
+      frame.direction === 'received' && frame.seq === request.seq
+    );
+    if (!response) await page.waitForTimeout(50);
+  }
+  if (!response) throw new Error(`WebSocket reply ${method} timed out`);
+  const body = response.body;
+  const code = body && (body.code !== undefined ? body.code : body.Code);
+  if (Number(code) !== 0) {
     throw new Error(`${method} failed: ${JSON.stringify(body)}`);
   }
   return body;
@@ -68,6 +110,7 @@ async function gatewayCall(page, serverName, method, content) {
 async function login(browser, username) {
   const context = await browser.newContext({ viewport: { width: 1920, height: 1080 } });
   const page = await context.newPage();
+  trackWebSocket(page);
   const pageErrors = [];
   const publicMarketPollingCalls = [];
   page.on('pageerror', error => pageErrors.push(error.message));
