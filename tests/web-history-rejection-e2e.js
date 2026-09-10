@@ -1,5 +1,6 @@
 const fs = require('fs');
 const path = require('path');
+const zlib = require('zlib');
 const {chromium} = require('playwright');
 
 const baseUrl = process.env.E2E_BASE_URL || 'http://127.0.0.1:18088';
@@ -13,9 +14,36 @@ const artifactDir = process.env.E2E_ARTIFACT_DIR || '/artifacts';
 if (!password) throw new Error('E2E_PASSWORD is required');
 fs.mkdirSync(artifactDir, {recursive: true});
 
+function decodeFrame(payload) {
+  try {
+    const bytes = Buffer.isBuffer(payload) ? payload : Buffer.from(payload);
+    if (bytes.length < 22 || bytes.readInt16BE(4) !== 22) return null;
+    const packetLength = bytes.readInt32BE(0);
+    const sessionLength = bytes.readInt16BE(14);
+    const serverLength = bytes.readInt16BE(16);
+    const methodLength = bytes.readInt16BE(18);
+    const keyLength = bytes.readInt16BE(20);
+    let offset = 22 + sessionLength;
+    const serverName = bytes.subarray(offset, offset + serverLength).toString('utf8');
+    offset += serverLength;
+    const method = bytes.subarray(offset, offset + methodLength).toString('utf8');
+    offset += methodLength + keyLength;
+    let body = bytes.subarray(offset, packetLength);
+    if (body[0] === 0x1f && body[1] === 0x8b) body = zlib.gunzipSync(body);
+    return {serverName, method, body: body.toString('utf8')};
+  } catch (_) {
+    return null;
+  }
+}
+
 async function login(browser, username, location) {
   const context = await browser.newContext({viewport: {width: 1920, height: 1080}});
   const page = await context.newPage();
+  const receivedFrames = [];
+  page.on('websocket', socket => socket.on('framereceived', event => {
+    const frame = decodeFrame(event.payload);
+    if (frame) receivedFrames.push(frame);
+  }));
   await page.goto(`${baseUrl}/#/login?location=${encodeURIComponent(location)}`, {
     waitUntil: 'domcontentloaded'
   });
@@ -25,7 +53,7 @@ async function login(browser, username, location) {
   await page.locator('.loginWrap .ant-btn-primary').click();
   await page.waitForFunction(() => Boolean(sessionStorage.getItem('loginData')));
   await page.locator('.tradeWrap').waitFor({timeout: 60000});
-  return {context, page};
+  return {context, page, receivedFrames};
 }
 
 async function historyRow(page, tabName) {
@@ -86,11 +114,18 @@ async function verifyRejectedOrderNotification(browser) {
     await form.getByRole('combobox', {name: 'Time in Force', exact: true}).selectOption('PO');
     await form.getByRole('button', {name: 'Buy / Long', exact: true}).click();
 
-    const notice = session.page.locator('.ant-notification-notice-error')
+    const notice = session.page.locator('.ant-notification-notice')
       .filter({hasText: 'Order rejected'})
       .filter({hasText: 'BTCUSDT'})
       .first();
-    await notice.waitFor({timeout: 30000});
+    try {
+      await notice.waitFor({timeout: 30000});
+    } catch (error) {
+      const orderFrames = session.receivedFrames.filter(frame =>
+        frame.method.includes('dc.order.status') || frame.body.includes('OrdRejReason')
+      ).slice(-10);
+      throw new Error(`rejection notification missing: ${JSON.stringify(orderFrames)}`);
+    }
     const noticeText = await notice.innerText();
     if (!noticeText.includes('Post Only order would execute immediately') || !noticeText.includes('ID ')) {
       throw new Error(`rejection notification is incomplete: ${noticeText}`);
