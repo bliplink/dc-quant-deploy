@@ -39,6 +39,7 @@ for name in "${required_vars[@]}"; do
 done
 
 ORDER_CLUSTER_ENABLED="${ORDER_CLUSTER_ENABLED:-false}"
+MD_CLUSTER_ENABLED="${MD_CLUSTER_ENABLED:-false}"
 PROTO_VERSION=1
 ORDER_CLUSTER_REPLICATION_CONSISTENCY_MODE="${ORDER_CLUSTER_REPLICATION_CONSISTENCY_MODE:-SYNC_PER_RECORD}"
 ORDER_CLUSTER_REPLICATION_BATCH_MAX_RECORDS="${ORDER_CLUSTER_REPLICATION_BATCH_MAX_RECORDS:-64}"
@@ -47,8 +48,10 @@ ORDER_CLUSTER_REPLICATION_BATCH_THREADS="${ORDER_CLUSTER_REPLICATION_BATCH_THREA
 ORDER_CLUSTER_REPLICATION_ASYNC_RETRY_MILLIS="${ORDER_CLUSTER_REPLICATION_ASYNC_RETRY_MILLIS:-100}"
 ORDER_CLUSTER_REPLICATION_ASYNC_MAX_PENDING_RECORDS="${ORDER_CLUSTER_REPLICATION_ASYNC_MAX_PENDING_RECORDS:-8192}"
 PROJECTIONSVR_GW_PORT="${PROJECTIONSVR_GW_PORT:-33042}"
-if [[ "${ORDER_CLUSTER_ENABLED}" == "true" ]]; then
+if [[ "${ORDER_CLUSTER_ENABLED}" == "true" || "${MD_CLUSTER_ENABLED}" == "true" ]]; then
   PROTO_VERSION=2
+fi
+if [[ "${ORDER_CLUSTER_ENABLED}" == "true" ]]; then
   for name in ORDERSVR_B_GW_PORT ORDERSVR_A_REPLICATION_PORT ORDERSVR_B_REPLICATION_PORT; do
     [[ -n "${!name:-}" ]] || die "Missing required cluster variable: ${name}"
   done
@@ -67,12 +70,15 @@ if [[ "${ORDER_CLUSTER_ENABLED}" == "true" ]]; then
   [[ "${ORDER_CLUSTER_REPLICATION_ASYNC_MAX_PENDING_RECORDS}" =~ ^[1-9][0-9]*$ ]] ||
     die "ORDER_CLUSTER_REPLICATION_ASYNC_MAX_PENDING_RECORDS must be a positive integer"
 fi
+if [[ "${MD_CLUSTER_ENABLED}" == "true" ]]; then
+  [[ -n "${MDSVR_B_GW_PORT:-}" ]] || die "Missing required cluster variable: MDSVR_B_GW_PORT"
+fi
 
 CONTROL_ROOT="${DEPLOY_ROOT}/control"
 OVERRIDE_ROOT="${CONTROL_ROOT}/overrides"
 umask 077
 
-install -d -m 0750 "${CONTROL_ROOT}" "${OVERRIDE_ROOT}/GW/config" "${OVERRIDE_ROOT}/LoginSvr/config" "${OVERRIDE_ROOT}/MDSvr/config" "${OVERRIDE_ROOT}/APSSvr/config" "${OVERRIDE_ROOT}/OrderSvr/config" "${OVERRIDE_ROOT}/OrderSvrA/config" "${OVERRIDE_ROOT}/OrderSvrB/config" "${OVERRIDE_ROOT}/ProjectionSvr/config" "${OVERRIDE_ROOT}/TradeSvr/config" "${OVERRIDE_ROOT}/LiqSvr/config" "${OVERRIDE_ROOT}/ManagerSvr/config" "${OVERRIDE_ROOT}/AdminSvr/config"
+install -d -m 0750 "${CONTROL_ROOT}" "${OVERRIDE_ROOT}/GW/config" "${OVERRIDE_ROOT}/LoginSvr/config" "${OVERRIDE_ROOT}/MDSvr/config" "${OVERRIDE_ROOT}/MDSvrA/config" "${OVERRIDE_ROOT}/MDSvrB/config" "${OVERRIDE_ROOT}/APSSvr/config" "${OVERRIDE_ROOT}/OrderSvr/config" "${OVERRIDE_ROOT}/OrderSvrA/config" "${OVERRIDE_ROOT}/OrderSvrB/config" "${OVERRIDE_ROOT}/ProjectionSvr/config" "${OVERRIDE_ROOT}/TradeSvr/config" "${OVERRIDE_ROOT}/LiqSvr/config" "${OVERRIDE_ROOT}/ManagerSvr/config" "${OVERRIDE_ROOT}/AdminSvr/config"
 
 cat > "${CONTROL_ROOT}/DBPoolConfig.ini" <<EOF
 [DBPOOL]
@@ -163,18 +169,39 @@ else
 fi
 append_server APSSvr APSSvr "${APSSVR_GW_PORT}" APSSvr
 append_server TradeSvr TradeSvr "${TRADESVR_GW_PORT}" TDSvr
-append_server MDSvr MDSvr "${MDSVR_GW_PORT}" MDSvr
+if [[ "${MD_CLUSTER_ENABLED}" == "true" ]]; then
+  cat >> "${CONTROL_ROOT}/ATSConfig.ini" <<EOF
+
+SERVER.MDSvr.Name=MDSvr
+SERVER.MDSvr.Host=127.0.0.1:33998
+SERVER.MDSvr.RegType=0
+SERVER.MDSvr.RegisterEnable=1
+SERVER.MDSvr.LBFactor=1
+SERVER.MDSvr.ServiceName=MDSvr
+SERVER.MDSvr.RegisterServerList=REGISTER.Svr1
+EOF
+  append_server MDSvrA MDSvrA "${MDSVR_GW_PORT}" MDSvrA
+  append_server MDSvrB MDSvrB "${MDSVR_B_GW_PORT}" MDSvrB
+else
+  append_server MDSvr MDSvr "${MDSVR_GW_PORT}" MDSvr
+fi
 append_server LoginSvr LoginSvr "${LOGINSVR_GW_PORT}" LoginSvr
 append_server AdminSvr AdminSvr "${ADMINSVR_GW_PORT}" AdminSvr
 append_server LiqSvr LiqSvr "${LIQSVR_GW_PORT}" LiqSvr
 append_server ManagerSvr ManagerSvr "${MANAGERSVR_GW_PORT}" ManagerSvr
 append_server ProjectionSvr ProjectionSvr "${PROJECTIONSVR_GW_PORT}" ProjectionSvr
 
+if [[ "${ORDER_CLUSTER_ENABLED}" == "true" || "${MD_CLUSTER_ENABLED}" == "true" ]]; then
+  cat >> "${CONTROL_ROOT}/ATSConfig.ini" <<'EOF'
+
+Cluster.Enabled=true
+EOF
+fi
+
 if [[ "${ORDER_CLUSTER_ENABLED}" == "true" ]]; then
   cat >> "${CONTROL_ROOT}/ATSConfig.ini" <<'EOF'
 
 LBConfig.OrderSvr=Partition
-Cluster.Enabled=true
 Cluster.OrderSvr.Enabled=true
 Cluster.OrderSvrA.Enabled=true
 Cluster.OrderSvrB.Enabled=true
@@ -189,6 +216,27 @@ Partition.OrderSvrB.Count=256
 Partition.OrderSvrB.Root=/dc/cluster/ordersvr/partitions
 Partition.OrderSvrB.EnforceFence=true
 Partition.OrderSvrB.EnforceReadiness=true
+EOF
+fi
+
+if [[ "${MD_CLUSTER_ENABLED}" == "true" ]]; then
+  cat >> "${CONTROL_ROOT}/ATSConfig.ini" <<'EOF'
+
+LBConfig.MDSvr=Partition
+Cluster.MDSvr.Enabled=true
+Cluster.MDSvrA.Enabled=true
+Cluster.MDSvrB.Enabled=true
+Partition.MDSvr.Count=256
+Partition.MDSvr.Root=/dc/cluster/mdsvr/partitions
+Partition.MDSvr.EnforceFence=true
+Partition.MDSvrA.Count=256
+Partition.MDSvrA.Root=/dc/cluster/mdsvr/partitions
+Partition.MDSvrA.EnforceFence=true
+Partition.MDSvrA.EnforceReadiness=true
+Partition.MDSvrB.Count=256
+Partition.MDSvrB.Root=/dc/cluster/mdsvr/partitions
+Partition.MDSvrB.EnforceFence=true
+Partition.MDSvrB.EnforceReadiness=true
 EOF
 fi
 
@@ -247,9 +295,12 @@ validTime=3600
 checkInterval=60
 EOF
 
-cat > "${OVERRIDE_ROOT}/MDSvr/config/application.properties" <<EOF
-serverKey=SERVER.MDSvr
+write_md_config() {
+  local node="$1"
+  cat > "${OVERRIDE_ROOT}/${node}/config/application.properties" <<EOF
+serverKey=SERVER.${node}
 orderServerKey=SERVER.OrderSvr
+md.cluster.defaultMarketIndicator=4
 log4j.file=./config/log4j.ini
 log4j.thread=1
 log4j.writeTime=true
@@ -260,8 +311,8 @@ dbType=mysql
 clickhouse.default=ClickHouse1
 
 [ohlc]
-ohlcStorePath=../../data/MDSvr/ohlc
-ohlcBackPath=../../data/MDSvr/backup/ohlc
+ohlcStorePath=../../data/${node}/ohlc
+ohlcBackPath=../../data/${node}/backup/ohlc
 ohlcList=1W;true;false;yyyyww;false;true|1N;true;false;yyyyMM;false;true|1Y;true;false;yyyy;false;true|1D;true;false;yyyyMMdd;false;false|1M;true;true;HHmmss;false;false|5M;true;true;HHmmss;false;false|15M;true;true;HHmmss;false;false|30M;true;true;HHmmss;false;false|1H;true;true;HHmmss;false;true|2H;true;true;HHmmss;false;true|4H;true;true;HHmmss;false;true
 ohlcVolumeFlag=false
 
@@ -283,6 +334,13 @@ enableIndexMarkPriceFlag=true
 enableIndexTickerFlag=true
 enableTradeFlag=true
 EOF
+}
+
+write_md_config MDSvr
+if [[ "${MD_CLUSTER_ENABLED}" == "true" ]]; then
+  write_md_config MDSvrA
+  write_md_config MDSvrB
+fi
 
 cat > "${OVERRIDE_ROOT}/APSSvr/config/application.properties" <<EOF
 serverKey=SERVER.APSSvr

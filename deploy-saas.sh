@@ -23,8 +23,9 @@ usage() {
   cat <<'EOF'
 Usage: sudo ./deploy-saas.sh [--skip-host-prepare] [--skip-pull]
 
-Deploy the standalone DC cryptocurrency SaaS stack. This script never starts,
-stops, or reconfigures the independent quantitative-trading stack.
+Deploy the DC cryptocurrency SaaS stack, optionally with OrderSvr and MDSvr
+cluster profiles. This script never starts, stops, or reconfigures the
+independent quantitative-trading stack.
 EOF
 }
 
@@ -120,6 +121,12 @@ ensure_env_defaults() {
   if ! grep -q '^ORDER_CLUSTER_ENABLED=' "${ENV_FILE}"; then
     printf 'ORDER_CLUSTER_ENABLED=false\n' >> "${ENV_FILE}"
   fi
+  if ! grep -q '^MD_CLUSTER_ENABLED=' "${ENV_FILE}"; then
+    printf 'MD_CLUSTER_ENABLED=false\n' >> "${ENV_FILE}"
+  fi
+  if ! grep -q '^MDSVR_B_GW_PORT=' "${ENV_FILE}"; then
+    printf 'MDSVR_B_GW_PORT=33043\n' >> "${ENV_FILE}"
+  fi
   if ! grep -q '^ORDERSVR_B_GW_PORT=' "${ENV_FILE}"; then
     printf 'ORDERSVR_B_GW_PORT=33041\n' >> "${ENV_FILE}"
   fi
@@ -197,13 +204,20 @@ load_env() {
   . "${ENV_FILE}"
   set +a
 
+  local profiles=()
   if [[ "${ORDER_CLUSTER_ENABLED:-false}" == "true" ]]; then
-    export COMPOSE_PROFILES=order-cluster
+    profiles+=(order-cluster)
     export ORDERSVR_CONFIG_NAME=OrderSvrA
   else
-    export COMPOSE_PROFILES=""
     export ORDERSVR_CONFIG_NAME=OrderSvr
   fi
+  if [[ "${MD_CLUSTER_ENABLED:-false}" == "true" ]]; then
+    profiles+=(md-cluster)
+    export MDSVR_CONFIG_NAME=MDSvrA
+  else
+    export MDSVR_CONFIG_NAME=MDSvr
+  fi
+  export COMPOSE_PROFILES="$(IFS=,; printf '%s' "${profiles[*]}")"
 }
 
 validate_runtime_root() {
@@ -268,6 +282,9 @@ validate_initial_ports() {
   if [[ "${ORDER_CLUSTER_ENABLED:-false}" == "true" ]]; then
     ports+=("${ORDERSVR_B_GW_PORT}" "${ORDERSVR_A_REPLICATION_PORT}" "${ORDERSVR_B_REPLICATION_PORT}")
   fi
+  if [[ "${MD_CLUSTER_ENABLED:-false}" == "true" ]]; then
+    ports+=("${MDSVR_B_GW_PORT}")
+  fi
   for port in "${ports[@]}"; do
     if port_is_listening "${port}"; then
       die "Port ${port} is already in use. Existing non-SaaS services were not changed."
@@ -327,6 +344,33 @@ verify_order_cluster_images() {
     fi
   done
   log "Cluster image identity verified: Common ${expected_revision}, SHA-256 ${expected_hash}."
+}
+
+verify_md_cluster_images() {
+  [[ "${MD_CLUSTER_ENABLED:-false}" == "true" ]] || return 0
+  local expected_hash="" expected_revision="" spec name image hash revision
+  local specs=(
+    "gateway|${GW_IMAGE_REPOSITORY}:${GW_TAG}"
+    "mdsvr|${MDSVR_IMAGE_REPOSITORY}:${MDSVR_TAG}"
+  )
+  for spec in "${specs[@]}"; do
+    name="${spec%%|*}"
+    image="${spec#*|}"
+    [[ "${image##*:}" == cluster-dev-* ]] ||
+      die "${name} must use an immutable cluster-dev image while MD_CLUSTER_ENABLED=true: ${image}"
+    hash="$(docker image inspect "${image}" --format '{{index .Config.Labels "dc.common.jar.sha256"}}' 2>/dev/null || true)"
+    revision="$(docker image inspect "${image}" --format '{{index .Config.Labels "dc.common.revision"}}' 2>/dev/null || true)"
+    [[ "${hash}" =~ ^[0-9a-f]{64}$ ]] || die "${name} cluster image has no Common SHA-256 label: ${image}"
+    [[ -n "${revision}" && "${revision}" != "unknown" ]] || die "${name} cluster image has no Common revision label: ${image}"
+    if [[ -z "${expected_hash}" ]]; then
+      expected_hash="${hash}"
+      expected_revision="${revision}"
+    else
+      [[ "${hash}" == "${expected_hash}" ]] || die "${name} embeds a different Common JAR."
+      [[ "${revision}" == "${expected_revision}" ]] || die "${name} embeds a different Common revision."
+    fi
+  done
+  log "MD cluster image identity verified: Common ${expected_revision}, SHA-256 ${expected_hash}."
 }
 
 wait_for_health() {
@@ -423,6 +467,51 @@ ensure_order_cluster_assignments() {
   count="$(grep -oE 'P[0-9]{3}' <<<"${output}" | sort -u | wc -l | tr -d ' ')"
   [[ "${count}" == "256" ]] || die "Expected 256 OrderSvr assignments, found ${count}."
   log "ZooKeeper OrderSvr assignments are ready: 256 partitions, alternating A/B primaries."
+}
+
+ensure_md_cluster_assignments() {
+  [[ "${MD_CLUSTER_ENABLED:-false}" == "true" ]] || return 0
+  local commands output status count partition node replica
+  commands="$(mktemp)"
+  {
+    printf 'create /dc x\n'
+    printf 'create /dc/cluster x\n'
+    printf 'create /dc/cluster/mdsvr x\n'
+    printf 'create /dc/cluster/mdsvr/partitions x\n'
+    for ((partition=0; partition<256; partition++)); do
+      if (( partition % 2 == 0 )); then
+        node=MDSvrA
+        replica=MDSvrB
+      else
+        node=MDSvrB
+        replica=MDSvrA
+      fi
+      printf 'create /dc/cluster/mdsvr/partitions/P%03d {"partitionId":"P%03d","epoch":1,"primary":"%s","replica":"%s","state":"READY"}\n' \
+        "${partition}" "${partition}" "${node}" "${replica}"
+    done
+    printf 'quit\n'
+  } > "${commands}"
+  set +e
+  output="$(docker exec -i \
+    -e CLIENT_JVMFLAGS=-Djava.security.auth.login.config=/conf/jaas.ini \
+    dc-saas-zookeeper zkCli.sh -server "127.0.0.1:${ZOOKEEPER_PORT}" < "${commands}" 2>&1)"
+  status="$?"
+  set -e
+  rm -f -- "${commands}"
+  if grep -Eq 'KeeperErrorCode = (NoAuth|InvalidACL|ConnectionLoss|SessionExpired)' <<<"${output}"; then
+    printf '%s\n' "${output}" >&2
+    die "Could not initialize MDSvr partition assignments (exit ${status})."
+  fi
+  if (( status != 0 )) && ! grep -Fq 'Node already exists:' <<<"${output}"; then
+    printf '%s\n' "${output}" >&2
+    die "Could not initialize MDSvr partition assignments (exit ${status})."
+  fi
+  output="$({ printf 'ls /dc/cluster/mdsvr/partitions\nquit\n'; } | docker exec -i \
+    -e CLIENT_JVMFLAGS=-Djava.security.auth.login.config=/conf/jaas.ini \
+    dc-saas-zookeeper zkCli.sh -server "127.0.0.1:${ZOOKEEPER_PORT}" 2>&1)"
+  count="$(grep -oE 'P[0-9]{3}' <<<"${output}" | sort -u | wc -l | tr -d ' ')"
+  [[ "${count}" == "256" ]] || die "Expected 256 MDSvr assignments, found ${count}."
+  log "ZooKeeper MDSvr assignments are ready: 256 partitions, alternating A/B primaries."
 }
 
 wait_for_port() {
@@ -636,6 +725,7 @@ else
   die "IMAGE_SOURCE must be local or registry."
 fi
 verify_order_cluster_images
+verify_md_cluster_images
 
 if docker inspect dc-saas-loginsvr >/dev/null 2>&1; then
   LOGIN_CONTAINER_EXISTED="true"
@@ -648,6 +738,7 @@ wait_for_health dc-saas-clickhouse 420
 wait_for_health dc-saas-zookeeper 120
   ensure_zookeeper_service_root
   ensure_order_cluster_assignments
+  ensure_md_cluster_assignments
 apply_mysql_migrations
 provision_platform_admin
 provision_robot_runtime_identity
@@ -668,6 +759,9 @@ wait_for_port "${GW_TCP_PORT}" gateway 120
 wait_for_port "${LOGINSVR_GW_PORT}" loginsvr 120
 wait_for_port "${LOGINSVR_HTTP_PORT}" loginsvr 180
 wait_for_port "${MDSVR_GW_PORT}" mdsvr 120
+if [[ "${MD_CLUSTER_ENABLED:-false}" == "true" ]]; then
+  wait_for_port "${MDSVR_B_GW_PORT}" mdsvr-b 180
+fi
 wait_for_port "${APSSVR_GW_PORT}" apssvr 120
 wait_for_port "${ORDERSVR_GW_PORT}" ordersvr 120
 if [[ "${ORDER_CLUSTER_ENABLED:-false}" == "true" ]]; then
