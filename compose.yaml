@@ -188,9 +188,33 @@ services:
       - ${DEPLOY_ROOT}/control:/srv/dc/control:ro
       - ${DEPLOY_ROOT}/data:/srv/dc/data
       - ${DEPLOY_ROOT}/log:/srv/dc/log
-      - ${DEPLOY_ROOT}/control/overrides/MDSvr/config/application.properties:/srv/dc/dc/MDSvr/config/application.properties:ro
+      - ${DEPLOY_ROOT}/control/overrides/${MDSVR_CONFIG_NAME:-MDSvr}/config/application.properties:/srv/dc/dc/MDSvr/config/application.properties:ro
     mem_limit: ${MDSVR_MEMORY_LIMIT:-640m}
     cpus: ${MDSVR_CPU_LIMIT:-0.35}
+
+  mdsvr-b:
+    <<: *java-service-base
+    profiles: ["md-cluster"]
+    image: ${MDSVR_IMAGE_REPOSITORY:-ghcr.io/bliplink/mdsvr}:${MDSVR_TAG:-saas-crypto}
+    container_name: dc-saas-mdsvr-b
+    depends_on:
+      clickhouse:
+        condition: service_healthy
+      zookeeper:
+        condition: service_started
+    environment:
+      TZ: Asia/Shanghai
+      DEPLOY_ROOT: /srv/dc
+      SERVICE_NAME: MDSvr
+      MAIN_CLASS: MDSvr
+      JAVA_OPTS: ${MDSVR_JAVA_OPTS:--server -Xms64m -Xmx448m -Xmn112m -Djava.security.auth.login.config=../../control/jaas.ini}
+    volumes:
+      - ${DEPLOY_ROOT}/control:/srv/dc/control:ro
+      - ${DEPLOY_ROOT}/data:/srv/dc/data
+      - ${DEPLOY_ROOT}/log:/srv/dc/log
+      - ${DEPLOY_ROOT}/control/overrides/MDSvrB/config/application.properties:/srv/dc/dc/MDSvr/config/application.properties:ro
+    mem_limit: ${MDSVR_B_MEMORY_LIMIT:-640m}
+    cpus: ${MDSVR_B_CPU_LIMIT:-0.35}
 
   apssvr:
     <<: *java-service-base

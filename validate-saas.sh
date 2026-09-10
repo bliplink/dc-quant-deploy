@@ -33,10 +33,16 @@ set -a
 . "${ENV_FILE}"
 set +a
 
+profiles=()
 if [[ "${ORDER_CLUSTER_ENABLED:-false}" == "true" ]]; then
-  export COMPOSE_PROFILES=order-cluster
+  profiles+=(order-cluster)
   export ORDERSVR_CONFIG_NAME=OrderSvrA
 fi
+if [[ "${MD_CLUSTER_ENABLED:-false}" == "true" ]]; then
+  profiles+=(md-cluster)
+  export MDSVR_CONFIG_NAME=MDSvrA
+fi
+export COMPOSE_PROFILES="$(IFS=,; printf '%s' "${profiles[*]}")"
 
 compose() {
   docker compose --env-file "${ENV_FILE}" -f "${SCRIPT_DIR}/compose.yaml" "$@"
@@ -61,6 +67,9 @@ expected_containers=(
 )
 if [[ "${ORDER_CLUSTER_ENABLED:-false}" == "true" ]]; then
   expected_containers+=(dc-saas-ordersvr-b dc-saas-projectionsvr)
+fi
+if [[ "${MD_CLUSTER_ENABLED:-false}" == "true" ]]; then
+  expected_containers+=(dc-saas-mdsvr-b)
 fi
 
 for container in "${expected_containers[@]}"; do
@@ -95,6 +104,19 @@ if [[ "${ORDER_CLUSTER_ENABLED:-false}" == "true" ]]; then
   grep -Fq 'serverKey=SERVER.OrderSvrB' \
     "${DEPLOY_ROOT}/control/overrides/OrderSvrB/config/application.properties" ||
     die "OrderSvrB cluster configuration is missing."
+fi
+if [[ "${MD_CLUSTER_ENABLED:-false}" == "true" ]]; then
+  required_ports+=("${MDSVR_B_GW_PORT}")
+  grep -Fqx 'ProtoVersion=2' "${DEPLOY_ROOT}/control/ATSConfig.ini" ||
+    die "MDSvr partition routing requires ProtoVersion=2."
+  grep -Fq 'LBConfig.MDSvr=Partition' "${DEPLOY_ROOT}/control/ATSConfig.ini" ||
+    die "MDSvr partition load balancing is not enabled in ATSConfig.ini."
+  grep -Fq 'serverKey=SERVER.MDSvrA' \
+    "${DEPLOY_ROOT}/control/overrides/MDSvrA/config/application.properties" ||
+    die "MDSvrA cluster configuration is missing."
+  grep -Fq 'serverKey=SERVER.MDSvrB' \
+    "${DEPLOY_ROOT}/control/overrides/MDSvrB/config/application.properties" ||
+    die "MDSvrB cluster configuration is missing."
 fi
 
 listening="$(ss -lnt | awk 'NR > 1 {print $4}')"
