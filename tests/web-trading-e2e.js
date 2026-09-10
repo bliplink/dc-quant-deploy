@@ -27,16 +27,31 @@ function decodeWebSocketFrame(payload) {
     const bytes = Buffer.isBuffer(payload) ? payload : Buffer.from(payload);
     if (bytes.length < 20) return null;
     const packetLength = bytes.readInt32BE(0);
-    const sessionLength = bytes.readInt32BE(16);
-    if (packetLength > bytes.length || sessionLength < 0 || 20 + sessionLength > packetLength) return null;
-    let bodyBytes = bytes.subarray(20 + sessionLength, packetLength);
+    const headerLength = bytes.readInt16BE(4);
+    const v2 = headerLength === 22;
+    const sessionLength = v2 ? bytes.readInt16BE(14) : bytes.readInt32BE(16);
+    const serverNameLength = v2 ? bytes.readInt16BE(16) : 0;
+    const methodLength = v2 ? bytes.readInt16BE(18) : 0;
+    const keyLength = v2 ? bytes.readInt16BE(20) : 0;
+    let offset = headerLength + sessionLength;
+    if (packetLength > bytes.length || sessionLength < 0 || offset > packetLength) return null;
+    const serverName = v2 ? bytes.subarray(offset, offset + serverNameLength).toString('utf8') : '';
+    offset += serverNameLength;
+    const method = v2 ? bytes.subarray(offset, offset + methodLength).toString('utf8') : '';
+    offset += methodLength;
+    const key = v2 ? bytes.subarray(offset, offset + keyLength).toString('utf8') : '';
+    offset += keyLength;
+    let bodyBytes = bytes.subarray(offset, packetLength);
     if (bodyBytes.length >= 2 && bodyBytes[0] === 0x1f && bodyBytes[1] === 0x8b) {
       bodyBytes = zlib.gunzipSync(bodyBytes);
     }
     const bodyText = bodyBytes.toString('utf8');
     return {
-      format: bytes.readInt16BE(10),
-      seq: bytes.readInt32BE(12),
+      format: v2 ? bytes.readInt16BE(8) : bytes.readInt16BE(10),
+      seq: v2 ? bytes.readInt32BE(10) : bytes.readInt32BE(12),
+      serverName,
+      method,
+      key,
       body: bodyText ? JSON.parse(bodyText) : null
     };
   } catch (error) {
@@ -71,7 +86,7 @@ async function invokeFromPage(page, method, action) {
   let request;
   while (!request && Date.now() < deadline) {
     request = tracker.frames.slice(startIndex).find(frame =>
-      frame.direction === 'sent' && frame.body && frame.body.method === method
+      frame.direction === 'sent' && (frame.method === method || (frame.body && frame.body.method === method))
     );
     if (!request) await page.waitForTimeout(50);
   }
