@@ -393,7 +393,8 @@ order.cluster.replication.peers=OrderSvrA=127.0.0.1:${ORDERSVR_A_REPLICATION_POR
 order.cluster.defaultMarketIndicator=4
 order.projection.enabled=true
 order.projection.serverKey=SERVER.ProjectionSvr
-order.projection.pollMillis=500
+# Normal delivery is commit-event-driven; this only covers startup/reconnect/lost wakeups.
+order.projection.recoveryPollMillis=10000
 order.projection.batchSize=64
 order.projection.readBatchRecords=512
 order.tenantSymbolRules.enabled=true
