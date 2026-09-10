@@ -29,7 +29,10 @@ async function login(browser, username, location) {
 }
 
 async function historyRow(page, tabName) {
-  await page.locator('.orderWrap').getByText(tabName, {exact: true}).click({force: true});
+  const tab = page.locator('.orderWrap .ant-tabs-tab').filter({hasText: tabName}).first();
+  await tab.evaluate(node => node.click());
+  await page.waitForFunction(name => [...document.querySelectorAll('.orderWrap .ant-tabs-tab')]
+    .some(node => node.classList.contains('ant-tabs-tab-active') && node.textContent.trim() === name), tabName);
   const pane = page.locator('.orderWrap .ant-tabs-tabpane-active');
   const row = pane.locator('.ant-table-tbody tr')
     .filter({hasText: 'BTCUSDT'})
@@ -37,10 +40,20 @@ async function historyRow(page, tabName) {
     .filter({hasText: '0.001'})
     .first();
   try {
-    await row.waitFor({timeout: 5000});
-  } catch (_) {
-    await pane.locator('.historyToolbar button').click();
-    await row.waitFor({timeout: 20000});
+    await row.waitFor({timeout: 35000});
+  } catch (error) {
+    const diagnostics = await page.evaluate(() => ({
+      url: location.href,
+      loginData: sessionStorage.getItem('loginData'),
+      tabs: [...document.querySelectorAll('.orderWrap .ant-tabs-tab')].map(node => ({
+        className: node.className,
+        text: node.textContent
+      })),
+      activePane: document.querySelector('.orderWrap .ant-tabs-tabpane-active')?.innerText || '',
+      messages: [...document.querySelectorAll('.ant-message-notice, .ant-notification-notice')]
+        .map(node => node.textContent)
+    }));
+    throw new Error(`history row not visible: ${JSON.stringify(diagnostics)}`);
   }
   return row.innerText();
 }
