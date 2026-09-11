@@ -118,12 +118,13 @@ else
   (( target_epoch > max_epoch )) || die "Recovery epoch ${target_epoch} must be greater than current max ${max_epoch}"
 fi
 
-python3 - "${assignments_json}" "${recovering_commands}" "${ready_tsv}" "${PARTITION_ROOT}" "${target_epoch}" <<'PY'
+python3 - "${assignments_json}" "${recovering_commands}" "${ready_tsv}" "${PARTITION_ROOT}" "${target_epoch}" "${USE_CURRENT_FENCED}" <<'PY'
 import json
 import sys
 
-source, recovering_path, ready_path, root, epoch_text = sys.argv[1:]
+source, recovering_path, ready_path, root, epoch_text, use_current_text = sys.argv[1:]
 epoch = int(epoch_text)
+use_current = use_current_text == "true"
 rows = sorted((json.loads(line) for line in open(source, encoding="utf-8")), key=lambda row: row["partitionId"])
 with open(recovering_path, "w", encoding="utf-8", newline="\n") as recovering, \
         open(ready_path, "w", encoding="utf-8", newline="\n") as ready:
@@ -137,7 +138,7 @@ with open(recovering_path, "w", encoding="utf-8", newline="\n") as recovering, \
         value["state"] = "RECOVERING"
         recovering.write(f"set {root}/{partition_id} {json.dumps(value, separators=(',', ':'))}\n")
         if "assignmentVersion" in value:
-            value["assignmentVersion"] = current_version + 2
+            value["assignmentVersion"] = current_version + (1 if use_current else 2)
         value["state"] = "READY"
         ready.write(f"{partition_id}\t{value['primary']}\t{json.dumps(value, separators=(',', ':'))}\n")
 PY
