@@ -39,6 +39,7 @@ for name in "${required_vars[@]}"; do
 done
 
 ORDER_CLUSTER_ENABLED="${ORDER_CLUSTER_ENABLED:-false}"
+ORDER_CLUSTER_C_ENABLED="${ORDER_CLUSTER_C_ENABLED:-false}"
 MD_CLUSTER_ENABLED="${MD_CLUSTER_ENABLED:-false}"
 PROTO_VERSION=1
 ORDER_CLUSTER_REPLICATION_CONSISTENCY_MODE="${ORDER_CLUSTER_REPLICATION_CONSISTENCY_MODE:-SYNC_PER_RECORD}"
@@ -47,6 +48,11 @@ ORDER_CLUSTER_REPLICATION_BATCH_MAX_WAIT_MICROS="${ORDER_CLUSTER_REPLICATION_BAT
 ORDER_CLUSTER_REPLICATION_BATCH_THREADS="${ORDER_CLUSTER_REPLICATION_BATCH_THREADS:-2}"
 ORDER_CLUSTER_REPLICATION_ASYNC_RETRY_MILLIS="${ORDER_CLUSTER_REPLICATION_ASYNC_RETRY_MILLIS:-100}"
 ORDER_CLUSTER_REPLICATION_ASYNC_MAX_PENDING_RECORDS="${ORDER_CLUSTER_REPLICATION_ASYNC_MAX_PENDING_RECORDS:-8192}"
+ORDER_CLUSTER_PERIODIC_SNAPSHOT_ENABLED="${ORDER_CLUSTER_PERIODIC_SNAPSHOT_ENABLED:-true}"
+ORDER_CLUSTER_PERIODIC_SNAPSHOT_POLL_MILLIS="${ORDER_CLUSTER_PERIODIC_SNAPSHOT_POLL_MILLIS:-5000}"
+ORDER_CLUSTER_PERIODIC_SNAPSHOT_MAX_AGE_MILLIS="${ORDER_CLUSTER_PERIODIC_SNAPSHOT_MAX_AGE_MILLIS:-300000}"
+ORDER_CLUSTER_PERIODIC_SNAPSHOT_MIN_COMMITTED_MUTATIONS="${ORDER_CLUSTER_PERIODIC_SNAPSHOT_MIN_COMMITTED_MUTATIONS:-10000}"
+ORDER_CLUSTER_PERIODIC_SNAPSHOT_MAX_PARTITIONS_PER_RUN="${ORDER_CLUSTER_PERIODIC_SNAPSHOT_MAX_PARTITIONS_PER_RUN:-4}"
 PROJECTIONSVR_GW_PORT="${PROJECTIONSVR_GW_PORT:-33042}"
 if [[ "${ORDER_CLUSTER_ENABLED}" == "true" || "${MD_CLUSTER_ENABLED}" == "true" ]]; then
   PROTO_VERSION=2
@@ -69,6 +75,18 @@ if [[ "${ORDER_CLUSTER_ENABLED}" == "true" ]]; then
     die "ORDER_CLUSTER_REPLICATION_ASYNC_RETRY_MILLIS must be a positive integer"
   [[ "${ORDER_CLUSTER_REPLICATION_ASYNC_MAX_PENDING_RECORDS}" =~ ^[1-9][0-9]*$ ]] ||
     die "ORDER_CLUSTER_REPLICATION_ASYNC_MAX_PENDING_RECORDS must be a positive integer"
+  [[ "${ORDER_CLUSTER_PERIODIC_SNAPSHOT_ENABLED}" == "true" || "${ORDER_CLUSTER_PERIODIC_SNAPSHOT_ENABLED}" == "false" ]] ||
+    die "ORDER_CLUSTER_PERIODIC_SNAPSHOT_ENABLED must be true or false"
+  for name in ORDER_CLUSTER_PERIODIC_SNAPSHOT_POLL_MILLIS ORDER_CLUSTER_PERIODIC_SNAPSHOT_MAX_AGE_MILLIS \
+      ORDER_CLUSTER_PERIODIC_SNAPSHOT_MIN_COMMITTED_MUTATIONS ORDER_CLUSTER_PERIODIC_SNAPSHOT_MAX_PARTITIONS_PER_RUN; do
+    [[ "${!name}" =~ ^[1-9][0-9]*$ ]] || die "${name} must be a positive integer"
+  done
+fi
+if [[ "${ORDER_CLUSTER_C_ENABLED}" == "true" ]]; then
+  [[ "${ORDER_CLUSTER_ENABLED}" == "true" ]] || die "ORDER_CLUSTER_C_ENABLED requires ORDER_CLUSTER_ENABLED=true"
+  for name in ORDERSVR_C_GW_PORT ORDERSVR_C_REPLICATION_PORT; do
+    [[ -n "${!name:-}" ]] || die "Missing required OrderSvrC variable: ${name}"
+  done
 fi
 if [[ "${MD_CLUSTER_ENABLED}" == "true" ]]; then
   [[ -n "${MDSVR_B_GW_PORT:-}" ]] || die "Missing required cluster variable: MDSVR_B_GW_PORT"
@@ -78,7 +96,7 @@ CONTROL_ROOT="${DEPLOY_ROOT}/control"
 OVERRIDE_ROOT="${CONTROL_ROOT}/overrides"
 umask 077
 
-install -d -m 0750 "${CONTROL_ROOT}" "${OVERRIDE_ROOT}/GW/config" "${OVERRIDE_ROOT}/LoginSvr/config" "${OVERRIDE_ROOT}/MDSvr/config" "${OVERRIDE_ROOT}/MDSvrA/config" "${OVERRIDE_ROOT}/MDSvrB/config" "${OVERRIDE_ROOT}/APSSvr/config" "${OVERRIDE_ROOT}/OrderSvr/config" "${OVERRIDE_ROOT}/OrderSvrA/config" "${OVERRIDE_ROOT}/OrderSvrB/config" "${OVERRIDE_ROOT}/ProjectionSvr/config" "${OVERRIDE_ROOT}/TradeSvr/config" "${OVERRIDE_ROOT}/LiqSvr/config" "${OVERRIDE_ROOT}/ManagerSvr/config" "${OVERRIDE_ROOT}/AdminSvr/config"
+install -d -m 0750 "${CONTROL_ROOT}" "${OVERRIDE_ROOT}/GW/config" "${OVERRIDE_ROOT}/LoginSvr/config" "${OVERRIDE_ROOT}/MDSvr/config" "${OVERRIDE_ROOT}/MDSvrA/config" "${OVERRIDE_ROOT}/MDSvrB/config" "${OVERRIDE_ROOT}/APSSvr/config" "${OVERRIDE_ROOT}/OrderSvr/config" "${OVERRIDE_ROOT}/OrderSvrA/config" "${OVERRIDE_ROOT}/OrderSvrB/config" "${OVERRIDE_ROOT}/OrderSvrC/config" "${OVERRIDE_ROOT}/ProjectionSvr/config" "${OVERRIDE_ROOT}/TradeSvr/config" "${OVERRIDE_ROOT}/LiqSvr/config" "${OVERRIDE_ROOT}/ManagerSvr/config" "${OVERRIDE_ROOT}/AdminSvr/config"
 
 cat > "${CONTROL_ROOT}/DBPoolConfig.ini" <<EOF
 [DBPOOL]
@@ -164,6 +182,9 @@ SERVER.OrderSvr.RegisterServerList=REGISTER.Svr1
 EOF
   append_server OrderSvrA OrderSvrA "${ORDERSVR_GW_PORT}" OrderSvrA
   append_server OrderSvrB OrderSvrB "${ORDERSVR_B_GW_PORT}" OrderSvrB
+  if [[ "${ORDER_CLUSTER_C_ENABLED}" == "true" ]]; then
+    append_server OrderSvrC OrderSvrC "${ORDERSVR_C_GW_PORT}" OrderSvrC
+  fi
 else
   append_server OrderSvr OrderSvr "${ORDERSVR_GW_PORT}" OrderSvr
 fi
@@ -217,6 +238,15 @@ Partition.OrderSvrB.Root=/dc/cluster/ordersvr/partitions
 Partition.OrderSvrB.EnforceFence=true
 Partition.OrderSvrB.EnforceReadiness=true
 EOF
+  if [[ "${ORDER_CLUSTER_C_ENABLED}" == "true" ]]; then
+    cat >> "${CONTROL_ROOT}/ATSConfig.ini" <<'EOF'
+Cluster.OrderSvrC.Enabled=true
+Partition.OrderSvrC.Count=256
+Partition.OrderSvrC.Root=/dc/cluster/ordersvr/partitions
+Partition.OrderSvrC.EnforceFence=true
+Partition.OrderSvrC.EnforceReadiness=true
+EOF
+  fi
 fi
 
 if [[ "${MD_CLUSTER_ENABLED}" == "true" ]]; then
@@ -407,6 +437,10 @@ EOF
 
 write_cluster_order_config() {
   local node="$1" replication_port="$2"
+  local peers="OrderSvrA=127.0.0.1:${ORDERSVR_A_REPLICATION_PORT},OrderSvrB=127.0.0.1:${ORDERSVR_B_REPLICATION_PORT}"
+  if [[ "${ORDER_CLUSTER_C_ENABLED}" == "true" ]]; then
+    peers="${peers},OrderSvrC=127.0.0.1:${ORDERSVR_C_REPLICATION_PORT}"
+  fi
   cat > "${OVERRIDE_ROOT}/${node}/config/application.properties" <<EOF
 dbType=rockdb
 execOrderType=trade
@@ -428,6 +462,11 @@ order.cluster.snapshot.barrier.enabled=true
 order.cluster.snapshot.barrier.required=true
 order.cluster.snapshot.barrier.acquireTimeoutMillis=10000
 order.cluster.snapshot.promotionBarrier.required=true
+order.cluster.snapshot.periodic.enabled=${ORDER_CLUSTER_PERIODIC_SNAPSHOT_ENABLED}
+order.cluster.snapshot.periodic.pollMillis=${ORDER_CLUSTER_PERIODIC_SNAPSHOT_POLL_MILLIS}
+order.cluster.snapshot.periodic.maxAgeMillis=${ORDER_CLUSTER_PERIODIC_SNAPSHOT_MAX_AGE_MILLIS}
+order.cluster.snapshot.periodic.minCommittedMutations=${ORDER_CLUSTER_PERIODIC_SNAPSHOT_MIN_COMMITTED_MUTATIONS}
+order.cluster.snapshot.periodic.maxPartitionsPerRun=${ORDER_CLUSTER_PERIODIC_SNAPSHOT_MAX_PARTITIONS_PER_RUN}
 order.cluster.lifecycle.enabled=true
 order.cluster.lifecycle.bootstrap.enabled=true
 order.cluster.lifecycle.pollMillis=1000
@@ -447,7 +486,7 @@ order.cluster.replication.async.retryMillis=${ORDER_CLUSTER_REPLICATION_ASYNC_RE
 order.cluster.replication.async.maxPendingRecords=${ORDER_CLUSTER_REPLICATION_ASYNC_MAX_PENDING_RECORDS}
 order.cluster.replication.catchupBatchRecords=256
 order.cluster.replication.crossEpochSnapshotRebase.enabled=true
-order.cluster.replication.peers=OrderSvrA=127.0.0.1:${ORDERSVR_A_REPLICATION_PORT},OrderSvrB=127.0.0.1:${ORDERSVR_B_REPLICATION_PORT}
+order.cluster.replication.peers=${peers}
 order.cluster.defaultMarketIndicator=4
 order.projection.enabled=true
 order.projection.serverKey=SERVER.ProjectionSvr
@@ -490,6 +529,9 @@ EOF
 if [[ "${ORDER_CLUSTER_ENABLED}" == "true" ]]; then
   write_cluster_order_config OrderSvrA "${ORDERSVR_A_REPLICATION_PORT}"
   write_cluster_order_config OrderSvrB "${ORDERSVR_B_REPLICATION_PORT}"
+  if [[ "${ORDER_CLUSTER_C_ENABLED}" == "true" ]]; then
+    write_cluster_order_config OrderSvrC "${ORDERSVR_C_REPLICATION_PORT}"
+  fi
 fi
 
 cat > "${OVERRIDE_ROOT}/TradeSvr/config/application.properties" <<EOF

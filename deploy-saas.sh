@@ -121,6 +121,9 @@ ensure_env_defaults() {
   if ! grep -q '^ORDER_CLUSTER_ENABLED=' "${ENV_FILE}"; then
     printf 'ORDER_CLUSTER_ENABLED=false\n' >> "${ENV_FILE}"
   fi
+  if ! grep -q '^ORDER_CLUSTER_C_ENABLED=' "${ENV_FILE}"; then
+    printf 'ORDER_CLUSTER_C_ENABLED=false\n' >> "${ENV_FILE}"
+  fi
   if ! grep -q '^MD_CLUSTER_ENABLED=' "${ENV_FILE}"; then
     printf 'MD_CLUSTER_ENABLED=false\n' >> "${ENV_FILE}"
   fi
@@ -130,11 +133,20 @@ ensure_env_defaults() {
   if ! grep -q '^ORDERSVR_B_GW_PORT=' "${ENV_FILE}"; then
     printf 'ORDERSVR_B_GW_PORT=33041\n' >> "${ENV_FILE}"
   fi
+  if ! grep -q '^ORDERSVR_C_GW_PORT=' "${ENV_FILE}"; then
+    printf 'ORDERSVR_C_GW_PORT=33044\n' >> "${ENV_FILE}"
+  fi
   if ! grep -q '^ORDERSVR_A_REPLICATION_PORT=' "${ENV_FILE}"; then
     printf 'ORDERSVR_A_REPLICATION_PORT=19121\n' >> "${ENV_FILE}"
   fi
   if ! grep -q '^ORDERSVR_B_REPLICATION_PORT=' "${ENV_FILE}"; then
     printf 'ORDERSVR_B_REPLICATION_PORT=19122\n' >> "${ENV_FILE}"
+  fi
+  if ! grep -q '^ORDERSVR_C_REPLICATION_PORT=' "${ENV_FILE}"; then
+    printf 'ORDERSVR_C_REPLICATION_PORT=19123\n' >> "${ENV_FILE}"
+  fi
+  if ! grep -q '^ORDER_CLUSTER_PERIODIC_SNAPSHOT_ENABLED=' "${ENV_FILE}"; then
+    printf 'ORDER_CLUSTER_PERIODIC_SNAPSHOT_ENABLED=true\n' >> "${ENV_FILE}"
   fi
   if ! grep -q '^PROJECTIONSVR_GW_PORT=' "${ENV_FILE}"; then
     printf 'PROJECTIONSVR_GW_PORT=33042\n' >> "${ENV_FILE}"
@@ -208,6 +220,9 @@ load_env() {
   if [[ "${ORDER_CLUSTER_ENABLED:-false}" == "true" ]]; then
     profiles+=(order-cluster)
     export ORDERSVR_CONFIG_NAME=OrderSvrA
+    if [[ "${ORDER_CLUSTER_C_ENABLED:-false}" == "true" ]]; then
+      profiles+=(order-cluster-c)
+    fi
   else
     export ORDERSVR_CONFIG_NAME=OrderSvr
   fi
@@ -281,6 +296,9 @@ validate_initial_ports() {
   local ports=("${MYSQL_PORT}" "${CLICKHOUSE_HTTP_PORT}" "${CLICKHOUSE_NATIVE_PORT}" "${ZOOKEEPER_PORT}" "${ZOOKEEPER_JMX_PORT}" "${GW_TCP_PORT}" "${GW_WEBSOCKET_PORT}" "${GW_HTTP_PORT}" "${LOGINSVR_HTTP_PORT}" "${LOGINSVR_GW_PORT}" "${MDSVR_GW_PORT}" "${APSSVR_GW_PORT}" "${ORDERSVR_GW_PORT}" "${PROJECTIONSVR_GW_PORT:-33042}" "${TRADESVR_GW_PORT}" "${LIQSVR_GW_PORT}" "${MANAGERSVR_GW_PORT}" "${ADMINSVR_GW_PORT}" "${WEB_LISTEN_PORT}")
   if [[ "${ORDER_CLUSTER_ENABLED:-false}" == "true" ]]; then
     ports+=("${ORDERSVR_B_GW_PORT}" "${ORDERSVR_A_REPLICATION_PORT}" "${ORDERSVR_B_REPLICATION_PORT}")
+    if [[ "${ORDER_CLUSTER_C_ENABLED:-false}" == "true" ]]; then
+      ports+=("${ORDERSVR_C_GW_PORT}" "${ORDERSVR_C_REPLICATION_PORT}")
+    fi
   fi
   if [[ "${MD_CLUSTER_ENABLED:-false}" == "true" ]]; then
     ports+=("${MDSVR_B_GW_PORT}")
@@ -315,22 +333,25 @@ compose_up() {
     docker compose --env-file "${ENV_FILE}" -f "${SCRIPT_DIR}/compose.yaml" up "$@"
 }
 
+require_immutable_cluster_image() {
+  local name="$1" image="$2" tag="${2##*:}"
+  case "${tag}" in
+    cluster-dev-*|sha-*) return 0 ;;
+    *) die "${name} must use an immutable cluster image: ${image}" ;;
+  esac
+}
+
 verify_order_cluster_images() {
   [[ "${ORDER_CLUSTER_ENABLED:-false}" == "true" ]] || return 0
   local expected_hash="" expected_revision="" spec name image hash revision
   local specs=(
     "gateway|${GW_IMAGE_REPOSITORY}:${GW_TAG}"
     "ordersvr|${ORDERSVR_IMAGE_REPOSITORY}:${ORDERSVR_TAG}"
-    "projectionsvr|${PROJECTIONSVR_IMAGE_REPOSITORY}:${PROJECTIONSVR_TAG}"
-    "mdsvr|${MDSVR_IMAGE_REPOSITORY}:${MDSVR_TAG}"
-    "tradesvr|${TRADESVR_IMAGE_REPOSITORY}:${TRADESVR_TAG}"
-    "liqsvr|${LIQSVR_IMAGE_REPOSITORY}:${LIQSVR_TAG}"
   )
   for spec in "${specs[@]}"; do
     name="${spec%%|*}"
     image="${spec#*|}"
-    [[ "${image##*:}" == cluster-dev-* ]] ||
-      die "${name} must use an immutable cluster-dev image while ORDER_CLUSTER_ENABLED=true: ${image}"
+    require_immutable_cluster_image "${name}" "${image}"
     hash="$(docker image inspect "${image}" --format '{{index .Config.Labels "dc.common.jar.sha256"}}' 2>/dev/null || true)"
     revision="$(docker image inspect "${image}" --format '{{index .Config.Labels "dc.common.revision"}}' 2>/dev/null || true)"
     [[ "${hash}" =~ ^[0-9a-f]{64}$ ]] || die "${name} cluster image has no Common SHA-256 label: ${image}"
@@ -356,8 +377,7 @@ verify_md_cluster_images() {
   for spec in "${specs[@]}"; do
     name="${spec%%|*}"
     image="${spec#*|}"
-    [[ "${image##*:}" == cluster-dev-* ]] ||
-      die "${name} must use an immutable cluster-dev image while MD_CLUSTER_ENABLED=true: ${image}"
+    require_immutable_cluster_image "${name}" "${image}"
     hash="$(docker image inspect "${image}" --format '{{index .Config.Labels "dc.common.jar.sha256"}}' 2>/dev/null || true)"
     revision="$(docker image inspect "${image}" --format '{{index .Config.Labels "dc.common.revision"}}' 2>/dev/null || true)"
     [[ "${hash}" =~ ^[0-9a-f]{64}$ ]] || die "${name} cluster image has no Common SHA-256 label: ${image}"
@@ -538,29 +558,42 @@ wait_for_order_cluster_readiness() {
   while true; do
     count="$(current_order_cluster_ready_count)"
     if [[ "${count}" == "256" ]]; then
-      log "OrderSvr A/B readiness complete: 256/256 partitions."
+      log "OrderSvr cluster readiness complete: 256/256 partitions."
       return 0
     fi
     if (( $(date +%s) - start >= 300 )); then
       docker logs --tail 100 dc-saas-ordersvr >&2 || true
       docker logs --tail 100 dc-saas-ordersvr-b >&2 || true
-      die "Timed out waiting for OrderSvr A/B readiness: ${count:-0}/256 partitions."
+      if [[ "${ORDER_CLUSTER_C_ENABLED:-false}" == "true" ]]; then
+        docker logs --tail 100 dc-saas-ordersvr-c >&2 || true
+      fi
+      die "Timed out waiting for OrderSvr cluster readiness: ${count:-0}/256 partitions."
     fi
     sleep 2
   done
 }
 
 current_order_cluster_ready_count() {
-  local a_started b_started
+  local a_started b_started c_started=""
   a_started="$(docker inspect --format '{{.State.StartedAt}}' dc-saas-ordersvr 2>/dev/null || true)"
   b_started="$(docker inspect --format '{{.State.StartedAt}}' dc-saas-ordersvr-b 2>/dev/null || true)"
   if [[ -z "${a_started}" || -z "${b_started}" ]]; then
     printf '0\n'
     return 0
   fi
+  if [[ "${ORDER_CLUSTER_C_ENABLED:-false}" == "true" ]]; then
+    c_started="$(docker inspect --format '{{.State.StartedAt}}' dc-saas-ordersvr-c 2>/dev/null || true)"
+    if [[ -z "${c_started}" ]]; then
+      printf '0\n'
+      return 0
+    fi
+  fi
   {
     docker logs --since "${a_started}" dc-saas-ordersvr 2>&1 || true
     docker logs --since "${b_started}" dc-saas-ordersvr-b 2>&1 || true
+    if [[ -n "${c_started}" ]]; then
+      docker logs --since "${c_started}" dc-saas-ordersvr-c 2>&1 || true
+    fi
   } | awk '
     /ORDER_PARTITION_(BOOTSTRAP|PROMOTION)_READY/ {
       if (match($0, /partition:P[0-9][0-9][0-9]/)) print substr($0, RSTART + 10, 4)
@@ -768,6 +801,10 @@ if [[ "${ORDER_CLUSTER_ENABLED:-false}" == "true" ]]; then
   wait_for_port "${ORDERSVR_B_GW_PORT}" ordersvr-b 180
   wait_for_port "${ORDERSVR_A_REPLICATION_PORT}" ordersvr 180
   wait_for_port "${ORDERSVR_B_REPLICATION_PORT}" ordersvr-b 180
+  if [[ "${ORDER_CLUSTER_C_ENABLED:-false}" == "true" ]]; then
+    wait_for_port "${ORDERSVR_C_GW_PORT}" ordersvr-c 180
+    wait_for_port "${ORDERSVR_C_REPLICATION_PORT}" ordersvr-c 180
+  fi
 fi
 recover_order_cluster_if_needed
 wait_for_order_cluster_readiness

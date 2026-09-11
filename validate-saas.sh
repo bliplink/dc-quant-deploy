@@ -37,6 +37,9 @@ profiles=()
 if [[ "${ORDER_CLUSTER_ENABLED:-false}" == "true" ]]; then
   profiles+=(order-cluster)
   export ORDERSVR_CONFIG_NAME=OrderSvrA
+  if [[ "${ORDER_CLUSTER_C_ENABLED:-false}" == "true" ]]; then
+    profiles+=(order-cluster-c)
+  fi
 fi
 if [[ "${MD_CLUSTER_ENABLED:-false}" == "true" ]]; then
   profiles+=(md-cluster)
@@ -67,6 +70,9 @@ expected_containers=(
 )
 if [[ "${ORDER_CLUSTER_ENABLED:-false}" == "true" ]]; then
   expected_containers+=(dc-saas-ordersvr-b dc-saas-projectionsvr)
+  if [[ "${ORDER_CLUSTER_C_ENABLED:-false}" == "true" ]]; then
+    expected_containers+=(dc-saas-ordersvr-c)
+  fi
 fi
 if [[ "${MD_CLUSTER_ENABLED:-false}" == "true" ]]; then
   expected_containers+=(dc-saas-mdsvr-b)
@@ -104,6 +110,12 @@ if [[ "${ORDER_CLUSTER_ENABLED:-false}" == "true" ]]; then
   grep -Fq 'serverKey=SERVER.OrderSvrB' \
     "${DEPLOY_ROOT}/control/overrides/OrderSvrB/config/application.properties" ||
     die "OrderSvrB cluster configuration is missing."
+  if [[ "${ORDER_CLUSTER_C_ENABLED:-false}" == "true" ]]; then
+    required_ports+=("${ORDERSVR_C_GW_PORT}" "${ORDERSVR_C_REPLICATION_PORT}")
+    grep -Fq 'serverKey=SERVER.OrderSvrC' \
+      "${DEPLOY_ROOT}/control/overrides/OrderSvrC/config/application.properties" ||
+      die "OrderSvrC cluster configuration is missing."
+  fi
 fi
 if [[ "${MD_CLUSTER_ENABLED:-false}" == "true" ]]; then
   required_ports+=("${MDSVR_B_GW_PORT}")
