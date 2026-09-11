@@ -469,6 +469,7 @@ order.cluster.snapshot.periodic.minCommittedMutations=${ORDER_CLUSTER_PERIODIC_S
 order.cluster.snapshot.periodic.maxPartitionsPerRun=${ORDER_CLUSTER_PERIODIC_SNAPSHOT_MAX_PARTITIONS_PER_RUN}
 order.cluster.lifecycle.enabled=true
 order.cluster.lifecycle.bootstrap.enabled=true
+order.cluster.lifecycle.sameEpochRestart.enabled=true
 order.cluster.lifecycle.pollMillis=1000
 order.cluster.lifecycle.retryMillis=5000
 order.cluster.perfProbe.enabled=false

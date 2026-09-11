@@ -244,6 +244,7 @@ order.cluster.snapshot.barrier.acquireTimeoutMillis=10000
 order.cluster.snapshot.promotionBarrier.required=true
 order.cluster.lifecycle.enabled=true
 order.cluster.lifecycle.bootstrap.enabled=true
+order.cluster.lifecycle.sameEpochRestart.enabled=true
 order.cluster.lifecycle.pollMillis=1000
 order.cluster.lifecycle.retryMillis=5000
 order.cluster.perfProbe.enabled=true
