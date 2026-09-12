@@ -116,6 +116,75 @@ grep -Fq 'is not Online' <<<"${route_response}" && die 'logical OrderSvr route i
 grep -Fq 'handler:__cluster_state_verify__ does not exist.' <<<"${route_response}" \
   || die "unexpected logical OrderSvr route response: ${route_response}"
 
+python3 - "${WEB_PORT}" "${PARTITION_COUNT}" <<'PY'
+import json
+import sys
+import urllib.error
+import urllib.request
+import zlib
+from concurrent.futures import ThreadPoolExecutor, as_completed
+
+web_port = int(sys.argv[1])
+partition_count = int(sys.argv[2])
+url = f"http://127.0.0.1:{web_port}/httpapi/"
+
+
+def representative_key(target):
+    nonce = 0
+    while True:
+        candidate = f"__dc_primary_scan__{target}:{nonce}"
+        if zlib.crc32(candidate.encode("utf-8")) % partition_count == target:
+            return candidate
+        nonce += 1
+
+
+def verify(target):
+    body = json.dumps(
+        {
+            "serverName": "OrderSvr",
+            "method": "__cluster_all_route_verify__",
+            "key": representative_key(target),
+            "content": {
+                "Location": "CLUSTER_VERIFY",
+                "MarketIndicator": "4",
+                "SecurityID": "BTCUSDT",
+            },
+        },
+        separators=(",", ":"),
+    ).encode("utf-8")
+    request = urllib.request.Request(
+        url, data=body, headers={"Content-Type": "application/json"}
+    )
+    try:
+        with urllib.request.urlopen(request, timeout=12) as response:
+            text = response.read().decode("utf-8", errors="replace")
+    except urllib.error.HTTPError as error:
+        text = error.read().decode("utf-8", errors="replace")
+    except Exception as error:
+        return target, f"{type(error).__name__}: {error}"
+    expected = "handler:__cluster_all_route_verify__ does not exist."
+    if expected not in text or "is not Online" in text:
+        return target, text[:240]
+    return target, None
+
+
+failures = []
+with ThreadPoolExecutor(max_workers=min(16, partition_count)) as pool:
+    futures = [pool.submit(verify, target) for target in range(partition_count)]
+    for future in as_completed(futures):
+        target, error = future.result()
+        if error is not None:
+            failures.append((target, error))
+
+if failures:
+    for target, error in sorted(failures):
+        print(f"P{target:03d} {error}", file=sys.stderr)
+    raise SystemExit(
+        f"logical OrderSvr partition routes failed: {len(failures)}/{partition_count}"
+    )
+print(f"logical_partition_routes={partition_count}/{partition_count}")
+PY
+
 containers=(dc-saas-ordersvr dc-saas-ordersvr-b dc-saas-gateway)
 if grep -qE '"(primary|replica)":"OrderSvrC"|"replicas":\[[^]]*"OrderSvrC"|"learners":\[[^]]*"OrderSvrC"' "${assignments}"; then
   containers+=(dc-saas-ordersvr-c)
