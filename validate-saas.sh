@@ -48,6 +48,12 @@ if [[ "${MD_CLUSTER_ENABLED:-false}" == "true" ]]; then
     profiles+=(md-cluster-c)
   fi
 fi
+if [[ "${TRADE_CLUSTER_ENABLED:-false}" == "true" ]]; then
+  profiles+=(trade-cluster)
+  export TRADESVR_CONFIG_NAME=TradeSvrA
+else
+  export TRADESVR_CONFIG_NAME=TradeSvr
+fi
 export COMPOSE_PROFILES="$(IFS=,; printf '%s' "${profiles[*]}")"
 
 compose() {
@@ -82,6 +88,9 @@ if [[ "${MD_CLUSTER_ENABLED:-false}" == "true" ]]; then
   if [[ "${MD_CLUSTER_C_ENABLED:-false}" == "true" ]]; then
     expected_containers+=(dc-saas-mdsvr-c)
   fi
+fi
+if [[ "${TRADE_CLUSTER_ENABLED:-false}" == "true" ]]; then
+  expected_containers+=(dc-saas-tradesvr-b)
 fi
 
 for container in "${expected_containers[@]}"; do
@@ -141,6 +150,22 @@ if [[ "${MD_CLUSTER_ENABLED:-false}" == "true" ]]; then
       "${DEPLOY_ROOT}/control/overrides/MDSvrC/config/application.properties" ||
       die "MDSvrC cluster configuration is missing."
   fi
+fi
+if [[ "${TRADE_CLUSTER_ENABLED:-false}" == "true" ]]; then
+  required_ports+=("${TRADESVR_B_GW_PORT}")
+  grep -Fqx 'ProtoVersion=2' "${DEPLOY_ROOT}/control/ATSConfig.ini" ||
+    die "TradeSvr partition routing requires ProtoVersion=2."
+  grep -Fq 'LBConfig.TradeSvr=Partition' "${DEPLOY_ROOT}/control/ATSConfig.ini" ||
+    die "TradeSvr partition load balancing is not enabled in ATSConfig.ini."
+  grep -Fq 'serverKey=SERVER.TradeSvrA' \
+    "${DEPLOY_ROOT}/control/overrides/TradeSvrA/config/application.properties" ||
+    die "TradeSvrA cluster configuration is missing."
+  grep -Fq 'serverKey=SERVER.TradeSvrB' \
+    "${DEPLOY_ROOT}/control/overrides/TradeSvrB/config/application.properties" ||
+    die "TradeSvrB cluster configuration is missing."
+  grep -Fq 'trade.node.businessEnabled=false' \
+    "${DEPLOY_ROOT}/control/overrides/TradeSvrB/config/application.properties" ||
+    die "TradeSvrB must remain a fenced cold standby."
 fi
 
 listening="$(ss -lnt | awk 'NR > 1 {print $4}')"

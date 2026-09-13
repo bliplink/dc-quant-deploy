@@ -130,6 +130,9 @@ ensure_env_defaults() {
   if ! grep -q '^MD_CLUSTER_C_ENABLED=' "${ENV_FILE}"; then
     printf 'MD_CLUSTER_C_ENABLED=false\n' >> "${ENV_FILE}"
   fi
+  if ! grep -q '^TRADE_CLUSTER_ENABLED=' "${ENV_FILE}"; then
+    printf 'TRADE_CLUSTER_ENABLED=false\n' >> "${ENV_FILE}"
+  fi
   if ! grep -q '^MDSVR_B_GW_PORT=' "${ENV_FILE}"; then
     printf 'MDSVR_B_GW_PORT=33043\n' >> "${ENV_FILE}"
   fi
@@ -138,6 +141,9 @@ ensure_env_defaults() {
   fi
   if ! grep -q '^ORDERSVR_B_GW_PORT=' "${ENV_FILE}"; then
     printf 'ORDERSVR_B_GW_PORT=33041\n' >> "${ENV_FILE}"
+  fi
+  if ! grep -q '^TRADESVR_B_GW_PORT=' "${ENV_FILE}"; then
+    printf 'TRADESVR_B_GW_PORT=33046\n' >> "${ENV_FILE}"
   fi
   if ! grep -q '^ORDERSVR_C_GW_PORT=' "${ENV_FILE}"; then
     printf 'ORDERSVR_C_GW_PORT=33044\n' >> "${ENV_FILE}"
@@ -241,6 +247,12 @@ load_env() {
   else
     export MDSVR_CONFIG_NAME=MDSvr
   fi
+  if [[ "${TRADE_CLUSTER_ENABLED:-false}" == "true" ]]; then
+    profiles+=(trade-cluster)
+    export TRADESVR_CONFIG_NAME=TradeSvrA
+  else
+    export TRADESVR_CONFIG_NAME=TradeSvr
+  fi
   export COMPOSE_PROFILES="$(IFS=,; printf '%s' "${profiles[*]}")"
 }
 
@@ -314,6 +326,9 @@ validate_initial_ports() {
     if [[ "${MD_CLUSTER_C_ENABLED:-false}" == "true" ]]; then
       ports+=("${MDSVR_C_GW_PORT}")
     fi
+  fi
+  if [[ "${TRADE_CLUSTER_ENABLED:-false}" == "true" ]]; then
+    ports+=("${TRADESVR_B_GW_PORT}")
   fi
   for port in "${ports[@]}"; do
     if port_is_listening "${port}"; then
@@ -827,6 +842,9 @@ if [[ "${ORDER_CLUSTER_ENABLED:-false}" == "true" ]]; then
   wait_for_port "${PROJECTIONSVR_GW_PORT:-33042}" projectionsvr 120
 fi
 wait_for_port "${TRADESVR_GW_PORT}" tradesvr 120
+if [[ "${TRADE_CLUSTER_ENABLED:-false}" == "true" ]]; then
+  wait_for_port "${TRADESVR_B_GW_PORT}" tradesvr-b 180
+fi
 wait_for_port "${LIQSVR_GW_PORT}" liqsvr 120
 wait_for_port "${MANAGERSVR_GW_PORT}" managersvr 120
 wait_for_port "${ADMINSVR_GW_PORT}" adminsvr 120

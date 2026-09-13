@@ -42,6 +42,7 @@ ORDER_CLUSTER_ENABLED="${ORDER_CLUSTER_ENABLED:-false}"
 ORDER_CLUSTER_C_ENABLED="${ORDER_CLUSTER_C_ENABLED:-false}"
 MD_CLUSTER_ENABLED="${MD_CLUSTER_ENABLED:-false}"
 MD_CLUSTER_C_ENABLED="${MD_CLUSTER_C_ENABLED:-false}"
+TRADE_CLUSTER_ENABLED="${TRADE_CLUSTER_ENABLED:-false}"
 PROTO_VERSION=1
 ORDER_CLUSTER_REPLICATION_CONSISTENCY_MODE="${ORDER_CLUSTER_REPLICATION_CONSISTENCY_MODE:-SYNC_PER_RECORD}"
 ORDER_CLUSTER_REPLICATION_BATCH_MAX_RECORDS="${ORDER_CLUSTER_REPLICATION_BATCH_MAX_RECORDS:-64}"
@@ -58,7 +59,7 @@ ORDER_CLUSTER_PERIODIC_SNAPSHOT_MAX_AGE_MILLIS="${ORDER_CLUSTER_PERIODIC_SNAPSHO
 ORDER_CLUSTER_PERIODIC_SNAPSHOT_MIN_COMMITTED_MUTATIONS="${ORDER_CLUSTER_PERIODIC_SNAPSHOT_MIN_COMMITTED_MUTATIONS:-10000}"
 ORDER_CLUSTER_PERIODIC_SNAPSHOT_MAX_PARTITIONS_PER_RUN="${ORDER_CLUSTER_PERIODIC_SNAPSHOT_MAX_PARTITIONS_PER_RUN:-4}"
 PROJECTIONSVR_GW_PORT="${PROJECTIONSVR_GW_PORT:-33042}"
-if [[ "${ORDER_CLUSTER_ENABLED}" == "true" || "${MD_CLUSTER_ENABLED}" == "true" ]]; then
+if [[ "${ORDER_CLUSTER_ENABLED}" == "true" || "${MD_CLUSTER_ENABLED}" == "true" || "${TRADE_CLUSTER_ENABLED}" == "true" ]]; then
   PROTO_VERSION=2
 fi
 if [[ "${ORDER_CLUSTER_ENABLED}" == "true" ]]; then
@@ -99,12 +100,15 @@ if [[ "${MD_CLUSTER_C_ENABLED}" == "true" ]]; then
   [[ "${MD_CLUSTER_ENABLED}" == "true" ]] || die "MD_CLUSTER_C_ENABLED requires MD_CLUSTER_ENABLED=true"
   [[ -n "${MDSVR_C_GW_PORT:-}" ]] || die "Missing required MDSvrC variable: MDSVR_C_GW_PORT"
 fi
+if [[ "${TRADE_CLUSTER_ENABLED}" == "true" ]]; then
+  [[ -n "${TRADESVR_B_GW_PORT:-}" ]] || die "Missing required cluster variable: TRADESVR_B_GW_PORT"
+fi
 
 CONTROL_ROOT="${DEPLOY_ROOT}/control"
 OVERRIDE_ROOT="${CONTROL_ROOT}/overrides"
 umask 077
 
-install -d -m 0750 "${CONTROL_ROOT}" "${OVERRIDE_ROOT}/GW/config" "${OVERRIDE_ROOT}/LoginSvr/config" "${OVERRIDE_ROOT}/MDSvr/config" "${OVERRIDE_ROOT}/MDSvrA/config" "${OVERRIDE_ROOT}/MDSvrB/config" "${OVERRIDE_ROOT}/MDSvrC/config" "${OVERRIDE_ROOT}/APSSvr/config" "${OVERRIDE_ROOT}/OrderSvr/config" "${OVERRIDE_ROOT}/OrderSvrA/config" "${OVERRIDE_ROOT}/OrderSvrB/config" "${OVERRIDE_ROOT}/OrderSvrC/config" "${OVERRIDE_ROOT}/ProjectionSvr/config" "${OVERRIDE_ROOT}/TradeSvr/config" "${OVERRIDE_ROOT}/LiqSvr/config" "${OVERRIDE_ROOT}/ManagerSvr/config" "${OVERRIDE_ROOT}/AdminSvr/config"
+install -d -m 0750 "${CONTROL_ROOT}" "${OVERRIDE_ROOT}/GW/config" "${OVERRIDE_ROOT}/LoginSvr/config" "${OVERRIDE_ROOT}/MDSvr/config" "${OVERRIDE_ROOT}/MDSvrA/config" "${OVERRIDE_ROOT}/MDSvrB/config" "${OVERRIDE_ROOT}/MDSvrC/config" "${OVERRIDE_ROOT}/APSSvr/config" "${OVERRIDE_ROOT}/OrderSvr/config" "${OVERRIDE_ROOT}/OrderSvrA/config" "${OVERRIDE_ROOT}/OrderSvrB/config" "${OVERRIDE_ROOT}/OrderSvrC/config" "${OVERRIDE_ROOT}/ProjectionSvr/config" "${OVERRIDE_ROOT}/TradeSvr/config" "${OVERRIDE_ROOT}/TradeSvrA/config" "${OVERRIDE_ROOT}/TradeSvrB/config" "${OVERRIDE_ROOT}/LiqSvr/config" "${OVERRIDE_ROOT}/ManagerSvr/config" "${OVERRIDE_ROOT}/AdminSvr/config"
 
 cat > "${CONTROL_ROOT}/DBPoolConfig.ini" <<EOF
 [DBPOOL]
@@ -197,7 +201,22 @@ else
   append_server OrderSvr OrderSvr "${ORDERSVR_GW_PORT}" OrderSvr
 fi
 append_server APSSvr APSSvr "${APSSVR_GW_PORT}" APSSvr
-append_server TradeSvr TradeSvr "${TRADESVR_GW_PORT}" TDSvr
+if [[ "${TRADE_CLUSTER_ENABLED}" == "true" ]]; then
+  cat >> "${CONTROL_ROOT}/ATSConfig.ini" <<EOF
+
+SERVER.TradeSvr.Name=TradeSvr
+SERVER.TradeSvr.Host=127.0.0.1:33997
+SERVER.TradeSvr.RegType=0
+SERVER.TradeSvr.RegisterEnable=1
+SERVER.TradeSvr.LBFactor=1
+SERVER.TradeSvr.ServiceName=TradeSvr
+SERVER.TradeSvr.RegisterServerList=REGISTER.Svr1
+EOF
+  append_server TradeSvrA TradeSvrA "${TRADESVR_GW_PORT}" TradeSvrA
+  append_server TradeSvrB TradeSvrB "${TRADESVR_B_GW_PORT}" TradeSvrB
+else
+  append_server TradeSvr TradeSvr "${TRADESVR_GW_PORT}" TDSvr
+fi
 if [[ "${MD_CLUSTER_ENABLED}" == "true" ]]; then
   cat >> "${CONTROL_ROOT}/ATSConfig.ini" <<EOF
 
@@ -223,10 +242,40 @@ append_server LiqSvr LiqSvr "${LIQSVR_GW_PORT}" LiqSvr
 append_server ManagerSvr ManagerSvr "${MANAGERSVR_GW_PORT}" ManagerSvr
 append_server ProjectionSvr ProjectionSvr "${PROJECTIONSVR_GW_PORT}" ProjectionSvr
 
-if [[ "${ORDER_CLUSTER_ENABLED}" == "true" || "${MD_CLUSTER_ENABLED}" == "true" ]]; then
+if [[ "${ORDER_CLUSTER_ENABLED}" == "true" || "${MD_CLUSTER_ENABLED}" == "true" || "${TRADE_CLUSTER_ENABLED}" == "true" ]]; then
   cat >> "${CONTROL_ROOT}/ATSConfig.ini" <<'EOF'
 
 Cluster.Enabled=true
+EOF
+fi
+
+if [[ "${TRADE_CLUSTER_ENABLED}" == "true" ]]; then
+  cat >> "${CONTROL_ROOT}/ATSConfig.ini" <<'EOF'
+
+LBConfig.TradeSvr=Partition
+Cluster.TradeSvr.Enabled=true
+Cluster.TradeSvrA.Enabled=true
+Cluster.TradeSvrB.Enabled=true
+Partition.TradeSvr.Count=256
+Partition.TradeSvr.Root=/dc/cluster/tradesvr/partitions
+Partition.TradeSvr.EnforceFence=true
+Partition.TradeSvr.PlacementEnabled=false
+Partition.TradeSvr.PlacementRequired=true
+Partition.TradeSvr.PlacementPath=/dc/cluster/tradesvr/desired/placement
+Partition.TradeSvrA.Count=256
+Partition.TradeSvrA.Root=/dc/cluster/tradesvr/partitions
+Partition.TradeSvrA.EnforceFence=true
+Partition.TradeSvrA.EnforceReadiness=true
+Partition.TradeSvrA.PlacementEnabled=false
+Partition.TradeSvrA.PlacementRequired=true
+Partition.TradeSvrA.PlacementPath=/dc/cluster/tradesvr/desired/placement
+Partition.TradeSvrB.Count=256
+Partition.TradeSvrB.Root=/dc/cluster/tradesvr/partitions
+Partition.TradeSvrB.EnforceFence=true
+Partition.TradeSvrB.EnforceReadiness=true
+Partition.TradeSvrB.PlacementEnabled=false
+Partition.TradeSvrB.PlacementRequired=true
+Partition.TradeSvrB.PlacementPath=/dc/cluster/tradesvr/desired/placement
 EOF
 fi
 
@@ -599,33 +648,48 @@ if [[ "${ORDER_CLUSTER_ENABLED}" == "true" ]]; then
   fi
 fi
 
-cat > "${OVERRIDE_ROOT}/TradeSvr/config/application.properties" <<EOF
+write_trade_config() {
+  local node="$1" business_enabled="$2"
+  cat > "${OVERRIDE_ROOT}/${node}/config/application.properties" <<EOF
 [Cron]
 schedule.Config=./config/quartz.properties
-serverKey=SERVER.TradeSvr
+serverKey=SERVER.${node}
 log4j.file=./config/log4j.ini
 log4j.thread=1
 log4j.writeTime=true
 log4j.async=true
-storePath=../../data/TradeSvr
+storePath=../../data/${node}
 enableSaveDBDemo=false
 allowMissingMarkPrice=${TRADE_ALLOW_MISSING_MARK_PRICE:-false}
 trade.executionDedupe.maxEntries=${TRADE_EXECUTION_DEDUPE_MAX_ENTRIES:-1000000}
+trade.node.businessEnabled=${business_enabled}
 dbType=mysql
 dbpool.cfg=../../control/DBPoolConfig.ini
 dbpool.default=MYSQL0
 EOF
+}
+
+if [[ "${TRADE_CLUSTER_ENABLED}" == "true" ]]; then
+  write_trade_config TradeSvrA true
+  # Stage one is a fenced cold standby. Do not start funding, ADL or DB
+  # writers until replicated state recovery is implemented and verified.
+  write_trade_config TradeSvrB false
+else
+  write_trade_config TradeSvr true
+fi
 
 # TradeSvr's successful order/execution path is intentionally quieter than the
 # default image configuration. At sustained matching rates those messages are
 # emitted several times per fill to both a file and stdout, creating needless
 # I/O and cgroup page-cache pressure. Warnings, failures and lifecycle events
 # remain at INFO/WARN through the root logger.
-cat > "${OVERRIDE_ROOT}/TradeSvr/config/log4j.ini" <<'EOF'
+write_trade_log_config() {
+  local node="$1"
+  cat > "${OVERRIDE_ROOT}/${node}/config/log4j.ini" <<EOF
 log4j.rootLogger=INFO,file,stdout
 
 log4j.appender.file=org.apache.log4j.DailyRollingFileAppender
-log4j.appender.file.File=./log/TradeSvr.log
+log4j.appender.file.File=../../log/${node}.log
 log4j.appender.file.Append=true
 log4j.appender.file.layout=org.apache.log4j.PatternLayout
 log4j.appender.file.layout.ConversionPattern=%d{yyyy/MM/dd HH:mm:ss.SSS} %p %m (%C{1}:%L)%n
@@ -640,6 +704,14 @@ log4j.logger.com.app.dc.service.check.ProcessOrder=WARN
 log4j.logger.com.app.dc.service.order.OrderManager=WARN
 log4j.logger.com.app.dc.handler.UpdateOrderHandler=WARN
 EOF
+}
+
+if [[ "${TRADE_CLUSTER_ENABLED}" == "true" ]]; then
+  write_trade_log_config TradeSvrA
+  write_trade_log_config TradeSvrB
+else
+  write_trade_log_config TradeSvr
+fi
 
 cat > "${OVERRIDE_ROOT}/LiqSvr/config/application.properties" <<EOF
 tradeServerKey=SERVER.TradeSvr

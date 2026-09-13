@@ -382,10 +382,36 @@ services:
       - ${DEPLOY_ROOT}/control:/srv/dc/control:ro
       - ${DEPLOY_ROOT}/data:/srv/dc/data
       - ${DEPLOY_ROOT}/log:/srv/dc/log
-      - ${DEPLOY_ROOT}/control/overrides/TradeSvr/config/application.properties:/srv/dc/dc/TradeSvr/config/application.properties:ro
-      - ${DEPLOY_ROOT}/control/overrides/TradeSvr/config/log4j.ini:/srv/dc/dc/TradeSvr/config/log4j.ini:ro
+      - ${DEPLOY_ROOT}/control/overrides/${TRADESVR_CONFIG_NAME:-TradeSvr}/config/application.properties:/srv/dc/dc/TradeSvr/config/application.properties:ro
+      - ${DEPLOY_ROOT}/control/overrides/${TRADESVR_CONFIG_NAME:-TradeSvr}/config/log4j.ini:/srv/dc/dc/TradeSvr/config/log4j.ini:ro
     mem_limit: ${TRADESVR_MEMORY_LIMIT:-896m}
     cpus: ${TRADESVR_CPU_LIMIT:-0.50}
+
+  tradesvr-b:
+    <<: *java-service-base
+    profiles: ["trade-cluster"]
+    image: ${TRADESVR_IMAGE_REPOSITORY:-ghcr.io/bliplink/tradesvr}:${TRADESVR_TAG:-saas-crypto}
+    container_name: dc-saas-tradesvr-b
+    depends_on:
+      mysql:
+        condition: service_healthy
+      zookeeper:
+        condition: service_started
+    environment:
+      TZ: Asia/Shanghai
+      DEPLOY_ROOT: /srv/dc
+      SERVICE_NAME: TradeSvr
+      MAIN_CLASS: TradeSvr
+      MALLOC_ARENA_MAX: ${TRADESVR_MALLOC_ARENA_MAX:-2}
+      JAVA_OPTS: ${TRADESVR_B_JAVA_OPTS:--server -Xms32m -Xmx192m -Xmn48m -Xss256k -XX:MaxDirectMemorySize=64m -XX:+ExitOnOutOfMemoryError -Dgateway.api.workerThreads=16 -Dgateway.api.workerQueueCapacity=2000 -Djava.security.auth.login.config=../../control/jaas.ini}
+    volumes:
+      - ${DEPLOY_ROOT}/control:/srv/dc/control:ro
+      - ${DEPLOY_ROOT}/data:/srv/dc/data
+      - ${DEPLOY_ROOT}/log:/srv/dc/log
+      - ${DEPLOY_ROOT}/control/overrides/TradeSvrB/config/application.properties:/srv/dc/dc/TradeSvr/config/application.properties:ro
+      - ${DEPLOY_ROOT}/control/overrides/TradeSvrB/config/log4j.ini:/srv/dc/dc/TradeSvr/config/log4j.ini:ro
+    mem_limit: ${TRADESVR_B_MEMORY_LIMIT:-512m}
+    cpus: ${TRADESVR_B_CPU_LIMIT:-0.25}
 
   liqsvr:
     <<: *java-service-base

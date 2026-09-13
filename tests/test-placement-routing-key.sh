@@ -16,7 +16,7 @@ assert_key() {
 separator=$'\x1f'
 assert_key OrderSvr "WEB_E2E${separator}4${separator}BTCUSDT"
 assert_key MDSvr "WEB_E2E${separator}4${separator}BTCUSDT"
-assert_key TradeSvr ""
+assert_key TradeSvr "WEB_E2E"
 
 existing='{"serverName":"MDSvr","key":"operator-selected","content":{}}'
 actual="$(dc_attach_placement_key "${existing}" WEB_E2E 4 BTCUSDT | "${PYTHON_BIN}" -c 'import json,sys; print(json.load(sys.stdin)["key"])')"
