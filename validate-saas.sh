@@ -44,6 +44,9 @@ fi
 if [[ "${MD_CLUSTER_ENABLED:-false}" == "true" ]]; then
   profiles+=(md-cluster)
   export MDSVR_CONFIG_NAME=MDSvrA
+  if [[ "${MD_CLUSTER_C_ENABLED:-false}" == "true" ]]; then
+    profiles+=(md-cluster-c)
+  fi
 fi
 export COMPOSE_PROFILES="$(IFS=,; printf '%s' "${profiles[*]}")"
 
@@ -76,6 +79,9 @@ if [[ "${ORDER_CLUSTER_ENABLED:-false}" == "true" ]]; then
 fi
 if [[ "${MD_CLUSTER_ENABLED:-false}" == "true" ]]; then
   expected_containers+=(dc-saas-mdsvr-b)
+  if [[ "${MD_CLUSTER_C_ENABLED:-false}" == "true" ]]; then
+    expected_containers+=(dc-saas-mdsvr-c)
+  fi
 fi
 
 for container in "${expected_containers[@]}"; do
@@ -129,6 +135,12 @@ if [[ "${MD_CLUSTER_ENABLED:-false}" == "true" ]]; then
   grep -Fq 'serverKey=SERVER.MDSvrB' \
     "${DEPLOY_ROOT}/control/overrides/MDSvrB/config/application.properties" ||
     die "MDSvrB cluster configuration is missing."
+  if [[ "${MD_CLUSTER_C_ENABLED:-false}" == "true" ]]; then
+    required_ports+=("${MDSVR_C_GW_PORT}")
+    grep -Fq 'serverKey=SERVER.MDSvrC' \
+      "${DEPLOY_ROOT}/control/overrides/MDSvrC/config/application.properties" ||
+      die "MDSvrC cluster configuration is missing."
+  fi
 fi
 
 listening="$(ss -lnt | awk 'NR > 1 {print $4}')"

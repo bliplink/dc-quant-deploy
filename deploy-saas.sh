@@ -127,8 +127,14 @@ ensure_env_defaults() {
   if ! grep -q '^MD_CLUSTER_ENABLED=' "${ENV_FILE}"; then
     printf 'MD_CLUSTER_ENABLED=false\n' >> "${ENV_FILE}"
   fi
+  if ! grep -q '^MD_CLUSTER_C_ENABLED=' "${ENV_FILE}"; then
+    printf 'MD_CLUSTER_C_ENABLED=false\n' >> "${ENV_FILE}"
+  fi
   if ! grep -q '^MDSVR_B_GW_PORT=' "${ENV_FILE}"; then
     printf 'MDSVR_B_GW_PORT=33043\n' >> "${ENV_FILE}"
+  fi
+  if ! grep -q '^MDSVR_C_GW_PORT=' "${ENV_FILE}"; then
+    printf 'MDSVR_C_GW_PORT=33045\n' >> "${ENV_FILE}"
   fi
   if ! grep -q '^ORDERSVR_B_GW_PORT=' "${ENV_FILE}"; then
     printf 'ORDERSVR_B_GW_PORT=33041\n' >> "${ENV_FILE}"
@@ -229,6 +235,9 @@ load_env() {
   if [[ "${MD_CLUSTER_ENABLED:-false}" == "true" ]]; then
     profiles+=(md-cluster)
     export MDSVR_CONFIG_NAME=MDSvrA
+    if [[ "${MD_CLUSTER_C_ENABLED:-false}" == "true" ]]; then
+      profiles+=(md-cluster-c)
+    fi
   else
     export MDSVR_CONFIG_NAME=MDSvr
   fi
@@ -302,6 +311,9 @@ validate_initial_ports() {
   fi
   if [[ "${MD_CLUSTER_ENABLED:-false}" == "true" ]]; then
     ports+=("${MDSVR_B_GW_PORT}")
+    if [[ "${MD_CLUSTER_C_ENABLED:-false}" == "true" ]]; then
+      ports+=("${MDSVR_C_GW_PORT}")
+    fi
   fi
   for port in "${ports[@]}"; do
     if port_is_listening "${port}"; then
@@ -794,6 +806,9 @@ wait_for_port "${LOGINSVR_HTTP_PORT}" loginsvr 180
 wait_for_port "${MDSVR_GW_PORT}" mdsvr 120
 if [[ "${MD_CLUSTER_ENABLED:-false}" == "true" ]]; then
   wait_for_port "${MDSVR_B_GW_PORT}" mdsvr-b 180
+  if [[ "${MD_CLUSTER_C_ENABLED:-false}" == "true" ]]; then
+    wait_for_port "${MDSVR_C_GW_PORT}" mdsvr-c 180
+  fi
 fi
 wait_for_port "${APSSVR_GW_PORT}" apssvr 120
 wait_for_port "${ORDERSVR_GW_PORT}" ordersvr 120

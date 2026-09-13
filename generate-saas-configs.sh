@@ -41,6 +41,7 @@ done
 ORDER_CLUSTER_ENABLED="${ORDER_CLUSTER_ENABLED:-false}"
 ORDER_CLUSTER_C_ENABLED="${ORDER_CLUSTER_C_ENABLED:-false}"
 MD_CLUSTER_ENABLED="${MD_CLUSTER_ENABLED:-false}"
+MD_CLUSTER_C_ENABLED="${MD_CLUSTER_C_ENABLED:-false}"
 PROTO_VERSION=1
 ORDER_CLUSTER_REPLICATION_CONSISTENCY_MODE="${ORDER_CLUSTER_REPLICATION_CONSISTENCY_MODE:-SYNC_PER_RECORD}"
 ORDER_CLUSTER_REPLICATION_BATCH_MAX_RECORDS="${ORDER_CLUSTER_REPLICATION_BATCH_MAX_RECORDS:-64}"
@@ -94,12 +95,16 @@ fi
 if [[ "${MD_CLUSTER_ENABLED}" == "true" ]]; then
   [[ -n "${MDSVR_B_GW_PORT:-}" ]] || die "Missing required cluster variable: MDSVR_B_GW_PORT"
 fi
+if [[ "${MD_CLUSTER_C_ENABLED}" == "true" ]]; then
+  [[ "${MD_CLUSTER_ENABLED}" == "true" ]] || die "MD_CLUSTER_C_ENABLED requires MD_CLUSTER_ENABLED=true"
+  [[ -n "${MDSVR_C_GW_PORT:-}" ]] || die "Missing required MDSvrC variable: MDSVR_C_GW_PORT"
+fi
 
 CONTROL_ROOT="${DEPLOY_ROOT}/control"
 OVERRIDE_ROOT="${CONTROL_ROOT}/overrides"
 umask 077
 
-install -d -m 0750 "${CONTROL_ROOT}" "${OVERRIDE_ROOT}/GW/config" "${OVERRIDE_ROOT}/LoginSvr/config" "${OVERRIDE_ROOT}/MDSvr/config" "${OVERRIDE_ROOT}/MDSvrA/config" "${OVERRIDE_ROOT}/MDSvrB/config" "${OVERRIDE_ROOT}/APSSvr/config" "${OVERRIDE_ROOT}/OrderSvr/config" "${OVERRIDE_ROOT}/OrderSvrA/config" "${OVERRIDE_ROOT}/OrderSvrB/config" "${OVERRIDE_ROOT}/OrderSvrC/config" "${OVERRIDE_ROOT}/ProjectionSvr/config" "${OVERRIDE_ROOT}/TradeSvr/config" "${OVERRIDE_ROOT}/LiqSvr/config" "${OVERRIDE_ROOT}/ManagerSvr/config" "${OVERRIDE_ROOT}/AdminSvr/config"
+install -d -m 0750 "${CONTROL_ROOT}" "${OVERRIDE_ROOT}/GW/config" "${OVERRIDE_ROOT}/LoginSvr/config" "${OVERRIDE_ROOT}/MDSvr/config" "${OVERRIDE_ROOT}/MDSvrA/config" "${OVERRIDE_ROOT}/MDSvrB/config" "${OVERRIDE_ROOT}/MDSvrC/config" "${OVERRIDE_ROOT}/APSSvr/config" "${OVERRIDE_ROOT}/OrderSvr/config" "${OVERRIDE_ROOT}/OrderSvrA/config" "${OVERRIDE_ROOT}/OrderSvrB/config" "${OVERRIDE_ROOT}/OrderSvrC/config" "${OVERRIDE_ROOT}/ProjectionSvr/config" "${OVERRIDE_ROOT}/TradeSvr/config" "${OVERRIDE_ROOT}/LiqSvr/config" "${OVERRIDE_ROOT}/ManagerSvr/config" "${OVERRIDE_ROOT}/AdminSvr/config"
 
 cat > "${CONTROL_ROOT}/DBPoolConfig.ini" <<EOF
 [DBPOOL]
@@ -206,6 +211,9 @@ SERVER.MDSvr.RegisterServerList=REGISTER.Svr1
 EOF
   append_server MDSvrA MDSvrA "${MDSVR_GW_PORT}" MDSvrA
   append_server MDSvrB MDSvrB "${MDSVR_B_GW_PORT}" MDSvrB
+  if [[ "${MD_CLUSTER_C_ENABLED}" == "true" ]]; then
+    append_server MDSvrC MDSvrC "${MDSVR_C_GW_PORT}" MDSvrC
+  fi
 else
   append_server MDSvr MDSvr "${MDSVR_GW_PORT}" MDSvr
 fi
@@ -292,6 +300,18 @@ Partition.MDSvrB.PlacementEnabled=false
 Partition.MDSvrB.PlacementRequired=true
 Partition.MDSvrB.PlacementPath=/dc/cluster/mdsvr/desired/placement
 EOF
+  if [[ "${MD_CLUSTER_C_ENABLED}" == "true" ]]; then
+    cat >> "${CONTROL_ROOT}/ATSConfig.ini" <<'EOF'
+Cluster.MDSvrC.Enabled=true
+Partition.MDSvrC.Count=256
+Partition.MDSvrC.Root=/dc/cluster/mdsvr/partitions
+Partition.MDSvrC.EnforceFence=true
+Partition.MDSvrC.EnforceReadiness=true
+Partition.MDSvrC.PlacementEnabled=false
+Partition.MDSvrC.PlacementRequired=true
+Partition.MDSvrC.PlacementPath=/dc/cluster/mdsvr/desired/placement
+EOF
+  fi
 fi
 
 install -m 0600 "${SCRIPT_DIR}/control.prod/jaas.ini" "${CONTROL_ROOT}/jaas.ini"
@@ -394,6 +414,9 @@ write_md_config MDSvr
 if [[ "${MD_CLUSTER_ENABLED}" == "true" ]]; then
   write_md_config MDSvrA
   write_md_config MDSvrB
+  if [[ "${MD_CLUSTER_C_ENABLED}" == "true" ]]; then
+    write_md_config MDSvrC
+  fi
 fi
 
 cat > "${OVERRIDE_ROOT}/APSSvr/config/application.properties" <<EOF
