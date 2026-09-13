@@ -33,6 +33,7 @@ if (!password) throw new Error('E2E_PASSWORD is required');
         body: JSON.stringify({
           serverName: 'MDSvr',
           method: 'queryPublicMarket',
+          key: [tenant, '4', 'BTCUSDT'].join('\x1f'),
           content: {securityID: 'BTCUSDT', location: tenant}
         })
       });

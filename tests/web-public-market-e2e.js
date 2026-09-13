@@ -211,31 +211,37 @@ function timeout(ms, message) {
     if (market.bidDepth[0].color === market.askDepth[0].color) {
       fail('bid and ask cumulative depth bars do not use distinct colors', market);
     }
+    const tickerChange = await page.locator('.symbolMarketWrap > .df.fdc').nth(1)
+      .locator('span').nth(1).innerText();
+    if (!tickerChange || tickerChange.trim() === '--' || !tickerChange.includes('%')) {
+      fail('24h change is missing from the market ticker', tickerChange);
+    }
     const depthScreenshot = path.join(artifactDir, 'web-order-book-depth.png');
     await page.screenshot({path: depthScreenshot, fullPage: true});
 
     await page.locator('.TVChartContainer iframe').waitFor({state: 'visible', timeout: 60000});
-    const history = await Promise.race([
-      (async () => {
-        for (let attempt = 0; attempt < 120; attempt += 1) {
-          const result = klineResponses.find(item => item.code === 0 && item.rows > 1);
-          if (result) return result;
-          await page.waitForTimeout(250);
-        }
-        return null;
-      })(),
-      timeout(35000, 'timed out waiting for chart history')
-    ]);
-    if (!history) {
+    // K-line history shares the trading page's WebSocket transport. The data
+    // feed publishes this status only after queryKLine rows are normalized.
+    try {
+      await page.waitForFunction(() => window.__dcKlineStatus && window.__dcKlineStatus.receivedRows > 1,
+        null, {timeout: 35000});
+    } catch (error) {
       await page.screenshot({path: path.join(artifactDir, 'web-public-history-failure.png'), fullPage: true});
-      fail('the first chart load did not request durable K-line history', {
+      fail('the first chart load did not receive durable K-line history over websocket', {
         klineResponses,
         publicMarketResponses,
         pageErrors
       });
     }
-    await page.waitForFunction(() => window.__dcKlineStatus && window.__dcKlineStatus.receivedRows > 1, null, {timeout: 10000});
     const chartHistory = await page.evaluate(() => window.__dcKlineStatus);
+    const history = {
+      rows: chartHistory.receivedRows,
+      request: {
+        from: chartHistory.from,
+        to: chartHistory.to,
+        countBack: chartHistory.countBack
+      }
+    };
     if (chartHistory.bars <= 1 || chartHistory.lastTime > Date.now() + 5 * 60 * 1000) {
       fail('K-line history was returned but not normalized into renderable bars', chartHistory);
     }
