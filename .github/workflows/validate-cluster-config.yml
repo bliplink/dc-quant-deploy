@@ -20,6 +20,8 @@ on:
       - tests/md_cluster_roll_drain_host.py
       - tests/test_md_cluster_roll_drain_host.py
       - tests/test-order-cluster-c-config.sh
+      - tests/order-routing-key.sh
+      - tests/test-placement-routing-key.sh
       - tests/test_verify_placement_catalogs.py
       - tests/verify_placement_catalogs.py
   pull_request:
@@ -39,6 +41,8 @@ on:
       - tests/md_cluster_roll_drain_host.py
       - tests/test_md_cluster_roll_drain_host.py
       - tests/test-order-cluster-c-config.sh
+      - tests/order-routing-key.sh
+      - tests/test-placement-routing-key.sh
       - tests/test_verify_placement_catalogs.py
       - tests/verify_placement_catalogs.py
 
@@ -48,11 +52,12 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - name: Check shell syntax
-        run: bash -n deploy-saas.sh generate-saas-configs.sh validate-saas.sh tests/test-md-cluster-config.sh tests/test-order-cluster-c-config.sh
+        run: bash -n deploy-saas.sh generate-saas-configs.sh validate-saas.sh tests/test-md-cluster-config.sh tests/test-order-cluster-c-config.sh tests/order-routing-key.sh tests/test-placement-routing-key.sh
       - name: Validate generated cluster configurations
         run: |
           tests/test-md-cluster-config.sh
           tests/test-order-cluster-c-config.sh
+          tests/test-placement-routing-key.sh
       - name: Validate placement catalogs
         run: |
           python -m unittest tests.test_verify_placement_catalogs tests.test_md_cluster_assignment_plan tests.test_md_cluster_transition_host tests.test_md_cluster_roll_drain_host
