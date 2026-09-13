@@ -13,6 +13,8 @@ on:
       - validate-saas.sh
       - control.prod/placement/**
       - tests/test-md-cluster-config.sh
+      - tests/md_cluster_assignment_plan.py
+      - tests/test_md_cluster_assignment_plan.py
       - tests/test-order-cluster-c-config.sh
       - tests/test_verify_placement_catalogs.py
       - tests/verify_placement_catalogs.py
@@ -26,6 +28,8 @@ on:
       - validate-saas.sh
       - control.prod/placement/**
       - tests/test-md-cluster-config.sh
+      - tests/md_cluster_assignment_plan.py
+      - tests/test_md_cluster_assignment_plan.py
       - tests/test-order-cluster-c-config.sh
       - tests/test_verify_placement_catalogs.py
       - tests/verify_placement_catalogs.py
@@ -42,4 +46,4 @@ jobs:
           tests/test-md-cluster-config.sh
           tests/test-order-cluster-c-config.sh
       - name: Validate placement catalogs
-        run: python -m unittest tests.test_verify_placement_catalogs
+        run: python -m unittest tests.test_verify_placement_catalogs tests.test_md_cluster_assignment_plan
