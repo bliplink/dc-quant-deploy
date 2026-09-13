@@ -31,6 +31,11 @@ peers='order.cluster.replication.peers=OrderSvrA=127.0.0.1:19121,OrderSvrB=127.0
 
 grep -Fqx 'SERVER.OrderSvrC.Name=OrderSvrC' "${ats}" || fail 'OrderSvrC server registration is missing'
 grep -Fqx 'Partition.OrderSvrC.EnforceReadiness=true' "${ats}" || fail 'OrderSvrC readiness fence is missing'
+grep -Fqx 'Partition.OrderSvr.PlacementEnabled=false' "${ats}" || fail 'logical Order placement must stay disabled'
+grep -Fqx 'Partition.OrderSvrA.PlacementEnabled=false' "${ats}" || fail 'OrderSvrA placement must stay disabled'
+grep -Fqx 'Partition.OrderSvrB.PlacementEnabled=false' "${ats}" || fail 'OrderSvrB placement must stay disabled'
+grep -Fqx 'Partition.OrderSvrC.PlacementEnabled=false' "${ats}" || fail 'OrderSvrC placement must stay disabled'
+grep -Fqx 'Partition.OrderSvr.PlacementPath=/dc/cluster/ordersvr/desired/placement' "${ats}" || fail 'Order placement path is missing'
 grep -Fqx 'serverKey=SERVER.OrderSvrC' "${c_config}" || fail 'OrderSvrC physical identity is missing'
 grep -Fqx 'orderStorePath=../../data/OrderSvrC/store' "${c_config}" || fail 'OrderSvrC data path is not isolated'
 grep -Fqx 'order.cluster.replication.port=19123' "${c_config}" || fail 'OrderSvrC replication port is missing'

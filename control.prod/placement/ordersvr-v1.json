@@ -1,0 +1,49 @@
+{
+  "version": 1,
+  "protocolVersion": 3,
+  "required": true,
+  "nodePools": [
+    {
+      "poolId": "order-a",
+      "serviceName": "OrderSvr",
+      "primaryNodes": ["OrderSvrA"],
+      "replicaNodes": ["OrderSvrB"],
+      "learnerNodes": ["OrderSvrC"],
+      "minimumReplicas": 1,
+      "assignmentVersion": 1,
+      "enabled": true
+    },
+    {
+      "poolId": "order-b",
+      "serviceName": "OrderSvr",
+      "primaryNodes": ["OrderSvrB"],
+      "replicaNodes": ["OrderSvrA"],
+      "learnerNodes": ["OrderSvrC"],
+      "minimumReplicas": 1,
+      "assignmentVersion": 1,
+      "enabled": true
+    },
+    {
+      "poolId": "order-c",
+      "serviceName": "OrderSvr",
+      "primaryNodes": ["OrderSvrC"],
+      "replicaNodes": ["OrderSvrA", "OrderSvrB"],
+      "learnerNodes": [],
+      "minimumReplicas": 1,
+      "assignmentVersion": 1,
+      "enabled": true
+    }
+  ],
+  "groups": [
+    {"groupId": "ORDER_A", "serviceName": "OrderSvr", "nodePool": "order-a", "partitionCount": 256, "assignmentVersion": 1, "enabled": true},
+    {"groupId": "ORDER_B", "serviceName": "OrderSvr", "nodePool": "order-b", "partitionCount": 256, "assignmentVersion": 1, "enabled": true},
+    {"groupId": "ORDER_C", "serviceName": "OrderSvr", "nodePool": "order-c", "partitionCount": 256, "assignmentVersion": 1, "enabled": true}
+  ],
+  "rules": [
+    {"ruleId": "btc", "serviceName": "OrderSvr", "placementKeyPattern": "*\u001f4\u001fBTCUSDT", "placementGroup": "ORDER_A", "priority": 100, "assignmentVersion": 1, "enabled": true},
+    {"ruleId": "eth", "serviceName": "OrderSvr", "placementKeyPattern": "*\u001f4\u001fETHUSDT", "placementGroup": "ORDER_B", "priority": 100, "assignmentVersion": 1, "enabled": true},
+    {"ruleId": "sol", "serviceName": "OrderSvr", "placementKeyPattern": "*\u001f4\u001fSOLUSDT", "placementGroup": "ORDER_C", "priority": 100, "assignmentVersion": 1, "enabled": true},
+    {"ruleId": "uni", "serviceName": "OrderSvr", "placementKeyPattern": "*\u001f4\u001fUNIUSDT", "placementGroup": "ORDER_C", "priority": 100, "assignmentVersion": 1, "enabled": true},
+    {"ruleId": "default", "serviceName": "OrderSvr", "placementKeyPattern": "*\u001f*\u001f*", "placementGroup": "ORDER_C", "priority": 0, "assignmentVersion": 1, "enabled": true}
+  ]
+}

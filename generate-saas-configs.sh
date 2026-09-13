@@ -232,14 +232,23 @@ Cluster.OrderSvrB.Enabled=true
 Partition.OrderSvr.Count=256
 Partition.OrderSvr.Root=/dc/cluster/ordersvr/partitions
 Partition.OrderSvr.EnforceFence=true
+Partition.OrderSvr.PlacementEnabled=false
+Partition.OrderSvr.PlacementRequired=true
+Partition.OrderSvr.PlacementPath=/dc/cluster/ordersvr/desired/placement
 Partition.OrderSvrA.Count=256
 Partition.OrderSvrA.Root=/dc/cluster/ordersvr/partitions
 Partition.OrderSvrA.EnforceFence=true
 Partition.OrderSvrA.EnforceReadiness=true
+Partition.OrderSvrA.PlacementEnabled=false
+Partition.OrderSvrA.PlacementRequired=true
+Partition.OrderSvrA.PlacementPath=/dc/cluster/ordersvr/desired/placement
 Partition.OrderSvrB.Count=256
 Partition.OrderSvrB.Root=/dc/cluster/ordersvr/partitions
 Partition.OrderSvrB.EnforceFence=true
 Partition.OrderSvrB.EnforceReadiness=true
+Partition.OrderSvrB.PlacementEnabled=false
+Partition.OrderSvrB.PlacementRequired=true
+Partition.OrderSvrB.PlacementPath=/dc/cluster/ordersvr/desired/placement
 EOF
   if [[ "${ORDER_CLUSTER_C_ENABLED}" == "true" ]]; then
     cat >> "${CONTROL_ROOT}/ATSConfig.ini" <<'EOF'
@@ -248,6 +257,9 @@ Partition.OrderSvrC.Count=256
 Partition.OrderSvrC.Root=/dc/cluster/ordersvr/partitions
 Partition.OrderSvrC.EnforceFence=true
 Partition.OrderSvrC.EnforceReadiness=true
+Partition.OrderSvrC.PlacementEnabled=false
+Partition.OrderSvrC.PlacementRequired=true
+Partition.OrderSvrC.PlacementPath=/dc/cluster/ordersvr/desired/placement
 EOF
   fi
 fi
@@ -262,14 +274,23 @@ Cluster.MDSvrB.Enabled=true
 Partition.MDSvr.Count=256
 Partition.MDSvr.Root=/dc/cluster/mdsvr/partitions
 Partition.MDSvr.EnforceFence=true
+Partition.MDSvr.PlacementEnabled=false
+Partition.MDSvr.PlacementRequired=true
+Partition.MDSvr.PlacementPath=/dc/cluster/mdsvr/desired/placement
 Partition.MDSvrA.Count=256
 Partition.MDSvrA.Root=/dc/cluster/mdsvr/partitions
 Partition.MDSvrA.EnforceFence=true
 Partition.MDSvrA.EnforceReadiness=true
+Partition.MDSvrA.PlacementEnabled=false
+Partition.MDSvrA.PlacementRequired=true
+Partition.MDSvrA.PlacementPath=/dc/cluster/mdsvr/desired/placement
 Partition.MDSvrB.Count=256
 Partition.MDSvrB.Root=/dc/cluster/mdsvr/partitions
 Partition.MDSvrB.EnforceFence=true
 Partition.MDSvrB.EnforceReadiness=true
+Partition.MDSvrB.PlacementEnabled=false
+Partition.MDSvrB.PlacementRequired=true
+Partition.MDSvrB.PlacementPath=/dc/cluster/mdsvr/desired/placement
 EOF
 fi
 

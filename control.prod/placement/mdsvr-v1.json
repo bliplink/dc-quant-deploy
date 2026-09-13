@@ -1,0 +1,35 @@
+{
+  "version": 1,
+  "protocolVersion": 3,
+  "required": true,
+  "nodePools": [
+    {
+      "poolId": "md-btc",
+      "serviceName": "MDSvr",
+      "primaryNodes": ["MDSvrA"],
+      "replicaNodes": ["MDSvrC"],
+      "learnerNodes": [],
+      "minimumReplicas": 1,
+      "assignmentVersion": 1,
+      "enabled": true
+    },
+    {
+      "poolId": "md-normal",
+      "serviceName": "MDSvr",
+      "primaryNodes": ["MDSvrB"],
+      "replicaNodes": ["MDSvrC"],
+      "learnerNodes": [],
+      "minimumReplicas": 1,
+      "assignmentVersion": 1,
+      "enabled": true
+    }
+  ],
+  "groups": [
+    {"groupId": "MD_BTC", "serviceName": "MDSvr", "nodePool": "md-btc", "partitionCount": 256, "assignmentVersion": 1, "enabled": true},
+    {"groupId": "MD_NORMAL", "serviceName": "MDSvr", "nodePool": "md-normal", "partitionCount": 256, "assignmentVersion": 1, "enabled": true}
+  ],
+  "rules": [
+    {"ruleId": "btc", "serviceName": "MDSvr", "placementKeyPattern": "*\u001f4\u001fBTCUSDT", "placementGroup": "MD_BTC", "priority": 100, "assignmentVersion": 1, "enabled": true},
+    {"ruleId": "default", "serviceName": "MDSvr", "placementKeyPattern": "*\u001f*\u001f*", "placementGroup": "MD_NORMAL", "priority": 0, "assignmentVersion": 1, "enabled": true}
+  ]
+}
