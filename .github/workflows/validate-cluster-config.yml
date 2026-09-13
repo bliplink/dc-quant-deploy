@@ -50,4 +50,6 @@ jobs:
           tests/test-md-cluster-config.sh
           tests/test-order-cluster-c-config.sh
       - name: Validate placement catalogs
-        run: python -m unittest tests.test_verify_placement_catalogs tests.test_md_cluster_assignment_plan tests.test_md_cluster_transition_host
+        run: |
+          python -m unittest tests.test_verify_placement_catalogs tests.test_md_cluster_assignment_plan tests.test_md_cluster_transition_host
+          python tests/md_cluster_transition_host.py --help >/dev/null

@@ -15,11 +15,15 @@ import subprocess
 import sys
 import zlib
 
-from tests.md_cluster_assignment_plan import (
-    plan_primary_drain,
-    stage_learner,
-    validate,
-)
+try:
+    from tests.md_cluster_assignment_plan import (
+        plan_primary_drain,
+        stage_learner,
+        validate,
+    )
+except ModuleNotFoundError:
+    # Host operators invoke this file directly from the deployment checkout.
+    from md_cluster_assignment_plan import plan_primary_drain, stage_learner, validate
 
 
 DEFAULT_ROOT = "/dc/cluster/mdsvr/partitions"
