@@ -3,6 +3,7 @@ import unittest
 from tests.md_cluster_transition_host import (
     parse_ready_evidence,
     parse_zk_get,
+    parse_zk_get_many,
     partition_for_route,
     require_route_evidence,
     validate_transition,
@@ -20,6 +21,19 @@ numChildren = 0
         value, version = parse_zk_get(output, "P027")
         self.assertEqual("MDSvrA", value["primary"])
         self.assertEqual(12, version)
+
+    def test_parse_many_pairs_each_payload_with_its_stat(self):
+        output = """
+{"partitionId":"P000","epoch":7}
+dataVersion = 2
+numChildren = 0
+{"partitionId":"P001","epoch":8}
+dataVersion = 3
+numChildren = 0
+"""
+        result = parse_zk_get_many(output, ["P000", "P001"])
+        self.assertEqual(2, result["P000"][1])
+        self.assertEqual(8, result["P001"][0]["epoch"])
 
     def test_route_hash_matches_java_partition_contract(self):
         self.assertEqual(

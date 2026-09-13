@@ -61,11 +61,10 @@ def validate(rows, expected, allowed_nodes):
 
 
 def _bump_assignment_version(row, increments=1):
-    if "assignmentVersion" in row:
-        value = row.get("assignmentVersion")
-        if not isinstance(value, int) or isinstance(value, bool) or value < 0:
-            raise ValueError(f"invalid assignmentVersion: {value}")
-        row["assignmentVersion"] = value + increments
+    value = row.get("assignmentVersion", 0)
+    if not isinstance(value, int) or isinstance(value, bool) or value < 0:
+        raise ValueError(f"invalid assignmentVersion: {value}")
+    row["assignmentVersion"] = value + increments
 
 
 def stage_learner(rows, expected, learner, allowed_nodes):
@@ -136,4 +135,3 @@ def write_jsonl(path, rows):
         for row in rows:
             stream.write(json.dumps(row, separators=(",", ":"), sort_keys=True))
             stream.write("\n")
-

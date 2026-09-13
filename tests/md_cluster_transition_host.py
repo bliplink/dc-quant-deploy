@@ -65,6 +65,33 @@ def parse_zk_get(output, partition_id):
     return payloads[0], int(versions[0])
 
 
+def parse_zk_get_many(output, expected_ids):
+    expected_ids = set(expected_ids)
+    result = {}
+    pending = None
+    for line in output.splitlines():
+        line = line.strip()
+        if line.startswith("{"):
+            try:
+                value = json.loads(line)
+            except json.JSONDecodeError:
+                continue
+            partition_id = value.get("partitionId")
+            pending = (partition_id, value) if partition_id in expected_ids else None
+            continue
+        version = DATA_VERSION.fullmatch(line)
+        if version and pending:
+            partition_id, value = pending
+            if partition_id in result:
+                raise RuntimeError(f"duplicate ZooKeeper result: {partition_id}")
+            result[partition_id] = (value, int(version.group(1)))
+            pending = None
+    missing = expected_ids - set(result)
+    if missing:
+        raise RuntimeError(f"missing ZooKeeper results: {','.join(sorted(missing)[:10])}")
+    return result
+
+
 def partition_for_route(route, partition_count):
     values = [route.get("location"), route.get("marketIndicator"), route.get("securityID")]
     if any(not isinstance(value, str) or not value.strip() for value in values):
@@ -166,14 +193,14 @@ class DockerZk:
         self.root = root.rstrip("/")
         self.docker = docker
 
-    def _zk(self, command):
+    def _zk(self, command, timeout=30):
         result = subprocess.run(
             [self.docker, "exec", "-i", self.container, "zkCli.sh", "-server", self.server],
             input=command + "\nquit\n",
             text=True,
             stdout=subprocess.PIPE,
             stderr=subprocess.STDOUT,
-            timeout=30,
+            timeout=timeout,
             check=False,
         )
         if result.returncode != 0 or "KeeperErrorCode" in result.stdout or "Exception" in result.stdout:
@@ -186,7 +213,18 @@ class DockerZk:
         return {"partitionId": partition_id, "path": path, "version": version, "value": value}
 
     def read_all(self, count):
-        return [self.read(f"P{index:03d}") for index in range(count)]
+        partition_ids = [f"P{index:03d}" for index in range(count)]
+        commands = "\n".join(f"get -s {self.root}/{partition_id}" for partition_id in partition_ids)
+        values = parse_zk_get_many(self._zk(commands, timeout=90), partition_ids)
+        return [
+            {
+                "partitionId": partition_id,
+                "path": f"{self.root}/{partition_id}",
+                "version": values[partition_id][1],
+                "value": values[partition_id][0],
+            }
+            for partition_id in partition_ids
+        ]
 
     def cas(self, record, desired):
         current = self.read(record["partitionId"])

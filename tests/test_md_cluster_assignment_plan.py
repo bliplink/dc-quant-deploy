@@ -67,7 +67,12 @@ class MdClusterAssignmentPlanTest(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "not READY"):
             stage_learner(source, 2, "MDSvrC", ALLOWED)
 
+    def test_stage_upgrades_legacy_assignment_version_from_zero(self):
+        source = assignments()
+        source[0].pop("assignmentVersion")
+        planned = stage_learner(source, 2, "MDSvrC", ALLOWED)
+        self.assertEqual(1, planned[0]["assignmentVersion"])
+
 
 if __name__ == "__main__":
     unittest.main()
-
