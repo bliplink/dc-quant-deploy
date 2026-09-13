@@ -39,7 +39,7 @@ grep -Fqx 'Partition.OrderSvr.PlacementPath=/dc/cluster/ordersvr/desired/placeme
 grep -Fqx 'serverKey=SERVER.OrderSvrC' "${c_config}" || fail 'OrderSvrC physical identity is missing'
 grep -Fqx 'orderStorePath=../../data/OrderSvrC/store' "${c_config}" || fail 'OrderSvrC data path is not isolated'
 grep -Fqx 'order.cluster.replication.port=19123' "${c_config}" || fail 'OrderSvrC replication port is missing'
-grep -Fqx 'order.cluster.snapshot.periodic.enabled=true' "${c_config}" || fail 'periodic snapshots are not enabled'
+grep -Fqx 'order.cluster.snapshot.periodic.enabled=false' "${c_config}" || fail 'periodic snapshots must stay disabled by default'
 for config in "${a_config}" "${b_config}" "${c_config}"; do
   grep -Fqx "${peers}" "${config}" || fail "three-node peer map is missing from ${config}"
 done
