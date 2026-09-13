@@ -212,8 +212,8 @@ class DockerZk:
         value, version = parse_zk_get(self._zk(f"get -s {path}"), partition_id)
         return {"partitionId": partition_id, "path": path, "version": version, "value": value}
 
-    def read_all(self, count):
-        partition_ids = [f"P{index:03d}" for index in range(count)]
+    def read_many(self, partition_ids):
+        partition_ids = list(partition_ids)
         commands = "\n".join(f"get -s {self.root}/{partition_id}" for partition_id in partition_ids)
         values = parse_zk_get_many(self._zk(commands, timeout=90), partition_ids)
         return [
@@ -226,6 +226,10 @@ class DockerZk:
             for partition_id in partition_ids
         ]
 
+    def read_all(self, count):
+        partition_ids = [f"P{index:03d}" for index in range(count)]
+        return self.read_many(partition_ids)
+
     def cas(self, record, desired):
         current = self.read(record["partitionId"])
         if current["version"] != record["version"] or canonical(current["value"]) != canonical(record["value"]):
@@ -235,6 +239,27 @@ class DockerZk:
         if written["version"] != record["version"] + 1 or canonical(written["value"]) != canonical(desired):
             raise RuntimeError(f"CAS verification failed: {record['partitionId']}")
         return written
+
+    def cas_many(self, records):
+        current_records = self.read_many(record["partitionId"] for record in records)
+        current_by_id = {record["partitionId"]: record for record in current_records}
+        for record in records:
+            current = current_by_id[record["partitionId"]]
+            if current["version"] != record["version"] or canonical(current["value"]) != canonical(record["value"]):
+                raise RuntimeError(f"CAS precondition changed: {record['partitionId']}")
+
+        commands = "\n".join(
+            f"set -v {record['version']} {record['path']} {canonical(record['desired'])}"
+            for record in records
+        )
+        self._zk(commands, timeout=90)
+        written_records = self.read_many(record["partitionId"] for record in records)
+        written_by_id = {record["partitionId"]: record for record in written_records}
+        for record in records:
+            written = written_by_id[record["partitionId"]]
+            if written["version"] != record["version"] + 1 or canonical(written["value"]) != canonical(record["desired"]):
+                raise RuntimeError(f"CAS verification failed: {record['partitionId']}")
+        return written_records
 
     def logs(self, container, since):
         result = subprocess.run(
@@ -286,11 +311,19 @@ def plan_records(snapshots, desired_rows, operation, **context):
     return records
 
 
-def apply_records(zk, records, operation, **context):
-    for index, record in enumerate(records, 1):
+def apply_records(zk, records, operation, batch_size=16, **context):
+    if batch_size <= 0:
+        raise ValueError("batch size must be positive")
+    for record in records:
         validate_transition(record["value"], record["desired"], operation, **context)
-        zk.cas(record, record["desired"])
-        print(f"applied={index}/{len(records)} partition={record['partitionId']}", flush=True)
+    for offset in range(0, len(records), batch_size):
+        batch = records[offset : offset + batch_size]
+        zk.cas_many(batch)
+        print(
+            f"applied={offset + len(batch)}/{len(records)} "
+            f"partitions={batch[0]['partitionId']}..{batch[-1]['partitionId']}",
+            flush=True,
+        )
 
 
 def command_stage(args, zk):
@@ -301,7 +334,7 @@ def command_stage(args, zk):
     save_plan(args.plan, "stage-learner", records, partitionRoot=args.partition_root, learner=args.learner)
     print(f"plan={args.plan} changes={len(records)} apply={str(args.apply).lower()}")
     if args.apply:
-        apply_records(zk, records, "stage-learner", learner=args.learner)
+        apply_records(zk, records, "stage-learner", args.batch_size, learner=args.learner)
 
 
 def command_drain(args, zk):
@@ -348,7 +381,12 @@ def command_drain(args, zk):
     print(f"plan={args.plan} changes={len(records)} apply={str(args.apply).lower()}")
     if args.apply:
         apply_records(
-            zk, records, "drain-recovering", source=args.from_node, target=args.to_node
+            zk,
+            records,
+            "drain-recovering",
+            args.batch_size,
+            source=args.from_node,
+            target=args.to_node,
         )
 
 
@@ -391,7 +429,7 @@ def command_promote(args, zk):
     )
     print(f"plan={args.plan} changes={len(records)} apply={str(args.apply).lower()}")
     if args.apply:
-        apply_records(zk, records, "promote-ready")
+        apply_records(zk, records, "promote-ready", args.batch_size)
 
 
 def parser():
@@ -426,6 +464,7 @@ def parser():
     for command in (stage, drain, promote):
         command.add_argument("--apply", action="store_true")
         command.add_argument("--confirm-root")
+        command.add_argument("--batch-size", type=int, default=16)
     return result
 
 

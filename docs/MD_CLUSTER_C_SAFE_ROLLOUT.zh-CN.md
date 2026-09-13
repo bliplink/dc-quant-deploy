@@ -17,7 +17,7 @@
 
 ## 工具
 
-`tests/md_cluster_transition_host.py` 默认只生成计划，不修改 ZooKeeper。实际写入必须同时提供 `--apply` 和与目标根路径完全一致的 `--confirm-root`。
+`tests/md_cluster_transition_host.py` 默认只生成计划，不修改 ZooKeeper。实际写入必须同时提供 `--apply` 和与目标根路径完全一致的 `--confirm-root`。工具默认每 16 个分区执行一次批量预读、逐条版本 CAS 和批量回读；可用 `--batch-size` 调小故障域。
 
 活跃路由文件使用 JSONL，例如：
 

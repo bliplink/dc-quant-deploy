@@ -1,6 +1,7 @@
 import unittest
 
 from tests.md_cluster_transition_host import (
+    apply_records,
     parse_ready_evidence,
     parse_zk_get,
     parse_zk_get_many,
@@ -88,6 +89,24 @@ numChildren = 0
             require_route_evidence(
                 routes, {"P027": assignment()}, "MDSvrC", "PRIMARY", evidence, 256
             )
+
+    def test_apply_records_uses_bounded_cas_batches(self):
+        class FakeZk:
+            def __init__(self):
+                self.sizes = []
+
+            def cas_many(self, records):
+                self.sizes.append(len(records))
+
+        records = []
+        for index in range(5):
+            current = assignment()
+            current["partitionId"] = f"P{index:03d}"
+            desired = {**current, "assignmentVersion": 11, "learners": ["MDSvrC"]}
+            records.append({"partitionId": current["partitionId"], "value": current, "desired": desired})
+        zk = FakeZk()
+        apply_records(zk, records, "stage-learner", 2, learner="MDSvrC")
+        self.assertEqual([2, 2, 1], zk.sizes)
 
 
 def assignment():
