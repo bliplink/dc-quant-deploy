@@ -5,6 +5,7 @@ from tests.md_cluster_transition_host import (
     parse_ready_evidence,
     parse_zk_get,
     parse_zk_get_many,
+    parser,
     partition_for_route,
     require_route_evidence,
     validate_transition,
@@ -107,6 +108,24 @@ numChildren = 0
         zk = FakeZk()
         apply_records(zk, records, "stage-learner", 2, learner="MDSvrC")
         self.assertEqual([2, 2, 1], zk.sizes)
+
+    def test_drain_cli_accepts_exact_partition_option(self):
+        args = parser().parse_args(
+            [
+                "drain-recovering",
+                "--from-node",
+                "MDSvrA",
+                "--to-node",
+                "MDSvrC",
+                "--partition",
+                "P132",
+                "--since",
+                "2026-09-13T12:38:42Z",
+                "--plan",
+                "plan.json",
+            ]
+        )
+        self.assertEqual(["P132"], args.partition)
 
 
 def assignment():

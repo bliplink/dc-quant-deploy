@@ -433,7 +433,7 @@ def command_promote(args, zk):
 
 
 def parser():
-    result = argparse.ArgumentParser(description=__doc__)
+    result = argparse.ArgumentParser(description=__doc__, allow_abbrev=False)
     result.add_argument("--zk-container", default="dc-saas-zookeeper")
     result.add_argument("--zk-server", default="127.0.0.1:32181")
     result.add_argument("--partition-root", default=DEFAULT_ROOT)
