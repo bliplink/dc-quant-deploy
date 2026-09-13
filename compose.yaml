@@ -189,6 +189,7 @@ services:
       - ${DEPLOY_ROOT}/data:/srv/dc/data
       - ${DEPLOY_ROOT}/log:/srv/dc/log
       - ${DEPLOY_ROOT}/control/overrides/${MDSVR_CONFIG_NAME:-MDSvr}/config/application.properties:/srv/dc/dc/MDSvr/config/application.properties:ro
+      - ${DEPLOY_ROOT}/control/overrides/${MDSVR_CONFIG_NAME:-MDSvr}/config/log4j.ini:/srv/dc/dc/MDSvr/config/log4j.ini:ro
     mem_limit: ${MDSVR_MEMORY_LIMIT:-640m}
     cpus: ${MDSVR_CPU_LIMIT:-0.35}
 
@@ -213,6 +214,7 @@ services:
       - ${DEPLOY_ROOT}/data:/srv/dc/data
       - ${DEPLOY_ROOT}/log:/srv/dc/log
       - ${DEPLOY_ROOT}/control/overrides/MDSvrB/config/application.properties:/srv/dc/dc/MDSvr/config/application.properties:ro
+      - ${DEPLOY_ROOT}/control/overrides/MDSvrB/config/log4j.ini:/srv/dc/dc/MDSvr/config/log4j.ini:ro
     mem_limit: ${MDSVR_B_MEMORY_LIMIT:-640m}
     cpus: ${MDSVR_B_CPU_LIMIT:-0.35}
 
@@ -237,6 +239,7 @@ services:
       - ${DEPLOY_ROOT}/data:/srv/dc/data
       - ${DEPLOY_ROOT}/log:/srv/dc/log
       - ${DEPLOY_ROOT}/control/overrides/MDSvrC/config/application.properties:/srv/dc/dc/MDSvr/config/application.properties:ro
+      - ${DEPLOY_ROOT}/control/overrides/MDSvrC/config/log4j.ini:/srv/dc/dc/MDSvr/config/log4j.ini:ro
     mem_limit: ${MDSVR_C_MEMORY_LIMIT:-640m}
     cpus: ${MDSVR_C_CPU_LIMIT:-0.35}
 

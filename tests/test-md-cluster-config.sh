@@ -27,6 +27,7 @@ ats="${TEST_ROOT}/runtime/control/ATSConfig.ini"
 a_config="${TEST_ROOT}/runtime/control/overrides/MDSvrA/config/application.properties"
 b_config="${TEST_ROOT}/runtime/control/overrides/MDSvrB/config/application.properties"
 c_config="${TEST_ROOT}/runtime/control/overrides/MDSvrC/config/application.properties"
+c_log="${TEST_ROOT}/runtime/control/overrides/MDSvrC/config/log4j.ini"
 
 grep -Fqx 'ProtoVersion=2' "${ats}" || fail 'protocol v2 is not enabled'
 grep -Fqx 'LBConfig.MDSvr=Partition' "${ats}" || fail 'MDSvr partition load balance is missing'
@@ -45,6 +46,12 @@ grep -Fqx 'serverKey=SERVER.MDSvrC' "${c_config}" || fail 'MDSvrC physical ident
 grep -Fqx 'ohlcStorePath=../../data/MDSvrA/ohlc' "${a_config}" || fail 'MDSvrA data path is not isolated'
 grep -Fqx 'ohlcStorePath=../../data/MDSvrB/ohlc' "${b_config}" || fail 'MDSvrB data path is not isolated'
 grep -Fqx 'ohlcStorePath=../../data/MDSvrC/ohlc' "${c_config}" || fail 'MDSvrC data path is not isolated'
+grep -Fqx 'log4j.logger.com.app.dc.service.cluster.MdPartitionRuntime=INFO,file,stdout' "${c_log}" ||
+  fail 'MDSvr cluster readiness logger is not observable'
+grep -Fqx 'log4j.appender.file.File=../../log/MDSvrC.log' "${c_log}" ||
+  fail 'MDSvrC log path is not isolated'
+grep -Fq 'overrides/MDSvrC/config/log4j.ini:/srv/dc/dc/MDSvr/config/log4j.ini:ro' "${DEPLOY_DIR}/compose.yaml" ||
+  fail 'MDSvrC generated logger config is not mounted'
 grep -Fqx '  mdsvr-c:' "${DEPLOY_DIR}/compose.yaml" || fail 'mdsvr-c compose service is missing'
 grep -Fq 'profiles: ["md-cluster-c"]' "${DEPLOY_DIR}/compose.yaml" ||
   fail 'mdsvr-c compose profile is missing'

@@ -408,6 +408,23 @@ enableIndexMarkPriceFlag=true
 enableIndexTickerFlag=true
 enableTradeFlag=true
 EOF
+
+  cat > "${OVERRIDE_ROOT}/${node}/config/log4j.ini" <<EOF
+log4j.rootLogger=error,file,stdout
+log4j.logger.com.app.dc.service.cluster.MdPartitionRuntime=INFO,file,stdout
+log4j.additivity.com.app.dc.service.cluster.MdPartitionRuntime=false
+
+log4j.appender.file=org.apache.log4j.DailyRollingFileAppender
+log4j.appender.file.File=../../log/${node}.log
+log4j.appender.file.Append=true
+log4j.appender.file.layout=org.apache.log4j.PatternLayout
+log4j.appender.file.layout.ConversionPattern=%d{yyyy/MM/dd HH:mm:ss.SSS} %p %m (%C{1}:%L)%n
+log4j.appender.stdout=org.apache.log4j.ConsoleAppender
+log4j.appender.stdout.Target=System.out
+log4j.appender.stdout.follow=true
+log4j.appender.stdout.layout=org.apache.log4j.PatternLayout
+log4j.appender.stdout.layout.ConversionPattern=%d{yyyy/MM/dd HH:mm:ss.SSS} %p %m (%C{1}:%L)%n
+EOF
 }
 
 write_md_config MDSvr
