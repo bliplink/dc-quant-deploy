@@ -102,13 +102,15 @@ def run(args):
         batch_number += 1
         by_id = {row["partitionId"]: row for row in current_rows}
 
-        learner_evidence = parse_ready_evidence(zk.logs(args.target_container, args.learner_since))
+        target_evidence = parse_ready_evidence(
+            zk.logs(args.target_container, args.target_ready_since)
+        )
         require_route_evidence(
             routes,
             by_id,
             args.target,
-            "LEARNER",
-            learner_evidence,
+            args.target_ready_role,
+            target_evidence,
             args.partitions,
             selected,
         )
@@ -197,7 +199,19 @@ def parser():
     result.add_argument("--target", required=True)
     result.add_argument("--active-routes", required=True)
     result.add_argument("--target-container", required=True)
-    result.add_argument("--learner-since", required=True)
+    result.add_argument(
+        "--target-ready-since",
+        "--learner-since",
+        dest="target_ready_since",
+        required=True,
+        help="Earliest target readiness log timestamp; --learner-since is retained as an alias.",
+    )
+    result.add_argument(
+        "--target-ready-role",
+        choices=("LEARNER", "REPLICA"),
+        default="LEARNER",
+        help="Role the target must already report before a primary transition.",
+    )
     result.add_argument("--evidence-dir", required=True)
     result.add_argument("--batch-size", type=int, default=8)
     result.add_argument("--ready-timeout", type=int, default=60)

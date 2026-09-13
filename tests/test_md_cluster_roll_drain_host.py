@@ -1,6 +1,6 @@
 import unittest
 
-from tests.md_cluster_roll_drain_host import ready_value, select_source_partitions
+from tests.md_cluster_roll_drain_host import parser, ready_value, select_source_partitions
 
 
 class MdClusterRollDrainHostTest(unittest.TestCase):
@@ -27,6 +27,37 @@ class MdClusterRollDrainHostTest(unittest.TestCase):
         self.assertEqual(3, ready["assignmentVersion"])
         self.assertEqual(2, ready["epoch"])
         self.assertEqual("RECOVERING", recovering["state"])
+
+    def test_replica_target_readiness_role_is_supported(self):
+        args = parser().parse_args(
+            [
+                "--source", "MDSvrB",
+                "--target", "MDSvrA",
+                "--active-routes", "active.jsonl",
+                "--target-container", "dc-saas-mdsvr",
+                "--target-ready-since", "2026-09-13T13:28:57Z",
+                "--target-ready-role", "REPLICA",
+                "--evidence-dir", "evidence",
+                "--confirm-root", "/dc/cluster/mdsvr/partitions",
+            ]
+        )
+        self.assertEqual("REPLICA", args.target_ready_role)
+        self.assertEqual("2026-09-13T13:28:57Z", args.target_ready_since)
+
+    def test_learner_since_alias_remains_compatible(self):
+        args = parser().parse_args(
+            [
+                "--source", "MDSvrA",
+                "--target", "MDSvrC",
+                "--active-routes", "active.jsonl",
+                "--target-container", "dc-saas-mdsvr-c",
+                "--learner-since", "2026-09-13T12:38:42Z",
+                "--evidence-dir", "evidence",
+                "--confirm-root", "/dc/cluster/mdsvr/partitions",
+            ]
+        )
+        self.assertEqual("LEARNER", args.target_ready_role)
+        self.assertEqual("2026-09-13T12:38:42Z", args.target_ready_since)
 
 
 if __name__ == "__main__":
