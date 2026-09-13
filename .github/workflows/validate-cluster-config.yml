@@ -17,6 +17,8 @@ on:
       - tests/test_md_cluster_assignment_plan.py
       - tests/md_cluster_transition_host.py
       - tests/test_md_cluster_transition_host.py
+      - tests/md_cluster_roll_drain_host.py
+      - tests/test_md_cluster_roll_drain_host.py
       - tests/test-order-cluster-c-config.sh
       - tests/test_verify_placement_catalogs.py
       - tests/verify_placement_catalogs.py
@@ -34,6 +36,8 @@ on:
       - tests/test_md_cluster_assignment_plan.py
       - tests/md_cluster_transition_host.py
       - tests/test_md_cluster_transition_host.py
+      - tests/md_cluster_roll_drain_host.py
+      - tests/test_md_cluster_roll_drain_host.py
       - tests/test-order-cluster-c-config.sh
       - tests/test_verify_placement_catalogs.py
       - tests/verify_placement_catalogs.py
@@ -51,5 +55,6 @@ jobs:
           tests/test-order-cluster-c-config.sh
       - name: Validate placement catalogs
         run: |
-          python -m unittest tests.test_verify_placement_catalogs tests.test_md_cluster_assignment_plan tests.test_md_cluster_transition_host
+          python -m unittest tests.test_verify_placement_catalogs tests.test_md_cluster_assignment_plan tests.test_md_cluster_transition_host tests.test_md_cluster_roll_drain_host
           python tests/md_cluster_transition_host.py --help >/dev/null
+          python tests/md_cluster_roll_drain_host.py --help >/dev/null

@@ -75,6 +75,19 @@ sudo python3 tests/md_cluster_transition_host.py promote-ready \
 
 10. 每批验收行情最新价、盘口、成交、K 线和 WebSocket 连续性，然后继续下一批。
 
+单分区灰度通过后，可使用 `tests/md_cluster_roll_drain_host.py` 自动重复同一套门禁，按批排空一个节点。它仍要求精确确认 ZooKeeper 根路径，并为每批分别保存 RECOVERING/READY 证据：
+
+```bash
+sudo python3 tests/md_cluster_roll_drain_host.py \
+  --source MDSvrA --target MDSvrC \
+  --active-routes /data/dc-saas-runtime/evidence/md-active-routes.jsonl \
+  --target-container dc-saas-mdsvr-c \
+  --learner-since 2026-09-13T12:38:42Z \
+  --evidence-dir /data/dc-saas-runtime/evidence/md-a-to-c \
+  --batch-size 8 --ready-timeout 60 \
+  --confirm-root /dc/cluster/mdsvr/partitions
+```
+
 ## 版本滚动顺序
 
 MDSvrC 用旧镜像预热并承接 A 的 primary 后，先升级 A；A 在新镜像下作为 replica/learner 追平后承接 B，再升级 B；最后把 C 的 primary 排空到已升级节点并升级 C。最终三节点使用同一不可变镜像和相同 Common JAR SHA，再进行均衡与 placement 灰度。
