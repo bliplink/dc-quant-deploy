@@ -258,7 +258,8 @@ CREATE TABLE `dc_orders_execorders` (
   `info4` varchar(45) DEFAULT NULL,
   `info5` varchar(45) DEFAULT NULL,
   PRIMARY KEY (`exec_id`,`user_id`) USING BTREE,
-  KEY `index` (`create_time`,`security_id`,`side`,`user_id`) USING BTREE
+  KEY `index` (`create_time`,`security_id`,`side`,`user_id`) USING BTREE,
+  KEY `idx_exec_transact_time_location` (`transact_time`,`location`) USING BTREE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci ROW_FORMAT=DYNAMIC COMMENT='成交明细表';
 
 CREATE TABLE `dc_orders_position` (
