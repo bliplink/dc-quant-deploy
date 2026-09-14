@@ -193,6 +193,12 @@ ensure_env_defaults() {
   migrate_env_value ROBOTSVR_IMAGE_REPOSITORY dc-saas/robotsvr ghcr.io/bliplink/robotsvr
   migrate_env_value TRADE_WEB_IMAGE_REPOSITORY dc-saas/dc-trade-web ghcr.io/bliplink/dc-saas-trade-web
   migrate_env_value TRADE_WEB_IMAGE_REPOSITORY ghcr.io/skt-walter/dc-trade-web ghcr.io/bliplink/dc-saas-trade-web
+  if ! grep -q '^PLATFORM_WEB_IMAGE_REPOSITORY=' "${ENV_FILE}"; then
+    printf 'PLATFORM_WEB_IMAGE_REPOSITORY=ghcr.io/bliplink/dc-saas-platform-console\n' >> "${ENV_FILE}"
+  fi
+  if ! grep -q '^PLATFORM_WEB_TAG=' "${ENV_FILE}"; then
+    printf 'PLATFORM_WEB_TAG=source-e5b605dd49fba14b315ef9235d76e1ec67160cae\n' >> "${ENV_FILE}"
+  fi
   if grep -q '^TRADESVR_TAG=sha-' "${ENV_FILE}"; then
     sed -i 's/^TRADESVR_TAG=sha-.*/TRADESVR_TAG=saas-crypto/' "${ENV_FILE}"
   fi
@@ -314,7 +320,7 @@ validate_initial_ports() {
   existing="$(docker ps -a --format '{{.Names}}' | grep '^dc-saas-' || true)"
   [[ -z "${existing}" ]] || return 0
 
-  local ports=("${MYSQL_PORT}" "${CLICKHOUSE_HTTP_PORT}" "${CLICKHOUSE_NATIVE_PORT}" "${ZOOKEEPER_PORT}" "${ZOOKEEPER_JMX_PORT}" "${GW_TCP_PORT}" "${GW_WEBSOCKET_PORT}" "${GW_HTTP_PORT}" "${LOGINSVR_HTTP_PORT}" "${LOGINSVR_GW_PORT}" "${MDSVR_GW_PORT}" "${APSSVR_GW_PORT}" "${ORDERSVR_GW_PORT}" "${PROJECTIONSVR_GW_PORT:-33042}" "${TRADESVR_GW_PORT}" "${LIQSVR_GW_PORT}" "${MANAGERSVR_GW_PORT}" "${ADMINSVR_GW_PORT}" "${WEB_LISTEN_PORT}")
+  local ports=("${MYSQL_PORT}" "${CLICKHOUSE_HTTP_PORT}" "${CLICKHOUSE_NATIVE_PORT}" "${ZOOKEEPER_PORT}" "${ZOOKEEPER_JMX_PORT}" "${GW_TCP_PORT}" "${GW_WEBSOCKET_PORT}" "${GW_HTTP_PORT}" "${LOGINSVR_HTTP_PORT}" "${LOGINSVR_GW_PORT}" "${MDSVR_GW_PORT}" "${APSSVR_GW_PORT}" "${ORDERSVR_GW_PORT}" "${PROJECTIONSVR_GW_PORT:-33042}" "${TRADESVR_GW_PORT}" "${LIQSVR_GW_PORT}" "${MANAGERSVR_GW_PORT}" "${ADMINSVR_GW_PORT}" "${WEB_LISTEN_PORT}" "18090")
   if [[ "${ORDER_CLUSTER_ENABLED:-false}" == "true" ]]; then
     ports+=("${ORDERSVR_B_GW_PORT}" "${ORDERSVR_A_REPLICATION_PORT}" "${ORDERSVR_B_REPLICATION_PORT}")
     if [[ "${ORDER_CLUSTER_C_ENABLED:-false}" == "true" ]]; then
@@ -815,6 +821,7 @@ if [[ "${ROBOT_IDENTITY_CHANGED}" == "true" && "${LOGIN_CONTAINER_EXISTED}" == "
   docker restart dc-saas-loginsvr >/dev/null
 fi
 wait_for_health dc-saas-trade-web 300
+wait_for_health dc-saas-platform-web 300
 wait_for_port "${GW_TCP_PORT}" gateway 120
 wait_for_port "${LOGINSVR_GW_PORT}" loginsvr 120
 wait_for_port "${LOGINSVR_HTTP_PORT}" loginsvr 180
@@ -848,6 +855,7 @@ fi
 wait_for_port "${LIQSVR_GW_PORT}" liqsvr 120
 wait_for_port "${MANAGERSVR_GW_PORT}" managersvr 120
 wait_for_port "${ADMINSVR_GW_PORT}" adminsvr 120
+wait_for_port 18090 platform-web 120
 
 # GW caches both service aliases (for example TDSvr) and direct instance
 # names (TradeSvr). A backend container recreation can change its host-network

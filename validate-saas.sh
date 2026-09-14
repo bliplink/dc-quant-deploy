@@ -75,7 +75,7 @@ expected_containers=(
   dc-saas-mysql dc-saas-clickhouse dc-saas-zookeeper dc-saas-gateway
   dc-saas-loginsvr dc-saas-mdsvr dc-saas-apssvr dc-saas-ordersvr
   dc-saas-tradesvr dc-saas-liqsvr dc-saas-managersvr dc-saas-adminsvr
-  dc-saas-robotsvr dc-saas-trade-web
+  dc-saas-robotsvr dc-saas-trade-web dc-saas-platform-web
 )
 if [[ "${ORDER_CLUSTER_ENABLED:-false}" == "true" ]]; then
   expected_containers+=(dc-saas-ordersvr-b dc-saas-projectionsvr)
@@ -101,7 +101,7 @@ for container in "${expected_containers[@]}"; do
   }
 done
 
-for container in dc-saas-mysql dc-saas-clickhouse dc-saas-zookeeper dc-saas-trade-web; do
+for container in dc-saas-mysql dc-saas-clickhouse dc-saas-zookeeper dc-saas-trade-web dc-saas-platform-web; do
   health="$(docker inspect --format '{{.State.Health.Status}}' "${container}" 2>/dev/null || true)"
   [[ "${health}" == "healthy" ]] || die "${container} health is ${health:-missing}."
 done
@@ -111,7 +111,7 @@ required_ports=(
   "${ZOOKEEPER_PORT}" "${GW_TCP_PORT}" "${GW_WEBSOCKET_PORT}" "${GW_HTTP_PORT}"
   "${LOGINSVR_HTTP_PORT}" "${LOGINSVR_GW_PORT}" "${MDSVR_GW_PORT}" "${APSSVR_GW_PORT}"
   "${ORDERSVR_GW_PORT}" "${TRADESVR_GW_PORT}" "${LIQSVR_GW_PORT}"
-  "${MANAGERSVR_GW_PORT}" "${ADMINSVR_GW_PORT}" "${WEB_LISTEN_PORT}"
+  "${MANAGERSVR_GW_PORT}" "${ADMINSVR_GW_PORT}" "${WEB_LISTEN_PORT}" "18090"
 )
 if [[ "${ORDER_CLUSTER_ENABLED:-false}" == "true" ]]; then
   required_ports+=("${ORDERSVR_B_GW_PORT}" "${ORDERSVR_A_REPLICATION_PORT}" "${ORDERSVR_B_REPLICATION_PORT}" "${PROJECTIONSVR_GW_PORT:-33042}")
