@@ -1,6 +1,8 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
+SCRIPT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
+DEPLOY_DIR="$(cd -- "${SCRIPT_DIR}/.." && pwd)"
 ZK_CONTAINER="${ORDER_CLUSTER_ZK_CONTAINER:-dc-saas-zookeeper}"
 ZK_SERVER="${ORDER_CLUSTER_ZK_SERVER:-127.0.0.1:32181}"
 PARTITION_ROOT="${ORDER_CLUSTER_PARTITION_ROOT:-/dc/cluster/ordersvr/partitions}"
@@ -12,6 +14,9 @@ EXPECTED_PARTITIONS="${ORDER_CLUSTER_PARTITION_COUNT:-256}"
 ASSIGNMENT_SETTLE_SECONDS="${ORDER_CLUSTER_ASSIGNMENT_SETTLE_SECONDS:-5}"
 PARTITION_READY_TIMEOUT_SECONDS="${ORDER_CLUSTER_PARTITION_READY_TIMEOUT_SECONDS:-180}"
 RESTART_AFTER_FENCE="${ORDER_CLUSTER_RESTART_AFTER_FENCE:-false}"
+RECREATE_AFTER_FENCE="${ORDER_CLUSTER_RECREATE_AFTER_FENCE:-false}"
+COMPOSE_FILE="${ORDER_CLUSTER_COMPOSE_FILE:-${DEPLOY_DIR}/compose.yaml}"
+COMPOSE_ENV_FILE="${ORDER_CLUSTER_COMPOSE_ENV_FILE:-${DEPLOY_DIR}/.env.prod}"
 USE_CURRENT_FENCED="${ORDER_CLUSTER_RECOVERY_USE_CURRENT_FENCED:-false}"
 TRADE_CONTAINER="${ORDER_CLUSTER_TRADE_CONTAINER:-dc-saas-tradesvr}"
 ORDER_A_GW_PORT="${ORDER_CLUSTER_A_GW_PORT:-33036}"
@@ -30,6 +35,10 @@ command -v docker >/dev/null || die 'docker is required'
 command -v python3 >/dev/null || die 'python3 is required'
 [[ "${RESTART_AFTER_FENCE}" == true || "${RESTART_AFTER_FENCE}" == false ]] ||
   die 'ORDER_CLUSTER_RESTART_AFTER_FENCE must be true or false'
+[[ "${RECREATE_AFTER_FENCE}" == true || "${RECREATE_AFTER_FENCE}" == false ]] ||
+  die 'ORDER_CLUSTER_RECREATE_AFTER_FENCE must be true or false'
+[[ "${RESTART_AFTER_FENCE}" != true || "${RECREATE_AFTER_FENCE}" != true ]] ||
+  die 'Choose either restart or recreate after the fence, not both'
 [[ "${USE_CURRENT_FENCED}" == true || "${USE_CURRENT_FENCED}" == false ]] ||
   die 'ORDER_CLUSTER_RECOVERY_USE_CURRENT_FENCED must be true or false'
 containers=("${ZK_CONTAINER}" "${ORDER_A_CONTAINER}" "${ORDER_B_CONTAINER}")
@@ -37,8 +46,13 @@ containers=("${ZK_CONTAINER}" "${ORDER_A_CONTAINER}" "${ORDER_B_CONTAINER}")
 for container in "${containers[@]}"; do
   docker inspect "${container}" >/dev/null 2>&1 || die "Missing container ${container}"
 done
-if [[ "${RESTART_AFTER_FENCE}" == true ]]; then
+if [[ "${RESTART_AFTER_FENCE}" == true || "${RECREATE_AFTER_FENCE}" == true ]]; then
   docker inspect "${TRADE_CONTAINER}" >/dev/null 2>&1 || die "Missing container ${TRADE_CONTAINER}"
+fi
+if [[ "${RECREATE_AFTER_FENCE}" == true ]]; then
+  docker compose version >/dev/null 2>&1 || die 'docker compose is required for fenced recreation'
+  [[ -f "${COMPOSE_FILE}" ]] || die "Missing Compose file ${COMPOSE_FILE}"
+  [[ -f "${COMPOSE_ENV_FILE}" ]] || die "Missing Compose environment ${COMPOSE_ENV_FILE}"
 fi
 
 work_dir="$(mktemp -d)"
@@ -185,12 +199,23 @@ PY
   done
 }
 
-if [[ "${RESTART_AFTER_FENCE}" == true ]]; then
-  log "Fence confirmed; restarting OrderSvr cluster and TradeSvr inside epoch ${target_epoch}."
+if [[ "${RESTART_AFTER_FENCE}" == true || "${RECREATE_AFTER_FENCE}" == true ]]; then
   restart_containers=("${ORDER_A_CONTAINER}" "${ORDER_B_CONTAINER}")
   [[ "${ORDER_C_ENABLED}" == true ]] && restart_containers+=("${ORDER_C_CONTAINER}")
   restart_containers+=("${TRADE_CONTAINER}")
-  docker restart "${restart_containers[@]}" >/dev/null
+
+  if [[ "${RECREATE_AFTER_FENCE}" == true ]]; then
+    log "Fence confirmed; recreating OrderSvr cluster and TradeSvr inside epoch ${target_epoch}."
+    compose_services=(ordersvr ordersvr-b)
+    [[ "${ORDER_C_ENABLED}" == true ]] && compose_services+=(ordersvr-c)
+    compose_services+=(tradesvr)
+    COMPOSE_PARALLEL_LIMIT=1 docker compose \
+      --env-file "${COMPOSE_ENV_FILE}" -f "${COMPOSE_FILE}" \
+      up -d --no-deps --force-recreate "${compose_services[@]}"
+  else
+    log "Fence confirmed; restarting OrderSvr cluster and TradeSvr inside epoch ${target_epoch}."
+    docker restart "${restart_containers[@]}" >/dev/null
+  fi
   wait_for_tcp "${ORDER_A_GW_PORT}" "${ORDER_A_CONTAINER} gateway"
   wait_for_tcp "${ORDER_B_GW_PORT}" "${ORDER_B_CONTAINER} gateway"
   wait_for_tcp "${ORDER_A_REPLICATION_PORT}" "${ORDER_A_CONTAINER} replication"
