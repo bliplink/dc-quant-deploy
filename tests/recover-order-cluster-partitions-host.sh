@@ -18,6 +18,7 @@ RECREATE_AFTER_FENCE="${ORDER_CLUSTER_RECREATE_AFTER_FENCE:-false}"
 COMPOSE_FILE="${ORDER_CLUSTER_COMPOSE_FILE:-${DEPLOY_DIR}/compose.yaml}"
 COMPOSE_ENV_FILE="${ORDER_CLUSTER_COMPOSE_ENV_FILE:-${DEPLOY_DIR}/.env.prod}"
 USE_CURRENT_FENCED="${ORDER_CLUSTER_RECOVERY_USE_CURRENT_FENCED:-false}"
+USE_CURRENT_PARTIAL="${ORDER_CLUSTER_RECOVERY_USE_CURRENT_PARTIAL:-false}"
 TRADE_CONTAINER="${ORDER_CLUSTER_TRADE_CONTAINER:-dc-saas-tradesvr}"
 ORDER_A_GW_PORT="${ORDER_CLUSTER_A_GW_PORT:-33036}"
 ORDER_B_GW_PORT="${ORDER_CLUSTER_B_GW_PORT:-33041}"
@@ -41,6 +42,10 @@ command -v python3 >/dev/null || die 'python3 is required'
   die 'Choose either restart or recreate after the fence, not both'
 [[ "${USE_CURRENT_FENCED}" == true || "${USE_CURRENT_FENCED}" == false ]] ||
   die 'ORDER_CLUSTER_RECOVERY_USE_CURRENT_FENCED must be true or false'
+[[ "${USE_CURRENT_PARTIAL}" == true || "${USE_CURRENT_PARTIAL}" == false ]] ||
+  die 'ORDER_CLUSTER_RECOVERY_USE_CURRENT_PARTIAL must be true or false'
+[[ "${USE_CURRENT_FENCED}" != true || "${USE_CURRENT_PARTIAL}" != true ]] ||
+  die 'Choose either fully fenced or partial current-epoch recovery, not both'
 containers=("${ZK_CONTAINER}" "${ORDER_A_CONTAINER}" "${ORDER_B_CONTAINER}")
 [[ "${ORDER_C_ENABLED}" == true ]] && containers+=("${ORDER_C_CONTAINER}")
 for container in "${containers[@]}"; do
@@ -62,6 +67,7 @@ assignments_json="${work_dir}/assignments.jsonl"
 assignments_tsv="${work_dir}/assignments.tsv"
 recovering_commands="${work_dir}/recovering.commands"
 ready_tsv="${work_dir}/ready.tsv"
+already_ready_tsv="${work_dir}/already-ready.tsv"
 interactive_log="${work_dir}/interactive-zk.log"
 zk_write_fd=''
 
@@ -110,7 +116,7 @@ with open(target, "w", encoding="utf-8", newline="\n") as stream:
 PY
 
 max_epoch="$(awk -F '\t' 'BEGIN{max=0} $2>max{max=$2} END{print max}' "${assignments_tsv}")"
-if [[ "${USE_CURRENT_FENCED}" == true ]]; then
+if [[ "${USE_CURRENT_FENCED}" == true || "${USE_CURRENT_PARTIAL}" == true ]]; then
   target_epoch="${ORDER_CLUSTER_RECOVERY_EPOCH:-${max_epoch}}"
 else
   target_epoch="${ORDER_CLUSTER_RECOVERY_EPOCH:-$((max_epoch + 1))}"
@@ -128,31 +134,52 @@ rows = [json.loads(line) for line in open(path, encoding="utf-8")]
 if len(rows) != expected or any(row.get("state") != "RECOVERING" or int(row.get("epoch", 0)) != epoch for row in rows):
     raise SystemExit("prepared recovery requires every assignment RECOVERING at one target epoch")
 PY
+elif [[ "${USE_CURRENT_PARTIAL}" == true ]]; then
+  (( target_epoch == max_epoch )) || die "Partial recovery epoch ${target_epoch} must equal current max ${max_epoch}"
+  python3 - "${assignments_json}" "${EXPECTED_PARTITIONS}" "${target_epoch}" <<'PY'
+import json
+import sys
+
+path, expected_text, epoch_text = sys.argv[1:]
+expected, epoch = int(expected_text), int(epoch_text)
+rows = [json.loads(line) for line in open(path, encoding="utf-8")]
+allowed_states = {"READY", "RECOVERING"}
+if len(rows) != expected or any(int(row.get("epoch", 0)) != epoch or row.get("state") not in allowed_states
+                                for row in rows):
+    raise SystemExit("partial recovery requires one epoch with only READY/RECOVERING assignments")
+PY
 else
   (( target_epoch > max_epoch )) || die "Recovery epoch ${target_epoch} must be greater than current max ${max_epoch}"
 fi
 
-python3 - "${assignments_json}" "${recovering_commands}" "${ready_tsv}" "${PARTITION_ROOT}" "${target_epoch}" "${USE_CURRENT_FENCED}" <<'PY'
+python3 - "${assignments_json}" "${recovering_commands}" "${ready_tsv}" "${already_ready_tsv}" \
+  "${PARTITION_ROOT}" "${target_epoch}" "${USE_CURRENT_FENCED}" "${USE_CURRENT_PARTIAL}" <<'PY'
 import json
 import sys
 
-source, recovering_path, ready_path, root, epoch_text, use_current_text = sys.argv[1:]
+source, recovering_path, ready_path, already_ready_path, root, epoch_text, use_current_text, use_partial_text = sys.argv[1:]
 epoch = int(epoch_text)
 use_current = use_current_text == "true"
+use_partial = use_partial_text == "true"
 rows = sorted((json.loads(line) for line in open(source, encoding="utf-8")), key=lambda row: row["partitionId"])
 with open(recovering_path, "w", encoding="utf-8", newline="\n") as recovering, \
-        open(ready_path, "w", encoding="utf-8", newline="\n") as ready:
+        open(ready_path, "w", encoding="utf-8", newline="\n") as ready, \
+        open(already_ready_path, "w", encoding="utf-8", newline="\n") as already_ready:
     for original in rows:
         partition_id = original["partitionId"]
+        if use_partial and original.get("state") == "READY":
+            already_ready.write(f"{partition_id}\t{original['primary']}\n")
+            continue
         value = dict(original)
         value["epoch"] = epoch
         current_version = int(value.get("assignmentVersion") or 0)
-        if "assignmentVersion" in value:
+        if "assignmentVersion" in value and not use_partial:
             value["assignmentVersion"] = current_version + 1
         value["state"] = "RECOVERING"
-        recovering.write(f"set {root}/{partition_id} {json.dumps(value, separators=(',', ':'))}\n")
+        if not use_partial:
+            recovering.write(f"set {root}/{partition_id} {json.dumps(value, separators=(',', ':'))}\n")
         if "assignmentVersion" in value:
-            value["assignmentVersion"] = current_version + (1 if use_current else 2)
+            value["assignmentVersion"] = current_version + (1 if use_current or use_partial else 2)
         value["state"] = "READY"
         ready.write(f"{partition_id}\t{value['primary']}\t{json.dumps(value, separators=(',', ':'))}\n")
 PY
@@ -164,6 +191,8 @@ zk_write_fd="${ZK_CLIENT[1]}"
 
 if [[ "${USE_CURRENT_FENCED}" == true ]]; then
   log "Using prepared RECOVERING topology at epoch ${target_epoch}."
+elif [[ "${USE_CURRENT_PARTIAL}" == true ]]; then
+  log "Resuming partial recovery at epoch ${target_epoch}."
 else
   log "Fencing ${EXPECTED_PARTITIONS} partitions at epoch ${target_epoch} before recovery."
   cat "${recovering_commands}" >&"${zk_write_fd}"
@@ -244,8 +273,20 @@ partition_ready() {
       >/dev/null
 }
 
-mapfile -t assignment_rows <"${ready_tsv}"
 recovered=0
+if [[ "${USE_CURRENT_PARTIAL}" == true ]]; then
+  while IFS=$'\t' read -r partition_id primary; do
+    [[ -n "${partition_id}" ]] || continue
+    container="$(container_for_node "${primary}")"
+    container_started="$(docker inspect --format '{{.State.StartedAt}}' "${container}")"
+    partition_ready "${container}" "${primary}" "${partition_id}" "${container_started}" ||
+      die "READY assignment lacks current-container promotion evidence: ${partition_id}:${primary} epoch ${target_epoch}"
+    recovered=$((recovered + 1))
+  done <"${already_ready_tsv}"
+  log "Validated ${recovered}/${EXPECTED_PARTITIONS} already-ready partitions at epoch ${target_epoch}."
+fi
+
+mapfile -t assignment_rows <"${ready_tsv}"
 for ((offset=0; offset<${#assignment_rows[@]}; offset+=2)); do
   batch_started="$(date --iso-8601=seconds)"
   batch=()
