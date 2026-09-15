@@ -132,6 +132,7 @@ CREATE TABLE `dc_orders` (
   `maker` int(11) DEFAULT NULL,
   PRIMARY KEY (`order_id`,`user_id`) USING BTREE,
   KEY `query_index` (`user_id`,`security_id`,`side`,`ord_type`,`order_id`,`ord_status`) USING BTREE,
+  KEY `idx_order_history_scope` (`location`,`user_id`,`create_time`) USING BTREE,
   KEY `idx_order_ref` (`location`,`user_id`,`ref_order_id`,`close_by`,`ord_status`) USING BTREE,
   KEY `idx_robot_sweep` (`location`,`security_id`,`ord_status`,`side`,`price`,`transact_time`) USING BTREE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci ROW_FORMAT=DYNAMIC COMMENT='订单表';
@@ -258,6 +259,7 @@ CREATE TABLE `dc_orders_execorders` (
   `info4` varchar(45) DEFAULT NULL,
   `info5` varchar(45) DEFAULT NULL,
   PRIMARY KEY (`exec_id`,`user_id`) USING BTREE,
+  KEY `idx_exec_history_scope` (`location`,`user_id`,`create_time`) USING BTREE,
   KEY `index` (`create_time`,`security_id`,`side`,`user_id`) USING BTREE,
   KEY `idx_exec_transact_time_location` (`transact_time`,`location`) USING BTREE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci ROW_FORMAT=DYNAMIC COMMENT='成交明细表';
