@@ -7,7 +7,7 @@ ENV_FILE="${ENV_FILE:-${DEPLOY_DIR}/.env.prod}"
 PARTITION_ROOT="${TRADE_CLUSTER_PARTITION_ROOT:-/dc/cluster/tradesvr/partitions}"
 PARTITION_ID="${TRADE_CLUSTER_ROLE_REVERSAL_PARTITION:-P000}"
 ZK_CONTAINER="${TRADE_CLUSTER_ZK_CONTAINER:-dc-saas-zookeeper}"
-ZK_SERVER="${TRADE_CLUSTER_ZK_SERVER:-127.0.0.1:${ZOOKEEPER_PORT:-32181}}"
+ZK_SERVER=""
 RUN_ID="${RUN_ID:-$(date +%Y%m%d-%H%M%S)}"
 
 log() { printf '[trade-cluster-role-reversal] %s\n' "$*"; }
@@ -19,6 +19,7 @@ set -a
 # shellcheck disable=SC1090
 . "${ENV_FILE}"
 set +a
+ZK_SERVER="${TRADE_CLUSTER_ZK_SERVER:-127.0.0.1:${ZOOKEEPER_PORT:-32181}}"
 
 [[ "${TRADE_CLUSTER_ENABLED:-false}" == "true" ]] ||
   die "TRADE_CLUSTER_ENABLED=true is required"
@@ -67,6 +68,25 @@ switch_and_verify() {
 
 read -r original_primary original_replica < <(read_current_primary)
 [[ "${original_primary}" != "${original_replica}" ]] || die "Primary and replica overlap"
+
+restore_topology_on_failure() {
+  local status=$?
+  (( status == 0 )) && return 0
+  set +e
+  local current_primary current_replica recovery_container
+  read -r current_primary current_replica < <(read_current_primary)
+  if [[ "${current_primary}" != "${original_primary}" ]]; then
+    if [[ "${original_primary}" == "TradeSvrA" ]]; then
+      recovery_container="dc-saas-tradesvr"
+    else
+      recovery_container="dc-saas-tradesvr-b"
+    fi
+    log "Failure detected; restoring ${PARTITION_ID} to original primary ${original_primary}."
+    switch_and_verify "${current_primary}" "${original_primary}" "${recovery_container}"       "${EVIDENCE_DIR}/failure-restore.json" ||       log "WARNING: automatic topology restore failed; manual intervention required."
+  fi
+  return "${status}"
+}
+trap restore_topology_on_failure EXIT
 
 if [[ "${original_primary}" == "TradeSvrA" ]]; then
   forward_container="dc-saas-tradesvr-b"
