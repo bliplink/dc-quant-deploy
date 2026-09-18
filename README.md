@@ -41,13 +41,13 @@ cd /root/dc-saas-deploy
 Install the safe standalone topology:
 
 ```bash
-sudo ./deploy-saas.sh
+sudo ./install-saas.sh
 ```
 
 Install the complete clustered topology in one command:
 
 ```bash
-sudo ./deploy-saas.sh --full-cluster
+sudo ./install-saas.sh --full-cluster
 ```
 
 `--full-cluster` deterministically enables MDSvr A/B/C, OrderSvr A/B,
@@ -216,7 +216,7 @@ The purge command accepts only the exact
 `/opt/dc-runtime` or `/opt/sumscope`. Image purge removes only the exact SaaS
 tags and never deletes a shared image ID used by the quantitative stack.
 
-Redeploy with preserved data by running `sudo ./deploy-saas.sh` again, or `sudo ./deploy-saas.sh --full-cluster` to restore the complete clustered topology.
+Redeploy with preserved data by running `sudo ./install-saas.sh` again, or `sudo ./install-saas.sh --full-cluster` to restore the complete clustered topology. `install-saas.sh` is a stable operator wrapper around `deploy-saas.sh`, so install and redeploy use the same implementation.
 
 ## Implementation sequence after deployment
 
