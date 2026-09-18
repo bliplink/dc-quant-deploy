@@ -27,6 +27,16 @@ set -a
 . "${ENV_FILE}"
 set +a
 
+PROJECTION_BASELINE=""
+cleanup_projection_baseline() {
+  [[ -z "${PROJECTION_BASELINE}" ]] || rm -f "${PROJECTION_BASELINE}"
+}
+trap cleanup_projection_baseline EXIT
+
+# Reuse the same durable watermark helpers as restart/failover acceptance.
+# shellcheck disable=SC1090
+source "${SCRIPT_DIR}/restart-order-trade-e2e.sh"
+
 wait_for_port() {
   local port="$1" service="$2" start
   start="$(date +%s)"
@@ -88,6 +98,12 @@ log "Validating the deployed SaaS stack."
 
 log "Running MySQL and ClickHouse location-isolation smoke tests."
 ENV_FILE="${ENV_FILE}" "${DEPLOY_DIR}/smoke-test-location.sh"
+
+if [[ "${ORDER_CLUSTER_ENABLED:-false}" == "true" || "${TRADE_CLUSTER_ENABLED:-false}" == "true" ]]; then
+  PROJECTION_BASELINE="$(mktemp)"
+  log "Capturing ProjectionSvr watermarks before clustered business acceptance."
+  snapshot_projection_watermarks "${PROJECTION_BASELINE}"
+fi
 
 log "Running strict order-rule validation in an isolated acceptance location."
 ENV_FILE="${ENV_FILE}" \
@@ -152,6 +168,11 @@ wait_for_gateway_route TradeSvr
 
 log "Revalidating health after TradeSvr restart and ADL settlement."
 "${DEPLOY_DIR}/validate-saas.sh" --env-file "${ENV_FILE}"
+
+if [[ -n "${PROJECTION_BASELINE}" ]]; then
+  log "Verifying each enabled clustered Projection stream advanced during real trading."
+  verify_projection_watermarks_advanced "${PROJECTION_BASELINE}"
+fi
 
 if [[ "${RUN_CORE_STRESS:-false}" == "true" ]]; then
   log "Running the opt-in full-stack concurrent load and restart-recovery gate."
