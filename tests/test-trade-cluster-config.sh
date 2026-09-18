@@ -70,6 +70,14 @@ grep -Fqx 'projection.trade.binary.enabled=true' "${projection_config}" ||
   fail 'ProjectionSvr Trade binary consumer must be enabled'
 grep -Fqx 'projection.trade.binary.tradeServerKey=SERVER.TradeSvr' "${projection_config}" ||
   fail 'ProjectionSvr Trade logical server key is missing'
+grep -Fq 'wait_for_port "${TRADESVR_A_REPLICATION_PORT}" tradesvr 180' "${DEPLOY_DIR}/deploy-saas.sh" ||
+  fail 'TradeSvrA replication readiness wait is missing'
+grep -Fq 'wait_for_port "${TRADESVR_B_REPLICATION_PORT}" tradesvr-b 180' "${DEPLOY_DIR}/deploy-saas.sh" ||
+  fail 'TradeSvrB replication readiness wait is missing'
+grep -Fq 'wait_for_trade_cluster_readiness' "${DEPLOY_DIR}/deploy-saas.sh" ||
+  fail 'Trade cluster readiness gate is missing from deployment'
+grep -Fq '"${ORDER_CLUSTER_ENABLED:-false}" == "true" || "${TRADE_CLUSTER_ENABLED:-false}" == "true"' "${DEPLOY_DIR}/deploy-saas.sh" ||
+  fail 'ProjectionSvr deployment wait must cover Trade cluster mode'
 
 sed '/^TRADESVR_B_GW_PORT=/d' "${TEST_ROOT}/cluster.env" > "${TEST_ROOT}/invalid.env"
 if "${DEPLOY_DIR}/generate-saas-configs.sh" "${TEST_ROOT}/invalid.env" >/dev/null 2>&1; then
