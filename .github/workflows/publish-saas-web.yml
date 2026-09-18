@@ -33,7 +33,8 @@ jobs:
         run: |
           git clone --depth 1 --branch "${SOURCE_BRANCH}" \
             "https://x-access-token:${GH_REPO_TOKEN}@github.com/SKT-Walter/dc-trade-web.git" service
-          git -C service checkout "${SOURCE_REV}"
+          git -C service fetch --depth 1 origin "${SOURCE_REV}"
+          git -C service checkout --detach FETCH_HEAD
       - uses: docker/login-action@v3
         with:
           registry: ${{ env.REGISTRY }}
