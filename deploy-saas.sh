@@ -6,6 +6,7 @@ ENV_FILE="${ENV_FILE:-${SCRIPT_DIR}/.env.prod}"
 LOCK_FILE="${SAAS_AUTO_UPDATE_LOCK_FILE:-/tmp/dc-saas-auto-update.lock}"
 SKIP_HOST_PREPARE="false"
 SKIP_PULL="false"
+FULL_CLUSTER="false"
 ROBOT_IDENTITY_CHANGED="false"
 LOGIN_CONTAINER_EXISTED="false"
 SAAS_CHANGED_SERVICES="${SAAS_CHANGED_SERVICES:-}"
@@ -21,16 +22,19 @@ die() {
 
 usage() {
   cat <<'EOF'
-Usage: sudo ./deploy-saas.sh [--skip-host-prepare] [--skip-pull]
+Usage: sudo ./deploy-saas.sh [--full-cluster] [--skip-host-prepare] [--skip-pull]
 
-Deploy the DC cryptocurrency SaaS stack, optionally with OrderSvr and MDSvr
-cluster profiles. This script never starts, stops, or reconfigures the
+Deploy the DC cryptocurrency SaaS stack. --full-cluster enables the production-style
+MDSvr A/B/C, OrderSvr A/B, TradeSvr A/B, and ProjectionSvr cluster topology. This script never starts, stops, or reconfigures the
 independent quantitative-trading stack.
 EOF
 }
 
 while [[ "$#" -gt 0 ]]; do
   case "$1" in
+    --full-cluster)
+      FULL_CLUSTER="true"
+      ;;
     --skip-host-prepare)
       SKIP_HOST_PREPARE="true"
       ;;
@@ -157,6 +161,12 @@ ensure_env_defaults() {
   if ! grep -q '^ORDERSVR_C_REPLICATION_PORT=' "${ENV_FILE}"; then
     printf 'ORDERSVR_C_REPLICATION_PORT=19123\n' >> "${ENV_FILE}"
   fi
+  if ! grep -q '^TRADESVR_A_REPLICATION_PORT=' "${ENV_FILE}"; then
+    printf 'TRADESVR_A_REPLICATION_PORT=19221\n' >> "${ENV_FILE}"
+  fi
+  if ! grep -q '^TRADESVR_B_REPLICATION_PORT=' "${ENV_FILE}"; then
+    printf 'TRADESVR_B_REPLICATION_PORT=19222\n' >> "${ENV_FILE}"
+  fi
   if ! grep -q '^ORDER_CLUSTER_PERIODIC_SNAPSHOT_ENABLED=' "${ENV_FILE}"; then
     printf 'ORDER_CLUSTER_PERIODIC_SNAPSHOT_ENABLED=true\n' >> "${ENV_FILE}"
   fi
@@ -230,6 +240,16 @@ ensure_env_defaults() {
   if grep -q '^ZOOKEEPER_TAG=v0.0.3-test$' "${ENV_FILE}"; then
     sed -i 's/^ZOOKEEPER_TAG=v0.0.3-test$/ZOOKEEPER_TAG=3.8.4/' "${ENV_FILE}"
   fi
+}
+
+apply_full_cluster_profile() {
+  [[ "${FULL_CLUSTER}" == "true" ]] || return 0
+  set_env_value MD_CLUSTER_ENABLED true
+  set_env_value MD_CLUSTER_C_ENABLED true
+  set_env_value ORDER_CLUSTER_ENABLED true
+  set_env_value ORDER_CLUSTER_C_ENABLED false
+  set_env_value TRADE_CLUSTER_ENABLED true
+  log "Enabled full cluster topology: MD A/B/C, Order A/B, Trade A/B, ProjectionSvr."
 }
 
 ensure_host_runtime() {
@@ -814,6 +834,7 @@ verify_ghcr_access() {
 
 ensure_env_file
 ensure_env_defaults
+apply_full_cluster_profile
 ensure_host_runtime
 load_env
 validate_runtime_root
