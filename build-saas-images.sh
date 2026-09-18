@@ -116,6 +116,8 @@ sync_repo adminsvr https://github.com/bliplink/com.app.dc.adminsvr.git saas-cryp
 sync_repo robotsvr https://github.com/bliplink/com.app.dc.robotsvr.git saas-crypto
 sync_repo gateway https://github.com/bliplink/gw.git saas-crypto
 sync_repo trade-web https://github.com/SKT-Walter/dc-trade-web.git saas-crypto
+sync_repo tenant-web https://github.com/bliplink/dc-saas-tenant-web.git main
+sync_repo platform-web https://github.com/bliplink/dc-saas-platform-web.git saas
 
 log "Pulling the reproducible Maven build environment."
 docker pull "${MAVEN_BUILD_IMAGE}"
@@ -138,5 +140,11 @@ build_java_image gateway "${GW_IMAGE_REPOSITORY:-dc-saas/gw}:${GW_TAG:-saas-cryp
 
 log "Building dc-trade-web."
 DOCKER_BUILDKIT=1 docker build --pull -t "${TRADE_WEB_IMAGE_REPOSITORY:-dc-saas/dc-trade-web}:${TRADE_WEB_TAG:-saas-crypto}" "${SRC_ROOT}/trade-web"
+
+log "Building dc-saas-tenant-web."
+DOCKER_BUILDKIT=1 docker build --pull -t "${TENANT_WEB_IMAGE_REPOSITORY:-dc-saas/dc-saas-tenant-web}:${TENANT_WEB_TAG:-saas-crypto}" "${SRC_ROOT}/tenant-web"
+
+log "Building dc-saas-platform-web."
+DOCKER_BUILDKIT=1 docker build --pull -t "${PLATFORM_WEB_IMAGE_REPOSITORY:-dc-saas/dc-saas-platform-web}:${PLATFORM_WEB_TAG:-saas-crypto}" "${SRC_ROOT}/platform-web"
 
 log "All standalone SaaS images are available locally."
