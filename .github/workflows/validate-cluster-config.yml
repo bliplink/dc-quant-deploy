@@ -23,6 +23,8 @@ on:
       - tests/test-trade-cluster-config.sh
       - tests/trade_cluster_assignments.py
       - tests/test_trade_cluster_assignments.py
+      - tests/trade_cluster_bootstrap_host.py
+      - tests/trade_cluster_bootstrap_host.py
       - tests/order-routing-key.sh
       - tests/test-placement-routing-key.sh
       - tests/test_verify_placement_catalogs.py
@@ -70,3 +72,4 @@ jobs:
           python -m unittest tests.test_verify_placement_catalogs tests.test_md_cluster_assignment_plan tests.test_trade_cluster_assignments tests.test_md_cluster_transition_host tests.test_md_cluster_roll_drain_host
           python tests/md_cluster_transition_host.py --help >/dev/null
           python tests/md_cluster_roll_drain_host.py --help >/dev/null
+          python tests/trade_cluster_bootstrap_host.py --help >/dev/null
