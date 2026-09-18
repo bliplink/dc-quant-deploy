@@ -190,7 +190,6 @@ ensure_env_defaults() {
   fi
   ensure_generated_env_secret ROBOT_RUNTIME_API_KEY
   ensure_generated_env_secret ROBOT_RUNTIME_API_SECRET
-  migrate_env_value IMAGE_SOURCE local registry
   migrate_env_value GW_IMAGE_REPOSITORY dc-saas/gw ghcr.io/bliplink/gw
   migrate_env_value LOGINSVR_IMAGE_REPOSITORY dc-saas/loginsvr ghcr.io/bliplink/loginsvr
   migrate_env_value MDSVR_IMAGE_REPOSITORY dc-saas/mdsvr ghcr.io/bliplink/mdsvr
