@@ -24,16 +24,15 @@ on:
       - tests/test_md_cluster_roll_drain_host.py
       - tests/test-order-cluster-c-config.sh
       - tests/test-trade-cluster-config.sh
+      - tests/trade_cluster_transition_host.py
+      - tests/test_trade_cluster_transition_host.py
+      - tests/run-trade-cluster-role-reversal-host.sh
+      - tests/restart-order-trade-e2e.sh
+      - tests/run-core-trading-acceptance.sh
       - tests/trade_cluster_assignments.py
       - tests/test_trade_cluster_assignments.py
       - tests/trade_cluster_bootstrap_host.py
-      - tests/trade_cluster_transition_host.py
-      - tests/test_trade_cluster_transition_host.py
-      - tests/run-trade-cluster-role-reversal-host.sh
       - tests/trade_cluster_bootstrap_host.py
-      - tests/trade_cluster_transition_host.py
-      - tests/test_trade_cluster_transition_host.py
-      - tests/run-trade-cluster-role-reversal-host.sh
       - tests/order-routing-key.sh
       - tests/test-placement-routing-key.sh
       - tests/test_verify_placement_catalogs.py
@@ -59,6 +58,11 @@ on:
       - tests/test_md_cluster_roll_drain_host.py
       - tests/test-order-cluster-c-config.sh
       - tests/test-trade-cluster-config.sh
+      - tests/trade_cluster_transition_host.py
+      - tests/test_trade_cluster_transition_host.py
+      - tests/run-trade-cluster-role-reversal-host.sh
+      - tests/restart-order-trade-e2e.sh
+      - tests/run-core-trading-acceptance.sh
       - tests/trade_cluster_assignments.py
       - tests/test_trade_cluster_assignments.py
       - tests/order-routing-key.sh
