@@ -31,11 +31,29 @@ All names, ports, and data paths are isolated from a legacy STC installation:
 
 ## One-click deploy
 
+Clone once:
+
 ```bash
 git clone --branch saas-crypto <dc-quant-deploy-repository> /root/dc-saas-deploy
 cd /root/dc-saas-deploy
+```
+
+Install the safe standalone topology:
+
+```bash
 sudo ./deploy-saas.sh
 ```
+
+Install the complete clustered topology in one command:
+
+```bash
+sudo ./deploy-saas.sh --full-cluster
+```
+
+`--full-cluster` deterministically enables MDSvr A/B/C, OrderSvr A/B,
+TradeSvr A/B, and ProjectionSvr. Order and Trade use fenced 256-partition
+assignments; deployment waits for replication listeners and partition readiness
+before reporting success.
 
 ### OrderSvr A/B development cutover
 
@@ -82,7 +100,7 @@ The first run:
 5. pulls the application images produced from each dedicated `saas-crypto`
    branch on GitHub Container Registry;
 6. initializes MySQL and the location-aware ClickHouse K-line schema;
-7. starts and validates all 13 containers.
+7. starts and validates the selected topology; `--full-cluster` additionally waits for MD/Order/Trade cluster readiness and ProjectionSvr.
 
 `.env.prod` is runtime-only and must never be committed.
 
@@ -198,7 +216,7 @@ The purge command accepts only the exact
 `/opt/dc-runtime` or `/opt/sumscope`. Image purge removes only the exact SaaS
 tags and never deletes a shared image ID used by the quantitative stack.
 
-Redeploy with the preserved data by running `sudo ./deploy-saas.sh` again.
+Redeploy with preserved data by running `sudo ./deploy-saas.sh` again, or `sudo ./deploy-saas.sh --full-cluster` to restore the complete clustered topology.
 
 ## Implementation sequence after deployment
 
