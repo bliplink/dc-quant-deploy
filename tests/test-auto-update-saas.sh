@@ -22,9 +22,16 @@ done
 updater="${SCRIPT_DIR}/auto-update-saas.sh"
 service_block="$(sed -n '/^APP_SERVICES=(/,/^)/p' "${updater}")"
 
-for service in gateway loginsvr mdsvr apssvr ordersvr tradesvr liqsvr managersvr adminsvr web; do
+for service in gateway loginsvr mdsvr apssvr ordersvr tradesvr liqsvr managersvr adminsvr robotsvr web tenant-web platform-web; do
   grep -qw "${service}" <<< "${service_block}" || fail "missing application service ${service}"
 done
+
+grep -q '\${ORDER_CLUSTER_ENABLED:-false}.*\${TRADE_CLUSTER_ENABLED:-false}' "${updater}" ||
+  fail "ProjectionSvr must be tracked when either Order or Trade cluster is enabled"
+grep -q 'tenant-web).*TENANT_WEB_IMAGE_REPOSITORY' "${updater}" ||
+  fail "tenant web image is not tracked"
+grep -q 'platform-web).*PLATFORM_WEB_IMAGE_REPOSITORY' "${updater}" ||
+  fail "platform web image is not tracked"
 
 for infrastructure in mysql clickhouse zookeeper; do
   if grep -qw "${infrastructure}" <<< "${service_block}"; then
