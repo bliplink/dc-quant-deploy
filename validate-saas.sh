@@ -41,6 +41,9 @@ if [[ "${ORDER_CLUSTER_ENABLED:-false}" == "true" ]]; then
     profiles+=(order-cluster-c)
   fi
 fi
+if [[ "${ORDER_CLUSTER_ENABLED:-false}" == "true" || "${TRADE_CLUSTER_ENABLED:-false}" == "true" ]]; then
+  required_ports+=("${PROJECTIONSVR_GW_PORT:-33042}")
+fi
 if [[ "${MD_CLUSTER_ENABLED:-false}" == "true" ]]; then
   profiles+=(md-cluster)
   export MDSVR_CONFIG_NAME=MDSvrA
@@ -78,7 +81,7 @@ expected_containers=(
   dc-saas-robotsvr dc-saas-trade-web dc-saas-tenant-web dc-saas-platform-web
 )
 if [[ "${ORDER_CLUSTER_ENABLED:-false}" == "true" ]]; then
-  expected_containers+=(dc-saas-ordersvr-b dc-saas-projectionsvr)
+  expected_containers+=(dc-saas-ordersvr-b)
   if [[ "${ORDER_CLUSTER_C_ENABLED:-false}" == "true" ]]; then
     expected_containers+=(dc-saas-ordersvr-c)
   fi
@@ -91,6 +94,9 @@ if [[ "${MD_CLUSTER_ENABLED:-false}" == "true" ]]; then
 fi
 if [[ "${TRADE_CLUSTER_ENABLED:-false}" == "true" ]]; then
   expected_containers+=(dc-saas-tradesvr-b)
+fi
+if [[ "${ORDER_CLUSTER_ENABLED:-false}" == "true" || "${TRADE_CLUSTER_ENABLED:-false}" == "true" ]]; then
+  expected_containers+=(dc-saas-projectionsvr)
 fi
 
 for container in "${expected_containers[@]}"; do
@@ -114,7 +120,7 @@ required_ports=(
   "${MANAGERSVR_GW_PORT}" "${ADMINSVR_GW_PORT}" "${WEB_LISTEN_PORT}" "18092" "18090"
 )
 if [[ "${ORDER_CLUSTER_ENABLED:-false}" == "true" ]]; then
-  required_ports+=("${ORDERSVR_B_GW_PORT}" "${ORDERSVR_A_REPLICATION_PORT}" "${ORDERSVR_B_REPLICATION_PORT}" "${PROJECTIONSVR_GW_PORT:-33042}")
+  required_ports+=("${ORDERSVR_B_GW_PORT}" "${ORDERSVR_A_REPLICATION_PORT}" "${ORDERSVR_B_REPLICATION_PORT}")
   grep -Fqx 'ProtoVersion=2' "${DEPLOY_ROOT}/control/ATSConfig.ini" ||
     die "OrderSvr partition routing requires ProtoVersion=2."
   grep -Fq 'LBConfig.OrderSvr=Partition' "${DEPLOY_ROOT}/control/ATSConfig.ini" ||
@@ -125,6 +131,9 @@ if [[ "${ORDER_CLUSTER_ENABLED:-false}" == "true" ]]; then
   grep -Fq 'serverKey=SERVER.OrderSvrB' \
     "${DEPLOY_ROOT}/control/overrides/OrderSvrB/config/application.properties" ||
     die "OrderSvrB cluster configuration is missing."
+  grep -Fq 'projection.binary.enabled=true' \
+    "${DEPLOY_ROOT}/control/overrides/ProjectionSvr/config/application.properties" ||
+    die "ProjectionSvr Order committed-event consumer must be enabled."
   if [[ "${ORDER_CLUSTER_C_ENABLED:-false}" == "true" ]]; then
     required_ports+=("${ORDERSVR_C_GW_PORT}" "${ORDERSVR_C_REPLICATION_PORT}")
     grep -Fq 'serverKey=SERVER.OrderSvrC' \
@@ -163,9 +172,18 @@ if [[ "${TRADE_CLUSTER_ENABLED:-false}" == "true" ]]; then
   grep -Fq 'serverKey=SERVER.TradeSvrB' \
     "${DEPLOY_ROOT}/control/overrides/TradeSvrB/config/application.properties" ||
     die "TradeSvrB cluster configuration is missing."
-  grep -Fq 'trade.node.businessEnabled=false' \
+  grep -Fq 'trade.node.businessEnabled=true' \
     "${DEPLOY_ROOT}/control/overrides/TradeSvrB/config/application.properties" ||
-    die "TradeSvrB must remain a fenced cold standby."
+    die "TradeSvrB hot runtime must be enabled; partition readiness fencing controls writes."
+  grep -Fq 'trade.cluster.lifecycle.enabled=true' \
+    "${DEPLOY_ROOT}/control/overrides/TradeSvrB/config/application.properties" ||
+    die "TradeSvrB recovery lifecycle must be enabled."
+  grep -Fq 'trade.cluster.recovery.authoritative=true' \
+    "${DEPLOY_ROOT}/control/overrides/TradeSvrB/config/application.properties" ||
+    die "TradeSvrB authoritative recovery must be enabled."
+  grep -Fq 'projection.trade.binary.enabled=true' \
+    "${DEPLOY_ROOT}/control/overrides/ProjectionSvr/config/application.properties" ||
+    die "ProjectionSvr Trade committed-event consumer must be enabled."
 fi
 
 listening="$(ss -lnt | awk 'NR > 1 {print $4}')"
