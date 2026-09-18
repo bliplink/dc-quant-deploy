@@ -113,6 +113,7 @@ sync_repo apssvr https://github.com/bliplink/com.app.dc.apssvr.git saas-crypto
 sync_repo loginsvr https://github.com/bliplink/com.app.dc.loginsvr.git saas-crypto
 sync_repo managersvr https://github.com/bliplink/com.app.dc.managersvr.git saas-crypto
 sync_repo adminsvr https://github.com/bliplink/com.app.dc.adminsvr.git saas-crypto
+sync_repo robotsvr https://github.com/bliplink/com.app.dc.robotsvr.git saas-crypto
 sync_repo gateway https://github.com/bliplink/gw.git saas-crypto
 sync_repo trade-web https://github.com/SKT-Walter/dc-trade-web.git saas-crypto
 
@@ -132,6 +133,7 @@ build_java_image apssvr "${APSSVR_IMAGE_REPOSITORY:-dc-saas/apssvr}:${APSSVR_TAG
 build_java_image loginsvr "${LOGINSVR_IMAGE_REPOSITORY:-dc-saas/loginsvr}:${LOGINSVR_TAG:-saas-crypto}"
 build_java_image managersvr "${MANAGERSVR_IMAGE_REPOSITORY:-dc-saas/managersvr}:${MANAGERSVR_TAG:-saas-crypto}"
 build_java_image adminsvr "${ADMINSVR_IMAGE_REPOSITORY:-dc-saas/adminsvr}:${ADMINSVR_TAG:-saas-crypto}"
+build_java_image robotsvr "${ROBOTSVR_IMAGE_REPOSITORY:-dc-saas/robotsvr}:${ROBOTSVR_TAG:-saas-crypto}"
 build_java_image gateway "${GW_IMAGE_REPOSITORY:-dc-saas/gw}:${GW_TAG:-saas-crypto}"
 
 log "Building dc-trade-web."
