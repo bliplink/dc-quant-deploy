@@ -14,6 +14,7 @@ for script in \
   "${SCRIPT_DIR}/deploy-saas.sh" \
   "${SCRIPT_DIR}/tests/recover-order-cluster-partitions-host.sh" \
   "${SCRIPT_DIR}/tests/restart-order-trade-e2e.sh" \
+  "${SCRIPT_DIR}/tests/run-core-trading-acceptance.sh" \
   "${SCRIPT_DIR}/tests/run-core-trading-stress-host.sh" \
   "${SCRIPT_DIR}/tests/run-trade-cluster-role-reversal-host.sh" \
   "${SCRIPT_DIR}/uninstall-saas.sh"; do
@@ -57,6 +58,10 @@ grep -q '^snapshot_projection_watermarks()' "${SCRIPT_DIR}/tests/restart-order-t
   fail "projection watermark snapshot is missing from restart acceptance"
 grep -q 'verify_projection_watermarks_not_regressed' "${SCRIPT_DIR}/tests/restart-order-trade-e2e.sh" ||
   fail "projection watermark continuity check is missing from restart acceptance"
+grep -q '^verify_projection_watermarks_advanced()' "${SCRIPT_DIR}/tests/restart-order-trade-e2e.sh" ||
+  fail "projection advancement helper is missing"
+grep -q 'verify_projection_watermarks_advanced' "${SCRIPT_DIR}/tests/run-core-trading-acceptance.sh" ||
+  fail "projection advancement check is missing from core trading acceptance"
 grep -q 'Fence confirmed; restarting OrderSvr cluster and TradeSvr inside epoch' \
   "${SCRIPT_DIR}/tests/recover-order-cluster-partitions-host.sh" ||
   fail "cluster recovery does not own the fenced restart boundary"
