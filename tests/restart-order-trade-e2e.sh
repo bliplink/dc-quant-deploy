@@ -61,6 +61,60 @@ PY
   return "${status}"
 }
 
+verify_projection_watermarks_advanced() {
+  local before="$1" after
+  after="$(mktemp)"
+  snapshot_projection_watermarks "${after}"
+  python3 - "${before}" "${after}" "${ORDER_CLUSTER_ENABLED:-false}" "${TRADE_CLUSTER_ENABLED:-false}" <<'PY'
+import sys
+
+def load(path):
+    rows = {}
+    with open(path, encoding="utf-8") as stream:
+        for raw in stream:
+            parts = raw.rstrip("\n").split("\t")
+            if len(parts) != 4:
+                continue
+            stream_type, partition_id, epoch, seq = parts
+            rows[(stream_type, partition_id)] = (int(epoch), int(seq))
+    return rows
+
+before = load(sys.argv[1])
+after = load(sys.argv[2])
+required = []
+if sys.argv[3].lower() == "true":
+    required.append("ORDER")
+if sys.argv[4].lower() == "true":
+    required.append("TRADE")
+
+failures = []
+for stream_type in required:
+    old_rows = {k: v for k, v in before.items() if k[0] == stream_type}
+    new_rows = {k: v for k, v in after.items() if k[0] == stream_type}
+    advanced = False
+    for key, current in new_rows.items():
+        old = old_rows.get(key)
+        if old is None or current > old:
+            advanced = True
+            break
+    if not advanced:
+        failures.append(
+            "%s projection did not advance (before_rows=%d after_rows=%d)"
+            % (stream_type, len(old_rows), len(new_rows))
+        )
+
+if failures:
+    for failure in failures:
+        print(failure, file=sys.stderr)
+    raise SystemExit(1)
+
+print("projection advancement PASS streams=" + ",".join(required))
+PY
+  local status=$?
+  rm -f "${after}"
+  return "${status}"
+}
+
 restart_order_trade_for_e2e() {
   local robot_was_running=false
   local restart_status=0
