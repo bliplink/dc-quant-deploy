@@ -89,4 +89,19 @@ if "${DEPLOY_DIR}/generate-saas-configs.sh" "${TEST_ROOT}/invalid-replication.en
   fail 'Trade cluster must not be enabled without TRADESVR_A_REPLICATION_PORT'
 fi
 
+grep -Fq -- '--full-cluster)' "${DEPLOY_DIR}/deploy-saas.sh" ||
+  fail 'one-command full cluster option is missing'
+grep -Fq 'set_env_value MD_CLUSTER_ENABLED true' "${DEPLOY_DIR}/deploy-saas.sh" ||
+  fail 'full cluster must enable MD cluster'
+grep -Fq 'set_env_value MD_CLUSTER_C_ENABLED true' "${DEPLOY_DIR}/deploy-saas.sh" ||
+  fail 'full cluster must enable MDSvrC'
+grep -Fq 'set_env_value ORDER_CLUSTER_ENABLED true' "${DEPLOY_DIR}/deploy-saas.sh" ||
+  fail 'full cluster must enable Order cluster'
+grep -Fq 'set_env_value ORDER_CLUSTER_C_ENABLED false' "${DEPLOY_DIR}/deploy-saas.sh" ||
+  fail 'full cluster topology must keep OrderSvr at A/B'
+grep -Fq 'set_env_value TRADE_CLUSTER_ENABLED true' "${DEPLOY_DIR}/deploy-saas.sh" ||
+  fail 'full cluster must enable Trade cluster'
+grep -Fq 'apply_full_cluster_profile' "${DEPLOY_DIR}/deploy-saas.sh" ||
+  fail 'full cluster profile must be applied before deployment'
+
 printf '[trade-cluster-config-test] PASS\n'
