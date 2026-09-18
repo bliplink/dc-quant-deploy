@@ -50,7 +50,26 @@ grep -q 'SAAS_DEPLOY_LOCK_HELD=true' "${updater}" || fail "deploy lock handoff i
 grep -q '^if \[\[ "${BASH_SOURCE\[0\]}" == "\$0" \]\]; then$' "${updater}" || fail "source-safe main guard is missing"
 grep -q 'SAAS_AUTO_UPDATE_DEPLOY_REPO=true' "${SCRIPT_DIR}/.env.example" || fail "environment defaults are missing"
 grep -q 'AUTO_UPDATE.zh-CN.md' "${SCRIPT_DIR}/README.md" || fail "operator documentation is not linked"
-grep -q '^recover_order_cluster_if_needed$' "${SCRIPT_DIR}/deploy-saas.sh" || fail "staged OrderSvr recovery is not invoked"
+grep -q 'exec "${SCRIPT_DIR}/deploy-saas.sh" "\$@"' "${SCRIPT_DIR}/install-saas.sh" ||
+  fail "install entry point must delegate to deploy-saas.sh"
+grep -q '^recover_order_cluster_if_needed
+grep -q 'docker logs --since "${a_started}"' "${SCRIPT_DIR}/deploy-saas.sh" || fail "OrderSvr readiness is not scoped to the current process incarnation"
+grep -q 'ORDER_CLUSTER_RESTART_AFTER_FENCE=true' "${SCRIPT_DIR}/tests/restart-order-trade-e2e.sh" ||
+  fail "E2E restart does not fence the new epoch before restarting OrderSvr"
+grep -q '^snapshot_projection_watermarks()' "${SCRIPT_DIR}/tests/restart-order-trade-e2e.sh" ||
+  fail "projection watermark snapshot is missing from restart acceptance"
+grep -q 'verify_projection_watermarks_not_regressed' "${SCRIPT_DIR}/tests/restart-order-trade-e2e.sh" ||
+  fail "projection watermark continuity check is missing from restart acceptance"
+grep -q '^verify_projection_watermarks_advanced()' "${SCRIPT_DIR}/tests/restart-order-trade-e2e.sh" ||
+  fail "projection advancement helper is missing"
+grep -q 'verify_projection_watermarks_advanced' "${SCRIPT_DIR}/tests/run-core-trading-acceptance.sh" ||
+  fail "projection advancement check is missing from core trading acceptance"
+grep -q 'Fence confirmed; restarting OrderSvr cluster and TradeSvr inside epoch' \
+  "${SCRIPT_DIR}/tests/recover-order-cluster-partitions-host.sh" ||
+  fail "cluster recovery does not own the fenced restart boundary"
+
+printf 'PASS: SaaS auto-update static checks\n'
+ "${SCRIPT_DIR}/deploy-saas.sh" || fail "staged OrderSvr recovery is not invoked"
 grep -q 'docker logs --since "${a_started}"' "${SCRIPT_DIR}/deploy-saas.sh" || fail "OrderSvr readiness is not scoped to the current process incarnation"
 grep -q 'ORDER_CLUSTER_RESTART_AFTER_FENCE=true' "${SCRIPT_DIR}/tests/restart-order-trade-e2e.sh" ||
   fail "E2E restart does not fence the new epoch before restarting OrderSvr"
