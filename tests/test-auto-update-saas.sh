@@ -15,6 +15,7 @@ for script in \
   "${SCRIPT_DIR}/tests/recover-order-cluster-partitions-host.sh" \
   "${SCRIPT_DIR}/tests/restart-order-trade-e2e.sh" \
   "${SCRIPT_DIR}/tests/run-core-trading-stress-host.sh" \
+  "${SCRIPT_DIR}/tests/run-trade-cluster-role-reversal-host.sh" \
   "${SCRIPT_DIR}/uninstall-saas.sh"; do
   bash -n "${script}"
 done
