@@ -8,6 +8,8 @@ on:
       - .github/workflows/validate-cluster-config.yml
       - .env.example
       - compose.yaml
+      - auto-update-saas.sh
+      - tests/test-auto-update-saas.sh
       - build-saas-images.sh
       - deploy-saas.sh
       - generate-saas-configs.sh
@@ -35,6 +37,8 @@ on:
       - .github/workflows/validate-cluster-config.yml
       - .env.example
       - compose.yaml
+      - auto-update-saas.sh
+      - tests/test-auto-update-saas.sh
       - build-saas-images.sh
       - deploy-saas.sh
       - generate-saas-configs.sh
@@ -62,7 +66,9 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - name: Check shell syntax
-        run: bash -n build-saas-images.sh deploy-saas.sh generate-saas-configs.sh validate-saas.sh tests/test-md-cluster-config.sh tests/test-order-cluster-c-config.sh tests/test-trade-cluster-config.sh tests/order-routing-key.sh tests/test-placement-routing-key.sh
+        run: bash -n auto-update-saas.sh build-saas-images.sh deploy-saas.sh generate-saas-configs.sh validate-saas.sh tests/test-auto-update-saas.sh tests/test-md-cluster-config.sh tests/test-order-cluster-c-config.sh tests/test-trade-cluster-config.sh tests/order-routing-key.sh tests/test-placement-routing-key.sh
+      - name: Validate SaaS auto-update wiring
+        run: tests/test-auto-update-saas.sh
       - name: Validate generated cluster configurations
         run: |
           tests/test-md-cluster-config.sh
