@@ -340,7 +340,7 @@ services:
 
   projectionsvr:
     <<: *java-service-base
-    profiles: ["order-cluster"]
+    profiles: ["order-cluster", "trade-cluster"]
     image: ${PROJECTIONSVR_IMAGE_REPOSITORY:-ghcr.io/bliplink/com-app-dc-projectionsvr}:${PROJECTIONSVR_TAG:-saas-crypto}
     container_name: dc-saas-projectionsvr
     depends_on:
