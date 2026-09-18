@@ -552,7 +552,7 @@ services:
     cpus: ${TRADE_WEB_CPU_LIMIT:-0.10}
 
   tenant-web:
-    image: ${TENANT_WEB_IMAGE_REPOSITORY:-ghcr.io/bliplink/dc-saas-tenant-web}:${TENANT_WEB_TAG:-main}
+    image: ${TENANT_WEB_IMAGE_REPOSITORY:-ghcr.io/bliplink/dc-saas-tenant-web}:${TENANT_WEB_TAG:-saas-crypto}
     container_name: dc-saas-tenant-web
     network_mode: host
     restart: unless-stopped
@@ -565,27 +565,7 @@ services:
     environment:
       TZ: Asia/Shanghai
     healthcheck:
-      test: ["CMD-SHELL", "wget -qO- http://127.0.0.1:18092/healthz | grep -q '^ok
-    container_name: dc-saas-platform-web
-    network_mode: host
-    restart: unless-stopped
-    logging: *default-logging
-    depends_on:
-      gateway:
-        condition: service_started
-      managersvr:
-        condition: service_started
-    environment:
-      TZ: Asia/Shanghai
-    healthcheck:
-      test: ["CMD-SHELL", "wget -qO- http://127.0.0.1:18090/healthz | grep -q '^ok$'"]
-      interval: 15s
-      timeout: 5s
-      retries: 10
-      start_period: 10s
-    mem_limit: ${PLATFORM_WEB_MEMORY_LIMIT:-128m}
-    cpus: ${PLATFORM_WEB_CPU_LIMIT:-0.05}
-"]
+      test: ["CMD-SHELL", "wget -qO- http://127.0.0.1:18092/healthz | grep -q '^ok$'"]
       interval: 15s
       timeout: 5s
       retries: 10
@@ -594,7 +574,7 @@ services:
     cpus: ${TENANT_WEB_CPU_LIMIT:-0.05}
 
   platform-web:
-    image: ${PLATFORM_WEB_IMAGE_REPOSITORY:-ghcr.io/bliplink/dc-saas-platform-console}:${PLATFORM_WEB_TAG:-saas}
+    image: ${PLATFORM_WEB_IMAGE_REPOSITORY:-ghcr.io/bliplink/dc-saas-platform-web}:${PLATFORM_WEB_TAG:-saas-crypto}
     container_name: dc-saas-platform-web
     network_mode: host
     restart: unless-stopped
