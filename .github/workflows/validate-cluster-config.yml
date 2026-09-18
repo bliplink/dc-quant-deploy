@@ -27,7 +27,13 @@ on:
       - tests/trade_cluster_assignments.py
       - tests/test_trade_cluster_assignments.py
       - tests/trade_cluster_bootstrap_host.py
+      - tests/trade_cluster_transition_host.py
+      - tests/test_trade_cluster_transition_host.py
+      - tests/run-trade-cluster-role-reversal-host.sh
       - tests/trade_cluster_bootstrap_host.py
+      - tests/trade_cluster_transition_host.py
+      - tests/test_trade_cluster_transition_host.py
+      - tests/run-trade-cluster-role-reversal-host.sh
       - tests/order-routing-key.sh
       - tests/test-placement-routing-key.sh
       - tests/test_verify_placement_catalogs.py
@@ -77,7 +83,7 @@ jobs:
           tests/test-placement-routing-key.sh
       - name: Validate placement catalogs
         run: |
-          python -m unittest tests.test_verify_placement_catalogs tests.test_md_cluster_assignment_plan tests.test_trade_cluster_assignments tests.test_md_cluster_transition_host tests.test_md_cluster_roll_drain_host
+          python -m unittest tests.test_verify_placement_catalogs tests.test_md_cluster_assignment_plan tests.test_trade_cluster_assignments tests.test_trade_cluster_transition_host tests.test_md_cluster_transition_host tests.test_md_cluster_roll_drain_host
           python tests/md_cluster_transition_host.py --help >/dev/null
           python tests/md_cluster_roll_drain_host.py --help >/dev/null
           python tests/trade_cluster_bootstrap_host.py --help >/dev/null
