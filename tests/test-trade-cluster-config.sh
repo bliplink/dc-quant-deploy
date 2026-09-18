@@ -78,6 +78,12 @@ grep -Fq 'wait_for_trade_cluster_readiness' "${DEPLOY_DIR}/deploy-saas.sh" ||
   fail 'Trade cluster readiness gate is missing from deployment'
 grep -Fq '"${ORDER_CLUSTER_ENABLED:-false}" == "true" || "${TRADE_CLUSTER_ENABLED:-false}" == "true"' "${DEPLOY_DIR}/deploy-saas.sh" ||
   fail 'ProjectionSvr deployment wait must cover Trade cluster mode'
+grep -Fq 'expected_containers+=(dc-saas-projectionsvr)' "${DEPLOY_DIR}/validate-saas.sh" ||
+  fail 'runtime validation must require ProjectionSvr in clustered Trade mode'
+grep -Fq "trade.node.businessEnabled=true" "${DEPLOY_DIR}/validate-saas.sh" ||
+  fail 'runtime validation must require the TradeSvrB hot runtime'
+grep -Fq "projection.trade.binary.enabled=true" "${DEPLOY_DIR}/validate-saas.sh" ||
+  fail 'runtime validation must require the Trade Projection consumer'
 
 sed '/^TRADESVR_B_GW_PORT=/d' "${TEST_ROOT}/cluster.env" > "${TEST_ROOT}/invalid.env"
 if "${DEPLOY_DIR}/generate-saas-configs.sh" "${TEST_ROOT}/invalid.env" >/dev/null 2>&1; then
