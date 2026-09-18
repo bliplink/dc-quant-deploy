@@ -101,7 +101,9 @@ if [[ "${MD_CLUSTER_C_ENABLED}" == "true" ]]; then
   [[ -n "${MDSVR_C_GW_PORT:-}" ]] || die "Missing required MDSvrC variable: MDSVR_C_GW_PORT"
 fi
 if [[ "${TRADE_CLUSTER_ENABLED}" == "true" ]]; then
-  [[ -n "${TRADESVR_B_GW_PORT:-}" ]] || die "Missing required cluster variable: TRADESVR_B_GW_PORT"
+  for name in TRADESVR_B_GW_PORT TRADESVR_A_REPLICATION_PORT TRADESVR_B_REPLICATION_PORT; do
+    [[ -n "${!name:-}" ]] || die "Missing required Trade cluster variable: ${name}"
+  done
 fi
 
 CONTROL_ROOT="${DEPLOY_ROOT}/control"
@@ -602,12 +604,12 @@ order.cluster.replication.catchupBatchRecords=256
 order.cluster.replication.crossEpochSnapshotRebase.enabled=true
 order.cluster.replication.peers=${peers}
 order.cluster.defaultMarketIndicator=4
-order.projection.enabled=true
+order.projection.enabled=false
 order.projection.serverKey=SERVER.ProjectionSvr
-# Normal delivery is commit-event-driven; this only covers startup/reconnect/lost wakeups.
-order.projection.recoveryPollMillis=10000
-order.projection.batchSize=64
-order.projection.readBatchRecords=512
+# Consumer-owned binary projection path. ProjectionSvr owns durable watermark/GAP recovery.
+order.projection.binary.enabled=true
+order.projection.binary.publishBatchSize=64
+order.projection.binary.maxBatchBytes=16777216
 order.tenantSymbolRules.enabled=true
 enableMarketPrice=true
 enableSaveDBDemo=false
@@ -638,6 +640,18 @@ log4j.async=true
 dbpool.cfg=../../control/DBPoolConfig.ini
 dbpool.default=MYSQL0
 projection.saveDemo=false
+projection.binary.enabled=${ORDER_CLUSTER_ENABLED}
+projection.binary.orderServerKey=SERVER.OrderSvr
+projection.binary.fetchMaxRecords=500
+projection.binary.fetchTimeoutMs=5000
+projection.binary.retryMs=1000
+projection.binary.subscriptionRefreshMs=5000
+projection.binary.safetyPollMillis=1000
+projection.binary.safetyPollPartitionsPerRun=16
+projection.binary.workerStripes=4
+projection.binary.maxBufferedBatchesPerPartition=1024
+projection.trade.binary.enabled=${TRADE_CLUSTER_ENABLED}
+projection.trade.binary.tradeServerKey=SERVER.TradeSvr
 EOF
 
 if [[ "${ORDER_CLUSTER_ENABLED}" == "true" ]]; then
@@ -649,7 +663,11 @@ if [[ "${ORDER_CLUSTER_ENABLED}" == "true" ]]; then
 fi
 
 write_trade_config() {
-  local node="$1" business_enabled="$2"
+  local node="$1" business_enabled="$2" replication_port="${3:-}"
+  local peers=""
+  if [[ "${TRADE_CLUSTER_ENABLED}" == "true" ]]; then
+    peers="TradeSvrA=127.0.0.1:${TRADESVR_A_REPLICATION_PORT},TradeSvrB=127.0.0.1:${TRADESVR_B_REPLICATION_PORT}"
+  fi
   cat > "${OVERRIDE_ROOT}/${node}/config/application.properties" <<EOF
 [Cron]
 schedule.Config=./config/quartz.properties
@@ -663,6 +681,27 @@ enableSaveDBDemo=false
 allowMissingMarkPrice=${TRADE_ALLOW_MISSING_MARK_PRICE:-false}
 trade.executionDedupe.maxEntries=${TRADE_EXECUTION_DEDUPE_MAX_ENTRIES:-1000000}
 trade.node.businessEnabled=${business_enabled}
+trade.cluster.serviceName=SERVER.TradeSvr
+trade.cluster.journal.enabled=${TRADE_CLUSTER_ENABLED}
+trade.cluster.journal.path=../../data/${node}/journal
+trade.cluster.state.commit.enabled=${TRADE_CLUSTER_ENABLED}
+trade.cluster.state.required=${TRADE_CLUSTER_ENABLED}
+trade.cluster.snapshot.enabled=${TRADE_CLUSTER_ENABLED}
+trade.cluster.snapshot.path=../../data/${node}/snapshot
+trade.cluster.snapshot.periodic.enabled=false
+trade.cluster.lifecycle.enabled=${TRADE_CLUSTER_ENABLED}
+trade.cluster.recovery.authoritative=${TRADE_CLUSTER_ENABLED}
+trade.cluster.lifecycle.pollMillis=1000
+trade.cluster.lifecycle.retryMillis=5000
+trade.cluster.replication.enabled=${TRADE_CLUSTER_ENABLED}
+trade.cluster.replication.bindHost=127.0.0.1
+trade.cluster.replication.port=${replication_port:-19092}
+trade.cluster.replication.requestTimeoutMs=10000
+trade.cluster.replication.catchupBatchRecords=256
+trade.cluster.replication.peers=${peers}
+trade.projection.binary.enabled=${TRADE_CLUSTER_ENABLED}
+trade.projection.binary.topicPrefix=dc.trade.committed.
+trade.projection.binary.maxBatchBytes=16777216
 dbType=mysql
 dbpool.cfg=../../control/DBPoolConfig.ini
 dbpool.default=MYSQL0
@@ -670,10 +709,10 @@ EOF
 }
 
 if [[ "${TRADE_CLUSTER_ENABLED}" == "true" ]]; then
-  write_trade_config TradeSvrA true
-  # Stage one is a fenced cold standby. Do not start funding, ADL or DB
-  # writers until replicated state recovery is implemented and verified.
-  write_trade_config TradeSvrB false
+  # Both nodes initialize the hot runtime. Partition Primary + READY fencing
+  # controls business writes; replicas keep state warm for promotion.
+  write_trade_config TradeSvrA true "${TRADESVR_A_REPLICATION_PORT}"
+  write_trade_config TradeSvrB true "${TRADESVR_B_REPLICATION_PORT}"
 else
   write_trade_config TradeSvr true
 fi
