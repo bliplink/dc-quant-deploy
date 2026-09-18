@@ -669,6 +669,43 @@ recover_order_cluster_if_needed() {
   ORDER_CLUSTER_ZK_SERVER="127.0.0.1:${ZOOKEEPER_PORT}" "${recovery_script}"
 }
 
+current_trade_cluster_ready_count() {
+  local a_started b_started
+  a_started="$(docker inspect --format '{{.State.StartedAt}}' dc-saas-tradesvr 2>/dev/null || true)"
+  b_started="$(docker inspect --format '{{.State.StartedAt}}' dc-saas-tradesvr-b 2>/dev/null || true)"
+  if [[ -z "${a_started}" || -z "${b_started}" ]]; then
+    printf '0\n'
+    return 0
+  fi
+  {
+    docker logs --since "${a_started}" dc-saas-tradesvr 2>&1 || true
+    docker logs --since "${b_started}" dc-saas-tradesvr-b 2>&1 || true
+  } | awk '
+    /TRADE_PARTITION_READY/ {
+      if (match($0, /partition:P[0-9][0-9][0-9]/)) print substr($0, RSTART + 10, 4)
+    }
+  ' | sort -u | wc -l | tr -d ' '
+}
+
+wait_for_trade_cluster_readiness() {
+  [[ "${TRADE_CLUSTER_ENABLED:-false}" == "true" ]] || return 0
+  local start count
+  start="$(date +%s)"
+  while true; do
+    count="$(current_trade_cluster_ready_count)"
+    if [[ "${count}" == "256" ]]; then
+      log "TradeSvr cluster readiness complete: 256/256 partitions."
+      return 0
+    fi
+    if (( $(date +%s) - start >= 300 )); then
+      docker logs --tail 150 dc-saas-tradesvr >&2 || true
+      docker logs --tail 150 dc-saas-tradesvr-b >&2 || true
+      die "Timed out waiting for TradeSvr cluster readiness: ${count:-0}/256 partitions."
+    fi
+    sleep 2
+  done
+}
+
 gateway_routes_need_refresh() {
   local service
   # A direct/manual deployment has no changed-service manifest, so choose the
@@ -859,12 +896,15 @@ if [[ "${ORDER_CLUSTER_ENABLED:-false}" == "true" ]]; then
 fi
 recover_order_cluster_if_needed
 wait_for_order_cluster_readiness
-if [[ "${ORDER_CLUSTER_ENABLED:-false}" == "true" ]]; then
-  wait_for_port "${PROJECTIONSVR_GW_PORT:-33042}" projectionsvr 120
-fi
 wait_for_port "${TRADESVR_GW_PORT}" tradesvr 120
 if [[ "${TRADE_CLUSTER_ENABLED:-false}" == "true" ]]; then
   wait_for_port "${TRADESVR_B_GW_PORT}" tradesvr-b 180
+  wait_for_port "${TRADESVR_A_REPLICATION_PORT}" tradesvr 180
+  wait_for_port "${TRADESVR_B_REPLICATION_PORT}" tradesvr-b 180
+  wait_for_trade_cluster_readiness
+fi
+if [[ "${ORDER_CLUSTER_ENABLED:-false}" == "true" || "${TRADE_CLUSTER_ENABLED:-false}" == "true" ]]; then
+  wait_for_port "${PROJECTIONSVR_GW_PORT:-33042}" projectionsvr 120
 fi
 wait_for_port "${LIQSVR_GW_PORT}" liqsvr 120
 wait_for_port "${MANAGERSVR_GW_PORT}" managersvr 120
