@@ -61,6 +61,13 @@ grep -q 'AUTO_UPDATE.zh-CN.md' "${SCRIPT_DIR}/README.md" ||
 
 grep -Fq 'exec "${SCRIPT_DIR}/deploy-saas.sh" "$@"' "${SCRIPT_DIR}/install-saas.sh" ||
   fail "install entry point must delegate to deploy-saas.sh"
+grep -Fq 'if [[ "${IMAGE_SOURCE:-local}" == "local" ]]; then' "${SCRIPT_DIR}/deploy-saas.sh" ||
+  fail "local image source branch is missing"
+grep -Fq '"${SCRIPT_DIR}/build-saas-images.sh" "${ENV_FILE}"' "${SCRIPT_DIR}/deploy-saas.sh" ||
+  fail "local image source must build application images"
+if grep -Fq 'migrate_env_value IMAGE_SOURCE local registry' "${SCRIPT_DIR}/deploy-saas.sh"; then
+  fail "explicit local image source must not be rewritten to registry"
+fi
 grep -Fqx 'recover_order_cluster_if_needed' "${SCRIPT_DIR}/deploy-saas.sh" ||
   fail "staged OrderSvr recovery is not invoked"
 grep -Fq 'docker logs --since "${a_started}" dc-saas-ordersvr' "${SCRIPT_DIR}/deploy-saas.sh" ||
