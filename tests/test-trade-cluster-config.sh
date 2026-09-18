@@ -40,8 +40,21 @@ grep -Fqx 'Partition.TradeSvr.PlacementPath=/dc/cluster/tradesvr/desired/placeme
   fail 'Trade placement path is missing'
 grep -Fqx 'serverKey=SERVER.TradeSvrA' "${a_config}" || fail 'TradeSvrA physical identity is missing'
 grep -Fqx 'serverKey=SERVER.TradeSvrB' "${b_config}" || fail 'TradeSvrB physical identity is missing'
-grep -Fqx 'trade.node.businessEnabled=true' "${a_config}" || fail 'TradeSvrA must be the only business node'
-grep -Fqx 'trade.node.businessEnabled=false' "${b_config}" || fail 'TradeSvrB must start fenced'
+grep -Fqx 'trade.node.businessEnabled=true' "${a_config}" || fail 'TradeSvrA hot runtime must be enabled'
+grep -Fqx 'trade.node.businessEnabled=true' "${b_config}" || fail 'TradeSvrB hot runtime must be enabled'
+grep -Fqx 'trade.cluster.journal.enabled=true' "${a_config}" || fail 'TradeSvrA journal must be enabled'
+grep -Fqx 'trade.cluster.journal.enabled=true' "${b_config}" || fail 'TradeSvrB journal must be enabled'
+grep -Fqx 'trade.cluster.state.commit.enabled=true' "${a_config}" || fail 'Trade commit markers must be enabled'
+grep -Fqx 'trade.cluster.state.required=true' "${a_config}" || fail 'Trade authoritative state must fail closed'
+grep -Fqx 'trade.cluster.snapshot.enabled=true' "${a_config}" || fail 'Trade snapshot must be enabled'
+grep -Fqx 'trade.cluster.lifecycle.enabled=true' "${a_config}" || fail 'Trade recovery lifecycle must be enabled'
+grep -Fqx 'trade.cluster.recovery.authoritative=true' "${a_config}" || fail 'Trade authoritative recovery must be enabled'
+grep -Fqx 'trade.cluster.replication.enabled=true' "${a_config}" || fail 'Trade replication must be enabled'
+grep -Fqx 'trade.cluster.replication.port=19221' "${a_config}" || fail 'TradeSvrA replication port mismatch'
+grep -Fqx 'trade.cluster.replication.port=19222' "${b_config}" || fail 'TradeSvrB replication port mismatch'
+grep -Fqx 'trade.cluster.replication.peers=TradeSvrA=127.0.0.1:19221,TradeSvrB=127.0.0.1:19222' "${a_config}" ||
+  fail 'Trade replication peers are missing'
+grep -Fqx 'trade.projection.binary.enabled=true' "${a_config}" || fail 'Trade binary Projection publisher must be enabled'
 grep -Fqx 'storePath=../../data/TradeSvrA' "${a_config}" || fail 'TradeSvrA data path is not isolated'
 grep -Fqx 'storePath=../../data/TradeSvrB' "${b_config}" || fail 'TradeSvrB data path is not isolated'
 grep -Fqx 'log4j.appender.file.File=../../log/TradeSvrA.log' "${a_log}" || fail 'TradeSvrA log path is not isolated'
@@ -50,10 +63,22 @@ grep -Fq 'overrides/${TRADESVR_CONFIG_NAME:-TradeSvr}/config/application.propert
   fail 'TradeSvrA selected config is not mounted'
 grep -Fqx '  tradesvr-b:' "${DEPLOY_DIR}/compose.yaml" || fail 'tradesvr-b compose service is missing'
 grep -Fq 'profiles: ["trade-cluster"]' "${DEPLOY_DIR}/compose.yaml" || fail 'tradesvr-b compose profile is missing'
+grep -Fq 'profiles: ["order-cluster", "trade-cluster"]' "${DEPLOY_DIR}/compose.yaml" ||
+  fail 'ProjectionSvr must start for the trade-cluster profile'
+projection_config="${TEST_ROOT}/runtime/control/overrides/ProjectionSvr/config/application.properties"
+grep -Fqx 'projection.trade.binary.enabled=true' "${projection_config}" ||
+  fail 'ProjectionSvr Trade binary consumer must be enabled'
+grep -Fqx 'projection.trade.binary.tradeServerKey=SERVER.TradeSvr' "${projection_config}" ||
+  fail 'ProjectionSvr Trade logical server key is missing'
 
 sed '/^TRADESVR_B_GW_PORT=/d' "${TEST_ROOT}/cluster.env" > "${TEST_ROOT}/invalid.env"
 if "${DEPLOY_DIR}/generate-saas-configs.sh" "${TEST_ROOT}/invalid.env" >/dev/null 2>&1; then
   fail 'Trade cluster must not be enabled without TRADESVR_B_GW_PORT'
+fi
+
+sed '/^TRADESVR_A_REPLICATION_PORT=/d' "${TEST_ROOT}/cluster.env" > "${TEST_ROOT}/invalid-replication.env"
+if "${DEPLOY_DIR}/generate-saas-configs.sh" "${TEST_ROOT}/invalid-replication.env" >/dev/null 2>&1; then
+  fail 'Trade cluster must not be enabled without TRADESVR_A_REPLICATION_PORT'
 fi
 
 printf '[trade-cluster-config-test] PASS\n'
