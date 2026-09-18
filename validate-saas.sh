@@ -41,9 +41,6 @@ if [[ "${ORDER_CLUSTER_ENABLED:-false}" == "true" ]]; then
     profiles+=(order-cluster-c)
   fi
 fi
-if [[ "${ORDER_CLUSTER_ENABLED:-false}" == "true" || "${TRADE_CLUSTER_ENABLED:-false}" == "true" ]]; then
-  required_ports+=("${PROJECTIONSVR_GW_PORT:-33042}")
-fi
 if [[ "${MD_CLUSTER_ENABLED:-false}" == "true" ]]; then
   profiles+=(md-cluster)
   export MDSVR_CONFIG_NAME=MDSvrA
@@ -119,6 +116,9 @@ required_ports=(
   "${ORDERSVR_GW_PORT}" "${TRADESVR_GW_PORT}" "${LIQSVR_GW_PORT}"
   "${MANAGERSVR_GW_PORT}" "${ADMINSVR_GW_PORT}" "${WEB_LISTEN_PORT}" "18092" "18090"
 )
+if [[ "${ORDER_CLUSTER_ENABLED:-false}" == "true" || "${TRADE_CLUSTER_ENABLED:-false}" == "true" ]]; then
+  required_ports+=("${PROJECTIONSVR_GW_PORT:-33042}")
+fi
 if [[ "${ORDER_CLUSTER_ENABLED:-false}" == "true" ]]; then
   required_ports+=("${ORDERSVR_B_GW_PORT}" "${ORDERSVR_A_REPLICATION_PORT}" "${ORDERSVR_B_REPLICATION_PORT}")
   grep -Fqx 'ProtoVersion=2' "${DEPLOY_ROOT}/control/ATSConfig.ini" ||
