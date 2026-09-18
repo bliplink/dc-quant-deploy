@@ -1,29 +1,173 @@
-# TradeSvr 集群底座边界与后续实施
+# TradeSvr 集群实现与验收边界
 
-## 当前落地范围
+## 当前状态
 
-- TradeSvr 路由维度固定为 `location`，一个租户的余额、持仓、保证金、资金费、强平与 ADL 状态不拆分。
-- OrderSvr、LiqSvr 和 Web 发往 TradeSvr 的请求均携带 `location` placement key。
-- A/B 使用相同不可变镜像，通过独立 `serverKey`、端口、存储目录和日志目录区分实例。
-- A 节点运行现有业务；B 节点默认 `trade.node.businessEnabled=false`，只作为禁止写业务的冷备骨架。
-- `TRADE_CLUSTER_ENABLED=false` 为默认值，因此本阶段合入和发布不会改变现有单节点生产路由。
+TradeSvr 的集群底座已经从“冷备骨架”进入可部署验收阶段。
 
-## 明确未完成的能力
+当前 `saas-crypto` 已具备：
 
-当前版本不具备 TradeSvr 安全故障接管能力，不得在生产开启 `TRADE_CLUSTER_ENABLED`。在完成以下能力前，不能把 B 节点标记为可承载流量：
+- 按 `location` 路由到稳定逻辑分区 `P000~P255`。
+- TradeSvrA / TradeSvrB 使用相同不可变镜像，独立 `serverKey`、Gateway 端口、replication 端口、journal、snapshot 和日志目录。
+- Partition Primary / Replica、epoch fence 与 readiness gate。
+- authoritative post-state `STATE_BATCH` journal。
+- durable `STATE_COMMIT` watermark。
+- A/B 同步复制和 replica ACK。
+- snapshot + committed delta recovery。
+- recovery 完成后才允许 partition promotion / READY。
+- CashIn / CashOut、Funding、账户配置、杠杆、持仓模式、BanAccount、Bankruptcy、Position ADL、普通 ExecutionReport 和 legacy liquidation ADL 候选账户等 authoritative mutation 已接入状态 journal。
+- ProjectionSvr 可独立消费 TradeSvr committed binary stream，并维护独立 Trade watermark / GAP recovery。
+- Trade recovery replay、recovery-gated promotion、Projection committed reader 和各业务 STATE_BATCH recorder 已加入自动化测试。
 
-1. 按 location 记录可校验、单调序号的余额/持仓/订单状态 journal。
-2. A 到 B 的同步复制、ACK 策略、积压上限和降级策略。
-3. 一致性快照、快照后的增量回放、epoch/fence token 与启动恢复门禁。
-4. ProjectionSvr 消费成交、余额、持仓与资金流水事件，提供可重建的查询投影。
-5. 故障注入验收：进程退出、网络隔离、复制中断、角色切换和双主防护。
+## 部署模型
 
-## 后续启用流程
+启用：
 
-1. 部署包含复制与恢复能力的同版本 TradeSvr 镜像，但保持集群开关关闭。
-2. 在隔离 Compose 项目启动 A/B，执行历史状态基线、增量追平和校验。
-3. 写入 location placement 清单，确认每个租户只有一个 Primary，Replica 已追平且 fence 生效。
-4. 完成下单成交、资金变化、强平、ADL、重启恢复和角色反转验收。
-5. 生产按租户灰度启用；任何校验不通过立即停止迁移，原单节点继续服务。
+```text
+TRADE_CLUSTER_ENABLED=true
+```
 
-这套边界的目标是先统一调用契约和部署身份，不以“能启动两个容器”冒充可用的交易集群。
+后生成：
+
+```text
+TradeSvrA
+  Gateway port: TRADESVR_GW_PORT
+  Replication: TRADESVR_A_REPLICATION_PORT
+  journal: ../../data/TradeSvrA/journal
+  snapshot: ../../data/TradeSvrA/snapshot
+
+TradeSvrB
+  Gateway port: TRADESVR_B_GW_PORT
+  Replication: TRADESVR_B_REPLICATION_PORT
+  journal: ../../data/TradeSvrB/journal
+  snapshot: ../../data/TradeSvrB/snapshot
+```
+
+A/B 都启动完整业务 runtime：
+
+```properties
+trade.node.businessEnabled=true
+```
+
+是否允许业务写入不再通过静态 A/B 身份决定，而由：
+
+```text
+partition assignment
++ Primary ownership
++ epoch fence
++ recovery lifecycle
++ READY gate
+```
+
+共同决定。
+
+因此 Replica 可以保持热状态，但在未成为当前 READY Primary 前不能承载 authoritative mutation。
+
+## HA 配置
+
+Trade 集群模式生成的关键配置包括：
+
+```properties
+trade.cluster.journal.enabled=true
+trade.cluster.state.commit.enabled=true
+trade.cluster.state.required=true
+
+trade.cluster.snapshot.enabled=true
+
+trade.cluster.lifecycle.enabled=true
+trade.cluster.recovery.authoritative=true
+
+trade.cluster.replication.enabled=true
+trade.cluster.replication.peers=TradeSvrA=127.0.0.1:<A_PORT>,TradeSvrB=127.0.0.1:<B_PORT>
+
+trade.projection.binary.enabled=true
+```
+
+ProjectionSvr 同时启用：
+
+```properties
+projection.trade.binary.enabled=true
+projection.trade.binary.tradeServerKey=SERVER.TradeSvr
+```
+
+当 Order 集群同时启用时，ProjectionSvr 还启用独立的 Order binary consumer；Order 和 Trade 使用各自独立 watermark，不共享恢复进度。
+
+## 已完成的代码/CI验收
+
+TradeSvr 当前代码验证已经覆盖：
+
+- authoritative mutation journal
+- committed state replay
+- recovery planner / applier
+- recovery-gated promotion
+- replication transport
+- Projection committed reader
+- Trade binary consumer 状态机
+- 服务编译
+- Docker 镜像构建与 GHCR push
+
+这些验证说明代码和镜像具备进入真实多节点部署验收的条件。
+
+## 尚未完成的最终生产验收
+
+当前仍不能仅凭 CI 将 Trade 集群直接定义为“生产已验收”。
+
+还必须在隔离部署环境完成真实 A/B 故障注入：
+
+1. 使用固定不可变 TradeSvr 镜像启动 A/B。
+2. bootstrap 256 个 partition assignments。
+3. 验证每个 partition 只有一个 READY Primary。
+4. 产生真实业务 mutation：
+   - 普通成交
+   - CashIn / CashOut
+   - Funding
+   - Leverage / PositionType / AccountConfig
+   - BanAccount
+   - Bankruptcy
+   - ADL
+5. 校验 Replica journal / commit watermark 持续追平 Primary。
+6. kill 当前 Primary。
+7. 验证 Replica 通过 snapshot + committed delta recovery 后 promotion。
+8. 验证旧 Primary 不可继续写，防止双主。
+9. 验证角色反转后继续产生业务 mutation。
+10. 对比 failover 前后：
+    - AccountBalance
+    - Position
+    - AccountConfig
+    - SymbolPara
+    - OpenOrder
+    - execution dedupe
+    - committed watermark
+11. 验证 ProjectionSvr Trade watermark 连续推进，并能从 GAP / 重启恢复。
+12. 再执行反向 role reversal，确认 A/B 均可承担 Primary。
+
+只有上述真实部署验收全部通过，才把 TradeSvr A/B 标记为生产可用 HA 集群。
+
+## 与 MDSvr / OrderSvr 的关系
+
+MDSvr A/B/C 已有真实生产滚动迁移和 READY 门禁验收，不在本轮 Trade 改造范围内。
+
+OrderSvr 已具备 journal、state、commit、snapshot、replication、recovery lifecycle 和 Projection binary 路径。
+
+最终交易核心部署目标为：
+
+```text
+MDSvr A/B/C
+      │
+      ├── market data
+      │
+OrderSvr A/B ── committed binary ──┐
+      │                            │
+      └── executions               ├── ProjectionSvr
+                                   │
+TradeSvr A/B ── committed binary ──┘
+```
+
+四块统一依赖 partition assignment、epoch fencing 和 READY gate，避免以“容器存活”代替“节点可写”。
+
+## 启用原则
+
+- 默认仍保持 `TRADE_CLUSTER_ENABLED=false`，不影响当前单节点部署。
+- 先在隔离/验收环境启用 A/B。
+- 必须使用同一版本不可变镜像和同一套公共依赖。
+- 未完成 failover、role reversal 和 Projection GAP 验收前，不在生产租户上启用。
+- 任一 partition recovery、replication 或 READY 校验失败时，应保持该 partition fenced，而不是绕过门禁继续写。
