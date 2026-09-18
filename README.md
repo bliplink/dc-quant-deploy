@@ -110,6 +110,12 @@ No GitHub or GHCR login is required. Package visibility is public while the
 service source repositories may remain private. The Web image is published as
 `ghcr.io/bliplink/dc-saas-trade-web` by this public deployment repository.
 
+Set `IMAGE_SOURCE=local` in `.env.prod` when the single host should build the
+application images itself. In this mode `install-saas.sh` calls
+`build-saas-images.sh`, uses the dedicated source branches (or a verified
+`SOURCE_BUNDLE_PATH`), and pulls only MySQL, ClickHouse, and ZooKeeper from
+public registries. An explicit `local` setting is preserved across redeploys.
+
 `REQUIRE_GHCR_LOGIN` remains available only for operators who replace the
 defaults with their own private registry packages. Credentials must be supplied
 through the protected runtime environment and must never be committed.
