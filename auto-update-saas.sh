@@ -12,7 +12,7 @@ FORCE="false"
 SKIP_GIT_UPDATE="false"
 
 APP_SERVICES=(
-  gateway loginsvr mdsvr apssvr ordersvr tradesvr liqsvr managersvr adminsvr robotsvr web
+  gateway loginsvr mdsvr apssvr ordersvr tradesvr liqsvr managersvr adminsvr robotsvr web tenant-web platform-web
 )
 
 log() {
@@ -99,6 +99,8 @@ service_image_ref() {
     adminsvr) echo "${ADMINSVR_IMAGE_REPOSITORY:-ghcr.io/bliplink/adminsvr}:${ADMINSVR_TAG:-saas-crypto}" ;;
     robotsvr) echo "${ROBOTSVR_IMAGE_REPOSITORY:-ghcr.io/bliplink/robotsvr}:${ROBOTSVR_TAG:-saas-crypto}" ;;
     web) echo "${TRADE_WEB_IMAGE_REPOSITORY:-ghcr.io/bliplink/dc-saas-trade-web}:${TRADE_WEB_TAG:-saas-crypto}" ;;
+    tenant-web) echo "${TENANT_WEB_IMAGE_REPOSITORY:-ghcr.io/bliplink/dc-saas-tenant-web}:${TENANT_WEB_TAG:-saas-crypto}" ;;
+    platform-web) echo "${PLATFORM_WEB_IMAGE_REPOSITORY:-ghcr.io/bliplink/dc-saas-platform-web}:${PLATFORM_WEB_TAG:-saas-crypto}" ;;
     *) return 1 ;;
   esac
 }
@@ -107,6 +109,8 @@ service_container_name() {
   case "$1" in
     gateway) echo "dc-saas-gateway" ;;
     web) echo "dc-saas-trade-web" ;;
+    tenant-web) echo "dc-saas-tenant-web" ;;
+    platform-web) echo "dc-saas-platform-web" ;;
     loginsvr|mdsvr|apssvr|ordersvr|projectionsvr|tradesvr|liqsvr|managersvr|adminsvr|robotsvr)
       echo "dc-saas-$1"
       ;;
@@ -306,7 +310,7 @@ main() {
   . "${ENV_FILE}"
   set +a
 
-  if [[ "${ORDER_CLUSTER_ENABLED:-false}" == "true" ]]; then
+  if [[ "${ORDER_CLUSTER_ENABLED:-false}" == "true" || "${TRADE_CLUSTER_ENABLED:-false}" == "true" ]]; then
     APP_SERVICES+=(projectionsvr)
   fi
 
