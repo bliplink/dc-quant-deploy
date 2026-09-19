@@ -124,7 +124,9 @@ GW 在签名校验后注入 key 对应用户身份；LoginSvr 再从自己的 AP
 
 - `API` 会话可进入 Trader 订单/账户 API；
 - `TenantAPI` 会话被 OrderSvr/TradeSvr 拒绝；
-- Tenant 管理仍由 AdminSvr 检查实际 TENANT_ADMIN 角色；
+- AdminSvr Tenant Control Plane 只接受 `TenantAdmin` / `TenantAPI` Session；
+- 普通 Trader `API` Session 即使对应用户拥有 TENANT_ADMIN 角色，也不能调用 Tenant Control Plane；
+- Tenant 管理同时继续检查实际 TENANT_ADMIN 角色；
 - caller body 中的 location/userId 不能覆盖 Session 身份。
 
 ## 3. Trader API Key 管理
@@ -584,6 +586,7 @@ ADL_LEDGER
 - Trader 自助 key 不能提权成 Tenant key；
 - Tenant Service key 必须 TENANT_ADMIN 创建；
 - TenantAPI Session 不能访问 OrderSvr/TradeSvr；
+- Trader API Session 不能访问 AdminSvr Tenant Control Plane，即使该用户本身是 TENANT_ADMIN；
 - Order/Trade/MDSvr Session tenant identity 校验；
 - ProjectionSvr 历史订单/成交查询已绑定 LoginSvr authoritative Session，并拒绝 TenantAPI；
 - Tenant 生命周期宿主机 E2E 已包含 Tenant Service key：创建 -> GW `/api` HMAC 登录 -> AdminSvr 成功 -> OrderSvr/TradeSvr 拒绝 -> key 清理；
