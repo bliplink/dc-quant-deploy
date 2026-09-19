@@ -147,10 +147,13 @@ sudo ./acceptance-saas.sh
 
 The unified command first validates runtime health, creates isolated `*_E2E`
 tenant accounts through the real public `AdminSvr.tenantUserRegistration`
-path, then executes browser login, deposit, limit/market order flows,
-cancellation, matching, position close, trade/history checks, partial/final
-liquidation, insurance fund and ADL coverage, Projection watermark advancement,
-TradeSvr A/B role reversal, and a final health validation. Each stage writes a
+path. It also validates tenant application/approval, platform and tenant-admin
+Web flows, RBAC, quotas, tenant lifecycle/isolation, then executes browser login,
+deposit, limit/market order flows, cancellation, matching, position close,
+trade/history checks, partial/final liquidation, insurance fund and ADL
+coverage, RobotSvr API-key/liquidity/quote-replenishment behavior, Projection
+watermark advancement, TradeSvr A/B role reversal, and a final health
+validation. Each stage writes a
 log plus `acceptance-summary.json` below
 `${DEPLOY_ROOT}/evidence/<run>-full-acceptance/`. Any critical failure makes the
 command fail. Set `ACCEPTANCE_RUN_STRESS=true` to include the optional load
