@@ -118,6 +118,14 @@ grep -Fq 'tests/run-tenant-lifecycle-web-e2e-host.sh' "${SCRIPT_DIR}/acceptance-
   fail "unified acceptance does not run tenant/platform lifecycle business validation"
 grep -Fq 'tenant-platform-console-e2e.js' "${SCRIPT_DIR}/tests/run-tenant-lifecycle-web-e2e-host.sh" ||
   fail "tenant lifecycle acceptance does not exercise standalone tenant/platform consoles"
+grep -Fq 'tenantApiKeyAdmin' "${SCRIPT_DIR}/tests/run-tenant-lifecycle-e2e-host.sh" ||
+  fail "tenant lifecycle acceptance does not create a Tenant Service API key"
+grep -Fq 'signed_api_call' "${SCRIPT_DIR}/tests/run-tenant-lifecycle-e2e-host.sh" ||
+  fail "tenant lifecycle acceptance does not test signed GW /api authentication"
+grep -Fq 'TenantAPI OrderSvr access' "${SCRIPT_DIR}/tests/run-tenant-lifecycle-e2e-host.sh" ||
+  fail "tenant lifecycle acceptance does not reject TenantAPI trading access"
+grep -Fq 'queryAccountBalance' "${SCRIPT_DIR}/tests/run-tenant-lifecycle-e2e-host.sh" ||
+  fail "tenant lifecycle acceptance does not reject TenantAPI account access"
 grep -Fq 'http://127.0.0.1:18092' "${SCRIPT_DIR}/tests/run-tenant-lifecycle-web-e2e-host.sh" ||
   fail "standalone Tenant Web is not exercised"
 grep -Fq 'http://127.0.0.1:18090' "${SCRIPT_DIR}/tests/run-tenant-lifecycle-web-e2e-host.sh" ||
