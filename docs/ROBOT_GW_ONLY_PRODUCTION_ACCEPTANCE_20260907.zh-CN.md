@@ -1,5 +1,7 @@
 # Robot GW-only、租户盘口与交易 Web 生产验收报告（2026-09-07）
 
+> **历史验收快照说明（2026-09-19）**：本文是特定 Robot/GW-only 验收快照；当前 Robot 已由统一 acceptance 流程和独立 Tenant Web 管理 E2E 共同覆盖，真实外部 hedge 仍需专用凭据单独验收。 当前操作、拓扑和统一验收以仓库 `README.md`、`docs/USER_GUIDE.zh-CN.md`、`SAAS_IMPLEMENTATION_PLAN.md` 和 `acceptance-saas.sh` 为准；本文原始结论与数字按当时版本保留。
+
 ## 1. 结论
 
 本轮发布完成了 Robot 外置策略化、GW-only 接入、20 档流动性、MDSvr 租户盘口稳定发布和交易 Web 10 档完整显示。生产目标租户 `WEB_E2E` 的 Robot 持续维持 BTCUSDT 买 20 档、卖 20 档；MDSvr 与 Web 对外显示买 10 档、卖 10 档。
