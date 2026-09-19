@@ -1,5 +1,7 @@
 # OrderSvr A/B 与 GW 本机联测报告
 
+> **历史验收快照说明（2026-09-19）**：本文记录早期 Order A/B 本地阶段；其“尚未完成”列表不能作为当前 backlog。当前 Order 集群、Projection 连续性和统一业务/压力门禁已有后续实现。 当前操作、拓扑和统一验收以仓库 `README.md`、`docs/USER_GUIDE.zh-CN.md`、`SAAS_IMPLEMENTATION_PLAN.md` 和 `acceptance-saas.sh` 为准；本文原始结论与数字按当时版本保留。
+
 日期：2026-09-07
 
 ## 结论
