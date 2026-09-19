@@ -151,7 +151,7 @@ grep -Fq 'docs/openapi/WEBSOCKET_TOPICS_V1.zh-CN.md' "${SCRIPT_DIR}/README.md" |
 grep -Fq 'Markdown 是源文件' "${SCRIPT_DIR}/docs/openapi/README.zh-CN.md" &&
 grep -Fq 'MkDocs' "${SCRIPT_DIR}/docs/openapi/README.zh-CN.md" ||
   fail "Open API documentation portal is not static-site ready"
-grep -Fq 'client_type=API' "${SCRIPT_DIR}/docs/openapi/TRADER_API_V1.zh-CN.md" &&
+grep -Fq 'clientType/client_type = API' "${SCRIPT_DIR}/docs/openapi/TRADER_API_V1.zh-CN.md" &&
 grep -Fq 'ORDER_WRITE' "${SCRIPT_DIR}/docs/openapi/TRADER_API_V1.zh-CN.md" ||
   fail "Trader API v1 documentation is incomplete"
 grep -Fq 'client_type=TenantAPI' "${SCRIPT_DIR}/docs/openapi/TENANT_API_V1.zh-CN.md" &&
