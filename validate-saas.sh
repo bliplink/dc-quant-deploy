@@ -222,6 +222,12 @@ robot_runtime_columns="$(
 )"
 [[ "${robot_runtime_columns}" == "7" ]] || die "Robot runtime schema is incomplete: ${robot_runtime_columns}/7 columns."
 
+open_api_key_policy_columns="$(
+  docker exec -e MYSQL_PWD="${MYSQL_PASSWORD}" dc-saas-mysql mysql -u"${MYSQL_USERNAME}" -Nse     "SELECT COUNT(*) FROM information_schema.columns WHERE table_schema='dc' AND table_name='dc_users_api' AND column_name IN ('permissions','ip_whitelist','expires_at','rate_limit_profile','label','last_used_time');"
+)"
+[[ "${open_api_key_policy_columns}" == "6" ]] ||
+  die "Crypto Open API key policy schema is incomplete: ${open_api_key_policy_columns}/6 columns."
+
 robot_runtime_identity_count="$(
   docker exec -e MYSQL_PWD="${MYSQL_PASSWORD}" dc-saas-mysql mysql -u"${MYSQL_USERNAME}" -Nse \
     "SELECT COUNT(*) FROM dc.dc_users_api WHERE location='${ROBOT_RUNTIME_LOCATION}' AND user_id='${ROBOT_RUNTIME_USER_ID}' AND api_key='${ROBOT_RUNTIME_API_KEY}' AND enable='1' AND secret_key IS NOT NULL;"
@@ -268,6 +274,6 @@ wait_for_gateway_route TradeSvr
 wait_for_gateway_route TDSvr
 
 log "SaaS-only compose model verified."
-log "All 14 containers are running; MySQL tables=${mysql_table_count}, location columns=${mysql_location_columns}."
+log "All ${#expected_containers[@]} expected containers are running; MySQL tables=${mysql_table_count}, location columns=${mysql_location_columns}."
 log "MySQL, ClickHouse, and ZooKeeper are restricted to loopback interfaces."
 log "ClickHouse kline is location-aware and dc-trade-web is healthy."
