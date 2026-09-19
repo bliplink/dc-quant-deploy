@@ -1,72 +1,86 @@
-# Crypto Open API v1 设计基线
+# DC Crypto Open API v1 基线
 
 当前基线：2026-09-19。
 
-## 1. 当前阶段目标
+## 1. 设计结论
 
-本阶段只完善现有 **加密货币永续/保证金交易模型** 的开放 API，不修改现有撮合、资金、持仓、Funding、强平、保险基金和 ADL 计算模型，也不改变 `marketIndicator` 的语义。
+当前阶段**不新增 OpenApiSvr**，也**不把交易/行情/账户业务塞进 GW 或 AdminSvr**。
 
-`marketIndicator` 继续作为市场/品种市场标识；外部 API 同时使用 `symbol/securityId + marketIndicator` 识别交易市场。未来扩展外汇、商品、债券、自定义交易品种时，在保持 Open API 基本兼容的前提下再扩 Instrument/Product 元数据。
-
-当前 Open API 的目标用户有两类：
-
-1. **Trader API Key**：租户交易员、量化程序、租户自研 Robot。
-2. **Tenant Service API Key**：租户自己的管理后台、自动化运维和后续自研行情 Adapter。
-
-平台提供的 Trade Web、Tenant Web、Platform Web、APSSvr 和 RobotSvr 都不是开放 API 的强依赖；租户可以完全脱离这些 UI/可选服务，通过 API 使用交易核心。
-
-## 2. 推荐运行架构
+DC Open API v1 直接产品化现有 GW HTTP/WebSocket/TCP 能力：
 
 ```text
-Internet / Tenant Network
-        |
-        | HTTPS / WSS
-        v
-+-----------------------+
-|   L7 Load Balancer    |
-+-----------+-----------+
-            |
-    +-------+-------+
-    |               |
-    v               v
-OpenApiSvr-1     OpenApiSvr-N       <-- 无状态，可横向扩展
-    |               |
-    +-------+-------+
-            |
-            | internal GW protocol / keyed routing
-            v
-            GW
-   +--------+---------+----------------+
-   |                  |                |
-   v                  v                v
-LoginSvr          MDSvr Cluster    OrderSvr Cluster
-                                      |
-                                      v
-                                  TradeSvr Cluster
-                                      |
-                                      v
-                                    LiqSvr
+Trade Web / Tenant Web / Trader Robot / Tenant Backend / SDK
+                         |
+                  HTTP / WebSocket
+                         |
+                         v
+                    GW Cluster
+                         |
+        +----------------+----------------+
+        |                |                |
+     LoginSvr          MDSvr          OrderSvr
+      Auth/API          Market           Orders
+                                          |
+                                          v
+                                       TradeSvr
+                                   Account / Risk
+                                          |
+                                          v
+                                        LiqSvr
+
+     AdminSvr                     ManagerSvr
+ Tenant Control Plane          Platform Control Plane
+
+                ProjectionSvr
+          Durable order/trade history
 ```
 
-`OpenApiSvr` 不承担撮合、资金和风险计算，只做：
+职责边界：
 
-- REST/WSS 协议；
-- API Key HMAC 校验；
-- API Key scope / IP allowlist / expiry；
-- rate-limit；
-- 请求参数标准化；
-- API versioning；
-- 外部错误码/HTTP 状态码；
-- 将外部请求映射为内部 GW 请求；
-- 将内部 topic/event 映射为稳定的外部 WebSocket stream。
+- **GW**：连接、HTTP/WebSocket/TCP、request/reply、pub/sub、服务发现、负载均衡、keyed routing、通用安全/限流；不实现订单、资金、租户、Robot 等业务。
+- **LoginSvr**：登录、Session、API Key Source of Truth。
+- **MDSvr**：行情权威服务。
+- **OrderSvr**：订单/撮合权威服务。
+- **TradeSvr**：资金、持仓、手续费、保证金、风险权威服务。
+- **LiqSvr**：强平/保险基金/ADL。
+- **AdminSvr**：Tenant Control Plane。
+- **ManagerSvr**：Platform Control Plane。
+- **ProjectionSvr**：历史订单/成交投影查询。
 
-因此 OpenApiSvr 可以水平扩容，不改变 Order/MD/Trade 的一致性边界。
+平台自己的 Web 与第三方 API 客户端复用相同后端服务接口。外部客户端不需要知道具体 Order/Trade/MD 节点、partition、primary/replica 或 epoch。
 
-## 3. API Key
+## 2. 当前阶段范围
 
-### 3.1 类型
+v1 先完整开放当前加密货币永续/保证金能力：
 
-Trader key 默认：
+- 行情；
+- 下单/撤单/订单查询；
+- 成交查询；
+- 余额/持仓/账户设置；
+- API Key；
+- 租户用户/品种/Robot/设置/审计；
+- HTTP + WebSocket/TCP 订阅；
+- Order/MD/Trade 集群透明路由。
+
+本阶段不改：
+
+- `marketIndicator` 语义；
+- 当前 perpetual margin/risk/funding/liquidation 模型；
+- OrderSvr/TradeSvr/MDSvr 的核心业务模型。
+
+未来扩 FX、商品、债券和租户自定义品种时继续复用 `marketIndicator + SecurityID` 和同一 GW/API 框架，再增加 Instrument/Product 元数据。
+
+## 3. 两类 API Key
+
+### 3.1 Trader API Key
+
+用途：
+
+- 交易员量化程序；
+- 租户自研 Robot；
+- 第三方交易终端。
+
+默认能力：
 
 ```text
 MARKET_READ
@@ -75,28 +89,29 @@ ORDER_READ
 ORDER_WRITE
 ```
 
-Tenant service key 默认：
+Trader key 不允许申请 Tenant scope。
+
+### 3.2 Tenant Service API Key
+
+用途：
+
+- 租户自己的管理后台；
+- 租户自动化运维；
+- 第二阶段 Tenant Market Adapter。
+
+默认能力：
 
 ```text
 MARKET_READ
-ACCOUNT_READ
-ORDER_READ
-ORDER_WRITE
 TENANT_READ
 TENANT_WRITE
 ```
 
-保留的后续 scope：
+Tenant Service key 不拥有 `ORDER_WRITE`。租户自研 Robot 应使用独立交易用户 + Trader API Key，而不是 Tenant Admin key 下单。
 
-```text
-APIKEY_READ
-APIKEY_WRITE
-MARKET_WRITE        # 第二阶段 Tenant Market Ingress
-```
+### 3.3 当前 API Key 元数据
 
-### 3.2 元数据
-
-`dc_users_api` 当前扩展：
+`dc_users_api`：
 
 ```text
 location
@@ -112,311 +127,354 @@ label
 last_used_time
 ```
 
-私钥仅在创建成功时返回一次；查询 API Key 列表不得返回 `secret_key`。
-
-### 3.3 外部签名
-
-Open API v1 采用每请求 HMAC，不把内部 GW session/token 暴露给 API 客户端。
-
-请求头：
-
-```text
-X-DC-API-KEY
-X-DC-TIMESTAMP
-X-DC-RECV-WINDOW
-X-DC-SIGNATURE
-```
-
-签名原文：
-
-```text
-timestamp + "\n"
-+ HTTP_METHOD + "\n"
-+ PATH + "\n"
-+ RFC3986_SORTED_QUERY + "\n"
-+ SHA256_HEX(RAW_BODY)
-```
-
-签名：
-
-```text
-hex(HMAC-SHA256(secret_key, canonical_request))
-```
-
 规则：
 
-- 默认 `recvWindow=5000ms`；
-- v1 最大允许 `60000ms`；
-- key 过期、禁用、scope 不足、IP 不在 allowlist、时间窗超限均 fail-closed；
-- 外部 `location/userId` 在私有接口中不是权威字段，必须从 API Key 身份解析；
-- OpenApiSvr 内部可缓存 API session，但 API 客户端不感知内部 session。
+- key 与 `location + user_id` 绑定；
+- Trader 自助创建只能生成 `type=trade`；
+- Tenant Service key 只能由 TENANT_ADMIN 控制面创建；
+- 查询 key 不返回 `secret_key`；
+- 过期 key 在 LoginSvr fail-closed；
+- 私有业务请求中的 `Location/UserID` 不是权威身份，下游服务仍由 Session 覆盖并校验冲突。
 
-## 4. REST API v1
+## 4. GW HTTP 协议
 
-统一前缀：
+DC Open API v1 **保留现有 GW envelope**，不强制改造成 Binance REST 路径。
+
+### 4.1 API Key 签名入口
+
+默认入口：
 
 ```text
-/openapi/v1
+POST /api
+Content-Type: application/json
 ```
 
-### 4.1 Public market
+Headers：
 
-| HTTP | Path | Scope | 内部来源 |
-| --- | --- | --- | --- |
-| GET | `/ping` | public | OpenApiSvr |
-| GET | `/time` | public | OpenApiSvr |
-| GET | `/exchangeInfo` | public | AdminSvr / tenant symbol rules |
-| GET | `/depth` | public | MDSvr `queryPublicMarket` / depth image |
-| GET | `/trades` | public | MDSvr recent trades |
-| GET | `/ticker/price` | public | MDSvr ticker |
-| GET | `/ticker/bookTicker` | public | MDSvr BBO |
-| GET | `/klines` | public | MDSvr `queryKLine` |
-| GET | `/markPrice` | public | MDSvr tenant mark/index |
+```text
+cid: <client request id>
+apikey: <api key>
+expiry: <epoch milliseconds>
+signature: <hex hmac>
+```
 
-公共行情必须显式携带 `location`，因为不同租户可以启用不同产品/行情源。输入还包括 `marketIndicator` 和 `symbol`。
+Body：
 
-### 4.2 Trader private trading
+```json
+{
+  "serverName": "LoginSvr",
+  "method": "apiKeyLogin",
+  "content": {
+    "api_key": "xxxxxxxx",
+    "location": "TENANT_A",
+    "cid": "robot-auth-001"
+  }
+}
+```
 
-| HTTP | Path | Scope | 内部映射 |
-| --- | --- | --- | --- |
-| POST | `/order` | ORDER_WRITE | OrderSvr `placeOrder` |
-| DELETE | `/order` | ORDER_WRITE | OrderSvr `cancelOrder` |
-| GET | `/order` | ORDER_READ | OrderSvr `queryOrder` |
-| GET | `/openOrders` | ORDER_READ | OrderSvr `queryOpenOrder` |
-| GET | `/allOrders` | ORDER_READ | ProjectionSvr projected history / OrderSvr history |
-| GET | `/myTrades` | ORDER_READ | ProjectionSvr projected execution history |
-| GET | `/account` | ACCOUNT_READ | Trade/Projection account view |
-| GET | `/balance` | ACCOUNT_READ | Trade account balance image |
-| GET | `/positionRisk` | ACCOUNT_READ | Trade position image |
-| POST | `/leverage` | ORDER_WRITE | TradeSvr `setLeverage` |
-| POST | `/positionMode` | ORDER_WRITE | TradeSvr `setPositionType` |
+当前签名算法与 `com.app.common.ApiKeyUtils` 保持一致：
 
-Private API 不接收可覆盖身份的 `location/userId`。OpenApiSvr 从 API Key 得到 authoritative `location + user_id`，再写入内部请求。
+```text
+signature =
+  HEX(
+    HMAC-SHA256(
+      secret_key,
+      UTF8(raw_http_body + expiry)
+    )
+  )
+```
 
-### 4.3 API Key self-service
+`expiry` 为毫秒时间戳；当前服务端至少校验请求在 expiry 前到达。SDK 推荐使用短期 expiry，例如当前时间 + 60 秒。
 
-| HTTP | Path | Scope |
+**v1 推荐流程：API Key 先调用 `LoginSvr/apiKeyLogin` 换取 Session，然后后续交易/账户请求使用 Session。** 这与当前 RobotSvr 已验证的真实链路一致。
+
+### 4.2 Session HTTP
+
+入口：
+
+```text
+POST /httpapi/
+sessionId: <LoginSvr returned session>
+Content-Type: application/json
+```
+
+Body：
+
+```json
+{
+  "serverName": "OrderSvr",
+  "method": "queryOpenOrder",
+  "content": {
+    "SecurityID": "BTCUSDT",
+    "MarketIndicator": "4"
+  }
+}
+```
+
+私有请求即使携带 `Location/UserID`，OrderSvr/TradeSvr/AdminSvr 仍使用 Session 中的 authoritative tenant/user identity。
+
+## 5. DC Open API v1 服务目录
+
+### 5.1 Authentication / API Key — LoginSvr
+
+| method | 用途 | 权限 |
 | --- | --- | --- |
-| POST | `/apiKeys` | APIKEY_WRITE 或交互式登录 session |
-| GET | `/apiKeys` | APIKEY_READ 或交互式登录 session |
-| DELETE | `/apiKeys/{apiKey}` | APIKEY_WRITE 或交互式登录 session |
+| `apiKeyLogin` | API Key 换 Session | signed API key |
+| `updateApiKey` | Trader 自助创建/更新 key | interactive trader session |
+| `queryApiKey` | Trader key 列表 | interactive trader session |
+| `deleteApiKey` | 删除 Trader key | interactive trader session |
+| `tenantApiKeyAdmin` | Tenant Service key LIST/CREATE/DELETE | TENANT_ADMIN |
 
-首个 key 仍可由 Trade Web / Tenant Admin 交互式会话创建。API Key 不能通过自身权限任意提升自己的 scope。
+### 5.2 Market API — MDSvr
 
-## 5. Tenant API v1
+| method/topic | 用途 | Scope |
+| --- | --- | --- |
+| `queryPublicMarket` | order book + ticker + recent trades | MARKET_READ/public tenant market |
+| `queryKLine` | K 线 | MARKET_READ |
+| market order-book topic | 深度 image/update | MARKET_READ |
+| market trade topic | 逐笔成交 | MARKET_READ |
 
-统一前缀：
-
-```text
-/tenant/v1
-```
-
-Tenant API Key 的 location 永远来自 key，不接受调用方切换租户。
-
-| HTTP | Path | Scope | 当前内部能力 |
-| --- | --- | --- | --- |
-| GET | `/users` | TENANT_READ | `tenantUserAdmin.LIST` |
-| POST | `/users` | TENANT_WRITE | `tenantUserAdmin.CREATE` |
-| POST | `/users/{id}/enable` | TENANT_WRITE | `ENABLE` |
-| POST | `/users/{id}/disable` | TENANT_WRITE | `DISABLE` |
-| POST | `/users/{id}/reset-password` | TENANT_WRITE | `RESET_PASSWORD` |
-| GET | `/symbols` | TENANT_READ | `tenantSymbolAdmin.LIST` |
-| POST | `/symbols/{symbol}/enable` | TENANT_WRITE | `ENABLE` |
-| POST | `/symbols/{symbol}/disable` | TENANT_WRITE | `DISABLE` |
-| GET | `/robots` | TENANT_READ | `tenantRobotAdmin.LIST` |
-| POST | `/robots` | TENANT_WRITE | `UPSERT` |
-| PUT | `/robots/{id}` | TENANT_WRITE | `UPSERT` |
-| POST | `/robots/{id}/enable` | TENANT_WRITE | `ENABLE` |
-| POST | `/robots/{id}/disable` | TENANT_WRITE | `DISABLE` |
-| GET | `/settings` | TENANT_READ | `tenantSettingsAdmin.GET` |
-| PUT | `/settings` | TENANT_WRITE | `tenantSettingsAdmin.UPDATE` |
-| GET | `/audit` | TENANT_READ | `tenantSettingsAdmin.AUDIT` |
-| GET | `/orders` | TENANT_READ | `tenantTradeAdmin.ORDERS` |
-| GET | `/executions` | TENANT_READ | `tenantTradeAdmin.EXECUTIONS` |
-| GET | `/positions` | TENANT_READ | `tenantTradeAdmin.POSITIONS` |
-| GET | `/balances` | TENANT_READ | `tenantTradeAdmin.BALANCES` |
-
-平台级 API 与 Tenant API 分离，不允许 Tenant API Key 访问 PLATFORM scope。
-
-## 6. Order request v1
-
-外部字段采用稳定 API 名，OpenApiSvr 转为现有 `NewOrderSingle`：
-
-```json
-{
-  "symbol": "BTCUSDT",
-  "marketIndicator": "4",
-  "side": "BUY",
-  "positionSide": "LONG",
-  "type": "LIMIT",
-  "timeInForce": "GTC",
-  "quantity": "0.010",
-  "price": "60000.0",
-  "clientOrderId": "my-bot-000001",
-  "reduceOnly": false
-}
-```
-
-映射：
+Market 请求至少由：
 
 ```text
-symbol          -> SecurityID
-marketIndicator -> MarketIndicator
-side            -> Side
-positionSide    -> PositionSide / OPEN-CLOSE normalization
-type            -> OrdType
-timeInForce     -> TimeInForce
-quantity        -> OrderQty
-price           -> Price
-clientOrderId   -> ClOrdID
-```
-
-数值全部使用十进制字符串，禁止 JSON double 作为金融权威输入。
-
-`clientOrderId` 继续复用现有 OrderSvr 幂等性机制；重试同一业务请求不得生成重复订单。
-
-## 7. WebSocket v1
-
-### 7.1 Public
-
-```text
-/openapi/v1/ws/public?location=<tenant>
-```
-
-订阅：
-
-```json
-{"method":"SUBSCRIBE","params":[
-  "depth:4:BTCUSDT",
-  "trade:4:BTCUSDT",
-  "ticker:4:BTCUSDT",
-  "kline:4:BTCUSDT:1m"
-],"id":1}
-```
-
-### 7.2 Private
-
-```text
-/openapi/v1/ws/private
-```
-
-握手使用与 REST 相同的 API Key + timestamp + signature。身份来自 key。
-
-私有 stream：
-
-```text
-order
-execution
-position
-balance
-account
-```
-
-外部 stream 名称稳定，内部 topic 名称不得成为公开兼容性契约。
-
-## 8. Rate limit
-
-至少支持配置文件：
-
-```text
-READ_ONLY
-TRADER_STANDARD
-TRADER_HIGH
-TENANT_STANDARD
-TENANT_HIGH
-```
-
-v1 计量维度：
-
-```text
-api_key
 location
-source_ip
-endpoint_group
+marketIndicator
+SecurityID
 ```
 
-响应头：
+确定租户市场。私有登录后的 location 仍以 Session 为准。
+
+### 5.3 Trading API — OrderSvr
+
+| method | 用途 | Scope |
+| --- | --- | --- |
+| `placeOrder` | 下单 | ORDER_WRITE |
+| `cancelOrder` | 单笔撤单 | ORDER_WRITE |
+| `cancelBatchOrder` | 批量撤单 | ORDER_WRITE |
+| `queryOrder` | 单笔/条件订单查询 | ORDER_READ |
+| `queryOpenOrder` | 当前活动订单 | ORDER_READ |
+| `queryExecOrder` | 当前服务成交查询 | ORDER_READ |
+
+Order/MD 集群请求使用：
 
 ```text
-X-DC-RATE-LIMIT
-X-DC-RATE-REMAINING
-X-DC-RATE-RESET
+routing key =
+location + marketIndicator + SecurityID
 ```
 
-超限返回 HTTP 429。
+SDK/客户端不自行计算实际 partition owner，只需要向 GW 提供完整的市场身份字段。
 
-多 OpenApiSvr 实例时不能只依赖单进程全局计数。第一版可以使用 API-key consistent-hash/sticky routing 保证单 key 进入固定 OpenApiSvr；生产多活阶段再引入共享 rate-limit store。
+### 5.4 Account / Risk API — TradeSvr
 
-## 9. 错误语义
-
-HTTP 层使用：
+当前可复用：
 
 ```text
-400 INVALID_REQUEST
-401 INVALID_API_KEY / INVALID_SIGNATURE / REQUEST_EXPIRED
-403 PERMISSION_DENIED / IP_NOT_ALLOWED / TENANT_DISABLED
-404 ORDER_NOT_FOUND / SYMBOL_NOT_FOUND
-409 DUPLICATE_CLIENT_ORDER_ID / STATE_CONFLICT
-429 RATE_LIMITED
-503 ROUTE_NOT_READY / PARTITION_NOT_READY / SERVICE_UNAVAILABLE
+dc.trade.accountbalance.**
+dc.trade.position.**
+setLeverage
+setPositionType
+order preview / account config APIs
 ```
 
-业务响应：
+职责：
+
+- balance；
+- position；
+- margin/risk；
+- leverage；
+- position mode；
+- liquidation-related state。
+
+所有金融计算结果以 TradeSvr 为权威；客户端或 AdminSvr 不重新计算。
+
+### 5.5 Durable History — ProjectionSvr
+
+| method | 用途 | Scope |
+| --- | --- | --- |
+| `queryProjectedOrderHistory` | 历史订单 | ORDER_READ |
+| `queryProjectedExecutionHistory` | 历史成交 | ORDER_READ |
+
+查询强制 `location + userId` 边界。
+
+### 5.6 Tenant API — AdminSvr
+
+| method | action | Scope |
+| --- | --- | --- |
+| `tenantUserAdmin` | LIST/CREATE/ENABLE/DISABLE/RESET_PASSWORD | TENANT_READ/TENANT_WRITE |
+| `tenantSymbolAdmin` | LIST/ENABLE/DISABLE | TENANT_READ/TENANT_WRITE |
+| `tenantRobotAdmin` | LIST/UPSERT/ENABLE/DISABLE | TENANT_READ/TENANT_WRITE |
+| `tenantSettingsAdmin` | GET/UPDATE/AUDIT | TENANT_READ/TENANT_WRITE |
+| `tenantTradeAdmin` | ORDERS/EXECUTIONS/POSITIONS/BALANCES/... | TENANT_READ |
+| `tenantUserRegistration` | 租户公开注册 | public + tenant registration policy |
+
+Tenant API 不允许通过 body 切换 `location`。AdminSvr 使用 LoginSvr Session 的 location 作为权威租户。
+
+### 5.7 Platform API — ManagerSvr
+
+Platform API 只面向平台运营身份，不属于 Tenant API Key 权限域。
+
+包括：
+
+- tenant application/approval；
+- tenant lifecycle；
+- quota；
+- tenant service route；
+- cluster snapshot；
+- placement preview/apply。
+
+## 6. Order 消息
+
+v1 直接使用现有 `NewOrderSingle` 语义，不再额外维护一份 Binance DTO。
+
+核心字段：
+
+```text
+SecurityID
+MarketIndicator
+Side
+OCType
+PositionSide
+OrdType
+TimeInForce
+OrderQty
+Price
+ClOrdID
+ReduceOnly
+```
+
+例：
 
 ```json
 {
-  "code": "ORDER_NOT_FOUND",
-  "message": "order does not exist",
-  "requestId": "01...",
-  "serverTime": 1789830000000
+  "serverName": "OrderSvr",
+  "method": "placeOrder",
+  "content": {
+    "SecurityID": "BTCUSDT",
+    "MarketIndicator": "4",
+    "Side": "BUY",
+    "OCType": "OPEN",
+    "OrdType": "Limit",
+    "TimeInForce": "GTC",
+    "OrderQty": "0.010",
+    "Price": "60000.0",
+    "ClOrdID": "tenant-robot-000001"
+  }
 }
 ```
 
-不得把 Java exception、SQL、ZK path 或内部 serverName 暴露到公网响应。
+金融数值在开放文档/SDK 中使用字符串，避免客户端 JSON double 精度问题。
 
-## 10. 横向扩展
+## 7. WebSocket / TCP API
 
-OpenApiSvr 不保存资金/订单权威状态，可任意水平扩：
+GW 已经提供连接、登录、request/reply、subscribe/unsubscribe。
+
+API Key 客户端标准流程：
 
 ```text
-OpenApiSvr x N
-   |
-   +-- public market -> MDSvr keyed route
-   +-- order         -> OrderSvr market placement
-   +-- account       -> TradeSvr location partition
-   +-- tenant admin  -> AdminSvr
+1. HTTP /api -> LoginSvr/apiKeyLogin
+2. 得到 user_id + location + session token
+3. GateWayApi/WebSocket connect，client_type=API
+4. requestSync / requestSyncWithKey
+5. subscribe market/order/trade/account topics
+6. 断线后重新认证/重连/重新订阅
 ```
 
-Order/MD 继续按 `location + marketIndicator + securityId`；Trade 继续按 `location`。Open API 层不重新发明分区算法。
+平台 RobotSvr 当前已按该流程真实运行，可作为 Java SDK 行为基线。
 
-## 11. 第二阶段：租户自研行情
-
-本阶段只预留 `MARKET_WRITE` scope，不立即开放写行情。
-
-下一阶段增加：
+示例 execution topic：
 
 ```text
-/ingress/v1/book
-/ingress/v1/trade
-/ingress/v1/ticker
-/ingress/v1/mark-price
+dc.order.trade.<SecurityID>.*.<UserID>.<Location>
 ```
 
-Tenant Market Adapter 与平台 APSSvr 最终进入同一个 MDSvr 规范化入口。
-
-## 12. 多资产兼容原则
-
-Open API v1 不把“永续”写入 URL；只在当前实现的 `exchangeInfo` 中表明产品属性。以后扩展 FX、商品、债券或租户自定义品种时，继续复用：
+示例 market trade topic：
 
 ```text
-symbol/securityId
+dc.md.trade.<SecurityID>.<Location>
+```
+
+后续会把全部公开 topic、image/increment、sequence、Gap、重连语义整理成单独 WebSocket/Topic Reference。内部未正式纳入 v1 目录的 topic 不承诺兼容。
+
+## 8. 集群透明性
+
+外部 API 不暴露：
+
+```text
+OrderSvr-A/B/C
+MDSvr-A/B/C
+TradeSvr-A/B
+partition id
+epoch
+primary/replica
+ZooKeeper path
+```
+
+GW 和服务端路由负责：
+
+- Order/MDSvr：`location + marketIndicator + SecurityID`；
+- TradeSvr：`location`；
+- primary/replica/fencing/recovery。
+
+因此同一套 API 可直接随着 GW / Order / MD / Trade 横向扩展。
+
+## 9. 错误与兼容
+
+所有对外方法必须固定：
+
+- request/response 字段；
+- code/msg 语义；
+- 必填/可选字段；
+- 幂等字段；
+- scope；
+- topic；
+- version。
+
+不能把以下内容作为稳定公共契约：
+
+- Java exception；
+- SQL；
+- ZooKeeper path；
+- 容器名；
+- 实例名；
+- partition owner。
+
+现有内部 handler 可以继续演进，但一旦某方法正式进入 `DcOpenApi.VERSION=v1`，破坏性修改必须通过 v2 或兼容字段完成。
+
+## 10. 第二阶段：Tenant Market Ingress
+
+当前只先完成 Crypto Open API。
+
+下一阶段给 Tenant Service key 增加受控：
+
+```text
+MARKET_WRITE
+```
+
+并开放租户自研行情 Adapter：
+
+```text
+book snapshot/delta
+trade
+ticker
+index
+mark price
+```
+
+平台 APSSvr 与 Tenant Market Adapter 最终都写入同一套 MDSvr 规范化行情入口。
+
+## 11. 多资产演进
+
+未来 FX、商品、债券和租户自定义品种继续复用：
+
+```text
+GW transport
+API Key
+location
 marketIndicator
-side
-order type
-quantity
-price
-clientOrderId
-tenant identity
+SecurityID
+OrderSvr
+MDSvr
+TradeSvr
 ```
 
-再增加可选 instrument metadata，而不重新设计下单 API。
+再逐步扩 Instrument/Product/Risk/Settlement 模型。Open API v1 不因为资产类别扩展而重新发明一套网络协议。
