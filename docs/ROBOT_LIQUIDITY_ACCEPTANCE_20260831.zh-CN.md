@@ -1,5 +1,7 @@
 # RobotSvr 租户流动性专项验收报告
 
+> **历史验收快照说明（2026-09-19）**：本文的“14 个容器”和 Robot 边界属于 2026-08-31 环境；当前拓扑已经加入独立 Tenant/Platform Web、Projection 和集群副本，Robot 也已进入统一全系统验收。 当前操作、拓扑和统一验收以仓库 `README.md`、`docs/USER_GUIDE.zh-CN.md`、`SAAS_IMPLEMENTATION_PLAN.md` 和 `acceptance-saas.sh` 为准；本文原始结论与数字按当时版本保留。
+
 文档版本：V1.0
 
 日期：2026-08-31
