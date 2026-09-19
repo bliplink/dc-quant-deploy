@@ -7,6 +7,7 @@ on:
     paths:
       - .github/workflows/validate-cluster-config.yml
       - .env.example
+      - docs/**
       - docs/TRADE_CLUSTER_FOUNDATION_20260914.zh-CN.md
       - docs/BINANCE_BYBIT_ROADMAP.zh-CN.md
       - docs/CLUSTER_DEV_LOCAL_COMMON_BUILD.zh-CN.md
@@ -61,6 +62,7 @@ on:
     paths:
       - .github/workflows/validate-cluster-config.yml
       - .env.example
+      - docs/**
       - docs/TRADE_CLUSTER_FOUNDATION_20260914.zh-CN.md
       - docs/BINANCE_BYBIT_ROADMAP.zh-CN.md
       - docs/CLUSTER_DEV_LOCAL_COMMON_BUILD.zh-CN.md
