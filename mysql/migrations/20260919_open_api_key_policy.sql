@@ -65,6 +65,23 @@ UPDATE dc_users_api
 SET rate_limit_profile='TRADER_STANDARD'
 WHERE rate_limit_profile IS NULL OR trim(rate_limit_profile)='';
 
+-- The generic column default is trader-safe for legacy keys. Existing
+-- tenant/service keys must be converted to their own permission class.
+UPDATE dc_users_api
+SET permissions='MARKET_READ,TENANT_READ,TENANT_WRITE',
+    rate_limit_profile='TENANT_STANDARD'
+WHERE lower(trim(type)) IN ('tenant','service')
+  AND (
+    permissions IS NULL
+    OR trim(permissions)=''
+    OR trim(permissions)='MARKET_READ,ACCOUNT_READ,ORDER_READ,ORDER_WRITE'
+  );
+
+UPDATE dc_users_api
+SET rate_limit_profile='TENANT_STANDARD'
+WHERE lower(trim(type)) IN ('tenant','service')
+  AND (rate_limit_profile IS NULL OR trim(rate_limit_profile)='' OR rate_limit_profile='TRADER_STANDARD');
+
 SET @has_idx := (
   SELECT COUNT(*) FROM information_schema.statistics
   WHERE table_schema=DATABASE() AND table_name='dc_users_api' AND index_name='idx_users_api_openapi'
