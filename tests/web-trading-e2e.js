@@ -8,6 +8,8 @@ const location = process.env.E2E_LOCATION || 'WEB_E2E';
 const password = process.env.E2E_PASSWORD;
 const buyer = process.env.E2E_BUYER || 'webbuyer';
 const seller = process.env.E2E_SELLER || 'webseller';
+const buyerId = process.env.E2E_BUYER_ID || buyer;
+const sellerId = process.env.E2E_SELLER_ID || seller;
 const artifactDir = process.env.E2E_ARTIFACT_DIR || '/artifacts';
 const browserExecutable = process.env.E2E_BROWSER_EXECUTABLE;
 const ignoredConsoleErrors = [
@@ -127,7 +129,7 @@ async function gatewayCall(page, serverName, method, content) {
   });
 }
 
-async function login(browser, username) {
+async function login(browser, username, expectedUserId = username) {
   const context = await browser.newContext({ viewport: { width: 1920, height: 1080 } });
   const page = await context.newPage();
   trackWebSocket(page);
@@ -175,8 +177,11 @@ async function login(browser, username) {
   await page.waitForURL(`**/#/trade?location=${encodeURIComponent(location)}`);
   await page.locator('.tradeWrap').waitFor({ timeout: 60000 });
   const loginBody = await page.evaluate(() => JSON.parse(sessionStorage.getItem('loginData') || '{}'));
-  if (loginBody.user_id !== username) {
-    throw new Error(`websocket login returned unexpected user ${loginBody.user_id}`);
+  if (loginBody.user_id !== expectedUserId) {
+    throw new Error(`websocket login returned unexpected user id ${loginBody.user_id}, expected ${expectedUserId}`);
+  }
+  if (loginBody.user_name && loginBody.user_name !== username) {
+    throw new Error(`websocket login returned unexpected username ${loginBody.user_name}, expected ${username}`);
   }
   if (loginBody.location !== location) {
     throw new Error(`websocket login returned unexpected location ${loginBody.location}`);
@@ -416,8 +421,8 @@ async function waitForNoPosition(page) {
   let buyerSession;
   let sellerSession;
   try {
-    buyerSession = await login(browser, buyer);
-    sellerSession = await login(browser, seller);
+    buyerSession = await login(browser, buyer, buyerId);
+    sellerSession = await login(browser, seller, sellerId);
 
     await clearOpenOrders(buyerSession.page);
     await clearOpenOrders(sellerSession.page);
