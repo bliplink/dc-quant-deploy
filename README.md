@@ -235,6 +235,8 @@ Current operator/developer documentation:
 - [中文用户手册](docs/USER_GUIDE.zh-CN.md)
 - [当前实施方案与服务/分支基线](SAAS_IMPLEMENTATION_PLAN.md)
 - [SaaS 公共镜像自动部署与运维](docs/AUTO_UPDATE.zh-CN.md)
+- [Crypto Open API v1 架构与接口基线](docs/CRYPTO_OPEN_API_V1.zh-CN.md)
+- [Crypto OpenAPI 3.0 规范](docs/openapi/crypto-openapi-v1.yaml)
 - [集群开发期本地 Common/镜像专项流程](docs/CLUSTER_DEV_LOCAL_COMMON_BUILD.zh-CN.md)
 - [对标 Binance / Bybit 的产品化路线图](docs/BINANCE_BYBIT_ROADMAP.zh-CN.md)
 
