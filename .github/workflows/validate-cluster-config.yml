@@ -7,6 +7,14 @@ on:
     paths:
       - .github/workflows/validate-cluster-config.yml
       - .env.example
+      - docs/TRADE_CLUSTER_FOUNDATION_20260914.zh-CN.md
+      - docs/BINANCE_BYBIT_ROADMAP.zh-CN.md
+      - docs/CLUSTER_DEV_LOCAL_COMMON_BUILD.zh-CN.md
+      - docs/AUTO_UPDATE.zh-CN.md
+      - docs/USER_GUIDE.zh-CN.md
+      - SAAS_IMPLEMENTATION_PLAN.md
+      - CONTRIBUTING.md
+      - README.md
       - compose.yaml
       - auto-update-saas.sh
       - tests/test-auto-update-saas.sh
@@ -53,6 +61,14 @@ on:
     paths:
       - .github/workflows/validate-cluster-config.yml
       - .env.example
+      - docs/TRADE_CLUSTER_FOUNDATION_20260914.zh-CN.md
+      - docs/BINANCE_BYBIT_ROADMAP.zh-CN.md
+      - docs/CLUSTER_DEV_LOCAL_COMMON_BUILD.zh-CN.md
+      - docs/AUTO_UPDATE.zh-CN.md
+      - docs/USER_GUIDE.zh-CN.md
+      - SAAS_IMPLEMENTATION_PLAN.md
+      - CONTRIBUTING.md
+      - README.md
       - compose.yaml
       - auto-update-saas.sh
       - tests/test-auto-update-saas.sh
