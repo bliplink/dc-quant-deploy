@@ -146,6 +146,14 @@ grep -Fq '/api:' "${SCRIPT_DIR}/docs/openapi/crypto-openapi-v1.yaml" ||
   fail "OpenAPI spec does not describe the native /api transport"
 grep -Fq '/httpapi/:' "${SCRIPT_DIR}/docs/openapi/crypto-openapi-v1.yaml" ||
   fail "OpenAPI spec does not describe the native /httpapi/ transport"
+grep -Fq 'tenantApiKeyAdmin' "${SCRIPT_DIR}/docs/DC_OPEN_API_V1_REFERENCE.zh-CN.md" ||
+  fail "field-level Open API reference does not document tenant API keys"
+grep -Fq 'dc.trade.accountbalance.<UserID>.<Location>' "${SCRIPT_DIR}/docs/DC_OPEN_API_V1_REFERENCE.zh-CN.md" ||
+  fail "field-level Open API reference does not document account topics"
+grep -Fq 'dc.order.trade.<SecurityID>.*.<UserID>.<Location>' "${SCRIPT_DIR}/docs/DC_OPEN_API_V1_REFERENCE.zh-CN.md" ||
+  fail "field-level Open API reference does not document execution topics"
+! grep -Fq 'OpenApiSvr-' "${SCRIPT_DIR}/docs/DC_OPEN_API_V1_REFERENCE.zh-CN.md" ||
+  fail "field-level Open API reference still depends on obsolete OpenApiSvr topology"
 grep -Fq 'MARKET_READ,ACCOUNT_READ,ORDER_READ,ORDER_WRITE' "${SCRIPT_DIR}/mysql/migrations/20260919_open_api_key_policy.sql" ||
   fail "Open API trader permission defaults are missing"
 grep -Fq "open_api_key_policy_columns" "${SCRIPT_DIR}/validate-saas.sh" ||
