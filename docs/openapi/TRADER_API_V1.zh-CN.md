@@ -27,6 +27,18 @@ POST /api -> LoginSvr/apiKeyLogin
 
 signed login 的签名、Header 和 envelope 见 [字段级调用参考](../DC_OPEN_API_V1_REFERENCE.zh-CN.md)。
 
+连接 GW TCP/WebSocket 时，Trader 客户端使用：
+
+```text
+userName = apiKeyLogin 返回的 user_id
+pwd      = apiKeyLogin 返回的 sid/token
+clientType/client_type = API
+Location/location      = apiKeyLogin 返回的 authoritative location
+authType               = TOKEN
+```
+
+客户端不能自行把 `client_type` 改成 TenantAPI/TenantAdmin 来扩大权限。
+
 ## 2. Trader API Key 权限
 
 允许的 scope：
