@@ -154,6 +154,8 @@ last_used_time
 - `rate_limit_profile` 由服务端按 API Key 类型分配，客户端不能选择、更改或提升级别；当前 SaaS 部署策略为 `TRADER_STANDARD = 100 req/s`、burst `30`，`TENANT_STANDARD = 20 req/s`、burst `10`；
 - GW 使用独立 token bucket：`req/s` 是持续补充速率，`burst` 是瞬时桶容量，因此 Trader 并不表示可在瞬间发送 100 个请求，默认瞬时容量为 30；
 - 该 profile 只约束 `API`/`TenantAPI` Session 的业务请求；signed `/api` 的 API Key 登录交换本身不使用该 Session profile，`WEB`/`TenantAdmin` 也不受这两个 Open API profile 控制；
+- `last_used_time` 在 API Key 通过身份/location/enable/expiry 等校验并成功创建 API/TenantAPI Session 后更新；失败认证不会刷新该时间；
+- `last_used_time` 是安全审计元数据，不在每笔订单、行情、账户等 Session 业务请求上写数据库，因此不会把高频业务流量转换成高频审计写；该审计字段持久化失败只记录服务端错误，不把已成功创建的 API Session 反向判为登录失败；
 - 私有业务请求中的 `Location/UserID` 不是权威身份，下游服务仍由 Session 覆盖并校验冲突。
 
 ## 4. GW HTTP 协议

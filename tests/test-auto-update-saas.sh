@@ -164,6 +164,12 @@ grep -Fq '<property name="tenantStandardBurst" value="10"/>' "${SCRIPT_DIR}/gene
 grep -Fq 'TRADER_STANDARD = 100 req/s' "${SCRIPT_DIR}/docs/CRYPTO_OPEN_API_V1.zh-CN.md" &&
 grep -Fq 'TENANT_STANDARD = 20 req/s' "${SCRIPT_DIR}/docs/CRYPTO_OPEN_API_V1.zh-CN.md" ||
   fail "Open API rate-limit profile deployment policy is undocumented"
+grep -Fq '成功创建 API/TenantAPI Session 后更新' "${SCRIPT_DIR}/docs/CRYPTO_OPEN_API_V1.zh-CN.md" &&
+grep -Fq '不在每笔订单、行情、账户等 Session 业务请求上写数据库' "${SCRIPT_DIR}/docs/CRYPTO_OPEN_API_V1.zh-CN.md" ||
+  fail "Open API last_used_time runtime policy is undocumented"
+grep -Fq 'last_used_time' "${SCRIPT_DIR}/docs/DC_OPEN_API_V1_REFERENCE.zh-CN.md" &&
+! grep -Fq '1. `last_used_time` 更新' "${SCRIPT_DIR}/docs/DC_OPEN_API_V1_REFERENCE.zh-CN.md" ||
+  fail "Open API last_used_time is still listed as a GA TODO"
 ! grep -Fq 'OpenApiSvr-' "${SCRIPT_DIR}/docs/CRYPTO_OPEN_API_V1.zh-CN.md" ||
   fail "obsolete OpenApiSvr topology is still documented"
 grep -Fq '/api:' "${SCRIPT_DIR}/docs/openapi/crypto-openapi-v1.yaml" ||

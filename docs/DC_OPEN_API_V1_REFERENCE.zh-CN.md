@@ -592,15 +592,15 @@ ADL_LEDGER
 - `permissions` 的细粒度 `READ/WRITE` 下游强制执行；
 - Trader/Tenant API Key 可选择各自权限域内的非空 scope 子集，且不能跨域提权；
 - `ip_whitelist` 已在 GW signed `/api` 入口强制执行，支持 IPv4/IPv6 单 IP 与 CIDR；当前直连部署使用 socket peer，不信任客户端代理头；
-- `rate_limit_profile` 已在 GW Session 业务请求入口强制执行：`TRADER_STANDARD` 为 100 req/s、burst 30，`TENANT_STANDARD` 为 20 req/s、burst 10；按 `sid` 独立 token bucket 限流，`WEB`/`TenantAdmin` 不进入该 Open API profile。
+- `rate_limit_profile` 已在 GW Session 业务请求入口强制执行：`TRADER_STANDARD` 为 100 req/s、burst 30，`TENANT_STANDARD` 为 20 req/s、burst 10；按 `sid` 独立 token bucket 限流，`WEB`/`TenantAdmin` 不进入该 Open API profile；
+- `last_used_time` 已由 LoginSvr 在成功 API Key 认证并创建 Session 后更新；失败认证不刷新，不在下游每笔订单/行情/账户请求上更新，审计持久化失败不阻断已成功的 API 登录。
 
 在“对外 GA”前仍要完成：
 
-1. `last_used_time` 更新；
-2. API 错误码公开白名单，禁止泄露内部异常；
-3. WebSocket 全 topic reference、image/increment、sequence/gap/reconnect 规范；
-4. Java/Python SDK；
-5. Trader API E2E：Trader API Key -> signed HTTP login -> TCP/WebSocket -> 下单 -> 成交 -> balance/position -> reconnect；
-6. 现有 `marketIndicator=4` 的 topic 兼容方案，为后续同 symbol 多市场做准备。
+1. API 错误码公开白名单，禁止泄露内部异常；
+2. WebSocket 全 topic reference、image/increment、sequence/gap/reconnect 规范；
+3. Java/Python SDK；
+4. Trader API E2E：Trader API Key -> signed HTTP login -> TCP/WebSocket -> 下单 -> 成交 -> balance/position -> reconnect；
+5. 现有 `marketIndicator=4` 的 topic 兼容方案，为后续同 symbol 多市场做准备。
 
 这些项完成后，才把 Crypto Open API v1 标记为 External GA。
