@@ -21,6 +21,9 @@ paths:
         Canonical v1 use is LoginSvr/apiKeyLogin to exchange an API key for a
         tenant-scoped user session. signature = HEX(HMAC-SHA256(secret_key,
         UTF8(raw_http_body + expiry))). expiry is epoch milliseconds.
+        LoginSvr snapshots api_key_type, permissions and rate_limit_profile
+        into the returned session. That snapshot is authoritative for the
+        lifetime of the session and request content cannot widen it.
       security:
         - DcApiKey: []
       parameters:
@@ -58,6 +61,20 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/GwResponse'
+              examples:
+                traderSession:
+                  value:
+                    code: 0
+                    msg: NO_ERROR
+                    data:
+                      client_type: API
+                      user_id: '500020'
+                      location: TENANT_A
+                      token: opaque-session-token
+                      sid: opaque-session-token
+                      api_key_type: trade
+                      permissions: MARKET_READ,ACCOUNT_READ,ORDER_READ,ORDER_WRITE
+                      rate_limit_profile: TRADER_STANDARD
   /httpapi/:
     post:
       tags: [session]
@@ -66,6 +83,10 @@ paths:
         Used by Trade Web, Tenant Web and Open API clients after login.
         Downstream services bind authoritative location/user identity from the
         LoginSvr session; caller supplied identity cannot widen scope.
+        API/TenantAPI requests must also satisfy the permission snapshot carried
+        by that session. Token refresh/resume preserves the same snapshot.
+        Pre-upgrade API sessions without a persisted snapshot fail closed and
+        must perform signed API-key login again.
       parameters:
         - name: sessionId
           in: header
@@ -136,6 +157,37 @@ components:
           oneOf:
             - type: object
             - type: string
+    OpenApiSessionIdentity:
+      type: object
+      required:
+        - client_type
+        - user_id
+        - location
+        - token
+        - api_key_type
+        - permissions
+        - rate_limit_profile
+      properties:
+        client_type:
+          type: string
+          enum: [API, TenantAPI]
+        user_id:
+          type: string
+        location:
+          type: string
+        token:
+          type: string
+        sid:
+          type: string
+        api_key_type:
+          type: string
+          enum: [trade, tenant, service]
+        permissions:
+          type: string
+          description: Comma-separated v1 scopes; exact-scope matching is required.
+        rate_limit_profile:
+          type: string
+          example: TRADER_STANDARD
     GwResponse:
       type: object
       required: [code, msg]
