@@ -150,10 +150,10 @@ grep -Fq 'POST /httpapi/' "${SCRIPT_DIR}/docs/CRYPTO_OPEN_API_V1.zh-CN.md" ||
   fail "Crypto Open API session GW transport is missing"
 grep -Fq 'tenantUserAdmin' "${SCRIPT_DIR}/docs/CRYPTO_OPEN_API_V1.zh-CN.md" ||
   fail "Tenant API contract is missing"
-grep -Fq '固定权限模板' "${SCRIPT_DIR}/docs/CRYPTO_OPEN_API_V1.zh-CN.md" ||
-  fail "Open API v1 fixed permission-template policy is undocumented"
-grep -Fq '细粒度只读/可写 scope' "${SCRIPT_DIR}/docs/CRYPTO_OPEN_API_V1.zh-CN.md" ||
-  fail "Open API stage-two scope boundary is undocumented"
+grep -Fq '受控的 scope 子集' "${SCRIPT_DIR}/docs/CRYPTO_OPEN_API_V1.zh-CN.md" ||
+  fail "Open API v1 controlled scope-subset policy is undocumented"
+grep -Fq '逐方法运行时门禁' "${SCRIPT_DIR}/docs/CRYPTO_OPEN_API_V1.zh-CN.md" ||
+  fail "Open API stage-two runtime scope enforcement is undocumented"
 ! grep -Fq 'OpenApiSvr-' "${SCRIPT_DIR}/docs/CRYPTO_OPEN_API_V1.zh-CN.md" ||
   fail "obsolete OpenApiSvr topology is still documented"
 grep -Fq '/api:' "${SCRIPT_DIR}/docs/openapi/crypto-openapi-v1.yaml" ||
