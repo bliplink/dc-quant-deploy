@@ -430,7 +430,7 @@ dc.order.trade.<SecurityID>.*.<UserID>.<Location>
 dc.md.trade.<SecurityID>.<Location>
 ```
 
-后续会把全部公开 topic、image/increment、sequence、Gap、重连语义整理成单独 WebSocket/Topic Reference。内部未正式纳入 v1 目录的 topic 不承诺兼容。
+全部公开 topic、image/increment、sequence、Gap、重连语义已经冻结到 [WebSocket / Topic Reference v1](openapi/WEBSOCKET_TOPICS_V1.zh-CN.md)。Trader 与 Tenant 入口分别见 [Trader API v1](openapi/TRADER_API_V1.zh-CN.md) 和 [Tenant API v1](openapi/TENANT_API_V1.zh-CN.md)。未正式纳入该 Reference 的内部 topic 不承诺 v1 兼容。
 
 ## 8. 集群透明性
 
