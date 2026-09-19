@@ -1,20 +1,29 @@
 # 集群开发期本地 Common Docker 验证
 
+> 当前基线：2026-09-19。本文描述的是 **Common/Order/GW 定向开发镜像** 的专项流程，
+> 不是当前完整 SaaS 单机安装入口。需要从源码构建整个系统时，优先使用
+> `IMAGE_SOURCE=local sudo ./install-saas.sh --full-cluster`；该完整流程会固定
+> gateway-api tag、校验所有 `com.app.dc` 消费者版本、构建 Projection/Trade/Liq/MD/APS/Login/Manager/Admin/Robot
+> 以及三个 Web，并统一写入镜像 provenance。
+
 ## 目的
 
 在不发布 Maven Central 的情况下，将本地编译的 `com.app.common` 固化进 OrderSvr、GW 开发镜像，用于集群功能联调。该流程只用于开发和验收；正式生产镜像仍必须先发布 Maven Central，再由 GitHub Actions 构建公开 GHCR 镜像。
 
 ## 当前依赖链
 
+专项脚本会从本地 POM **动态读取并校验** GAV，不再以本文中的旧版本号作为构建依据。当前主线关键坐标为：
+
 ```text
-io.github.bliplink:com.app.common:3.0.5
-├─ com.app.dc:com.app.dc:0.0.3-SNAPSHOT
+io.github.bliplink:com.app.common:3.0.13
+├─ com.app.dc:com.app.dc:0.0.4-SNAPSHOT
 │  └─ com.app.dc:com.app.dc.ordersvr:0.0.1-SNAPSHOT
-└─ io.github.bliplink:gw:3.0.6
-   └─ io.github.bliplink:gw-app:3.0.3
+└─ GW wrapper
+   ├─ gateway library: 3.0.12
+   └─ gateway-api: 3.0.6
 ```
 
-OrderSvr 不是直接引用 `com.app.common`，而是通过 `com.app.dc` 传递引用。GW library 直接引用 `com.app.common`，GW运行镜像由 `gw-app` wrapper 构建。因此不能只向容器复制一个 Common JAR，必须按依赖链重新编译。
+完整本地源码构建另外固定从 `gateway-api-java-v3.0.6` tag 安装 gateway-api。OrderSvr 通过 `com.app.dc` 传递使用 Common，GW 运行镜像直接携带 Common/Gateway 运行依赖，因此不能只复制一个 Common JAR；必须重新编译并验证运行时仅存在一个 `com.app.common-*.jar`，且集群相关镜像中的 SHA256 一致。
 
 ## 安全约束
 
