@@ -408,6 +408,7 @@ log4j.writeTime=true
 log4j.async=true
 
 server.servlet.context-path=/dc
+server.address=127.0.0.1
 server.port=${LOGINSVR_HTTP_PORT}
 
 dbpool.cfg=../../control/DBPoolConfig.ini
@@ -861,11 +862,12 @@ cat > "${OVERRIDE_ROOT}/GW/config/spring-gw-client.xml" <<'EOF'
         <entry key="APSSvr" value="dc.aps|dc.aps.**|dc.bookticker.**|dc.trade.**"/>
       </map>
     </property>
-    <property name="securityChecks"><list><ref bean="sqlInjSecurityCheck"/></list></property>
+    <property name="securityChecks"><list><ref bean="openApiIngressSecurityCheck"/><ref bean="sqlInjSecurityCheck"/></list></property>
     <property name="filterTopics"><list><ref bean="apiKeyService"/></list></property>
     <property name="ApiKeyService" ref="apiKeyService"/>
   </bean>
   <bean id="apiKeyService" class="com.gateway.invoke.filter.apikey.ApiKeyService"/>
+  <bean id="openApiIngressSecurityCheck" class="com.app.gw.security.OpenApiIngressSecurityCheck"/>
   <bean id="limitSecurityCheck" class="com.gateway.invoke.security.LimitSecurityCheck" init-method="init">
     <property name="tcpSessionManager" ref="tcpSessionManager"/>
     <property name="limitQps" value="100"/>

@@ -66,6 +66,17 @@ gateway_client_config="${DEPLOY_ROOT}/control/overrides/GW/config/spring-gw-clie
 grep -Fq 'dc.md.orderbook.**' "${gateway_client_config}" ||
   die "GW is not subscribed to tenant order-book broadcasts (dc.md.orderbook.**)."
 
+grep -Fq 'openApiIngressSecurityCheck' "${gateway_client_config}" ||
+  die "GW Open API ingress policy is not enabled."
+grep -Fq 'com.app.gw.security.OpenApiIngressSecurityCheck' "${gateway_client_config}" ||
+  die "GW Open API ingress policy bean is missing."
+
+login_config="${DEPLOY_ROOT}/control/overrides/LoginSvr/config/application.properties"
+[[ -r "${login_config}" ]] ||
+  die "Generated LoginSvr configuration is missing: ${login_config}."
+grep -Fqx 'server.address=127.0.0.1' "${login_config}" ||
+  die "LoginSvr REST endpoint must bind to 127.0.0.1; external API traffic must enter through GW."
+
 services="$(compose config --services)"
 if grep -Eiq '(^|_)(quant|ind|sim|batch|customind)' <<<"${services}"; then
   die "Quantitative-trading services leaked into the SaaS compose model."
