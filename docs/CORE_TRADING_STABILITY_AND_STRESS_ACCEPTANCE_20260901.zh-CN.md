@@ -1,5 +1,7 @@
 # DC SaaS 核心交易稳定性与压力验收报告
 
+> **历史验收快照说明（2026-09-19）**：本文的 3000×32 是 2026-09-01 的历史高压证据；当前 `acceptance-saas.sh` 的强制默认压力基线为 1000 resting + mass cancel + 1000 maker + 1000 taker、并发 16，可通过 `ACCEPTANCE_STRESS_ORDERS` / `ACCEPTANCE_STRESS_CONCURRENCY` 提高负载。 当前安装/卸载/全系统验收请以仓库 `README.md`、`docs/USER_GUIDE.zh-CN.md` 和 `acceptance-saas.sh` 为准；本文原始日期、性能数字、镜像/提交和缺陷记录保留为当时证据，不改写成当前运行结果。
+
 文档版本：V1.0
 
 验收日期：2026-09-01
