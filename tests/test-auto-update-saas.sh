@@ -13,8 +13,11 @@ for script in \
   "${SCRIPT_DIR}/install-auto-update-cron.sh" \
   "${SCRIPT_DIR}/install-saas.sh" \
   "${SCRIPT_DIR}/deploy-saas.sh" \
+  "${SCRIPT_DIR}/acceptance-saas.sh" \
   "${SCRIPT_DIR}/tests/recover-order-cluster-partitions-host.sh" \
   "${SCRIPT_DIR}/tests/restart-order-trade-e2e.sh" \
+  "${SCRIPT_DIR}/tests/prepare-web-trading-e2e.sh" \
+  "${SCRIPT_DIR}/tests/run-web-trading-e2e-host.sh" \
   "${SCRIPT_DIR}/tests/run-core-trading-acceptance.sh" \
   "${SCRIPT_DIR}/tests/run-core-trading-stress-host.sh" \
   "${SCRIPT_DIR}/tests/run-trade-cluster-role-reversal-host.sh" \
@@ -94,6 +97,20 @@ grep -Fq 'SOURCE_GIT_TOKEN in the protected runtime environment' "${SCRIPT_DIR}/
   fail "private source clone failure does not explain SOURCE_GIT_TOKEN"
 grep -Fq 'SOURCE_GIT_TOKEN' "${SCRIPT_DIR}/README.md" ||
   fail "private local source authentication is undocumented"
+grep -Fq 'tenantUserRegistration' "${SCRIPT_DIR}/tests/prepare-web-trading-e2e.sh" ||
+  fail "core trading acceptance must create users through the public registration handler"
+grep -Fq 'E2E_BUYER_ID' "${SCRIPT_DIR}/tests/run-web-trading-e2e-host.sh" ||
+  fail "browser trading acceptance does not resolve registered user identities"
+grep -Fq 'tests/run-core-trading-acceptance.sh' "${SCRIPT_DIR}/acceptance-saas.sh" ||
+  fail "unified acceptance does not run the core business flow"
+grep -Fq 'tests/run-trade-cluster-role-reversal-host.sh' "${SCRIPT_DIR}/acceptance-saas.sh" ||
+  fail "unified acceptance does not exercise TradeSvr role reversal"
+[[ "$(grep -Fc 'validate-saas.sh' "${SCRIPT_DIR}/acceptance-saas.sh")" -ge 2 ]] ||
+  fail "unified acceptance must validate health before and after business/failover tests"
+grep -Fq 'acceptance-summary.json' "${SCRIPT_DIR}/acceptance-saas.sh" ||
+  fail "unified acceptance does not write a summary artifact"
+grep -Fq 'sudo ./acceptance-saas.sh' "${SCRIPT_DIR}/README.md" ||
+  fail "full business acceptance command is undocumented"
 
 for image_var in \
   GW_IMAGE_REPOSITORY LOGINSVR_IMAGE_REPOSITORY MDSVR_IMAGE_REPOSITORY APSSVR_IMAGE_REPOSITORY \
