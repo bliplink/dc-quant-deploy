@@ -62,5 +62,19 @@ docker exec \
   "${E2E_RUNNER_NAME}" bash -lc \
   'cd /runner && [[ -f package.json ]] || npm init -y >/dev/null 2>&1; [[ -d node_modules/playwright ]] || npm install --no-fund --no-audit playwright@1.55.0 >/dev/null; NODE_PATH=/runner/node_modules node /work/tenant-lifecycle-web-e2e.js'
 
+docker exec \
+  -e TENANT_CONSOLE_BASE_URL="http://127.0.0.1:18092" \
+  -e PLATFORM_CONSOLE_BASE_URL="http://127.0.0.1:18090" \
+  -e E2E_SUFFIX="${E2E_SUFFIX}" \
+  -e E2E_LOCATION_A="${E2E_LOCATION_A}" -e E2E_LOCATION_B="${E2E_LOCATION_B}" \
+  -e E2E_ADMIN_USER="${E2E_ADMIN_USER}" \
+  -e E2E_ADMIN_PASSWORD_A="${admin_password_a}" -e E2E_ADMIN_PASSWORD_B="${admin_password_b}" \
+  -e E2E_SHARED_USER="${E2E_SHARED_USER:-sharedtrader}" \
+  -e E2E_TRADER_PASSWORD_A="${trader_password_a}" -e E2E_TRADER_PASSWORD_B="${trader_password_b}" \
+  -e PLATFORM_ADMIN_USERNAME="${PLATFORM_ADMIN_USERNAME}" -e PLATFORM_ADMIN_PASSWORD="${PLATFORM_ADMIN_PASSWORD}" \
+  -e E2E_ARTIFACT_DIR="${container_artifact_dir}/standalone-consoles" \
+  "${E2E_RUNNER_NAME}" bash -lc \
+  'NODE_PATH=/runner/node_modules node /work/tenant-platform-console-e2e.js'
+
 printf '[tenant-web-e2e] PASS; locations: %s, %s; artifacts: %s\n' \
   "${E2E_LOCATION_A}" "${E2E_LOCATION_B}" "${artifact_dir}"
