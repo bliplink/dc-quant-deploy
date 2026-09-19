@@ -1,5 +1,7 @@
 # DC SaaS Web 行情与持仓风险验收（2026-09-08）
 
+> **历史验收快照说明（2026-09-19）**：本文关于非零持仓截图等未覆盖项属于 2026-09-08 批次；当前核心业务验收已经包含真实成交、持仓、平仓和风险链，是否在某台主机 PASS 仍以该次 `acceptance-saas.sh` 结果为准。 当前操作、拓扑和统一验收以仓库 `README.md`、`docs/USER_GUIDE.zh-CN.md`、`SAAS_IMPLEMENTATION_PLAN.md` 和 `acceptance-saas.sh` 为准；本文原始结论与数字按当时版本保留。
+
 ## 1. 结论
 
 本批 Web 改造已发布到生产主机 `18.140.45.126`，生产容器 `dc-saas-trade-web` 健康运行。
