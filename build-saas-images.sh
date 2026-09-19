@@ -93,6 +93,91 @@ run_maven() {
   docker run --rm --memory=3g -e MAVEN_OPTS="-Xms64m -Xmx1024m -XX:+UseSerialGC" -v "${M2_ROOT}:/root/.m2:Z" -v "${source_dir}:/workspace:Z" -w /workspace "${MAVEN_BUILD_IMAGE}" mvn -B -U "$@"
 }
 
+project_common_version() {
+  awk '
+    /<artifactId>[[:space:]]*com\.app\.dc[[:space:]]*<\/artifactId>/ { seen_artifact = 1; next }
+    seen_artifact && /<version>/ {
+      line = $0
+      sub(/^.*<version>[[:space:]]*/, "", line)
+      sub(/[[:space:]]*<\/version>.*$/, "", line)
+      print line
+      exit
+    }
+  ' "$1"
+}
+
+common_dependency_version() {
+  awk '
+    /<dependency>/ {
+      in_dependency = 1
+      group_id = ""
+      artifact_id = ""
+      version = ""
+    }
+    in_dependency && /<groupId>/ {
+      value = $0
+      sub(/^.*<groupId>[[:space:]]*/, "", value)
+      sub(/[[:space:]]*<\/groupId>.*$/, "", value)
+      group_id = value
+    }
+    in_dependency && /<artifactId>/ {
+      value = $0
+      sub(/^.*<artifactId>[[:space:]]*/, "", value)
+      sub(/[[:space:]]*<\/artifactId>.*$/, "", value)
+      artifact_id = value
+    }
+    in_dependency && /<version>/ {
+      value = $0
+      sub(/^.*<version>[[:space:]]*/, "", value)
+      sub(/[[:space:]]*<\/version>.*$/, "", value)
+      version = value
+    }
+    /<\/dependency>/ {
+      if (in_dependency && group_id == "com.app.dc" && artifact_id == "com.app.dc") {
+        print version
+        exit
+      }
+      in_dependency = 0
+    }
+  ' "$1"
+}
+
+verify_source_dependency_alignment() {
+  local common_pom="${SRC_ROOT}/common/pom.xml"
+  local common_version service pom dependency_version
+  local common_consumers=(
+    ordersvr projectionsvr tradesvr liqsvr mdsvr apssvr
+    loginsvr managersvr adminsvr robotsvr
+  )
+  local all_maven_sources=(
+    common connector ordersvr projectionsvr tradesvr liqsvr mdsvr apssvr
+    loginsvr managersvr adminsvr robotsvr gateway
+  )
+
+  common_version="$(project_common_version "${common_pom}")"
+  [[ -n "${common_version}" ]] || die "Cannot determine com.app.dc project version from ${common_pom}."
+
+  for service in "${common_consumers[@]}"; do
+    pom="${SRC_ROOT}/${service}/pom.xml"
+    [[ -f "${pom}" ]] || die "Missing Maven descriptor for ${service}: ${pom}"
+    dependency_version="$(common_dependency_version "${pom}")"
+    [[ -n "${dependency_version}" ]] ||
+      die "${service} does not declare an explicit com.app.dc:com.app.dc dependency version."
+    [[ "${dependency_version}" == "${common_version}" ]] ||
+      die "${service} expects com.app.dc ${dependency_version}, but local common source is ${common_version}."
+  done
+
+  for service in "${all_maven_sources[@]}"; do
+    pom="${SRC_ROOT}/${service}/pom.xml"
+    [[ -f "${pom}" ]] || die "Missing Maven descriptor for ${service}: ${pom}"
+    if grep -Eq '<version>[[:space:]]*(LATEST|RELEASE)[[:space:]]*</version>' "${pom}"; then
+      die "${service} uses a dynamic Maven dependency version (LATEST/RELEASE); pin it before local-source build."
+    fi
+  done
+
+  log "Verified local Maven dependency alignment against com.app.dc ${common_version}."
+}
+
 build_java_image() {
   local source_name="$1"
   local image_ref="$2"
@@ -118,6 +203,8 @@ sync_repo gateway https://github.com/bliplink/gw.git saas-crypto
 sync_repo trade-web https://github.com/SKT-Walter/dc-trade-web.git saas-crypto
 sync_repo tenant-web https://github.com/bliplink/dc-saas-tenant-web.git main
 sync_repo platform-web https://github.com/bliplink/dc-saas-platform-web.git saas
+
+verify_source_dependency_alignment
 
 log "Pulling the reproducible Maven build environment."
 docker pull "${MAVEN_BUILD_IMAGE}"
