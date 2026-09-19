@@ -83,10 +83,13 @@ paths:
         Used by Trade Web, Tenant Web and Open API clients after login.
         Downstream services bind authoritative location/user identity from the
         LoginSvr session; caller supplied identity cannot widen scope.
-        API/TenantAPI requests must also satisfy the permission snapshot carried
-        by that session. Token refresh/resume preserves the same snapshot.
-        Pre-upgrade API sessions without a persisted snapshot fail closed and
-        must perform signed API-key login again.
+        API/TenantAPI sessions carry the permission snapshot so downstream
+        services have one authoritative field/model for scope checks. Phase 1
+        keeps fixed Trader/Tenant permission templates plus the existing
+        client-type boundary; per-method fine-grained scope gates are a Phase 2
+        concern. Token refresh/resume preserves the same snapshot. Pre-upgrade
+        API sessions without a persisted snapshot fail closed and must perform
+        signed API-key login again.
       parameters:
         - name: sessionId
           in: header
