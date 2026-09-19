@@ -88,6 +88,12 @@ grep -Fq 'sync_repo gateway-api https://github.com/bliplink/gateway-api.git gate
   fail "local builder is missing the pinned gateway-api source"
 grep -Fq 'run_maven "${SRC_ROOT}/gateway-api/gateway-api-java/gateway-api" clean install -DskipTests' "${SCRIPT_DIR}/build-saas-images.sh" ||
   fail "local builder must install gateway-api before com.app.dc"
+grep -q '^prepare_git_auth()' "${SCRIPT_DIR}/build-saas-images.sh" ||
+  fail "private source Git authentication helper is missing"
+grep -Fq 'SOURCE_GIT_TOKEN in the protected runtime environment' "${SCRIPT_DIR}/build-saas-images.sh" ||
+  fail "private source clone failure does not explain SOURCE_GIT_TOKEN"
+grep -Fq 'SOURCE_GIT_TOKEN' "${SCRIPT_DIR}/README.md" ||
+  fail "private local source authentication is undocumented"
 
 for image_var in \
   GW_IMAGE_REPOSITORY LOGINSVR_IMAGE_REPOSITORY MDSVR_IMAGE_REPOSITORY APSSVR_IMAGE_REPOSITORY \
