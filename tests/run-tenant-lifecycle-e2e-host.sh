@@ -206,6 +206,30 @@ expect_rejected "admin cross-location request" "${cross_location_response}"
 trader_admin_response="$(api_call "${users_payload}" "${trader_token_a}")"
 expect_rejected "trader tenant-admin request" "${trader_admin_response}"
 
+admin_trader_key_payload="$(printf '{"serverName":"LoginSvr","method":"updateApiKey","content":{"cid":"ADMIN_TRADER_KEY_E2E","label":"admin-trader-%s","type":"tenant","permissions":"TENANT_WRITE","rate_limit_profile":"TENANT_HIGH"}}' "${E2E_SUFFIX}")"
+admin_trader_key_response="$(api_call "${admin_trader_key_payload}" "${admin_token_a}")"
+expect_ok "tenant-admin user trader API key creation" "${admin_trader_key_response}"
+admin_trader_api_key="$(printf '%s' "${admin_trader_key_response}" | json_eval 'd["data"]["api_key"]')"
+admin_trader_api_secret="$(printf '%s' "${admin_trader_key_response}" | json_eval 'd["data"]["secret_key"]')"
+[[ "$(printf '%s' "${admin_trader_key_response}" | json_eval 'd["data"]["type"]')" == "trade" ]] ||
+  die "trader self-service key accepted caller supplied tenant key type"
+[[ "$(printf '%s' "${admin_trader_key_response}" | json_eval 'd["data"]["permissions"]')" == "MARKET_READ,ACCOUNT_READ,ORDER_READ,ORDER_WRITE" ]] ||
+  die "trader self-service key accepted caller supplied tenant scope"
+
+admin_trader_login_payload="$(printf '{"serverName":"LoginSvr","method":"apiKeyLogin","content":{"api_key":"%s","location":"%s","cid":"ADMIN_TRADER_LOGIN_E2E"}}' "${admin_trader_api_key}" "${E2E_LOCATION_A}")"
+admin_trader_login_response="$(signed_api_call "${admin_trader_login_payload}" "${admin_trader_api_key}" "${admin_trader_api_secret}")"
+expect_ok "tenant-admin user trader API login" "${admin_trader_login_response}"
+admin_trader_api_token="$(printf '%s' "${admin_trader_login_response}" | json_eval 'd["data"]["token"]')"
+[[ "$(printf '%s' "${admin_trader_login_response}" | json_eval 'd["data"]["client_type"]')" == "API" ]] ||
+  die "trader key did not create an API session"
+admin_trader_admin_response="$(api_call "${users_payload}" "${admin_trader_api_token}")"
+expect_rejected "Trader API session cannot use Tenant Admin role" "${admin_trader_admin_response}"
+
+admin_trader_key_delete_payload="$(printf '{"serverName":"LoginSvr","method":"deleteApiKey","content":{"api_key":"%s","cid":"ADMIN_TRADER_KEY_DELETE_E2E"}}' "${admin_trader_api_key}")"
+admin_trader_key_delete_response="$(api_call "${admin_trader_key_delete_payload}" "${admin_token_a}")"
+expect_ok "tenant-admin user trader API key cleanup" "${admin_trader_key_delete_response}"
+log "Trader API boundary verified: caller-supplied tenant scope ignored; API session denied Tenant control-plane access."
+
 tenant_key_create_payload="$(printf '{"serverName":"LoginSvr","method":"tenantApiKeyAdmin","content":{"action":"CREATE","label":"tenant-e2e-%s","cid":"TENANT_KEY_CREATE_E2E"}}' "${E2E_SUFFIX}")"
 tenant_key_create_response="$(api_call "${tenant_key_create_payload}" "${admin_token_a}")"
 expect_ok "tenant service API key creation" "${tenant_key_create_response}"
