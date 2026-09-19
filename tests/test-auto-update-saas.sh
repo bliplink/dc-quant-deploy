@@ -28,6 +28,9 @@ done
 [[ -x "${SCRIPT_DIR}/install-saas.sh" ]] ||
   fail "install-saas.sh must be executable"
 
+[[ -x "${SCRIPT_DIR}/acceptance-saas.sh" ]] ||
+  fail "acceptance-saas.sh must be executable"
+
 updater="${SCRIPT_DIR}/auto-update-saas.sh"
 service_block="$(sed -n '/^APP_SERVICES=(/,/^)/p' "${updater}")"
 
