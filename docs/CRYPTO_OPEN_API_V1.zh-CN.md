@@ -117,7 +117,8 @@ Tenant Service key 不拥有 `ORDER_WRITE`。租户自研 Robot 应使用独立�
 - `tenantApiKeyAdmin.CREATE` 无论客户端是否提交 `permissions/type/rate_limit_profile`，服务端都强制生成 Tenant Service key，并使用 Tenant 默认模板；
 - Trader API Session 的服务端类型为 `API`；
 - Tenant Service API Session 的服务端类型为 `TenantAPI`；
-- OrderSvr/TradeSvr 明确拒绝 `TenantAPI`，AdminSvr 只接受有租户管理权限的会话。
+- OrderSvr/TradeSvr 明确拒绝 `TenantAPI`；
+- AdminSvr Tenant Control Plane 只接受 `TenantAdmin` 和 `TenantAPI` 会话，即使某个 TENANT_ADMIN 用户使用普通 Trader key 登录成 `API`，也必须拒绝其租户管理调用。
 
 这样阶段 1 已经具备稳定的“交易数据面 / 租户控制面”硬隔离，不会出现客户端自行扩大权限的情况。
 
