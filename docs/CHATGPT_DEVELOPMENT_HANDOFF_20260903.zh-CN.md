@@ -1,5 +1,7 @@
 # DC SaaS 加密货币永续合约系统开发交接
 
+> **历史交接快照说明（2026-09-19）**：本文是 2026-09-03 的开发交接清单，不是当前 backlog。其“RobotSvr 尚未部署”“集群/Projection 未完成”等多项内容后来已经实现或纳入统一验收。当前状态请以 `README.md`、`SAAS_IMPLEMENTATION_PLAN.md`、`docs/USER_GUIDE.zh-CN.md` 和 `acceptance-saas.sh` 为准；本文保留原始未完成项用于追溯当时决策。
+
 更新时间：2026-09-03  
 源码根目录：`E:\sourcecode\stc-saas-crypto`  
 目标分支：除 `gateway-api` 外统一使用 `saas-crypto`；`gateway-api` 使用 `3.0.0`。
