@@ -251,6 +251,35 @@ apply_full_cluster_profile() {
   log "Enabled full cluster topology: MD A/B/C, Order A/B, Trade A/B, ProjectionSvr."
 }
 
+env_file_value() {
+  local key="$1"
+  sed -n "s/^${key}=//p" "${ENV_FILE}" | tail -n 1
+}
+
+prepare_local_build_identity() {
+  local image_source local_tag key
+  image_source="$(env_file_value IMAGE_SOURCE)"
+  [[ "${image_source}" == "local" && "${SKIP_PULL}" == "false" ]] || return 0
+
+  local_tag="${SAAS_LOCAL_BUILD_TAG:-cluster-dev-local-$(date -u +%Y%m%d%H%M%S)-$}"
+  case "${local_tag}" in
+    cluster-dev-*|sha-*) ;;
+    *) die "SAAS_LOCAL_BUILD_TAG must start with cluster-dev- or sha-." ;;
+  esac
+
+  for key in \
+    GW_TAG LOGINSVR_TAG MDSVR_TAG APSSVR_TAG ORDERSVR_TAG PROJECTIONSVR_TAG \
+    TRADESVR_TAG LIQSVR_TAG MANAGERSVR_TAG ADMINSVR_TAG ROBOTSVR_TAG \
+    TRADE_WEB_TAG TENANT_WEB_TAG PLATFORM_WEB_TAG; do
+    if grep -q "^${key}=" "${ENV_FILE}"; then
+      set_env_value "${key}" "${local_tag}"
+    else
+      printf '%s=%s\n' "${key}" "${local_tag}" >> "${ENV_FILE}"
+    fi
+  done
+  log "Pinned local application images to immutable tag ${local_tag}."
+}
+
 ensure_host_runtime() {
   if command -v docker >/dev/null 2>&1 && docker compose version >/dev/null 2>&1; then
     return 0
@@ -834,6 +863,7 @@ verify_ghcr_access() {
 ensure_env_file
 ensure_env_defaults
 apply_full_cluster_profile
+prepare_local_build_identity
 ensure_host_runtime
 load_env
 validate_runtime_root
