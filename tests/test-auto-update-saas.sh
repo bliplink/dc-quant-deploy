@@ -124,6 +124,8 @@ grep -Fq 'signed_api_call' "${SCRIPT_DIR}/tests/run-tenant-lifecycle-e2e-host.sh
   fail "tenant lifecycle acceptance does not test signed GW /api authentication"
 grep -Fq 'TenantAPI OrderSvr access' "${SCRIPT_DIR}/tests/run-tenant-lifecycle-e2e-host.sh" ||
   fail "tenant lifecycle acceptance does not reject TenantAPI trading access"
+grep -Fq 'Trader API session cannot use Tenant Admin role' "${SCRIPT_DIR}/tests/run-tenant-lifecycle-e2e-host.sh" ||
+  fail "tenant lifecycle acceptance does not reject Trader API tenant-control access"
 grep -Fq 'queryAccountBalance' "${SCRIPT_DIR}/tests/run-tenant-lifecycle-e2e-host.sh" ||
   fail "tenant lifecycle acceptance does not reject TenantAPI account access"
 grep -Fq 'http://127.0.0.1:18092' "${SCRIPT_DIR}/tests/run-tenant-lifecycle-web-e2e-host.sh" ||
