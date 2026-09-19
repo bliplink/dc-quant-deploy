@@ -175,6 +175,9 @@ x-dc-v1-catalog:
       queryExecOrder: ORDER_READ
   account:
     TradeSvr:
+      queryAccountBalance: ACCOUNT_READ
+      queryTradePosition: ACCOUNT_READ
+      getAccountConfig: ACCOUNT_READ
       setLeverage: ORDER_WRITE
       setPositionType: ORDER_WRITE
   history:
