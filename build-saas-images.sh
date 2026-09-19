@@ -219,6 +219,7 @@ build_java_image() {
 }
 
 sync_repo common https://github.com/bliplink/com.app.dc.git saas-crypto
+sync_repo gateway-api https://github.com/bliplink/gateway-api.git gateway-api-java-v3.0.6
 sync_repo connector https://github.com/bliplink/binance-futures-connector.git main
 sync_repo ordersvr https://github.com/bliplink/com.app.dc.ordersvr.git saas-crypto
 sync_repo projectionsvr https://github.com/bliplink/com-app-dc-projectionsvr.git saas-crypto
@@ -241,6 +242,7 @@ log "Pulling the reproducible Maven build environment."
 docker pull "${MAVEN_BUILD_IMAGE}"
 
 log "Publishing the shared packages into the isolated build cache."
+run_maven "${SRC_ROOT}/gateway-api/gateway-api-java/gateway-api" clean install -DskipTests
 run_maven "${SRC_ROOT}/common" clean install -DskipTests
 run_maven "${SRC_ROOT}/connector" clean install -DskipTests
 
