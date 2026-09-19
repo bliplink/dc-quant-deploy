@@ -269,6 +269,9 @@ SDK/客户端不自行计算实际 partition owner，只需要向 GW 提供完�
 当前可复用：
 
 ```text
+queryAccountBalance
+queryTradePosition
+getAccountConfig
 dc.trade.accountbalance.**
 dc.trade.position.**
 setLeverage
