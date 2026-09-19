@@ -22,7 +22,9 @@ All names, ports, and data paths are isolated from a legacy STC installation:
 
 - Compose project and containers: `dc-saas*`
 - Runtime root: `/data/dc-saas-runtime` on the dedicated local data disk
-- Web: `18088`
+- Trade Web: `18088`
+- Platform Web: `18090`
+- Tenant Web: `18092`
 - ZooKeeper: `32181`
 - MySQL: `33306` (loopback only)
 - ClickHouse: `38123/39000` (loopback only)
