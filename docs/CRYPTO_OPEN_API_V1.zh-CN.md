@@ -151,6 +151,9 @@ last_used_time
 - 过期 key 在 LoginSvr fail-closed；
 - `ip_whitelist` 已在 GW signed `/api` 入口强制执行：空白名单表示不限制；非空白名单支持单个 IPv4/IPv6 与 CIDR，格式非法或来源不匹配均 fail-closed；
 - 当前 SaaS 直连部署以 Netty socket peer 作为权威来源 IP，不信任客户端自行提交的 `X-Forwarded-For`；未来若在 GW 前增加反向代理/LB，必须同时配置可信代理链路后再启用代理头；
+- `rate_limit_profile` 由服务端按 API Key 类型分配，客户端不能选择、更改或提升级别；当前 SaaS 部署策略为 `TRADER_STANDARD = 100 req/s`、burst `30`，`TENANT_STANDARD = 20 req/s`、burst `10`；
+- GW 使用独立 token bucket：`req/s` 是持续补充速率，`burst` 是瞬时桶容量，因此 Trader 并不表示可在瞬间发送 100 个请求，默认瞬时容量为 30；
+- 该 profile 只约束 `API`/`TenantAPI` Session 的业务请求；signed `/api` 的 API Key 登录交换本身不使用该 Session profile，`WEB`/`TenantAdmin` 也不受这两个 Open API profile 控制；
 - 私有业务请求中的 `Location/UserID` 不是权威身份，下游服务仍由 Session 覆盖并校验冲突。
 
 ## 4. GW HTTP 协议

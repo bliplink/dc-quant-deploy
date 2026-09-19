@@ -154,6 +154,16 @@ grep -Fq '受控的 scope 子集' "${SCRIPT_DIR}/docs/CRYPTO_OPEN_API_V1.zh-CN.m
   fail "Open API v1 controlled scope-subset policy is undocumented"
 grep -Fq '逐方法运行时门禁' "${SCRIPT_DIR}/docs/CRYPTO_OPEN_API_V1.zh-CN.md" ||
   fail "Open API stage-two runtime scope enforcement is undocumented"
+grep -Fq 'com.app.gw.security.OpenApiRateLimitSecurityCheck' "${SCRIPT_DIR}/generate-saas-configs.sh" ||
+  fail "generated SaaS GW config is missing the Open API rate-limit policy"
+grep -Fq '<property name="traderStandardQps" value="100"/>' "${SCRIPT_DIR}/generate-saas-configs.sh" &&
+grep -Fq '<property name="traderStandardBurst" value="30"/>' "${SCRIPT_DIR}/generate-saas-configs.sh" &&
+grep -Fq '<property name="tenantStandardQps" value="20"/>' "${SCRIPT_DIR}/generate-saas-configs.sh" &&
+grep -Fq '<property name="tenantStandardBurst" value="10"/>' "${SCRIPT_DIR}/generate-saas-configs.sh" ||
+  fail "generated SaaS GW rate-limit profile values are incomplete"
+grep -Fq 'TRADER_STANDARD = 100 req/s' "${SCRIPT_DIR}/docs/CRYPTO_OPEN_API_V1.zh-CN.md" &&
+grep -Fq 'TENANT_STANDARD = 20 req/s' "${SCRIPT_DIR}/docs/CRYPTO_OPEN_API_V1.zh-CN.md" ||
+  fail "Open API rate-limit profile deployment policy is undocumented"
 ! grep -Fq 'OpenApiSvr-' "${SCRIPT_DIR}/docs/CRYPTO_OPEN_API_V1.zh-CN.md" ||
   fail "obsolete OpenApiSvr topology is still documented"
 grep -Fq '/api:' "${SCRIPT_DIR}/docs/openapi/crypto-openapi-v1.yaml" ||

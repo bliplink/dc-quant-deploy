@@ -74,6 +74,17 @@ grep -Fq 'com.app.gw.security.SaasGWProxy' "${gateway_client_config}" ||
   die "GW SaaS proxy is not enforcing signed /api boundary semantics."
 grep -Fq '<ref bean="apiKeyService"/><ref bean="openApiIngressSecurityCheck"/>' "${gateway_client_config}" ||
   die "GW Open API ingress policy is not subscribed to API-key policy updates."
+grep -Fq 'com.app.gw.security.OpenApiRateLimitSecurityCheck' "${gateway_client_config}" ||
+  die "GW Open API rate-limit profile policy bean is missing."
+grep -Fq '<property name="securityChecks"><list><ref bean="openApiIngressSecurityCheck"/><ref bean="openApiRateLimitSecurityCheck"/><ref bean="sqlInjSecurityCheck"/></list></property>' "${gateway_client_config}" ||
+  die "GW Open API rate-limit profile policy is not active in request security checks."
+grep -Fq '<property name="filterTopics"><list><ref bean="apiKeyService"/><ref bean="openApiIngressSecurityCheck"/><ref bean="openApiRateLimitSecurityCheck"/></list></property>' "${gateway_client_config}" ||
+  die "GW Open API rate-limit profile policy is not subscribed to LoginSvr session updates."
+grep -Fq '<property name="traderStandardQps" value="100"/>' "${gateway_client_config}" &&
+grep -Fq '<property name="traderStandardBurst" value="30"/>' "${gateway_client_config}" &&
+grep -Fq '<property name="tenantStandardQps" value="20"/>' "${gateway_client_config}" &&
+grep -Fq '<property name="tenantStandardBurst" value="10"/>' "${gateway_client_config}" ||
+  die "GW Open API rate-limit profile values are not the SaaS baseline (Trader 100/30, Tenant 20/10)."
 
 login_config="${DEPLOY_ROOT}/control/overrides/LoginSvr/config/application.properties"
 [[ -r "${login_config}" ]] ||

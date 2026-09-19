@@ -862,12 +862,18 @@ cat > "${OVERRIDE_ROOT}/GW/config/spring-gw-client.xml" <<'EOF'
         <entry key="APSSvr" value="dc.aps|dc.aps.**|dc.bookticker.**|dc.trade.**"/>
       </map>
     </property>
-    <property name="securityChecks"><list><ref bean="openApiIngressSecurityCheck"/><ref bean="sqlInjSecurityCheck"/></list></property>
-    <property name="filterTopics"><list><ref bean="apiKeyService"/><ref bean="openApiIngressSecurityCheck"/></list></property>
+    <property name="securityChecks"><list><ref bean="openApiIngressSecurityCheck"/><ref bean="openApiRateLimitSecurityCheck"/><ref bean="sqlInjSecurityCheck"/></list></property>
+    <property name="filterTopics"><list><ref bean="apiKeyService"/><ref bean="openApiIngressSecurityCheck"/><ref bean="openApiRateLimitSecurityCheck"/></list></property>
     <property name="ApiKeyService" ref="apiKeyService"/>
   </bean>
   <bean id="apiKeyService" class="com.gateway.invoke.filter.apikey.ApiKeyService"/>
   <bean id="openApiIngressSecurityCheck" class="com.app.gw.security.OpenApiIngressSecurityCheck"/>
+  <bean id="openApiRateLimitSecurityCheck" class="com.app.gw.security.OpenApiRateLimitSecurityCheck">
+    <property name="traderStandardQps" value="100"/>
+    <property name="traderStandardBurst" value="30"/>
+    <property name="tenantStandardQps" value="20"/>
+    <property name="tenantStandardBurst" value="10"/>
+  </bean>
   <bean id="limitSecurityCheck" class="com.gateway.invoke.security.LimitSecurityCheck" init-method="init">
     <property name="tcpSessionManager" ref="tcpSessionManager"/>
     <property name="limitQps" value="100"/>
