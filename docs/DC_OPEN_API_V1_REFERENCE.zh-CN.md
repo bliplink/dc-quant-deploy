@@ -135,7 +135,7 @@ GW 在签名校验后注入 key 对应用户身份；LoginSvr 再从自己的 AP
 - Tenant 管理同时继续检查实际 TENANT_ADMIN 角色；
 - caller body 中的 location/userId 不能覆盖 Session 身份。
 - `api_key_type + permissions + rate_limit_profile` 是 LoginSvr 生成并持久化的 Session 权威快照；refresh/resume 不允许客户端扩大它。
-- 阶段 1 使用固定 Trader/Tenant 权限模板和 client-type 硬隔离；逐方法细粒度 scope 门禁在阶段 2 实现。
+- 阶段 2 已开放受控 scope 子集，并完成 Order/Trade/MD/Projection/Admin 的逐方法运行时门禁；client-type 硬隔离继续保留。
 - 升级前缺少权限快照的 `API/TenantAPI` Session fail-closed，必须重新 API Key 登录。
 
 ## 3. Trader API Key 管理
@@ -150,6 +150,7 @@ GW 在签名校验后注入 key 对应用户身份；LoginSvr 再从自己的 AP
   "method": "updateApiKey",
   "content": {
     "label": "my-robot",
+    "permissions": "MARKET_READ,ACCOUNT_READ,ORDER_READ",
     "ip_whitelist": "[\"203.0.113.10\"]",
     "expires_at": "2027-01-01T00:00:00Z",
     "cid": "key-create-001"
@@ -157,15 +158,7 @@ GW 在签名校验后注入 key 对应用户身份；LoginSvr 再从自己的 AP
 }
 ```
 
-服务端强制：
-
-```text
-type=trade
-permissions=MARKET_READ,ACCOUNT_READ,ORDER_READ,ORDER_WRITE
-rate_limit_profile=TRADER_STANDARD
-```
-
-客户端不能通过该接口把 Trader key 升级成 Tenant key。
+服务端强制 `type=trade` 和 `rate_limit_profile=TRADER_STANDARD`。若不提交 `permissions`，使用默认 `MARKET_READ,ACCOUNT_READ,ORDER_READ,ORDER_WRITE`；若提交，只允许上述 Trader scope 的任意非空子集。客户端不能通过该接口申请 `TENANT_READ/TENANT_WRITE` 或把 Trader key 升级成 Tenant key。
 
 ### 查询
 
@@ -192,18 +185,13 @@ TenantAdmin Session 调用：
   "content": {
     "action": "CREATE",
     "label": "tenant-backoffice",
+    "permissions": "TENANT_READ",
     "cid": "tenant-key-001"
   }
 }
 ```
 
-服务端强制：
-
-```text
-type=tenant
-permissions=MARKET_READ,TENANT_READ,TENANT_WRITE
-rate_limit_profile=TENANT_STANDARD
-```
+服务端强制 `type=tenant` 和 `rate_limit_profile=TENANT_STANDARD`。若不提交 `permissions`，使用默认 `MARKET_READ,TENANT_READ,TENANT_WRITE`；若提交，只允许 `MARKET_READ,TENANT_READ,TENANT_WRITE` 的任意非空子集。
 
 支持：
 
@@ -400,7 +388,7 @@ queryProjectedExecutionHistory
 
 使用同类查询结构。
 
-**在对第三方正式开放 Projection 查询前，需要完成 Session authoritative identity 绑定，避免直接信任 content 中的 userId/location。**
+ProjectionSvr 已完成 Session authoritative identity 绑定：API 查询要求 `ORDER_READ`，TenantAPI 被拒绝，content 中的 userId/location 不能覆盖 Session 身份。
 
 ## 9. 账户与持仓
 
@@ -600,18 +588,19 @@ ADL_LEDGER
 - ProjectionSvr 历史订单/成交查询已绑定 LoginSvr authoritative Session，并拒绝 TenantAPI；
 - Tenant 生命周期宿主机 E2E 已包含 Tenant Service key：创建 -> GW `/api` HMAC 登录 -> AdminSvr 成功 -> OrderSvr/TradeSvr 拒绝 -> key 清理；
 - GW HTTP + TCP/WebSocket 真实链路已有 RobotSvr 运行验证；
-- 共享 `DcOpenApi.VERSION=v1` 服务/方法/scope 常量。
+- 共享 `DcOpenApi.VERSION=v1` 服务/方法/scope 常量；
+- `permissions` 的细粒度 `READ/WRITE` 下游强制执行；
+- Trader/Tenant API Key 可选择各自权限域内的非空 scope 子集，且不能跨域提权。
 
 在“对外 GA”前仍要完成：
 
-1. `permissions` 的细粒度 `READ/WRITE` 下游强制执行，而不是只靠 key class；
-2. `ip_whitelist` 在 API 登录/入口强制执行；
-3. `rate_limit_profile` 与 GW 通用限流联动；
-4. `last_used_time` 更新；
-5. API 错误码公开白名单，禁止泄露内部异常；
-6. WebSocket 全 topic reference、image/increment、sequence/gap/reconnect 规范；
-7. Java/Python SDK；
-8. Trader API E2E：Trader API Key -> signed HTTP login -> TCP/WebSocket -> 下单 -> 成交 -> balance/position -> reconnect；
-9. 现有 `marketIndicator=4` 的 topic 兼容方案，为后续同 symbol 多市场做准备。
+1. `ip_whitelist` 在 API 登录/入口强制执行；
+2. `rate_limit_profile` 与 GW 通用限流联动；
+3. `last_used_time` 更新；
+4. API 错误码公开白名单，禁止泄露内部异常；
+5. WebSocket 全 topic reference、image/increment、sequence/gap/reconnect 规范；
+6. Java/Python SDK；
+7. Trader API E2E：Trader API Key -> signed HTTP login -> TCP/WebSocket -> 下单 -> 成交 -> balance/position -> reconnect；
+8. 现有 `marketIndicator=4` 的 topic 兼容方案，为后续同 symbol 多市场做准备。
 
 这些项完成后，才把 Crypto Open API v1 标记为 External GA。

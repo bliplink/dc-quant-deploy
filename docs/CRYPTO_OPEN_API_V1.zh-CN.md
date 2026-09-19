@@ -109,20 +109,20 @@ TENANT_WRITE
 
 Tenant Service key 不拥有 `ORDER_WRITE`。租户自研 Robot 应使用独立交易用户 + Trader API Key，而不是 Tenant Admin key 下单。
 
-### 3.3 v1 权限模板策略
+### 3.3 v1 细粒度权限策略
 
-阶段 1 先采用**固定权限模板**，不对外开放自定义 scope：
+阶段 2 已开放**受控的 scope 子集**，并完成逐方法运行时门禁：
 
-- `updateApiKey` 无论客户端是否提交 `permissions/type/rate_limit_profile`，服务端都强制生成 Trader key，并使用 Trader 默认模板；
-- `tenantApiKeyAdmin.CREATE` 无论客户端是否提交 `permissions/type/rate_limit_profile`，服务端都强制生成 Tenant Service key，并使用 Tenant 默认模板；
-- Trader API Session 的服务端类型为 `API`；
-- Tenant Service API Session 的服务端类型为 `TenantAPI`；
-- OrderSvr/TradeSvr 明确拒绝 `TenantAPI`；
-- AdminSvr Tenant Control Plane 只接受 `TenantAdmin` 和 `TenantAPI` 会话，即使某个 TENANT_ADMIN 用户使用普通 Trader key 登录成 `API`，也必须拒绝其租户管理调用。
+- `updateApiKey` 仍由服务端强制生成 `type=trade`，但允许客户端从 Trader scope 集合中选择子集：`MARKET_READ,ACCOUNT_READ,ORDER_READ,ORDER_WRITE`；
+- `tenantApiKeyAdmin.CREATE` 仍由服务端强制生成 `type=tenant`，但允许客户端从 Tenant scope 集合中选择子集：`MARKET_READ,TENANT_READ,TENANT_WRITE`；
+- 未提交 `permissions` 时仍使用对应默认模板；
+- Trader key 申请 Tenant scope、Tenant Service key 申请 Trader scope 会 fail-closed；
+- `rate_limit_profile` 仍由服务端控制，客户端不能自行扩大限流档位；
+- Trader API Session 的服务端类型为 `API`，Tenant Service API Session 的服务端类型为 `TenantAPI`；
+- OrderSvr、TradeSvr、MDSvr、ProjectionSvr、AdminSvr 已按方法/动作检查所需 scope；
+- OrderSvr/TradeSvr 继续硬拒绝 `TenantAPI`；AdminSvr Tenant Control Plane 继续只接受 `TenantAdmin` 和 `TenantAPI`。
 
-这样阶段 1 已经具备稳定的“交易数据面 / 租户控制面”硬隔离，不会出现客户端自行扩大权限的情况。
-
-`permissions` 字段先作为稳定的数据模型和后续兼容位保留。**Trader key 的细粒度只读/可写 scope（例如只开放 `ORDER_READ`）放到阶段 2 Trader API 时再正式开放并做逐方法运行时门禁。** 在该门禁完成前，外部 API 文档不得宣称支持任意自定义 scope。
+因此权限模型同时具备“key class 硬隔离 + 精确 scope 门禁”，客户端只能收窄权限，不能跨权限域提权。
 
 ### 3.4 当前 API Key 元数据
 
@@ -203,7 +203,7 @@ signature =
 
 **v1 推荐流程：API Key 先调用 `LoginSvr/apiKeyLogin` 换取 Session，然后后续交易/账户请求使用 Session。** 这与当前 RobotSvr 已验证的真实链路一致。
 
-阶段 1 中，LoginSvr 会把以下 API Key 上下文作为 Session 权威快照返回并持久化：
+LoginSvr 会把以下 API Key 上下文作为 Session 权威快照返回并持久化：
 
 ```text
 api_key_type
@@ -213,7 +213,7 @@ rate_limit_profile
 
 Trader key 示例为 `trade + MARKET_READ,ACCOUNT_READ,ORDER_READ,ORDER_WRITE + TRADER_STANDARD`；Tenant Service key 示例为 `tenant + MARKET_READ,TENANT_READ,TENANT_WRITE + TENANT_STANDARD`。Session refresh/resume 保留同一快照；升级前没有权限快照的 `API/TenantAPI` Session 不恢复，客户端需要重新执行 signed API-key login。
 
-这里的 `permissions` 在阶段 1 是**固定模板的权威会话字段**，用于形成统一下游校验模型；Order/Trade/Admin 各方法的细粒度 scope 门禁仍按计划放到阶段 2，不在阶段 1 虚构已完成能力。
+这里的 `permissions` 是**权威会话字段**。阶段 2 已完成 Order/Trade/MD/Projection/Admin 的运行时 scope 门禁；Session refresh/resume 只能保留原快照，不能扩大权限。
 
 ### 4.2 Session HTTP
 
