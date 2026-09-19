@@ -585,6 +585,8 @@ ADL_LEDGER
 - Tenant Service key 必须 TENANT_ADMIN 创建；
 - TenantAPI Session 不能访问 OrderSvr/TradeSvr；
 - Order/Trade/MDSvr Session tenant identity 校验；
+- ProjectionSvr 历史订单/成交查询已绑定 LoginSvr authoritative Session，并拒绝 TenantAPI；
+- Tenant 生命周期宿主机 E2E 已包含 Tenant Service key：创建 -> GW `/api` HMAC 登录 -> AdminSvr 成功 -> OrderSvr/TradeSvr 拒绝 -> key 清理；
 - GW HTTP + TCP/WebSocket 真实链路已有 RobotSvr 运行验证；
 - 共享 `DcOpenApi.VERSION=v1` 服务/方法/scope 常量。
 
@@ -594,11 +596,10 @@ ADL_LEDGER
 2. `ip_whitelist` 在 API 登录/入口强制执行；
 3. `rate_limit_profile` 与 GW 通用限流联动；
 4. `last_used_time` 更新；
-5. ProjectionSvr 历史查询 Session authoritative identity；
-6. API 错误码公开白名单，禁止泄露内部异常；
-7. WebSocket 全 topic reference、image/increment、sequence/gap/reconnect 规范；
-8. Java/Python SDK；
-9. API E2E：API Key -> HTTP login -> TCP/WebSocket -> 下单 -> 成交 -> balance/position -> reconnect；
-10. 现有 `marketIndicator=4` 的 topic 兼容方案，为后续同 symbol 多市场做准备。
+5. API 错误码公开白名单，禁止泄露内部异常；
+6. WebSocket 全 topic reference、image/increment、sequence/gap/reconnect 规范；
+7. Java/Python SDK；
+8. Trader API E2E：Trader API Key -> signed HTTP login -> TCP/WebSocket -> 下单 -> 成交 -> balance/position -> reconnect；
+9. 现有 `marketIndicator=4` 的 topic 兼容方案，为后续同 symbol 多市场做准备。
 
 这些项完成后，才把 Crypto Open API v1 标记为 External GA。
