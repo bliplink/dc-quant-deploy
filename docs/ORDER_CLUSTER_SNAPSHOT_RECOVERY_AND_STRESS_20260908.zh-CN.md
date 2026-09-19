@@ -1,5 +1,7 @@
 # OrderSvr A/B 跨 Epoch 快照恢复与压力验收（2026-09-08）
 
+> **历史验收快照说明（2026-09-19）**：本文记录 2026-09-08 snapshot/recovery/stress 阶段；文末“下一阶段”是当时计划，后续恢复、Projection 和集群验收能力已继续演进。 当前操作、拓扑和统一验收以仓库 `README.md`、`docs/USER_GUIDE.zh-CN.md`、`SAAS_IMPLEMENTATION_PLAN.md` 和 `acceptance-saas.sh` 为准；本文原始结论与数字按当时版本保留。
+
 ## 1. 结论
 
 本轮在生产主机 `18.140.45.126` 的**独立 Compose 项目** `dc-saas-order-cluster-dev` 中完成了跨 epoch 快照重基线、恢复 readiness、在线角色反转、Primary 进程故障注入和双顺序吞吐回归。隔离集群最终为健康状态，现有量化及 SaaS 生产容器未替换、未重启。
