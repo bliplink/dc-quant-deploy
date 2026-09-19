@@ -267,6 +267,42 @@ overflow_payload="$(printf '{"serverName":"AdminSvr","method":"tenantUserRegistr
   "${E2E_SUFFIX}" "${E2E_SUFFIX}" "${E2E_LOCATION_A}" "${E2E_SUFFIX}" "${trader_password_a}")"
 overflow_response="$(api_call "${overflow_payload}")"
 expect_ok "second customer within registered-user quota" "${overflow_response}"
+overflow_user_id="$(printf '%s' "${overflow_response}" | json_eval 'd["data"]["user_id"]')"
+[[ -n "${overflow_user_id}" && "${overflow_user_id}" != "${user_id_a}" ]] ||
+  die "second tenant customer did not return a distinct user_id"
+
+broker_key_create_payload="$(printf '{"serverName":"LoginSvr","method":"tenantApiKeyAdmin","content":{"action":"CREATE","type":"broker","label":"broker-e2e-%s","cid":"BROKER_KEY_CREATE_E2E"}}' "${E2E_SUFFIX}")"
+broker_key_create_response="$(api_call "${broker_key_create_payload}" "${admin_token_a}")"
+expect_ok "broker API key creation" "${broker_key_create_response}"
+broker_api_key="$(printf '%s' "${broker_key_create_response}" | json_eval 'd["data"]["api_key"]')"
+broker_api_secret="$(printf '%s' "${broker_key_create_response}" | json_eval 'd["data"]["secret_key"]')"
+[[ "$(printf '%s' "${broker_key_create_response}" | json_eval 'd["data"]["type"]')" == "broker" ]] ||
+  die "broker key creation did not preserve type=broker"
+[[ "$(printf '%s' "${broker_key_create_response}" | json_eval 'd["data"]["rate_limit_profile"]')" == "TRADER_STANDARD" ]] ||
+  die "broker key does not use Trader trading rate profile"
+[[ "$(printf '%s' "${broker_key_create_response}" | json_eval 'd["data"]["permissions"]')" == "MARKET_READ,ACCOUNT_READ,ORDER_READ,ORDER_WRITE,TENANT_READ,TENANT_WRITE,CUSTOMER_CASH" ]] ||
+  die "broker key default permission contract drifted"
+
+broker_login_payload="$(printf '{"serverName":"LoginSvr","method":"apiKeyLogin","content":{"api_key":"%s","location":"%s","cid":"BROKER_LOGIN_E2E"}}' "${broker_api_key}" "${E2E_LOCATION_A}")"
+broker_login_response="$(signed_api_call "${broker_login_payload}" "${broker_api_key}" "${broker_api_secret}")"
+expect_ok "broker signed API login" "${broker_login_response}"
+broker_api_token="$(printf '%s' "${broker_login_response}" | json_eval 'd["data"]["token"]')"
+[[ "$(printf '%s' "${broker_login_response}" | json_eval 'd["data"]["client_type"]')" == "TenantAPI" ]] ||
+  die "broker key did not create a TenantAPI session"
+[[ "$(printf '%s' "${broker_login_response}" | json_eval 'd["data"]["api_key_type"]')" == "broker" ]] ||
+  die "broker session lost api_key_type=broker"
+
+broker_admin_response="$(api_call "${users_payload}" "${broker_api_token}")"
+expect_ok "Broker API retains Tenant management access" "${broker_admin_response}"
+broker_actor_user_id="$(printf '%s' "${broker_login_response}" | json_eval 'd["data"]["user_id"]')"
+
+ENV_FILE="${ENV_FILE}" BROKER_E2E_RUN_ID="${E2E_SUFFIX}" BROKER_E2E_LOCATION="${E2E_LOCATION_A}" BROKER_E2E_ACTOR_USER_ID="${broker_actor_user_id}" BROKER_E2E_API_KEY="${broker_api_key}" BROKER_E2E_API_SECRET="${broker_api_secret}" BROKER_E2E_MAKER_CUSTOMER_ID="${user_id_a}" BROKER_E2E_TAKER_CUSTOMER_ID="${overflow_user_id}" BROKER_E2E_FOREIGN_LOCATION="${E2E_LOCATION_B}" BROKER_E2E_FOREIGN_CUSTOMER_ID="${user_id_b}"   "${SCRIPT_DIR}/run-broker-api-e2e-host.sh"
+
+broker_key_delete_payload="$(printf '{"serverName":"LoginSvr","method":"tenantApiKeyAdmin","content":{"action":"DELETE","api_key":"%s","cid":"BROKER_KEY_DELETE_E2E"}}' "${broker_api_key}")"
+broker_key_delete_response="$(api_call "${broker_key_delete_payload}" "${admin_token_a}")"
+expect_ok "broker API key cleanup" "${broker_key_delete_response}"
+log "Broker API boundary verified: management + same-tenant customer trading/cash allowed; foreign tenant rejected."
+
 overquota_payload="$(printf '{"serverName":"AdminSvr","method":"tenantUserRegistration","content":{"action":"REGISTER","cid":"OVERQUOTA_%s","request_id":"OVERQUOTA_%s","location":"%s","username":"overquotatrader","name":"Over Quota Trader","email":"overquota-%s@example.com","password":"%s"}}' \
   "${E2E_SUFFIX}" "${E2E_SUFFIX}" "${E2E_LOCATION_A}" "${E2E_SUFFIX}" "${trader_password_a}")"
 overquota_response="$(api_call "${overquota_payload}")"

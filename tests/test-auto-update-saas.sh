@@ -18,6 +18,8 @@ for script in \
   "${SCRIPT_DIR}/tests/restart-order-trade-e2e.sh" \
   "${SCRIPT_DIR}/tests/prepare-web-trading-e2e.sh" \
   "${SCRIPT_DIR}/tests/run-web-trading-e2e-host.sh" \
+  "${SCRIPT_DIR}/tests/run-tenant-lifecycle-e2e-host.sh" \
+  "${SCRIPT_DIR}/tests/run-broker-api-e2e-host.sh" \
   "${SCRIPT_DIR}/tests/run-core-trading-acceptance.sh" \
   "${SCRIPT_DIR}/tests/run-core-trading-stress-host.sh" \
   "${SCRIPT_DIR}/tests/run-trade-cluster-role-reversal-host.sh" \
@@ -120,6 +122,13 @@ grep -Fq 'tenant-platform-console-e2e.js' "${SCRIPT_DIR}/tests/run-tenant-lifecy
   fail "tenant lifecycle acceptance does not exercise standalone tenant/platform consoles"
 grep -Fq 'tenantApiKeyAdmin' "${SCRIPT_DIR}/tests/run-tenant-lifecycle-e2e-host.sh" ||
   fail "tenant lifecycle acceptance does not create a Tenant Service API key"
+grep -Fq '"type":"broker"' "${SCRIPT_DIR}/tests/run-tenant-lifecycle-e2e-host.sh" &&
+grep -Fq 'run-broker-api-e2e-host.sh' "${SCRIPT_DIR}/tests/run-tenant-lifecycle-e2e-host.sh" ||
+  fail "tenant lifecycle acceptance does not execute the Broker API flow"
+grep -Fq 'BrokerApiE2ERunner' "${SCRIPT_DIR}/tests/run-broker-api-e2e-host.sh" &&
+grep -Fq 'BROKER_E2E_FOREIGN_CUSTOMER_ID' "${SCRIPT_DIR}/tests/run-broker-api-e2e-host.sh" &&
+grep -Fq 'dc_users_posting' "${SCRIPT_DIR}/tests/run-broker-api-e2e-host.sh" ||
+  fail "Broker API acceptance is missing cash/trading/isolation evidence"
 grep -Fq 'signed_api_call' "${SCRIPT_DIR}/tests/run-tenant-lifecycle-e2e-host.sh" ||
   fail "tenant lifecycle acceptance does not test signed GW /api authentication"
 grep -Fq 'TenantAPI OrderSvr access' "${SCRIPT_DIR}/tests/run-tenant-lifecycle-e2e-host.sh" ||

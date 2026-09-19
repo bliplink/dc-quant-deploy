@@ -145,6 +145,8 @@ acceptance:
 
 ```bash
 sudo ./acceptance-saas.sh
+
+完整验收中的 Tenant 生命周期同时覆盖 Broker API：创建 `type=broker` Key、客户充值/提现、代客下单/撤单/成交、余额/持仓与 Projection 历史、TCP 重连，以及跨租户 `customerId` 拒绝。交易阶段使用当前部署 RobotSvr 镜像内的 `BrokerApiE2ERunner`，因此不会维护第二套测试交易协议。
 ```
 
 The unified command first validates runtime health, creates isolated `*_E2E`
