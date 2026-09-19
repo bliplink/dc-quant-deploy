@@ -109,7 +109,21 @@ TENANT_WRITE
 
 Tenant Service key 不拥有 `ORDER_WRITE`。租户自研 Robot 应使用独立交易用户 + Trader API Key，而不是 Tenant Admin key 下单。
 
-### 3.3 当前 API Key 元数据
+### 3.3 v1 权限模板策略
+
+阶段 1 先采用**固定权限模板**，不对外开放自定义 scope：
+
+- `updateApiKey` 无论客户端是否提交 `permissions/type/rate_limit_profile`，服务端都强制生成 Trader key，并使用 Trader 默认模板；
+- `tenantApiKeyAdmin.CREATE` 无论客户端是否提交 `permissions/type/rate_limit_profile`，服务端都强制生成 Tenant Service key，并使用 Tenant 默认模板；
+- Trader API Session 的服务端类型为 `API`；
+- Tenant Service API Session 的服务端类型为 `TenantAPI`；
+- OrderSvr/TradeSvr 明确拒绝 `TenantAPI`，AdminSvr 只接受有租户管理权限的会话。
+
+这样阶段 1 已经具备稳定的“交易数据面 / 租户控制面”硬隔离，不会出现客户端自行扩大权限的情况。
+
+`permissions` 字段先作为稳定的数据模型和后续兼容位保留。**Trader key 的细粒度只读/可写 scope（例如只开放 `ORDER_READ`）放到阶段 2 Trader API 时再正式开放并做逐方法运行时门禁。** 在该门禁完成前，外部 API 文档不得宣称支持任意自定义 scope。
+
+### 3.4 当前 API Key 元数据
 
 `dc_users_api`：
 
