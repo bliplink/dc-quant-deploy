@@ -182,9 +182,40 @@ build_java_image() {
   local source_name="$1"
   local image_ref="$2"
   local source_dir="${SRC_ROOT}/${source_name}"
+  local common_jar common_count common_version common_hash service_revision repo_url build_date gateway_revision
+  local -a build_args
+
   log "Building Java service ${source_name}."
   run_maven "${source_dir}" clean package dependency:copy-dependencies -DskipTests -DoutputDirectory=target/dependency
-  DOCKER_BUILDKIT=1 docker build --pull -t "${image_ref}" "${source_dir}"
+
+  common_count="$(find "${source_dir}/target/dependency" -maxdepth 1 -name 'com.app.common-*.jar' | wc -l | tr -d ' ')"
+  [[ "${common_count}" == "1" ]] ||
+    die "${source_name} must contain exactly one com.app.common runtime JAR; found ${common_count}."
+  common_jar="$(find "${source_dir}/target/dependency" -maxdepth 1 -name 'com.app.common-*.jar' -print -quit)"
+  common_version="$(basename "${common_jar}" | sed -E 's/^com\.app\.common-(.+)\.jar$/\1/')"
+  common_hash="$(sha256sum "${common_jar}" | awk '{print $1}')"
+  [[ "${common_hash}" =~ ^[0-9a-f]{64}$ ]] ||
+    die "Cannot calculate com.app.common SHA-256 for ${source_name}."
+
+  service_revision="$(git -C "${source_dir}" rev-parse HEAD 2>/dev/null || printf 'source-bundle')"
+  repo_url="$(git -C "${source_dir}" config --get remote.origin.url 2>/dev/null || printf 'local-source')"
+  build_date="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+  build_args=(
+    --build-arg "REPO_URL=${repo_url}"
+    --build-arg "SERVICE_REVISION=${service_revision}"
+    --build-arg "COMMON_REVISION=com-app-common-v${common_version}"
+    --build-arg "COMMON_GAV=io.github.bliplink:com.app.common:${common_version}"
+    --build-arg "COMMON_JAR_SHA256=${common_hash}"
+    --build-arg "BUILD_DATE=${build_date}"
+  )
+
+  if [[ "${source_name}" == "gateway" ]]; then
+    gateway_revision="$(awk -F'[<>]' '/<gateway.version>/{print $3; exit}' "${source_dir}/pom.xml")"
+    [[ -n "${gateway_revision}" ]] || die "Cannot determine gateway.version for local Gateway image."
+    build_args+=(--build-arg "GATEWAY_REVISION=gateway-lib-v${gateway_revision}")
+  fi
+
+  DOCKER_BUILDKIT=1 docker build --pull "${build_args[@]}" -t "${image_ref}" "${source_dir}"
 }
 
 sync_repo common https://github.com/bliplink/com.app.dc.git saas-crypto
