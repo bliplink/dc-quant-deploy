@@ -116,6 +116,13 @@ application images itself. In this mode `install-saas.sh` calls
 `SOURCE_BUNDLE_PATH`), and pulls only MySQL, ClickHouse, and ZooKeeper from
 public registries. An explicit `local` setting is preserved across redeploys.
 
+Private source repositories can be read in three ways: an existing Git credential
+helper on the host, a verified `SOURCE_BUNDLE_PATH`, or a token supplied only in
+the protected runtime environment as `SOURCE_GIT_TOKEN` (optional
+`SOURCE_GIT_USERNAME`, default `x-access-token`). The token is consumed through
+a temporary `GIT_ASKPASS` helper and is not embedded in repository URLs or
+committed configuration.
+
 `REQUIRE_GHCR_LOGIN` remains available only for operators who replace the
 defaults with their own private registry packages. Credentials must be supplied
 through the protected runtime environment and must never be committed.
