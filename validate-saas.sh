@@ -228,6 +228,12 @@ open_api_key_policy_columns="$(
 [[ "${open_api_key_policy_columns}" == "6" ]] ||
   die "Crypto Open API key policy schema is incomplete: ${open_api_key_policy_columns}/6 columns."
 
+open_api_session_context_columns="$(
+  docker exec -e MYSQL_PWD="${MYSQL_PASSWORD}" dc-saas-mysql mysql -u"${MYSQL_USERNAME}" -Nse     "SELECT COUNT(*) FROM information_schema.columns WHERE table_schema='dc' AND table_name='dc_users_session' AND column_name IN ('api_key_type','permissions','rate_limit_profile');"
+)"
+[[ "${open_api_session_context_columns}" == "3" ]] ||
+  die "Open API session context schema is incomplete: ${open_api_session_context_columns}/3 columns."
+
 robot_runtime_identity_count="$(
   docker exec -e MYSQL_PWD="${MYSQL_PASSWORD}" dc-saas-mysql mysql -u"${MYSQL_USERNAME}" -Nse \
     "SELECT COUNT(*) FROM dc.dc_users_api WHERE location='${ROBOT_RUNTIME_LOCATION}' AND user_id='${ROBOT_RUNTIME_USER_ID}' AND api_key='${ROBOT_RUNTIME_API_KEY}' AND enable='1' AND secret_key IS NOT NULL;"
