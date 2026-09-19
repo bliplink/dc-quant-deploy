@@ -65,6 +65,28 @@ prepare_source_bundle() {
 
 prepare_source_bundle
 
+prepare_git_auth() {
+  local askpass_script
+  [[ -z "${SOURCE_GIT_TOKEN:-}" ]] && return 0
+
+  askpass_script="${BUILD_ROOT}/.git-askpass.sh"
+  cat > "${askpass_script}" <<'EOF'
+#!/usr/bin/env bash
+case "$1" in
+  *Username*) printf '%s\n' "${SOURCE_GIT_USERNAME:-x-access-token}" ;;
+  *Password*) printf '%s\n' "${SOURCE_GIT_TOKEN}" ;;
+  *) printf '\n' ;;
+esac
+EOF
+  chmod 0700 "${askpass_script}"
+  export GIT_ASKPASS="${askpass_script}"
+  export GIT_TERMINAL_PROMPT=0
+  export SOURCE_GIT_USERNAME="${SOURCE_GIT_USERNAME:-x-access-token}"
+  log "Configured non-interactive Git authentication for private source repositories."
+}
+
+prepare_git_auth
+
 sync_repo() {
   local name="$1"
   local url="$2"
@@ -79,11 +101,15 @@ sync_repo() {
 
   if [[ -d "${target}/.git" ]]; then
     log "Updating ${name} from ${branch}."
-    git -C "${target}" fetch --depth 1 origin "${branch}"
+    if ! GIT_TERMINAL_PROMPT=0 git -C "${target}" fetch --depth 1 origin "${branch}"; then
+      die "Cannot fetch ${name}. Configure Git credentials, set SOURCE_GIT_TOKEN in the protected runtime environment, or provide SOURCE_BUNDLE_PATH."
+    fi
     git -C "${target}" checkout -B saas-build FETCH_HEAD
   else
     log "Cloning ${name} from ${branch}."
-    git clone --depth 1 --branch "${branch}" "${url}" "${target}"
+    if ! GIT_TERMINAL_PROMPT=0 git clone --depth 1 --branch "${branch}" "${url}" "${target}"; then
+      die "Cannot clone ${name}. Configure Git credentials, set SOURCE_GIT_TOKEN in the protected runtime environment, or provide SOURCE_BUNDLE_PATH."
+    fi
   fi
 }
 
