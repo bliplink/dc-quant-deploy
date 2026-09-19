@@ -1,0 +1,321 @@
+openapi: 3.0.3
+info:
+  title: DC Crypto Open API
+  version: 1.0.0
+  description: |
+    Multi-tenant crypto trading Open API. Private identity is derived from the API key;
+    client supplied location/userId never overrides the authenticated identity.
+servers:
+  - url: /openapi/v1
+tags:
+  - name: public
+  - name: trading
+  - name: account
+  - name: api-key
+paths:
+  /ping:
+    get:
+      tags: [public]
+      security: []
+      responses:
+        '200':
+          description: Service is available.
+  /time:
+    get:
+      tags: [public]
+      security: []
+      responses:
+        '200':
+          description: Server time.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  serverTime: { type: integer, format: int64 }
+  /exchangeInfo:
+    get:
+      tags: [public]
+      security: []
+      parameters:
+        - $ref: '#/components/parameters/Location'
+        - $ref: '#/components/parameters/MarketIndicator'
+        - $ref: '#/components/parameters/SymbolOptional'
+      responses:
+        '200':
+          description: Tenant-visible symbol and trading rules.
+  /depth:
+    get:
+      tags: [public]
+      security: []
+      parameters:
+        - $ref: '#/components/parameters/Location'
+        - $ref: '#/components/parameters/MarketIndicator'
+        - $ref: '#/components/parameters/Symbol'
+        - name: limit
+          in: query
+          schema: { type: integer, minimum: 1, maximum: 1000, default: 20 }
+      responses:
+        '200': { description: Order book snapshot. }
+  /trades:
+    get:
+      tags: [public]
+      security: []
+      parameters:
+        - $ref: '#/components/parameters/Location'
+        - $ref: '#/components/parameters/MarketIndicator'
+        - $ref: '#/components/parameters/Symbol'
+        - name: limit
+          in: query
+          schema: { type: integer, minimum: 1, maximum: 1000, default: 100 }
+      responses:
+        '200': { description: Recent public trades. }
+  /ticker/price:
+    get:
+      tags: [public]
+      security: []
+      parameters:
+        - $ref: '#/components/parameters/Location'
+        - $ref: '#/components/parameters/MarketIndicator'
+        - $ref: '#/components/parameters/Symbol'
+      responses:
+        '200': { description: Last/mark/index price view. }
+  /ticker/bookTicker:
+    get:
+      tags: [public]
+      security: []
+      parameters:
+        - $ref: '#/components/parameters/Location'
+        - $ref: '#/components/parameters/MarketIndicator'
+        - $ref: '#/components/parameters/Symbol'
+      responses:
+        '200': { description: Best bid/ask. }
+  /klines:
+    get:
+      tags: [public]
+      security: []
+      parameters:
+        - $ref: '#/components/parameters/Location'
+        - $ref: '#/components/parameters/MarketIndicator'
+        - $ref: '#/components/parameters/Symbol'
+        - name: interval
+          in: query
+          required: true
+          schema: { type: string, example: 1m }
+        - name: startTime
+          in: query
+          schema: { type: integer, format: int64 }
+        - name: endTime
+          in: query
+          schema: { type: integer, format: int64 }
+        - name: limit
+          in: query
+          schema: { type: integer, minimum: 1, maximum: 1500, default: 500 }
+      responses:
+        '200': { description: Kline series. }
+  /markPrice:
+    get:
+      tags: [public]
+      security: []
+      parameters:
+        - $ref: '#/components/parameters/Location'
+        - $ref: '#/components/parameters/MarketIndicator'
+        - $ref: '#/components/parameters/Symbol'
+      responses:
+        '200': { description: Mark/index/funding view. }
+  /order:
+    post:
+      tags: [trading]
+      security: [{ DcHmac: [] }]
+      x-dc-scope: ORDER_WRITE
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/NewOrder' }
+      responses:
+        '200': { description: Order accepted or rejected by the trading core. }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '429': { $ref: '#/components/responses/RateLimited' }
+    delete:
+      tags: [trading]
+      security: [{ DcHmac: [] }]
+      x-dc-scope: ORDER_WRITE
+      parameters:
+        - $ref: '#/components/parameters/Symbol'
+        - $ref: '#/components/parameters/MarketIndicator'
+        - name: orderId
+          in: query
+          schema: { type: string }
+        - name: clientOrderId
+          in: query
+          schema: { type: string }
+      responses:
+        '200': { description: Cancel result. }
+    get:
+      tags: [trading]
+      security: [{ DcHmac: [] }]
+      x-dc-scope: ORDER_READ
+      parameters:
+        - $ref: '#/components/parameters/Symbol'
+        - $ref: '#/components/parameters/MarketIndicator'
+        - name: orderId
+          in: query
+          schema: { type: string }
+        - name: clientOrderId
+          in: query
+          schema: { type: string }
+      responses:
+        '200': { description: One order. }
+  /openOrders:
+    get:
+      tags: [trading]
+      security: [{ DcHmac: [] }]
+      x-dc-scope: ORDER_READ
+      parameters:
+        - $ref: '#/components/parameters/SymbolOptional'
+        - $ref: '#/components/parameters/MarketIndicator'
+      responses:
+        '200': { description: Current open orders. }
+  /allOrders:
+    get:
+      tags: [trading]
+      security: [{ DcHmac: [] }]
+      x-dc-scope: ORDER_READ
+      parameters:
+        - $ref: '#/components/parameters/SymbolOptional'
+        - $ref: '#/components/parameters/MarketIndicator'
+        - $ref: '#/components/parameters/Limit'
+      responses:
+        '200': { description: Projected order history. }
+  /myTrades:
+    get:
+      tags: [trading]
+      security: [{ DcHmac: [] }]
+      x-dc-scope: ORDER_READ
+      parameters:
+        - $ref: '#/components/parameters/SymbolOptional'
+        - $ref: '#/components/parameters/MarketIndicator'
+        - $ref: '#/components/parameters/Limit'
+      responses:
+        '200': { description: Projected execution history. }
+  /account:
+    get:
+      tags: [account]
+      security: [{ DcHmac: [] }]
+      x-dc-scope: ACCOUNT_READ
+      responses:
+        '200': { description: Account summary. }
+  /balance:
+    get:
+      tags: [account]
+      security: [{ DcHmac: [] }]
+      x-dc-scope: ACCOUNT_READ
+      responses:
+        '200': { description: Account balance. }
+  /positionRisk:
+    get:
+      tags: [account]
+      security: [{ DcHmac: [] }]
+      x-dc-scope: ACCOUNT_READ
+      parameters:
+        - $ref: '#/components/parameters/SymbolOptional'
+        - $ref: '#/components/parameters/MarketIndicator'
+      responses:
+        '200': { description: Position and liquidation-risk view. }
+  /leverage:
+    post:
+      tags: [account]
+      security: [{ DcHmac: [] }]
+      x-dc-scope: ORDER_WRITE
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [symbol, marketIndicator, leverage]
+              properties:
+                symbol: { type: string }
+                marketIndicator: { type: string }
+                leverage: { type: integer, minimum: 1 }
+      responses:
+        '200': { description: Leverage updated. }
+  /positionMode:
+    post:
+      tags: [account]
+      security: [{ DcHmac: [] }]
+      x-dc-scope: ORDER_WRITE
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [positionMode]
+              properties:
+                positionMode:
+                  type: string
+                  enum: [ONE_WAY, HEDGE]
+      responses:
+        '200': { description: Position mode updated. }
+components:
+  securitySchemes:
+    DcHmac:
+      type: apiKey
+      in: header
+      name: X-DC-API-KEY
+      description: |
+        Signed requests also require X-DC-TIMESTAMP, X-DC-RECV-WINDOW and
+        X-DC-SIGNATURE. Signature is HMAC-SHA256 over the canonical request.
+  parameters:
+    Location:
+      name: location
+      in: query
+      required: true
+      schema: { type: string, maxLength: 64 }
+    MarketIndicator:
+      name: marketIndicator
+      in: query
+      required: true
+      schema: { type: string, example: '4' }
+    Symbol:
+      name: symbol
+      in: query
+      required: true
+      schema: { type: string, example: BTCUSDT }
+    SymbolOptional:
+      name: symbol
+      in: query
+      required: false
+      schema: { type: string, example: BTCUSDT }
+    Limit:
+      name: limit
+      in: query
+      schema: { type: integer, minimum: 1, maximum: 1000, default: 100 }
+  schemas:
+    NewOrder:
+      type: object
+      required: [symbol, marketIndicator, side, type, quantity]
+      properties:
+        symbol: { type: string, example: BTCUSDT }
+        marketIndicator: { type: string, example: '4' }
+        side: { type: string, enum: [BUY, SELL] }
+        positionSide: { type: string, enum: [BOTH, LONG, SHORT] }
+        type: { type: string, enum: [LIMIT, MARKET] }
+        timeInForce: { type: string, enum: [GTC, IOC, FOK] }
+        quantity:
+          type: string
+          pattern: '^[0-9]+(\\.[0-9]+)?$'
+        price:
+          type: string
+          pattern: '^[0-9]+(\\.[0-9]+)?$'
+        clientOrderId:
+          type: string
+          maxLength: 64
+        reduceOnly: { type: boolean, default: false }
+  responses:
+    Unauthorized:
+      description: Invalid/expired API key or signature.
+    RateLimited:
+      description: API key, tenant or source IP rate limit exceeded.
