@@ -536,8 +536,15 @@ CREATE TABLE `dc_users_api` (
   `close_by` varchar(45) DEFAULT NULL COMMENT '操作人',
   `inf1` varchar(45) DEFAULT NULL COMMENT '扩展字段',
   `location` varchar(64) NOT NULL DEFAULT '' COMMENT '多实体',
+  `permissions` varchar(512) NOT NULL DEFAULT 'MARKET_READ,ACCOUNT_READ,ORDER_READ,ORDER_WRITE' COMMENT 'comma-separated Open API scopes',
+  `ip_whitelist` text DEFAULT NULL COMMENT 'JSON array or comma-separated IP/CIDR allowlist',
+  `expires_at` varchar(30) DEFAULT NULL COMMENT 'UTC expiry timestamp for Open API use',
+  `rate_limit_profile` varchar(64) NOT NULL DEFAULT 'TRADER_STANDARD' COMMENT 'Open API rate-limit policy profile',
+  `label` varchar(128) DEFAULT NULL COMMENT 'operator supplied API key label',
+  `last_used_time` varchar(30) DEFAULT NULL COMMENT 'last successful Open API authentication time',
   PRIMARY KEY (`api_key`,`user_id`,`type`) USING BTREE,
-  KEY `idx_users_api_location_user` (`location`,`user_id`,`enable`) USING BTREE
+  KEY `idx_users_api_location_user` (`location`,`user_id`,`enable`) USING BTREE,
+  KEY `idx_users_api_openapi` (`location`,`api_key`,`enable`,`rate_limit_profile`) USING BTREE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8 ROW_FORMAT=DYNAMIC COMMENT='api用户表';
 
 CREATE TABLE `dc_users_balance` (
@@ -645,6 +652,9 @@ CREATE TABLE `dc_users_session` (
   `client_type` varchar(45) DEFAULT NULL COMMENT '登录类型',
   `infs` varchar(8000) DEFAULT NULL COMMENT '扩展信息',
   `location` varchar(45) DEFAULT NULL COMMENT '多实体',
+  `api_key_type` varchar(32) DEFAULT NULL COMMENT 'trade/tenant/service API key class snapshot',
+  `permissions` varchar(512) DEFAULT NULL COMMENT 'Open API permission snapshot',
+  `rate_limit_profile` varchar(64) DEFAULT NULL COMMENT 'Open API rate-limit profile snapshot',
   PRIMARY KEY (`token`) USING BTREE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci ROW_FORMAT=DYNAMIC COMMENT='用户会话控制表';
 
