@@ -1,5 +1,7 @@
 # Common 3.0.12 集群兼容发布记录（2026-09-13）
 
+> **历史发布快照说明（2026-09-19）**：本文记录 2026-09-13 的兼容性发布。当时的 gateway-api 版本和镜像组合属于该次发布证据；当前主线已使用 `com.app.common:3.0.13`、`com.app.dc:0.0.4-SNAPSHOT`、`gateway-api:3.0.6`，完整本地构建还固定 `gateway-api-java-v3.0.6` tag。不要用本文旧版本号覆盖当前 POM/构建脚本。
+
 ## 发布结论
 
 - `io.github.bliplink:com.app.common:3.0.12` 已发布并可从 Maven Central 下载。
