@@ -68,6 +68,12 @@ grep -Fq '"${SCRIPT_DIR}/build-saas-images.sh" "${ENV_FILE}"' "${SCRIPT_DIR}/dep
 if grep -Fq 'migrate_env_value IMAGE_SOURCE local registry' "${SCRIPT_DIR}/deploy-saas.sh"; then
   fail "explicit local image source must not be rewritten to registry"
 fi
+grep -q '^verify_source_dependency_alignment()' "${SCRIPT_DIR}/build-saas-images.sh" ||
+  fail "local source dependency-alignment guard is missing"
+grep -Fqx 'verify_source_dependency_alignment' "${SCRIPT_DIR}/build-saas-images.sh" ||
+  fail "local source dependency-alignment guard is not invoked"
+grep -Fq 'uses a dynamic Maven dependency version (LATEST/RELEASE)' "${SCRIPT_DIR}/build-saas-images.sh" ||
+  fail "dynamic Maven version guard is missing"
 grep -Fqx 'recover_order_cluster_if_needed' "${SCRIPT_DIR}/deploy-saas.sh" ||
   fail "staged OrderSvr recovery is not invoked"
 grep -Fq 'docker logs --since "${a_started}" dc-saas-ordersvr' "${SCRIPT_DIR}/deploy-saas.sh" ||
