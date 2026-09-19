@@ -593,14 +593,54 @@ ADL_LEDGER
 - Trader/Tenant API Key 可选择各自权限域内的非空 scope 子集，且不能跨域提权；
 - `ip_whitelist` 已在 GW signed `/api` 入口强制执行，支持 IPv4/IPv6 单 IP 与 CIDR；当前直连部署使用 socket peer，不信任客户端代理头；
 - `rate_limit_profile` 已在 GW Session 业务请求入口强制执行：`TRADER_STANDARD` 为 100 req/s、burst 30，`TENANT_STANDARD` 为 20 req/s、burst 10；按 `sid` 独立 token bucket 限流，`WEB`/`TenantAdmin` 不进入该 Open API profile；
-- `last_used_time` 已由 LoginSvr 在成功 API Key 认证并创建 Session 后更新；失败认证不刷新，不在下游每笔订单/行情/账户请求上更新，审计持久化失败不阻断已成功的 API 登录。
+- `last_used_time` 已由 LoginSvr 在成功 API Key 认证并创建 Session 后更新；失败认证不刷新，不在下游每笔订单/行情/账户请求上更新，审计持久化失败不阻断已成功的 API 登录；
+- Open API 公共错误白名单已在 GW 最终出站边界强制执行；内部/未知异常统一为 `9000 / INTERNAL_ERROR`，错误 `data=null`，不向外暴露 Exception、SQL、文件路径、类名或内部集群细节。
+
+### 12.1 Open API v1 公共错误码白名单
+
+| code | 固定 msg |
+| ---: | --- |
+| 1 | `INVALID_REQUEST` |
+| 1004 | `INVALID_REQUEST` |
+| 1005 | `ACCESS_DENIED` |
+| 1006 | `CHECK_FAILED` |
+| 1007 | `TIMEOUT` |
+| 1050 | `CONNECTION_LIMIT_EXCEEDED` |
+| 5000 | `TRADE_BALANCE_NOT_ENOUGH` |
+| 5001 | `TRADE_ACCOUNTBALANCE_NOTEXIST` |
+| 5002 | `TRADE_POSITION_NOT_ENOUGH` |
+| 5003 | `MARK_PRICE_NOT_FOUND` |
+| 5004 | `SYMBOL_NOT_FOUND` |
+| 7000 | `API_NOT_EXIST` |
+| 7001 | `API_REQ_HAS_EXPIRE` |
+| 7002 | `API_SIGN_ERROR` |
+| 7003 | `API_IP_NOT_ALLOWED` |
+| 7004 | `API_KEY_POLICY_NOT_READY` |
+| 8000 | `ORDER_NOT_FOUND` |
+| 9000 | `INTERNAL_ERROR` |
+| 9001 | `USER_NOT_FOUND` |
+| 9002 | `USER_SESSION_NOTEXIST` |
+| 9004 | `PARAMETER_ERROR` |
+| 9005 | `AUTHENTICATION_FAILED` |
+| 9006 | `USER_IS_BAN` |
+| 9007 | `CLIENT_TYPE_NOT_SUPPORTED` |
+| 9008 | `SIGNATURE_VERIFY_FAIL` |
+| 9009 | `BALANCE_NOT_ENOUGH` |
+| 9016 | `TRADE_PERMISSION_DENIED` |
+| 9018 | `API_KEY_LIMIT_REACHED` |
+| 9019 | `NOT_API_USER` |
+| 10000 | `NO_POSITION` |
+| 10003 | `RATE_LIMIT_EXCEEDED` |
+| 10004 | `ACCESS_DENIED` |
+| 10005 | `RATE_LIMIT_PROFILE_INVALID` |
+
+`code=0` 表示成功，不属于错误。任何不在上表中的非零后端 code 对 Open API 客户端统一表现为 `9000 / INTERNAL_ERROR`。公开白名单只定义外部兼容契约，不要求业务服务删除内部更细的错误和日志。
 
 在“对外 GA”前仍要完成：
 
-1. API 错误码公开白名单，禁止泄露内部异常；
-2. WebSocket 全 topic reference、image/increment、sequence/gap/reconnect 规范；
-3. Java/Python SDK；
-4. Trader API E2E：Trader API Key -> signed HTTP login -> TCP/WebSocket -> 下单 -> 成交 -> balance/position -> reconnect；
-5. 现有 `marketIndicator=4` 的 topic 兼容方案，为后续同 symbol 多市场做准备。
+1. WebSocket 全 topic reference、image/increment、sequence/gap/reconnect 规范；
+2. Java/Python SDK；
+3. Trader API E2E：Trader API Key -> signed HTTP login -> TCP/WebSocket -> 下单 -> 成交 -> balance/position -> reconnect；
+4. 现有 `marketIndicator=4` 的 topic 兼容方案，为后续同 symbol 多市场做准备。
 
 这些项完成后，才把 Crypto Open API v1 标记为 External GA。

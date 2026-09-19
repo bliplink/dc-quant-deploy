@@ -198,8 +198,51 @@ components:
       properties:
         code:
           type: integer
+          description: |
+            DC Open API v1 public response code. Success is 0. Non-zero
+            backend codes outside this public whitelist are normalized by GW
+            to 9000 (INTERNAL_ERROR).
+          enum:
+            - 0
+            - 1
+            - 1004
+            - 1005
+            - 1006
+            - 1007
+            - 1050
+            - 5000
+            - 5001
+            - 5002
+            - 5003
+            - 5004
+            - 7000
+            - 7001
+            - 7002
+            - 7003
+            - 7004
+            - 8000
+            - 9000
+            - 9001
+            - 9002
+            - 9004
+            - 9005
+            - 9006
+            - 9007
+            - 9008
+            - 9009
+            - 9016
+            - 9018
+            - 9019
+            - 10000
+            - 10003
+            - 10004
+            - 10005
         msg:
           type: string
+          description: |
+            Stable public message for non-zero codes. Internal exception text,
+            SQL, stack traces, file paths and cluster internals are never part
+            of the Open API v1 response contract.
         data:
           nullable: true
         info1:

@@ -865,6 +865,7 @@ cat > "${OVERRIDE_ROOT}/GW/config/spring-gw-client.xml" <<'EOF'
     <property name="securityChecks"><list><ref bean="openApiIngressSecurityCheck"/><ref bean="openApiRateLimitSecurityCheck"/><ref bean="sqlInjSecurityCheck"/></list></property>
     <property name="filterTopics"><list><ref bean="apiKeyService"/><ref bean="openApiIngressSecurityCheck"/><ref bean="openApiRateLimitSecurityCheck"/></list></property>
     <property name="ApiKeyService" ref="apiKeyService"/>
+    <property name="openApiRateLimitSecurityCheck" ref="openApiRateLimitSecurityCheck"/>
   </bean>
   <bean id="apiKeyService" class="com.gateway.invoke.filter.apikey.ApiKeyService"/>
   <bean id="openApiIngressSecurityCheck" class="com.app.gw.security.OpenApiIngressSecurityCheck"/>

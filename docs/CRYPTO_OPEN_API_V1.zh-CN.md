@@ -466,16 +466,24 @@ GW 和服务端路由负责：
 - topic；
 - version。
 
-不能把以下内容作为稳定公共契约：
+GW 已作为 DC Open API v1 的最终错误响应边界。signed `/api`、`API`/`TenantAPI` Session 以及匿名公共行情响应均执行公共错误白名单：
 
-- Java exception；
-- SQL；
+- `code=0` 的成功响应保持业务数据不变；
+- 白名单错误保留公开 `code`，但 `msg` 强制转换成固定公共消息，错误 `data` 清空；
+- 非白名单 code、无法解析的响应、内部异常统一转换为 `9000 / INTERNAL_ERROR / data=null`；
+- `cid` 在可安全识别时保留，便于客户端与服务端日志关联；
+- WEB/TenantAdmin 内部产品链路不受 Open API 脱敏策略影响。
+
+公开错误码的唯一清单见《DC Crypto Open API v1 调用参考》和 `docs/openapi/crypto-openapi-v1.yaml`。服务端日志可以保留完整异常用于排障，但以下内容不得进入 Open API 错误响应：
+
+- Java exception / stack trace；
+- SQL / JDBC / 数据库内部信息；
+- 文件路径、类名；
 - ZooKeeper path；
-- 容器名；
-- 实例名；
-- partition owner。
+- 容器名、实例名；
+- partition owner / 内部集群状态细节。
 
-现有内部 handler 可以继续演进，但一旦某方法正式进入 `DcOpenApi.VERSION=v1`，破坏性修改必须通过 v2 或兼容字段完成。
+现有内部 handler 可以继续演进，但一旦某方法正式进入 `DcOpenApi.VERSION=v1`，破坏性修改必须通过 v2 或兼容字段完成。新增公共错误码必须先加入 GW whitelist、OpenAPI YAML 和公开参考文档，不能直接透传内部错误码。
 
 ## 10. 第二阶段：Tenant Market Ingress
 

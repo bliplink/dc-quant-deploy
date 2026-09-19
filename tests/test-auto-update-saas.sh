@@ -170,6 +170,19 @@ grep -Fq '不在每笔订单、行情、账户等 Session 业务请求上写数�
 grep -Fq 'last_used_time' "${SCRIPT_DIR}/docs/DC_OPEN_API_V1_REFERENCE.zh-CN.md" &&
 ! grep -Fq '1. `last_used_time` 更新' "${SCRIPT_DIR}/docs/DC_OPEN_API_V1_REFERENCE.zh-CN.md" ||
   fail "Open API last_used_time is still listed as a GA TODO"
+grep -Fq '<property name="openApiRateLimitSecurityCheck" ref="openApiRateLimitSecurityCheck"/>' "${SCRIPT_DIR}/generate-saas-configs.sh" ||
+  fail "generated SaaS GW proxy is missing Open API response-sanitizer session policy wiring"
+grep -Fq '9000 / INTERNAL_ERROR' "${SCRIPT_DIR}/docs/CRYPTO_OPEN_API_V1.zh-CN.md" &&
+grep -Fq '### 12.1 Open API v1 公共错误码白名单' "${SCRIPT_DIR}/docs/DC_OPEN_API_V1_REFERENCE.zh-CN.md" &&
+grep -Fq '| 10004 | `ACCESS_DENIED` |' "${SCRIPT_DIR}/docs/DC_OPEN_API_V1_REFERENCE.zh-CN.md" &&
+grep -Fq '| 10003 | `RATE_LIMIT_EXCEEDED` |' "${SCRIPT_DIR}/docs/DC_OPEN_API_V1_REFERENCE.zh-CN.md" ||
+  fail "Open API public error whitelist is undocumented"
+! grep -Fq '1. API 错误码公开白名单' "${SCRIPT_DIR}/docs/DC_OPEN_API_V1_REFERENCE.zh-CN.md" ||
+  fail "Open API public error whitelist is still listed as a GA TODO"
+grep -Fq 'Non-zero' "${SCRIPT_DIR}/docs/openapi/crypto-openapi-v1.yaml" &&
+grep -Fq '            - 10005' "${SCRIPT_DIR}/docs/openapi/crypto-openapi-v1.yaml" &&
+grep -Fq 'SQL, stack traces, file paths' "${SCRIPT_DIR}/docs/openapi/crypto-openapi-v1.yaml" ||
+  fail "OpenAPI YAML does not lock the public error-code boundary"
 ! grep -Fq 'OpenApiSvr-' "${SCRIPT_DIR}/docs/CRYPTO_OPEN_API_V1.zh-CN.md" ||
   fail "obsolete OpenApiSvr topology is still documented"
 grep -Fq '/api:' "${SCRIPT_DIR}/docs/openapi/crypto-openapi-v1.yaml" ||

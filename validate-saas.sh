@@ -80,6 +80,8 @@ grep -Fq '<property name="securityChecks"><list><ref bean="openApiIngressSecurit
   die "GW Open API rate-limit profile policy is not active in request security checks."
 grep -Fq '<property name="filterTopics"><list><ref bean="apiKeyService"/><ref bean="openApiIngressSecurityCheck"/><ref bean="openApiRateLimitSecurityCheck"/></list></property>' "${gateway_client_config}" ||
   die "GW Open API rate-limit profile policy is not subscribed to LoginSvr session updates."
+grep -Fq '<property name="openApiRateLimitSecurityCheck" ref="openApiRateLimitSecurityCheck"/>' "${gateway_client_config}" ||
+  die "GW Open API response sanitizer cannot resolve API/TenantAPI Session policy."
 grep -Fq '<property name="traderStandardQps" value="100"/>' "${gateway_client_config}" &&
 grep -Fq '<property name="traderStandardBurst" value="30"/>' "${gateway_client_config}" &&
 grep -Fq '<property name="tenantStandardQps" value="20"/>' "${gateway_client_config}" &&
