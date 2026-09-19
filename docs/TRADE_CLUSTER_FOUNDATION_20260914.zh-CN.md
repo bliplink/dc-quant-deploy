@@ -140,7 +140,7 @@ TradeSvr 当前代码验证已经覆盖：
 11. 验证 ProjectionSvr Trade watermark 连续推进，并能从 GAP / 重启恢复。
 12. 再执行反向 role reversal，确认 A/B 均可承担 Primary。
 
-只有上述真实部署验收全部通过，才把 TradeSvr A/B 标记为生产可用 HA 集群。
+只有目标宿主机上的统一验收全部通过，才把该部署实例的 TradeSvr A/B 标记为通过 HA 验收；仓库级 CI 只证明代码与验收入口具备执行条件。
 
 ## 与 MDSvr / OrderSvr 的关系
 
@@ -169,5 +169,5 @@ TradeSvr A/B ── committed binary ──┘
 - 默认仍保持 `TRADE_CLUSTER_ENABLED=false`，不影响当前单节点部署。
 - 先在隔离/验收环境启用 A/B。
 - 必须使用同一版本不可变镜像和同一套公共依赖。
-- 未完成 failover、role reversal 和 Projection GAP 验收前，不在生产租户上启用。
+- 未在目标宿主机完成 `acceptance-saas.sh`（含 role reversal、Projection 连续性和压力门禁）前，不把该实例标记为生产 HA 验收通过。
 - 任一 partition recovery、replication 或 READY 校验失败时，应保持该 partition fenced，而不是绕过门禁继续写。
