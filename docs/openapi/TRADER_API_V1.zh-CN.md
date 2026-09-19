@@ -2,7 +2,9 @@
 
 当前基线：2026-09-19。
 
-本文面向交易员、量化程序、租户自研 Robot 和第三方交易终端。Trader API Key 的服务端 Session 类型固定为 `API`。
+本文面向单一交易账号自己的量化程序和第三方交易终端。Trader API Key 的服务端 Session 类型固定为 `API`，并且所有交易/账户操作都被强制绑定到当前 Session 自己的 `user_id`。
+
+Trader 与 Broker 的交易字段和方法完全相同，公共合同见 [Trading API v1](TRADING_API_V1.zh-CN.md)。Broker 的差异仅在于可以指定本租户 `customerId`，并具备客户资料和资金充值/提现能力。
 
 ## 1. 快速开始
 
@@ -179,6 +181,8 @@ burst  = 30
 
 Trader API 不允许：
 
+- 指定其他 `customerId/userId` 代客下单；
+- 客户充值/提现；
 - Tenant 用户管理；
 - Tenant 品种管理；
 - Tenant Robot 管理；

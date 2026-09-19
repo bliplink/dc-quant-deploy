@@ -144,10 +144,21 @@ grep -Fq 'sudo ./acceptance-saas.sh' "${SCRIPT_DIR}/README.md" ||
   fail "full business acceptance command is undocumented"
 grep -Fq 'Crypto Open API v1' "${SCRIPT_DIR}/README.md" ||
   fail "Crypto Open API documentation is not linked from README"
+grep -Fq 'docs/openapi/TRADING_API_V1.zh-CN.md' "${SCRIPT_DIR}/README.md" &&
 grep -Fq 'docs/openapi/TRADER_API_V1.zh-CN.md' "${SCRIPT_DIR}/README.md" &&
+grep -Fq 'docs/openapi/BROKER_API_V1.zh-CN.md' "${SCRIPT_DIR}/README.md" &&
 grep -Fq 'docs/openapi/TENANT_API_V1.zh-CN.md' "${SCRIPT_DIR}/README.md" &&
 grep -Fq 'docs/openapi/WEBSOCKET_TOPICS_V1.zh-CN.md' "${SCRIPT_DIR}/README.md" ||
-  fail "Trader/Tenant/WebSocket public API documentation is not linked from README"
+  fail "Trading/Trader/Broker/Tenant/WebSocket public API documentation is not linked from README"
+grep -Fq 'Trader API Key' "${SCRIPT_DIR}/docs/openapi/TRADING_API_V1.zh-CN.md" &&
+grep -Fq 'Broker API Key' "${SCRIPT_DIR}/docs/openapi/TRADING_API_V1.zh-CN.md" &&
+grep -Fq '只能是当前 API Key 所属交易账号' "${SCRIPT_DIR}/docs/openapi/TRADING_API_V1.zh-CN.md" ||
+  fail "shared Trader/Broker trading contract is incomplete"
+grep -Fq 'type = broker' "${SCRIPT_DIR}/docs/openapi/BROKER_API_V1.zh-CN.md" &&
+grep -Fq 'CUSTOMER_CASH' "${SCRIPT_DIR}/docs/openapi/BROKER_API_V1.zh-CN.md" &&
+grep -Fq 'TradeSvr/cashIn' "${SCRIPT_DIR}/docs/openapi/BROKER_API_V1.zh-CN.md" &&
+grep -Fq 'TradeSvr/cashOut' "${SCRIPT_DIR}/docs/openapi/BROKER_API_V1.zh-CN.md" ||
+  fail "Broker API customer trading/cash contract is incomplete"
 grep -Fq 'Markdown 是源文件' "${SCRIPT_DIR}/docs/openapi/README.zh-CN.md" &&
 grep -Fq 'MkDocs' "${SCRIPT_DIR}/docs/openapi/README.zh-CN.md" ||
   fail "Open API documentation portal is not static-site ready"

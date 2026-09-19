@@ -107,6 +107,27 @@ GW 在签名校验后注入 key 对应用户身份；LoginSvr 再从自己的 AP
 }
 ```
 
+### Broker key success
+
+```json
+{
+  "code": 0,
+  "msg": "NO_ERROR",
+  "data": {
+    "client_type": "TenantAPI",
+    "user_id": "tenant-admin-user",
+    "location": "TENANT_A",
+    "token": "<SESSION>",
+    "sid": "<SESSION>",
+    "api_key_type": "broker",
+    "permissions": "MARKET_READ,ACCOUNT_READ,ORDER_READ,ORDER_WRITE,TENANT_READ,TENANT_WRITE,CUSTOMER_CASH",
+    "rate_limit_profile": "TRADER_STANDARD"
+  }
+}
+```
+
+Broker 交易请求必须显式指定本租户客户 `userId/customerId`。Trader 请求仍强制绑定自己。Broker 的 `CUSTOMER_CASH` 额外开放 `cashIn/cashOut` 给本租户客户。
+
 ### Tenant Service key success
 
 ```json

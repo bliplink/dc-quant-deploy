@@ -6,8 +6,10 @@
 
 ## 文档入口
 
-- [Trader API v1](TRADER_API_V1.zh-CN.md)：交易员、量化程序、租户自研 Robot 使用。
-- [Tenant API v1](TENANT_API_V1.zh-CN.md)：租户后台、租户自动化和 Tenant Service 使用。
+- [Trading API v1](TRADING_API_V1.zh-CN.md)：Trader 与 Broker 共用的行情/订单/成交/账户交易合同。
+- [Trader API v1](TRADER_API_V1.zh-CN.md)：单一交易账号，自始至终只能操作自己。
+- [Broker API v1](BROKER_API_V1.zh-CN.md)：租户代客交易、客户资料、充值和提现。
+- [Tenant Management API v1](TENANT_API_V1.zh-CN.md)：租户后台、租户自动化和管理型 Tenant Service Key 使用。
 - [WebSocket / Topic Reference v1](WEBSOCKET_TOPICS_V1.zh-CN.md)：行情、订单、成交、资金、持仓订阅以及重连/Gap 规则。
 - [OpenAPI 3.0 HTTP 传输规范](crypto-openapi-v1.yaml)：机器可读 HTTP envelope / response schema。
 - [总体架构与安全基线](../CRYPTO_OPEN_API_V1.zh-CN.md)。
@@ -37,8 +39,9 @@ docs/openapi/*.md + crypto-openapi-v1.yaml
 
 ## 身份边界
 
-- Trader API Key -> `client_type=API`。
-- Tenant Service API Key -> `client_type=TenantAPI`。
+- Trader API Key -> `type=trade`, `client_type=API`，只能操作自己。
+- Tenant Service API Key -> `type=tenant/service`, `client_type=TenantAPI`，只能做管理面。
+- Broker API Key -> `type=broker`, `client_type=TenantAPI`，可管理客户并代表本租户客户交易。
 - Trader API 不能进入 Tenant Control Plane。
-- TenantAPI 不能进入 OrderSvr/TradeSvr Trader 交易接口。
+- 管理型 TenantAPI 不能进入交易接口；只有 `api_key_type=broker` 的 TenantAPI 才能指定本租户客户进入交易接口。
 - 所有租户/用户身份最终以 LoginSvr Session 为准。

@@ -2,7 +2,9 @@
 
 当前基线：2026-09-19。
 
-本文面向租户自己的管理后台、自动化运维和 Tenant Service。Tenant Service API Key 的 Session 类型固定为 `TenantAPI`。
+本文只描述 **Tenant Management API**：租户自己的管理后台和自动化运维。管理型 Tenant Service API Key 的 Session 类型固定为 `TenantAPI`，但不能下单。
+
+如果租户需要自己开发完整交易系统，并代表名下客户下单/撤单/查询账户/充值/提现，应使用 [Broker API v1](BROKER_API_V1.zh-CN.md)。
 
 ## 1. Tenant API 与 Trader API 的边界
 
@@ -22,7 +24,7 @@ Tenant Service Key 默认 scope：
 MARKET_READ,TENANT_READ,TENANT_WRITE
 ```
 
-Tenant Service Key **不拥有 ORDER_WRITE**，且 OrderSvr/TradeSvr 会硬拒绝 `TenantAPI`。
+普通 Tenant Service Key **不拥有 ORDER_WRITE**。OrderSvr/TradeSvr 会拒绝管理型 TenantAPI；只有 `api_key_type=broker` 的 TenantAPI 才可以按 Broker 规则进入交易接口。
 
 租户自研 Robot 应创建独立交易用户并给该用户创建 Trader API Key，而不是使用 Tenant Service Key 下单。
 

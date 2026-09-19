@@ -70,7 +70,7 @@ v1 先完整开放当前加密货币永续/保证金能力：
 
 未来扩 FX、商品、债券和租户自定义品种时继续复用 `marketIndicator + SecurityID` 和同一 GW/API 框架，再增加 Instrument/Product 元数据。
 
-## 3. 两类 API Key
+## 3. 三类 API Key
 
 ### 3.1 Trader API Key
 
@@ -91,7 +91,31 @@ ORDER_WRITE
 
 Trader key 不允许申请 Tenant scope。
 
-### 3.2 Tenant Service API Key
+### 3.2 Broker API Key
+
+用途：
+
+- 租户自行开发完整交易前台/APP/后台；
+- 创建并管理本租户交易客户；
+- 使用与 Trader 相同的交易 API 代表客户下单、撤单和查询；
+- 对本租户客户执行充值/提现。
+
+默认能力：
+
+```text
+MARKET_READ
+ACCOUNT_READ
+ORDER_READ
+ORDER_WRITE
+TENANT_READ
+TENANT_WRITE
+CUSTOMER_CASH
+```
+
+Broker 登录仍使用 `client_type=TenantAPI`，但 `api_key_type=broker`。交易服务只允许 Broker 指定本租户客户，普通 Tenant/Service Key 仍不能进入交易面。
+
+
+### 3.3 Tenant Service API Key
 
 用途：
 
