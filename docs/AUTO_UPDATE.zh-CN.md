@@ -1,8 +1,11 @@
 # SaaS 公共镜像自动部署
 
+> 当前基线：2026-09-19。本文件描述 `IMAGE_SOURCE=registry` 的自动更新；
+> `IMAGE_SOURCE=local` 的单机源码构建不使用本自动更新流程。
+
 ## 目标
 
-部署机定时检查 `.env.prod` 中配置的 SaaS 应用镜像标签。默认标签是独立的 `saas-crypto`；如果后续统一改成 `latest`，脚本无需修改，只需调整对应 `*_TAG`。
+部署机定时检查 `.env.prod` 中配置的 SaaS 应用镜像标签。默认部署标签为独立的 `saas-crypto` 别名；不建议改成跨系统共享的 `latest`。若生产需要更强可重复性，应使用经 QA/Staging 晋级的不可变 `sha-*` 标签或 digest，并关闭移动标签自动更新。
 
 自动任务不更新 MySQL、ClickHouse、ZooKeeper 等基础设施固定版本，也不会接触独立量化系统或 `/opt/sumscope`。
 
@@ -10,7 +13,7 @@
 
 量化系统可以逐服务比较运行容器和最新镜像后重启。SaaS 的 OrderSvr、TradeSvr、AdminSvr 等会共享公共协议并依赖数据库迁移，因此这里按一个完整发布批次处理：
 
-1. 通过 GHCR Registry API 读取十个应用标签的 manifest digest，不下载镜像层。
+1. 通过 GHCR Registry API 读取当前应用集合的 manifest digest，不下载镜像层。常规集合包含 Gateway、Login、MD、APS、Order、Trade、Liq、Manager、Admin、Robot、Trade Web、Tenant Web、Platform Web；启用 Order 或 Trade 集群时还包含 ProjectionSvr。
 2. digest 集合保持稳定达到安静窗口后，才认为同批 GitHub Actions 已构建完成。
 3. 先快进部署仓库，确保数据库迁移和镜像版本同步。
 4. 仅对变化或运行版本漂移的服务执行串行 `docker pull`。
