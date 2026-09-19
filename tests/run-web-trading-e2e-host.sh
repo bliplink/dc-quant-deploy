@@ -98,6 +98,20 @@ else
   log "Using the existing E2E database baseline without mutation."
 fi
 
+resolve_registered_user_id() {
+  local username="$1" user_id
+  user_id="$(mysql_exec dc -e "SELECT user_id FROM dc_users WHERE location='${E2E_LOCATION}' AND user_name='${username}' LIMIT 1;")"
+  [[ -n "${user_id}" ]] || die "No registered identity found for ${username} in ${E2E_LOCATION}"
+  safe_user_id="${user_id}"
+  [[ "${safe_user_id}" =~ ^[A-Za-z0-9_.-]+$ ]] || die "Unsafe registered user_id for ${username}"
+  printf '%s' "${user_id}"
+}
+
+E2E_BUYER_ID="$(resolve_registered_user_id "${E2E_BUYER}")"
+E2E_SELLER_ID="$(resolve_registered_user_id "${E2E_SELLER}")"
+[[ "${E2E_BUYER_ID}" != "${E2E_SELLER_ID}" ]] || die "Buyer and seller resolved to the same registered identity"
+log "Resolved registered identities buyer=${E2E_BUYER_ID} seller=${E2E_SELLER_ID}."
+
 if is_true "${E2E_RESTART_SERVICES}"; then
   restart_order_trade_for_e2e
 else
@@ -115,7 +129,7 @@ wait_for_gateway_route OrderSvr
 wait_for_gateway_route TradeSvr
 
 login_api_check() {
-  local user="$1"
+  local user="$1" expected_user_id="$2"
   local request_file response
   request_file="$(mktemp)"
   chmod 0600 "${request_file}"
@@ -127,12 +141,24 @@ JSON
     die "Login API request failed for ${user}"
   }
   rm -f "${request_file}"
-  grep -Eq '"code"[[:space:]]*:[[:space:]]*0' <<<"${response}" || die "Login API rejected ${user}"
-  grep -Fq "\"user_id\":\"${user}\"" <<<"${response}" || die "Login API returned another user for ${user}"
+  python3 - "${response}" "${expected_user_id}" "${E2E_LOCATION}" <<'PY' || die "Login API returned an unexpected registered identity for ${user}"
+import json
+import sys
+obj = json.loads(sys.argv[1])
+expected_user_id = sys.argv[2]
+expected_location = sys.argv[3]
+if int(obj.get("code", -1)) != 0:
+    raise SystemExit("login rejected: %s" % obj)
+data = obj.get("data") or {}
+if str(data.get("user_id") or "") != expected_user_id:
+    raise SystemExit("unexpected user_id: %s" % data)
+if str(data.get("location") or "") != expected_location:
+    raise SystemExit("unexpected location: %s" % data)
+PY
 }
 
-login_api_check "${E2E_BUYER}"
-login_api_check "${E2E_SELLER}"
+login_api_check "${E2E_BUYER}" "${E2E_BUYER_ID}"
+login_api_check "${E2E_SELLER}" "${E2E_SELLER_ID}"
 
 wrong_location_request="$(mktemp)"
 chmod 0600 "${wrong_location_request}"
@@ -185,6 +211,8 @@ docker exec \
   -e E2E_LOCATION="${E2E_LOCATION}" \
   -e E2E_BUYER="${E2E_BUYER}" \
   -e E2E_SELLER="${E2E_SELLER}" \
+  -e E2E_BUYER_ID="${E2E_BUYER_ID}" \
+  -e E2E_SELLER_ID="${E2E_SELLER_ID}" \
   -e E2E_PASSWORD="${E2E_PASSWORD}" \
   -e E2E_ARTIFACT_DIR=/artifacts \
   "${E2E_RUNNER_NAME}" bash /work/run-web-trading-e2e.sh
@@ -196,33 +224,33 @@ for attempt in $(seq 1 30); do
     cat <<SQL
 SELECT COUNT(*) FROM dc.dc_orders_position
 WHERE location='${E2E_LOCATION}'
-  AND user_id IN ('${E2E_BUYER}','${E2E_SELLER}')
+  AND user_id IN ('${E2E_BUYER_ID}','${E2E_SELLER_ID}')
   AND (long_position <> 0 OR short_position <> 0
        OR long_locked_position <> 0 OR short_locked_position <> 0
        OR long_used_margin <> 0 OR short_used_margin <> 0);
 SELECT COUNT(*) FROM dc.dc_orders
 WHERE location='${E2E_LOCATION}'
-  AND user_id IN ('${E2E_BUYER}','${E2E_SELLER}')
+  AND user_id IN ('${E2E_BUYER_ID}','${E2E_SELLER_ID}')
   AND ord_status IN ('Newing','New','PartiallyFilled','Partially_Filled','PendingCancel','Pending_Cancel');
 SELECT COUNT(*) FROM dc.dc_users_balance
 WHERE location='${E2E_LOCATION}'
-  AND user_id IN ('${E2E_BUYER}','${E2E_SELLER}')
+  AND user_id IN ('${E2E_BUYER_ID}','${E2E_SELLER_ID}')
   AND (used_margin <> 0 OR freezed_margin <> 0 OR freezed_commission <> 0);
 SELECT COUNT(*) FROM dc.dc_orders_execorders
 WHERE location='${E2E_LOCATION}'
-  AND user_id IN ('${E2E_BUYER}','${E2E_SELLER}')
+  AND user_id IN ('${E2E_BUYER_ID}','${E2E_SELLER_ID}')
   AND UPPER(oc_type)='OPEN' AND last_qty > 0;
 SELECT COUNT(*) FROM dc.dc_orders_execorders
 WHERE location='${E2E_LOCATION}'
-  AND user_id IN ('${E2E_BUYER}','${E2E_SELLER}')
+  AND user_id IN ('${E2E_BUYER_ID}','${E2E_SELLER_ID}')
   AND UPPER(oc_type)='CLOSE' AND last_qty > 0;
 SELECT COUNT(*) FROM dc.dc_orders
-WHERE location='${E2E_LOCATION}' AND user_id='${E2E_BUYER}'
+WHERE location='${E2E_LOCATION}' AND user_id='${E2E_BUYER_ID}'
   AND UPPER(oc_type)='CLOSE' AND reduce_only=1
   AND ord_type='Market' AND timeinforce='IOC' AND ord_status='Filled';
 SELECT COUNT(*) FROM dc.dc_users_posting
 WHERE location='${E2E_LOCATION}'
-  AND user_id IN ('${E2E_BUYER}','${E2E_SELLER}') AND type=1 AND amount='100000';
+  AND user_id IN ('${E2E_BUYER_ID}','${E2E_SELLER_ID}') AND type=1 AND amount='100000';
 SQL
   } | mysql_exec dc)"
   mapfile -t db_rows <<<"${db_result}"
