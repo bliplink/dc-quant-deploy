@@ -590,17 +590,17 @@ ADL_LEDGER
 - GW HTTP + TCP/WebSocket 真实链路已有 RobotSvr 运行验证；
 - 共享 `DcOpenApi.VERSION=v1` 服务/方法/scope 常量；
 - `permissions` 的细粒度 `READ/WRITE` 下游强制执行；
-- Trader/Tenant API Key 可选择各自权限域内的非空 scope 子集，且不能跨域提权。
+- Trader/Tenant API Key 可选择各自权限域内的非空 scope 子集，且不能跨域提权；
+- `ip_whitelist` 已在 GW signed `/api` 入口强制执行，支持 IPv4/IPv6 单 IP 与 CIDR；当前直连部署使用 socket peer，不信任客户端代理头。
 
 在“对外 GA”前仍要完成：
 
-1. `ip_whitelist` 在 API 登录/入口强制执行；
-2. `rate_limit_profile` 与 GW 通用限流联动；
-3. `last_used_time` 更新；
-4. API 错误码公开白名单，禁止泄露内部异常；
-5. WebSocket 全 topic reference、image/increment、sequence/gap/reconnect 规范；
-6. Java/Python SDK；
-7. Trader API E2E：Trader API Key -> signed HTTP login -> TCP/WebSocket -> 下单 -> 成交 -> balance/position -> reconnect；
-8. 现有 `marketIndicator=4` 的 topic 兼容方案，为后续同 symbol 多市场做准备。
+1. `rate_limit_profile` 与 GW 通用限流联动；
+2. `last_used_time` 更新；
+3. API 错误码公开白名单，禁止泄露内部异常；
+4. WebSocket 全 topic reference、image/increment、sequence/gap/reconnect 规范；
+5. Java/Python SDK；
+6. Trader API E2E：Trader API Key -> signed HTTP login -> TCP/WebSocket -> 下单 -> 成交 -> balance/position -> reconnect；
+7. 现有 `marketIndicator=4` 的 topic 兼容方案，为后续同 symbol 多市场做准备。
 
 这些项完成后，才把 Crypto Open API v1 标记为 External GA。

@@ -149,6 +149,8 @@ last_used_time
 - Tenant Service key 只能由 TENANT_ADMIN 控制面创建；
 - 查询 key 不返回 `secret_key`；
 - 过期 key 在 LoginSvr fail-closed；
+- `ip_whitelist` 已在 GW signed `/api` 入口强制执行：空白名单表示不限制；非空白名单支持单个 IPv4/IPv6 与 CIDR，格式非法或来源不匹配均 fail-closed；
+- 当前 SaaS 直连部署以 Netty socket peer 作为权威来源 IP，不信任客户端自行提交的 `X-Forwarded-For`；未来若在 GW 前增加反向代理/LB，必须同时配置可信代理链路后再启用代理头；
 - 私有业务请求中的 `Location/UserID` 不是权威身份，下游服务仍由 Session 覆盖并校验冲突。
 
 ## 4. GW HTTP 协议

@@ -70,6 +70,10 @@ grep -Fq 'openApiIngressSecurityCheck' "${gateway_client_config}" ||
   die "GW Open API ingress policy is not enabled."
 grep -Fq 'com.app.gw.security.OpenApiIngressSecurityCheck' "${gateway_client_config}" ||
   die "GW Open API ingress policy bean is missing."
+grep -Fq 'com.app.gw.security.SaasGWProxy' "${gateway_client_config}" ||
+  die "GW SaaS proxy is not enforcing signed /api boundary semantics."
+grep -Fq '<ref bean="apiKeyService"/><ref bean="openApiIngressSecurityCheck"/>' "${gateway_client_config}" ||
+  die "GW Open API ingress policy is not subscribed to API-key policy updates."
 
 login_config="${DEPLOY_ROOT}/control/overrides/LoginSvr/config/application.properties"
 [[ -r "${login_config}" ]] ||

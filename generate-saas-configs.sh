@@ -849,7 +849,7 @@ cat > "${OVERRIDE_ROOT}/GW/config/spring-gw-client.xml" <<'EOF'
 <beans xmlns="http://www.springframework.org/schema/beans"
        xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
        xsi:schemaLocation="http://www.springframework.org/schema/beans http://www.springframework.org/schema/beans/spring-beans-3.0.xsd">
-  <bean id="proxy" class="com.gateway.invoke.gw.GWProxy" init-method="init">
+  <bean id="proxy" class="com.app.gw.security.SaasGWProxy" init-method="init">
     <property name="topicManager" ref="topicManager"/>
     <property name="notifyProxy" ref="notify"/>
     <property name="tcpConnector" ref="tcpConnector"/>
@@ -863,7 +863,7 @@ cat > "${OVERRIDE_ROOT}/GW/config/spring-gw-client.xml" <<'EOF'
       </map>
     </property>
     <property name="securityChecks"><list><ref bean="openApiIngressSecurityCheck"/><ref bean="sqlInjSecurityCheck"/></list></property>
-    <property name="filterTopics"><list><ref bean="apiKeyService"/></list></property>
+    <property name="filterTopics"><list><ref bean="apiKeyService"/><ref bean="openApiIngressSecurityCheck"/></list></property>
     <property name="ApiKeyService" ref="apiKeyService"/>
   </bean>
   <bean id="apiKeyService" class="com.gateway.invoke.filter.apikey.ApiKeyService"/>
