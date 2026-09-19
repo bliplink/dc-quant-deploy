@@ -17,6 +17,10 @@ on:
       - tests/run-web-trading-e2e-host.sh
       - tests/prepare-web-trading-e2e.sh
       - acceptance-saas.sh
+      - tests/run-robot-liquidity-e2e-host.sh
+      - tests/tenant-lifecycle-web-e2e.js
+      - tests/run-tenant-lifecycle-web-e2e-host.sh
+      - tests/run-tenant-lifecycle-e2e-host.sh
       - generate-saas-configs.sh
       - validate-saas.sh
       - control.prod/placement/**
@@ -56,6 +60,10 @@ on:
       - tests/run-web-trading-e2e-host.sh
       - tests/prepare-web-trading-e2e.sh
       - acceptance-saas.sh
+      - tests/run-robot-liquidity-e2e-host.sh
+      - tests/tenant-lifecycle-web-e2e.js
+      - tests/run-tenant-lifecycle-web-e2e-host.sh
+      - tests/run-tenant-lifecycle-e2e-host.sh
       - generate-saas-configs.sh
       - validate-saas.sh
       - control.prod/placement/**
@@ -86,9 +94,9 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - name: Check shell syntax
-        run: bash -n auto-update-saas.sh build-saas-images.sh install-saas.sh deploy-saas.sh acceptance-saas.sh generate-saas-configs.sh validate-saas.sh tests/prepare-web-trading-e2e.sh tests/run-web-trading-e2e-host.sh tests/run-core-trading-acceptance.sh tests/run-trade-cluster-role-reversal-host.sh tests/test-auto-update-saas.sh tests/test-md-cluster-config.sh tests/test-order-cluster-c-config.sh tests/test-trade-cluster-config.sh tests/order-routing-key.sh tests/test-placement-routing-key.sh
+        run: bash -n auto-update-saas.sh build-saas-images.sh install-saas.sh deploy-saas.sh acceptance-saas.sh generate-saas-configs.sh validate-saas.sh tests/prepare-web-trading-e2e.sh tests/run-web-trading-e2e-host.sh tests/run-core-trading-acceptance.sh tests/run-tenant-lifecycle-e2e-host.sh tests/run-tenant-lifecycle-web-e2e-host.sh tests/run-robot-liquidity-e2e-host.sh tests/run-trade-cluster-role-reversal-host.sh tests/test-auto-update-saas.sh tests/test-md-cluster-config.sh tests/test-order-cluster-c-config.sh tests/test-trade-cluster-config.sh tests/order-routing-key.sh tests/test-placement-routing-key.sh
       - name: Check browser E2E syntax
-        run: node --check tests/web-trading-e2e.js
+        run: node --check tests/web-trading-e2e.js && node --check tests/tenant-lifecycle-web-e2e.js
       - name: Validate SaaS auto-update wiring
         run: tests/test-auto-update-saas.sh
       - name: Validate generated cluster configurations
