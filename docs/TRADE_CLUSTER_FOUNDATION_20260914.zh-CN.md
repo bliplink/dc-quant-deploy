@@ -107,11 +107,19 @@ TradeSvr 当前代码验证已经覆盖：
 
 这些验证说明代码和镜像具备进入真实多节点部署验收的条件。
 
-## 尚未完成的最终生产验收
+## 2026-09-19 验收状态与剩余宿主机门禁
 
-当前仍不能仅凭 CI 将 Trade 集群直接定义为“生产已验收”。
+当前代码/CI 已继续补齐：
 
-还必须在隔离部署环境完成真实 A/B 故障注入：
+- ProjectionSvr Trade binary consumer 的 GAP catch-up、buffer drain、BASELINE_MOVED/rebase 测试；
+- Order/Trade Projection durable watermark 的重启连续性与不回退检查；
+- 核心真实交易后 Order/Trade watermark 必须实际推进；
+- `run-trade-cluster-role-reversal-host.sh`：A→B→A role reversal、READY、epoch/version 和 Projection 连续性；
+- `acceptance-saas.sh`：把真实交易、强制压力、Robot、role reversal 和最终 health validation 串成统一门禁。
+
+因此“缺少 failover/role reversal/Projection GAP 自动化”这一旧缺口已经关闭。仍不能仅凭 CI 把某台部署主机定义为“生产 HA 已验收”：目标 Linux/Docker 宿主机必须真正执行 `install-saas.sh --full-cluster -> acceptance-saas.sh` 并得到最终 PASS。
+
+统一宿主机验收会覆盖/验证以下目标：
 
 1. 使用固定不可变 TradeSvr 镜像启动 A/B。
 2. bootstrap 256 个 partition assignments。
