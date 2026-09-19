@@ -106,6 +106,10 @@ grep -Fq 'E2E_BUYER_ID' "${SCRIPT_DIR}/tests/run-web-trading-e2e-host.sh" ||
   fail "browser trading acceptance does not resolve registered user identities"
 grep -Fq 'tests/run-core-trading-acceptance.sh' "${SCRIPT_DIR}/acceptance-saas.sh" ||
   fail "unified acceptance does not run the core business flow"
+grep -Fq 'tests/run-tenant-lifecycle-web-e2e-host.sh' "${SCRIPT_DIR}/acceptance-saas.sh" ||
+  fail "unified acceptance does not run tenant/platform lifecycle business validation"
+grep -Fq 'tests/run-robot-liquidity-e2e-host.sh' "${SCRIPT_DIR}/acceptance-saas.sh" ||
+  fail "unified acceptance does not run RobotSvr liquidity business validation"
 grep -Fq 'tests/run-trade-cluster-role-reversal-host.sh' "${SCRIPT_DIR}/acceptance-saas.sh" ||
   fail "unified acceptance does not exercise TradeSvr role reversal"
 [[ "$(grep -Fc 'validate-saas.sh' "${SCRIPT_DIR}/acceptance-saas.sh")" -ge 2 ]] ||
