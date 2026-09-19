@@ -10,7 +10,9 @@ on:
       - docs/**
       - docs/openapi/crypto-openapi-v1.yaml
       - docs/CRYPTO_OPEN_API_V1.zh-CN.md
+      - mysql/init/10-dc.sql
       - mysql/migrations/20260919_open_api_key_policy.sql
+      - mysql/migrations/20260919_open_api_session_context.sql
       - docs/TRADE_CLUSTER_FOUNDATION_20260914.zh-CN.md
       - docs/BINANCE_BYBIT_ROADMAP.zh-CN.md
       - docs/CLUSTER_DEV_LOCAL_COMMON_BUILD.zh-CN.md
@@ -68,7 +70,9 @@ on:
       - docs/**
       - docs/openapi/crypto-openapi-v1.yaml
       - docs/CRYPTO_OPEN_API_V1.zh-CN.md
+      - mysql/init/10-dc.sql
       - mysql/migrations/20260919_open_api_key_policy.sql
+      - mysql/migrations/20260919_open_api_session_context.sql
       - docs/TRADE_CLUSTER_FOUNDATION_20260914.zh-CN.md
       - docs/BINANCE_BYBIT_ROADMAP.zh-CN.md
       - docs/CLUSTER_DEV_LOCAL_COMMON_BUILD.zh-CN.md
@@ -125,6 +129,13 @@ jobs:
       - uses: actions/checkout@v4
       - name: Check shell syntax
         run: bash -n auto-update-saas.sh build-saas-images.sh install-saas.sh deploy-saas.sh acceptance-saas.sh generate-saas-configs.sh validate-saas.sh tests/prepare-web-trading-e2e.sh tests/run-web-trading-e2e-host.sh tests/run-core-trading-acceptance.sh tests/run-core-trading-stress-host.sh tests/run-tenant-lifecycle-e2e-host.sh tests/run-tenant-lifecycle-web-e2e-host.sh tests/run-robot-liquidity-e2e-host.sh tests/run-trade-cluster-role-reversal-host.sh tests/test-auto-update-saas.sh tests/test-md-cluster-config.sh tests/test-order-cluster-c-config.sh tests/test-trade-cluster-config.sh tests/order-routing-key.sh tests/test-placement-routing-key.sh
+      - name: Validate Open API session context contract
+        run: |
+          grep -q 'api_key_type' mysql/init/10-dc.sql
+          grep -q 'permissions' mysql/migrations/20260919_open_api_session_context.sql
+          grep -q 'rate_limit_profile' mysql/migrations/20260919_open_api_session_context.sql
+          grep -q 'MARKET_READ,TENANT_READ,TENANT_WRITE' mysql/migrations/20260919_open_api_key_policy.sql
+          grep -q 'OpenApiSessionIdentity' docs/openapi/crypto-openapi-v1.yaml
       - name: Check browser E2E syntax
         run: node --check tests/web-trading-e2e.js && node --check tests/tenant-lifecycle-web-e2e.js && node --check tests/tenant-platform-console-e2e.js && node --check tests/core-trading-load.js
       - name: Validate SaaS auto-update wiring
