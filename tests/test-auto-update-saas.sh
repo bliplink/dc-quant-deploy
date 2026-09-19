@@ -74,6 +74,26 @@ grep -Fqx 'verify_source_dependency_alignment' "${SCRIPT_DIR}/build-saas-images.
   fail "local source dependency-alignment guard is not invoked"
 grep -Fq 'uses a dynamic Maven dependency version (LATEST/RELEASE)' "${SCRIPT_DIR}/build-saas-images.sh" ||
   fail "dynamic Maven version guard is missing"
+grep -q '^prepare_local_build_identity()' "${SCRIPT_DIR}/deploy-saas.sh" ||
+  fail "immutable local build tag preparation is missing"
+grep -Fq 'SAAS_LOCAL_BUILD_TAG:-cluster-dev-local-' "${SCRIPT_DIR}/deploy-saas.sh" ||
+  fail "local build tag must default to an immutable cluster-dev tag"
+grep -Fq 'prepare_local_build_identity' "${SCRIPT_DIR}/deploy-saas.sh" ||
+  fail "local build identity preparation is not invoked"
+grep -Fq 'COMMON_JAR_SHA256=${common_hash}' "${SCRIPT_DIR}/build-saas-images.sh" ||
+  fail "local Java images are missing com.app.common SHA-256 provenance"
+grep -Fq 'COMMON_REVISION=com-app-common-v${common_version}' "${SCRIPT_DIR}/build-saas-images.sh" ||
+  fail "local Java images are missing com.app.common revision provenance"
+
+for image_var in \
+  GW_IMAGE_REPOSITORY LOGINSVR_IMAGE_REPOSITORY MDSVR_IMAGE_REPOSITORY APSSVR_IMAGE_REPOSITORY \
+  ORDERSVR_IMAGE_REPOSITORY PROJECTIONSVR_IMAGE_REPOSITORY TRADESVR_IMAGE_REPOSITORY \
+  LIQSVR_IMAGE_REPOSITORY MANAGERSVR_IMAGE_REPOSITORY ADMINSVR_IMAGE_REPOSITORY \
+  ROBOTSVR_IMAGE_REPOSITORY TRADE_WEB_IMAGE_REPOSITORY TENANT_WEB_IMAGE_REPOSITORY \
+  PLATFORM_WEB_IMAGE_REPOSITORY; do
+  grep -Fq "\${${image_var}" "${SCRIPT_DIR}/build-saas-images.sh" ||
+    fail "local image builder does not produce compose image variable ${image_var}"
+done
 grep -Fqx 'recover_order_cluster_if_needed' "${SCRIPT_DIR}/deploy-saas.sh" ||
   fail "staged OrderSvr recovery is not invoked"
 grep -Fq 'docker logs --since "${a_started}" dc-saas-ordersvr' "${SCRIPT_DIR}/deploy-saas.sh" ||
