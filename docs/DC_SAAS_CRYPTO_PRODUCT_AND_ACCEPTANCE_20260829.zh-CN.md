@@ -1,5 +1,7 @@
 # DC SaaS 加密货币永续合约系统产品与验收说明
 
+> **历史验收快照说明（2026-09-19）**：本文是跨 2026-08-29 至 2026-09-01 的产品/验收快照，其中旧 18089 隧道、14 容器和当时的镜像修订属于历史环境。当前默认端口为 Trade Web 18088、Platform Web 18090、Tenant Web 18092；full-cluster 还包含 MDSvr A/B/C、Order A/B、Trade A/B 和 ProjectionSvr。 当前安装/卸载/全系统验收请以仓库 `README.md`、`docs/USER_GUIDE.zh-CN.md` 和 `acceptance-saas.sh` 为准；本文原始日期、性能数字、镜像/提交和缺陷记录保留为当时证据，不改写成当前运行结果。
+
 文档版本：V1.6
 
 基线日期：2026-09-01
