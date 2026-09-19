@@ -1,6 +1,6 @@
 # 对标 Binance / Bybit 的产品化路线图
 
-基线日期：2026-08-29。目标是把已经完成核心永续合约闭环的独立 SaaS 系统发展为能够承载真实资金的中心化加密货币交易系统，而不是复制量化系统。
+原始基线日期：2026-08-29；当前状态更新：2026-09-19。目标是把已经完成核心永续合约闭环的独立 SaaS 系统发展为能够承载真实资金的中心化加密货币交易系统，而不是复制量化系统。
 
 官方能力基线：
 
@@ -17,24 +17,24 @@
 
 已经具备：
 
-- 独立 `saas-crypto` 分支、公开镜像和一键部署/卸载。
-- Web、GW、LoginSvr、MDSvr、APSSvr、OrderSvr、TradeSvr、LiqSvr、ManagerSvr、AdminSvr。
+- 独立 SaaS 部署、公开镜像以及一键安装/验收/卸载；多数后端仓库使用 `saas-crypto`，Tenant Web 使用 `main`，Platform Web 使用 `saas`。
+- Trade Web、Tenant Web、Platform Web、GW、LoginSvr、MDSvr A/B/C、APSSvr、OrderSvr A/B、TradeSvr A/B、ProjectionSvr、LiqSvr、ManagerSvr、AdminSvr、RobotSvr。
 - MySQL 业务数据、ClickHouse 行情/K 线、ZooKeeper 服务发现。
 - `location` 租户字段和双租户数据库隔离冒烟测试。
 - 登录、测试入金、限价/市价/条件单、撤单/改单/批量撤单、订单/成交/持仓/资金页面。
 - 专业永续合约 Web 工作区：五类交易面板可拖动、缩放、自动重排，按租户和用户持久化布局，并支持中英文切换。
 - GTC/IOC/FOK/Post Only、tick/step/minNotional、市价保护、ClOrdID 幂等、价格时间优先和 STP 核心规则。
 - 保证金、杠杆与风险档位、maker/taker 费用、资金费、reduce-only、TP/SL/OCO、部分/最终强平、保险基金和事务型 ADL。
-- 97.64 已通过双浏览器闭环、140 个源码测试和 17,100 个压力订单请求；订单、执行、余额、持仓和 11,400 条成交资金流水精确一致。
+- 历史环境已完成多轮双浏览器与高压验收；当前 `acceptance-saas.sh` 将 Tenant/Platform 全功能浏览器 E2E、真实交易、Robot、Projection、Trade A/B role reversal 和强制压力门禁统一为一个运行入口。历史 17,100 请求等数字只代表当时版本，不作为当前代码的自动结论。
 
 尚不能承载真实资金的核心原因：
 
-- 租户隔离仍主要依赖调用方传入 `location`，未完成所有 DAO、会话和唯一键的强制约束。
+- 登录、Tenant/Platform 管理和主要交易路由已经使用服务端会话/路由键约束权威 `location`；仍需继续完成所有 DAO、Topic、缓存、锁、重放和报表导出的系统性跨租户攻击矩阵，不能把已覆盖路径等同于全部攻击面完成。
 - 资金变化缺少统一的不可变复式账本、幂等键和全链路对账。
 - 已实现的订单、仓位、费用、资金费和强平规则仍需历史极端行情回放、属性测试、生产账本和更大容量验证。
 - API、WebSocket、账户安全、限流、高可用和灾备尚未产品化。
-- 当前环境的 Binance 出站网络不可用。
-- 64 环境外部 Binance 行情不可达，核心验收使用受控标记价；可靠的多源指数、标记价和异常剔除仍是生产硬门槛。
+- Robot 内部 Binance 行情/报价链已经有自动化路径；真实外部反向对冲仍需要专用测试或小额账户凭据单独验收，不能用公开行情可达替代资金侧 hedge 验收。
+- 可靠的多源指数、生产标记价、异常源剔除和断流降级仍是生产硬门槛。
 
 ## 2. P0：真实资金前置硬门槛
 
