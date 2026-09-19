@@ -132,6 +132,16 @@ grep -Fq 'acceptance-summary.json' "${SCRIPT_DIR}/acceptance-saas.sh" ||
   fail "unified acceptance does not write a summary artifact"
 grep -Fq 'sudo ./acceptance-saas.sh' "${SCRIPT_DIR}/README.md" ||
   fail "full business acceptance command is undocumented"
+grep -Fq 'Crypto Open API v1' "${SCRIPT_DIR}/README.md" ||
+  fail "Crypto Open API documentation is not linked from README"
+grep -Fq '/openapi/v1/order' "${SCRIPT_DIR}/docs/CRYPTO_OPEN_API_V1.zh-CN.md" ||
+  fail "Crypto Open API trading contract is missing"
+grep -Fq '/tenant/v1' "${SCRIPT_DIR}/docs/CRYPTO_OPEN_API_V1.zh-CN.md" ||
+  fail "Tenant Open API contract is missing"
+grep -Fq 'MARKET_READ,ACCOUNT_READ,ORDER_READ,ORDER_WRITE' "${SCRIPT_DIR}/mysql/migrations/20260919_open_api_key_policy.sql" ||
+  fail "Open API trader permission defaults are missing"
+grep -Fq "open_api_key_policy_columns" "${SCRIPT_DIR}/validate-saas.sh" ||
+  fail "runtime validation does not require the Open API key policy schema"
 grep -Fq 'Trade Web: `18088`' "${SCRIPT_DIR}/README.md" ||
   fail "README does not document the current Trade Web port"
 grep -Fq 'Platform Web: `18090`' "${SCRIPT_DIR}/README.md" ||
