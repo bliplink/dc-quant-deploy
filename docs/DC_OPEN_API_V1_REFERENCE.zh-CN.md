@@ -99,7 +99,10 @@ GW 在签名校验后注入 key 对应用户身份；LoginSvr 再从自己的 AP
     "user_id": "u-001",
     "location": "TENANT_A",
     "token": "<SESSION>",
-    "sid": "<SESSION>"
+    "sid": "<SESSION>",
+    "api_key_type": "trade",
+    "permissions": "MARKET_READ,ACCOUNT_READ,ORDER_READ,ORDER_WRITE",
+    "rate_limit_profile": "TRADER_STANDARD"
   }
 }
 ```
@@ -115,7 +118,10 @@ GW 在签名校验后注入 key 对应用户身份；LoginSvr 再从自己的 AP
     "user_id": "tenant-admin-user",
     "location": "TENANT_A",
     "token": "<SESSION>",
-    "sid": "<SESSION>"
+    "sid": "<SESSION>",
+    "api_key_type": "tenant",
+    "permissions": "MARKET_READ,TENANT_READ,TENANT_WRITE",
+    "rate_limit_profile": "TENANT_STANDARD"
   }
 }
 ```
@@ -128,6 +134,9 @@ GW 在签名校验后注入 key 对应用户身份；LoginSvr 再从自己的 AP
 - 普通 Trader `API` Session 即使对应用户拥有 TENANT_ADMIN 角色，也不能调用 Tenant Control Plane；
 - Tenant 管理同时继续检查实际 TENANT_ADMIN 角色；
 - caller body 中的 location/userId 不能覆盖 Session 身份。
+- `api_key_type + permissions + rate_limit_profile` 是 LoginSvr 生成并持久化的 Session 权威快照；refresh/resume 不允许客户端扩大它。
+- 阶段 1 使用固定 Trader/Tenant 权限模板和 client-type 硬隔离；逐方法细粒度 scope 门禁在阶段 2 实现。
+- 升级前缺少权限快照的 `API/TenantAPI` Session fail-closed，必须重新 API Key 登录。
 
 ## 3. Trader API Key 管理
 
