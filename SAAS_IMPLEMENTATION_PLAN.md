@@ -2,23 +2,36 @@
 
 ## 1. 产品与分支边界
 
-- SaaS 与量化是两套独立系统；所有 SaaS 仓库固定使用 `saas-crypto` 分支。
-- SaaS 部署不包含、不启动 QuantSvr、INDSvr、CustomIndSvr、SIMSvr、BatchSvr，也不使用量化 Web。
-- 可复用 `common`、GW、MD、APS、Order 等代码能力，但运行配置、容器、端口、数据目录和发布标签完全隔离。
-- 多租户唯一键为 `location`，不再增加 `tenant_id` 或另一套平行租户概念。
-- MySQL 保存用户、会话、订单、成交、资金、持仓和配置；ClickHouse 只保存行情和 K 线。
+> 当前基线：2026-09-19。本文同时保留后续生产化路线图；凡与当前操作方式冲突，以本节、仓库 `README.md` 和 `acceptance-saas.sh` 为准。
 
-## 2. 目标服务拓扑
+- SaaS 与量化是两套独立系统；SaaS 部署不包含、不启动 QuantSvr、INDSvr、CustomIndSvr、SIMSvr、BatchSvr，也不使用量化 Web。
+- **并非所有仓库都使用同一分支。** 当前源码基线为：
+  - `dc-quant-deploy`、`com.app.dc`、GW、OrderSvr、TradeSvr、LiqSvr、MDSvr、APSSvr、LoginSvr、ManagerSvr、AdminSvr、RobotSvr：`saas-crypto`；
+  - 当前 ProjectionSvr 仓库：`bliplink/com-app-dc-projectionsvr`，分支 `saas-crypto`；旧 `bliplink/com.app.dc.projectionsvr` 不作为当前部署源；
+  - Trade Web：`SKT-Walter/dc-trade-web:saas-crypto`；
+  - Tenant Web：`bliplink/dc-saas-tenant-web:main`；
+  - Platform Web：`bliplink/dc-saas-platform-web:saas`；
+  - Binance connector：`main`；
+  - gateway-api：固定 tag `gateway-api-java-v3.0.6`。
+- 可复用 common、GW、MD、APS、Order 等代码能力，但运行配置、容器、端口、数据目录和发布标签与量化系统隔离。
+- 多租户唯一业务边界为 `location`，不增加另一套平行 `tenant_id` 概念。
+- MySQL 保存用户、会话、订单、成交、资金、持仓、Projection watermark 和管理配置；ClickHouse 保存行情/K 线类分析数据。
 
-| 领域 | 服务 | 主要职责 | 数据库 |
+## 2. 当前服务拓扑
+
+| 领域 | 服务 | 主要职责 | 数据库/状态 |
 | --- | --- | --- | --- |
-| 接入 | dc-trade-web、GW、LoginSvr | 登录、鉴权、WebSocket/HTTP 接入、租户上下文 | MySQL |
-| 行情 | APSSvr、MDSvr | 外部行情、订单簿、逐笔、K 线 | ClickHouse |
-| 交易 | OrderSvr、TradeSvr、LiqSvr | 撮合、资金/持仓、风险与强平 | MySQL |
-| 管理 | ManagerSvr、AdminSvr | 用户、权限、产品、运营查询 | MySQL |
-| 发现 | ZooKeeper | 独立服务发现 | 专用数据目录 |
+| Web | Trade Web、Tenant Web、Platform Web | 交易、租户管理、平台运营 | 通过 GW 访问后端 |
+| 接入 | GW、LoginSvr | 登录、鉴权、HTTP/WebSocket、服务路由、租户会话 | MySQL + ZooKeeper |
+| 行情 | APSSvr、MDSvr A/B/C | 外部行情、订单簿、逐笔、K 线、行情集群 | ClickHouse + 集群状态 |
+| 订单 | OrderSvr A/B（可选 C） | 订单规则、撮合、journal/replication/fencing | MySQL + 本地持久化/复制 |
+| 交易 | TradeSvr A/B、LiqSvr | 资金、持仓、手续费、强平、保险基金、ADL | MySQL + journal/复制 |
+| 投影 | ProjectionSvr | 消费 Order/Trade committed binary stream，维护查询投影与 watermark/GAP recovery | MySQL |
+| 管理 | ManagerSvr、AdminSvr | 租户审批、平台管理、租户用户/品种/Robot/查询/审计 | MySQL |
+| 流动性 | RobotSvr | 租户 Robot 配置、报价、补单、主动成交与可选 hedge | MySQL + APSSvr/GW |
+| 基础设施 | MySQL、ClickHouse、ZooKeeper | 事务数据、行情分析、服务发现 | 专用数据目录 |
 
-部署基线为 13 个容器，Compose 项目、容器名和运行目录均以 `dc-saas` 命名。
+`compose.yaml` 当前定义 22 个服务槽位。默认单实例拓扑约 17 个容器；`sudo ./install-saas.sh --full-cluster` 启用 MDSvr A/B/C、OrderSvr A/B、TradeSvr A/B 和 ProjectionSvr，共约 21 个容器。OrderSvr-C 是独立可选扩展，不属于默认 `--full-cluster` 基线。Compose 项目、容器名和运行目录均以 `dc-saas` 命名。
 
 ## 3. `location` 多租户规则
 
@@ -89,14 +102,28 @@
 - 使用不可变 `sha-*` 镜像从 QA 晋级到 Staging/Production；禁止引用量化 `latest` 标签。
 - 建立滚动升级、数据库向前兼容和一键回滚流程。
 
-## 5. 每阶段验收门槛
+## 5. 当前统一验收门槛
 
-1. 构建：所有仓库 tracked working tree 干净，单测及镜像构建通过。
-2. 部署：13 个 SaaS 容器健康，旧 `/opt/sumscope` 进程和端口不变。
-3. 隔离：两个 `location` 可使用相同用户/产品标识，查询和事件互不可见。
-4. 交易：订单状态转换唯一合法，资金/持仓/成交/手续费可对账。
-5. 故障：服务重启、消息重复和数据库短暂中断后无重复成交或资金漂移。
-6. 卸载：默认保留数据；`--purge-data` 只删除 `/data/dc-saas-runtime` 和专用构建缓存。
+标准操作流程：
+
+```bash
+sudo ./install-saas.sh --full-cluster
+sudo ./acceptance-saas.sh
+sudo ./uninstall-saas.sh
+```
+
+`install-saas.sh` 安装完成前会先执行基础 `validate-saas.sh`；`acceptance-saas.sh` 是当前唯一的全系统业务验收总入口，关键步骤任一失败即返回失败。当前门槛包括：
+
+1. 构建/部署：脚本、配置、镜像身份和 full-cluster 运行条件正确，全部必需容器健康。
+2. Tenant/Platform：真实浏览器覆盖当前独立 Tenant Web `:18092`、Platform Web `:18090` 的所有已启用管理操作；尚未实现的 Host-Agent“新增节点/滚动升级/回滚”必须保持 disabled。
+3. 租户隔离：两个 `location` 可使用相同用户名，平台/租户/普通交易用户的权限与数据边界互不越权。
+4. 核心交易：真实注册、登录、测试入金、订单规则、挂单、撤单、撮合、历史、余额、持仓、平仓、部分/最终强平、保险基金和 ADL 全部通过。
+5. Robot：API Key、配置、启停、10+10 报价、真实用户成交、补档、主动 sweep 与租户隔离通过。
+6. Projection/集群：Order/Trade committed projection watermark 推进且不回退；TradeSvr A/B role reversal 与恢复通过。
+7. **压力测试为强制门槛**：默认 1,000 resting + mass cancel + 1,000 maker + 1,000 taker，并发 16；校验零请求失败/异步拒单、撮合/记账/手续费/保证金/持仓一致、ClOrdID 唯一、重启恢复、恢复后平仓，以及核心容器无 OOM/异常退出；输出 TPS 与 p50/p95/p99。
+8. 卸载：默认保留业务数据；`--purge-data` / `--purge-images` 为显式破坏性选项，并不得影响非 SaaS 容器。
+
+验收证据统一写入 `${DEPLOY_ROOT}/evidence/<run>-full-acceptance/`，最终结果记录在 `acceptance-summary.json`。
 
 ## 6. 推荐提交与发布节奏
 
