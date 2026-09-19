@@ -393,7 +393,41 @@ queryProjectedExecutionHistory
 
 ## 9. 账户与持仓
 
-当前 TradeSvr 主要以 snapshot topic 提供权威状态：
+### HTTP 查询余额
+
+```json
+{
+  "serverName": "TradeSvr",
+  "method": "queryAccountBalance",
+  "content": {}
+}
+```
+
+TradeSvr 从 Session 取得 authoritative location/user，不允许 body 切换账户。
+
+### HTTP 查询持仓
+
+```json
+{
+  "serverName": "TradeSvr",
+  "method": "queryTradePosition",
+  "content": {
+    "securityid": "BTCUSDT"
+  }
+}
+```
+
+### Account config
+
+```json
+{
+  "serverName": "TradeSvr",
+  "method": "getAccountConfig",
+  "content": {}
+}
+```
+
+同时保留 snapshot topic：
 
 ```text
 dc.trade.accountbalance.<UserID>.<Location>
