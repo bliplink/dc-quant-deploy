@@ -1,321 +1,191 @@
 openapi: 3.0.3
 info:
-  title: DC Crypto Open API
+  title: DC Crypto Open API v1 - GW Native HTTP Transport
   version: 1.0.0
   description: |
-    Multi-tenant crypto trading Open API. Private identity is derived from the API key;
-    client supplied location/userId never overrides the authenticated identity.
+    DC Open API v1 deliberately reuses the existing GW envelope instead of
+    introducing Binance-style REST paths or a separate OpenApiSvr. Business
+    semantics remain owned by LoginSvr, MDSvr, OrderSvr, TradeSvr,
+    ProjectionSvr, AdminSvr and ManagerSvr.
 servers:
-  - url: /openapi/v1
+  - url: /
 tags:
-  - name: public
-  - name: trading
-  - name: account
   - name: api-key
+  - name: session
 paths:
-  /ping:
-    get:
-      tags: [public]
-      security: []
+  /api:
+    post:
+      tags: [api-key]
+      summary: Signed API-key request
+      description: |
+        Canonical v1 use is LoginSvr/apiKeyLogin to exchange an API key for a
+        tenant-scoped user session. signature = HEX(HMAC-SHA256(secret_key,
+        UTF8(raw_http_body + expiry))). expiry is epoch milliseconds.
+      security:
+        - DcApiKey: []
+      parameters:
+        - name: cid
+          in: header
+          required: false
+          schema: { type: string }
+        - name: expiry
+          in: header
+          required: true
+          schema: { type: integer, format: int64 }
+        - name: signature
+          in: header
+          required: true
+          schema: { type: string }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/GwEnvelope'
+            examples:
+              apiKeyLogin:
+                value:
+                  serverName: LoginSvr
+                  method: apiKeyLogin
+                  content:
+                    api_key: 0123456789abcdef
+                    location: TENANT_A
+                    cid: robot-auth-001
       responses:
         '200':
-          description: Service is available.
-  /time:
-    get:
-      tags: [public]
-      security: []
-      responses:
-        '200':
-          description: Server time.
+          description: GW business response; inspect code/msg/data.
           content:
             application/json:
               schema:
-                type: object
-                properties:
-                  serverTime: { type: integer, format: int64 }
-  /exchangeInfo:
-    get:
-      tags: [public]
-      security: []
+                $ref: '#/components/schemas/GwResponse'
+  /httpapi/:
+    post:
+      tags: [session]
+      summary: Session-authenticated GW request
+      description: |
+        Used by Trade Web, Tenant Web and Open API clients after login.
+        Downstream services bind authoritative location/user identity from the
+        LoginSvr session; caller supplied identity cannot widen scope.
       parameters:
-        - $ref: '#/components/parameters/Location'
-        - $ref: '#/components/parameters/MarketIndicator'
-        - $ref: '#/components/parameters/SymbolOptional'
+        - name: sessionId
+          in: header
+          required: true
+          schema: { type: string }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/GwEnvelope'
+            examples:
+              queryOpenOrder:
+                value:
+                  serverName: OrderSvr
+                  method: queryOpenOrder
+                  content:
+                    SecurityID: BTCUSDT
+                    MarketIndicator: '4'
+              placeOrder:
+                value:
+                  serverName: OrderSvr
+                  method: placeOrder
+                  content:
+                    SecurityID: BTCUSDT
+                    MarketIndicator: '4'
+                    Side: BUY
+                    OCType: OPEN
+                    OrdType: Limit
+                    TimeInForce: GTC
+                    OrderQty: '0.010'
+                    Price: '60000.0'
+                    ClOrdID: tenant-robot-000001
       responses:
         '200':
-          description: Tenant-visible symbol and trading rules.
-  /depth:
-    get:
-      tags: [public]
-      security: []
-      parameters:
-        - $ref: '#/components/parameters/Location'
-        - $ref: '#/components/parameters/MarketIndicator'
-        - $ref: '#/components/parameters/Symbol'
-        - name: limit
-          in: query
-          schema: { type: integer, minimum: 1, maximum: 1000, default: 20 }
-      responses:
-        '200': { description: Order book snapshot. }
-  /trades:
-    get:
-      tags: [public]
-      security: []
-      parameters:
-        - $ref: '#/components/parameters/Location'
-        - $ref: '#/components/parameters/MarketIndicator'
-        - $ref: '#/components/parameters/Symbol'
-        - name: limit
-          in: query
-          schema: { type: integer, minimum: 1, maximum: 1000, default: 100 }
-      responses:
-        '200': { description: Recent public trades. }
-  /ticker/price:
-    get:
-      tags: [public]
-      security: []
-      parameters:
-        - $ref: '#/components/parameters/Location'
-        - $ref: '#/components/parameters/MarketIndicator'
-        - $ref: '#/components/parameters/Symbol'
-      responses:
-        '200': { description: Last/mark/index price view. }
-  /ticker/bookTicker:
-    get:
-      tags: [public]
-      security: []
-      parameters:
-        - $ref: '#/components/parameters/Location'
-        - $ref: '#/components/parameters/MarketIndicator'
-        - $ref: '#/components/parameters/Symbol'
-      responses:
-        '200': { description: Best bid/ask. }
-  /klines:
-    get:
-      tags: [public]
-      security: []
-      parameters:
-        - $ref: '#/components/parameters/Location'
-        - $ref: '#/components/parameters/MarketIndicator'
-        - $ref: '#/components/parameters/Symbol'
-        - name: interval
-          in: query
-          required: true
-          schema: { type: string, example: 1m }
-        - name: startTime
-          in: query
-          schema: { type: integer, format: int64 }
-        - name: endTime
-          in: query
-          schema: { type: integer, format: int64 }
-        - name: limit
-          in: query
-          schema: { type: integer, minimum: 1, maximum: 1500, default: 500 }
-      responses:
-        '200': { description: Kline series. }
-  /markPrice:
-    get:
-      tags: [public]
-      security: []
-      parameters:
-        - $ref: '#/components/parameters/Location'
-        - $ref: '#/components/parameters/MarketIndicator'
-        - $ref: '#/components/parameters/Symbol'
-      responses:
-        '200': { description: Mark/index/funding view. }
-  /order:
-    post:
-      tags: [trading]
-      security: [{ DcHmac: [] }]
-      x-dc-scope: ORDER_WRITE
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema: { $ref: '#/components/schemas/NewOrder' }
-      responses:
-        '200': { description: Order accepted or rejected by the trading core. }
-        '401': { $ref: '#/components/responses/Unauthorized' }
-        '429': { $ref: '#/components/responses/RateLimited' }
-    delete:
-      tags: [trading]
-      security: [{ DcHmac: [] }]
-      x-dc-scope: ORDER_WRITE
-      parameters:
-        - $ref: '#/components/parameters/Symbol'
-        - $ref: '#/components/parameters/MarketIndicator'
-        - name: orderId
-          in: query
-          schema: { type: string }
-        - name: clientOrderId
-          in: query
-          schema: { type: string }
-      responses:
-        '200': { description: Cancel result. }
-    get:
-      tags: [trading]
-      security: [{ DcHmac: [] }]
-      x-dc-scope: ORDER_READ
-      parameters:
-        - $ref: '#/components/parameters/Symbol'
-        - $ref: '#/components/parameters/MarketIndicator'
-        - name: orderId
-          in: query
-          schema: { type: string }
-        - name: clientOrderId
-          in: query
-          schema: { type: string }
-      responses:
-        '200': { description: One order. }
-  /openOrders:
-    get:
-      tags: [trading]
-      security: [{ DcHmac: [] }]
-      x-dc-scope: ORDER_READ
-      parameters:
-        - $ref: '#/components/parameters/SymbolOptional'
-        - $ref: '#/components/parameters/MarketIndicator'
-      responses:
-        '200': { description: Current open orders. }
-  /allOrders:
-    get:
-      tags: [trading]
-      security: [{ DcHmac: [] }]
-      x-dc-scope: ORDER_READ
-      parameters:
-        - $ref: '#/components/parameters/SymbolOptional'
-        - $ref: '#/components/parameters/MarketIndicator'
-        - $ref: '#/components/parameters/Limit'
-      responses:
-        '200': { description: Projected order history. }
-  /myTrades:
-    get:
-      tags: [trading]
-      security: [{ DcHmac: [] }]
-      x-dc-scope: ORDER_READ
-      parameters:
-        - $ref: '#/components/parameters/SymbolOptional'
-        - $ref: '#/components/parameters/MarketIndicator'
-        - $ref: '#/components/parameters/Limit'
-      responses:
-        '200': { description: Projected execution history. }
-  /account:
-    get:
-      tags: [account]
-      security: [{ DcHmac: [] }]
-      x-dc-scope: ACCOUNT_READ
-      responses:
-        '200': { description: Account summary. }
-  /balance:
-    get:
-      tags: [account]
-      security: [{ DcHmac: [] }]
-      x-dc-scope: ACCOUNT_READ
-      responses:
-        '200': { description: Account balance. }
-  /positionRisk:
-    get:
-      tags: [account]
-      security: [{ DcHmac: [] }]
-      x-dc-scope: ACCOUNT_READ
-      parameters:
-        - $ref: '#/components/parameters/SymbolOptional'
-        - $ref: '#/components/parameters/MarketIndicator'
-      responses:
-        '200': { description: Position and liquidation-risk view. }
-  /leverage:
-    post:
-      tags: [account]
-      security: [{ DcHmac: [] }]
-      x-dc-scope: ORDER_WRITE
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              type: object
-              required: [symbol, marketIndicator, leverage]
-              properties:
-                symbol: { type: string }
-                marketIndicator: { type: string }
-                leverage: { type: integer, minimum: 1 }
-      responses:
-        '200': { description: Leverage updated. }
-  /positionMode:
-    post:
-      tags: [account]
-      security: [{ DcHmac: [] }]
-      x-dc-scope: ORDER_WRITE
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              type: object
-              required: [positionMode]
-              properties:
-                positionMode:
-                  type: string
-                  enum: [ONE_WAY, HEDGE]
-      responses:
-        '200': { description: Position mode updated. }
+          description: GW business response; inspect code/msg/data.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/GwResponse'
 components:
   securitySchemes:
-    DcHmac:
+    DcApiKey:
       type: apiKey
       in: header
-      name: X-DC-API-KEY
-      description: |
-        Signed requests also require X-DC-TIMESTAMP, X-DC-RECV-WINDOW and
-        X-DC-SIGNATURE. Signature is HMAC-SHA256 over the canonical request.
-  parameters:
-    Location:
-      name: location
-      in: query
-      required: true
-      schema: { type: string, maxLength: 64 }
-    MarketIndicator:
-      name: marketIndicator
-      in: query
-      required: true
-      schema: { type: string, example: '4' }
-    Symbol:
-      name: symbol
-      in: query
-      required: true
-      schema: { type: string, example: BTCUSDT }
-    SymbolOptional:
-      name: symbol
-      in: query
-      required: false
-      schema: { type: string, example: BTCUSDT }
-    Limit:
-      name: limit
-      in: query
-      schema: { type: integer, minimum: 1, maximum: 1000, default: 100 }
+      name: apikey
   schemas:
-    NewOrder:
+    GwEnvelope:
       type: object
-      required: [symbol, marketIndicator, side, type, quantity]
+      required: [serverName, method, content]
       properties:
-        symbol: { type: string, example: BTCUSDT }
-        marketIndicator: { type: string, example: '4' }
-        side: { type: string, enum: [BUY, SELL] }
-        positionSide: { type: string, enum: [BOTH, LONG, SHORT] }
-        type: { type: string, enum: [LIMIT, MARKET] }
-        timeInForce: { type: string, enum: [GTC, IOC, FOK] }
-        quantity:
+        serverName:
           type: string
-          pattern: '^[0-9]+(\\.[0-9]+)?$'
-        price:
+          description: Stable DC service contract name.
+          enum:
+            - LoginSvr
+            - MDSvr
+            - OrderSvr
+            - TradeSvr
+            - ProjectionSvr
+            - AdminSvr
+            - ManagerSvr
+        method:
           type: string
-          pattern: '^[0-9]+(\\.[0-9]+)?$'
-        clientOrderId:
+          description: Stable v1 method name from the published API catalog.
+        content:
+          description: Method-specific request object.
+          oneOf:
+            - type: object
+            - type: string
+    GwResponse:
+      type: object
+      required: [code, msg]
+      properties:
+        code:
+          type: integer
+        msg:
           type: string
-          maxLength: 64
-        reduceOnly: { type: boolean, default: false }
-  responses:
-    Unauthorized:
-      description: Invalid/expired API key or signature.
-    RateLimited:
-      description: API key, tenant or source IP rate limit exceeded.
+        data:
+          nullable: true
+        info1:
+          nullable: true
+        info2:
+          nullable: true
+        cid:
+          type: string
+          nullable: true
+x-dc-v1-catalog:
+  authentication:
+    LoginSvr:
+      apiKeyLogin: SIGNED_API_KEY
+      updateApiKey: INTERACTIVE_SESSION
+      queryApiKey: INTERACTIVE_SESSION
+      deleteApiKey: INTERACTIVE_SESSION
+      tenantApiKeyAdmin: TENANT_ADMIN
+  market:
+    MDSvr:
+      queryPublicMarket: MARKET_READ
+      queryKLine: MARKET_READ
+  trading:
+    OrderSvr:
+      placeOrder: ORDER_WRITE
+      cancelOrder: ORDER_WRITE
+      cancelBatchOrder: ORDER_WRITE
+      queryOrder: ORDER_READ
+      queryOpenOrder: ORDER_READ
+      queryExecOrder: ORDER_READ
+  account:
+    TradeSvr:
+      setLeverage: ORDER_WRITE
+      setPositionType: ORDER_WRITE
+  history:
+    ProjectionSvr:
+      queryProjectedOrderHistory: ORDER_READ
+      queryProjectedExecutionHistory: ORDER_READ
+  tenant:
+    AdminSvr:
+      tenantUserAdmin: TENANT_READ_OR_WRITE
+      tenantSymbolAdmin: TENANT_READ_OR_WRITE
+      tenantRobotAdmin: TENANT_READ_OR_WRITE
+      tenantSettingsAdmin: TENANT_READ_OR_WRITE
+      tenantTradeAdmin: TENANT_READ
+      tenantUserRegistration: PUBLIC_POLICY_GATED
