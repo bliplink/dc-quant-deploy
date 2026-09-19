@@ -147,8 +147,15 @@ sudo ./acceptance-saas.sh
 
 The unified command first validates runtime health, creates isolated `*_E2E`
 tenant accounts through the real public `AdminSvr.tenantUserRegistration`
-path. It also validates tenant application/approval, platform and tenant-admin
-Web flows, RBAC, quotas, tenant lifecycle/isolation, then executes browser login,
+path. It also validates tenant application/approval, RBAC, quotas and
+tenant lifecycle/isolation through both the Trade Web embedded administration
+pages and the standalone Tenant Web (:18092) / Platform Web (:18090). The
+standalone console test clicks every currently enabled management operation:
+tenant user create/enable/disable/password reset, all trade-query tabs, symbol
+toggle/restore, Robot create/edit/enable/disable, tenant info/audit/settings
+save-and-restore, application needs-info/reject/approve, tenant configuration
+and route save, plus cluster snapshot/placement preview/re-apply. Host-Agent
+upgrade buttons are asserted disabled until that feature exists. It then executes browser login,
 deposit, limit/market order flows, cancellation, matching, position close,
 trade/history checks, partial/final liquidation, insurance fund and ADL
 coverage, RobotSvr API-key/liquidity/quote-replenishment behavior, Projection
