@@ -132,6 +132,32 @@ grep -Fq 'acceptance-summary.json' "${SCRIPT_DIR}/acceptance-saas.sh" ||
   fail "unified acceptance does not write a summary artifact"
 grep -Fq 'sudo ./acceptance-saas.sh' "${SCRIPT_DIR}/README.md" ||
   fail "full business acceptance command is undocumented"
+grep -Fq 'Trade Web: `18088`' "${SCRIPT_DIR}/README.md" ||
+  fail "README does not document the current Trade Web port"
+grep -Fq 'Platform Web: `18090`' "${SCRIPT_DIR}/README.md" ||
+  fail "README does not document the current Platform Web port"
+grep -Fq 'Tenant Web: `18092`' "${SCRIPT_DIR}/README.md" ||
+  fail "README does not document the current Tenant Web port"
+grep -Fq 'Historical acceptance evidence' "${SCRIPT_DIR}/README.md" ||
+  fail "README does not distinguish current runbooks from historical reports"
+grep -Fq 'http://127.0.0.1:18088/' "${SCRIPT_DIR}/docs/USER_GUIDE.zh-CN.md" ||
+  fail "user guide does not document the current Trade Web endpoint"
+grep -Fq 'http://127.0.0.1:18090/' "${SCRIPT_DIR}/docs/USER_GUIDE.zh-CN.md" ||
+  fail "user guide does not document the current Platform Web endpoint"
+grep -Fq 'http://127.0.0.1:18092/?location=<你的 location>' "${SCRIPT_DIR}/docs/USER_GUIDE.zh-CN.md" ||
+  fail "user guide does not document the current Tenant Web endpoint"
+! grep -Fq '127.0.0.1:18089' "${SCRIPT_DIR}/docs/USER_GUIDE.zh-CN.md" ||
+  fail "user guide still documents the obsolete fixed 18089 tunnel"
+grep -Fq 'compose.yaml` 当前定义 22 个服务槽位' "${SCRIPT_DIR}/SAAS_IMPLEMENTATION_PLAN.md" ||
+  fail "implementation plan does not describe the current compose topology"
+! grep -Fq '部署基线为 13 个容器' "${SCRIPT_DIR}/SAAS_IMPLEMENTATION_PLAN.md" ||
+  fail "implementation plan still contains the obsolete 13-container baseline"
+! grep -Fq './validate.sh' "${SCRIPT_DIR}/CONTRIBUTING.md" ||
+  fail "CONTRIBUTING still points to the removed validate.sh"
+grep -Fq 'Tenant Web' "${SCRIPT_DIR}/docs/AUTO_UPDATE.zh-CN.md" &&
+grep -Fq 'Platform Web' "${SCRIPT_DIR}/docs/AUTO_UPDATE.zh-CN.md" &&
+grep -Fq 'ProjectionSvr' "${SCRIPT_DIR}/docs/AUTO_UPDATE.zh-CN.md" ||
+  fail "auto-update documentation does not describe the current application set"
 
 for image_var in \
   GW_IMAGE_REPOSITORY LOGINSVR_IMAGE_REPOSITORY MDSVR_IMAGE_REPOSITORY APSSVR_IMAGE_REPOSITORY \
