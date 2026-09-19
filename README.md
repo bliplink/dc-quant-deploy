@@ -230,14 +230,20 @@ IDs if validation fails. It never updates MySQL, ClickHouse, or ZooKeeper.
 
 ## Product documentation
 
+Current operator/developer documentation:
+
 - [中文用户手册](docs/USER_GUIDE.zh-CN.md)
-- [产品、业务规则、数据流与完整验收报告](docs/DC_SAAS_CRYPTO_PRODUCT_AND_ACCEPTANCE_20260829.zh-CN.md)
-- [产品与完整验收报告（Word，2026-09-01）](docs/DC_SAAS_CRYPTO_PRODUCT_AND_ACCEPTANCE_20260901.zh-CN.docx)
-- [核心交易稳定性、压力与故障恢复验收（2026-09-01）](docs/CORE_TRADING_STABILITY_AND_STRESS_ACCEPTANCE_20260901.zh-CN.md)
-- [多租户控制面生产验收报告](docs/TENANT_CONTROL_PLANE_ACCEPTANCE_20260830.zh-CN.md)
-- [多租户控制面生产验收报告（Word）](docs/TENANT_CONTROL_PLANE_ACCEPTANCE_20260830.zh-CN.docx)
-- [对标 Binance / Bybit 的产品化路线图](docs/BINANCE_BYBIT_ROADMAP.zh-CN.md)
+- [当前实施方案与服务/分支基线](SAAS_IMPLEMENTATION_PLAN.md)
 - [SaaS 公共镜像自动部署与运维](docs/AUTO_UPDATE.zh-CN.md)
+- [集群开发期本地 Common/镜像专项流程](docs/CLUSTER_DEV_LOCAL_COMMON_BUILD.zh-CN.md)
+- [对标 Binance / Bybit 的产品化路线图](docs/BINANCE_BYBIT_ROADMAP.zh-CN.md)
+
+Historical acceptance evidence (dated snapshots; not current runbooks):
+
+- [产品、业务规则、数据流与验收快照（2026-08-29/09-01）](docs/DC_SAAS_CRYPTO_PRODUCT_AND_ACCEPTANCE_20260829.zh-CN.md)
+- [核心交易稳定性、压力与故障恢复（2026-09-01）](docs/CORE_TRADING_STABILITY_AND_STRESS_ACCEPTANCE_20260901.zh-CN.md)
+- [多租户控制面生产验收（2026-08-30）](docs/TENANT_CONTROL_PLANE_ACCEPTANCE_20260830.zh-CN.md)
+- Word/PDF 等导出报告同样属于其生成日期的历史快照；当前操作以 README、用户手册和可执行脚本为准。
 
 ## Uninstall and recovery
 
