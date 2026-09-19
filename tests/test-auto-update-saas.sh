@@ -134,10 +134,18 @@ grep -Fq 'sudo ./acceptance-saas.sh' "${SCRIPT_DIR}/README.md" ||
   fail "full business acceptance command is undocumented"
 grep -Fq 'Crypto Open API v1' "${SCRIPT_DIR}/README.md" ||
   fail "Crypto Open API documentation is not linked from README"
-grep -Fq '/openapi/v1/order' "${SCRIPT_DIR}/docs/CRYPTO_OPEN_API_V1.zh-CN.md" ||
-  fail "Crypto Open API trading contract is missing"
-grep -Fq '/tenant/v1' "${SCRIPT_DIR}/docs/CRYPTO_OPEN_API_V1.zh-CN.md" ||
-  fail "Tenant Open API contract is missing"
+grep -Fq 'POST /api' "${SCRIPT_DIR}/docs/CRYPTO_OPEN_API_V1.zh-CN.md" ||
+  fail "Crypto Open API signed GW transport is missing"
+grep -Fq 'POST /httpapi/' "${SCRIPT_DIR}/docs/CRYPTO_OPEN_API_V1.zh-CN.md" ||
+  fail "Crypto Open API session GW transport is missing"
+grep -Fq 'tenantUserAdmin' "${SCRIPT_DIR}/docs/CRYPTO_OPEN_API_V1.zh-CN.md" ||
+  fail "Tenant API contract is missing"
+! grep -Fq 'OpenApiSvr-' "${SCRIPT_DIR}/docs/CRYPTO_OPEN_API_V1.zh-CN.md" ||
+  fail "obsolete OpenApiSvr topology is still documented"
+grep -Fq '/api:' "${SCRIPT_DIR}/docs/openapi/crypto-openapi-v1.yaml" ||
+  fail "OpenAPI spec does not describe the native /api transport"
+grep -Fq '/httpapi/:' "${SCRIPT_DIR}/docs/openapi/crypto-openapi-v1.yaml" ||
+  fail "OpenAPI spec does not describe the native /httpapi/ transport"
 grep -Fq 'MARKET_READ,ACCOUNT_READ,ORDER_READ,ORDER_WRITE' "${SCRIPT_DIR}/mysql/migrations/20260919_open_api_key_policy.sql" ||
   fail "Open API trader permission defaults are missing"
 grep -Fq "open_api_key_policy_columns" "${SCRIPT_DIR}/validate-saas.sh" ||
