@@ -108,6 +108,12 @@ grep -Fq 'tests/run-core-trading-acceptance.sh' "${SCRIPT_DIR}/acceptance-saas.s
   fail "unified acceptance does not run the core business flow"
 grep -Fq 'tests/run-tenant-lifecycle-web-e2e-host.sh' "${SCRIPT_DIR}/acceptance-saas.sh" ||
   fail "unified acceptance does not run tenant/platform lifecycle business validation"
+grep -Fq 'tenant-platform-console-e2e.js' "${SCRIPT_DIR}/tests/run-tenant-lifecycle-web-e2e-host.sh" ||
+  fail "tenant lifecycle acceptance does not exercise standalone tenant/platform consoles"
+grep -Fq 'http://127.0.0.1:18092' "${SCRIPT_DIR}/tests/run-tenant-lifecycle-web-e2e-host.sh" ||
+  fail "standalone Tenant Web is not exercised"
+grep -Fq 'http://127.0.0.1:18090' "${SCRIPT_DIR}/tests/run-tenant-lifecycle-web-e2e-host.sh" ||
+  fail "standalone Platform Web is not exercised"
 grep -Fq 'tests/run-robot-liquidity-e2e-host.sh' "${SCRIPT_DIR}/acceptance-saas.sh" ||
   fail "unified acceptance does not run RobotSvr liquidity business validation"
 grep -Fq 'tests/run-trade-cluster-role-reversal-host.sh' "${SCRIPT_DIR}/acceptance-saas.sh" ||
