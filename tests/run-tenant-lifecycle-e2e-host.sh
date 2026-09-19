@@ -59,6 +59,26 @@ api_call() {
   fi
 }
 
+signed_api_call() {
+  local payload="$1" api_key="$2" secret_key="$3" expiry signature
+  expiry="$(( $(date +%s%3N) + 60000 ))"
+  signature="$(python3 - "${secret_key}" "${payload}" "${expiry}" <<'PY'
+import hashlib
+import hmac
+import sys
+secret, body, expiry = sys.argv[1:]
+print(hmac.new(secret.encode("utf-8"), (body + expiry).encode("utf-8"), hashlib.sha256).hexdigest())
+PY
+)"
+  curl -fsS --max-time 30 \
+    -H 'Content-Type: application/json' \
+    -H "cid: TENANT_API_E2E" \
+    -H "apikey: ${api_key}" \
+    -H "expiry: ${expiry}" \
+    -H "signature: ${signature}" \
+    --data "${payload}" "http://127.0.0.1:${GW_HTTP_PORT}/api"
+}
+
 json_eval() {
   local expression="$1"
   python3 -c 'import json,sys; d=json.load(sys.stdin); print(eval(sys.argv[1], {"d": d}))' "${expression}"
@@ -186,6 +206,39 @@ expect_rejected "admin cross-location request" "${cross_location_response}"
 trader_admin_response="$(api_call "${users_payload}" "${trader_token_a}")"
 expect_rejected "trader tenant-admin request" "${trader_admin_response}"
 
+tenant_key_create_payload="$(printf '{"serverName":"LoginSvr","method":"tenantApiKeyAdmin","content":{"action":"CREATE","label":"tenant-e2e-%s","cid":"TENANT_KEY_CREATE_E2E"}}' "${E2E_SUFFIX}")"
+tenant_key_create_response="$(api_call "${tenant_key_create_payload}" "${admin_token_a}")"
+expect_ok "tenant service API key creation" "${tenant_key_create_response}"
+tenant_api_key="$(printf '%s' "${tenant_key_create_response}" | json_eval 'd["data"]["api_key"]')"
+tenant_api_secret="$(printf '%s' "${tenant_key_create_response}" | json_eval 'd["data"]["secret_key"]')"
+[[ -n "${tenant_api_key}" && -n "${tenant_api_secret}" ]] ||
+  die "tenant service API key creation did not return key material"
+
+tenant_api_login_payload="$(printf '{"serverName":"LoginSvr","method":"apiKeyLogin","content":{"api_key":"%s","location":"%s","cid":"TENANT_API_LOGIN_E2E"}}' "${tenant_api_key}" "${E2E_LOCATION_A}")"
+tenant_api_login_response="$(signed_api_call "${tenant_api_login_payload}" "${tenant_api_key}" "${tenant_api_secret}")"
+expect_ok "tenant service signed API login" "${tenant_api_login_response}"
+tenant_api_token="$(printf '%s' "${tenant_api_login_response}" | json_eval 'd["data"]["token"]')"
+[[ "$(printf '%s' "${tenant_api_login_response}" | json_eval 'd["data"]["client_type"]')" == "TenantAPI" ]] ||
+  die "tenant service key did not create a TenantAPI session"
+[[ "$(printf '%s' "${tenant_api_login_response}" | json_eval 'd["data"]["location"]')" == "${E2E_LOCATION_A}" ]] ||
+  die "tenant service API login returned another location"
+
+tenant_api_users_response="$(api_call "${users_payload}" "${tenant_api_token}")"
+expect_ok "TenantAPI AdminSvr user list" "${tenant_api_users_response}"
+
+tenant_api_order_payload='{"serverName":"OrderSvr","method":"queryOpenOrder","content":{"securityid":"BTCUSDT","marketIndicator":"4","maxOrderCount":1}}'
+tenant_api_order_response="$(api_call "${tenant_api_order_payload}" "${tenant_api_token}")"
+expect_rejected "TenantAPI OrderSvr access" "${tenant_api_order_response}"
+
+tenant_api_balance_payload='{"serverName":"TradeSvr","method":"queryAccountBalance","content":{}}'
+tenant_api_balance_response="$(api_call "${tenant_api_balance_payload}" "${tenant_api_token}")"
+expect_rejected "TenantAPI TradeSvr access" "${tenant_api_balance_response}"
+
+tenant_key_delete_payload="$(printf '{"serverName":"LoginSvr","method":"tenantApiKeyAdmin","content":{"action":"DELETE","api_key":"%s","cid":"TENANT_KEY_DELETE_E2E"}}' "${tenant_api_key}")"
+tenant_key_delete_response="$(api_call "${tenant_key_delete_payload}" "${admin_token_a}")"
+expect_ok "tenant service API key cleanup" "${tenant_key_delete_response}"
+log "Tenant Service API key boundary verified: signed /api login -> AdminSvr allowed; OrderSvr/TradeSvr denied."
+
 overflow_payload="$(printf '{"serverName":"AdminSvr","method":"tenantUserRegistration","content":{"action":"REGISTER","cid":"OVERFLOW_%s","request_id":"OVERFLOW_%s","location":"%s","username":"overflowtrader","name":"Quota Overflow Trader","email":"overflow-%s@example.com","password":"%s"}}' \
   "${E2E_SUFFIX}" "${E2E_SUFFIX}" "${E2E_LOCATION_A}" "${E2E_SUFFIX}" "${trader_password_a}")"
 overflow_response="$(api_call "${overflow_payload}")"
@@ -240,5 +293,5 @@ grep -Fxq 'balances=2' <<<"${database_summary}" || die "database account initial
 grep -Fxq 'symbols=2' <<<"${database_summary}" || die "database product initialization assertion failed"
 grep -Fxq 'quota_tenants=2' <<<"${database_summary}" || die "database tenant quota assertion failed"
 log "Database assertions: ${database_summary//$'\n'/; }."
-log "PASS: application, approval, URLs, registration, RBAC, symbols, records, lifecycle and two-tenant isolation are correct."
+log "PASS: application, approval, URLs, registration, RBAC, Tenant Service API key isolation, symbols, records, lifecycle and two-tenant isolation are correct."
 log "Acceptance tenants retained for evidence: ${E2E_LOCATION_A}, ${E2E_LOCATION_B}."
