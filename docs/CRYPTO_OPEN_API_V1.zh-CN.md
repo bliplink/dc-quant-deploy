@@ -203,6 +203,18 @@ signature =
 
 **v1 推荐流程：API Key 先调用 `LoginSvr/apiKeyLogin` 换取 Session，然后后续交易/账户请求使用 Session。** 这与当前 RobotSvr 已验证的真实链路一致。
 
+阶段 1 中，LoginSvr 会把以下 API Key 上下文作为 Session 权威快照返回并持久化：
+
+```text
+api_key_type
+permissions
+rate_limit_profile
+```
+
+Trader key 示例为 `trade + MARKET_READ,ACCOUNT_READ,ORDER_READ,ORDER_WRITE + TRADER_STANDARD`；Tenant Service key 示例为 `tenant + MARKET_READ,TENANT_READ,TENANT_WRITE + TENANT_STANDARD`。Session refresh/resume 保留同一快照；升级前没有权限快照的 `API/TenantAPI` Session 不恢复，客户端需要重新执行 signed API-key login。
+
+这里的 `permissions` 在阶段 1 是**固定模板的权威会话字段**，用于形成统一下游校验模型；Order/Trade/Admin 各方法的细粒度 scope 门禁仍按计划放到阶段 2，不在阶段 1 虚构已完成能力。
+
 ### 4.2 Session HTTP
 
 入口：
