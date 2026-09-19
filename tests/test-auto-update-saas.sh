@@ -106,6 +106,14 @@ grep -Fq 'E2E_BUYER_ID' "${SCRIPT_DIR}/tests/run-web-trading-e2e-host.sh" ||
   fail "browser trading acceptance does not resolve registered user identities"
 grep -Fq 'tests/run-core-trading-acceptance.sh' "${SCRIPT_DIR}/acceptance-saas.sh" ||
   fail "unified acceptance does not run the core business flow"
+grep -Fq 'tests/run-core-trading-stress-host.sh' "${SCRIPT_DIR}/acceptance-saas.sh" ||
+  fail "unified acceptance does not run the mandatory core pressure gate"
+grep -Fq 'ACCEPTANCE_STRESS_ORDERS:-1000' "${SCRIPT_DIR}/acceptance-saas.sh" ||
+  fail "full acceptance pressure order baseline is missing"
+grep -Fq 'ACCEPTANCE_STRESS_CONCURRENCY:-16' "${SCRIPT_DIR}/acceptance-saas.sh" ||
+  fail "full acceptance pressure concurrency baseline is missing"
+grep -Fq 'LOAD_ARTIFACT_DIR="${EVIDENCE_DIR}/stress"' "${SCRIPT_DIR}/acceptance-saas.sh" ||
+  fail "pressure evidence is not retained with the acceptance report"
 grep -Fq 'tests/run-tenant-lifecycle-web-e2e-host.sh' "${SCRIPT_DIR}/acceptance-saas.sh" ||
   fail "unified acceptance does not run tenant/platform lifecycle business validation"
 grep -Fq 'tenant-platform-console-e2e.js' "${SCRIPT_DIR}/tests/run-tenant-lifecycle-web-e2e-host.sh" ||
