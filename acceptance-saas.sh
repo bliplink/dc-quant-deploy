@@ -107,7 +107,13 @@ run_step() {
 run_step 01-foundation-health \
   "${SCRIPT_DIR}/validate-saas.sh" --env-file "${ENV_FILE}"
 
-run_step 02-registration-trading-risk \
+run_step 02-tenant-control-plane-web \
+  env ENV_FILE="${ENV_FILE}" \
+      E2E_SUFFIX="${short_id}" \
+      E2E_ARTIFACT_DIR="${EVIDENCE_DIR}/tenant-web" \
+      "${SCRIPT_DIR}/tests/run-tenant-lifecycle-web-e2e-host.sh"
+
+run_step 03-registration-trading-risk \
   env ENV_FILE="${ENV_FILE}" \
       E2E_PASSWORD="${E2E_PASSWORD}" \
       CORE_E2E_LOCATION="${CORE_E2E_LOCATION}" \
@@ -116,12 +122,18 @@ run_step 02-registration-trading-risk \
       RUN_CORE_STRESS="${RUN_CORE_STRESS}" \
       "${SCRIPT_DIR}/tests/run-core-trading-acceptance.sh"
 
-run_step 03-trade-role-reversal \
+run_step 04-robot-liquidity \
+  env ENV_FILE="${ENV_FILE}" \
+      ROBOT_E2E_RUN_ID="${short_id}" \
+      ROBOT_E2E_PASSWORD="${E2E_PASSWORD}" \
+      "${SCRIPT_DIR}/tests/run-robot-liquidity-e2e-host.sh"
+
+run_step 05-trade-role-reversal \
   env ENV_FILE="${ENV_FILE}" \
       TRADE_CLUSTER_EVIDENCE_ROOT="${EVIDENCE_DIR}" \
       "${SCRIPT_DIR}/tests/run-trade-cluster-role-reversal-host.sh"
 
-run_step 04-final-health \
+run_step 06-final-health \
   "${SCRIPT_DIR}/validate-saas.sh" --env-file "${ENV_FILE}"
 
 write_summary PASS
