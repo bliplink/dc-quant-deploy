@@ -138,10 +138,26 @@ The location smoke test inserts temporary rows for two locations into MySQL and
 ClickHouse, verifies there is no cross-location match, and removes its test
 rows.
 
-Run the complete browser acceptance flow with an operator-supplied test
-password. The helper idempotently prepares the two test users, verifies both
-logins through the real GW/LoginSvr path, and then covers deposit, limit order,
-cancel, matched buy/sell execution, trade history, and recent trades:
+After a `--full-cluster` installation, run the unified full-business
+acceptance:
+
+```bash
+sudo ./acceptance-saas.sh
+```
+
+The unified command first validates runtime health, creates isolated `*_E2E`
+tenant accounts through the real public `AdminSvr.tenantUserRegistration`
+path, then executes browser login, deposit, limit/market order flows,
+cancellation, matching, position close, trade/history checks, partial/final
+liquidation, insurance fund and ADL coverage, Projection watermark advancement,
+TradeSvr A/B role reversal, and a final health validation. Each stage writes a
+log plus `acceptance-summary.json` below
+`${DEPLOY_ROOT}/evidence/<run>-full-acceptance/`. Any critical failure makes the
+command fail. Set `ACCEPTANCE_RUN_STRESS=true` to include the optional load
+stage.
+
+The standalone browser acceptance helper now also provisions buyer/seller
+identities through the real tenant self-registration path before trading:
 
 ```bash
 sudo E2E_PASSWORD='replace-with-a-test-password' \
