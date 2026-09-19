@@ -84,6 +84,10 @@ grep -Fq 'COMMON_JAR_SHA256=${common_hash}' "${SCRIPT_DIR}/build-saas-images.sh"
   fail "local Java images are missing com.app.common SHA-256 provenance"
 grep -Fq 'COMMON_REVISION=com-app-common-v${common_version}' "${SCRIPT_DIR}/build-saas-images.sh" ||
   fail "local Java images are missing com.app.common revision provenance"
+grep -Fq 'sync_repo gateway-api https://github.com/bliplink/gateway-api.git gateway-api-java-v3.0.6' "${SCRIPT_DIR}/build-saas-images.sh" ||
+  fail "local builder is missing the pinned gateway-api source"
+grep -Fq 'run_maven "${SRC_ROOT}/gateway-api/gateway-api-java/gateway-api" clean install -DskipTests' "${SCRIPT_DIR}/build-saas-images.sh" ||
+  fail "local builder must install gateway-api before com.app.dc"
 
 for image_var in \
   GW_IMAGE_REPOSITORY LOGINSVR_IMAGE_REPOSITORY MDSVR_IMAGE_REPOSITORY APSSVR_IMAGE_REPOSITORY \
