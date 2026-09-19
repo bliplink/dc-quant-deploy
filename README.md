@@ -160,11 +160,20 @@ deposit, limit/market order flows, cancellation, matching, position close,
 trade/history checks, partial/final liquidation, insurance fund and ADL
 coverage, RobotSvr API-key/liquidity/quote-replenishment behavior, Projection
 watermark advancement, TradeSvr A/B role reversal, and a final health
-validation. Each stage writes a
-log plus `acceptance-summary.json` below
+validation. The full acceptance also contains a mandatory bounded pressure
+gate. By default it sends 1,000 resting orders followed by mass cancel, 1,000
+maker orders and 1,000 taker orders at concurrency 16 through the real
+GW -> OrderSvr -> TradeSvr path. The pressure gate validates zero request
+failures/rejections, matching and accounting consistency, fees/margins/positions,
+unique client order IDs, persisted restart recovery, post-recovery position
+close, and no OOM/stopped core containers. TPS plus p50/p95/p99 latency are
+written into the pressure evidence and surfaced in `acceptance-summary.json`.
+Operators can raise the bounded load with `ACCEPTANCE_STRESS_ORDERS` and
+`ACCEPTANCE_STRESS_CONCURRENCY`; the full acceptance never skips this stage.
+
+Each stage writes a log plus `acceptance-summary.json` below
 `${DEPLOY_ROOT}/evidence/<run>-full-acceptance/`. Any critical failure makes the
-command fail. Set `ACCEPTANCE_RUN_STRESS=true` to include the optional load
-stage.
+command fail.
 
 The standalone browser acceptance helper now also provisions buyer/seller
 identities through the real tenant self-registration path before trading:
