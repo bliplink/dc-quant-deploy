@@ -7,6 +7,7 @@ LOCK_FILE="${SAAS_AUTO_UPDATE_LOCK_FILE:-/tmp/dc-saas-auto-update.lock}"
 SKIP_HOST_PREPARE="false"
 SKIP_PULL="false"
 FULL_CLUSTER="false"
+RUN_WEB_TRADING_ACCEPTANCE="false"
 ROBOT_IDENTITY_CHANGED="false"
 LOGIN_CONTAINER_EXISTED="false"
 SAAS_CHANGED_SERVICES="${SAAS_CHANGED_SERVICES:-}"
@@ -22,10 +23,13 @@ die() {
 
 usage() {
   cat <<'EOF'
-Usage: sudo ./deploy-saas.sh [--full-cluster] [--skip-host-prepare] [--skip-pull]
+Usage: sudo ./deploy-saas.sh [--full-cluster] [--web-trading-acceptance] [--skip-host-prepare] [--skip-pull]
 
 Deploy the DC cryptocurrency SaaS stack. --full-cluster enables the production-style
-MDSvr A/B/C, OrderSvr A/B, TradeSvr A/B, and ProjectionSvr cluster topology. This script never starts, stops, or reconfigures the
+MDSvr A/B/C, OrderSvr A/B, TradeSvr A/B, and ProjectionSvr cluster topology.
+--web-trading-acceptance runs the isolated state-changing Web trading acceptance
+after normal non-destructive validation. It requires E2E_PASSWORD and uses an
+isolated *_E2E location. This script never starts, stops, or reconfigures the
 independent quantitative-trading stack.
 EOF
 }
@@ -34,6 +38,9 @@ while [[ "$#" -gt 0 ]]; do
   case "$1" in
     --full-cluster)
       FULL_CLUSTER="true"
+      ;;
+    --web-trading-acceptance)
+      RUN_WEB_TRADING_ACCEPTANCE="true"
       ;;
     --skip-host-prepare)
       SKIP_HOST_PREPARE="true"
@@ -973,4 +980,31 @@ if gateway_routes_need_refresh; then
 fi
 
 "${SCRIPT_DIR}/validate-saas.sh" --env-file "${ENV_FILE}"
+
+if [[ "${RUN_WEB_TRADING_ACCEPTANCE}" == "true" ]]; then
+  [[ -n "${E2E_PASSWORD:-}" ]] ||
+    die "--web-trading-acceptance requires E2E_PASSWORD in the protected runtime environment."
+  DEPLOY_E2E_LOCATION="${DEPLOY_E2E_LOCATION:-DEPLOY_E2E}"
+  [[ "${DEPLOY_E2E_LOCATION}" == *_E2E ]] ||
+    die "DEPLOY_E2E_LOCATION must end with _E2E to prevent production-tenant mutation."
+
+  log "Running isolated state-changing Web trading acceptance in ${DEPLOY_E2E_LOCATION}."
+  ENV_FILE="${ENV_FILE}" \
+  E2E_LOCATION="${DEPLOY_E2E_LOCATION}" \
+  E2E_BUYER="${DEPLOY_E2E_BUYER:-deploywebbuyer}" \
+  E2E_SELLER="${DEPLOY_E2E_SELLER:-deploywebseller}" \
+  E2E_PASSWORD="${E2E_PASSWORD}" \
+    "${SCRIPT_DIR}/tests/run-web-trading-e2e-host.sh"
+
+  log "Running portrait and landscape mobile Web acceptance against the same isolated users."
+  ENV_FILE="${ENV_FILE}" \
+  E2E_LOCATION="${DEPLOY_E2E_LOCATION}" \
+  E2E_USER="${DEPLOY_E2E_BUYER:-deploywebbuyer}" \
+  E2E_PASSWORD="${E2E_PASSWORD}" \
+    "${SCRIPT_DIR}/tests/run-web-mobile-e2e-host.sh"
+
+  log "Revalidating SaaS health after state-changing Web acceptance."
+  "${SCRIPT_DIR}/validate-saas.sh" --env-file "${ENV_FILE}"
+fi
+
 log "DC SaaS is ready at http://$(hostname -I | awk '{print $1}'):${WEB_LISTEN_PORT}/"
