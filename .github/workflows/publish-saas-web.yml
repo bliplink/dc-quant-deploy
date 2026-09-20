@@ -15,13 +15,124 @@ env:
   REGISTRY: ghcr.io
   IMAGE_NAME: bliplink/dc-saas-trade-web
   SOURCE_BRANCH: saas-crypto
-  # Pin every image to a reviewed source commit that already exists remotely.
-  # Immutable private-source revision published as the standalone public image.
-  SOURCE_REV: 95247cfea59aca217c38f28f5f007377f4eb09cf
+  # Pin every image to a source commit that passes the acceptance gate below.
+  SOURCE_REV: 2c4ad40a75075996aca966ae6387291156620ab7
   PUBLIC_SOURCE_URL: https://github.com/bliplink/dc-quant-deploy
 
 jobs:
+  source-acceptance:
+    runs-on: ubuntu-latest
+    timeout-minutes: 35
+    permissions:
+      contents: read
+    steps:
+      - name: Check out private web source
+        env:
+          GH_REPO_TOKEN: ${{ secrets.GH_REPO_TOKEN }}
+        run: |
+          git clone --depth 1 --branch "${SOURCE_BRANCH}"             "https://x-access-token:${GH_REPO_TOKEN}@github.com/SKT-Walter/dc-trade-web.git" service
+          git -C service fetch --depth 1 origin "${SOURCE_REV}"
+          git -C service checkout --detach FETCH_HEAD
+          test "$(git -C service rev-parse HEAD)" = "${SOURCE_REV}"
+
+      - name: Build pinned source image
+        run: docker build -t dc-trade-web-publish:acceptance service
+
+      - name: Start protocol-compatible mock gateway
+        run: |
+          python3 -m pip install --disable-pip-version-check websockets==12.0
+          nohup python3 service/.github/mock_gateway.py > mock-gateway-publish.log 2>&1 &
+          echo $! > mock-gateway-publish.pid
+          for i in $(seq 1 30); do
+            if curl -fsS http://127.0.0.1:18080/healthz | grep -q '^ok$'; then
+              exit 0
+            fi
+            sleep 1
+          done
+          cat mock-gateway-publish.log
+          exit 1
+
+      - name: Run pinned source against mock gateway
+        run: |
+          docker run -d --name dc-trade-web-publish             --network host             -e WEB_LISTEN_PORT=18088             -e GATEWAY_HOST=127.0.0.1             -e GATEWAY_HTTP_PORT=18080             -e GATEWAY_WS_PORT=18081             -e TENANT_WEB_HOST=127.0.0.1             -e TENANT_WEB_PORT=65532             dc-trade-web-publish:acceptance
+          for i in $(seq 1 30); do
+            if curl -fsS http://127.0.0.1:18088/healthz | grep -q '^ok$'; then
+              exit 0
+            fi
+            sleep 1
+          done
+          docker logs dc-trade-web-publish
+          exit 1
+
+      - name: Install Chromium acceptance runner
+        run: |
+          mkdir -p /tmp/dc-trade-publish /tmp/dc-trade-publish-artifacts
+          cd /tmp/dc-trade-publish
+          npm init -y >/dev/null 2>&1
+          npm install --no-audit --no-fund playwright@1.55.0
+          npx playwright install --with-deps chromium
+          cp "$GITHUB_WORKSPACE"/service/.github/capture-trade-visual.mjs .
+          cp "$GITHUB_WORKSPACE"/service/.github/capture-trade-functional.mjs .
+          cp "$GITHUB_WORKSPACE"/service/.github/capture-trade-functional-edge.mjs .
+          cp "$GITHUB_WORKSPACE"/service/.github/capture-trade-functional-faults.mjs .
+          cp "$GITHUB_WORKSPACE"/service/.github/capture-trade-functional-config.mjs .
+          cp "$GITHUB_WORKSPACE"/service/.github/capture-trade-market-health.mjs .
+          cp "$GITHUB_WORKSPACE"/service/.github/capture-trade-position-close.mjs .
+          cp "$GITHUB_WORKSPACE"/service/.github/capture-trade-protection.mjs .
+          cp "$GITHUB_WORKSPACE"/service/.github/capture-trade-order-lifecycle.mjs .
+          cp "$GITHUB_WORKSPACE"/service/.github/capture-trade-history.mjs .
+          cp "$GITHUB_WORKSPACE"/service/.github/capture-trade-disconnect-transaction.mjs .
+          cp "$GITHUB_WORKSPACE"/service/.github/capture-trade-stress.mjs .
+
+      - name: Verify source policies
+        run: |
+          node service/.github/test-kline-subscription-lifecycle.mjs
+          node service/.github/test-market-health-policy.mjs
+
+      - name: Run visual acceptance
+        run: |
+          cd /tmp/dc-trade-publish
+          node capture-trade-visual.mjs /tmp/dc-trade-publish-artifacts
+          test -s /tmp/dc-trade-publish-artifacts/trade-web-mock-mobile-360x800.png
+          test -s /tmp/dc-trade-publish-artifacts/trade-web-mock-mobile-390x844.png
+          test -s /tmp/dc-trade-publish-artifacts/trade-web-mock-mobile-430x932.png
+          test -s /tmp/dc-trade-publish-artifacts/trade-web-mock-mobile-landscape-chart-844x390.png
+          test -s /tmp/dc-trade-publish-artifacts/trade-web-mock-mobile-landscape-order-844x390.png
+
+      - name: Run functional acceptance
+        run: |
+          cd /tmp/dc-trade-publish
+          for script in             capture-trade-functional.mjs             capture-trade-functional-config.mjs             capture-trade-market-health.mjs             capture-trade-position-close.mjs             capture-trade-protection.mjs             capture-trade-order-lifecycle.mjs             capture-trade-history.mjs             capture-trade-disconnect-transaction.mjs             capture-trade-functional-edge.mjs             capture-trade-functional-faults.mjs; do
+            node "$script" /tmp/dc-trade-publish-artifacts
+          done
+
+      - name: Run stress acceptance
+        run: |
+          cd /tmp/dc-trade-publish
+          node capture-trade-stress.mjs /tmp/dc-trade-publish-artifacts
+
+      - name: Upload pinned-source acceptance artifacts
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: dc-saas-trade-web-source-acceptance
+          path: |
+            /tmp/dc-trade-publish-artifacts
+            mock-gateway-publish.log
+          if-no-files-found: warn
+          retention-days: 14
+
+      - name: Diagnostics
+        if: always()
+        run: |
+          echo "SOURCE_REV=${SOURCE_REV}"
+          echo '--- mock gateway ---'
+          tail -n 600 mock-gateway-publish.log || true
+          echo '--- trade web ---'
+          docker logs dc-trade-web-publish || true
+
   build-and-push:
+    needs: source-acceptance
     runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -31,16 +142,19 @@ jobs:
         env:
           GH_REPO_TOKEN: ${{ secrets.GH_REPO_TOKEN }}
         run: |
-          git clone --depth 1 --branch "${SOURCE_BRANCH}" \
-            "https://x-access-token:${GH_REPO_TOKEN}@github.com/SKT-Walter/dc-trade-web.git" service
+          git clone --depth 1 --branch "${SOURCE_BRANCH}"             "https://x-access-token:${GH_REPO_TOKEN}@github.com/SKT-Walter/dc-trade-web.git" service
           git -C service fetch --depth 1 origin "${SOURCE_REV}"
           git -C service checkout --detach FETCH_HEAD
+          test "$(git -C service rev-parse HEAD)" = "${SOURCE_REV}"
+
       - uses: docker/login-action@v3
         with:
           registry: ${{ env.REGISTRY }}
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
+
       - uses: docker/setup-buildx-action@v3
+
       - name: Build and push image
         uses: docker/build-push-action@v6
         with:
@@ -48,6 +162,7 @@ jobs:
           push: true
           labels: |
             org.opencontainers.image.source=${{ env.PUBLIC_SOURCE_URL }}
+            org.opencontainers.image.revision=${{ env.SOURCE_REV }}
           tags: |
             ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:saas-crypto
             ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:source-${{ env.SOURCE_REV }}
