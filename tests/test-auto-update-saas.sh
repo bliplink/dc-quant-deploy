@@ -143,6 +143,10 @@ grep -Fq 'http://127.0.0.1:18090' "${SCRIPT_DIR}/tests/run-tenant-lifecycle-web-
   fail "standalone Platform Web is not exercised"
 grep -Fq 'tests/run-robot-liquidity-e2e-host.sh' "${SCRIPT_DIR}/acceptance-saas.sh" ||
   fail "unified acceptance does not run RobotSvr liquidity business validation"
+grep -Fq "'depth_quantity_mode','NOTIONAL_ZONES'" "${SCRIPT_DIR}/tests/run-robot-liquidity-e2e-host.sh" &&
+grep -Fq "'tape_enabled',true" "${SCRIPT_DIR}/tests/run-robot-liquidity-e2e-host.sh" &&
+grep -Fq 'Synthetic tape passed' "${SCRIPT_DIR}/tests/run-robot-liquidity-e2e-host.sh" ||
+  fail "Robot liquidity acceptance does not validate randomized notional depth and synthetic Binance tape"
 grep -Fq 'tests/run-trade-cluster-role-reversal-host.sh' "${SCRIPT_DIR}/acceptance-saas.sh" ||
   fail "unified acceptance does not exercise TradeSvr role reversal"
 [[ "$(grep -Fc 'validate-saas.sh' "${SCRIPT_DIR}/acceptance-saas.sh")" -ge 2 ]] ||
