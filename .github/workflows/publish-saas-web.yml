@@ -64,6 +64,9 @@ jobs:
           node service/.github/test-kline-subscription-lifecycle.mjs
           node service/.github/test-market-health-policy.mjs
 
+      - name: Install mock gateway dependency
+        run: python3 -m pip install --disable-pip-version-check websockets==12.0
+
       - name: Start isolated visual runtime
         run: |
           nohup python3 service/.github/mock_gateway.py > mock-gateway-visual.log 2>&1 &
