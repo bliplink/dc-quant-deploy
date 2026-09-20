@@ -22,7 +22,7 @@ jobs:
             -e MYSQL_DATABASE=dc \
             -p 3306:3306 mysql:8.0
           for i in $(seq 1 60); do
-            if docker exec profile-mysql mysqladmin ping -uroot -proot --silent; then exit 0; fi
+            if docker exec profile-mysql mysql -uroot -proot -N -e "SELECT 1" >/dev/null 2>&1; then exit 0; fi
             sleep 2
           done
           docker logs profile-mysql
