@@ -1,0 +1,41 @@
+name: Liquidity profile schema CI
+
+on:
+  push:
+    branches: [feature/liquidity-profile-v1]
+
+concurrency:
+  group: liquidity-profile-schema-ci
+  cancel-in-progress: true
+
+jobs:
+  mysql:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+      - name: Start MySQL 8
+        run: |
+          docker run -d --name profile-mysql \
+            -e MYSQL_ROOT_PASSWORD=root \
+            -e MYSQL_DATABASE=dc \
+            -p 3306:3306 mysql:8.0
+          for i in $(seq 1 60); do
+            if docker exec profile-mysql mysqladmin ping -uroot -proot --silent; then exit 0; fi
+            sleep 2
+          done
+          docker logs profile-mysql
+          exit 1
+      - name: Apply fresh install schema
+        run: |
+          docker exec -i profile-mysql mysql -uroot -proot dc < mysql/init/10-dc.sql
+          docker exec -i profile-mysql mysql -uroot -proot dc < mysql/init/11-tenant-control-plane.sql
+      - name: Reapply liquidity profile migration twice
+        run: |
+          docker exec -i profile-mysql mysql -uroot -proot dc < mysql/migrations/20260920_liquidity_profile.sql
+          docker exec -i profile-mysql mysql -uroot -proot dc < mysql/migrations/20260920_liquidity_profile.sql
+      - name: Verify schema
+        run: |
+          test "$(docker exec profile-mysql mysql -N -uroot -proot dc -e "SELECT COUNT(*) FROM information_schema.tables WHERE table_schema='dc' AND table_name='dc_tenant_liquidity_profile'")" = "1"
+          test "$(docker exec profile-mysql mysql -N -uroot -proot dc -e "SELECT COUNT(*) FROM information_schema.columns WHERE table_schema='dc' AND table_name='dc_tenant_robot' AND column_name IN ('liquidity_profile_id','liquidity_profile_version')")" = "2"
