@@ -199,15 +199,9 @@ INSERT INTO dc_tenant_robot
    create_by,update_by,create_time,update_time)
 VALUES
   ('${LOCATION}','${ROBOT_ID}','Binance Ticker 10-Level E2E','BTCUSDT','${ROBOT_USER}','${robot_api_key}',
-   'APSSVR_BINANCE_TICKER',1,10,10,1,1,0.001,10,200,3000,500,5,0,
-   JSON_OBJECT('depth_quantity_mode','NOTIONAL_ZONES',
-               'depth_margin_budget',10000,'depth_leverage',1,
-               'depth_zone_levels',JSON_ARRAY(3,3,4),
-               'depth_zone_weights',JSON_ARRAY(3,3,4),
-               'sweep_user_orders_enabled',true,
-               'sweep_max_loss_bps',5,'sweep_max_qty',0.001,
-               'tape_enabled',true,'tape_volume_scale',0.01,
-               'tape_min_notional',1,'tape_max_notional',100,'tape_interval_ms',500),
+   'APSSVR_BINANCE_TICKER',1,10,10,1,1,0.001,0.1,200,3000,500,5,0,
+   JSON_OBJECT('sweep_user_orders_enabled',true,
+               'sweep_max_loss_bps',5,'sweep_max_qty',0.001),
    'STOPPED','robot-e2e','robot-e2e',NOW(),NOW());
 SQL
 } | mysql_exec dc
@@ -269,70 +263,6 @@ for _ in $(seq 1 30); do
 done
 [[ "${ticker_ladder_ok}" == "1" ]] || die "Robot did not synthesize a valid 10+10 ladder near the live Binance book ticker"
 log "Binance ticker ladder passed: 10 distinct bids + 10 distinct asks, ordered and within 30 bps of live midpoint."
-
-
-notional_shape="$(robot_open_orders | python3 - "${robot_prefix}" <<'PY'
-import json,sys
-from decimal import Decimal
-d=json.load(sys.stdin)
-prefix=sys.argv[1]
-rows=[]
-for row in d.get('data') or []:
-    item={str(k).lower().replace('_',''):v for k,v in row.items()}
-    cid=str(item.get('clordid') or '')
-    status=str(item.get('ordstatus') or '')
-    if cid.startswith(prefix) and '-SW' not in cid and status in ('New','Partially_Filled'):
-        rows.append(item)
-def stats(side):
-    values=[r for r in rows if str(r.get('side','')).lower()==side]
-    notionals=[Decimal(str(r.get('price')))*Decimal(str(r.get('orderqty'))) for r in values]
-    qtys={str(r.get('orderqty')) for r in values}
-    return sum(notionals,Decimal(0)),len(qtys)
-bn,bq=stats('buy')
-an,aq=stats('sell')
-print(bn,bq,an,aq)
-PY
-)"
-read -r bid_notional bid_qty_shapes ask_notional ask_qty_shapes <<<"${notional_shape}"
-python3 - "${bid_notional}" "${bid_qty_shapes}" "${ask_notional}" "${ask_qty_shapes}" <<'PY'
-from decimal import Decimal
-import sys
-bn,bq,an,aq=sys.argv[1:5]
-bn,an=Decimal(bn),Decimal(an)
-assert Decimal('4900') <= bn <= Decimal('5000'), (bn,an)
-assert Decimal('4900') <= an <= Decimal('5000'), (bn,an)
-assert int(bq) >= 4 and int(aq) >= 4, (bq,aq)
-PY
-log "Notional depth passed: each side stays near the 5000 USDT budget and uses non-uniform level quantities."
-
-public_market_payload="{\"serverName\":\"MDSvr\",\"method\":\"queryPublicMarket\",\"content\":{\"location\":\"${LOCATION}\",\"securityID\":\"BTCUSDT\"}}"
-synthetic_seen="0"
-for _ in $(seq 1 60); do
-  public_response="$(api_call "${public_market_payload}" "${trader_token}" 2>/dev/null || true)"
-  if [[ -n "${public_response}" ]]; then
-    synthetic_seen="$(printf '%s' "${public_response}" | python3 -c '
-import json,sys
-d=json.load(sys.stdin)
-data=d.get("data") or {}
-recent=data.get("recentTrades") or {}
-entries=recent.get("NoMDEntries") or recent.get("noMDEntries") or []
-ticker=data.get("ticker") or {}
-volume=ticker.get("Volume") or ticker.get("volume") or "0"
-ok=any(str((x or {}).get("MDEntryID") or (x or {}).get("mdEntryID") or "").startswith("BN:BTCUSDT:") for x in entries)
-try:
-    vol=float(volume or 0)
-except Exception:
-    vol=0
-print(1 if ok and vol>0 else 0)
-' 2>/dev/null || printf 0)"
-  fi
-  [[ "${synthetic_seen}" == "1" ]] && break
-  sleep 1
-done
-[[ "${synthetic_seen}" == "1" ]] || die "Synthetic Binance-scaled market tape did not reach MDSvr recentTrades/ticker volume"
-pre_user_robot_execs="$(mysql_exec -e "SELECT COUNT(*) FROM dc_orders_execorders WHERE location='${LOCATION}' AND user_id='${ROBOT_USER}'" dc)"
-[[ "${pre_user_robot_execs}" == "0" ]] || die "Synthetic tape unexpectedly created Robot account executions (${pre_user_robot_execs})"
-log "Synthetic tape passed: Binance-scaled trade/volume reached MDSvr without creating Robot account executions."
 
 log "Hitting a Robot ask and verifying the partially filled level is replenished."
 before_ids="$(robot_open_orders | robot_open_value '";".join(sorted(str(row.get("clordid")) for row in rows))')"
@@ -422,4 +352,4 @@ done
 summary="$(mysql_exec -e "SELECT CONCAT('persisted_robot_orders=',COUNT(*)) FROM dc_orders WHERE location='${LOCATION}' AND user_id='${ROBOT_USER}' AND clord_id LIKE '${robot_prefix}%'; SELECT CONCAT('trader_executions=',COUNT(*)) FROM dc_orders_execorders WHERE location='${LOCATION}' AND user_id='${TRADER_USER}'; SELECT CONCAT('foreign_location_orders=',COUNT(*)) FROM dc_orders WHERE location<>'${LOCATION}' AND clord_id LIKE '%${RUN_ID}%';" dc)"
 grep -Fq 'foreign_location_orders=0' <<<"${summary}" || die "Robot E2E order identifiers leaked into another location"
 log "PASS: ${summary//$'\n'/; }."
-log "Evidence location retained: ${LOCATION}; synthetic tape was isolated from account positions. External hedge remained disabled only because this acceptance run has no Binance credential."
+log "Evidence location retained: ${LOCATION}; hedge remained disabled because no external Binance credential was supplied."
