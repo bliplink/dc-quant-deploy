@@ -26,6 +26,7 @@ on:
       - tests/test-auto-update-saas.sh
       - build-saas-images.sh
       - install-saas.sh
+      - uninstall-saas.sh
       - deploy-saas.sh
       - tests/web-trading-e2e.js
       - tests/run-web-trading-e2e-host.sh
@@ -86,6 +87,7 @@ on:
       - tests/test-auto-update-saas.sh
       - build-saas-images.sh
       - install-saas.sh
+      - uninstall-saas.sh
       - deploy-saas.sh
       - tests/web-trading-e2e.js
       - tests/run-web-trading-e2e-host.sh
@@ -128,7 +130,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - name: Check shell syntax
-        run: bash -n auto-update-saas.sh build-saas-images.sh install-saas.sh deploy-saas.sh acceptance-saas.sh generate-saas-configs.sh validate-saas.sh tests/prepare-web-trading-e2e.sh tests/run-web-trading-e2e-host.sh tests/run-core-trading-acceptance.sh tests/run-core-trading-stress-host.sh tests/run-tenant-lifecycle-e2e-host.sh tests/run-tenant-lifecycle-web-e2e-host.sh tests/run-robot-liquidity-e2e-host.sh tests/run-trade-cluster-role-reversal-host.sh tests/test-auto-update-saas.sh tests/test-md-cluster-config.sh tests/test-order-cluster-c-config.sh tests/test-trade-cluster-config.sh tests/order-routing-key.sh tests/test-placement-routing-key.sh
+        run: bash -n auto-update-saas.sh build-saas-images.sh install-saas.sh uninstall-saas.sh deploy-saas.sh acceptance-saas.sh generate-saas-configs.sh validate-saas.sh tests/prepare-web-trading-e2e.sh tests/run-web-trading-e2e-host.sh tests/run-core-trading-acceptance.sh tests/run-core-trading-stress-host.sh tests/run-tenant-lifecycle-e2e-host.sh tests/run-tenant-lifecycle-web-e2e-host.sh tests/run-robot-liquidity-e2e-host.sh tests/run-trade-cluster-role-reversal-host.sh tests/test-auto-update-saas.sh tests/test-md-cluster-config.sh tests/test-order-cluster-c-config.sh tests/test-trade-cluster-config.sh tests/order-routing-key.sh tests/test-placement-routing-key.sh
       - name: Validate Open API session context contract
         run: |
           grep -q 'api_key_type' mysql/init/10-dc.sql
