@@ -13,7 +13,7 @@ concurrency:
 
 env:
   REGISTRY: ghcr.io
-  IMAGE_NAME: bliplink/dc-saas-trade-web
+  IMAGE_NAME: bliplink/dc-trade-web
   SOURCE_BRANCH: saas-crypto
   SOURCE_REV: b976b647acc4306f68e4ba446b64f1a389d804ed
   PUBLIC_SOURCE_URL: https://github.com/bliplink/dc-quant-deploy
@@ -31,7 +31,7 @@ jobs:
           GH_REPO_TOKEN: ${{ secrets.GH_REPO_TOKEN }}
         run: |
           git clone --depth 1 --branch "${SOURCE_BRANCH}" \
-            "https://x-access-token:${GH_REPO_TOKEN}@github.com/SKT-Walter/dc-trade-web.git" service
+            "https://x-access-token:${GH_REPO_TOKEN}@github.com/bliplink/dc-trade-web.git" service
           git -C service fetch --depth 1 origin "${SOURCE_REV}"
           git -C service checkout --detach FETCH_HEAD
           test "$(git -C service rev-parse HEAD)" = "${SOURCE_REV}"
@@ -229,7 +229,7 @@ jobs:
           GH_REPO_TOKEN: ${{ secrets.GH_REPO_TOKEN }}
         run: |
           git clone --depth 1 --branch "${SOURCE_BRANCH}" \
-            "https://x-access-token:${GH_REPO_TOKEN}@github.com/SKT-Walter/dc-trade-web.git" service
+            "https://x-access-token:${GH_REPO_TOKEN}@github.com/bliplink/dc-trade-web.git" service
           git -C service fetch --depth 1 origin "${SOURCE_REV}"
           git -C service checkout --detach FETCH_HEAD
           test "$(git -C service rev-parse HEAD)" = "${SOURCE_REV}"
