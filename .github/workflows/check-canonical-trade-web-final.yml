@@ -1,0 +1,26 @@
+name: Check canonical trade web image final
+
+on:
+  push:
+    branches:
+      - ops/check-canonical-trade-web
+    paths:
+      - '.github/workflows/check-canonical-trade-web-final.yml'
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Anonymous inspect canonical image
+        shell: bash
+        run: |
+          set -euo pipefail
+          docker logout ghcr.io >/dev/null 2>&1 || true
+          rm -f "$HOME/.docker/config.json"
+          image="ghcr.io/bliplink/dc-saas-trade-web:saas-crypto"
+          docker manifest inspect "$image" > /tmp/manifest.json
+          grep -q '"architecture": "amd64"' /tmp/manifest.json
+          grep -q '"architecture": "arm64"' /tmp/manifest.json
+          echo "PUBLIC=true"
+          echo "AMD64=true"
+          echo "ARM64=true"
