@@ -1,0 +1,42 @@
+name: Check public GHCR manifests
+
+on:
+  push:
+    branches:
+      - ops/check-public-ghcr
+    paths:
+      - '.github/workflows/check-public-ghcr-fast.yml'
+  workflow_dispatch:
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        image:
+          - ordersvr
+          - tradesvr
+          - projectionsvr
+          - mdsvr
+          - liqsvr
+          - gw
+          - robotsvr
+          - apssvr
+          - adminsvr
+          - managersvr
+          - loginsvr
+          - dc-trade-web
+          - dc-saas-tenant-web
+          - dc-saas-platform-web
+    steps:
+      - name: Ensure anonymous GHCR access
+        run: |
+          docker logout ghcr.io >/dev/null 2>&1 || true
+          rm -f "$HOME/.docker/config.json"
+      - name: Anonymous manifest inspect
+        run: |
+          set -euo pipefail
+          image="ghcr.io/bliplink/${{ matrix.image }}:saas-crypto"
+          docker manifest inspect "$image" >/tmp/manifest.json
+          echo "RESULT PUBLIC $image"
