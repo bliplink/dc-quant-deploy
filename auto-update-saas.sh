@@ -98,7 +98,7 @@ service_image_ref() {
     managersvr) echo "${MANAGERSVR_IMAGE_REPOSITORY:-ghcr.io/bliplink/managersvr}:${MANAGERSVR_TAG:-saas-crypto}" ;;
     adminsvr) echo "${ADMINSVR_IMAGE_REPOSITORY:-ghcr.io/bliplink/adminsvr}:${ADMINSVR_TAG:-saas-crypto}" ;;
     robotsvr) echo "${ROBOTSVR_IMAGE_REPOSITORY:-ghcr.io/bliplink/robotsvr}:${ROBOTSVR_TAG:-saas-crypto}" ;;
-    web) echo "${TRADE_WEB_IMAGE_REPOSITORY:-ghcr.io/bliplink/dc-trade-web}:${TRADE_WEB_TAG:-saas-crypto}" ;;
+    web) echo "${TRADE_WEB_IMAGE_REPOSITORY:-ghcr.io/bliplink/dc-saas-trade-web}:${TRADE_WEB_TAG:-saas-crypto}" ;;
     tenant-web) echo "${TENANT_WEB_IMAGE_REPOSITORY:-ghcr.io/bliplink/dc-saas-tenant-web}:${TENANT_WEB_TAG:-saas-crypto}" ;;
     platform-web) echo "${PLATFORM_WEB_IMAGE_REPOSITORY:-ghcr.io/bliplink/dc-saas-platform-web}:${PLATFORM_WEB_TAG:-saas-crypto}" ;;
     *) return 1 ;;
