@@ -210,7 +210,7 @@ ensure_env_defaults() {
   migrate_env_value PROJECTIONSVR_IMAGE_REPOSITORY dc-saas/projectionsvr ghcr.io/bliplink/projectionsvr
   migrate_env_value PROJECTIONSVR_IMAGE_REPOSITORY ghcr.io/bliplink/com-app-dc-projectionsvr ghcr.io/bliplink/projectionsvr
   migrate_env_value TRADE_WEB_IMAGE_REPOSITORY dc-saas/dc-trade-web ghcr.io/bliplink/dc-saas-trade-web
-  migrate_env_value TRADE_WEB_IMAGE_REPOSITORY ghcr.io/bliplink/dc-saas-trade-web ghcr.io/bliplink/dc-saas-trade-web
+  migrate_env_value TRADE_WEB_IMAGE_REPOSITORY ghcr.io/bliplink/dc-trade-web ghcr.io/bliplink/dc-saas-trade-web
   migrate_env_value TRADE_WEB_IMAGE_REPOSITORY ghcr.io/skt-walter/dc-trade-web ghcr.io/bliplink/dc-saas-trade-web
   if ! grep -q '^TENANT_WEB_IMAGE_REPOSITORY=' "${ENV_FILE}"; then
     printf 'TENANT_WEB_IMAGE_REPOSITORY=ghcr.io/bliplink/dc-saas-tenant-web\n' >> "${ENV_FILE}"
