@@ -110,7 +110,7 @@ The default `IMAGE_SOURCE=registry` mode pulls public `saas-crypto` images from
 GHCR and never uploads or compiles application source on the deployment host.
 No GitHub or GHCR login is required. Package visibility is public while the
 service source repositories may remain private. The Web image is published as
-`ghcr.io/bliplink/dc-saas-trade-web` by this public deployment repository.
+`ghcr.io/bliplink/dc-trade-web` by this public deployment repository.
 
 Set `IMAGE_SOURCE=local` in `.env.prod` when the single host should build the
 application images itself. In this mode `install-saas.sh` calls
