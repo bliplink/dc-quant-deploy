@@ -9,14 +9,14 @@ on:
 
 concurrency:
   group: publish-standalone-saas-web
-  cancel-in-progress: false
+  cancel-in-progress: true
 
 env:
   REGISTRY: ghcr.io
   IMAGE_NAME: bliplink/dc-trade-web
   SOURCE_BRANCH: saas-crypto
-  SOURCE_REV: b976b647acc4306f68e4ba446b64f1a389d804ed
-  PUBLIC_SOURCE_URL: https://github.com/bliplink/dc-quant-deploy
+  SOURCE_REV: 7535bc00163d00db83f600524d1773e62cf4bab1
+  PUBLIC_SOURCE_URL: https://github.com/bliplink/dc-trade-web
 
 jobs:
   source-acceptance:
