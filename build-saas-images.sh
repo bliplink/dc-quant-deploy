@@ -248,7 +248,7 @@ sync_repo common https://github.com/bliplink/com.app.dc.git saas-crypto
 sync_repo gateway-api https://github.com/bliplink/gateway-api.git gateway-api-java-v3.0.6
 sync_repo connector https://github.com/bliplink/binance-futures-connector.git main
 sync_repo ordersvr https://github.com/bliplink/com.app.dc.ordersvr.git saas-crypto
-sync_repo projectionsvr https://github.com/bliplink/com-app-dc-projectionsvr.git saas-crypto
+sync_repo projectionsvr https://github.com/bliplink/com.app.dc.projectionsvr.git saas-crypto
 sync_repo tradesvr https://github.com/bliplink/com.app.dc.tradesvr.git saas-crypto
 sync_repo liqsvr https://github.com/bliplink/com.app.dc.liqsvr.git saas-crypto
 sync_repo mdsvr https://github.com/bliplink/com.app.dc.mdsvr.git saas-crypto
@@ -258,7 +258,7 @@ sync_repo managersvr https://github.com/bliplink/com.app.dc.managersvr.git saas-
 sync_repo adminsvr https://github.com/bliplink/com.app.dc.adminsvr.git saas-crypto
 sync_repo robotsvr https://github.com/bliplink/com.app.dc.robotsvr.git saas-crypto
 sync_repo gateway https://github.com/bliplink/gw.git saas-crypto
-sync_repo trade-web https://github.com/SKT-Walter/dc-trade-web.git saas-crypto
+sync_repo trade-web https://github.com/bliplink/dc-trade-web.git saas-crypto
 sync_repo tenant-web https://github.com/bliplink/dc-saas-tenant-web.git main
 sync_repo platform-web https://github.com/bliplink/dc-saas-platform-web.git saas
 
