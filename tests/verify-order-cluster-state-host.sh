@@ -8,6 +8,7 @@ PARTITION_COUNT="${ORDER_CLUSTER_PARTITION_COUNT:-256}"
 DATA_ROOT="${ORDER_CLUSTER_DATA_ROOT:-/data/dc-saas-runtime/data}"
 WEB_PORT="${WEB_LISTEN_PORT:-18088}"
 VERIFY_LEARNERS="${ORDER_CLUSTER_VERIFY_LEARNERS:-false}"
+VERIFY_SESSION_ID="${ORDER_CLUSTER_VERIFY_SESSION_ID:-}"
 SCRIPT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
 
 log() { printf '[order-cluster-verify] %s\n' "$*"; }
@@ -35,14 +36,18 @@ grep -o '{"partitionId"[^}]*}' "${zk_output}" >"${assignments}" || true
 python3 "${SCRIPT_DIR}/verify_order_cluster_assignments.py" \
   "${assignments}" "${PARTITION_COUNT}" "${DATA_ROOT}" "${VERIFY_LEARNERS}"
 
-route_response="$(curl -fsS --max-time 10 -H 'Content-Type: application/json' \
+curl_headers=(-H 'Content-Type: application/json')
+if [[ -n "${VERIFY_SESSION_ID}" ]]; then
+  curl_headers+=(-H "sessionId: ${VERIFY_SESSION_ID}")
+fi
+route_response="$(curl -fsS --max-time 10 "${curl_headers[@]}" \
   --data '{"serverName":"OrderSvr","method":"__cluster_state_verify__","key":"CLUSTER_VERIFY\u001f4\u001fBTCUSDT","content":{"Location":"CLUSTER_VERIFY","MarketIndicator":"4","SecurityID":"BTCUSDT"}}' \
   "http://127.0.0.1:${WEB_PORT}/httpapi/")"
 grep -Fq 'is not Online' <<<"${route_response}" && die 'logical OrderSvr route is offline'
 grep -Fq 'handler:__cluster_state_verify__ does not exist.' <<<"${route_response}" \
   || die "unexpected logical OrderSvr route response: ${route_response}"
 
-python3 - "${WEB_PORT}" "${PARTITION_COUNT}" <<'PY'
+python3 - "${WEB_PORT}" "${PARTITION_COUNT}" "${VERIFY_SESSION_ID}" <<'PY'
 import json
 import sys
 import urllib.error
@@ -52,6 +57,7 @@ from concurrent.futures import ThreadPoolExecutor, as_completed
 
 web_port = int(sys.argv[1])
 partition_count = int(sys.argv[2])
+session_id = sys.argv[3]
 url = f"http://127.0.0.1:{web_port}/httpapi/"
 
 
@@ -78,9 +84,10 @@ def verify(target):
         },
         separators=(",", ":"),
     ).encode("utf-8")
-    request = urllib.request.Request(
-        url, data=body, headers={"Content-Type": "application/json"}
-    )
+    headers = {"Content-Type": "application/json"}
+    if session_id:
+        headers["sessionId"] = session_id
+    request = urllib.request.Request(url, data=body, headers=headers)
     try:
         with urllib.request.urlopen(request, timeout=12) as response:
             text = response.read().decode("utf-8", errors="replace")
