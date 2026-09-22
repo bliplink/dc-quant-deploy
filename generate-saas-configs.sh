@@ -860,6 +860,8 @@ cat > "${OVERRIDE_ROOT}/GW/config/spring-gw-client.xml" <<'EOF'
         <entry key="LoginSvr" value="SYS.ATS.LOGIN|1dc.login.apikey"/>
         <entry key="MDSvr" value="dc.md.kline.**|dc.md.trade.**|dc.md.market.trade.**|dc.md.orderbook.**|dc.md.depth.**"/>
         <entry key="APSSvr" value="dc.aps|dc.aps.**|dc.bookticker.**|dc.trade.**"/>
+        <entry key="OrderSvr" value="dc.order.status.**|dc.order.trade.**"/>
+        <entry key="TradeSvr" value="dc.trade.accountbalance.**|dc.trade.position.**|dc.trade.posting.**"/>
       </map>
     </property>
     <property name="securityChecks"><list><ref bean="openApiIngressSecurityCheck"/><ref bean="openApiRateLimitSecurityCheck"/><ref bean="sqlInjSecurityCheck"/></list></property>
