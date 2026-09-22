@@ -854,7 +854,7 @@ cat > "${OVERRIDE_ROOT}/GW/config/spring-gw-client.xml" <<'EOF'
     <property name="notifyProxy" ref="notify"/>
     <property name="tcpConnector" ref="tcpConnector"/>
     <property name="SessionService" value="LoginSvr"/>
-    <property name="RequestService" value="AdminSvr,APSSvr,OrderSvr,TDSvr,MDSvr,LoginSvr,ManagerSvr,LiqSvr"/>
+    <property name="RequestService" value="AdminSvr,APSSvr,OrderSvr,TradeSvr,MDSvr,LoginSvr,ManagerSvr,LiqSvr,ProjectionSvr"/>
     <property name="Subscribes">
       <map>
         <entry key="LoginSvr" value="SYS.ATS.LOGIN|1dc.login.apikey"/>
