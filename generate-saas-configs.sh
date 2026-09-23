@@ -788,6 +788,7 @@ log4j.writeTime=true
 log4j.async=true
 dbpool.cfg=../../control/DBPoolConfig.ini
 dbpool.default=MYSQL0
+clickhouse.default=ClickHouse1
 dbpool.event=MYSQL1
 loadSymbolCron=0 0/10 * * * ?
 codeCheckDate=false
