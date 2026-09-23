@@ -8,6 +8,7 @@ RUN_ID="${ROBOT_E2E_RUN_ID:-$(date +%Y%m%d%H%M%S)}"
 LOCATION="${ROBOT_E2E_LOCATION:-ROBOT_E2E_${RUN_ID}}"
 ROBOT_USER="${ROBOT_E2E_ROBOT_USER:-robotmaker}"
 TRADER_USER="${ROBOT_E2E_TRADER_USER:-robottrader}"
+TAPE_USER="${ROBOT_E2E_TAPE_USER:-robottape}"
 ROBOT_ID="${ROBOT_E2E_ROBOT_ID:-depth10}"
 PASSWORD="${ROBOT_E2E_PASSWORD:-$(openssl rand -hex 16)}"
 RESTART_SERVICES="${ROBOT_E2E_RESTART_SERVICES:-true}"
@@ -19,10 +20,11 @@ safe_identifier() { [[ "$1" =~ ^[A-Za-z0-9_.-]+$ ]]; }
 
 [[ "$(id -u)" -eq 0 ]] || die "Run with sudo so the protected environment can be read"
 [[ -r "${ENV_FILE}" ]] || die "Cannot read ${ENV_FILE}"
-for value in "${RUN_ID}" "${LOCATION}" "${ROBOT_USER}" "${TRADER_USER}" "${ROBOT_ID}"; do
+for value in "${RUN_ID}" "${LOCATION}" "${ROBOT_USER}" "${TRADER_USER}" "${TAPE_USER}" "${ROBOT_ID}"; do
   safe_identifier "${value}" || die "Unsupported identifier: ${value}"
 done
 [[ "${LOCATION}" == ROBOT_E2E_* ]] || die "ROBOT_E2E_LOCATION must be an isolated ROBOT_E2E_* location"
+[[ "${TAPE_USER}" != "${ROBOT_USER}" && "${TAPE_USER}" != "${TRADER_USER}" ]] || die "Tape user must be distinct from maker and test trader"
 robot_compact="${ROBOT_ID//[^A-Za-z0-9]/}"
 robot_prefix="RB${robot_compact:0:12}-"
 command -v curl >/dev/null || die "curl is required"
@@ -125,12 +127,14 @@ INSERT INTO dc_users
    enable_trade,enable_cash_in,enable_cash_out,close_by,location)
 VALUES
   ('${ROBOT_USER}','${ROBOT_USER}','Robot Maker','${password_hash}','1','1',NOW(),NOW(),'1','1','1','robot-e2e','${LOCATION}'),
-  ('${TRADER_USER}','${TRADER_USER}','Robot Test Trader','${password_hash}','1','1',NOW(),NOW(),'1','1','1','robot-e2e','${LOCATION}');
+  ('${TRADER_USER}','${TRADER_USER}','Robot Test Trader','${password_hash}','1','1',NOW(),NOW(),'1','1','1','robot-e2e','${LOCATION}'),
+  ('${TAPE_USER}','${TAPE_USER}','Robot Tape Trader','${password_hash}','1','1',NOW(),NOW(),'1','1','1','robot-e2e','${LOCATION}');
 INSERT INTO dc_users_symbol_config
   (user_id,security_id,symbol,leverage,position_type,update_time,close_by,location,market_indicator)
 VALUES
   ('${ROBOT_USER}','BTCUSDT','BTCUSDT',20,'Cross',NOW(),'robot-e2e','${LOCATION}','4'),
-  ('${TRADER_USER}','BTCUSDT','BTCUSDT',20,'Cross',NOW(),'robot-e2e','${LOCATION}','4');
+  ('${TRADER_USER}','BTCUSDT','BTCUSDT',20,'Cross',NOW(),'robot-e2e','${LOCATION}','4'),
+  ('${TAPE_USER}','BTCUSDT','BTCUSDT',20,'Cross',NOW(),'robot-e2e','${LOCATION}','4');
 COMMIT;
 SQL
 } | mysql_exec dc
@@ -156,12 +160,15 @@ wait_for_route OrderSvr
 
 robot_token="$(login "${ROBOT_USER}")"
 trader_token="$(login "${TRADER_USER}")"
+tape_token="$(login "${TAPE_USER}")"
 
 robot_funding_response="$(api_call "{\"serverName\":\"TDSvr\",\"method\":\"cashIn\",\"content\":{\"UserID\":\"${ROBOT_USER}\",\"Amount\":\"1000000\",\"Location\":\"${LOCATION}\"}}" "${robot_token}")"
 expect_ok "fund robot account" "${robot_funding_response}"
 trader_funding_response="$(api_call "{\"serverName\":\"TDSvr\",\"method\":\"cashIn\",\"content\":{\"UserID\":\"${TRADER_USER}\",\"Amount\":\"1000000\",\"Location\":\"${LOCATION}\"}}" "${trader_token}")"
 expect_ok "fund trader account" "${trader_funding_response}"
-log "Funded Robot and trader through the authoritative GW-to-TDSvr path."
+tape_funding_response="$(api_call "{\"serverName\":\"TDSvr\",\"method\":\"cashIn\",\"content\":{\"UserID\":\"${TAPE_USER}\",\"Amount\":\"1000000\",\"Location\":\"${LOCATION}\"}}" "${tape_token}")"
+expect_ok "fund tape account" "${tape_funding_response}"
+log "Funded Robot, trader and Tape accounts through the authoritative GW-to-TDSvr path."
 
 robot_open_orders() {
   api_call "{\"serverName\":\"OrderSvr\",\"method\":\"queryOpenOrder\",\"content\":{\"securityid\":\"BTCUSDT\",\"userid\":\"${ROBOT_USER}\",\"Location\":\"${LOCATION}\",\"MarketIndicator\":\"4\",\"SecurityID\":\"BTCUSDT\"}}" "${robot_token}"
@@ -190,6 +197,11 @@ expect_ok "create robot API key" "${key_response}"
 robot_api_key="$(printf '%s' "${key_response}" | json_eval 'd["data"]["api_key"]')"
 [[ -n "${robot_api_key}" ]] || die "LoginSvr returned no robot API key"
 
+tape_key_response="$(api_call "{\"serverName\":\"LoginSvr\",\"method\":\"updateApiKey\",\"content\":{\"cid\":\"ROBOT_TAPE_KEY_${RUN_ID}\",\"type\":\"trade\",\"inf1\":\"RobotSvr Binance volume tape E2E\"}}" "${tape_token}")"
+expect_ok "create tape API key" "${tape_key_response}"
+tape_api_key="$(printf '%s' "${tape_key_response}" | json_eval 'd["data"]["api_key"]')"
+[[ -n "${tape_api_key}" ]] || die "LoginSvr returned no tape API key"
+
 {
   cat <<SQL
 INSERT INTO dc_tenant_robot
@@ -201,7 +213,10 @@ VALUES
   ('${LOCATION}','${ROBOT_ID}','Binance Ticker 10-Level E2E','BTCUSDT','${ROBOT_USER}','${robot_api_key}',
    'APSSVR_BINANCE_TICKER',1,10,10,1,1,0.001,0.1,200,3000,500,5,0,
    JSON_OBJECT('sweep_user_orders_enabled',true,
-               'sweep_max_loss_bps',5,'sweep_max_qty',0.001),
+               'sweep_max_loss_bps',5,'sweep_max_qty',0.001,
+               'tape_enabled',true,'tape_api_user_id','${TAPE_USER}','tape_api_key','${tape_api_key}',
+               'tape_volume_scale',0.01,'tape_min_notional',5,'tape_max_notional',1000,
+               'tape_interval_ms',1000),
    'STOPPED','robot-e2e','robot-e2e',NOW(),NOW());
 SQL
 } | mysql_exec dc
@@ -221,6 +236,38 @@ if [[ "${ready}" != "1" ]]; then
   mysql_exec -e "SELECT runtime_status,last_error_code,last_error_message,open_order_count FROM dc_tenant_robot WHERE location='${LOCATION}' AND robot_id='${ROBOT_ID}'" dc >&2 || true
   die "Robot did not reach RUNNING with 20 orders"
 fi
+
+log "Waiting for Binance-volume Tape to produce a tenant K-line."
+tape_ready="0"
+tape_close="0"
+tape_volume="0"
+tape_deviation_bps="999999"
+for _ in $(seq 1 60); do
+  kline_response="$(api_call "{\"serverName\":\"MDSvr\",\"method\":\"queryKLine\",\"content\":{\"num\":10,\"securityID\":\"BTCUSDT\",\"text\":\"1M\",\"Location\":\"${LOCATION}\"}}" "${trader_token}" 2>/dev/null || true)"
+  reference_price="$(mysql_exec -e "SELECT COALESCE(last_reference_price,0) FROM dc_tenant_robot WHERE location='${LOCATION}' AND robot_id='${ROBOT_ID}' LIMIT 1;" dc 2>/dev/null || echo 0)"
+  read -r tape_ready tape_close tape_volume tape_deviation_bps <<<"$(printf '%s' "${kline_response}" | python3 -c '
+import json,sys
+from decimal import Decimal
+try:
+    d=json.load(sys.stdin)
+    rows=d.get("data") if isinstance(d.get("data"),list) else ((d.get("data") or {}).get("data") or [])
+    ref=Decimal(sys.argv[1])
+    if int(d.get("code",-1)) != 0 or not rows or ref <= 0:
+        print("0 0 0 999999")
+        raise SystemExit
+    parts=str(rows[-1]).split(",")
+    close=Decimal(parts[5]); volume=Decimal(parts[6])
+    deviation=abs(close-ref)*Decimal(10000)/ref
+    print(1 if close > 0 and volume > 0 and deviation <= Decimal("100") else 0,
+          close, volume, deviation)
+except Exception:
+    print("0 0 0 999999")
+' "${reference_price}")"
+  [[ "${tape_ready}" == "1" ]] && break
+  sleep 1
+done
+[[ "${tape_ready}" == "1" ]] || die "Tape did not produce a positive recent tenant K-line within 60s"
+log "Tape K-line ready: close=${tape_close}, volume=${tape_volume}, reference_deviation_bps=${tape_deviation_bps}."
 
 compare_ticker_ladder() {
   local robot_file external_file result
