@@ -326,7 +326,7 @@ async function verifyKlineAndMarketData(page) {
         method: 'POST',
         headers: {'Content-Type': 'application/json', sessionId: session.token || session.sid || ''},
         body: JSON.stringify({
-          serverName: 'MDSvr',
+          serverName: 'AdminSvr',
           method: 'queryKLine',
           content: {num: 1000, securityID: 'BTCUSDT', text: '5M', Location: tenant}
         })

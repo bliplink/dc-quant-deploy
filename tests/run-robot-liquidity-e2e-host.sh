@@ -162,13 +162,13 @@ robot_token="$(login "${ROBOT_USER}")"
 trader_token="$(login "${TRADER_USER}")"
 tape_token="$(login "${TAPE_USER}")"
 
-robot_funding_response="$(api_call "{\"serverName\":\"TDSvr\",\"method\":\"cashIn\",\"content\":{\"UserID\":\"${ROBOT_USER}\",\"Amount\":\"1000000\",\"Location\":\"${LOCATION}\"}}" "${robot_token}")"
+robot_funding_response="$(api_call "{\"serverName\":\"TradeSvr\",\"method\":\"cashIn\",\"content\":{\"UserID\":\"${ROBOT_USER}\",\"Amount\":\"1000000\",\"Location\":\"${LOCATION}\"}}" "${robot_token}")"
 expect_ok "fund robot account" "${robot_funding_response}"
-trader_funding_response="$(api_call "{\"serverName\":\"TDSvr\",\"method\":\"cashIn\",\"content\":{\"UserID\":\"${TRADER_USER}\",\"Amount\":\"1000000\",\"Location\":\"${LOCATION}\"}}" "${trader_token}")"
+trader_funding_response="$(api_call "{\"serverName\":\"TradeSvr\",\"method\":\"cashIn\",\"content\":{\"UserID\":\"${TRADER_USER}\",\"Amount\":\"1000000\",\"Location\":\"${LOCATION}\"}}" "${trader_token}")"
 expect_ok "fund trader account" "${trader_funding_response}"
-tape_funding_response="$(api_call "{\"serverName\":\"TDSvr\",\"method\":\"cashIn\",\"content\":{\"UserID\":\"${TAPE_USER}\",\"Amount\":\"1000000\",\"Location\":\"${LOCATION}\"}}" "${tape_token}")"
+tape_funding_response="$(api_call "{\"serverName\":\"TradeSvr\",\"method\":\"cashIn\",\"content\":{\"UserID\":\"${TAPE_USER}\",\"Amount\":\"1000000\",\"Location\":\"${LOCATION}\"}}" "${tape_token}")"
 expect_ok "fund tape account" "${tape_funding_response}"
-log "Funded Robot, trader and Tape accounts through the authoritative GW-to-TDSvr path."
+log "Funded Robot, trader and Tape accounts through the authoritative GW-to-TradeSvr path."
 
 robot_open_orders() {
   api_call "{\"serverName\":\"OrderSvr\",\"method\":\"queryOpenOrder\",\"content\":{\"securityid\":\"BTCUSDT\",\"userid\":\"${ROBOT_USER}\",\"Location\":\"${LOCATION}\",\"MarketIndicator\":\"4\",\"SecurityID\":\"BTCUSDT\"}}" "${robot_token}"
@@ -243,7 +243,7 @@ tape_close="0"
 tape_volume="0"
 tape_deviation_bps="999999"
 for _ in $(seq 1 60); do
-  kline_response="$(api_call "{\"serverName\":\"MDSvr\",\"method\":\"queryKLine\",\"content\":{\"num\":10,\"securityID\":\"BTCUSDT\",\"text\":\"1M\",\"Location\":\"${LOCATION}\"}}" "${trader_token}" 2>/dev/null || true)"
+  kline_response="$(api_call "{\"serverName\":\"AdminSvr\",\"method\":\"queryKLine\",\"content\":{\"num\":10,\"securityID\":\"BTCUSDT\",\"text\":\"1M\",\"Location\":\"${LOCATION}\"}}" "${trader_token}" 2>/dev/null || true)"
   reference_price="$(mysql_exec -e "SELECT COALESCE(last_reference_price,0) FROM dc_tenant_robot WHERE location='${LOCATION}' AND robot_id='${ROBOT_ID}' LIMIT 1;" dc 2>/dev/null || echo 0)"
   read -r tape_ready tape_close tape_volume tape_deviation_bps <<<"$(printf '%s' "${kline_response}" | python3 -c '
 import json,sys

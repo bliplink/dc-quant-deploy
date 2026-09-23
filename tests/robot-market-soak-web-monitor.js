@@ -80,7 +80,7 @@ async function openTrade(browser) {
       } catch (_) {
         return;
       }
-      if (payload.serverName !== 'MDSvr' || payload.method !== 'queryKLine') return;
+      if (payload.serverName !== 'AdminSvr' || payload.method !== 'queryKLine') return;
       try {
         const body = await response.json();
         lastKlineResponse = {
