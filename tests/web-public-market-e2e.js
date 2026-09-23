@@ -146,7 +146,7 @@ function timeout(ms, message) {
       fail('anonymous order book did not become ready', {diagnostics, publicMarketResponses, pageErrors});
     }
     if (publicMarketResponses.length) {
-      fail('anonymous market page used polling snapshot API instead of MDSvr websocket subscriptions',
+      fail('anonymous market page used polling snapshot API instead of gateway websocket subscriptions',
         publicMarketResponses);
     }
 
@@ -220,14 +220,15 @@ function timeout(ms, message) {
     await page.screenshot({path: depthScreenshot, fullPage: true});
 
     await page.locator('.TVChartContainer iframe').waitFor({state: 'visible', timeout: 60000});
-    // K-line history shares the trading page's WebSocket transport. The data
-    // feed publishes this status only after queryKLine rows are normalized.
+    // Durable K-line history is requested from AdminSvr over the trading page's
+    // GW WebSocket request/reply transport. The data feed publishes this status
+    // only after AdminSvr queryKLine rows are normalized.
     try {
       await page.waitForFunction(() => window.__dcKlineStatus && window.__dcKlineStatus.receivedRows > 1,
         null, {timeout: 35000});
     } catch (error) {
       await page.screenshot({path: path.join(artifactDir, 'web-public-history-failure.png'), fullPage: true});
-      fail('the first chart load did not receive durable K-line history over websocket', {
+      fail('the first chart load did not receive durable K-line history from AdminSvr over GW', {
         klineResponses,
         publicMarketResponses,
         pageErrors
@@ -263,7 +264,7 @@ function timeout(ms, message) {
     if (!realtimeKline.topic.endsWith(`.${location}`)
       || realtimeKline.symbol !== 'BTCUSDT'
       || realtimeKline.time > Date.now() + 5 * 60 * 1000) {
-      fail('MDSvr realtime K-line push has an invalid tenant, symbol or timestamp', realtimeKline);
+      fail('gateway realtime K-line push has an invalid tenant, symbol or timestamp', realtimeKline);
     }
 
     const dragZones = page.locator('.panelDragZone');
