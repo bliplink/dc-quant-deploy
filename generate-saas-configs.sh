@@ -499,6 +499,7 @@ log4j.async=true
 [BNFutures]
 enableBinanceFlag=true
 enableBookTickerFlag=true
+enableTradeFlag=true
 enablePartialDepthFlag=true
 partialDepthLevels=10
 partialDepthSpeedMs=100
