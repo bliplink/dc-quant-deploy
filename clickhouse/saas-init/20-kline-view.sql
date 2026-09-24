@@ -11,6 +11,7 @@ SELECT
     close,
     low,
     high,
+    numTrades,
     turnover,
     volume,
     latestCreateTime AS createTime
@@ -28,6 +29,7 @@ FROM
         argMax(close, createTime) AS close,
         argMax(low, createTime) AS low,
         argMax(high, createTime) AS high,
+        argMax(numTrades, createTime) AS numTrades,
         argMax(turnover, createTime) AS turnover,
         argMax(volume, createTime) AS volume,
         max(createTime) AS latestCreateTime

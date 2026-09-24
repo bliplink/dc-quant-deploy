@@ -439,7 +439,7 @@ clickhouse.default=ClickHouse1
 [ohlc]
 ohlcStorePath=../../data/${node}/ohlc
 ohlcBackPath=../../data/${node}/backup/ohlc
-ohlcList=1W;true;false;yyyyww;false;true|1N;true;false;yyyyMM;false;true|1Y;true;false;yyyy;false;true|1D;true;false;yyyyMMdd;false;false|1M;true;true;HHmmss;false;false|5M;true;true;HHmmss;false;false|15M;true;true;HHmmss;false;false|30M;true;true;HHmmss;false;false|1H;true;true;HHmmss;false;true|2H;true;true;HHmmss;false;true|4H;true;true;HHmmss;false;true
+ohlcList=1W;true;false;yyyyww;true;true|1N;true;false;yyyyMM;true;true|1Y;true;false;yyyy;true;true|1D;true;false;yyyyMMdd;true;false|1M;true;true;HHmmss;true;false|5M;true;true;HHmmss;true;false|15M;true;true;HHmmss;true;false|30M;true;true;HHmmss;true;false|1H;true;true;HHmmss;true;true|2H;true;true;HHmmss;true;true|4H;true;true;HHmmss;true;true
 ohlcVolumeFlag=false
 
 [index]
