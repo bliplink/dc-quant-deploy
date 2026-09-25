@@ -522,6 +522,7 @@ services:
       - ${DEPLOY_ROOT}/control:/srv/dc/control:ro
       - ${DEPLOY_ROOT}/data:/srv/dc/data
       - ${DEPLOY_ROOT}/log:/srv/dc/log
+      - ${DEPLOY_ROOT}/control/overrides/RobotSvr/config/log4j.ini:/srv/dc/dc/RobotSvr/config/log4j.ini:ro
     mem_limit: ${ROBOTSVR_MEMORY_LIMIT:-384m}
     cpus: ${ROBOTSVR_CPU_LIMIT:-0.20}
 

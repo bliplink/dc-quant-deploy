@@ -120,7 +120,7 @@ CONTROL_ROOT="${DEPLOY_ROOT}/control"
 OVERRIDE_ROOT="${CONTROL_ROOT}/overrides"
 umask 077
 
-install -d -m 0750 "${CONTROL_ROOT}" "${OVERRIDE_ROOT}/GW/config" "${OVERRIDE_ROOT}/LoginSvr/config" "${OVERRIDE_ROOT}/MDSvr/config" "${OVERRIDE_ROOT}/MDSvrA/config" "${OVERRIDE_ROOT}/MDSvrB/config" "${OVERRIDE_ROOT}/MDSvrC/config" "${OVERRIDE_ROOT}/APSSvr/config" "${OVERRIDE_ROOT}/OrderSvr/config" "${OVERRIDE_ROOT}/OrderSvrA/config" "${OVERRIDE_ROOT}/OrderSvrB/config" "${OVERRIDE_ROOT}/OrderSvrC/config" "${OVERRIDE_ROOT}/ProjectionSvr/config" "${OVERRIDE_ROOT}/TradeSvr/config" "${OVERRIDE_ROOT}/TradeSvrA/config" "${OVERRIDE_ROOT}/TradeSvrB/config" "${OVERRIDE_ROOT}/LiqSvr/config" "${OVERRIDE_ROOT}/ManagerSvr/config" "${OVERRIDE_ROOT}/AdminSvr/config"
+install -d -m 0750 "${CONTROL_ROOT}" "${OVERRIDE_ROOT}/GW/config" "${OVERRIDE_ROOT}/LoginSvr/config" "${OVERRIDE_ROOT}/MDSvr/config" "${OVERRIDE_ROOT}/MDSvrA/config" "${OVERRIDE_ROOT}/MDSvrB/config" "${OVERRIDE_ROOT}/MDSvrC/config" "${OVERRIDE_ROOT}/APSSvr/config" "${OVERRIDE_ROOT}/OrderSvr/config" "${OVERRIDE_ROOT}/OrderSvrA/config" "${OVERRIDE_ROOT}/OrderSvrB/config" "${OVERRIDE_ROOT}/OrderSvrC/config" "${OVERRIDE_ROOT}/ProjectionSvr/config" "${OVERRIDE_ROOT}/TradeSvr/config" "${OVERRIDE_ROOT}/TradeSvrA/config" "${OVERRIDE_ROOT}/TradeSvrB/config" "${OVERRIDE_ROOT}/LiqSvr/config" "${OVERRIDE_ROOT}/ManagerSvr/config" "${OVERRIDE_ROOT}/AdminSvr/config" "${OVERRIDE_ROOT}/RobotSvr/config"
 
 cat > "${CONTROL_ROOT}/DBPoolConfig.ini" <<EOF
 [DBPOOL]
@@ -811,6 +811,25 @@ codeCheckDate=false
 ConvertCurrency=USDT
 level1Rebate=0.4
 level2Rebate=0
+EOF
+
+# Keep RobotSvr logging deployment-managed just like the other Java services.
+# GateWayApi can include login reply payloads at WARN, so keep that class at ERROR.
+cat > "${OVERRIDE_ROOT}/RobotSvr/config/log4j.ini" <<EOF
+log4j.rootLogger=INFO,file,stdout
+log4j.logger.com.gateway.connector.tcp.client.GateWayApi=ERROR
+
+log4j.appender.file=org.apache.log4j.DailyRollingFileAppender
+log4j.appender.file.File=../../log/RobotSvr.log
+log4j.appender.file.Append=true
+log4j.appender.file.layout=org.apache.log4j.PatternLayout
+log4j.appender.file.layout.ConversionPattern=%d{yyyy/MM/dd HH:mm:ss.SSS} %p %m (%C{1}:%L)%n
+
+log4j.appender.stdout=org.apache.log4j.ConsoleAppender
+log4j.appender.stdout.Target=System.out
+log4j.appender.stdout.follow=true
+log4j.appender.stdout.layout=org.apache.log4j.PatternLayout
+log4j.appender.stdout.layout.ConversionPattern=%d{yyyy/MM/dd HH:mm:ss.SSS} %p %m (%C{1}:%L)%n
 EOF
 
 cat > "${OVERRIDE_ROOT}/GW/config/spring-tcp-server.xml" <<EOF
