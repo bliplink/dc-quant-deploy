@@ -50,6 +50,8 @@ grep -Fqx 'trade.cluster.snapshot.enabled=true' "${a_config}" || fail 'Trade sna
 grep -Fqx 'trade.cluster.lifecycle.enabled=true' "${a_config}" || fail 'Trade recovery lifecycle must be enabled'
 grep -Fqx 'trade.cluster.recovery.authoritative=true' "${a_config}" || fail 'Trade authoritative recovery must be enabled'
 grep -Fqx 'trade.cluster.replication.enabled=true' "${a_config}" || fail 'Trade replication must be enabled'
+grep -Fqx 'trade.cluster.replication.required=false' "${a_config}" || fail 'TradeSvrA replica ACK must not gate Primary availability'
+grep -Fqx 'trade.cluster.replication.required=false' "${b_config}" || fail 'TradeSvrB replica ACK must not gate Primary availability'
 grep -Fqx 'trade.cluster.replication.port=19221' "${a_config}" || fail 'TradeSvrA replication port mismatch'
 grep -Fqx 'trade.cluster.replication.port=19222' "${b_config}" || fail 'TradeSvrB replication port mismatch'
 grep -Fqx 'trade.cluster.replication.peers=TradeSvrA=127.0.0.1:19221,TradeSvrB=127.0.0.1:19222' "${a_config}" ||

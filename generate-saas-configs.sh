@@ -697,6 +697,7 @@ trade.cluster.recovery.authoritative=${TRADE_CLUSTER_ENABLED}
 trade.cluster.lifecycle.pollMillis=1000
 trade.cluster.lifecycle.retryMillis=5000
 trade.cluster.replication.enabled=${TRADE_CLUSTER_ENABLED}
+trade.cluster.replication.required=${TRADE_CLUSTER_REPLICATION_REQUIRED:-false}
 trade.cluster.replication.bindHost=127.0.0.1
 trade.cluster.replication.port=${replication_port:-19092}
 trade.cluster.replication.requestTimeoutMs=10000
