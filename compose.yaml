@@ -260,6 +260,7 @@ services:
       SERVICE_NAME: APSSvr
       MAIN_CLASS: APSSvr
       JAVA_OPTS: ${APSSVR_JAVA_OPTS:--server -Xms64m -Xmx448m -Xmn112m -Djava.security.auth.login.config=../../control/jaas.ini}
+      JAVA_TOOL_OPTIONS: ${APSSVR_EXTRA_JAVA_OPTS:-}
     volumes:
       - ${DEPLOY_ROOT}/control:/srv/dc/control:ro
       - ${DEPLOY_ROOT}/data:/srv/dc/data

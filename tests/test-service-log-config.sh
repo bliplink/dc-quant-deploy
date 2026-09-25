@@ -66,4 +66,7 @@ missing="$({
 } | sort)"
 [[ -z "${missing}" ]] || fail "services missing log4j mount: ${missing//$'\n'/,}"
 
+grep -Fq 'JAVA_TOOL_OPTIONS: ${APSSVR_EXTRA_JAVA_OPTS:-}' "${DEPLOY_DIR}/compose.yaml" ||
+  fail 'APSSvr optional JVM proxy options are not wired through JAVA_TOOL_OPTIONS'
+
 printf '[service-log-config-test] PASS\n'
