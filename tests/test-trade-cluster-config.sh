@@ -18,6 +18,7 @@ fail() {
 sed \
   -e "s|^DEPLOY_ROOT=.*|DEPLOY_ROOT=${TEST_ROOT}/runtime|" \
   -e 's|^TRADE_CLUSTER_ENABLED=.*|TRADE_CLUSTER_ENABLED=true|' \
+  -e 's|^TRADE_CLUSTER_PERIODIC_SNAPSHOT_ENABLED=.*|TRADE_CLUSTER_PERIODIC_SNAPSHOT_ENABLED=true|' \
   "${DEPLOY_DIR}/.env.example" > "${TEST_ROOT}/cluster.env"
 
 "${DEPLOY_DIR}/generate-saas-configs.sh" "${TEST_ROOT}/cluster.env" >/dev/null
@@ -47,6 +48,10 @@ grep -Fqx 'trade.cluster.journal.enabled=true' "${b_config}" || fail 'TradeSvrB 
 grep -Fqx 'trade.cluster.state.commit.enabled=true' "${a_config}" || fail 'Trade commit markers must be enabled'
 grep -Fqx 'trade.cluster.state.required=true' "${a_config}" || fail 'Trade authoritative state must fail closed'
 grep -Fqx 'trade.cluster.snapshot.enabled=true' "${a_config}" || fail 'Trade snapshot must be enabled'
+grep -Fqx 'trade.cluster.snapshot.periodic.enabled=true' "${a_config}" || fail 'Trade periodic snapshot must be enabled'
+grep -Fqx 'trade.cluster.snapshot.periodic.pollMillis=5000' "${a_config}" || fail 'Trade periodic snapshot poll interval mismatch'
+grep -Fqx 'trade.cluster.snapshot.periodic.maxAgeMillis=300000' "${a_config}" || fail 'Trade periodic snapshot max age mismatch'
+grep -Fqx 'trade.cluster.snapshot.periodic.minCommittedMutations=10000' "${a_config}" || fail 'Trade periodic snapshot mutation threshold mismatch'
 grep -Fqx 'trade.cluster.lifecycle.enabled=true' "${a_config}" || fail 'Trade recovery lifecycle must be enabled'
 grep -Fqx 'trade.cluster.recovery.authoritative=true' "${a_config}" || fail 'Trade authoritative recovery must be enabled'
 grep -Fqx 'trade.cluster.replication.enabled=true' "${a_config}" || fail 'Trade replication must be enabled'
@@ -99,6 +104,16 @@ if "${DEPLOY_DIR}/generate-saas-configs.sh" "${TEST_ROOT}/invalid-replication.en
   fail 'Trade cluster must not be enabled without TRADESVR_A_REPLICATION_PORT'
 fi
 
+sed 's/^TRADE_CLUSTER_PERIODIC_SNAPSHOT_ENABLED=.*/TRADE_CLUSTER_PERIODIC_SNAPSHOT_ENABLED=invalid/' "${TEST_ROOT}/cluster.env" > "${TEST_ROOT}/invalid-snapshot-enabled.env"
+if "${DEPLOY_DIR}/generate-saas-configs.sh" "${TEST_ROOT}/invalid-snapshot-enabled.env" >/dev/null 2>&1; then
+  fail 'Trade periodic snapshot enabled flag must be boolean'
+fi
+
+sed 's/^TRADE_CLUSTER_PERIODIC_SNAPSHOT_POLL_MILLIS=.*/TRADE_CLUSTER_PERIODIC_SNAPSHOT_POLL_MILLIS=0/' "${TEST_ROOT}/cluster.env" > "${TEST_ROOT}/invalid-snapshot-poll.env"
+if "${DEPLOY_DIR}/generate-saas-configs.sh" "${TEST_ROOT}/invalid-snapshot-poll.env" >/dev/null 2>&1; then
+  fail 'Trade periodic snapshot poll interval must be positive'
+fi
+
 grep -Fq -- '--full-cluster)' "${DEPLOY_DIR}/deploy-saas.sh" ||
   fail 'one-command full cluster option is missing'
 grep -Fq 'set_env_value MD_CLUSTER_ENABLED true' "${DEPLOY_DIR}/deploy-saas.sh" ||
@@ -111,6 +126,8 @@ grep -Fq 'set_env_value ORDER_CLUSTER_C_ENABLED false' "${DEPLOY_DIR}/deploy-saa
   fail 'full cluster topology must keep OrderSvr at A/B'
 grep -Fq 'set_env_value TRADE_CLUSTER_ENABLED true' "${DEPLOY_DIR}/deploy-saas.sh" ||
   fail 'full cluster must enable Trade cluster'
+grep -Fq "printf 'TRADE_CLUSTER_PERIODIC_SNAPSHOT_ENABLED=true" "${DEPLOY_DIR}/deploy-saas.sh" ||
+  fail 'deployment must enable Trade periodic snapshots when the env setting is missing'
 grep -Fq 'apply_full_cluster_profile' "${DEPLOY_DIR}/deploy-saas.sh" ||
   fail 'full cluster profile must be applied before deployment'
 

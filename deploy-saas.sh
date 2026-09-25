@@ -177,6 +177,9 @@ ensure_env_defaults() {
   if ! grep -q '^ORDER_CLUSTER_PERIODIC_SNAPSHOT_ENABLED=' "${ENV_FILE}"; then
     printf 'ORDER_CLUSTER_PERIODIC_SNAPSHOT_ENABLED=true\n' >> "${ENV_FILE}"
   fi
+  if ! grep -q '^TRADE_CLUSTER_PERIODIC_SNAPSHOT_ENABLED=' "${ENV_FILE}"; then
+    printf 'TRADE_CLUSTER_PERIODIC_SNAPSHOT_ENABLED=true\n' >> "${ENV_FILE}"
+  fi
   if ! grep -q '^PROJECTIONSVR_GW_PORT=' "${ENV_FILE}"; then
     printf 'PROJECTIONSVR_GW_PORT=33042\n' >> "${ENV_FILE}"
   fi
