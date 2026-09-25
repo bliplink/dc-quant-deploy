@@ -474,6 +474,7 @@ EOF
 
   cat > "${OVERRIDE_ROOT}/${node}/config/log4j.ini" <<EOF
 log4j.rootLogger=error,file,stdout
+log4j.logger.com.gateway.connector.tcp.client.GateWayApi=ERROR
 log4j.logger.com.app.dc.service.cluster.MdPartitionRuntime=INFO,file,stdout
 log4j.additivity.com.app.dc.service.cluster.MdPartitionRuntime=false
 
@@ -744,6 +745,7 @@ write_trade_log_config() {
   local node="$1"
   cat > "${OVERRIDE_ROOT}/${node}/config/log4j.ini" <<EOF
 log4j.rootLogger=INFO,file,stdout
+log4j.logger.com.gateway.connector.tcp.client.GateWayApi=ERROR
 
 log4j.appender.file=org.apache.log4j.DailyRollingFileAppender
 log4j.appender.file.File=../../log/${node}.log
@@ -813,14 +815,17 @@ level1Rebate=0.4
 level2Rebate=0
 EOF
 
-# Keep RobotSvr logging deployment-managed just like the other Java services.
-# GateWayApi can include login reply payloads at WARN, so keep that class at ERROR.
-cat > "${OVERRIDE_ROOT}/RobotSvr/config/log4j.ini" <<EOF
+# Keep logging deployment-managed for every Java service. The structure,
+# rolling policy and console/file format stay identical; only explicit
+# service-specific logger overrides (MD/Trade hot paths) differ.
+write_standard_log_config() {
+  local node="$1"
+  cat > "${OVERRIDE_ROOT}/${node}/config/log4j.ini" <<EOF
 log4j.rootLogger=INFO,file,stdout
 log4j.logger.com.gateway.connector.tcp.client.GateWayApi=ERROR
 
 log4j.appender.file=org.apache.log4j.DailyRollingFileAppender
-log4j.appender.file.File=../../log/RobotSvr.log
+log4j.appender.file.File=../../log/${node}.log
 log4j.appender.file.Append=true
 log4j.appender.file.layout=org.apache.log4j.PatternLayout
 log4j.appender.file.layout.ConversionPattern=%d{yyyy/MM/dd HH:mm:ss.SSS} %p %m (%C{1}:%L)%n
@@ -831,6 +836,25 @@ log4j.appender.stdout.follow=true
 log4j.appender.stdout.layout=org.apache.log4j.PatternLayout
 log4j.appender.stdout.layout.ConversionPattern=%d{yyyy/MM/dd HH:mm:ss.SSS} %p %m (%C{1}:%L)%n
 EOF
+}
+
+write_standard_log_config GW
+write_standard_log_config LoginSvr
+write_standard_log_config APSSvr
+if [[ "${ORDER_CLUSTER_ENABLED}" == "true" ]]; then
+  write_standard_log_config OrderSvrA
+  write_standard_log_config OrderSvrB
+  if [[ "${ORDER_CLUSTER_C_ENABLED}" == "true" ]]; then
+    write_standard_log_config OrderSvrC
+  fi
+else
+  write_standard_log_config OrderSvr
+fi
+write_standard_log_config ProjectionSvr
+write_standard_log_config LiqSvr
+write_standard_log_config ManagerSvr
+write_standard_log_config AdminSvr
+write_standard_log_config RobotSvr
 
 cat > "${OVERRIDE_ROOT}/GW/config/spring-tcp-server.xml" <<EOF
 <?xml version="1.0" encoding="UTF-8"?>
