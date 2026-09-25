@@ -488,6 +488,13 @@ scene.strategy.selection.prompt-version=deepseek_live_strategy_selection_v4
 scene.strategy.selection.cron=0 5 */6 * * ?
 scene.strategy.selection.max-candidates=30
 scene.strategy.selection.allow-default-fallback=false
+scene.strategy.candidate.quarantined-strategies=wb15_range_r001_u44064,lcr1_bnb_bre_6efa001b,lcr1_xrp_cha_a6726a34,lcr1_eth_rev_01b6ddf2
+strategy.selection.backtest-qualification.enabled=true
+strategy.selection.backtest-qualification.execution-model-version=v4_non_overlapping_walk_forward
+strategy.selection.backtest-qualification.max-age-days=45
+strategy.selection.backtest-qualification.min-trades=20
+strategy.selection.backtest-qualification.min-profit-factor=1.20
+strategy.selection.backtest-qualification.max-drawdown=0.15
 
 binanceStageGuardEnabled=true
 binanceRangeAllowedStages=0,2,B
