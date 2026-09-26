@@ -56,7 +56,7 @@ mysql_exec() {
 }
 
 password_hash="$(printf '%s' "${RULE_PASSWORD}" | sha256sum | awk '{print $1}')"
-declare -A SESSION_BY_USER
+SESSION_USER_1=""; SESSION_TOKEN_1=""; SESSION_USER_2=""; SESSION_TOKEN_2=""; SESSION_USER_3=""; SESSION_TOKEN_3=""; SESSION_USER_4=""; SESSION_TOKEN_4=""
 
 collision_count="$(mysql_exec -e "
 SELECT COUNT(*) FROM dc.dc_users
@@ -77,7 +77,13 @@ login_user() {
   rm -f "${request}"
   token="$(sed -n 's/.*"token"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/p' <<<"${response}")"
   [[ -n "${token}" ]] || die "Login returned no session token for ${user}: ${response}"
-  SESSION_BY_USER["${user}"]="${token}"
+  case "${user}" in
+    "${MAKER_ONE}") SESSION_USER_1="${user}"; SESSION_TOKEN_1="${token}" ;;
+    "${MAKER_TWO}") SESSION_USER_2="${user}"; SESSION_TOKEN_2="${token}" ;;
+    "${TAKER}") SESSION_USER_3="${user}"; SESSION_TOKEN_3="${token}" ;;
+    "${SELF_USER}") SESSION_USER_4="${user}"; SESSION_TOKEN_4="${token}" ;;
+    *) die "Unsupported session user ${user}" ;;
+  esac
 }
 
 wait_for_port() {
@@ -113,7 +119,13 @@ wait_for_route() {
 API_RESPONSE=""
 trade_api() {
   local method="$1" content="$2" user="$3" request token
-  token="${SESSION_BY_USER[${user}]:-}"
+  case "${user}" in
+    "${SESSION_USER_1}") token="${SESSION_TOKEN_1}" ;;
+    "${SESSION_USER_2}") token="${SESSION_TOKEN_2}" ;;
+    "${SESSION_USER_3}") token="${SESSION_TOKEN_3}" ;;
+    "${SESSION_USER_4}") token="${SESSION_TOKEN_4}" ;;
+    *) token="" ;;
+  esac
   [[ -n "${token}" ]] || die "No authenticated session for ${user}"
   request="$(mktemp)"
   printf '{"serverName":"TradeSvr","method":"%s","key":"%s","content":%s}\n' \
@@ -128,7 +140,13 @@ trade_api() {
 
 api() {
   local method="$1" content="$2" user="$3" request token
-  token="${SESSION_BY_USER[${user}]:-}"
+  case "${user}" in
+    "${SESSION_USER_1}") token="${SESSION_TOKEN_1}" ;;
+    "${SESSION_USER_2}") token="${SESSION_TOKEN_2}" ;;
+    "${SESSION_USER_3}") token="${SESSION_TOKEN_3}" ;;
+    "${SESSION_USER_4}") token="${SESSION_TOKEN_4}" ;;
+    *) token="" ;;
+  esac
   [[ -n "${token}" ]] || die "No authenticated session for ${user}"
   request="$(mktemp)"
   printf '{"serverName":"OrderSvr","method":"%s","key":"%s\\u001f4\\u001fBTCUSDT","content":%s}\n' \
