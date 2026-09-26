@@ -212,8 +212,6 @@ for user in "${MAKER_ONE}" "${MAKER_TWO}" "${TAKER}" "${SELF_USER}"; do
   # Direct SQL is only the durable baseline. Publish the account through the
   # clustered TradeSvr mutation path so ACCOUNT_BALANCE/UPSERT is journaled
   # after the recovery boundary and available in hot state.
-  api cashOut "{\"Amount\":\"0\",\"UserID\":\"${user}\",\"Location\":\"${RULE_LOCATION}\",\"Demo\":\"1\"}" "${user}"
-  assert_success
   api cashIn "{\"Amount\":\"100000\",\"UserID\":\"${user}\",\"Location\":\"${RULE_LOCATION}\",\"Demo\":\"1\"}" "${user}"
   assert_success
 done
