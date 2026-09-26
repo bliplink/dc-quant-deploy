@@ -16,8 +16,7 @@ log() { printf '[robot-e2e] %s\n' "$*"; }
 die() { printf '[robot-e2e] ERROR: %s\n' "$*" >&2; exit 1; }
 safe_identifier() { [[ "$1" =~ ^[A-Za-z0-9_.-]+$ ]]; }
 
-[[ "$(id -u)" -eq 0 ]] || die "Run with sudo so the protected environment can be read"
-[[ -r "${ENV_FILE}" ]] || die "Cannot read ${ENV_FILE}"
+[[ -r "${ENV_FILE}" ]] || die "Cannot read ${ENV_FILE}; run with sufficient permission"
 for value in "${RUN_ID}" "${LOCATION}" "${ROBOT_USER}" "${TRADER_USER}" "${TAPE_USER}" "${ROBOT_ID}"; do
   safe_identifier "${value}" || die "Unsupported identifier: ${value}"
 done
@@ -65,7 +64,7 @@ expect_ok() {
 wait_for_port() {
   local port="$1" container="$2" start
   start="$(date +%s)"
-  until ss -lnt | awk 'NR > 1 {print $4}' | grep -Eq "[:.]${port}$"; do
+  until { if command -v ss >/dev/null 2>&1; then ss -lnt | awk 'NR > 1 {print $4}' | grep -Eq "[:.]${port}$"; else nc -z 127.0.0.1 "${port}" >/dev/null 2>&1; fi; }; do
     if (( $(date +%s) - start >= 120 )); then
       docker logs --tail 120 "${container}" >&2 || true
       die "${container} did not listen on ${port}"
