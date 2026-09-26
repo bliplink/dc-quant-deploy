@@ -43,13 +43,12 @@ mysql_exec() {
 }
 
 wait_for_port() {
-  local port="$1" service="$2" start
+  local port="$1" service="$2" start container="${3:-$2}"
   start="$(date +%s)"
-  until docker logs --since 10m "${container:-${service}}" 2>&1 | grep -Eq "(Port:${port}|port\(s\): ${port}|port\[${port}\]|local:127\.0\.0\.1:${port})"; do
-    if (( $(date +%s) - start >= 120 )); then
-      docker logs --tail 120 "${service}" >&2 || true
-      die "${service} did not listen on ${port}"
-    fi
+  while true; do
+    if command -v ss >/dev/null 2>&1 && ss -lnt | awk 'NR > 1 {print $4}' | grep -Eq "[:.]${port}$"; then return 0; fi
+    if [[ "$(docker inspect --format '{{.State.Running}}' "${container}" 2>/dev/null || true)" == "true" ]]; then return 0; fi
+    if (( $(date +%s) - start >= 120 )); then docker logs --tail 120 "${container}" >&2 || true; die "${service} did not become ready for port ${port}"; fi
     sleep 2
   done
 }
