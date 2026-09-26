@@ -25,6 +25,10 @@ run 'Order cluster config' "${SCRIPT_DIR}/test-order-cluster-c-config.sh"
 run 'Trade cluster config' "${SCRIPT_DIR}/test-trade-cluster-config.sh"
 if [[ -r "$ENV_FILE" ]]; then
   set -a; . "$ENV_FILE"; set +a
+  if [[ "$MODE" == full && -z "${E2E_PASSWORD:-}" ]]; then
+    E2E_PASSWORD="${LOGIN_DEFAULT_PASSWORD:-}"
+    export E2E_PASSWORD
+  fi
 elif [[ "$RUNNING" != true ]]; then
   echo "cannot read $ENV_FILE (use --running to validate an existing deployment)" >&2; exit 1
 fi
