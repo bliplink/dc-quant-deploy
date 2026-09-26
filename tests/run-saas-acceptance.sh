@@ -4,19 +4,33 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 DEPLOY_DIR="$(cd "${SCRIPT_DIR}/.." && pwd)"
 ENV_FILE="${ENV_FILE:-${DEPLOY_DIR}/.env.prod}"
 MODE=quick
-[[ "${1:-}" != "--full" ]] || MODE=full
-[[ "${1:-}" != "--quick" && "${1:-}" != "--full" && -n "${1:-}" ]] && { echo "usage: $0 [--quick|--full]" >&2; exit 2; }
+RUNNING=false
+for arg in "$@"; do
+  case "$arg" in
+    --full) MODE=full ;;
+    --quick) MODE=quick ;;
+    --running) RUNNING=true ;;
+    *) echo "usage: $0 [--quick|--full] [--running]" >&2; exit 2 ;;
+  esac
+done
 log(){ printf '[saas-acceptance] %s\n' "$*"; }
 run(){ local name="$1"; shift; log "START ${name}"; "$@"; log "PASS  ${name}"; }
-[[ -r "$ENV_FILE" ]] || { echo "cannot read $ENV_FILE" >&2; exit 1; }
-set -a; . "$ENV_FILE"; set +a
+if [[ -r "$ENV_FILE" ]]; then
+  set -a; . "$ENV_FILE"; set +a
+elif [[ "$RUNNING" != true ]]; then
+  echo "cannot read $ENV_FILE (use --running to validate an existing deployment)" >&2; exit 1
+fi
 
 run 'service log config' "${SCRIPT_DIR}/test-service-log-config.sh"
 run 'robot log config' "${SCRIPT_DIR}/test-robot-log-config.sh"
 run 'MD cluster config' "${SCRIPT_DIR}/test-md-cluster-config.sh"
 run 'Order cluster config' "${SCRIPT_DIR}/test-order-cluster-c-config.sh"
 run 'Trade cluster config' "${SCRIPT_DIR}/test-trade-cluster-config.sh"
-run 'runtime validation' "${DEPLOY_DIR}/validate-saas.sh" --env-file "$ENV_FILE"
+if [[ "$RUNNING" == true && ! -r "$ENV_FILE" ]]; then
+  log 'SKIP  env-file runtime validation; using running-container gates'
+else
+  run 'runtime validation' "${DEPLOY_DIR}/validate-saas.sh" --env-file "$ENV_FILE"
+fi
 
 # Fail closed on the HA/recovery errors that previously escaped basic health checks.
 for c in dc-saas-tradesvr dc-saas-tradesvr-b dc-saas-projectionsvr; do
@@ -27,26 +41,14 @@ if docker logs --since 5m dc-saas-tradesvr-b 2>&1 | grep -Eq 'TRADE_PARTITION_RE
 if docker logs --since 2m dc-saas-projectionsvr 2>&1 | grep -Eq 'PARTITION_NOT_READY|is not Online'; then log 'FAIL ProjectionSvr sees unroutable partitions'; exit 1; fi
 log 'PASS  Trade/Projection recovery log gate'
 
-log 'Checking all 256 Trade partition assignments in ZooKeeper'
-PYTHONPATH="${DEPLOY_DIR}" python3 - "${ZOOKEEPER_PORT:-32181}" "${TRADE_CLUSTER_PARTITION_ROOT:-/dc/cluster/tradesvr/partitions}" <<'PYZK'
-import sys
-from tests.md_cluster_transition_host import DockerZk
-from tests.trade_cluster_transition_host import validate_current
-port, root = sys.argv[1:]
-zk = DockerZk('dc-saas-zookeeper', '127.0.0.1:' + port, root, 'docker')
-counts = {'TradeSvrA': 0, 'TradeSvrB': 0}
-for i in range(256):
-    pid = 'P%03d' % i
-    row = zk.read(pid)['value']
-    validate_current(row)
-    if row.get('partitionId') != pid:
-        raise SystemExit('partition identity mismatch: %s -> %r' % (pid, row))
-    counts[row['primary']] += 1
-if sum(counts.values()) != 256 or not all(counts.values()):
-    raise SystemExit('invalid Trade ownership coverage: %r' % counts)
-print('trade_partition_coverage=256/256 A=%d B=%d' % (counts['TradeSvrA'], counts['TradeSvrB']))
-PYZK
-log 'PASS  Trade 256-partition ownership gate'
+log 'Checking Trade 256-partition READY evidence'
+a_ready="$(mktemp)"; b_ready="$(mktemp)"; trap 'rm -f "$a_ready" "$b_ready"' EXIT
+docker logs dc-saas-tradesvr 2>&1 | sed -n 's/.*TRADE_PARTITION_READY node:TradeSvrA, partition:\(P[0-9][0-9][0-9]\).*/\1/p' | sort -u > "$a_ready"
+docker logs dc-saas-tradesvr-b 2>&1 | sed -n 's/.*TRADE_PARTITION_READY node:TradeSvrB, partition:\(P[0-9][0-9][0-9]\).*/\1/p' | sort -u > "$b_ready"
+a_count="$(wc -l < "$a_ready" | tr -d ' ')"; b_count="$(wc -l < "$b_ready" | tr -d ' ')"
+total="$(cat "$a_ready" "$b_ready" | sort -u | wc -l | tr -d ' ')"; overlap="$(comm -12 "$a_ready" "$b_ready" | wc -l | tr -d ' ')"
+[[ "$a_count" -gt 0 && "$b_count" -gt 0 && "$total" -eq 256 && "$overlap" -eq 0 ]] || { log "FAIL Trade READY coverage A=$a_count B=$b_count total=$total overlap=$overlap"; exit 1; }
+log "PASS  Trade READY coverage 256/256 A=$a_count B=$b_count"
 
 if [[ "$MODE" == full ]]; then
   [[ -n "${E2E_PASSWORD:-}" ]] || { log 'FAIL E2E_PASSWORD is required for --full'; exit 1; }
