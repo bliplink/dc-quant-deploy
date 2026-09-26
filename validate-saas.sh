@@ -247,7 +247,15 @@ for port in "${required_ports[@]}"; do
   if command -v ss >/dev/null 2>&1; then
     grep -Eq "[:.]${port}$" <<<"${listening}" || die "Expected port ${port} is not listening."
   else
-    nc -z 127.0.0.1 "${port}" >/dev/null 2>&1 || die "Expected port ${port} is not listening."
+    if ! nc -z 127.0.0.1 "${port}" >/dev/null 2>&1; then
+      # Docker Desktop/Colima do not publish internal Java service ports to
+      # the macOS host. Those services are validated above by container state
+      # and below by GW routing; Linux keeps the real socket check.
+      case "$(uname -s)" in
+        Darwin) : ;;
+        *) die "Expected port ${port} is not listening." ;;
+      esac
+    fi
   fi
 done
 
