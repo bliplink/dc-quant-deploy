@@ -21,6 +21,7 @@ assert_standard_log() {
   grep -Fqx 'log4j.rootLogger=INFO,file,stdout' "${file}" || fail "${node} root logger is not INFO,file,stdout"
   grep -Fqx 'log4j.logger.com.gateway.connector.tcp.client.GateWayApi=ERROR' "${file}" || fail "${node} GateWayApi sensitive logging is not suppressed"
   grep -Fqx 'log4j.logger.com.gw.common.utils.GwServerResource=WARN' "${file}" || fail "${node} market-data payload logging is not suppressed"
+  grep -Fqx 'log4j.logger.com.gw.common.utils=WARN' "${file}" || fail "${node} proxied GwServerResource payload logging is not suppressed"
   grep -Fqx 'log4j.appender.file=org.apache.log4j.DailyRollingFileAppender' "${file}" || fail "${node} file appender is not DailyRollingFileAppender"
   grep -Fqx "log4j.appender.file.File=../../log/${node}.log" "${file}" || fail "${node} log path mismatch"
   grep -Fqx 'log4j.appender.stdout=org.apache.log4j.ConsoleAppender' "${file}" || fail "${node} stdout appender missing"
@@ -53,6 +54,7 @@ for node in MDSvrA MDSvrB MDSvrC TradeSvrA TradeSvrB; do
   [[ -f "${file}" ]] || fail "${node} cluster log4j override was not generated"
   grep -Fqx 'log4j.logger.com.gateway.connector.tcp.client.GateWayApi=ERROR' "${file}" || fail "${node} GateWayApi sensitive logging is not suppressed"
   grep -Fqx 'log4j.logger.com.gw.common.utils.GwServerResource=WARN' "${file}" || fail "${node} market-data payload logging is not suppressed"
+  grep -Fqx 'log4j.logger.com.gw.common.utils=WARN' "${file}" || fail "${node} proxied GwServerResource payload logging is not suppressed"
   grep -Fq "log4j.appender.file.File=../../log/${node}.log" "${file}" || fail "${node} log path mismatch"
   grep -Fq 'log4j.appender.stdout=org.apache.log4j.ConsoleAppender' "${file}" || fail "${node} stdout appender missing"
 done

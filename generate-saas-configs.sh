@@ -476,6 +476,7 @@ EOF
 log4j.rootLogger=error,file,stdout
 log4j.logger.com.gateway.connector.tcp.client.GateWayApi=ERROR
 log4j.logger.com.gw.common.utils.GwServerResource=WARN
+log4j.logger.com.gw.common.utils=WARN
 log4j.logger.com.app.dc.service.cluster.MdPartitionRuntime=INFO,file,stdout
 log4j.additivity.com.app.dc.service.cluster.MdPartitionRuntime=false
 
@@ -748,6 +749,7 @@ write_trade_log_config() {
 log4j.rootLogger=INFO,file,stdout
 log4j.logger.com.gateway.connector.tcp.client.GateWayApi=ERROR
 log4j.logger.com.gw.common.utils.GwServerResource=WARN
+log4j.logger.com.gw.common.utils=WARN
 
 log4j.appender.file=org.apache.log4j.DailyRollingFileAppender
 log4j.appender.file.File=../../log/${node}.log
@@ -826,6 +828,7 @@ write_standard_log_config() {
 log4j.rootLogger=INFO,file,stdout
 log4j.logger.com.gateway.connector.tcp.client.GateWayApi=ERROR
 log4j.logger.com.gw.common.utils.GwServerResource=WARN
+log4j.logger.com.gw.common.utils=WARN
 
 log4j.appender.file=org.apache.log4j.DailyRollingFileAppender
 log4j.appender.file.File=../../log/${node}.log
