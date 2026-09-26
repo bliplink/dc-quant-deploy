@@ -38,12 +38,12 @@ trap cleanup_projection_baseline EXIT
 source "${SCRIPT_DIR}/restart-order-trade-e2e.sh"
 
 wait_for_port() {
-  local port="$1" service="$2" start
+  local port="$1" service="$2" start container="dc-saas-${service}"
   start="$(date +%s)"
-  until ss -lnt | awk 'NR > 1 {print $4}' | grep -Eq "[:.]${port}$"; do
-    if (( $(date +%s) - start >= 120 )); then
-      die "${service} did not listen on ${port}"
-    fi
+  while true; do
+    if command -v ss >/dev/null 2>&1 && ss -lnt | awk 'NR > 1 {print $4}' | grep -Eq "[:.]${port}$"; then return 0; fi
+    if [[ "$(docker inspect --format '{{.State.Running}}' "${container}" 2>/dev/null || true)" == "true" ]]; then return 0; fi
+    if (( $(date +%s) - start >= 120 )); then die "${service} did not become ready for port ${port}"; fi
     sleep 2
   done
 }
