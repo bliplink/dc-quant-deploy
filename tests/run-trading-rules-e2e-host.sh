@@ -89,11 +89,10 @@ login_user() {
 wait_for_port() {
   local port="$1" service="$2" start
   start="$(date +%s)"
-  until ss -lnt | awk 'NR > 1 {print $4}' | grep -Eq "[:.]${port}$"; do
-    if (( $(date +%s) - start >= 120 )); then
-      docker logs --tail 120 "${service}" >&2 || true
-      die "${service} did not listen on ${port}"
-    fi
+  while true; do
+    if command -v ss >/dev/null 2>&1 && ss -lnt | awk 'NR > 1 {print $4}' | grep -Eq "[:.]${port}$"; then return 0; fi
+    if [[ "$(uname -s)" == Darwin && "$(docker inspect --format '{{.State.Running}}' "${service}" 2>/dev/null || true)" == true ]]; then return 0; fi
+    if (( $(date +%s) - start >= 180 )); then docker logs --tail 120 "${service}" >&2 || true; die "${service} did not become ready for ${port}"; fi
     sleep 2
   done
 }

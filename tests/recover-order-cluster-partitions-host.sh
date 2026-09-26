@@ -31,8 +31,8 @@ TRADE_GW_PORT="${ORDER_CLUSTER_TRADE_GW_PORT:-33037}"
 log() { printf '[order-cluster-recovery] %s\n' "$*"; }
 die() { printf '[order-cluster-recovery] ERROR: %s\n' "$*" >&2; exit 1; }
 
-[[ "$(id -u)" -eq 0 ]] || die 'Run with sudo so Docker and protected runtime files are accessible'
 command -v docker >/dev/null || die 'docker is required'
+docker inspect "${ZK_CONTAINER}" >/dev/null 2>&1 || die 'Docker/runtime is not readable; use sudo on Linux when required'
 command -v python3 >/dev/null || die 'python3 is required'
 [[ "${RESTART_AFTER_FENCE}" == true || "${RESTART_AFTER_FENCE}" == false ]] ||
   die 'ORDER_CLUSTER_RESTART_AFTER_FENCE must be true or false'
