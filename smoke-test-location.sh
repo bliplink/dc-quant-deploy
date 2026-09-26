@@ -56,7 +56,11 @@ cross_count="$(mysql_exec "SELECT COUNT(*) FROM dc.dc_users_balance WHERE (locat
   die "MySQL location isolation failed (A=${count_a}, B=${count_b}, cross=${cross_count})."
 
 start_time="$(date -u '+%Y-%m-%d %H:%M:%S.000000')"
-end_time="$(date -u -d '+1 minute' '+%Y-%m-%d %H:%M:%S.000000')"
+end_time="$(python3 - <<'PYTIME'
+from datetime import datetime, timedelta, timezone
+print((datetime.now(timezone.utc)+timedelta(minutes=1)).strftime('%Y-%m-%d %H:%M:%S.000000'))
+PYTIME
+)"
 create_time="$(date -u '+%Y-%m-%d %H:%M:%S.000000')"
 
 clickhouse_exec "
