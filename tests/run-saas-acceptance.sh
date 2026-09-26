@@ -61,7 +61,7 @@ if [[ "$MODE" == full ]]; then
   [[ -n "${E2E_PASSWORD:-}" ]] || { log 'FAIL E2E_PASSWORD is required for --full'; exit 1; }
   run 'Order cluster state' bash "${SCRIPT_DIR}/verify-order-cluster-state-host.sh"
   run 'core trading acceptance' bash "${SCRIPT_DIR}/run-core-trading-acceptance.sh"
-  run 'Robot liquidity E2E' bash "${SCRIPT_DIR}/run-robot-liquidity-e2e-host.sh"
+  ROBOT_E2E_PASSWORD="${ROBOT_E2E_PASSWORD:-${E2E_PASSWORD}}" run 'Robot liquidity E2E' bash "${SCRIPT_DIR}/run-robot-liquidity-e2e-host.sh"
   run 'final runtime validation' "${DEPLOY_DIR}/validate-saas.sh" --env-file "$ENV_FILE"
 fi
 log "PASS: SaaS ${MODE} acceptance completed"
