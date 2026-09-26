@@ -64,7 +64,7 @@ expect_ok() {
 wait_for_port() {
   local port="$1" container="$2" start
   start="$(date +%s)"
-  until { if command -v ss >/dev/null 2>&1; then ss -lnt | awk 'NR > 1 {print $4}' | grep -Eq "[:.]${port}$"; else nc -z 127.0.0.1 "${port}" >/dev/null 2>&1; fi; }; do
+  until docker exec "${container:-${service}}" sh -lc "(command -v ss >/dev/null 2>&1 && ss -lnt | grep -Eq '[:.]${port}([[:space:]]|$)') || (command -v netstat >/dev/null 2>&1 && netstat -lnt | grep -Eq '[:.]${port}([[:space:]]|$)')" >/dev/null 2>&1; do
     if (( $(date +%s) - start >= 120 )); then
       docker logs --tail 120 "${container}" >&2 || true
       die "${container} did not listen on ${port}"
