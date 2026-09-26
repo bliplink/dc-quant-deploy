@@ -37,8 +37,15 @@ def ensure_path(docker: str, container: str, server: str, path: str) -> None:
     current = ""
     for part in [item for item in path.split("/") if item]:
         current += "/" + part
-        output = run_cli(docker, container, server, f'create {current} ""')
-        if "KeeperErrorCode" in output and "NodeExists" not in output:
+        result = subprocess.run(
+            [docker, "exec", "-i", container, "zkCli.sh", "-server", server],
+            input=f'create {current} ""\nquit\n',
+            text=True, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, timeout=60, check=False,
+        )
+        output = result.stdout
+        if result.returncode != 0 and "Node already exists:" not in output and "NodeExists" not in output:
+            raise RuntimeError(f"failed to create {current}: {output[-1200:]}")
+        if "KeeperErrorCode" in output and "NodeExists" not in output and "Node already exists:" not in output:
             raise RuntimeError(f"failed to create {current}: {output[-1200:]}")
 
 
