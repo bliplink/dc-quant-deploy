@@ -31,8 +31,13 @@ set +a
 . "${SCRIPT_DIR}/restart-order-trade-e2e.sh"
 
 order_config="${DEPLOY_ROOT}/control/overrides/OrderSvr/config/application.properties"
-grep -Eq '^enableMarketPrice=true$' "${order_config}" ||
-  die "OrderSvr enableMarketPrice=true is required for conditional-order lifecycle testing"
+if [[ -r "${order_config}" ]]; then
+  grep -Eq '^enableMarketPrice=true$' "${order_config}" ||
+    die "OrderSvr enableMarketPrice=true is required for conditional-order lifecycle testing"
+else
+  docker exec dc-saas-ordersvr sh -lc "grep -Eq '^enableMarketPrice=true$' /srv/dc/dc/OrderSvr/config/application.properties" ||
+    die "OrderSvr enableMarketPrice=true is required for conditional-order lifecycle testing"
+fi
 
 liq_was_running="$(docker inspect --format '{{.State.Running}}' dc-saas-liqsvr 2>/dev/null || true)"
 restore_liqsvr() {
