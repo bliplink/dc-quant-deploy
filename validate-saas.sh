@@ -60,7 +60,31 @@ compose() {
   docker compose --env-file "${ENV_FILE}" -f "${SCRIPT_DIR}/compose.yaml" "$@"
 }
 
+# DEPLOY_ROOT lives inside the Colima VM on macOS. Read generated runtime
+# configuration through a running container when the host cannot see it.
+runtime_cat() {
+  local path="$1" rel
+  if [[ -r "${path}" ]]; then
+    cat "${path}"
+    return
+  fi
+  rel="${path#${DEPLOY_ROOT}}"
+  docker exec dc-saas-gateway cat "/srv/dc${rel}"
+}
+
+runtime_grep() {
+  local pattern="$1" path="$2"
+  runtime_cat "${path}" | grep -Fq -- "${pattern}"
+}
+
 gateway_client_config="${DEPLOY_ROOT}/control/overrides/GW/config/spring-gw-client.xml"
+if [[ ! -r "${gateway_client_config}" ]]; then
+  runtime_tmp="$(mktemp -d)"
+  trap 'rm -rf "${runtime_tmp}"' EXIT
+  docker cp dc-saas-gateway:/srv/dc/control "${runtime_tmp}/control" >/dev/null
+  DEPLOY_ROOT="${runtime_tmp}"
+  gateway_client_config="${DEPLOY_ROOT}/control/overrides/GW/config/spring-gw-client.xml"
+fi
 [[ -r "${gateway_client_config}" ]] ||
   die "Generated GW client configuration is missing: ${gateway_client_config}."
 grep -Fq 'dc.md.orderbook.**' "${gateway_client_config}" ||
@@ -214,18 +238,31 @@ if [[ "${TRADE_CLUSTER_ENABLED:-false}" == "true" ]]; then
     die "ProjectionSvr Trade committed-event consumer must be enabled."
 fi
 
-listening="$(ss -lnt | awk 'NR > 1 {print $4}')"
+if command -v ss >/dev/null 2>&1; then
+  listening="$(ss -lnt | awk 'NR > 1 {print $4}')"
+else
+  listening="$(docker ps --format '{{.Ports}}' | tr ',' '\n' | grep -oE '127\.0\.0\.1:[0-9]+|0\.0\.0\.0:[0-9]+|\[::\]:[0-9]+' || true)"
+fi
 for port in "${required_ports[@]}"; do
-  grep -Eq "[:.]${port}$" <<<"${listening}" || die "Expected port ${port} is not listening."
+  if command -v ss >/dev/null 2>&1; then
+    grep -Eq "[:.]${port}$" <<<"${listening}" || die "Expected port ${port} is not listening."
+  else
+    nc -z 127.0.0.1 "${port}" >/dev/null 2>&1 || die "Expected port ${port} is not listening."
+  fi
 done
 
 for port in "${MYSQL_PORT}" "${CLICKHOUSE_HTTP_PORT}" "${CLICKHOUSE_NATIVE_PORT}" "${ZOOKEEPER_PORT}"; do
-  while IFS= read -r endpoint; do
-    case "${endpoint}" in
-      "127.0.0.1:${port}"|"[::1]:${port}"|"[::ffff:127.0.0.1]:${port}") ;;
-      *) die "Infrastructure port ${port} is exposed on non-loopback endpoint ${endpoint}." ;;
-    esac
-  done < <(ss -lntH "sport = :${port}" | awk '{print $4}')
+  if command -v ss >/dev/null 2>&1; then
+    while IFS= read -r endpoint; do
+      case "${endpoint}" in
+        "127.0.0.1:${port}"|"[::1]:${port}"|"[::ffff:127.0.0.1]:${port}") ;;
+        *) die "Infrastructure port ${port} is exposed on non-loopback endpoint ${endpoint}." ;;
+      esac
+    done < <(ss -lntH "sport = :${port}" | awk '{print $4}')
+  else
+    docker ps --format '{{.Ports}}' | grep -E "(^|, )0\.0\.0\.0:${port}->|(^|, )\[::\]:${port}->" >/dev/null &&
+      die "Infrastructure port ${port} is exposed on a non-loopback Docker endpoint." || true
+  fi
 done
 
 mysql_table_count="$(
