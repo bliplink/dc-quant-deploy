@@ -106,6 +106,21 @@ wait_for_route() {
 }
 
 API_RESPONSE=""
+trade_api() {
+  local method="$1" content="$2" user="$3" request token
+  token="${SESSION_BY_USER[${user}]:-}"
+  [[ -n "${token}" ]] || die "No authenticated session for ${user}"
+  request="$(mktemp)"
+  printf '{"serverName":"TradeSvr","method":"%s","key":"%s","content":%s}\n' \
+    "${method}" "${RULE_LOCATION}" "${content}" >"${request}"
+  API_RESPONSE="$(curl -fsS --max-time 30 -H 'Content-Type: application/json' -H "sessionId: ${token}" \
+    --data-binary "@${request}" "http://127.0.0.1:${WEB_LISTEN_PORT}/httpapi/")" || {
+      rm -f "${request}"
+      die "TradeSvr ${method} request failed"
+    }
+  rm -f "${request}"
+}
+
 api() {
   local method="$1" content="$2" user="$3" request token
   token="${SESSION_BY_USER[${user}]:-}"
@@ -212,7 +227,7 @@ for user in "${MAKER_ONE}" "${MAKER_TWO}" "${TAKER}" "${SELF_USER}"; do
   # Direct SQL is only the durable baseline. Publish the account through the
   # clustered TradeSvr mutation path so ACCOUNT_BALANCE/UPSERT is journaled
   # after the recovery boundary and available in hot state.
-  api cashIn "{\"Amount\":\"100000\",\"UserID\":\"${user}\",\"Location\":\"${RULE_LOCATION}\",\"Demo\":\"1\"}" "${user}"
+  trade_api cashIn "{\"Amount\":\"100000\",\"UserID\":\"${user}\",\"Location\":\"${RULE_LOCATION}\",\"Demo\":\"1\"}" "${user}"
   assert_success
 done
 
