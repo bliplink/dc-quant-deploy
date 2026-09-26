@@ -38,7 +38,12 @@ trap cleanup_projection_baseline EXIT
 source "${SCRIPT_DIR}/restart-order-trade-e2e.sh"
 
 wait_for_port() {
-  local port="$1" service="$2" start container="dc-saas-${service}"
+  local port="$1" service="$2" start container="dc-saas-${service//-/_}"
+  case "${service}" in
+    ordersvr-b) container=dc-saas-ordersvr-b ;;
+    mdsvr-b) container=dc-saas-mdsvr-b ;;
+    tradesvr-b) container=dc-saas-tradesvr-b ;;
+  esac
   start="$(date +%s)"
   while true; do
     if command -v ss >/dev/null 2>&1 && ss -lnt | awk 'NR > 1 {print $4}' | grep -Eq "[:.]${port}$"; then return 0; fi
