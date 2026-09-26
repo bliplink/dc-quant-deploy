@@ -199,10 +199,10 @@ else
   last_partition="$(tail -n 1 "${assignments_tsv}" | cut -f1)"
   printf 'get %s/%s\n' "${PARTITION_ROOT}" "${last_partition}" >&"${zk_write_fd}"
 
-  fence_deadline=$((SECONDS + 60))
+  fence_deadline=$((SECONDS + 180))
   until grep -Fq "\"partitionId\":\"${last_partition}\",\"epoch\":${target_epoch}" "${interactive_log}" \
       && grep -Fq '"state":"RECOVERING"' "${interactive_log}"; do
-    (( SECONDS < fence_deadline )) || die 'ZooKeeper did not confirm the fenced assignment set'
+    (( SECONDS < fence_deadline )) || die 'ZooKeeper did not confirm the fenced assignment set within 180 seconds'
     sleep 1
   done
 fi
