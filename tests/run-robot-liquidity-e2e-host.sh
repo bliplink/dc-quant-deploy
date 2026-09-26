@@ -78,7 +78,7 @@ wait_for_route() {
   start="$(date +%s)"
   while true; do
     response="$(api_call "{\"serverName\":\"${server}\",\"method\":\"__robot_e2e_readiness__\",\"content\":{}}" 2>/dev/null || true)"
-    if [[ -n "${response}" ]] && ! grep -Fq 'is not Online' <<<"${response}"; then return 0; fi
+    if [[ -n "${response}" ]] && ! grep -Eq 'is not Online|PARTITION_NOT_READY|STALE_PARTITION' <<<"${response}"; then return 0; fi
     if (( $(date +%s) - start >= 120 )); then die "${server} did not become routable"; fi
     sleep 2
   done
@@ -141,8 +141,11 @@ wait_for_port "${GW_TCP_PORT}" dc-saas-gateway
 wait_for_route LoginSvr
 wait_for_route OrderSvr
 for _ in $(seq 1 60); do
-  robot_token="$(login "${ROBOT_USER}" 2>/dev/null || true)"
-  [[ -n "${robot_token}" ]] && break
+  response="$(api_call "{\"serverName\":\"LoginSvr\",\"method\":\"SYS.ATS.LOGIN\",\"content\":{\"method\":\"login\",\"cid\":\"ROBOT_LOGIN_${ROBOT_USER}\",\"user_id\":\"${ROBOT_USER}\",\"user_name\":\"${ROBOT_USER}\",\"password\":\"${PASSWORD}\",\"client_type\":\"WEB\",\"Location\":\"${LOCATION}\"}}" 2>/dev/null || true)"
+  if [[ -n "${response}" ]] && python3 -c 'import json,sys; d=json.load(sys.stdin); raise SystemExit(0 if d.get("code")==0 and d.get("data",{}).get("token") else 1)' <<<"${response}" 2>/dev/null; then
+    robot_token="$(printf '%s' "${response}" | json_eval 'd["data"]["token"]')"
+    break
+  fi
   sleep 2
 done
 [[ -n "${robot_token:-}" ]] || die "LoginSvr did not become usable through GW"
