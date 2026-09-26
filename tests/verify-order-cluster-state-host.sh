@@ -14,8 +14,8 @@ SCRIPT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
 log() { printf '[order-cluster-verify] %s\n' "$*"; }
 die() { printf '[order-cluster-verify] ERROR: %s\n' "$*" >&2; exit 1; }
 
-[[ "$(id -u)" -eq 0 ]] || die 'Run with sudo so Docker and runtime state are readable'
 command -v docker >/dev/null || die 'docker is required'
+docker inspect "${ZK_CONTAINER}" >/dev/null 2>&1 || die 'Docker/ZooKeeper is not readable; run with sufficient permission (sudo on Linux when required)'
 command -v python3 >/dev/null || die 'python3 is required'
 command -v curl >/dev/null || die 'curl is required'
 
