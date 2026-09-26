@@ -113,6 +113,50 @@ login_user() {
   printf '%s' "${token}"
 }
 
+ensure_trade_account() {
+  local user="$1" target_balance="$2" token response code current_balance top_up
+  safe_identifier "${user}" || die "Unsafe trade account user"
+  [[ "${target_balance}" =~ ^[1-9][0-9]*([.][0-9]+)?$ ]] || die "Trade account balance must be positive"
+  ensure_secret
+  token="$(login_user "${user}")"
+  # queryAccountBalance is not registered in every legacy TradeSvr runtime.
+  # A zero-value cashOut is an idempotent clustered mutation: it creates a
+  # missing hot AccountBalance with zero balance, leaves an existing balance
+  # unchanged, and records ACCOUNT_BALANCE/UPSERT in the Trade journal.
+  response="$(api_call "{\"serverName\":\"TradeSvr\",\"method\":\"cashOut\",\"key\":\"${LOCATION}\",\"content\":{\"Amount\":\"0\",\"UserID\":\"${user}\",\"Location\":\"${LOCATION}\",\"Demo\":\"1\"}}" "${token}")"
+  IFS=$'\t' read -r code current_balance < <(printf '%s' "${response}" | python3 -c 'import json,sys
+d=json.load(sys.stdin); x=d.get("data") or {}
+print("{}\t{}".format(d.get("code",-1),x.get("Balance",x.get("balance",0))))')
+  [[ "${code}" == "0" ]] || die "Could not ensure TradeSvr account state for ${user}"
+  top_up="$(python3 - "${target_balance}" "${current_balance}" <<'PY'
+from decimal import Decimal
+import sys
+target, current = Decimal(sys.argv[1]), Decimal(sys.argv[2])
+delta = target - current
+print(format(delta if delta > 0 else Decimal(0), 'f'))
+PY
+)"
+  if [[ "${top_up}" == "0" ]]; then
+    log "Trade account already initialized: location=${LOCATION}, user=${user}, balance=${current_balance}"
+    return 0
+  fi
+  response="$(api_call "{\"serverName\":\"TradeSvr\",\"method\":\"cashIn\",\"key\":\"${LOCATION}\",\"content\":{\"Amount\":\"${top_up}\",\"UserID\":\"${user}\",\"Location\":\"${LOCATION}\",\"Demo\":\"1\"}}" "${token}")"
+  code="$(printf '%s' "${response}" | python3 -c 'import json,sys; print(json.load(sys.stdin).get("code",-1))')"
+  [[ "${code}" == "0" ]] || die "Could not initialize TradeSvr account state for ${user}"
+  log "Trade account initialized through clustered cash mutation: location=${LOCATION}, user=${user}, top_up=${top_up}"
+}
+
+diagnose_trade_route() {
+  local user="$1" token response code
+  safe_identifier "${user}" || die "Unsafe trade route user"
+  ensure_secret
+  token="$(login_user "${user}")"
+  response="$(api_call "{\"serverName\":\"TradeSvr\",\"method\":\"queryTradePosition\",\"key\":\"${LOCATION}\",\"content\":{\"userid\":\"${user}\",\"location\":\"${LOCATION}\",\"securityid\":\"BTCUSDT\"}}" "${token}")"
+  code="$(printf '%s' "${response}" | python3 -c 'import json,sys; print(json.load(sys.stdin).get("code",-1))')"
+  log "TradeSvr keyed route diagnostic: location=${LOCATION}, user=${user}, code=${code}"
+  [[ "${code}" == "0" ]]
+}
+
 provision() {
   ensure_secret
   local password_hash collision robot_token robot_api tape_token tape_api response initial_load robot_enabled
@@ -229,6 +273,12 @@ SQL
     printf '%s\n' "$(date -Is)" >"${CACHE_MARKER}"
     mysql_exec -e "UPDATE dc.dc_tenant_robot SET enabled=1,update_by='robot-soak',update_time=NOW() WHERE location='${LOCATION}' AND robot_id='${ROBOT_ID}';" dc >/dev/null
   fi
+  # A direct dc_users_balance insert is only the durable SQL baseline. In
+  # clustered TradeSvr, partition recovery replaces each location's hot state
+  # from its committed snapshot. Seed the dedicated Tape trader through the
+  # normal cashIn mutation so its ACCOUNT_BALANCE UPSERT is journaled and
+  # survives failover/recovery instead of disappearing from the in-memory map.
+  ensure_trade_account robotsoak01 1000000
 }
 
 start_monitor() {
@@ -516,6 +566,12 @@ is_running() { [[ -s "${PID_FILE}" ]] && kill -0 "$(cat "${PID_FILE}")" 2>/dev/n
 load_pids() { pgrep -f '^bash (\./tests|/.*/tests)/run-robot-market-soak-host\.sh run$' || true; }
 
 case "${MODE}" in
+  diagnose-route)
+    diagnose_trade_route "${ROBOT_SOAK_ACCOUNT_USER:-robotsoak01}"
+    ;;
+  ensure-account)
+    ensure_trade_account "${ROBOT_SOAK_ACCOUNT_USER:-robotsoak01}" "${ROBOT_SOAK_ACCOUNT_BALANCE:-1000000}"
+    ;;
   run)
     exec 9>"${LOCK_FILE}"
     flock -n 9 || exit 0
@@ -564,5 +620,5 @@ case "${MODE}" in
     mysql_exec -e "SELECT location,robot_id,enabled,runtime_status,open_order_count,last_error_code,last_error_message,update_time FROM dc.dc_tenant_robot WHERE location='${LOCATION}' AND robot_id='${ROBOT_ID}';" dc || true
     tail -5 "${METRICS_FILE}" 2>/dev/null || true
     ;;
-  *) die "Usage: $0 {install|start|run|status|stop}" ;;
+  *) die "Usage: $0 {install|start|run|status|stop|diagnose-route|ensure-account}" ;;
 esac

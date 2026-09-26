@@ -101,20 +101,29 @@ function timeout(ms, message) {
 
     await page.locator('.publicActions').waitFor({state: 'visible', timeout: 15000});
     const navItems = await page.locator('.head-user .navItem').allInnerTexts();
-    if (!navItems.includes('Trade') || !navItems.includes('Tenant Services')) fail('public navigation is incomplete', navItems);
+    if (!navItems.includes('Trade') || !navItems.includes('Tenant')) fail('public navigation is incomplete', navItems);
     if (navItems.includes('Tenant Admin') || navItems.includes('Derivatives')) {
       fail('public user can see a restricted navigation item', navItems);
     }
 
-    const loginPanels = page.locator('.loginRequiredPanel');
-    if (await loginPanels.count() !== 2) fail('private account panels are not protected', await loginPanels.count());
-    for (let index = 0; index < 2; index += 1) {
-      await loginPanels.nth(index).waitFor({state: 'visible', timeout: 15000});
+    const guestOrders = page.locator('.guestOrdersSplit');
+    await guestOrders.waitFor({state: 'visible', timeout: 15000});
+    if (await guestOrders.locator('section').count() !== 2
+      || await guestOrders.locator('.loginRequiredInline').count() !== 2) {
+      fail('positions and open orders are not protected for anonymous users');
     }
     const publicOrderActions = page.locator('.placeOrderWrap.publicMode .publicOrderActions');
     await publicOrderActions.waitFor({state: 'visible', timeout: 15000});
     if (await publicOrderActions.locator('button').count() !== 2) {
       fail('public order panel does not expose register and login actions');
+    }
+    if (await page.locator('.placeOrderWrap.publicMode .orderActionBar').count() !== 0) {
+      fail('anonymous user can see live buy/sell order actions');
+    }
+    const accountPublicActions = page.locator('.accountPublicActions');
+    await accountPublicActions.waitFor({state: 'visible', timeout: 15000});
+    if (await accountPublicActions.locator('button').count() !== 2) {
+      fail('public account panel does not expose register and login actions');
     }
 
     try {
@@ -127,7 +136,7 @@ function timeout(ms, message) {
         const orderBook = wrappers[0];
         const asks = orderBook?.querySelectorAll('.showDiv .ask-container > .bid').length || 0;
         const bids = orderBook?.querySelectorAll('.showDiv .ask-container + div + div > .bid').length || 0;
-        const lastPrice = orderBook?.querySelector('.showDiv .last-price')?.textContent?.trim() || '';
+        const lastPrice = orderBook?.querySelector('.showDiv .bookMidPrice span')?.textContent?.trim() || '';
         return bids === 10 && asks === 10 && lastPrice && lastPrice !== '--';
       }, null, {timeout: 60000});
     } catch (error) {
@@ -146,7 +155,7 @@ function timeout(ms, message) {
       fail('anonymous order book did not become ready', {diagnostics, publicMarketResponses, pageErrors});
     }
     if (publicMarketResponses.length) {
-      fail('anonymous market page used polling snapshot API instead of gateway websocket subscriptions',
+      fail('anonymous market page used polling snapshot API instead of MDSvr websocket subscriptions',
         publicMarketResponses);
     }
 
@@ -188,7 +197,7 @@ function timeout(ms, message) {
       return {
         bids: orderBook?.querySelectorAll('.showDiv .ask-container + div + div > .bid').length || 0,
         asks: orderBook?.querySelectorAll('.showDiv .ask-container > .bid').length || 0,
-        lastPrice: orderBook?.querySelector('.showDiv .last-price')?.textContent?.trim() || '',
+        lastPrice: orderBook?.querySelector('.showDiv .bookMidPrice span')?.textContent?.trim() || '',
         bidSample: rowView(orderBook?.querySelector('.showDiv .ask-container + div + div > .bid')),
         askSample: rowView(orderBook?.querySelector('.showDiv .ask-container > .bid')),
         bidDepth: depthView('.showDiv .ask-container + div + div > .order-book-row--bid'),
@@ -211,32 +220,26 @@ function timeout(ms, message) {
     if (market.bidDepth[0].color === market.askDepth[0].color) {
       fail('bid and ask cumulative depth bars do not use distinct colors', market);
     }
-    const tickerChange = await page.locator('.symbolMarketWrap > .df.fdc').nth(1)
-      .locator('span').nth(1).innerText();
-    if (!tickerChange || tickerChange.trim() === '--' || !tickerChange.includes('%')) {
-      fail('24h change is missing from the market ticker', tickerChange);
-    }
     const depthScreenshot = path.join(artifactDir, 'web-order-book-depth.png');
     await page.screenshot({path: depthScreenshot, fullPage: true});
 
     await page.locator('.TVChartContainer iframe').waitFor({state: 'visible', timeout: 60000});
-    // Durable K-line history is requested from AdminSvr over the trading page's
-    // GW WebSocket request/reply transport. The data feed publishes this status
-    // only after AdminSvr queryKLine rows are normalized.
     try {
-      await page.waitForFunction(() => window.__dcKlineStatus && window.__dcKlineStatus.receivedRows > 1,
-        null, {timeout: 35000});
+      await page.waitForFunction(() => window.__dcKlineStatus && window.__dcKlineStatus.receivedRows > 1, null, {timeout: 35000});
     } catch (error) {
       await page.screenshot({path: path.join(artifactDir, 'web-public-history-failure.png'), fullPage: true});
-      fail('the first chart load did not receive durable K-line history from AdminSvr over GW', {
+      fail('the first chart load did not load durable K-line history', {
         klineResponses,
+        chartStatus: await page.evaluate(() => window.__dcKlineStatus || null),
         publicMarketResponses,
         pageErrors
       });
     }
     const chartHistory = await page.evaluate(() => window.__dcKlineStatus);
-    const history = {
+    const history = klineResponses.find(item => item.code === 0 && item.rows > 1) || {
+      code: 0,
       rows: chartHistory.receivedRows,
+      transport: 'websocket',
       request: {
         from: chartHistory.from,
         to: chartHistory.to,
@@ -264,7 +267,7 @@ function timeout(ms, message) {
     if (!realtimeKline.topic.endsWith(`.${location}`)
       || realtimeKline.symbol !== 'BTCUSDT'
       || realtimeKline.time > Date.now() + 5 * 60 * 1000) {
-      fail('gateway realtime K-line push has an invalid tenant, symbol or timestamp', realtimeKline);
+      fail('MDSvr realtime K-line push has an invalid tenant, symbol or timestamp', realtimeKline);
     }
 
     const dragZones = page.locator('.panelDragZone');

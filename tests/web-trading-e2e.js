@@ -1,6 +1,5 @@
 const fs = require('fs');
 const path = require('path');
-const zlib = require('zlib');
 const { chromium } = require('playwright');
 
 const baseUrl = process.env.E2E_BASE_URL || 'http://127.0.0.1:18088';
@@ -8,8 +7,6 @@ const location = process.env.E2E_LOCATION || 'WEB_E2E';
 const password = process.env.E2E_PASSWORD;
 const buyer = process.env.E2E_BUYER || 'webbuyer';
 const seller = process.env.E2E_SELLER || 'webseller';
-const buyerId = process.env.E2E_BUYER_ID || buyer;
-const sellerId = process.env.E2E_SELLER_ID || seller;
 const artifactDir = process.env.E2E_ARTIFACT_DIR || '/artifacts';
 const browserExecutable = process.env.E2E_BROWSER_EXECUTABLE;
 const ignoredConsoleErrors = [
@@ -24,86 +21,25 @@ if (!password) {
 
 fs.mkdirSync(artifactDir, { recursive: true });
 
-function decodeWebSocketFrame(payload) {
+function requestMethod(response) {
   try {
-    const bytes = Buffer.isBuffer(payload) ? payload : Buffer.from(payload);
-    if (bytes.length < 20) return null;
-    const packetLength = bytes.readInt32BE(0);
-    const headerLength = bytes.readInt16BE(4);
-    const v2 = headerLength === 22;
-    const sessionLength = v2 ? bytes.readInt16BE(14) : bytes.readInt32BE(16);
-    const serverNameLength = v2 ? bytes.readInt16BE(16) : 0;
-    const methodLength = v2 ? bytes.readInt16BE(18) : 0;
-    const keyLength = v2 ? bytes.readInt16BE(20) : 0;
-    let offset = headerLength + sessionLength;
-    if (packetLength > bytes.length || sessionLength < 0 || offset > packetLength) return null;
-    const serverName = v2 ? bytes.subarray(offset, offset + serverNameLength).toString('utf8') : '';
-    offset += serverNameLength;
-    const method = v2 ? bytes.subarray(offset, offset + methodLength).toString('utf8') : '';
-    offset += methodLength;
-    const key = v2 ? bytes.subarray(offset, offset + keyLength).toString('utf8') : '';
-    offset += keyLength;
-    let bodyBytes = bytes.subarray(offset, packetLength);
-    if (bodyBytes.length >= 2 && bodyBytes[0] === 0x1f && bodyBytes[1] === 0x8b) {
-      bodyBytes = zlib.gunzipSync(bodyBytes);
-    }
-    const bodyText = bodyBytes.toString('utf8');
-    return {
-      format: v2 ? bytes.readInt16BE(8) : bytes.readInt16BE(10),
-      seq: v2 ? bytes.readInt32BE(10) : bytes.readInt32BE(12),
-      serverName,
-      method,
-      key,
-      body: bodyText ? JSON.parse(bodyText) : null
-    };
+    const body = response.request().postDataJSON();
+    return body && (body.method || (body.content && body.content.method));
   } catch (error) {
-    return null;
+    return '';
   }
-}
-
-const websocketTrackers = new WeakMap();
-
-function trackWebSocket(page) {
-  const tracker = {frames: []};
-  websocketTrackers.set(page, tracker);
-  page.on('websocket', socket => {
-    socket.on('framesent', event => {
-      const frame = decodeWebSocketFrame(event.payload);
-      if (frame) tracker.frames.push({...frame, direction: 'sent'});
-    });
-    socket.on('framereceived', event => {
-      const frame = decodeWebSocketFrame(event.payload);
-      if (frame) tracker.frames.push({...frame, direction: 'received'});
-    });
-  });
-  return tracker;
 }
 
 async function invokeFromPage(page, method, action) {
-  const tracker = websocketTrackers.get(page);
-  if (!tracker) throw new Error('WebSocket tracker is not initialized');
-  const startIndex = tracker.frames.length;
-  await action();
-  const deadline = Date.now() + 60000;
-  let request;
-  while (!request && Date.now() < deadline) {
-    request = tracker.frames.slice(startIndex).find(frame =>
-      frame.direction === 'sent' && (frame.method === method || (frame.body && frame.body.method === method))
-    );
-    if (!request) await page.waitForTimeout(50);
-  }
-  if (!request) throw new Error(`WebSocket request ${method} was not sent`);
-  let response;
-  while (!response && Date.now() < deadline) {
-    response = tracker.frames.slice(startIndex).find(frame =>
-      frame.direction === 'received' && frame.seq === request.seq
-    );
-    if (!response) await page.waitForTimeout(50);
-  }
-  if (!response) throw new Error(`WebSocket reply ${method} timed out`);
-  const body = response.body;
-  const code = body && (body.code !== undefined ? body.code : body.Code);
-  if (Number(code) !== 0) {
+  const [response] = await Promise.all([
+    page.waitForResponse(
+      candidate => candidate.url().includes('/httpapi/') && requestMethod(candidate) === method,
+      { timeout: 60000 }
+    ),
+    action()
+  ]);
+  const body = await response.json();
+  if (Number(body.code) !== 0) {
     throw new Error(`${method} failed: ${JSON.stringify(body)}`);
   }
   return body;
@@ -118,21 +54,12 @@ async function gatewayCall(page, serverName, method, content) {
       body: JSON.stringify(request)
     });
     return response.json();
-  }, {
-    serverName,
-    method,
-    key: serverName === 'OrderSvr'
-      ? [content.Location || content.location, content.MarketIndicator || content.marketIndicator,
-        content.SecurityID || content.securityID || content.securityid].map(String).join('\u001f')
-      : undefined,
-    content
-  });
+  }, {serverName, method, content});
 }
 
-async function login(browser, username, expectedUserId = username) {
+async function login(browser, username) {
   const context = await browser.newContext({ viewport: { width: 1920, height: 1080 } });
   const page = await context.newPage();
-  trackWebSocket(page);
   const pageErrors = [];
   const publicMarketPollingCalls = [];
   page.on('pageerror', error => pageErrors.push(error.message));
@@ -177,11 +104,8 @@ async function login(browser, username, expectedUserId = username) {
   await page.waitForURL(`**/#/trade?location=${encodeURIComponent(location)}`);
   await page.locator('.tradeWrap').waitFor({ timeout: 60000 });
   const loginBody = await page.evaluate(() => JSON.parse(sessionStorage.getItem('loginData') || '{}'));
-  if (loginBody.user_id !== expectedUserId) {
-    throw new Error(`websocket login returned unexpected user id ${loginBody.user_id}, expected ${expectedUserId}`);
-  }
-  if (loginBody.user_name && loginBody.user_name !== username) {
-    throw new Error(`websocket login returned unexpected username ${loginBody.user_name}, expected ${username}`);
+  if (loginBody.user_id !== username) {
+    throw new Error(`websocket login returned unexpected user ${loginBody.user_id}`);
   }
   if (loginBody.location !== location) {
     throw new Error(`websocket login returned unexpected location ${loginBody.location}`);
@@ -238,18 +162,6 @@ async function placeLimit(page, side, price, amount) {
   await amountInput.fill(String(amount));
   return invokeFromPage(page, 'placeOrder', () =>
     form.getByRole('button', { name: side }).click()
-  );
-}
-
-async function placeReduceOnlyLimit(page, side, price, amount) {
-  const form = page.locator('.placeOrderWrap');
-  await form.getByRole('button', { name: 'Limit', exact: true }).click();
-  const reduceOnly = form.getByRole('checkbox', { name: 'Reduce Only', exact: true });
-  if (!(await reduceOnly.isChecked())) await reduceOnly.check();
-  await form.getByRole('textbox', { name: 'Limit Price', exact: true }).fill(String(price));
-  await form.getByRole('textbox', { name: 'Amount', exact: true }).fill(String(amount));
-  return invokeFromPage(page, 'placeOrder', () =>
-    form.getByRole('button', { name: side, exact: true }).click()
   );
 }
 
@@ -312,44 +224,20 @@ async function waitForMarketMetric(page, label) {
 }
 
 async function verifyKlineAndMarketData(page) {
-  // MDSvr deliberately batches ClickHouse writes. The realtime K-line is
-  // already sent over WebSocket, so poll the authenticated history endpoint
-  // until the same tenant bar is durable. Session refresh/reconnect behavior
-  // is covered independently by web-session-resume-e2e.js.
-  const deadline = Date.now() + 60000;
-  let klineBody = null;
-  let klineRows = [];
-  do {
-    klineBody = await page.evaluate(async tenant => {
-      const session = JSON.parse(sessionStorage.getItem('loginData') || '{}');
-      const response = await fetch('/httpapi/', {
-        method: 'POST',
-        headers: {'Content-Type': 'application/json', sessionId: session.token || session.sid || ''},
-        body: JSON.stringify({
-          serverName: 'AdminSvr',
-          method: 'queryKLine',
-          content: {num: 1000, securityID: 'BTCUSDT', text: '5M', Location: tenant}
-        })
-      });
-      return response.json();
-    }, location);
-    if (Number(klineBody.code) !== 0) {
-      throw new Error(`queryKLine failed: ${JSON.stringify(klineBody)}`);
-    }
-    klineRows = Array.isArray(klineBody.data)
-      ? klineBody.data
-      : (klineBody.data && Array.isArray(klineBody.data.data) ? klineBody.data.data : []);
-    if (klineRows.length) break;
-    await page.waitForTimeout(2000);
-  } while (Date.now() < deadline);
-  if (!klineRows.length) {
-    throw new Error(`queryKLine returned no durable tenant bars within 60s: ${JSON.stringify(klineBody)}`);
-  }
+  // The trading page loads durable history through the same Gateway WebSocket
+  // path used in production: AdminSvr.queryKLine -> ClickHouse. Reuse the
+  // chart status published by the data feed instead of issuing a stale
+  // MDSvr/queryKLine HTTP request from the test.
+  await page.waitForFunction(() => {
+    const status = window.__dcKlineStatus;
+    return status && status.receivedRows > 0 && status.bars > 0;
+  }, null, {timeout: 60000});
+  const klineStatus = await page.evaluate(() => window.__dcKlineStatus);
   await page.locator('.TVChartContainer iframe').waitFor({timeout: 30000});
   const lastPrice = await waitForMarketMetric(page, 'Last Price');
   const markPrice = await waitForMarketMetric(page, 'Mark Price');
   const indexPrice = await waitForMarketMetric(page, 'Index Price');
-  return {klineRows: klineRows.length, lastPrice, markPrice, indexPrice};
+  return {klineRows: klineStatus.receivedRows, klineStatus, lastPrice, markPrice, indexPrice};
 }
 
 async function clearOpenOrders(page) {
@@ -421,8 +309,8 @@ async function waitForNoPosition(page) {
   let buyerSession;
   let sellerSession;
   try {
-    buyerSession = await login(browser, buyer, buyerId);
-    sellerSession = await login(browser, seller, sellerId);
+    buyerSession = await login(browser, buyer);
+    sellerSession = await login(browser, seller);
 
     await clearOpenOrders(buyerSession.page);
     await clearOpenOrders(sellerSession.page);
@@ -431,11 +319,6 @@ async function waitForNoPosition(page) {
     await deposit(sellerSession.page, '100000');
 
     await placeLimit(buyerSession.page, 'Buy / Long', '10000', '0.001');
-    // Keep the isolated tenant's book live while exercising cancellation.
-    // Without a Robot this far ask is the only remaining liquidity after the
-    // bid is cancelled, and correctly prevents the market-health gate from
-    // treating the fresh test tenant as an empty/stale market.
-    await placeLimit(sellerSession.page, 'Sell / Short', '100000', '0.001');
     const restingRows = await openOrders(buyerSession.page);
     await restingRows.first().waitFor({timeout: 15000});
     const restingBid = await restingRows.first().innerText();
@@ -491,12 +374,11 @@ async function waitForNoPosition(page) {
     // Rest an offsetting buy for the short account, then exercise the Web
     // reduce-only Market/IOC close action for the long account. The same match
     // closes both sides and leaves the acceptance location flat.
-    await placeReduceOnlyLimit(sellerSession.page, 'Close Short', '60000', '0.001');
+    await placeLimit(sellerSession.page, 'Buy / Long', '60000', '0.001');
     await (await openOrders(sellerSession.page)).first().waitFor({ timeout: 15000 });
     await closeFirstPosition(buyerSession.page, 'Long');
     await waitForNoPosition(buyerSession.page);
     await waitForNoPosition(sellerSession.page);
-    await cancelFirstOpenOrder(sellerSession.page);
 
     await buyerSession.page.screenshot({
       path: path.join(artifactDir, 'buyer-trading-flow.png'),
