@@ -5,12 +5,14 @@ DEPLOY_DIR="$(cd "${SCRIPT_DIR}/.." && pwd)"
 ENV_FILE="${ENV_FILE:-${DEPLOY_DIR}/.env.prod}"
 MODE=quick
 RUNNING=false
+STAGE=all
 for arg in "$@"; do
   case "$arg" in
     --full) MODE=full ;;
     --quick) MODE=quick ;;
     --running) RUNNING=true ;;
-    *) echo "usage: $0 [--quick|--full] [--running]" >&2; exit 2 ;;
+    --stage=*) STAGE="${arg#--stage=}" ;;
+    *) echo "usage: $0 [--quick|--full] [--running] [--stage=core|robot|all]" >&2; exit 2 ;;
   esac
 done
 log(){ printf '[saas-acceptance] %s\n' "$*"; }
@@ -60,8 +62,12 @@ log "PASS  Trade READY coverage 256/256 A=$a_count B=$b_count"
 if [[ "$MODE" == full ]]; then
   [[ -n "${E2E_PASSWORD:-}" ]] || { log 'FAIL E2E_PASSWORD is required for --full'; exit 1; }
   run 'Order cluster state' bash "${SCRIPT_DIR}/verify-order-cluster-state-host.sh"
-  run 'core trading acceptance' bash "${SCRIPT_DIR}/run-core-trading-acceptance.sh"
-  ROBOT_E2E_PASSWORD="${ROBOT_E2E_PASSWORD:-${E2E_PASSWORD}}" run 'Robot liquidity E2E' bash "${SCRIPT_DIR}/run-robot-liquidity-e2e-host.sh"
+  if [[ "${STAGE}" == all || "${STAGE}" == core ]]; then
+    run 'core trading acceptance' bash "${SCRIPT_DIR}/run-core-trading-acceptance.sh"
+  fi
+  if [[ "${STAGE}" == all || "${STAGE}" == robot ]]; then
+    ROBOT_E2E_PASSWORD="${ROBOT_E2E_PASSWORD:-${E2E_PASSWORD}}" run 'Robot liquidity E2E' bash "${SCRIPT_DIR}/run-robot-liquidity-e2e-host.sh"
+  fi
   run 'final runtime validation' "${DEPLOY_DIR}/validate-saas.sh" --env-file "$ENV_FILE"
 fi
 log "PASS: SaaS ${MODE} acceptance completed"
