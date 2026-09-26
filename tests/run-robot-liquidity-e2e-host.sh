@@ -140,8 +140,12 @@ docker restart dc-saas-gateway >/dev/null
 wait_for_port "${GW_TCP_PORT}" dc-saas-gateway
 wait_for_route LoginSvr
 wait_for_route OrderSvr
-
-robot_token="$(login "${ROBOT_USER}")"
+for _ in $(seq 1 60); do
+  robot_token="$(login "${ROBOT_USER}" 2>/dev/null || true)"
+  [[ -n "${robot_token}" ]] && break
+  sleep 2
+done
+[[ -n "${robot_token:-}" ]] || die "LoginSvr did not become usable through GW"
 trader_token="$(login "${TRADER_USER}")"
 tape_token="$(login "${TAPE_USER}")"
 
