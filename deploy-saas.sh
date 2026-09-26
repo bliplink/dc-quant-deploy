@@ -594,6 +594,33 @@ ensure_order_cluster_assignments() {
   log "ZooKeeper OrderSvr assignments are ready: 256 partitions, alternating A/B primaries."
 }
 
+ensure_trade_cluster_assignments() {
+  [[ "${TRADE_CLUSTER_ENABLED:-false}" == "true" ]] || return 0
+  local commands output status count partition node replica
+  commands="$(mktemp)"
+  {
+    printf 'create /dc x\n'
+    printf 'create /dc/cluster x\n'
+    printf 'create /dc/cluster/tradesvr x\n'
+    printf 'create /dc/cluster/tradesvr/partitions x\n'
+    for ((partition=0; partition<256; partition++)); do
+      if (( partition % 2 == 0 )); then node=TradeSvrA; replica=TradeSvrB; else node=TradeSvrB; replica=TradeSvrA; fi
+      printf 'create /dc/cluster/tradesvr/partitions/P%03d {"partitionId":"P%03d","epoch":1,"primary":"%s","replica":"%s","state":"READY"}\n' \
+        "${partition}" "${partition}" "${node}" "${replica}"
+    done
+    printf 'quit\n'
+  } > "${commands}"
+  set +e
+  output="$(docker exec -i -e CLIENT_JVMFLAGS=-Djava.security.auth.login.config=/conf/jaas.ini dc-saas-zookeeper zkCli.sh -server "127.0.0.1:${ZOOKEEPER_PORT}" < "${commands}" 2>&1)"
+  status="$?"; set -e; rm -f -- "${commands}"
+  if grep -Eq 'KeeperErrorCode = (NoAuth|InvalidACL|ConnectionLoss|SessionExpired)' <<<"${output}"; then printf '%s\n' "${output}" >&2; die "Could not initialize TradeSvr partition assignments (exit ${status})."; fi
+  if (( status != 0 )) && ! grep -Fq 'Node already exists:' <<<"${output}"; then printf '%s\n' "${output}" >&2; die "Could not initialize TradeSvr partition assignments (exit ${status})."; fi
+  output="$({ printf 'ls /dc/cluster/tradesvr/partitions\nquit\n'; } | docker exec -i -e CLIENT_JVMFLAGS=-Djava.security.auth.login.config=/conf/jaas.ini dc-saas-zookeeper zkCli.sh -server "127.0.0.1:${ZOOKEEPER_PORT}" 2>&1)"
+  count="$(grep -oE 'P[0-9]{3}' <<<"${output}" | sort -u | wc -l | tr -d ' ')"
+  [[ "${count}" == "256" ]] || die "Expected 256 TradeSvr assignments, found ${count}."
+  log "ZooKeeper TradeSvr assignments are ready: 256 partitions, alternating A/B primaries."
+}
+
 ensure_md_cluster_assignments() {
   [[ "${MD_CLUSTER_ENABLED:-false}" == "true" ]] || return 0
   local commands output status count partition node replica
@@ -915,6 +942,7 @@ wait_for_health dc-saas-clickhouse 420
 wait_for_health dc-saas-zookeeper 120
   ensure_zookeeper_service_root
   ensure_order_cluster_assignments
+  ensure_trade_cluster_assignments
   ensure_md_cluster_assignments
 apply_mysql_migrations
 provision_platform_admin

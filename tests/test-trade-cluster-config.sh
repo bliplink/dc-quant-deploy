@@ -133,6 +133,10 @@ grep -Fq 'apply_full_cluster_profile' "${DEPLOY_DIR}/deploy-saas.sh" ||
 
 grep -Fq 'embeds a different Common revision.' "${DEPLOY_DIR}/deploy-saas.sh" ||
   fail 'cluster deployment must fence mismatched Common source revisions'
+grep -Fq 'ensure_trade_cluster_assignments' "${DEPLOY_DIR}/deploy-saas.sh" ||
+  fail 'full cluster deployment must initialize TradeSvr partition assignments'
+grep -Fq 'Expected 256 TradeSvr assignments' "${DEPLOY_DIR}/deploy-saas.sh" ||
+  fail 'TradeSvr assignment initialization must verify all 256 partitions'
 if grep -Fq 'embeds a different Common JAR.' "${DEPLOY_DIR}/deploy-saas.sh"; then
   fail 'cluster deployment must not require byte-identical non-reproducible JAR archives'
 fi
