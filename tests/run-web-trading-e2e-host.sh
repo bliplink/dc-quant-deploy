@@ -45,7 +45,7 @@ mysql_exec() {
 wait_for_port() {
   local port="$1" service="$2" start
   start="$(date +%s)"
-  until docker exec "${container:-${service}}" sh -lc "(command -v ss >/dev/null 2>&1 && ss -lnt | grep -Eq '[:.]${port}([[:space:]]|$)') || (command -v netstat >/dev/null 2>&1 && netstat -lnt | grep -Eq '[:.]${port}([[:space:]]|$)')" >/dev/null 2>&1; do
+  until docker logs --since 10m "${container:-${service}}" 2>&1 | grep -Eq "(Port:${port}|port\(s\): ${port}|port\[${port}\]|local:127\.0\.0\.1:${port})"; do
     if (( $(date +%s) - start >= 120 )); then
       docker logs --tail 120 "${service}" >&2 || true
       die "${service} did not listen on ${port}"
