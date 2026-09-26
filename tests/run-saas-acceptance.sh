@@ -15,17 +15,17 @@ for arg in "$@"; do
 done
 log(){ printf '[saas-acceptance] %s\n' "$*"; }
 run(){ local name="$1"; shift; log "START ${name}"; "$@"; log "PASS  ${name}"; }
+run 'service log config' "${SCRIPT_DIR}/test-service-log-config.sh"
+run 'robot log config' "${SCRIPT_DIR}/test-robot-log-config.sh"
+run 'MD cluster config' "${SCRIPT_DIR}/test-md-cluster-config.sh"
+run 'Order cluster config' "${SCRIPT_DIR}/test-order-cluster-c-config.sh"
+run 'Trade cluster config' "${SCRIPT_DIR}/test-trade-cluster-config.sh"
 if [[ -r "$ENV_FILE" ]]; then
   set -a; . "$ENV_FILE"; set +a
 elif [[ "$RUNNING" != true ]]; then
   echo "cannot read $ENV_FILE (use --running to validate an existing deployment)" >&2; exit 1
 fi
 
-run 'service log config' "${SCRIPT_DIR}/test-service-log-config.sh"
-run 'robot log config' "${SCRIPT_DIR}/test-robot-log-config.sh"
-run 'MD cluster config' "${SCRIPT_DIR}/test-md-cluster-config.sh"
-run 'Order cluster config' "${SCRIPT_DIR}/test-order-cluster-c-config.sh"
-run 'Trade cluster config' "${SCRIPT_DIR}/test-trade-cluster-config.sh"
 if [[ "$RUNNING" == true && ! -r "$ENV_FILE" ]]; then
   log 'SKIP  env-file runtime validation; using running-container gates'
 else
