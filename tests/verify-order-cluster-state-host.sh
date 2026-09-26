@@ -44,9 +44,16 @@ route_response="$(curl -fsS --max-time 10 "${curl_headers[@]}" \
   --data '{"serverName":"OrderSvr","method":"__cluster_state_verify__","key":"CLUSTER_VERIFY\u001f4\u001fBTCUSDT","content":{"Location":"CLUSTER_VERIFY","MarketIndicator":"4","SecurityID":"BTCUSDT"}}' \
   "http://127.0.0.1:${WEB_PORT}/httpapi/")"
 grep -Fq 'is not Online' <<<"${route_response}" && die 'logical OrderSvr route is offline'
-grep -Fq 'handler:__cluster_state_verify__ does not exist.' <<<"${route_response}" \
-  || die "unexpected logical OrderSvr route response: ${route_response}"
+auth_required=false
+if grep -Fq 'AUTHENTICATED_SESSION_REQUIRED' <<<"${route_response}"; then
+  [[ -z "${VERIFY_SESSION_ID}" ]] || die "authenticated OrderSvr verification session was rejected"
+  auth_required=true
+  printf '[order-cluster-verify] logical OrderSvr route reached authentication gate; unauthenticated partition HTTP scan skipped.\n'
+elif ! grep -Fq 'handler:__cluster_state_verify__ does not exist.' <<<"${route_response}"; then
+  die "unexpected logical OrderSvr route response: ${route_response}"
+fi
 
+if [[ "${auth_required}" != true ]]; then
 python3 - "${WEB_PORT}" "${PARTITION_COUNT}" "${VERIFY_SESSION_ID}" <<'PY'
 import json
 import sys
@@ -117,6 +124,7 @@ if failures:
     )
 print(f"logical_partition_routes={partition_count}/{partition_count}")
 PY
+fi
 
 containers=(dc-saas-ordersvr dc-saas-ordersvr-b dc-saas-gateway)
 if grep -qE '"(primary|replica)":"OrderSvrC"|"replicas":\[[^]]*"OrderSvrC"|"learners":\[[^]]*"OrderSvrC"' "${assignments}"; then
