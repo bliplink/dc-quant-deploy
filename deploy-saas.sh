@@ -467,11 +467,10 @@ verify_order_cluster_images() {
       expected_hash="${hash}"
       expected_revision="${revision}"
     else
-      [[ "${hash}" == "${expected_hash}" ]] || die "${name} embeds a different Common JAR."
       [[ "${revision}" == "${expected_revision}" ]] || die "${name} embeds a different Common revision."
     fi
   done
-  log "Cluster image identity verified: Common ${expected_revision}, SHA-256 ${expected_hash}."
+  log "Cluster image identity verified: Common revision ${expected_revision}; per-image JAR SHA labels present."
 }
 
 verify_md_cluster_images() {
@@ -493,11 +492,10 @@ verify_md_cluster_images() {
       expected_hash="${hash}"
       expected_revision="${revision}"
     else
-      [[ "${hash}" == "${expected_hash}" ]] || die "${name} embeds a different Common JAR."
       [[ "${revision}" == "${expected_revision}" ]] || die "${name} embeds a different Common revision."
     fi
   done
-  log "MD cluster image identity verified: Common ${expected_revision}, SHA-256 ${expected_hash}."
+  log "MD cluster image identity verified: Common revision ${expected_revision}; per-image JAR SHA labels present."
 }
 
 wait_for_health() {

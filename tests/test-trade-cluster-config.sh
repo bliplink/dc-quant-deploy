@@ -131,4 +131,10 @@ grep -Fq "printf 'TRADE_CLUSTER_PERIODIC_SNAPSHOT_ENABLED=true" "${DEPLOY_DIR}/d
 grep -Fq 'apply_full_cluster_profile' "${DEPLOY_DIR}/deploy-saas.sh" ||
   fail 'full cluster profile must be applied before deployment'
 
+grep -Fq 'embeds a different Common revision.' "${DEPLOY_DIR}/deploy-saas.sh" ||
+  fail 'cluster deployment must fence mismatched Common source revisions'
+if grep -Fq 'embeds a different Common JAR.' "${DEPLOY_DIR}/deploy-saas.sh"; then
+  fail 'cluster deployment must not require byte-identical non-reproducible JAR archives'
+fi
+
 printf '[trade-cluster-config-test] PASS\n'
