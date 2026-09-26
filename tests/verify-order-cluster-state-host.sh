@@ -35,13 +35,15 @@ grep -o '{"partitionId"[^}]*}' "${zk_output}" >"${assignments}" || true
 
 verify_data_root="${DATA_ROOT}"
 if [[ ! -d "${verify_data_root}" ]]; then
+  # Colima/macOS: avoid copying the entire journal tree. Materialize only the
+  # 256 small snapshot.json files required by the same verifier. Linux keeps
+  # using DATA_ROOT directly.
   verify_data_root="${work_dir}/runtime-data"
-  mkdir -p "${verify_data_root}"
-  docker cp dc-saas-ordersvr:/srv/dc/data/OrderSvrA "${verify_data_root}/OrderSvrA" >/dev/null
-  docker cp dc-saas-ordersvr:/srv/dc/data/OrderSvrB "${verify_data_root}/OrderSvrB" >/dev/null
-  if [[ "${VERIFY_LEARNERS}" == true ]] && docker exec dc-saas-ordersvr test -d /srv/dc/data/OrderSvrC 2>/dev/null; then
-    docker cp dc-saas-ordersvr:/srv/dc/data/OrderSvrC "${verify_data_root}/OrderSvrC" >/dev/null
-  fi
+  for node in OrderSvrA OrderSvrB; do
+    mkdir -p "${verify_data_root}/${node}/snapshot"
+    docker exec dc-saas-ordersvr sh -lc "cd /srv/dc/data/${node}/snapshot && tar -cf - P*/snapshot.json" |
+      tar -xf - -C "${verify_data_root}/${node}/snapshot"
+  done
 fi
 python3 "${SCRIPT_DIR}/verify_order_cluster_assignments.py" \
   "${assignments}" "${PARTITION_COUNT}" "${verify_data_root}" "${VERIFY_LEARNERS}"
