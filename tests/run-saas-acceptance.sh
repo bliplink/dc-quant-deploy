@@ -14,6 +14,9 @@ for arg in "$@"; do
   esac
 done
 log(){ printf '[saas-acceptance] %s\n' "$*"; }
+# Local acceptance endpoints must bypass any developer/host HTTP proxy.
+export NO_PROXY="127.0.0.1,localhost${NO_PROXY:+,${NO_PROXY}}"
+export no_proxy="${NO_PROXY}"
 run(){ local name="$1"; shift; log "START ${name}"; "$@"; log "PASS  ${name}"; }
 run 'service log config' "${SCRIPT_DIR}/test-service-log-config.sh"
 run 'robot log config' "${SCRIPT_DIR}/test-robot-log-config.sh"
