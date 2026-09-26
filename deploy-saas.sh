@@ -548,6 +548,13 @@ ensure_zookeeper_service_root() {
 
 ensure_order_cluster_assignments() {
   [[ "${ORDER_CLUSTER_ENABLED:-false}" == "true" ]] || return 0
+  local existing_count existing_output
+  existing_output="$({ printf 'ls /dc/cluster/ordersvr/partitions\nquit\n'; } | docker exec -i -e CLIENT_JVMFLAGS=-Djava.security.auth.login.config=/conf/jaas.ini dc-saas-zookeeper zkCli.sh -server "127.0.0.1:${ZOOKEEPER_PORT}" 2>&1 || true)"
+  existing_count="$(grep -oE 'P[0-9]{3}' <<<"${existing_output}" | sort -u | wc -l | tr -d ' ')"
+  if [[ "${existing_count}" == "256" ]]; then
+    log "ZooKeeper OrderSvr assignments are already ready: 256 partitions."
+    return 0
+  fi
   local commands output status count partition node replica
   commands="$(mktemp)"
   {
@@ -596,6 +603,13 @@ ensure_order_cluster_assignments() {
 
 ensure_trade_cluster_assignments() {
   [[ "${TRADE_CLUSTER_ENABLED:-false}" == "true" ]] || return 0
+  local existing_count existing_output
+  existing_output="$({ printf 'ls /dc/cluster/tradesvr/partitions\nquit\n'; } | docker exec -i -e CLIENT_JVMFLAGS=-Djava.security.auth.login.config=/conf/jaas.ini dc-saas-zookeeper zkCli.sh -server "127.0.0.1:${ZOOKEEPER_PORT}" 2>&1 || true)"
+  existing_count="$(grep -oE 'P[0-9]{3}' <<<"${existing_output}" | sort -u | wc -l | tr -d ' ')"
+  if [[ "${existing_count}" == "256" ]]; then
+    log "ZooKeeper TradeSvr assignments are already ready: 256 partitions."
+    return 0
+  fi
   local commands output status count partition node replica
   commands="$(mktemp)"
   {
@@ -623,6 +637,13 @@ ensure_trade_cluster_assignments() {
 
 ensure_md_cluster_assignments() {
   [[ "${MD_CLUSTER_ENABLED:-false}" == "true" ]] || return 0
+  local existing_count existing_output
+  existing_output="$({ printf 'ls /dc/cluster/mdsvr/partitions\nquit\n'; } | docker exec -i -e CLIENT_JVMFLAGS=-Djava.security.auth.login.config=/conf/jaas.ini dc-saas-zookeeper zkCli.sh -server "127.0.0.1:${ZOOKEEPER_PORT}" 2>&1 || true)"
+  existing_count="$(grep -oE 'P[0-9]{3}' <<<"${existing_output}" | sort -u | wc -l | tr -d ' ')"
+  if [[ "${existing_count}" == "256" ]]; then
+    log "ZooKeeper MDSvr assignments are already ready: 256 partitions."
+    return 0
+  fi
   local commands output status count partition node replica
   commands="$(mktemp)"
   {
