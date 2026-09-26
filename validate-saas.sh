@@ -278,17 +278,18 @@ clickhouse_view="$(
 )"
 [[ "${clickhouse_view}" == "1" ]] || die "ClickHouse kline_view is missing."
 
-curl -fsS "http://127.0.0.1:${WEB_LISTEN_PORT}/healthz" | grep -q '^ok$' ||
+docker exec dc-saas-trade-web wget -qO- "http://127.0.0.1:${WEB_LISTEN_PORT}/healthz" | grep -q '^ok$' ||
   die "dc-trade-web health endpoint failed."
-curl -fsS "http://127.0.0.1:${WEB_LISTEN_PORT}/" | grep -qi '<title>Trade</title>' ||
+docker exec dc-saas-trade-web wget -qO- "http://127.0.0.1:${WEB_LISTEN_PORT}/" | grep -qi '<title>Trade</title>' ||
   die "dc-trade-web index page is not the trade application."
 
 wait_for_gateway_route() {
   local server="$1" response start
   start="$(date +%s)"
   while true; do
-    response="$(curl -sS --max-time 10 -H 'Content-Type: application/json' \
-      --data "{\"serverName\":\"${server}\",\"method\":\"getSymbolConfig\",\"content\":{\"SecurityID\":\"BTCUSDT\"}}" \
+    response="$(docker exec dc-saas-trade-web wget -qO- \
+      --header='Content-Type: application/json' \
+      --post-data="{\"serverName\":\"${server}\",\"method\":\"getSymbolConfig\",\"content\":{\"SecurityID\":\"BTCUSDT\"}}" \
       "http://127.0.0.1:${WEB_LISTEN_PORT}/httpapi/" 2>/dev/null || true)"
     if [[ -n "${response}" && "${response}" != *"SERVER.${server} is not Online"* ]]; then
       log "GW route ${server}: online"
