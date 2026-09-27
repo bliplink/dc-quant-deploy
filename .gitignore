@@ -17,3 +17,4 @@ clickhouse/log/
 __pycache__/
 *.py[cod]
 .cluster-dev/
+.default-e2e-credentials.txt

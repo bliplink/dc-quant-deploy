@@ -69,11 +69,17 @@ recovering_commands="${work_dir}/recovering.commands"
 ready_tsv="${work_dir}/ready.tsv"
 already_ready_tsv="${work_dir}/already-ready.tsv"
 interactive_log="${work_dir}/interactive-zk.log"
+zk_fifo="${work_dir}/interactive-zk.in"
 zk_write_fd=''
+zk_client_pid=''
 
 cleanup() {
   if [[ -n "${zk_write_fd}" ]]; then
-    printf 'quit\n' >&"${zk_write_fd}" 2>/dev/null || true
+    printf 'quit\n' >&9 2>/dev/null || true
+    exec 9>&- 2>/dev/null || true
+  fi
+  if [[ -n "${zk_client_pid}" ]]; then
+    wait "${zk_client_pid}" 2>/dev/null || true
   fi
   rm -rf -- "${work_dir}"
 }
@@ -184,10 +190,12 @@ with open(recovering_path, "w", encoding="utf-8", newline="\n") as recovering, \
         ready.write(f"{partition_id}\t{value['primary']}\t{json.dumps(value, separators=(',', ':'))}\n")
 PY
 
-coproc ZK_CLIENT {
-  docker exec -i "${ZK_CONTAINER}" zkCli.sh -server "${ZK_SERVER}" >"${interactive_log}" 2>&1
-}
-zk_write_fd="${ZK_CLIENT[1]}"
+mkfifo "${zk_fifo}"
+docker exec -i "${ZK_CONTAINER}" zkCli.sh -server "${ZK_SERVER}" \
+  <"${zk_fifo}" >"${interactive_log}" 2>&1 &
+zk_client_pid=$!
+exec 9>"${zk_fifo}"
+zk_write_fd=9
 
 if [[ "${USE_CURRENT_FENCED}" == true ]]; then
   log "Using prepared RECOVERING topology at epoch ${target_epoch}."
@@ -286,9 +294,16 @@ if [[ "${USE_CURRENT_PARTIAL}" == true ]]; then
   log "Validated ${recovered}/${EXPECTED_PARTITIONS} already-ready partitions at epoch ${target_epoch}."
 fi
 
-mapfile -t assignment_rows <"${ready_tsv}"
+assignment_rows=()
+while IFS= read -r assignment_row || [[ -n "${assignment_row}" ]]; do
+  assignment_rows+=("${assignment_row}")
+done <"${ready_tsv}"
 for ((offset=0; offset<${#assignment_rows[@]}; offset+=2)); do
-  batch_started="$(date --iso-8601=seconds)"
+  batch_started="$(python3 - <<'PYTIME'
+from datetime import datetime
+print(datetime.now().astimezone().isoformat(timespec="seconds"))
+PYTIME
+)"
   batch=()
   for ((item=offset; item<offset+2 && item<${#assignment_rows[@]}; item++)); do
     IFS=$'\t' read -r partition_id primary assignment_json <<<"${assignment_rows[item]}"

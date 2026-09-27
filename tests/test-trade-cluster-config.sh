@@ -28,6 +28,8 @@ a_config="${TEST_ROOT}/runtime/control/overrides/TradeSvrA/config/application.pr
 b_config="${TEST_ROOT}/runtime/control/overrides/TradeSvrB/config/application.properties"
 a_log="${TEST_ROOT}/runtime/control/overrides/TradeSvrA/config/log4j.ini"
 b_log="${TEST_ROOT}/runtime/control/overrides/TradeSvrB/config/log4j.ini"
+compat_config="${TEST_ROOT}/runtime/control/overrides/TradeSvr/config/application.properties"
+compat_log="${TEST_ROOT}/runtime/control/overrides/TradeSvr/config/log4j.ini"
 
 grep -Fqx 'ProtoVersion=2' "${ats}" || fail 'protocol v2 is not enabled'
 grep -Fqx 'LBConfig.TradeSvr=Partition' "${ats}" || fail 'TradeSvr partition load balance is missing'
@@ -41,6 +43,8 @@ grep -Fqx 'Partition.TradeSvr.PlacementPath=/dc/cluster/tradesvr/desired/placeme
   fail 'Trade placement path is missing'
 grep -Fqx 'serverKey=SERVER.TradeSvrA' "${a_config}" || fail 'TradeSvrA physical identity is missing'
 grep -Fqx 'serverKey=SERVER.TradeSvrB' "${b_config}" || fail 'TradeSvrB physical identity is missing'
+grep -Fqx 'serverKey=SERVER.TradeSvrA' "${compat_config}" || fail 'TradeSvr compatibility config must resolve to physical A'
+grep -Fqx 'log4j.appender.file.File=../../log/TradeSvrA.log' "${compat_log}" || fail 'TradeSvr compatibility log config must resolve to physical A'
 grep -Fqx 'trade.node.businessEnabled=true' "${a_config}" || fail 'TradeSvrA hot runtime must be enabled'
 grep -Fqx 'trade.node.businessEnabled=true' "${b_config}" || fail 'TradeSvrB hot runtime must be enabled'
 grep -Fqx 'trade.cluster.journal.enabled=true' "${a_config}" || fail 'TradeSvrA journal must be enabled'
@@ -130,6 +134,10 @@ grep -Fq "printf 'TRADE_CLUSTER_PERIODIC_SNAPSHOT_ENABLED=true" "${DEPLOY_DIR}/d
   fail 'deployment must enable Trade periodic snapshots when the env setting is missing'
 grep -Fq 'apply_full_cluster_profile' "${DEPLOY_DIR}/deploy-saas.sh" ||
   fail 'full cluster profile must be applied before deployment'
+grep -Fq 'persist_compose_config_names' "${DEPLOY_DIR}/deploy-saas.sh" ||
+  fail 'cluster config aliases must be persisted for direct docker compose use'
+grep -Fq 'upsert_env_value TRADESVR_CONFIG_NAME "${trade_name}"' "${DEPLOY_DIR}/deploy-saas.sh" ||
+  fail 'TradeSvr config alias must be written back to the env file'
 
 grep -Fq 'embeds a different Common revision.' "${DEPLOY_DIR}/deploy-saas.sh" ||
   fail 'cluster deployment must fence mismatched Common source revisions'

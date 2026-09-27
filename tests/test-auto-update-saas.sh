@@ -12,6 +12,7 @@ for script in \
   "${SCRIPT_DIR}/auto-update-saas.sh" \
   "${SCRIPT_DIR}/install-auto-update-cron.sh" \
   "${SCRIPT_DIR}/install-saas.sh" \
+  "${SCRIPT_DIR}/bootstrap-default-e2e.sh" \
   "${SCRIPT_DIR}/deploy-saas.sh" \
   "${SCRIPT_DIR}/acceptance-saas.sh" \
   "${SCRIPT_DIR}/tests/recover-order-cluster-partitions-host.sh" \
@@ -67,8 +68,16 @@ grep -q 'SAAS_AUTO_UPDATE_DEPLOY_REPO=true' "${SCRIPT_DIR}/.env.example" ||
 grep -q 'AUTO_UPDATE.zh-CN.md' "${SCRIPT_DIR}/README.md" ||
   fail "operator documentation is not linked"
 
-grep -Fq 'exec "${SCRIPT_DIR}/deploy-saas.sh" "$@"' "${SCRIPT_DIR}/install-saas.sh" ||
-  fail "install entry point must delegate to deploy-saas.sh"
+grep -Fqx '"${SCRIPT_DIR}/deploy-saas.sh" "$@"' "${SCRIPT_DIR}/install-saas.sh" ||
+  fail "install entry point must run deploy-saas.sh before demo bootstrap"
+grep -Fq 'bootstrap-default-e2e.sh' "${SCRIPT_DIR}/install-saas.sh" ||
+  fail "install entry point must provision the persistent default E2E tenant"
+grep -Fq 'verify_order_cluster_ready' "${SCRIPT_DIR}/bootstrap-default-e2e.sh" ||
+  fail "default E2E bootstrap must refuse a non-READY Order cluster"
+grep -Fq '.default-e2e-credentials.txt' "${SCRIPT_DIR}/.gitignore" ||
+  fail "default E2E credential file must be ignored by git"
+grep -Fq 'DEFAULT_E2E_LOCATION=E2E001' "${SCRIPT_DIR}/deploy-saas.sh" ||
+  fail "default E2E location bootstrap setting is missing"
 grep -Fq 'if [[ "${IMAGE_SOURCE:-local}" == "local" ]]; then' "${SCRIPT_DIR}/deploy-saas.sh" ||
   fail "local image source branch is missing"
 grep -Fq '"${SCRIPT_DIR}/build-saas-images.sh" "${ENV_FILE}"' "${SCRIPT_DIR}/deploy-saas.sh" ||

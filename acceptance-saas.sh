@@ -38,7 +38,7 @@ export E2E_PASSWORD
 
 short_id="$(printf '%s' "${RUN_ID}" | tr -cd 'A-Za-z0-9' | tail -c 9)"
 [[ -n "${short_id}" ]] || short_id="$(date -u +%H%M%S)"
-short_id="${short_id,,}"
+short_id="$(printf '%s' "${short_id}" | tr '[:upper:]' '[:lower:]')"
 CORE_E2E_LOCATION="${CORE_E2E_LOCATION:-ACC$(date -u +%H%M%S)_E2E}"
 CORE_E2E_BUYER="${CORE_E2E_BUYER:-buyer_${short_id}}"
 CORE_E2E_SELLER="${CORE_E2E_SELLER:-seller_${short_id}}"

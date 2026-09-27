@@ -189,6 +189,28 @@ ensure_env_defaults() {
   if ! grep -q '^PLATFORM_ADMIN_PASSWORD=' "${ENV_FILE}"; then
     printf 'PLATFORM_ADMIN_PASSWORD=%s\n' "$(generate_secret)" >> "${ENV_FILE}"
   fi
+  if ! grep -q '^DEFAULT_E2E_ENABLED=' "${ENV_FILE}"; then
+    printf 'DEFAULT_E2E_ENABLED=true\n' >> "${ENV_FILE}"
+  fi
+  if ! grep -q '^DEFAULT_E2E_LOCATION=' "${ENV_FILE}"; then
+    printf 'DEFAULT_E2E_LOCATION=E2E001\n' >> "${ENV_FILE}"
+  fi
+  if ! grep -q '^DEFAULT_E2E_ADMIN_USERNAME=' "${ENV_FILE}"; then
+    printf 'DEFAULT_E2E_ADMIN_USERNAME=tenantadmin\n' >> "${ENV_FILE}"
+  fi
+  if ! grep -q '^DEFAULT_E2E_TRADER_USERNAME=' "${ENV_FILE}"; then
+    printf 'DEFAULT_E2E_TRADER_USERNAME=demotrader\n' >> "${ENV_FILE}"
+  fi
+  if ! grep -q '^DEFAULT_E2E_ROBOT_USERNAME=' "${ENV_FILE}"; then
+    printf 'DEFAULT_E2E_ROBOT_USERNAME=demorobot\n' >> "${ENV_FILE}"
+  fi
+  if ! grep -q '^DEFAULT_E2E_TAPE_USERNAME=' "${ENV_FILE}"; then
+    printf 'DEFAULT_E2E_TAPE_USERNAME=demotape\n' >> "${ENV_FILE}"
+  fi
+  ensure_generated_env_secret DEFAULT_E2E_ADMIN_PASSWORD
+  ensure_generated_env_secret DEFAULT_E2E_TRADER_PASSWORD
+  ensure_generated_env_secret DEFAULT_E2E_ROBOT_PASSWORD
+  ensure_generated_env_secret DEFAULT_E2E_TAPE_PASSWORD
   if ! grep -q '^DC_HEDGE_CREDENTIAL_MASTER_KEY=' "${ENV_FILE}"; then
     printf 'DC_HEDGE_CREDENTIAL_MASTER_KEY=%s\n' "$(generate_secret)" >> "${ENV_FILE}"
   fi
@@ -267,6 +289,26 @@ apply_full_cluster_profile() {
 env_file_value() {
   local key="$1"
   sed -n "s/^${key}=//p" "${ENV_FILE}" | tail -n 1
+}
+
+upsert_env_value() {
+  local key="$1" value="$2"
+  if grep -q "^${key}=" "${ENV_FILE}"; then
+    set_env_value "${key}" "${value}"
+  else
+    printf '%s=%s\n' "${key}" "${value}" >> "${ENV_FILE}"
+  fi
+}
+
+persist_compose_config_names() {
+  local order_name="OrderSvr" md_name="MDSvr" trade_name="TradeSvr"
+  [[ "$(env_file_value ORDER_CLUSTER_ENABLED)" == "true" ]] && order_name="OrderSvrA"
+  [[ "$(env_file_value MD_CLUSTER_ENABLED)" == "true" ]] && md_name="MDSvrA"
+  [[ "$(env_file_value TRADE_CLUSTER_ENABLED)" == "true" ]] && trade_name="TradeSvrA"
+  upsert_env_value ORDERSVR_CONFIG_NAME "${order_name}"
+  upsert_env_value MDSVR_CONFIG_NAME "${md_name}"
+  upsert_env_value TRADESVR_CONFIG_NAME "${trade_name}"
+  log "Persisted compose config aliases: Order=${order_name}, MD=${md_name}, Trade=${trade_name}."
 }
 
 prepare_local_build_identity() {
@@ -922,6 +964,7 @@ verify_ghcr_access() {
 ensure_env_file
 ensure_env_defaults
 apply_full_cluster_profile
+persist_compose_config_names
 prepare_local_build_identity
 ensure_host_runtime
 load_env

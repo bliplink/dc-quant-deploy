@@ -120,6 +120,17 @@ CONTROL_ROOT="${DEPLOY_ROOT}/control"
 OVERRIDE_ROOT="${CONTROL_ROOT}/overrides"
 umask 077
 
+prepare_generated_file() {
+  local path="$1"
+  # Docker creates a directory when a bind-mount source file is missing.
+  # Remove that stale directory before regenerating the intended regular file.
+  if [[ -d "${path}" ]]; then
+    rm -rf -- "${path}"
+  elif [[ -L "${path}" ]]; then
+    rm -f -- "${path}"
+  fi
+}
+
 install -d -m 0750 "${CONTROL_ROOT}" "${OVERRIDE_ROOT}/GW/config" "${OVERRIDE_ROOT}/LoginSvr/config" "${OVERRIDE_ROOT}/MDSvr/config" "${OVERRIDE_ROOT}/MDSvrA/config" "${OVERRIDE_ROOT}/MDSvrB/config" "${OVERRIDE_ROOT}/MDSvrC/config" "${OVERRIDE_ROOT}/APSSvr/config" "${OVERRIDE_ROOT}/OrderSvr/config" "${OVERRIDE_ROOT}/OrderSvrA/config" "${OVERRIDE_ROOT}/OrderSvrB/config" "${OVERRIDE_ROOT}/OrderSvrC/config" "${OVERRIDE_ROOT}/ProjectionSvr/config" "${OVERRIDE_ROOT}/TradeSvr/config" "${OVERRIDE_ROOT}/TradeSvrA/config" "${OVERRIDE_ROOT}/TradeSvrB/config" "${OVERRIDE_ROOT}/LiqSvr/config" "${OVERRIDE_ROOT}/ManagerSvr/config" "${OVERRIDE_ROOT}/AdminSvr/config" "${OVERRIDE_ROOT}/RobotSvr/config"
 
 cat > "${CONTROL_ROOT}/DBPoolConfig.ini" <<EOF
@@ -684,7 +695,9 @@ write_trade_config() {
   if [[ "${TRADE_CLUSTER_ENABLED}" == "true" ]]; then
     peers="TradeSvrA=127.0.0.1:${TRADESVR_A_REPLICATION_PORT},TradeSvrB=127.0.0.1:${TRADESVR_B_REPLICATION_PORT}"
   fi
-  cat > "${OVERRIDE_ROOT}/${node}/config/application.properties" <<EOF
+  local target="${OVERRIDE_ROOT}/${node}/config/application.properties"
+  prepare_generated_file "${target}"
+  cat > "${target}" <<EOF
 [Cron]
 schedule.Config=./config/quartz.properties
 serverKey=SERVER.${node}
@@ -734,6 +747,11 @@ if [[ "${TRADE_CLUSTER_ENABLED}" == "true" ]]; then
   # controls business writes; replicas keep state warm for promotion.
   write_trade_config TradeSvrA true "${TRADESVR_A_REPLICATION_PORT}"
   write_trade_config TradeSvrB true "${TRADESVR_B_REPLICATION_PORT}"
+  # Compatibility alias for operators that invoke docker compose directly with
+  # an older env file. It must identify as TradeSvrA, not logical TradeSvr.
+  prepare_generated_file "${OVERRIDE_ROOT}/TradeSvr/config/application.properties"
+  install -m 0600 "${OVERRIDE_ROOT}/TradeSvrA/config/application.properties" \
+    "${OVERRIDE_ROOT}/TradeSvr/config/application.properties"
 else
   write_trade_config TradeSvr true
 fi
@@ -745,7 +763,9 @@ fi
 # remain at INFO/WARN through the root logger.
 write_trade_log_config() {
   local node="$1"
-  cat > "${OVERRIDE_ROOT}/${node}/config/log4j.ini" <<EOF
+  local target="${OVERRIDE_ROOT}/${node}/config/log4j.ini"
+  prepare_generated_file "${target}"
+  cat > "${target}" <<EOF
 log4j.rootLogger=INFO,file,stdout
 log4j.logger.com.gateway.connector.tcp.client.GateWayApi=ERROR
 log4j.logger.com.gw.common.utils.GwServerResource=WARN
@@ -772,6 +792,9 @@ EOF
 if [[ "${TRADE_CLUSTER_ENABLED}" == "true" ]]; then
   write_trade_log_config TradeSvrA
   write_trade_log_config TradeSvrB
+  prepare_generated_file "${OVERRIDE_ROOT}/TradeSvr/config/log4j.ini"
+  install -m 0600 "${OVERRIDE_ROOT}/TradeSvrA/config/log4j.ini" \
+    "${OVERRIDE_ROOT}/TradeSvr/config/log4j.ini"
 else
   write_trade_log_config TradeSvr
 fi

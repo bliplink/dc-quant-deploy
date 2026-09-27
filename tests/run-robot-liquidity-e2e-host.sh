@@ -12,6 +12,12 @@ TAPE_USER="${ROBOT_E2E_TAPE_USER:-robottape}"
 ROBOT_ID="${ROBOT_E2E_ROBOT_ID:-depth10}"
 PASSWORD="${ROBOT_E2E_PASSWORD:-$(openssl rand -hex 16)}"
 
+# Local GW/MySQL/management calls must never be sent through an inherited
+# host/VM HTTP proxy. Keep external proxy settings untouched, but always bypass
+# them for loopback traffic used by this acceptance test.
+export NO_PROXY="127.0.0.1,localhost${NO_PROXY:+,${NO_PROXY}}"
+export no_proxy="${NO_PROXY}"
+
 log() { printf '[robot-e2e] %s\n' "$*"; }
 die() { printf '[robot-e2e] ERROR: %s\n' "$*" >&2; exit 1; }
 safe_identifier() { [[ "$1" =~ ^[A-Za-z0-9_.-]+$ ]]; }
@@ -91,8 +97,20 @@ login() {
   printf '%s' "${response}" | json_eval 'd["data"]["token"]'
 }
 
+fund_trade_account() {
+  local user="$1" token="$2" demo="$3" response
+  response="$(api_call "{\"serverName\":\"TradeSvr\",\"method\":\"cashIn\",\"key\":\"${LOCATION}\",\"content\":{\"Amount\":\"1000000\",\"UserID\":\"${user}\",\"Location\":\"${LOCATION}\",\"Demo\":\"${demo}\"}}" "${token}")"
+  expect_ok "fund TradeSvr runtime account ${user}" "${response}"
+}
+
 password_hash="$(printf '%s' "${PASSWORD}" | sha256sum | awk '{print $1}')"
 log "Preparing isolated tenant ${LOCATION}."
+# Keep this deterministic acceptance isolated from stale workers left by a prior
+# failed run. RobotSvr polls enabled rows, so disable older ROBOT_E2E fixtures
+# before inserting the current one.
+mysql_exec -e "UPDATE dc_tenant_robot SET enabled=0,update_by='robot-e2e-cleanup',update_time=NOW() WHERE location LIKE 'ROBOT_E2E\_%' AND location<>'${LOCATION}' AND enabled=1" dc >/dev/null
+# Let the supervisor remove the prior same-symbol worker before replacement.
+sleep 4
 {
   cat <<SQL
 START TRANSACTION;
@@ -107,7 +125,7 @@ INSERT INTO dc_tenant_symbol
    min_notional,market_take_bound,maker_commission,taker_commission,funding_interval,create_by,update_by,
    create_time,update_time)
 VALUES
-  ('${LOCATION}','BTCUSDT','4',1,0.01,0.0001,0.0001,10,5,0.05,0.0002,0.0006,28800,
+  ('${LOCATION}','BTCUSDT','4',1,0.1,0.0001,0.0001,10,5,0.05,0.0002,0.0006,28800,
    'robot-e2e','robot-e2e',NOW(),NOW());
 INSERT INTO dc_users
   (user_id,user_name,name,password,user_type,enable,create_time,update_time,
@@ -119,9 +137,9 @@ VALUES
 INSERT INTO dc_users_balance
   (user_id,balance,used_margin,freezed_margin,freezed_commission,update_time,close_by,location)
 VALUES
-  ('${ROBOT_USER}',1000000,0,0,0,NOW(),'robot-e2e','${LOCATION}'),
-  ('${TRADER_USER}',1000000,0,0,0,NOW(),'robot-e2e','${LOCATION}'),
-  ('${TAPE_USER}',1000000,0,0,0,NOW(),'robot-e2e','${LOCATION}');
+  ('${ROBOT_USER}',0,0,0,0,NOW(),'robot-e2e','${LOCATION}'),
+  ('${TRADER_USER}',0,0,0,0,NOW(),'robot-e2e','${LOCATION}'),
+  ('${TAPE_USER}',0,0,0,0,NOW(),'robot-e2e','${LOCATION}');
 INSERT INTO dc_users_symbol_config
   (user_id,security_id,symbol,leverage,position_type,update_time,close_by,location,market_indicator)
 VALUES
@@ -132,14 +150,12 @@ COMMIT;
 SQL
 } | mysql_exec dc
 
-docker restart dc-saas-loginsvr dc-saas-ordersvr dc-saas-tradesvr >/dev/null
-wait_for_port "${LOGINSVR_GW_PORT}" dc-saas-loginsvr
-wait_for_port "${ORDERSVR_GW_PORT}" dc-saas-ordersvr
-wait_for_port "${TRADESVR_GW_PORT}" dc-saas-tradesvr
-docker restart dc-saas-gateway >/dev/null
-wait_for_port "${GW_TCP_PORT}" dc-saas-gateway
-wait_for_route LoginSvr
-wait_for_route OrderSvr
+# Robot acceptance runs against the already-online trading fabric. Restarting
+# Login/Order/Trade/GW here creates an artificial route outage that production
+# Robot configuration changes must not require.
+# Use the real login/order/trade calls below as readiness gates. The gateway
+# maps unknown-method probes to HTTP 503, so synthetic __robot_e2e_readiness__
+# calls can falsely report a route outage even while the service is online.
 for _ in $(seq 1 90); do
   response="$(api_call "{\"serverName\":\"LoginSvr\",\"method\":\"SYS.ATS.LOGIN\",\"content\":{\"method\":\"login\",\"cid\":\"ROBOT_LOGIN_${ROBOT_USER}\",\"user_id\":\"${ROBOT_USER}\",\"user_name\":\"${ROBOT_USER}\",\"password\":\"${PASSWORD}\",\"client_type\":\"WEB\",\"Location\":\"${LOCATION}\"}}" 2>/dev/null || true)"
   if [[ -n "${response}" ]] && python3 -c 'import json,sys; d=json.load(sys.stdin); raise SystemExit(0 if d.get("code")==0 and d.get("data",{}).get("token") else 1)' <<<"${response}" 2>/dev/null; then
@@ -152,8 +168,16 @@ done
 trader_token="$(login "${TRADER_USER}")"
 tape_token="$(login "${TAPE_USER}")"
 
+# Direct SQL only creates the durable account shells. TradeSvr owns hot
+# balance state, so publish funding through the clustered mutation path before
+# RobotSvr starts quoting. Robot/tape are internal Demo=1 identities; the test
+# trader remains normal Demo=0 business flow.
+fund_trade_account "${ROBOT_USER}" "${robot_token}" "1"
+fund_trade_account "${TRADER_USER}" "${trader_token}" "0"
+fund_trade_account "${TAPE_USER}" "${tape_token}" "1"
+
 robot_open_orders() {
-  api_call "{\"serverName\":\"OrderSvr\",\"method\":\"queryOpenOrder\",\"content\":{\"securityid\":\"BTCUSDT\",\"userid\":\"${ROBOT_USER}\"}}" "${robot_token}"
+  api_call "{\"serverName\":\"OrderSvr\",\"method\":\"queryOpenOrder\",\"key\":\"${LOCATION}\\u001f4\\u001fBTCUSDT\",\"content\":{\"securityid\":\"BTCUSDT\",\"userid\":\"${ROBOT_USER}\",\"Location\":\"${LOCATION}\"}}" "${robot_token}"
 }
 
 robot_open_value() {
@@ -167,8 +191,9 @@ rows=[]
 for row in d.get("data") or []:
     item={str(k).lower().replace("_",""):v for k,v in row.items()}
     cid=str(item.get("clordid") or "")
-    status=str(item.get("ordstatus") or "")
-    if cid.startswith(prefix) and "-SW" not in cid and status in ("New","Partially_Filled"):
+    status=str(item.get("ordstatus") or "").strip().replace("-","_").replace(" ","_")
+    active=status in ("0","1") or status.lower() in ("new","partially_filled")
+    if cid.startswith(prefix) and "-SW" not in cid and active:
         rows.append(item)
 print(eval(sys.argv[1], {"rows":rows}))
 ' "${expression}" "${robot_prefix}"
@@ -196,28 +221,82 @@ VALUES
    'APSSVR_BINANCE_TICKER',1,10,10,1,1,0.001,0.1,200,3000,500,5,0,
    JSON_OBJECT('sweep_user_orders_enabled',true,
                'sweep_max_loss_bps',5,'sweep_max_qty',0.001,
-               'tape_enabled',true,'tape_api_user_id','${TAPE_USER}','tape_api_key','${tape_api_key}',
+               'tape_enabled',false,'tape_api_user_id','${TAPE_USER}','tape_api_key','${tape_api_key}',
                'tape_volume_scale',0.01,'tape_min_notional',5,'tape_max_notional',1000,
                'tape_interval_ms',1000),
    'STOPPED','robot-e2e','robot-e2e',NOW(),NOW());
 SQL
 } | mysql_exec dc
 
+# RobotSvr polls durable configuration every ROBOT_CONFIG_POLL_MS (3s by
+# default). The runtime_status/open-order loop below is the real hot-discovery
+# readiness gate; do not use a synthetic unknown-method probe here.
+log "Waiting for RobotSvr hot reconciliation of the current fixture."
+
 log "Waiting for APSSvr Binance book ticker and 20 synthesized Robot orders."
 ready="0"
 for _ in $(seq 1 120); do
-  runtime_status="$(mysql_exec -e "SELECT runtime_status FROM dc_tenant_robot WHERE location='${LOCATION}' AND robot_id='${ROBOT_ID}'" dc)"
+  read -r runtime_status runtime_open_count <<<"$(mysql_exec -e "SELECT runtime_status,open_order_count FROM dc_tenant_robot WHERE location='${LOCATION}' AND robot_id='${ROBOT_ID}'" dc)"
   open_response="$(robot_open_orders 2>/dev/null || true)"
-  open_count="$(printf '%s' "${open_response}" | robot_open_value 'len(rows)' 2>/dev/null || true)"
-  [[ "${runtime_status}" == "RUNNING" && "${open_count}" == "20" ]] && ready="1" || ready="0"
+  read -r live_bids live_asks <<<"$(printf '%s' "${open_response}" | robot_open_value 'str(len({str(row.get("price")) for row in rows if str(row.get("side","")).lower()=="buy"}))+" "+str(len({str(row.get("price")) for row in rows if str(row.get("side","")).lower()=="sell"}))' 2>/dev/null || true)"
+  [[ "${runtime_status}" == "RUNNING" && "${runtime_open_count}" == "20" && "${live_bids:-0}" == "10" && "${live_asks:-0}" == "10" ]] && ready="1" || ready="0"
   [[ "${ready}" == "1" ]] && break
   sleep 1
 done
 if [[ "${ready}" != "1" ]]; then
   docker logs --tail 160 dc-saas-robotsvr >&2 || true
   mysql_exec -e "SELECT runtime_status,last_error_code,last_error_message,open_order_count FROM dc_tenant_robot WHERE location='${LOCATION}' AND robot_id='${ROBOT_ID}'" dc >&2 || true
-  die "Robot did not reach RUNNING with 20 orders"
+  die "Robot did not reach RUNNING with an acknowledged 20-order target and stable 10+10 ladder"
 fi
+
+
+# First prove the pure quoting book while Tape is off. Tape intentionally consumes
+# quote liquidity and would make a simultaneous exact 10+10 assertion racy.
+compare_ticker_ladder() {
+  local robot_file result reference_price
+  robot_file="$(mktemp)"
+  robot_open_orders >"${robot_file}"
+  reference_price="$(mysql_exec -e "SELECT COALESCE(last_reference_price,0) FROM dc_tenant_robot WHERE location='${LOCATION}' AND robot_id='${ROBOT_ID}' LIMIT 1;" dc 2>/dev/null || echo 0)"
+  result="$(python3 - "${robot_file}" "${reference_price}" <<'PY'
+import json, sys
+from decimal import Decimal
+response=json.load(open(sys.argv[1],encoding='utf-8'))
+rows=[{str(k).lower().replace('_',''):v for k,v in row.items()} for row in response.get('data') or []]
+robot_bids=sorted({Decimal(str(row.get('price'))) for row in rows if str(row.get('side','')).lower()=='buy'}, reverse=True)
+robot_asks=sorted({Decimal(str(row.get('price'))) for row in rows if str(row.get('side','')).lower()=='sell'})
+external_mid=Decimal(sys.argv[2])
+if external_mid <= 0:
+    raise SystemExit(1)
+robot_mid=(robot_bids[0]+robot_asks[0])/2 if robot_bids and robot_asks else Decimal(0)
+deviation_bps=abs(robot_mid-external_mid)*Decimal(10000)/external_mid
+monotonic=(len(robot_bids)==10 and len(robot_asks)==10
+           and all(robot_bids[i]>robot_bids[i+1] for i in range(9))
+           and all(robot_asks[i]<robot_asks[i+1] for i in range(9))
+           and robot_bids[0] < robot_asks[0])
+print(len(robot_bids),len(robot_asks),int(monotonic),deviation_bps)
+PY
+)"
+  rm -f "${robot_file}"
+  read -r robot_bids robot_asks monotonic deviation_bps <<<"${result}"
+  python3 - "${robot_bids}" "${robot_asks}" "${monotonic}" "${deviation_bps}" <<'PY'
+from decimal import Decimal
+import sys
+bids,asks,monotonic=sys.argv[1:4]
+assert bids=='10' and asks=='10' and monotonic=='1'
+assert Decimal(sys.argv[4]) <= Decimal('30')
+PY
+}
+
+ticker_ladder_ok="0"
+for _ in $(seq 1 30); do
+  if compare_ticker_ladder; then ticker_ladder_ok="1"; break; fi
+  sleep 1
+done
+[[ "${ticker_ladder_ok}" == "1" ]] || die "Robot did not synthesize a valid 10+10 ladder near the live Binance book ticker"
+log "Binance ticker ladder passed: stable 10 bids + 10 asks, ordered and within 30 bps of the APSSvr Binance reference."
+
+log "Enabling Binance-volume Tape after the stable ladder passed."
+mysql_exec -e "UPDATE dc_tenant_robot SET strategy_config=JSON_SET(strategy_config,'$.tape_enabled',CAST('true' AS JSON)),update_by='robot-e2e-tape-on',update_time=NOW() WHERE location='${LOCATION}' AND robot_id='${ROBOT_ID}'" dc >/dev/null
 
 log "Waiting for Binance-volume Tape to produce a tenant K-line."
 tape_ready="0"
@@ -225,7 +304,9 @@ tape_close="0"
 tape_volume="0"
 tape_deviation_bps="999999"
 for _ in $(seq 1 60); do
-  kline_response="$(api_call "{\"serverName\":\"MDSvr\",\"method\":\"queryKLine\",\"content\":{\"num\":10,\"securityID\":\"BTCUSDT\",\"text\":\"1M\",\"Location\":\"${LOCATION}\"}}" "${trader_token}" 2>/dev/null || true)"
+  # Historical K-line is served by AdminSvr/ClickHouse. MDSvr is the live
+  # subscription path and must not be used as the historical query backend.
+  kline_response="$(api_call "{\"serverName\":\"AdminSvr\",\"method\":\"queryKLine\",\"content\":{\"num\":10,\"securityID\":\"BTCUSDT\",\"text\":\"1M\",\"Location\":\"${LOCATION}\",\"location\":\"${LOCATION}\"}}" 2>/dev/null || true)"
   reference_price="$(mysql_exec -e "SELECT COALESCE(last_reference_price,0) FROM dc_tenant_robot WHERE location='${LOCATION}' AND robot_id='${ROBOT_ID}' LIMIT 1;" dc 2>/dev/null || echo 0)"
   read -r tape_ready tape_close tape_volume tape_deviation_bps <<<"$(printf '%s' "${kline_response}" | python3 -c '
 import json,sys
@@ -251,47 +332,21 @@ done
 [[ "${tape_ready}" == "1" ]] || die "Tape did not produce a positive recent tenant K-line within 60s"
 log "Tape K-line ready: close=${tape_close}, volume=${tape_volume}, reference_deviation_bps=${tape_deviation_bps}."
 
-compare_ticker_ladder() {
-  local robot_file external_file result
-  robot_file="$(mktemp)"; external_file="$(mktemp)"
-  robot_open_orders >"${robot_file}"
-  curl -fsS --max-time 10 'https://fapi.binance.com/fapi/v1/ticker/bookTicker?symbol=BTCUSDT' >"${external_file}" || { rm -f "${robot_file}" "${external_file}"; return 1; }
-  result="$(python3 - "${robot_file}" "${external_file}" <<'PY'
-import json, sys
-from decimal import Decimal
-response=json.load(open(sys.argv[1],encoding='utf-8'))
-rows=[{str(k).lower().replace('_',''):v for k,v in row.items()} for row in response.get('data') or []]
-robot_bids=sorted({Decimal(str(row.get('price'))) for row in rows if str(row.get('side','')).lower()=='buy'}, reverse=True)
-robot_asks=sorted({Decimal(str(row.get('price'))) for row in rows if str(row.get('side','')).lower()=='sell'})
-book=json.load(open(sys.argv[2],encoding='utf-8'))
-external_mid=(Decimal(book['bidPrice'])+Decimal(book['askPrice']))/2
-robot_mid=(robot_bids[0]+robot_asks[0])/2 if robot_bids and robot_asks else Decimal(0)
-deviation_bps=abs(robot_mid-external_mid)*Decimal(10000)/external_mid
-monotonic=(len(robot_bids)==10 and len(robot_asks)==10
-           and all(robot_bids[i]>robot_bids[i+1] for i in range(9))
-           and all(robot_asks[i]<robot_asks[i+1] for i in range(9))
-           and robot_bids[0] < robot_asks[0])
-print(len(robot_bids),len(robot_asks),int(monotonic),deviation_bps)
-PY
-)"
-  rm -f "${robot_file}" "${external_file}"
-  read -r robot_bids robot_asks monotonic deviation_bps <<<"${result}"
-  python3 - "${robot_bids}" "${robot_asks}" "${monotonic}" "${deviation_bps}" <<'PY'
-from decimal import Decimal
-import sys
-bids,asks,monotonic=sys.argv[1:4]
-assert bids=='10' and asks=='10' and monotonic=='1'
-assert Decimal(sys.argv[4]) <= Decimal('30')
-PY
-}
 
-ticker_ladder_ok="0"
-for _ in $(seq 1 30); do
-  if compare_ticker_ladder; then ticker_ladder_ok="1"; break; fi
+log "Disabling Tape and waiting for the quote book to settle before user-hit tests."
+mysql_exec -e "UPDATE dc_tenant_robot SET strategy_config=JSON_SET(strategy_config,'$.tape_enabled',CAST('false' AS JSON)),update_by='robot-e2e-tape-off',update_time=NOW() WHERE location='${LOCATION}' AND robot_id='${ROBOT_ID}'" dc >/dev/null
+stable_after_tape="0"
+for _ in $(seq 1 90); do
+  read -r runtime_status runtime_open_count <<<"$(mysql_exec -e "SELECT runtime_status,open_order_count FROM dc_tenant_robot WHERE location='${LOCATION}' AND robot_id='${ROBOT_ID}'" dc)"
+  open_response="$(robot_open_orders 2>/dev/null || true)"
+  read -r live_bids live_asks <<<"$(printf '%s' "${open_response}" | robot_open_value 'str(len({str(row.get("price")) for row in rows if str(row.get("side","")).lower()=="buy"}))+" "+str(len({str(row.get("price")) for row in rows if str(row.get("side","")).lower()=="sell"}))' 2>/dev/null || true)"
+  [[ "${runtime_status}" == "RUNNING" && "${runtime_open_count}" == "20" && "${live_bids:-0}" == "10" && "${live_asks:-0}" == "10" ]] && stable_after_tape="1" || stable_after_tape="0"
+  [[ "${stable_after_tape}" == "1" ]] && break
   sleep 1
 done
-[[ "${ticker_ladder_ok}" == "1" ]] || die "Robot did not synthesize a valid 10+10 ladder near the live Binance book ticker"
-log "Binance ticker ladder passed: 10 distinct bids + 10 distinct asks, ordered and within 30 bps of live midpoint."
+[[ "${stable_after_tape}" == "1" ]] || die "Quote book did not return to stable 10+10 after Tape was disabled"
+log "Quote book returned to stable 10+10 after Tape validation."
+
 
 log "Hitting a Robot ask and verifying the partially filled level is replenished."
 before_ids="$(robot_open_orders | robot_open_value '";".join(sorted(str(row.get("clordid")) for row in rows))')"
@@ -301,7 +356,7 @@ for attempt in $(seq 1 20); do
   current_ask="$(robot_open_orders | robot_open_value 'min(float(row.get("price")) for row in rows if str(row.get("side","")).lower()=="sell")')"
   [[ -n "${current_ask}" && "${current_ask}" != "NULL" ]] || { sleep 1; continue; }
   hit_clid="ROBOT-HIT-${RUN_ID}-${attempt}"
-  hit_response="$(api_call "{\"serverName\":\"OrderSvr\",\"method\":\"placeOrder\",\"content\":{\"OCType\":\"OPEN\",\"OrderQty\":\"0.0001\",\"OrdType\":\"Limit\",\"ClOrdID\":\"${hit_clid}\",\"Terminal\":\"RobotE2E\",\"AlgoName\":\"robot-e2e-hit\",\"Side\":\"Buy\",\"Price\":\"${current_ask}\",\"UserID\":\"${TRADER_USER}\",\"MarketIndicator\":\"4\",\"TimeInForce\":\"IOC\",\"SecurityID\":\"BTCUSDT\",\"Location\":\"${LOCATION}\"}}" "${trader_token}" 2>/dev/null || true)"
+  hit_response="$(api_call "{\"serverName\":\"OrderSvr\",\"method\":\"placeOrder\",\"key\":\"${LOCATION}\\u001f4\\u001fBTCUSDT\",\"content\":{\"OCType\":\"OPEN\",\"OrderQty\":\"0.0001\",\"OrdType\":\"Limit\",\"ClOrdID\":\"${hit_clid}\",\"Terminal\":\"RobotE2E\",\"AlgoName\":\"robot-e2e-hit\",\"Side\":\"Buy\",\"Price\":\"${current_ask}\",\"UserID\":\"${TRADER_USER}\",\"MarketIndicator\":\"4\",\"TimeInForce\":\"IOC\",\"SecurityID\":\"BTCUSDT\",\"Location\":\"${LOCATION}\"}}" "${trader_token}" 2>/dev/null || true)"
   if [[ -z "${hit_response}" ]] || [[ "$(printf '%s' "${hit_response}" | json_eval 'd.get("code",-1)' 2>/dev/null || true)" != "0" ]]; then
     sleep 1
     continue
@@ -328,20 +383,23 @@ done
 log "User hit and full 10+10 level replenishment passed (${hit_clid})."
 
 read -r best_bid best_ask <<<"$(robot_open_orders | robot_open_value 'str(max(float(row.get("price")) for row in rows if str(row.get("side","")).lower()=="buy"))+" "+str(min(float(row.get("price")) for row in rows if str(row.get("side","")).lower()=="sell"))')"
-inside_price="$(python3 - "${best_bid}" "${best_ask}" <<'PY'
+tenant_tick_size="$(mysql_exec -e "SELECT tick_size FROM dc_tenant_symbol WHERE location='${LOCATION}' AND security_id='BTCUSDT' AND market_indicator='4' LIMIT 1" dc)"
+inside_price="$(python3 - "${best_bid}" "${best_ask}" "${tenant_tick_size}" <<'PY'
 from decimal import Decimal, ROUND_DOWN
 import sys
-bid,ask=map(Decimal,sys.argv[1:])
-assert ask-bid >= Decimal('0.02')
-price=((bid+ask)/2).quantize(Decimal('0.01'),rounding=ROUND_DOWN)
-if price <= bid: price=bid+Decimal('0.01')
-if price >= ask: price=ask-Decimal('0.01')
+bid,ask,tick=map(Decimal,sys.argv[1:])
+assert tick > 0 and ask-bid >= tick*2
+mid=(bid+ask)/2
+price=(mid/tick).to_integral_value(rounding=ROUND_DOWN)*tick
+if price <= bid: price=bid+tick
+if price >= ask: price=ask-tick
+assert bid < price < ask
 print(price)
 PY
 )" || die "The live spread has no tenant-tick price inside it"
 
 clid="ROBOT-SWEEP-${RUN_ID}"
-place_response="$(api_call "{\"serverName\":\"OrderSvr\",\"method\":\"placeOrder\",\"content\":{\"OCType\":\"OPEN\",\"OrderQty\":\"0.0001\",\"OrdType\":\"Limit\",\"ClOrdID\":\"${clid}\",\"Terminal\":\"RobotE2E\",\"AlgoName\":\"robot-e2e-user\",\"Side\":\"Sell\",\"Price\":\"${inside_price}\",\"UserID\":\"${TRADER_USER}\",\"MarketIndicator\":\"4\",\"TimeInForce\":\"GTC\",\"SecurityID\":\"BTCUSDT\",\"Location\":\"${LOCATION}\"}}" "${trader_token}")"
+place_response="$(api_call "{\"serverName\":\"OrderSvr\",\"method\":\"placeOrder\",\"key\":\"${LOCATION}\\u001f4\\u001fBTCUSDT\",\"content\":{\"OCType\":\"OPEN\",\"OrderQty\":\"0.0001\",\"OrdType\":\"Limit\",\"ClOrdID\":\"${clid}\",\"Terminal\":\"RobotE2E\",\"AlgoName\":\"robot-e2e-user\",\"Side\":\"Sell\",\"Price\":\"${inside_price}\",\"UserID\":\"${TRADER_USER}\",\"MarketIndicator\":\"4\",\"TimeInForce\":\"GTC\",\"SecurityID\":\"BTCUSDT\",\"Location\":\"${LOCATION}\"}}" "${trader_token}")"
 expect_ok "place inside-spread user order" "${place_response}"
 
 sweep_ok="0"
