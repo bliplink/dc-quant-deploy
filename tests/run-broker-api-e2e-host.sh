@@ -95,16 +95,21 @@ SELECT COUNT(*) FROM dc_users_posting
  WHERE location='${BROKER_E2E_LOCATION}'
    AND user_id='${BROKER_E2E_MAKER_CUSTOMER_ID}'
    AND type=2 AND amount='${withdrawal}';
-SELECT COUNT(*) FROM dc_orders_execorders
- WHERE location='${BROKER_E2E_LOCATION}'
-   AND user_id='${BROKER_E2E_MAKER_CUSTOMER_ID}'
-   AND clordid='${maker_clordid}' AND last_qty > 0;
-SELECT COUNT(*) FROM dc_orders_execorders
- WHERE location='${BROKER_E2E_LOCATION}'
-   AND user_id='${BROKER_E2E_TAKER_CUSTOMER_ID}'
-   AND clordid='${taker_clordid}' AND last_qty > 0;
+SELECT COUNT(*) FROM dc_orders_execorders e
+ JOIN dc_orders o ON o.location=e.location AND o.user_id=e.user_id AND o.order_id=e.order_id
+ WHERE e.location='${BROKER_E2E_LOCATION}'
+   AND e.user_id='${BROKER_E2E_MAKER_CUSTOMER_ID}'
+   AND o.clord_id='${maker_clordid}' AND e.last_qty > 0;
+SELECT COUNT(*) FROM dc_orders_execorders e
+ JOIN dc_orders o ON o.location=e.location AND o.user_id=e.user_id AND o.order_id=e.order_id
+ WHERE e.location='${BROKER_E2E_LOCATION}'
+   AND e.user_id='${BROKER_E2E_TAKER_CUSTOMER_ID}'
+   AND o.clord_id='${taker_clordid}' AND e.last_qty > 0;
 ")"
-mapfile -t rows <<<"${db_result}"
+rows=()
+while IFS= read -r row || [[ -n "${row}" ]]; do
+  rows+=("${row}")
+done <<<"${db_result}"
 [[ "${#rows[@]}" -eq 5 ]] || die "Unexpected Broker DB verification output: ${db_result}"
 for i in 0 1 2 3 4; do
   (( rows[i] >= 1 )) || die "Broker DB assertion ${i} failed: ${db_result}"

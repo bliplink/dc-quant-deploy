@@ -6,8 +6,13 @@ DEPLOY_DIR="$(cd "${SCRIPT_DIR}/.." && pwd)"
 ENV_FILE="${ENV_FILE:-${DEPLOY_DIR}/.env.prod}"
 E2E_BASE_URL="${E2E_BASE_URL:-}"
 E2E_SUFFIX="${E2E_SUFFIX:-$(date +%m%d%H%M%S)}"
-E2E_LOCATION_A="${E2E_LOCATION_A:-SAASA_E2E_${E2E_SUFFIX}}"
-E2E_LOCATION_B="${E2E_LOCATION_B:-SAASB_E2E_${E2E_SUFFIX}}"
+E2E_LOCATION_SEED="$(python3 - "${E2E_SUFFIX}" <<'PYSEED'
+import hashlib,sys
+print(hashlib.sha256(sys.argv[1].encode()).hexdigest()[:5].upper())
+PYSEED
+)"
+E2E_LOCATION_A="${E2E_LOCATION_A:-A${E2E_LOCATION_SEED}}"
+E2E_LOCATION_B="${E2E_LOCATION_B:-B${E2E_LOCATION_SEED}}"
 E2E_SHARED_USER="${E2E_SHARED_USER:-sharedtrader}"
 E2E_ADMIN_USER="${E2E_ADMIN_USER:-tenantadmin}"
 
@@ -21,13 +26,13 @@ die() {
 }
 
 safe_location() {
-  [[ "$1" =~ ^[A-Z][A-Z0-9_]{2,29}$ && "$1" == *_E2E_* ]]
+  [[ "$1" =~ ^[A-Z0-9]{6}$ ]]
 }
 
 [[ "$(id -u)" -eq 0 ]] || die "Run with sudo so ${ENV_FILE} remains protected"
 [[ -r "${ENV_FILE}" ]] || die "Cannot read ${ENV_FILE}"
-safe_location "${E2E_LOCATION_A}" || die "E2E_LOCATION_A must be an isolated *_E2E_* location"
-safe_location "${E2E_LOCATION_B}" || die "E2E_LOCATION_B must be an isolated *_E2E_* location"
+safe_location "${E2E_LOCATION_A}" || die "E2E_LOCATION_A must be exactly 6 uppercase A-Z/0-9 characters"
+safe_location "${E2E_LOCATION_B}" || die "E2E_LOCATION_B must be exactly 6 uppercase A-Z/0-9 characters"
 [[ "${E2E_LOCATION_A}" != "${E2E_LOCATION_B}" ]] || die "The two E2E locations must differ"
 command -v curl >/dev/null 2>&1 || die "curl is required"
 command -v python3 >/dev/null 2>&1 || die "python3 is required"
@@ -40,6 +45,9 @@ set +a
 
 E2E_BASE_URL="${E2E_BASE_URL:-http://127.0.0.1:${WEB_LISTEN_PORT}/httpapi/}"
 [[ "${E2E_BASE_URL}" == */httpapi/ ]] || E2E_BASE_URL="${E2E_BASE_URL%/}/httpapi/"
+TENANT_PAGE_BASE_URL="${TENANT_PAGE_BASE_URL:-http://127.0.0.1:18092}"
+export NO_PROXY="127.0.0.1,localhost${NO_PROXY:+,${NO_PROXY}}"
+export no_proxy="${NO_PROXY}"
 platform_user="${PLATFORM_ADMIN_USERNAME:?PLATFORM_ADMIN_USERNAME is required}"
 platform_password="${PLATFORM_ADMIN_PASSWORD:?PLATFORM_ADMIN_PASSWORD is required}"
 admin_password_a="${E2E_ADMIN_PASSWORD_A:-$(openssl rand -hex 16)}"
@@ -51,10 +59,10 @@ api_call() {
   local payload="$1" token=""
   if (( $# > 1 )); then token="$2"; fi
   if [[ -n "${token}" ]]; then
-    curl -fsS --max-time 30 -H 'Content-Type: application/json' -H "sessionId: ${token}" \
+    curl --noproxy '*' -fsS --max-time 30 -H 'Content-Type: application/json' -H "sessionId: ${token}" \
       --data "${payload}" "${E2E_BASE_URL}"
   else
-    curl -fsS --max-time 30 -H 'Content-Type: application/json' \
+    curl --noproxy '*' -fsS --max-time 30 -H 'Content-Type: application/json' \
       --data "${payload}" "${E2E_BASE_URL}"
   fi
 }
@@ -70,7 +78,7 @@ secret, body, expiry = sys.argv[1:]
 print(hmac.new(secret.encode("utf-8"), (body + expiry).encode("utf-8"), hashlib.sha256).hexdigest())
 PY
 )"
-  curl -fsS --max-time 30 \
+  curl --noproxy '*' -fsS --max-time 30 \
     -H 'Content-Type: application/json' \
     -H "cid: TENANT_API_E2E" \
     -H "apikey: ${api_key}" \
@@ -140,12 +148,8 @@ register_trader() {
   printf '%s' "${response}" | json_eval 'd["data"]["user_id"]'
 }
 
-log "Checking public pages and gateway routes."
-curl -fsS --max-time 20 "${E2E_BASE_URL%/httpapi/}/#/apply" >/dev/null
-for service in LoginSvr ManagerSvr AdminSvr; do
-  readiness="$(api_call "$(printf '{"serverName":"%s","method":"__tenant_e2e_readiness__","content":{}}' "${service}")" || true)"
-  [[ -n "${readiness}" && "${readiness}" != *"is not Online"* ]] || die "${service} is not routable"
-done
+log "Checking the public tenant page. Real login/application/registration calls below are the service readiness gates."
+curl --noproxy '*' -fsS --max-time 20 "${TENANT_PAGE_BASE_URL%/}/#/apply" >/dev/null
 
 email_a="tenant-a-${E2E_SUFFIX}@example.com"
 email_b="tenant-b-${E2E_SUFFIX}@example.com"

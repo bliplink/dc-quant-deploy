@@ -57,6 +57,31 @@ TradeSvr A/B, and ProjectionSvr. Order and Trade use fenced 256-partition
 assignments; deployment waits for replication listeners and partition readiness
 before reporting success.
 
+### macOS + Colima demo workflow
+
+On the Mac/Colima validation host, use the dedicated wrapper instead of adding
+Mac-specific SSH behavior to the Linux deployment scripts:
+
+```bash
+./mac-colima-saas.sh install --full-cluster
+./mac-colima-saas.sh status
+./mac-colima-saas.sh acceptance
+./mac-colima-saas.sh reinstall --full-cluster
+```
+
+The wrapper runs the normal Linux scripts inside the Colima VM and owns only
+the localhost Web forwards for Trade `18088`, Platform `18090`, and Tenant
+`18092`. It never starts, stops, or reconfigures the Mac proxy on `10808`.
+After installation it prints the protected `.default-e2e-credentials.txt` file
+and the persistent demo tenant can be opened at:
+
+```text
+http://127.0.0.1:18088/#/trade?location=E2E001
+```
+
+If the containers are already running but the browser cannot reach localhost,
+restore just the Web forwards with `./mac-colima-saas.sh forward`.
+
 ### OrderSvr A/B development cutover
 
 The main SaaS stack can run the logical `OrderSvr` on two partitioned physical

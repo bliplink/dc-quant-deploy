@@ -223,7 +223,7 @@ dc-saas-ordersvr 2048m ${ORDERSVR_MEMORY_LIMIT:-3072m}
 dc-saas-tradesvr 384m ${TRADESVR_MEMORY_LIMIT:-896m}
 dc-saas-liqsvr 256m ${LIQSVR_MEMORY_LIMIT:-384m}
 dc-saas-managersvr 256m ${MANAGERSVR_MEMORY_LIMIT:-384m}
-dc-saas-adminsvr 256m ${ADMINSVR_MEMORY_LIMIT:-384m}
+dc-saas-adminsvr 256m ${ADMINSVR_MEMORY_LIMIT:-640m}
 dc-saas-robotsvr 256m ${ROBOTSVR_MEMORY_LIMIT:-384m}
 MEMORY_EXPECTATIONS
 

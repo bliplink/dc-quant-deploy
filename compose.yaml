@@ -493,7 +493,7 @@ services:
       - ${DEPLOY_ROOT}/log:/srv/dc/log
       - ${DEPLOY_ROOT}/control/overrides/AdminSvr/config/log4j.ini:/srv/dc/dc/AdminSvr/config/log4j.ini:ro
       - ${DEPLOY_ROOT}/control/overrides/AdminSvr/config/application.properties:/srv/dc/dc/AdminSvr/config/application.properties:ro
-    mem_limit: ${ADMINSVR_MEMORY_LIMIT:-384m}
+    mem_limit: ${ADMINSVR_MEMORY_LIMIT:-640m}
     cpus: ${ADMINSVR_CPU_LIMIT:-0.15}
 
   robotsvr:
