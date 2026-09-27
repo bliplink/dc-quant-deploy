@@ -38,6 +38,9 @@ ProjectionSvr 配置使用逻辑 key：
 - Trade binary consumer 的跨分区 funding `event_id` 冲突已定位并修复：durable identity 改为 `(partition_id, source_epoch, journal_seq)`；P064 watermark `3291 -> 3299`、P094 `1261 -> 1269`、P110 `21519 -> 24715`、P254 `331 -> 335`，同一 funding `event_id` 已验证可跨分区共存且不再触发 GAP retry。
 - ProjectionSvr 修复已提交到正确生产仓库 `bliplink/com-app-dc-projectionsvr@84f9863`。
 
+- 在线 Trade 投影验证：`PROJ_115134 / pm1_115134` 执行 `cashIn +1`，余额 `100000 -> 100001`，`ACCOUNT_BALANCE` mutation `7 -> 8`，新事件落在 `P159 seq=15`，对应 watermark 同步为 `1:15`。
+- 在线 Order 投影验证：新 location `PROJLIVE299_E2E` 通过 CRC32 路由到 `P175`（primary=`OrderSvrB`），限价单投影 `New` 后正常撤单为 `Cancelled`；Order watermark `19:98 -> 19:107 -> 19:111`。验证过程中未重启、未停止任何服务。
+
 ## 5. 源码与构建基线
 
 - 当前生产 ProjectionSvr 源码仓库固定为 `bliplink/com-app-dc-projectionsvr`，分支 `saas-crypto`。
@@ -49,4 +52,4 @@ ProjectionSvr 配置使用逻辑 key：
 
 - 单服务维护或验收启动必须避免隐式重建依赖；使用 Docker Compose 时优先 `up -d --no-deps <service>` 或等价的单容器操作。
 - Projection 验收禁止通过重启 OrderSvr/TradeSvr 来“制造通过”；先用只读一致性检查确认 event / mutation / watermark，再单独判断上游连接状态。
-- 当前只读一致性 gate：Trade event 主键为 `(partition_id,source_epoch,journal_seq)`，mutation 主键为 `(partition_id,source_epoch,journal_seq,mutation_index)`；Order/Trade 现有 18 个 watermark 均与 durable tail 一致，orphan mutation 为 0。
+- 当前只读一致性 gate：Trade event 主键为 `(partition_id,source_epoch,journal_seq)`，mutation 主键为 `(partition_id,source_epoch,journal_seq,mutation_index)`；Order/Trade 所有现有 watermark 均与 durable tail 一致，orphan mutation 为 0。
