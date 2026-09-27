@@ -5,11 +5,16 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 DEPLOY_DIR="$(cd "${SCRIPT_DIR}/.." && pwd)"
 ENV_FILE="${ENV_FILE:-${DEPLOY_DIR}/.env.prod}"
 RUN_ID="${ROBOT_E2E_RUN_ID:-$(date +%Y%m%d%H%M%S)}"
-LOCATION="${ROBOT_E2E_LOCATION:-ROBOT_E2E_${RUN_ID}}"
+LOCATION_SEED="$(python3 - "${RUN_ID}" <<'PYLOC'
+import hashlib,sys
+print(hashlib.sha256(sys.argv[1].encode()).hexdigest()[:5].upper())
+PYLOC
+)"
+LOCATION="${ROBOT_E2E_LOCATION:-R${LOCATION_SEED}}"
 ROBOT_USER="${ROBOT_E2E_ROBOT_USER:-robotmaker}"
 TRADER_USER="${ROBOT_E2E_TRADER_USER:-robottrader}"
 TAPE_USER="${ROBOT_E2E_TAPE_USER:-robottape}"
-ROBOT_ID="${ROBOT_E2E_ROBOT_ID:-depth10}"
+ROBOT_ID="${ROBOT_E2E_ROBOT_ID:-e2e-depth10}"
 PASSWORD="${ROBOT_E2E_PASSWORD:-$(openssl rand -hex 16)}"
 
 # Local GW/MySQL/management calls must never be sent through an inherited
@@ -26,7 +31,7 @@ safe_identifier() { [[ "$1" =~ ^[A-Za-z0-9_.-]+$ ]]; }
 for value in "${RUN_ID}" "${LOCATION}" "${ROBOT_USER}" "${TRADER_USER}" "${TAPE_USER}" "${ROBOT_ID}"; do
   safe_identifier "${value}" || die "Unsupported identifier: ${value}"
 done
-[[ "${LOCATION}" == ROBOT_E2E_* ]] || die "ROBOT_E2E_LOCATION must be an isolated ROBOT_E2E_* location"
+[[ "${LOCATION}" =~ ^[A-Z0-9]{6}$ ]] || die "ROBOT_E2E_LOCATION must be exactly 6 uppercase A-Z/0-9 characters"
 [[ "${TAPE_USER}" != "${ROBOT_USER}" && "${TAPE_USER}" != "${TRADER_USER}" ]] || die "Tape user must be distinct from maker and test trader"
 robot_compact="${ROBOT_ID//[^A-Za-z0-9]/}"
 robot_prefix="RB${robot_compact:0:12}-"
@@ -106,9 +111,9 @@ fund_trade_account() {
 password_hash="$(printf '%s' "${PASSWORD}" | sha256sum | awk '{print $1}')"
 log "Preparing isolated tenant ${LOCATION}."
 # Keep this deterministic acceptance isolated from stale workers left by a prior
-# failed run. RobotSvr polls enabled rows, so disable older ROBOT_E2E fixtures
-# before inserting the current one.
-mysql_exec -e "UPDATE dc_tenant_robot SET enabled=0,update_by='robot-e2e-cleanup',update_time=NOW() WHERE location LIKE 'ROBOT_E2E\_%' AND location<>'${LOCATION}' AND enabled=1" dc >/dev/null
+# failed run. Only rows created by this E2E are eligible for cleanup; production
+# and the persistent E2E001/default-depth10 robot are never touched.
+mysql_exec -e "UPDATE dc_tenant_robot SET enabled=0,update_by='robot-e2e-cleanup',update_time=NOW() WHERE enabled=1 AND location<>'${LOCATION}' AND create_by='robot-e2e' AND (location LIKE 'ROBOT_E2E\_%' OR robot_id LIKE 'e2e-%')" dc >/dev/null
 # Let the supervisor remove the prior same-symbol worker before replacement.
 sleep 4
 {
