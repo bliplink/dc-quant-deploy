@@ -10,6 +10,8 @@ LOAD_TAKER="${LOAD_TAKER:-stresstaker}"
 LOAD_ORDERS="${LOAD_ORDERS:-1000}"
 LOAD_CONCURRENCY="${LOAD_CONCURRENCY:-16}"
 LOAD_RELOAD_BEFORE="${LOAD_RELOAD_BEFORE:-true}"
+LOAD_PAUSE_BACKGROUND="${LOAD_PAUSE_BACKGROUND:-true}"
+LOAD_VERIFY_RESTART="${LOAD_VERIFY_RESTART:-true}"
 LOAD_RUN_ID="${LOAD_RUN_ID:-$(date +%Y%m%d%H%M%S)}"
 LOAD_RUNNER_NAME="${LOAD_RUNNER_NAME:-dc-saas-web-e2e-runner}"
 LOAD_PASSWORD="${LOAD_E2E_PASSWORD:-${E2E_PASSWORD:-}}"
@@ -25,8 +27,10 @@ for value in "${LOAD_LOCATION}" "${LOAD_MAKER}" "${LOAD_TAKER}" "${LOAD_RUN_ID}"
 done
 [[ "${LOAD_ORDERS}" =~ ^[1-9][0-9]*$ ]] || die "LOAD_ORDERS must be a positive integer"
 [[ "${LOAD_CONCURRENCY}" =~ ^[1-9][0-9]*$ ]] || die "LOAD_CONCURRENCY must be a positive integer"
-[[ "${LOAD_RELOAD_BEFORE}" == true || "${LOAD_RELOAD_BEFORE}" == false ]] ||
-  die "LOAD_RELOAD_BEFORE must be true or false"
+for flag in LOAD_RELOAD_BEFORE LOAD_PAUSE_BACKGROUND LOAD_VERIFY_RESTART; do
+  value="${!flag}"
+  [[ "${value}" == true || "${value}" == false ]] || die "${flag} must be true or false"
+done
 [[ "${LOAD_MAKER}" != "${LOAD_TAKER}" ]] || die "Load users must differ"
 
 set -a
@@ -41,7 +45,9 @@ fi
 
 liq_was_running="$(docker inspect --format '{{.State.Running}}' dc-saas-liqsvr 2>/dev/null || true)"
 robot_was_running="$(docker inspect --format '{{.State.Running}}' dc-saas-robotsvr 2>/dev/null || true)"
+background_services_paused=false
 restore_background_services() {
+  [[ "${background_services_paused}" == true ]] || return 0
   if [[ "${liq_was_running}" == "true" ]]; then
     timeout 120 docker start dc-saas-liqsvr >/dev/null 2>&1 || true
   fi
@@ -50,13 +56,18 @@ restore_background_services() {
   fi
 }
 trap restore_background_services EXIT
-if [[ "${liq_was_running}" == "true" ]]; then
-  log "Pausing LiqSvr so background liquidation cannot alter load-test order flow."
-  docker stop dc-saas-liqsvr >/dev/null
-fi
-if [[ "${robot_was_running}" == "true" ]]; then
-  log "Pausing RobotSvr so quote replacement cannot overlap the partition recovery fence."
-  docker stop dc-saas-robotsvr >/dev/null
+if [[ "${LOAD_PAUSE_BACKGROUND}" == true ]]; then
+  background_services_paused=true
+  if [[ "${liq_was_running}" == "true" ]]; then
+    log "Pausing LiqSvr so background liquidation cannot alter load-test order flow."
+    docker stop dc-saas-liqsvr >/dev/null
+  fi
+  if [[ "${robot_was_running}" == "true" ]]; then
+    log "Pausing RobotSvr so quote replacement cannot overlap the partition recovery fence."
+    docker stop dc-saas-robotsvr >/dev/null
+  fi
+else
+  log "Keeping LiqSvr and RobotSvr online for non-destructive load validation."
 fi
 
 mysql_exec() {
@@ -102,6 +113,16 @@ login_user() {
   token="$(sed -n 's/.*"token"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/p' <<<"${response}")"
   [[ -n "${token}" ]] || die "Login returned no session token for ${user}: ${response}"
   SESSION_BY_USER["${user}"]="${token}"
+}
+
+fund_trade_account() {
+  local user="$1" token response
+  token="${SESSION_BY_USER[${user}]:-}"
+  [[ -n "${token}" ]] || die "No authenticated session for ${user}"
+  response="$(curl --noproxy '*' -fsS --max-time 30 -H 'Content-Type: application/json' -H "sessionId: ${token}" \
+    --data "{\"serverName\":\"TradeSvr\",\"method\":\"cashIn\",\"key\":\"${LOAD_LOCATION}\",\"content\":{\"Amount\":\"1000000\",\"UserID\":\"${user}\",\"Location\":\"${LOAD_LOCATION}\",\"Demo\":\"0\"}}" \
+    "http://127.0.0.1:${WEB_LISTEN_PORT}/httpapi/")" || die "TradeSvr cashIn request failed for ${user}"
+  grep -Eq '"code"[[:space:]]*:[[:space:]]*0' <<<"${response}" || die "TradeSvr cashIn rejected for ${user}: ${response}"
 }
 
 wait_for_port() {
@@ -178,8 +199,8 @@ DELETE FROM dc.dc_users_symbol_config WHERE location='${LOAD_LOCATION}' AND user
 INSERT INTO dc.dc_users_balance
   (user_id,balance,used_margin,freezed_margin,freezed_commission,update_time,close_by,location)
 VALUES
-  ('${LOAD_MAKER}',1000000,0,0,0,NOW(),'CORE_STRESS','${LOAD_LOCATION}'),
-  ('${LOAD_TAKER}',1000000,0,0,0,NOW(),'CORE_STRESS','${LOAD_LOCATION}');
+  ('${LOAD_MAKER}',0,0,0,0,NOW(),'CORE_STRESS','${LOAD_LOCATION}'),
+  ('${LOAD_TAKER}',0,0,0,0,NOW(),'CORE_STRESS','${LOAD_LOCATION}');
 INSERT INTO dc.dc_users_symbol_config
   (user_id,security_id,symbol,leverage,position_type,update_time,close_by,location,market_indicator)
 VALUES
@@ -213,6 +234,9 @@ wait_for_route OrderSvr
 wait_for_route TradeSvr
 login_user "${LOAD_MAKER}"
 login_user "${LOAD_TAKER}"
+log "Funding hot TradeSvr account state through the clustered cashIn path."
+fund_trade_account "${LOAD_MAKER}"
+fund_trade_account "${LOAD_TAKER}"
 
 artifact_dir="${LOAD_ARTIFACT_DIR:-${DEPLOY_ROOT}/e2e-artifacts/stress-${LOAD_RUN_ID}}"
 install -d -m 0750 "${artifact_dir}"
@@ -307,15 +331,15 @@ FROM dc.dc_users_posting WHERE location='${LOAD_LOCATION}' AND user_id='${LOAD_M
 SELECT IF(COUNT(*)=${LOAD_ORDERS} AND ABS(SUM(CAST(amount AS DECIMAL(35,9)))+${taker_fee})<0.00000001,1,0)
 FROM dc.dc_users_posting WHERE location='${LOAD_LOCATION}' AND user_id='${LOAD_TAKER}' AND source='Trade';
 SELECT IF(ABS(p.short_position-${quantity})<0.00000001 AND ABS(p.short_used_margin-${maker_margin})<0.00000001
-          AND ABS(b.balance-(1000000+COALESCE((SELECT SUM(CAST(x.amount AS DECIMAL(35,9)))
-              FROM dc.dc_users_posting x WHERE x.location=p.location AND x.user_id=p.user_id),0)))<0.00000001
+          AND ABS(b.balance-COALESCE((SELECT SUM(CAST(x.amount AS DECIMAL(35,9)))
+              FROM dc.dc_users_posting x WHERE x.location=p.location AND x.user_id=p.user_id),0))<0.00000001
           AND ABS(b.used_margin-${maker_margin})<0.00000001
           AND ABS(b.freezed_margin)<0.00000001 AND ABS(b.freezed_commission)<0.00000001,1,0)
 FROM dc.dc_orders_position p JOIN dc.dc_users_balance b ON b.location=p.location AND b.user_id=p.user_id
 WHERE p.location='${LOAD_LOCATION}' AND p.user_id='${LOAD_MAKER}' AND p.security_id='BTCUSDT';
 SELECT IF(ABS(p.long_position-${quantity})<0.00000001 AND ABS(p.long_used_margin-${taker_margin})<0.00000001
-          AND ABS(b.balance-(1000000+COALESCE((SELECT SUM(CAST(x.amount AS DECIMAL(35,9)))
-              FROM dc.dc_users_posting x WHERE x.location=p.location AND x.user_id=p.user_id),0)))<0.00000001
+          AND ABS(b.balance-COALESCE((SELECT SUM(CAST(x.amount AS DECIMAL(35,9)))
+              FROM dc.dc_users_posting x WHERE x.location=p.location AND x.user_id=p.user_id),0))<0.00000001
           AND ABS(b.used_margin-${taker_margin})<0.00000001
           AND ABS(b.freezed_margin)<0.00000001 AND ABS(b.freezed_commission)<0.00000001,1,0)
 FROM dc.dc_orders_position p JOIN dc.dc_users_balance b ON b.location=p.location AND b.user_id=p.user_id
@@ -355,17 +379,21 @@ SQL
   fi
 done
 
-log "Restarting stateful services to verify persisted recovery."
-if [[ "${ORDER_CLUSTER_ENABLED:-false}" == "true" ]]; then
-  recover_order_cluster true
+if [[ "${LOAD_VERIFY_RESTART}" == true ]]; then
+  log "Restarting stateful services to verify persisted recovery."
+  if [[ "${ORDER_CLUSTER_ENABLED:-false}" == "true" ]]; then
+    recover_order_cluster true
+  else
+    docker restart "${order_containers[@]}" dc-saas-tradesvr >/dev/null
+    wait_for_port "${ORDERSVR_GW_PORT}" dc-saas-ordersvr
+    wait_for_port "${TRADESVR_GW_PORT}" dc-saas-tradesvr
+  fi
+  log "Waiting for the running GW to reconnect to the recovered services."
+  wait_for_route OrderSvr
+  wait_for_route TradeSvr
 else
-  docker restart "${order_containers[@]}" dc-saas-tradesvr >/dev/null
-  wait_for_port "${ORDERSVR_GW_PORT}" dc-saas-ordersvr
-  wait_for_port "${TRADESVR_GW_PORT}" dc-saas-tradesvr
+  log "Skipping stateful-service restart; validating the live committed state in-place."
 fi
-log "Waiting for the running GW to reconnect to the recovered services."
-wait_for_route OrderSvr
-wait_for_route TradeSvr
 
 recovery="$({
   cat <<SQL
@@ -422,4 +450,8 @@ if grep -Eq $'\ttrue\t|\texited$|\tdead$' "${artifact_dir}/container-health-afte
   die "A core container was OOM-killed or stopped during load"
 fi
 
-log "PASS: load, matching accounting, uniqueness and restart recovery checks succeeded. Artifacts: ${artifact_dir}"
+if [[ "${LOAD_VERIFY_RESTART}" == true ]]; then
+  log "PASS: load, matching accounting, uniqueness and restart recovery checks succeeded. Artifacts: ${artifact_dir}"
+else
+  log "PASS: non-destructive load, matching accounting, uniqueness, persistence and health checks succeeded. Artifacts: ${artifact_dir}"
+fi

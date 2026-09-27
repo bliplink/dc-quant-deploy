@@ -367,7 +367,7 @@ services:
       - ${DEPLOY_ROOT}/log:/srv/dc/log
       - ${DEPLOY_ROOT}/control/overrides/ProjectionSvr/config/log4j.ini:/srv/dc/dc/ProjectionSvr/config/log4j.ini:ro
       - ${DEPLOY_ROOT}/control/overrides/ProjectionSvr/config/application.properties:/srv/dc/dc/ProjectionSvr/config/application.properties:ro
-    mem_limit: ${PROJECTIONSVR_MEMORY_LIMIT:-320m}
+    mem_limit: ${PROJECTIONSVR_MEMORY_LIMIT:-512m}
     cpus: ${PROJECTIONSVR_CPU_LIMIT:-0.20}
 
   tradesvr:
