@@ -1,0 +1,68 @@
+site_name: DC Developers
+site_description: DC Open API v1 developer documentation for Trader, Broker and Tenant integrations
+docs_dir: docs
+site_dir: site
+
+theme:
+  name: material
+  language: zh
+  features:
+    - navigation.tabs
+    - navigation.sections
+    - navigation.indexes
+    - navigation.top
+    - content.code.copy
+    - content.tabs.link
+    - search.suggest
+    - search.highlight
+
+plugins:
+  - search
+
+markdown_extensions:
+  - admonition
+  - tables
+  - attr_list
+  - md_in_html
+  - pymdownx.details
+  - pymdownx.tabbed:
+      alternate_style: true
+  - pymdownx.superfences:
+      custom_fences:
+        - name: mermaid
+          class: mermaid
+          format: !!python/name:pymdownx.superfences.fence_code_format
+
+nav:
+  - 首页: index.md
+  - Getting Started:
+      - Open API 文档入口: openapi/README.zh-CN.md
+      - Authentication: openapi/AUTHENTICATION_REFERENCE_V1.zh-CN.md
+      - Rate Limits: api/RATE_LIMITS.zh-CN.md
+      - 字段级调用参考与错误码: DC_OPEN_API_V1_REFERENCE.zh-CN.md
+  - Market Data:
+      - Market Data Reference: openapi/MARKET_DATA_REFERENCE_V1.zh-CN.md
+      - WebSocket Topics: openapi/WEBSOCKET_TOPICS_V1.zh-CN.md
+  - Trading:
+      - Trading Contract: openapi/TRADING_API_V1.zh-CN.md
+      - Core Trading Reference: openapi/CORE_TRADING_REFERENCE_V1.zh-CN.md
+      - Trading Operations: openapi/TRADING_OPERATIONS_REFERENCE_V1.zh-CN.md
+      - Trader API: openapi/TRADER_API_V1.zh-CN.md
+      - Trader Guide: api/TRADER_API_GUIDE.zh-CN.md
+  - Broker:
+      - Broker API Overview: openapi/BROKER_API_V1.zh-CN.md
+      - Broker API Reference: openapi/BROKER_REFERENCE_V1.zh-CN.md
+      - Broker Integration Guide: api/BROKER_API_GUIDE.zh-CN.md
+  - Tenant Management:
+      - Tenant API Overview: openapi/TENANT_API_V1.zh-CN.md
+      - Tenant Management Reference: openapi/TENANT_MANAGEMENT_REFERENCE_V1.zh-CN.md
+      - Tenant Integration Guide: api/TENANT_API_GUIDE.zh-CN.md
+  - WebSocket:
+      - Topic / Recovery Contract: openapi/WEBSOCKET_TOPICS_V1.zh-CN.md
+  - Web Products:
+      - Platform Web: web/PLATFORM_WEB_GUIDE.zh-CN.md
+      - Tenant Web: web/TENANT_WEB_GUIDE.zh-CN.md
+      - Trade Web: web/TRADE_WEB_GUIDE.zh-CN.md
+  - Architecture:
+      - Core Architecture Baseline: DC_CORE_ARCHITECTURE_BASELINE.zh-CN.md
+      - Developer Portal Structure: openapi/DEVELOPER_PORTAL_STRUCTURE.zh-CN.md
