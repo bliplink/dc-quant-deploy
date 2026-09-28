@@ -84,7 +84,10 @@ paths:
         Downstream services bind authoritative location/user identity from the
         LoginSvr session; caller supplied identity cannot widen scope.
         API/TenantAPI sessions carry the permission snapshot so downstream
-        services have one authoritative field/model for scope checks. Phase 2
+        services have one authoritative field/model for scope checks. Broker
+        keys use client_type=TenantAPI with api_key_type=broker and may enter
+        scoped Order/Trade customer operations only for customers owned by the
+        same authoritative location. Phase 2
         permits only non-empty subsets of the scope class assigned to each key
         type, while preserving the client-type boundary. Order/Trade/MD/
         Projection/Admin enforce the required scope at runtime. Token refresh/
@@ -185,7 +188,7 @@ components:
           type: string
         api_key_type:
           type: string
-          enum: [trade, tenant, service]
+          enum: [trade, broker, tenant, service]
         permissions:
           type: string
           description: Comma-separated v1 scopes; exact-scope matching is required.
@@ -279,6 +282,8 @@ x-dc-v1-catalog:
       getAccountConfig: ACCOUNT_READ
       setLeverage: ORDER_WRITE
       setPositionType: ORDER_WRITE
+      cashIn: CUSTOMER_CASH
+      cashOut: CUSTOMER_CASH
   history:
     ProjectionSvr:
       queryProjectedOrderHistory: ORDER_READ
