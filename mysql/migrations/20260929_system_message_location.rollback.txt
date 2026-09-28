@@ -1,0 +1,4 @@
+-- Manual rollback only after reverting AdminSvr and archiving tenant-scoped messages.
+-- Do not run this as a forward migration or while the new AdminSvr is active.
+ALTER TABLE dc_system_message DROP INDEX idx_system_message_location_user;
+ALTER TABLE dc_system_message DROP COLUMN location;

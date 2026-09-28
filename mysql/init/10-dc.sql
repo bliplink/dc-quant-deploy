@@ -457,6 +457,7 @@ CREATE TABLE `dc_symbol_category` (
 
 CREATE TABLE `dc_system_message` (
   `id` varchar(255) NOT NULL COMMENT 'ID序列号',
+  `location` varchar(30) NOT NULL COMMENT '租户位置',
   `user_id` varchar(45) DEFAULT NULL COMMENT '用户名称',
   `type` varchar(45) DEFAULT NULL COMMENT '类型',
   `read_flag` longblob COMMENT '读标记',
@@ -466,6 +467,7 @@ CREATE TABLE `dc_system_message` (
   `create_time` varchar(45) DEFAULT NULL COMMENT '创建时间',
   `update_time` varchar(45) DEFAULT NULL COMMENT '更新时间',
   PRIMARY KEY (`id`) USING BTREE,
+  KEY `idx_system_message_location_user` (`location`,`user_id`,`id`,`del_flag`),
   KEY `updatetime` (`update_time`,`user_id`,`id`,`del_flag`,`type`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci ROW_FORMAT=DYNAMIC COMMENT='系统消息';
 
