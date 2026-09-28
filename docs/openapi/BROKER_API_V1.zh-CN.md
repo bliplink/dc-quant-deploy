@@ -23,7 +23,9 @@ TENANT_WRITE
 CUSTOMER_CASH
 ```
 
-默认交易限流基线与 Trader API 一致，使用 `TRADER_STANDARD`。
+默认交易限流基线与 Trader API 一致，使用 `TRADER_STANDARD`（当前 100 req/s、burst 30）。
+
+接口级请求字段、客户资金、代客交易、重连和 E2E 参考见 [Broker API Reference v1](BROKER_REFERENCE_V1.zh-CN.md)。
 
 ## 1. Broker 可以做什么
 
@@ -36,16 +38,20 @@ Broker 同时拥有两类能力：
 
 ## 2. 客户生命周期
 
-创建交易客户：
+当前真实管理入口使用 `AdminSvr/tenantUserAdmin action=CREATE`：
 
 ```json
 {
-  "externalCustomerId": "CUST-100001",
+  "action": "CREATE",
   "username": "client001",
+  "password": "strong-initial-password",
   "name": "Client 001",
-  "email": "client001@example.com"
+  "email": "client001@example.invalid",
+  "request_id": "create-customer-000001"
 }
 ```
+
+`externalCustomerId` 是推荐的后续正式幂等字段，目前尚未锁进机器可读 v1 schema，不能当作当前已实现字段。
 
 当前服务端会生成内部 `user_id/customerId`，并初始化：
 
