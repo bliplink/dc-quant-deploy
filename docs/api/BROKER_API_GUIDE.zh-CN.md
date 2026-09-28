@@ -239,3 +239,24 @@ Market catalog：
 - reconnect / token refresh；
 - rate limit；
 - idempotency。
+
+
+## 14. Rate Limits
+
+当前 GW 已实现 Token Bucket OpenAPI 限流。
+
+Broker API 目前仍使用现有 API / TenantAPI profile，**尚未实现独立 `BROKER_STANDARD`**。
+
+因此：
+
+- 不应在客户文档中提前承诺 Broker 500 QPS、1000 QPS 等未验证数值；
+- Broker 正式 profile 应在 OrderSvr / TradeSvr 性能优化和 Broker 并发压测后确定；
+- 当前 rate limit 语义、错误码和默认 profile 见：
+
+`docs/api/RATE_LIMITS.zh-CN.md`
+
+当前超限：
+
+`10003 RATE_LIMIT_EXCEEDED`
+
+当前没有 per-method weight。
