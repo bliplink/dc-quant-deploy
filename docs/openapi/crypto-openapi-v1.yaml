@@ -724,10 +724,14 @@ components:
         action:
           type: string
           enum: [LIST, CREATE, DELETE]
+        type:
+          type: string
+          enum: [tenant, service, broker]
+          description: CREATE type. broker creates a Broker API Key; tenant/service creates a management-only TenantAPI key.
         label: { type: string }
         permissions:
           type: string
-          description: Comma-separated subset of Tenant key scopes.
+          description: Optional scope subset. Broker and Tenant defaults are server-authoritative.
         api_key: { type: string }
         cid: { type: string }
 
@@ -944,6 +948,40 @@ components:
         content:
           $ref: '#/components/schemas/ProjectedHistoryContent'
 
+    TenantUserRegistrationContent:
+      type: object
+      required:
+        - location
+        - username
+        - password
+      properties:
+        action:
+          type: string
+          enum: [REGISTER]
+          default: REGISTER
+        cid: { type: string }
+        request_id:
+          type: string
+          description: Recommended request/idempotency identity.
+        location:
+          type: string
+          description: Target tenant location. Registration is accepted only when tenant policy permits it.
+        username: { type: string }
+        password:
+          type: string
+          format: password
+        name: { type: string }
+        email: { type: string }
+
+    TenantUserRegistrationEnvelope:
+      type: object
+      required: [serverName, method, content]
+      properties:
+        serverName: { type: string, enum: [AdminSvr] }
+        method: { type: string, enum: [tenantUserRegistration] }
+        content:
+          $ref: '#/components/schemas/TenantUserRegistrationContent'
+
     OpenApiSessionIdentity:
       type: object
       required:
@@ -1092,6 +1130,9 @@ x-dc-method-schemas:
     request: '#/components/schemas/QueryProjectedOrderHistoryEnvelope'
   'ProjectionSvr/queryProjectedExecutionHistory':
     request: '#/components/schemas/QueryProjectedExecutionHistoryEnvelope'
+
+  'AdminSvr/tenantUserRegistration':
+    request: '#/components/schemas/TenantUserRegistrationEnvelope'
 
 x-dc-v1-catalog:
   authentication:
