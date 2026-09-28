@@ -644,6 +644,306 @@ components:
         content:
           $ref: '#/components/schemas/TenantTradeAdminContent'
 
+    ApiKeyLoginContent:
+      type: object
+      required: [api_key, location]
+      properties:
+        api_key:
+          type: string
+        location:
+          type: string
+        cid:
+          type: string
+
+    ApiKeyLoginEnvelope:
+      type: object
+      required: [serverName, method, content]
+      properties:
+        serverName: { type: string, enum: [LoginSvr] }
+        method: { type: string, enum: [apiKeyLogin] }
+        content:
+          $ref: '#/components/schemas/ApiKeyLoginContent'
+
+    UpdateApiKeyContent:
+      type: object
+      properties:
+        cid: { type: string }
+        label: { type: string }
+        permissions:
+          type: string
+          description: Comma-separated subset of allowed Trader scopes.
+        ip_whitelist:
+          type: string
+          description: Current runtime JSON/string IP whitelist representation.
+        expires_at:
+          type: string
+          format: date-time
+
+    UpdateApiKeyEnvelope:
+      type: object
+      required: [serverName, method, content]
+      properties:
+        serverName: { type: string, enum: [LoginSvr] }
+        method: { type: string, enum: [updateApiKey] }
+        content:
+          $ref: '#/components/schemas/UpdateApiKeyContent'
+
+    QueryApiKeyContent:
+      type: object
+      properties:
+        cid: { type: string }
+
+    QueryApiKeyEnvelope:
+      type: object
+      required: [serverName, method, content]
+      properties:
+        serverName: { type: string, enum: [LoginSvr] }
+        method: { type: string, enum: [queryApiKey] }
+        content:
+          $ref: '#/components/schemas/QueryApiKeyContent'
+
+    DeleteApiKeyContent:
+      type: object
+      required: [api_key]
+      properties:
+        api_key: { type: string }
+        cid: { type: string }
+
+    DeleteApiKeyEnvelope:
+      type: object
+      required: [serverName, method, content]
+      properties:
+        serverName: { type: string, enum: [LoginSvr] }
+        method: { type: string, enum: [deleteApiKey] }
+        content:
+          $ref: '#/components/schemas/DeleteApiKeyContent'
+
+    TenantApiKeyAdminContent:
+      type: object
+      properties:
+        action:
+          type: string
+          enum: [LIST, CREATE, DELETE]
+        label: { type: string }
+        permissions:
+          type: string
+          description: Comma-separated subset of Tenant key scopes.
+        api_key: { type: string }
+        cid: { type: string }
+
+    TenantApiKeyAdminEnvelope:
+      type: object
+      required: [serverName, method, content]
+      properties:
+        serverName: { type: string, enum: [LoginSvr] }
+        method: { type: string, enum: [tenantApiKeyAdmin] }
+        content:
+          $ref: '#/components/schemas/TenantApiKeyAdminContent'
+
+    QueryPublicMarketContent:
+      type: object
+      required: [location, securityID]
+      properties:
+        location:
+          type: string
+          description: Must remain inside authoritative tenant scope.
+        securityID:
+          type: string
+          example: BTCUSDT
+
+    QueryPublicMarketEnvelope:
+      type: object
+      required: [serverName, method, content]
+      properties:
+        serverName: { type: string, enum: [MDSvr] }
+        method: { type: string, enum: [queryPublicMarket] }
+        content:
+          $ref: '#/components/schemas/QueryPublicMarketContent'
+
+    QueryKLineContent:
+      type: object
+      required: [location, securityID, text]
+      properties:
+        location: { type: string }
+        securityID: { type: string, example: BTCUSDT }
+        start: { type: string }
+        end: { type: string }
+        text:
+          type: string
+          description: Kline interval, for example 1m.
+          example: 1m
+        num:
+          type: integer
+          minimum: 1
+          example: 500
+
+    QueryKLineEnvelope:
+      type: object
+      required: [serverName, method, content]
+      properties:
+        serverName: { type: string, enum: [MDSvr] }
+        method: { type: string, enum: [queryKLine] }
+        content:
+          $ref: '#/components/schemas/QueryKLineContent'
+
+    CancelBatchOrderContent:
+      type: object
+      required: [SecurityID, MarketIndicator, OrderIDs]
+      properties:
+        SecurityID: { type: string, example: BTCUSDT }
+        MarketIndicator: { type: string, example: '4' }
+        OrderIDs:
+          type: array
+          items: { type: string }
+        Location:
+          type: string
+          description: Broker compatibility field.
+        UserID:
+          type: string
+          description: Broker target customer user id.
+
+    CancelBatchOrderEnvelope:
+      type: object
+      required: [serverName, method, content]
+      properties:
+        serverName: { type: string, enum: [OrderSvr] }
+        method: { type: string, enum: [cancelBatchOrder] }
+        content:
+          $ref: '#/components/schemas/CancelBatchOrderContent'
+
+    QueryOrderContent:
+      type: object
+      properties:
+        securityid: { type: string, example: BTCUSDT }
+        marketIndicator: { type: string, example: '4' }
+        orderId: { type: string }
+        maxOrderCount:
+          type: integer
+          minimum: 1
+          example: 100
+        userid:
+          type: string
+          description: Broker target customer user id.
+        location:
+          type: string
+          description: Broker customer location.
+
+    QueryOrderEnvelope:
+      type: object
+      required: [serverName, method, content]
+      properties:
+        serverName: { type: string, enum: [OrderSvr] }
+        method: { type: string, enum: [queryOrder] }
+        content:
+          $ref: '#/components/schemas/QueryOrderContent'
+
+    QueryExecOrderContent:
+      type: object
+      properties:
+        securityid: { type: string, example: BTCUSDT }
+        marketIndicator: { type: string, example: '4' }
+        maxOrderCount:
+          type: integer
+          minimum: 1
+          example: 100
+        userid:
+          type: string
+          description: Broker target customer user id.
+        location:
+          type: string
+          description: Broker customer location.
+
+    QueryExecOrderEnvelope:
+      type: object
+      required: [serverName, method, content]
+      properties:
+        serverName: { type: string, enum: [OrderSvr] }
+        method: { type: string, enum: [queryExecOrder] }
+        content:
+          $ref: '#/components/schemas/QueryExecOrderContent'
+
+    EmptyContent:
+      type: object
+      additionalProperties: false
+
+    GetAccountConfigEnvelope:
+      type: object
+      required: [serverName, method, content]
+      properties:
+        serverName: { type: string, enum: [TradeSvr] }
+        method: { type: string, enum: [getAccountConfig] }
+        content:
+          $ref: '#/components/schemas/EmptyContent'
+
+    SetLeverageContent:
+      type: object
+      required: [securityID, leverage]
+      properties:
+        securityID: { type: string, example: BTCUSDT }
+        leverage:
+          type: integer
+          minimum: 1
+
+    SetLeverageEnvelope:
+      type: object
+      required: [serverName, method, content]
+      properties:
+        serverName: { type: string, enum: [TradeSvr] }
+        method: { type: string, enum: [setLeverage] }
+        content:
+          $ref: '#/components/schemas/SetLeverageContent'
+
+    SetPositionTypeContent:
+      type: object
+      required: [securityID, positionType]
+      properties:
+        securityID: { type: string, example: BTCUSDT }
+        positionType:
+          type: string
+          example: Cross
+
+    SetPositionTypeEnvelope:
+      type: object
+      required: [serverName, method, content]
+      properties:
+        serverName: { type: string, enum: [TradeSvr] }
+        method: { type: string, enum: [setPositionType] }
+        content:
+          $ref: '#/components/schemas/SetPositionTypeContent'
+
+    ProjectedHistoryContent:
+      type: object
+      properties:
+        location:
+          type: string
+          description: Compatibility field; session identity remains authoritative for Trader API.
+        userId:
+          type: string
+          description: Broker customer or compatibility field; cannot widen authorized scope.
+        securityId: { type: string, example: BTCUSDT }
+        limit:
+          type: integer
+          minimum: 1
+          example: 100
+
+    QueryProjectedOrderHistoryEnvelope:
+      type: object
+      required: [serverName, method, content]
+      properties:
+        serverName: { type: string, enum: [ProjectionSvr] }
+        method: { type: string, enum: [queryProjectedOrderHistory] }
+        content:
+          $ref: '#/components/schemas/ProjectedHistoryContent'
+
+    QueryProjectedExecutionHistoryEnvelope:
+      type: object
+      required: [serverName, method, content]
+      properties:
+        serverName: { type: string, enum: [ProjectionSvr] }
+        method: { type: string, enum: [queryProjectedExecutionHistory] }
+        content:
+          $ref: '#/components/schemas/ProjectedHistoryContent'
+
     OpenApiSessionIdentity:
       type: object
       required:
@@ -761,6 +1061,37 @@ x-dc-method-schemas:
     request: '#/components/schemas/TenantSettingsAdminEnvelope'
   'AdminSvr/tenantTradeAdmin':
     request: '#/components/schemas/TenantTradeAdminEnvelope'
+
+  'LoginSvr/apiKeyLogin':
+    request: '#/components/schemas/ApiKeyLoginEnvelope'
+  'LoginSvr/updateApiKey':
+    request: '#/components/schemas/UpdateApiKeyEnvelope'
+  'LoginSvr/queryApiKey':
+    request: '#/components/schemas/QueryApiKeyEnvelope'
+  'LoginSvr/deleteApiKey':
+    request: '#/components/schemas/DeleteApiKeyEnvelope'
+  'LoginSvr/tenantApiKeyAdmin':
+    request: '#/components/schemas/TenantApiKeyAdminEnvelope'
+  'MDSvr/queryPublicMarket':
+    request: '#/components/schemas/QueryPublicMarketEnvelope'
+  'MDSvr/queryKLine':
+    request: '#/components/schemas/QueryKLineEnvelope'
+  'OrderSvr/cancelBatchOrder':
+    request: '#/components/schemas/CancelBatchOrderEnvelope'
+  'OrderSvr/queryOrder':
+    request: '#/components/schemas/QueryOrderEnvelope'
+  'OrderSvr/queryExecOrder':
+    request: '#/components/schemas/QueryExecOrderEnvelope'
+  'TradeSvr/getAccountConfig':
+    request: '#/components/schemas/GetAccountConfigEnvelope'
+  'TradeSvr/setLeverage':
+    request: '#/components/schemas/SetLeverageEnvelope'
+  'TradeSvr/setPositionType':
+    request: '#/components/schemas/SetPositionTypeEnvelope'
+  'ProjectionSvr/queryProjectedOrderHistory':
+    request: '#/components/schemas/QueryProjectedOrderHistoryEnvelope'
+  'ProjectionSvr/queryProjectedExecutionHistory':
+    request: '#/components/schemas/QueryProjectedExecutionHistoryEnvelope'
 
 x-dc-v1-catalog:
   authentication:
