@@ -58,3 +58,8 @@ docs/openapi/*.md + crypto-openapi-v1.yaml
 OpenAPI 当前限流实现、默认 profile、错误码与后续规划：
 
 - [OpenAPI Rate Limits](../api/RATE_LIMITS.zh-CN.md)
+
+
+## Developer Portal
+
+- [Developer Portal Structure v1](DEVELOPER_PORTAL_STRUCTURE.zh-CN.md)：静态文档站导航、接口页模板、版本化和 External GA 规则。
