@@ -37,6 +37,7 @@ nav:
   - 首页: index.md
   - Getting Started:
       - Open API 文档入口: openapi/README.zh-CN.md
+      - Quick Start: openapi/QUICK_START.zh-CN.md
       - Authentication: openapi/AUTHENTICATION_REFERENCE_V1.zh-CN.md
       - Rate Limits: api/RATE_LIMITS.zh-CN.md
       - 字段级调用参考与错误码: DC_OPEN_API_V1_REFERENCE.zh-CN.md
@@ -59,6 +60,9 @@ nav:
       - Tenant Integration Guide: api/TENANT_API_GUIDE.zh-CN.md
   - WebSocket:
       - Topic / Recovery Contract: openapi/WEBSOCKET_TOPICS_V1.zh-CN.md
+  - SDK:
+      - SDK Guide: openapi/SDK_GUIDE.zh-CN.md
+      - Versioning & Changelog: openapi/VERSIONING_CHANGELOG.zh-CN.md
   - Web Products:
       - Platform Web: web/PLATFORM_WEB_GUIDE.zh-CN.md
       - Tenant Web: web/TENANT_WEB_GUIDE.zh-CN.md
