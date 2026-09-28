@@ -7,6 +7,7 @@
 ## 文档入口
 
 - [Trading API v1](TRADING_API_V1.zh-CN.md)：Trader 与 Broker 共用的行情/订单/成交/账户交易合同。
+- [Core Trading API Reference v1](CORE_TRADING_REFERENCE_V1.zh-CN.md)：Place Order、Cancel Order、Open Orders、Balance、Position 的接口级参考。
 - [Trader API v1](TRADER_API_V1.zh-CN.md)：单一交易账号，自始至终只能操作自己。
 - [Broker API v1](BROKER_API_V1.zh-CN.md)：租户代客交易、客户资料、充值和提现。
 - [Tenant Management API v1](TENANT_API_V1.zh-CN.md)：租户后台、租户自动化和管理型 Tenant Service Key 使用。
