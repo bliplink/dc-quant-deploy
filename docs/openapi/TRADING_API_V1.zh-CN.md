@@ -4,6 +4,8 @@
 
 本文定义 Trader API 与 Broker Trading API **共同使用的交易能力**。两者下单、撤单、行情、订单、成交、余额、持仓、账户配置和历史查询的业务字段保持一致；区别只在“目标交易账户是谁”。
 
+面向开发者的接口级请求参数、Rate Limit、错误码和示例见 [Core Trading API Reference v1](CORE_TRADING_REFERENCE_V1.zh-CN.md)。
+
 ## 1. 账户作用域
 
 | 调用者 | 目标账户 |
