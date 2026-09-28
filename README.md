@@ -266,6 +266,7 @@ Current operator/developer documentation:
 - [SaaS 公共镜像自动部署与运维](docs/AUTO_UPDATE.zh-CN.md)
 - [DC Open API v1 文档入口（Trader / Tenant / WebSocket）](docs/openapi/README.zh-CN.md)
 - [Trading API v1（Trader/Broker 共用）](docs/openapi/TRADING_API_V1.zh-CN.md)
+- [Core Trading API Reference v1](docs/openapi/CORE_TRADING_REFERENCE_V1.zh-CN.md)
 - [Trader API v1](docs/openapi/TRADER_API_V1.zh-CN.md)
 - [Broker API v1](docs/openapi/BROKER_API_V1.zh-CN.md)
 - [Tenant Management API v1](docs/openapi/TENANT_API_V1.zh-CN.md)
