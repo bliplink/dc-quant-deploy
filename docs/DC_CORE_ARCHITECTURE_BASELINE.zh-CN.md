@@ -732,13 +732,16 @@ GW 已实现独立的 OpenAPI Token Bucket 限流：
 
 当前 profile：
 
-| Profile | client_type | QPS | Burst | Scope |
-|---|---|---:|---:|---|
-| TRADER_STANDARD | API | 100 | 30 | sessionId |
-| TENANT_STANDARD | TenantAPI | 20 | 10 | sessionId |
+| Session type | client_type | rate_limit_profile | QPS | Burst | Scope |
+|---|---|---|---:|---:|---|
+| Trader | API | TRADER_STANDARD | 100 | 30 | sessionId |
+| Broker | TenantAPI | TRADER_STANDARD | 100 | 30 | sessionId |
+| Tenant / Service | TenantAPI | TENANT_STANDARD | 20 | 10 | sessionId |
 
 当前行为：
 
+- LoginSvr 返回的 `rate_limit_profile` 是 GW 选择 bucket 参数的权威字段；
+- Broker 当前虽然是 `TenantAPI`，但使用 `TRADER_STANDARD=100/30`；
 - `WEB` session 不进入该 OpenAPI limiter；
 - signed `POST /api` 主要用于 API Key 登录交换，不消耗后续业务 session bucket；
 - `POST /httpapi/` 的 API/TenantAPI session 业务请求受限；
