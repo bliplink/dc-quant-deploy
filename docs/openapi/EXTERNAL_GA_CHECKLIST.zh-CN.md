@@ -99,6 +99,7 @@
 - [x] Versioning / Changelog
 - [x] MkDocs static portal config
 - [x] CI build
+- [x] OpenAPI spec validator CI
 
 ## 3. GA Blockers
 
@@ -134,13 +135,16 @@
 
 ### P0 — Machine-readable OpenAPI
 
-- [ ] placeOrder method-specific schema
-- [ ] cancelOrder schema
-- [ ] balance / position schemas
-- [ ] Broker customer scope schemas
+- [x] placeOrder request schema
+- [x] cancelOrder request schema
+- [x] queryOpenOrder request schema
+- [x] queryAccountBalance request schema
+- [x] queryTradePosition request schema
+- [ ] queryOrder / execution / history request schemas
+- [ ] Broker customer scope schemas beyond current compatibility fields
 - [ ] cashIn/cashOut schemas
 - [ ] Tenant action oneOf schemas
-- [ ] response schemas
+- [ ] method-specific response schemas
 
 ### P0 — Broker Cash Idempotency
 
