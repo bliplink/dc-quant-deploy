@@ -4,6 +4,9 @@ This branch deploys the standalone cryptocurrency SaaS product. It does not
 contain or start QuantSvr, INDSvr, CustomIndSvr, SIMSvr, BatchSvr, or the
 quantitative web application.
 
+Current product priorities, verified baseline, remaining gates, and delivery
+sequence: [DC SaaS product and engineering delivery plan](docs/SAAS_PRODUCT_DELIVERY_PLAN_20260929.zh-CN.md).
+
 ## Runtime boundary
 
 | Layer | Components | Storage |
