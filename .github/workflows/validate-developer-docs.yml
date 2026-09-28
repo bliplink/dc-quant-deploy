@@ -40,6 +40,9 @@ jobs:
       - name: Validate OpenAPI spec
         run: openapi-spec-validator docs/openapi/crypto-openapi-v1.yaml
 
+      - name: Validate OpenAPI catalog coverage
+        run: python scripts/validate-openapi-catalog.py
+
       - name: Build Developer Portal
         run: mkdocs build --clean
 
