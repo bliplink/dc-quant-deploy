@@ -132,3 +132,34 @@ Broker API：
 - history；
 - location isolation；
 - 权限越权拒绝。
+
+
+## 11. Rate Limits
+
+TenantAPI session 当前使用：
+
+`TENANT_STANDARD`
+
+默认：
+
+| Parameter | Value |
+|---|---:|
+| Refill rate | 20 requests / second |
+| Burst | 10 |
+| Scope | sessionId |
+
+算法为 Token Bucket。
+
+超限返回：
+
+`10003 RATE_LIMIT_EXCEEDED`
+
+profile 非法返回：
+
+`10005 RATE_LIMIT_PROFILE_INVALID`
+
+当前没有接口级 weight。
+
+完整说明：
+
+`docs/api/RATE_LIMITS.zh-CN.md`
