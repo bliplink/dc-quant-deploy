@@ -13,6 +13,7 @@ LOAD_TARGET_TPS="${LOAD_TARGET_TPS:-0}"
 LOAD_RELOAD_BEFORE="${LOAD_RELOAD_BEFORE:-true}"
 LOAD_PAUSE_BACKGROUND="${LOAD_PAUSE_BACKGROUND:-true}"
 LOAD_VERIFY_RESTART="${LOAD_VERIFY_RESTART:-true}"
+LOAD_VERIFY_RUNTIME_DRAIN="${LOAD_VERIFY_RUNTIME_DRAIN:-false}"
 LOAD_MODE="${LOAD_MODE:-full}"
 LOAD_RUN_ID="${LOAD_RUN_ID:-$(date +%Y%m%d%H%M%S)}"
 LOAD_RUNNER_NAME="${LOAD_RUNNER_NAME:-dc-saas-web-e2e-runner}"
@@ -31,7 +32,7 @@ done
 [[ "${LOAD_CONCURRENCY}" =~ ^[1-9][0-9]*$ ]] || die "LOAD_CONCURRENCY must be a positive integer"
 [[ "${LOAD_TARGET_TPS}" =~ ^([0-9]+([.][0-9]+)?|[.][0-9]+)$ ]] ||
   die "LOAD_TARGET_TPS must be a non-negative number"
-for flag in LOAD_RELOAD_BEFORE LOAD_PAUSE_BACKGROUND LOAD_VERIFY_RESTART; do
+for flag in LOAD_RELOAD_BEFORE LOAD_PAUSE_BACKGROUND LOAD_VERIFY_RESTART LOAD_VERIFY_RUNTIME_DRAIN; do
   value="${!flag}"
   [[ "${value}" == true || "${value}" == false ]] || die "${flag} must be true or false"
 done
@@ -145,6 +146,22 @@ cancel_all_user() {
     }
   rm -f "${request}"
   grep -Eq '"code"[[:space:]]*:[[:space:]]*0' <<<"${response}" || die "cancelAllOrder rejected for ${user}: ${response}"
+}
+
+query_runtime_open_count() {
+  local user="$1" token response
+  token="${SESSION_BY_USER[${user}]:-}"
+  [[ -n "${token}" ]] || die "No authenticated session for ${user}"
+  response="$(curl --noproxy '*' -fsS --max-time 30 -H 'Content-Type: application/json' \
+    -H "sessionId: ${token}" \
+    --data "{\"serverName\":\"OrderSvr\",\"method\":\"queryOpenOrder\",\"key\":\"${LOAD_LOCATION}\\u001f4\\u001fBTCUSDT\",\"content\":{\"location\":\"${LOAD_LOCATION}\",\"marketIndicator\":\"4\",\"securityid\":\"BTCUSDT\",\"userid\":\"${user}\"}}" \
+    "http://127.0.0.1:${WEB_LISTEN_PORT}/httpapi/" 2>/dev/null || true)"
+  python3 -c 'import json,sys
+try:
+    result=json.load(sys.stdin)
+    print(int(result.get("total_size", -1)) if result.get("code") == 0 else -1)
+except (ValueError, TypeError, KeyError):
+    print(-1)' <<<"${response}"
 }
 
 wait_for_port() {
@@ -339,8 +356,23 @@ PYLOAD
     fi
   fi
 
-  log "HTTP ${LOAD_MODE} phase completed; measuring ${accepted} accepted requests draining to durable New state."
+  log "HTTP ${LOAD_MODE} phase completed; measuring ${accepted} accepted requests through runtime and SQL projection."
   drain_started="${SECONDS}"
+  runtime_drain_ok=true
+  if [[ "${LOAD_VERIFY_RUNTIME_DRAIN}" == true ]]; then
+    runtime_visible=-1
+    for _ in $(seq 1 90); do
+      runtime_visible="$(query_runtime_open_count "${LOAD_MAKER}")"
+      if (( runtime_visible >= accepted )); then break; fi
+      sleep 2
+    done
+    runtime_seconds=$((SECONDS - drain_started))
+    printf 'accepted\t%s\nvisible_new\t%s\ndrain_seconds\t%s\n' \
+      "${accepted}" "${runtime_visible}" "${runtime_seconds}" >"${artifact_dir}/runtime-drain.tsv"
+    if (( runtime_visible < accepted )); then runtime_drain_ok=false; fi
+    log "OrderSvr runtime visible New: ${runtime_visible}/${accepted} after ${runtime_seconds}s."
+  fi
+  log "Measuring asynchronous SQL projection of accepted New orders."
   drain_rows=()
   for _ in $(seq 1 180); do
     drain_state="$({
@@ -371,7 +403,7 @@ SQL
     >"${artifact_dir}/admission-drain.tsv"
   [[ "${drain_rows[0]:-0}" == "${accepted}" && "${drain_rows[1]:-0}" == "${accepted}" ]] ||
     die "Accepted queue did not drain to New: rows=${drain_rows[0]:-0}/${accepted}, new=${drain_rows[1]:-0}/${accepted}"
-  log "Accepted requests drained in ${drain_seconds}s; cleaning isolated resting orders via cancelAllOrder."
+  log "SQL projection caught up in ${drain_seconds}s; cleaning isolated resting orders via cancelAllOrder."
   cancel_all_user "${LOAD_MAKER}"
   active=1
   for _ in $(seq 1 180); do
@@ -382,6 +414,8 @@ SQL
   [[ "${active}" == 0 ]] || die "Admission cleanup left ${active} active orders"
   docker stats --no-stream --format '{{.Name}}\t{{.CPUPerc}}\t{{.MemUsage}}' \
     dc-saas-gateway "${order_containers[@]}" dc-saas-tradesvr dc-saas-mdsvr >"${artifact_dir}/container-stats-after.tsv"
+  [[ "${runtime_drain_ok}" == true ]] ||
+    die "OrderSvr runtime did not expose every accepted New order: ${runtime_visible}/${accepted}"
   log "PASS: ${LOAD_MODE} profile completed; accepted=${accepted}, overloaded=${failed}, drain=${drain_seconds}s. Artifacts: ${artifact_dir}"
   exit 0
 fi
