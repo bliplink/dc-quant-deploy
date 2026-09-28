@@ -29,6 +29,103 @@ Broker Session 的 actor 是 Broker 自己；私有 Topic 中的目标 UserID �
 
 连接失效或 `9002 / USER_SESSION_NOTEXIST` 后，不继续重用旧 sid；重新执行 signed API-key login，再连接和恢复订阅。
 
+### 1.1 GW session connect metadata
+
+当前已验证 Java `gateway-api` 客户端连接行为如下：
+
+```text
+username / userName = apiKeyLogin 返回的 user_id
+password / pwd      = apiKeyLogin 返回的 sid/token
+clientType          = apiKeyLogin 返回的 client_type
+Location            = apiKeyLogin 返回的 authoritative location
+authType            = TOKEN
+```
+
+当前 keyed placement request 需要 gateway wire frame version 2。
+
+连接成功后，客户端必须校验 GW 返回身份：
+
+```text
+connected.user_id     == signed login user_id
+connected.location    == signed login location
+connected.client_type == signed login client_type
+gateway.isLogin       == true
+```
+
+任一不一致都应视为连接失败，不能继续订阅或发送交易请求。
+
+Broker 连接仍以 Broker actor 的 `user_id` 建立 Session；customer identity 只用于经过服务端授权的目标 customer request / private topic，不能把 customer 当成 Broker 登录身份。
+
+### 1.2 重认证而不是盲目复用旧 Session
+
+当前参考客户端明确关闭底层自动 reconnect，并在 Session 失效后执行：
+
+```text
+signed apiKeyLogin
+  -> new sid/token
+  -> reconnect GW
+  -> verify authoritative identity
+  -> rebuild subscriptions/state
+```
+
+这是 v1 推荐行为。
+
+原因是旧 TCP/WebSocket 连接“看起来还在线”并不代表 LoginSvr authoritative Session 仍然有效。
+
+### 1.3 断线后的写请求不可盲目重放
+
+如果 placeOrder / cancelOrder / cashIn / cashOut 等写请求在连接断开时出现“结果未知”，客户端不能因为没有收到 response 就直接再次发送。
+
+写请求可能已经被服务端接受。
+
+必须使用原有幂等标识和查询能力确认结果：
+
+```text
+Order:
+ClOrdID -> queryOrder / queryOpenOrder / history
+
+Cash:
+external reference -> posting / balance / history
+```
+
+当前参考客户端只允许对明确的只读调用在重新认证后自动 replay，例如：
+
+- queryPublicMarket；
+- queryAccountBalance；
+- queryTradePosition；
+- queryOpenOrder；
+- queryProjectedOrderHistory；
+- queryProjectedExecutionHistory。
+
+交易写操作不做透明自动重放。
+
+### 1.4 Subscribe / Unsubscribe 语义
+
+当前 gateway-api 的 live Topic 行为：
+
+```text
+subscribe(topic, callback)
+  -> register live callback
+
+unSubscribe(topic, callback)
+  -> remove callback
+```
+
+连接关闭时 SDK 应主动清理当前订阅集合，再断开 transport。
+
+对于需要 snapshot + live 的数据，不要假设所有 topic 都通过同一种订阅方式获得 image：
+
+- execution 等 live stream 可以直接 subscribe；
+- market/depth 等状态型数据需要按各自 Topic 合同先取得 image / snapshot，再消费 live update；
+- reconnect 后必须重新建立 image + live 关系。
+
+### 1.5 External GA 仍需锁定的 transport 文档
+
+当前 v1 已锁定身份、Topic、snapshot/delta、Gap 和恢复语义，但面向第三方非 Java 客户端的 **原始 WebSocket URL、wire frame JSON/binary schema、ping/pong frame contract** 仍需要在 External GA 前单独冻结。
+
+因此当前外部 SDK 应优先通过官方 gateway client / SDK 适配层使用，不应自行逆向内部 wire frame。
+
+
 ## 2. Topic 身份规则
 
 Topic 中的 `<Location>`、`<UserID>` 必须满足 Session 权威 scope。
