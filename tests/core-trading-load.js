@@ -10,17 +10,25 @@ const makerSession = process.env.LOAD_MAKER_SESSION || '';
 const takerSession = process.env.LOAD_TAKER_SESSION || '';
 const orders = Number(process.env.LOAD_ORDERS || 1000);
 const concurrency = Number(process.env.LOAD_CONCURRENCY || 16);
+const targetTps = Number(process.env.LOAD_TARGET_TPS || 0);
 const settleMs = Number(process.env.LOAD_SETTLE_MS || 10000);
 const requestTimeoutMs = Number(process.env.LOAD_REQUEST_TIMEOUT_MS || 30000);
+const cancelTimeoutMs = Number(process.env.LOAD_CANCEL_TIMEOUT_MS || 180000);
 const output = process.env.LOAD_OUTPUT || '/artifacts/core-trading-load.json';
 const runId = process.env.LOAD_RUN_ID || `${Date.now()}`;
+const mode = process.env.LOAD_MODE || 'full';
 
 if (!Number.isInteger(orders) || orders < 1) throw new Error('LOAD_ORDERS must be a positive integer');
 if (!Number.isInteger(concurrency) || concurrency < 1) throw new Error('LOAD_CONCURRENCY must be a positive integer');
+if (!Number.isFinite(targetTps) || targetTps < 0) throw new Error('LOAD_TARGET_TPS must be a non-negative number');
 if (!Number.isInteger(requestTimeoutMs) || requestTimeoutMs < 1000) {
   throw new Error('LOAD_REQUEST_TIMEOUT_MS must be an integer of at least 1000');
 }
+if (!Number.isInteger(cancelTimeoutMs) || cancelTimeoutMs < requestTimeoutMs) {
+  throw new Error('LOAD_CANCEL_TIMEOUT_MS must be an integer >= LOAD_REQUEST_TIMEOUT_MS');
+}
 if (!makerSession || !takerSession) throw new Error('Authenticated load sessions are required');
+if (!['full', 'admission', 'overload'].includes(mode)) throw new Error('LOAD_MODE must be full, admission or overload');
 
 const sessions = new Map([[maker, makerSession], [taker, takerSession]]);
 
@@ -32,12 +40,12 @@ function percentile(values, ratio) {
   return sorted[Math.min(sorted.length - 1, Math.ceil(sorted.length * ratio) - 1)];
 }
 
-async function invoke(method, content) {
+async function invoke(method, content, timeoutMs = requestTimeoutMs) {
   const sessionId = sessions.get(content.UserID || content.userID);
   if (!sessionId) throw new Error(`No authenticated session for ${content.UserID || content.userID || 'unknown user'}`);
   const started = process.hrtime.bigint();
   const controller = new AbortController();
-  const timeout = setTimeout(() => controller.abort(), requestTimeoutMs);
+  const timeout = setTimeout(() => controller.abort(), timeoutMs);
   let response;
   let body = '';
   try {
@@ -82,6 +90,12 @@ async function runConcurrent(name, total, factory) {
     while (true) {
       const index = next++;
       if (index >= total) return;
+      if (targetTps > 0) {
+        const scheduledMs = index * 1000 / targetTps;
+        const elapsedMs = Number(process.hrtime.bigint() - started) / 1e6;
+        const delayMs = scheduledMs - elapsedMs;
+        if (delayMs > 0) await new Promise(resolve => setTimeout(resolve, delayMs));
+      }
       results[index] = await factory(index);
     }
   }
@@ -89,11 +103,21 @@ async function runConcurrent(name, total, factory) {
   const wallMs = Number(process.hrtime.bigint() - started) / 1e6;
   const latencies = results.map(item => item.elapsedMs);
   const failures = results.filter(item => !item.ok);
+  const failureKindMap = new Map();
+  for (const item of failures) {
+    const code = String(item.code ?? '');
+    const msg = item.msg || '';
+    const key = JSON.stringify([code, msg]);
+    const current = failureKindMap.get(key) || { code, msg, count: 0 };
+    current.count += 1;
+    failureKindMap.set(key, current);
+  }
   return {
     name, total, success: total - failures.length, failed: failures.length, wallMs,
     throughput: total * 1000 / wallMs,
     latencyMs: { min: Math.min(...latencies), p50: percentile(latencies, 0.50),
       p95: percentile(latencies, 0.95), p99: percentile(latencies, 0.99), max: Math.max(...latencies) },
+    failureKinds: Array.from(failureKindMap.values()),
     failureSamples: failures.slice(0, 10).map(item => ({ code: item.code, status: item.httpStatus, msg: item.msg,
       body: item.body.slice(0, 300) }))
   };
@@ -102,7 +126,7 @@ async function runConcurrent(name, total, factory) {
 async function cancelAll(user) {
   return invoke('cancelAllOrder', {
     UserID: user, SecurityID: 'BTCUSDT', MarketIndicator: '4', AlgoName: 'cross', Location: location
-  });
+  }, cancelTimeoutMs);
 }
 
 async function main() {
@@ -113,6 +137,19 @@ async function main() {
   };
   record(await runConcurrent('resting-order-place', orders, index =>
     invoke('placeOrder', orderContent(maker, 'Sell', '90000', `LOAD-${runId}-REST-${index}`))));
+
+  if (mode === 'admission' || mode === 'overload') {
+    const summary = {
+      runId, generatedAt: new Date().toISOString(), endpoint, location, maker, taker, orders, concurrency, targetTps,
+      requestTimeoutMs, mode, phases,
+      passed: phases.every(phase => phase.failed === 0)
+    };
+    fs.writeFileSync(output, `${JSON.stringify(summary, null, 2)}\n`);
+    process.stdout.write(`${JSON.stringify(summary, null, 2)}\n`);
+    if (!summary.passed) process.exitCode = 2;
+    return;
+  }
+
   await new Promise(resolve => setTimeout(resolve, settleMs));
 
   const cancelStarted = process.hrtime.bigint();
@@ -130,8 +167,8 @@ async function main() {
     invoke('placeOrder', orderContent(taker, 'Buy', '60000', `LOAD-${runId}-TAKER-${index}`))));
 
   const summary = {
-    runId, generatedAt: new Date().toISOString(), endpoint, location, maker, taker, orders, concurrency,
-    requestTimeoutMs, phases,
+    runId, generatedAt: new Date().toISOString(), endpoint, location, maker, taker, orders, concurrency, targetTps,
+    requestTimeoutMs, mode, phases,
     passed: phases.every(phase => phase.failed === 0)
   };
   fs.writeFileSync(output, `${JSON.stringify(summary, null, 2)}\n`);

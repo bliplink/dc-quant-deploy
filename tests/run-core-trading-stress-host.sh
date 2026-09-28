@@ -9,9 +9,11 @@ LOAD_MAKER="${LOAD_MAKER:-stressmaker}"
 LOAD_TAKER="${LOAD_TAKER:-stresstaker}"
 LOAD_ORDERS="${LOAD_ORDERS:-1000}"
 LOAD_CONCURRENCY="${LOAD_CONCURRENCY:-16}"
+LOAD_TARGET_TPS="${LOAD_TARGET_TPS:-0}"
 LOAD_RELOAD_BEFORE="${LOAD_RELOAD_BEFORE:-true}"
 LOAD_PAUSE_BACKGROUND="${LOAD_PAUSE_BACKGROUND:-true}"
 LOAD_VERIFY_RESTART="${LOAD_VERIFY_RESTART:-true}"
+LOAD_MODE="${LOAD_MODE:-full}"
 LOAD_RUN_ID="${LOAD_RUN_ID:-$(date +%Y%m%d%H%M%S)}"
 LOAD_RUNNER_NAME="${LOAD_RUNNER_NAME:-dc-saas-web-e2e-runner}"
 LOAD_PASSWORD="${LOAD_E2E_PASSWORD:-${E2E_PASSWORD:-}}"
@@ -27,11 +29,15 @@ for value in "${LOAD_LOCATION}" "${LOAD_MAKER}" "${LOAD_TAKER}" "${LOAD_RUN_ID}"
 done
 [[ "${LOAD_ORDERS}" =~ ^[1-9][0-9]*$ ]] || die "LOAD_ORDERS must be a positive integer"
 [[ "${LOAD_CONCURRENCY}" =~ ^[1-9][0-9]*$ ]] || die "LOAD_CONCURRENCY must be a positive integer"
+[[ "${LOAD_TARGET_TPS}" =~ ^([0-9]+([.][0-9]+)?|[.][0-9]+)$ ]] ||
+  die "LOAD_TARGET_TPS must be a non-negative number"
 for flag in LOAD_RELOAD_BEFORE LOAD_PAUSE_BACKGROUND LOAD_VERIFY_RESTART; do
   value="${!flag}"
   [[ "${value}" == true || "${value}" == false ]] || die "${flag} must be true or false"
 done
 [[ "${LOAD_MAKER}" != "${LOAD_TAKER}" ]] || die "Load users must differ"
+[[ "${LOAD_MODE}" == full || "${LOAD_MODE}" == admission || "${LOAD_MODE}" == overload ]] ||
+  die "LOAD_MODE must be full, admission or overload"
 
 set -a
 # shellcheck disable=SC1090
@@ -123,6 +129,22 @@ fund_trade_account() {
     --data "{\"serverName\":\"TradeSvr\",\"method\":\"cashIn\",\"key\":\"${LOAD_LOCATION}\",\"content\":{\"Amount\":\"1000000\",\"UserID\":\"${user}\",\"Location\":\"${LOAD_LOCATION}\",\"Demo\":\"0\"}}" \
     "http://127.0.0.1:${WEB_LISTEN_PORT}/httpapi/")" || die "TradeSvr cashIn request failed for ${user}"
   grep -Eq '"code"[[:space:]]*:[[:space:]]*0' <<<"${response}" || die "TradeSvr cashIn rejected for ${user}: ${response}"
+}
+
+cancel_all_user() {
+  local user="$1" token request response
+  token="${SESSION_BY_USER[${user}]:-}"
+  [[ -n "${token}" ]] || die "No authenticated session for ${user}"
+  request="$(mktemp)"
+  printf '{"serverName":"OrderSvr","method":"cancelAllOrder","key":"%s\u001f4\u001fBTCUSDT","content":{"UserID":"%s","SecurityID":"BTCUSDT","MarketIndicator":"4","AlgoName":"cross","Location":"%s"}}\n' \
+    "${LOAD_LOCATION}" "${user}" "${LOAD_LOCATION}" >"${request}"
+  response="$(curl --noproxy '*' -fsS --max-time 180 -H 'Content-Type: application/json' -H "sessionId: ${token}" \
+    --data-binary "@${request}" "http://127.0.0.1:${WEB_LISTEN_PORT}/httpapi/")" || {
+      rm -f "${request}"
+      die "cancelAllOrder request failed for ${user}"
+    }
+  rm -f "${request}"
+  grep -Eq '"code"[[:space:]]*:[[:space:]]*0' <<<"${response}" || die "cancelAllOrder rejected for ${user}: ${response}"
 }
 
 wait_for_port() {
@@ -244,7 +266,15 @@ before_stats="$(docker stats --no-stream --format '{{.Name}}\t{{.CPUPerc}}\t{{.M
   dc-saas-gateway "${order_containers[@]}" dc-saas-tradesvr dc-saas-mdsvr)"
 printf '%s\n' "${before_stats}" >"${artifact_dir}/container-stats-before.tsv"
 
-log "Running ${LOAD_ORDERS} resting/cancel and ${LOAD_ORDERS} matched orders at concurrency ${LOAD_CONCURRENCY}."
+if [[ "${LOAD_MODE}" == admission ]]; then
+  log "Profiling ${LOAD_ORDERS} resting-order admissions at concurrency ${LOAD_CONCURRENCY}, target ${LOAD_TARGET_TPS} TPS."
+else
+  if [[ "${LOAD_MODE}" == full ]]; then
+  log "Running ${LOAD_ORDERS} resting/cancel and ${LOAD_ORDERS} matched orders at concurrency ${LOAD_CONCURRENCY}."
+else
+  log "Running ${LOAD_MODE} profile with ${LOAD_ORDERS} resting-order requests at concurrency ${LOAD_CONCURRENCY}, target ${LOAD_TARGET_TPS} TPS."
+fi
+fi
 runner_state="$(docker inspect --format '{{.State.Status}}' "${LOAD_RUNNER_NAME}" 2>/dev/null || true)"
 [[ "${runner_state}" == "running" ]] ||
   die "Reusable E2E runner ${LOAD_RUNNER_NAME} is not running; run the Web E2E acceptance first"
@@ -260,16 +290,101 @@ runner_artifact_source="$(docker inspect --format \
   die "Stress artifact directory is outside runner /artifacts mount"
 runner_artifact_rel="${artifact_dir#${runner_artifact_source}/}"
 
+set +e
 docker exec -w /work \
   -e LOAD_BASE_URL="http://127.0.0.1:${WEB_LISTEN_PORT}" \
   -e LOAD_LOCATION="${LOAD_LOCATION}" -e LOAD_MAKER="${LOAD_MAKER}" -e LOAD_TAKER="${LOAD_TAKER}" \
   -e LOAD_MAKER_SESSION="${SESSION_BY_USER[${LOAD_MAKER}]}" -e LOAD_TAKER_SESSION="${SESSION_BY_USER[${LOAD_TAKER}]}" \
   -e LOAD_ORDERS="${LOAD_ORDERS}" -e LOAD_CONCURRENCY="${LOAD_CONCURRENCY}" \
+  -e LOAD_TARGET_TPS="${LOAD_TARGET_TPS}" \
   -e LOAD_REQUEST_TIMEOUT_MS="${LOAD_REQUEST_TIMEOUT_MS:-30000}" \
   -e LOAD_SETTLE_MS="${LOAD_SETTLE_MS:-10000}" \
-  -e LOAD_RUN_ID="${LOAD_RUN_ID}" \
+  -e LOAD_RUN_ID="${LOAD_RUN_ID}" -e LOAD_MODE="${LOAD_MODE}" \
   -e LOAD_OUTPUT="/artifacts/${runner_artifact_rel}/core-trading-load.json" \
   "${LOAD_RUNNER_NAME}" node core-trading-load.js | tee "${artifact_dir}/core-trading-load.log"
+load_rc=${PIPESTATUS[0]}
+set -e
+if [[ "${LOAD_MODE}" == overload ]]; then
+  [[ "${load_rc}" == 0 || "${load_rc}" == 2 ]] || die "Overload runner failed unexpectedly rc=${load_rc}"
+else
+  [[ "${load_rc}" == 0 ]] || die "Load runner failed rc=${load_rc}"
+fi
+
+if [[ "${LOAD_MODE}" == admission || "${LOAD_MODE}" == overload ]]; then
+  summary_file="${artifact_dir}/core-trading-load.json"
+  read -r accepted failed bad_failures < <(python3 - "${summary_file}" <<'PYLOAD'
+import json,sys
+with open(sys.argv[1], encoding='utf-8') as f:
+    data=json.load(f)
+phase=data['phases'][0]
+accepted=int(phase.get('success',0)); failed=int(phase.get('failed',0))
+bad=0
+for kind in phase.get('failureKinds') or []:
+    if 'ORDER_BOOK_OVERLOADED' not in str(kind.get('msg','')):
+        bad += int(kind.get('count',0))
+print(accepted, failed, bad)
+PYLOAD
+)
+  [[ $((accepted + failed)) -eq "${LOAD_ORDERS}" ]] ||
+    die "Admission accounting mismatch accepted=${accepted} failed=${failed} requested=${LOAD_ORDERS}"
+  if [[ "${LOAD_MODE}" == admission ]]; then
+    [[ "${failed}" == 0 && "${accepted}" == "${LOAD_ORDERS}" ]] ||
+      die "Admission profile must accept every request: accepted=${accepted} failed=${failed}"
+  else
+    [[ "${bad_failures}" == 0 ]] || die "Overload profile returned non-overload failures: ${bad_failures}"
+    if (( failed > 0 )); then
+      log "Controlled overload observed: accepted=${accepted}, overloaded=${failed}."
+    else
+      log "No overload was required at this load; all ${accepted} requests were accepted."
+    fi
+  fi
+
+  log "HTTP ${LOAD_MODE} phase completed; measuring ${accepted} accepted requests draining to durable New state."
+  drain_started="${SECONDS}"
+  drain_rows=()
+  for _ in $(seq 1 180); do
+    drain_state="$({
+      cat <<SQL
+SELECT COUNT(*) FROM dc.dc_orders WHERE location='${LOAD_LOCATION}' AND user_id='${LOAD_MAKER}'
+  AND clord_id LIKE 'LOAD-${LOAD_RUN_ID}-REST-%';
+SELECT COUNT(*) FROM dc.dc_orders WHERE location='${LOAD_LOCATION}' AND user_id='${LOAD_MAKER}'
+  AND clord_id LIKE 'LOAD-${LOAD_RUN_ID}-REST-%' AND ord_status='New';
+SELECT COUNT(*) FROM dc.dc_orders WHERE location='${LOAD_LOCATION}' AND user_id='${LOAD_MAKER}'
+  AND clord_id LIKE 'LOAD-${LOAD_RUN_ID}-REST-%' AND ord_status='Rejected';
+SQL
+    } | mysql_exec dc)"
+    drain_rows=()
+    while IFS= read -r row || [[ -n "${row}" ]]; do
+      drain_rows+=("${row}")
+    done <<<"${drain_state}"
+    if (( ${drain_rows[2]:-0} > 0 )); then
+      die "${LOAD_MODE} profile produced asynchronous rejections: ${drain_state}"
+    fi
+    if [[ "${drain_rows[0]:-0}" == "${accepted}" && "${drain_rows[1]:-0}" == "${accepted}" ]]; then
+      break
+    fi
+    sleep 1
+  done
+  drain_seconds=$((SECONDS - drain_started))
+  printf 'requested\t%s\naccepted\t%s\noverloaded\t%s\ndrain_seconds\t%s\nrows\t%s\nnew\t%s\nrejected\t%s\n' \
+    "${LOAD_ORDERS}" "${accepted}" "${failed}" "${drain_seconds}" "${drain_rows[0]:-0}" "${drain_rows[1]:-0}" "${drain_rows[2]:-0}" \
+    >"${artifact_dir}/admission-drain.tsv"
+  [[ "${drain_rows[0]:-0}" == "${accepted}" && "${drain_rows[1]:-0}" == "${accepted}" ]] ||
+    die "Accepted queue did not drain to New: rows=${drain_rows[0]:-0}/${accepted}, new=${drain_rows[1]:-0}/${accepted}"
+  log "Accepted requests drained in ${drain_seconds}s; cleaning isolated resting orders via cancelAllOrder."
+  cancel_all_user "${LOAD_MAKER}"
+  active=1
+  for _ in $(seq 1 180); do
+    active="$(mysql_exec -e "SELECT COUNT(*) FROM dc.dc_orders WHERE location='${LOAD_LOCATION}' AND user_id='${LOAD_MAKER}' AND clord_id LIKE 'LOAD-${LOAD_RUN_ID}-REST-%' AND ord_status IN ('New','Partially_Filled','Newing','Suspended');" dc)"
+    [[ "${active}" == 0 ]] && break
+    sleep 1
+  done
+  [[ "${active}" == 0 ]] || die "Admission cleanup left ${active} active orders"
+  docker stats --no-stream --format '{{.Name}}\t{{.CPUPerc}}\t{{.MemUsage}}' \
+    dc-saas-gateway "${order_containers[@]}" dc-saas-tradesvr dc-saas-mdsvr >"${artifact_dir}/container-stats-after.tsv"
+  log "PASS: ${LOAD_MODE} profile completed; accepted=${accepted}, overloaded=${failed}, drain=${drain_seconds}s. Artifacts: ${artifact_dir}"
+  exit 0
+fi
 
 expected_exec=$((LOAD_ORDERS * 2))
 expected_orders=$((LOAD_ORDERS * 3))
@@ -287,7 +402,10 @@ SELECT COUNT(*) FROM dc.dc_users_posting WHERE location='${LOAD_LOCATION}'
   AND user_id IN ('${LOAD_MAKER}','${LOAD_TAKER}') AND source='Trade';
 SQL
   } | mysql_exec dc)"
-  mapfile -t progress <<<"${persisted}"
+  progress=()
+  while IFS= read -r row || [[ -n "${row}" ]]; do
+    progress+=("${row}")
+  done <<<"${persisted}"
   if (( ${progress[2]:-0} > 0 )); then
     timeout_rejections="$({
       cat <<SQL
@@ -359,7 +477,10 @@ SELECT IF(
   1,0);
 SQL
 } | mysql_exec dc)"
-mapfile -t checks <<<"${verification}"
+checks=()
+while IFS= read -r row || [[ -n "${row}" ]]; do
+  checks+=("${row}")
+done <<<"${verification}"
 [[ "${#checks[@]}" -eq 10 ]] || die "Unexpected load verification output: ${verification}"
 for index in "${!checks[@]}"; do
   if [[ "${checks[${index}]}" != "1" ]]; then
