@@ -13,6 +13,7 @@
 - [Trading Operations Reference v1](TRADING_OPERATIONS_REFERENCE_V1.zh-CN.md)：Batch Cancel、Query Order、Executions、Leverage、Position Mode、Durable History。
 - [Trader API v1](TRADER_API_V1.zh-CN.md)：单一交易账号，自始至终只能操作自己。
 - [Broker API v1](BROKER_API_V1.zh-CN.md)：租户代客交易、客户资料、充值和提现。
+- [Broker API Reference v1](BROKER_REFERENCE_V1.zh-CN.md)：Create Customer、Deposit、Withdraw、代客交易、客户账户/持仓/历史、重连和隔离。
 - [Tenant Management API v1](TENANT_API_V1.zh-CN.md)：租户后台、租户自动化和管理型 Tenant Service Key 使用。
 - [WebSocket / Topic Reference v1](WEBSOCKET_TOPICS_V1.zh-CN.md)：行情、订单、成交、资金、持仓订阅以及重连/Gap 规则。
 - [OpenAPI 3.0 HTTP 传输规范](crypto-openapi-v1.yaml)：机器可读 HTTP envelope / response schema。
