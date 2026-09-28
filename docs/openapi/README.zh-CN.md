@@ -45,3 +45,10 @@ docs/openapi/*.md + crypto-openapi-v1.yaml
 - Trader API 不能进入 Tenant Control Plane。
 - 管理型 TenantAPI 不能进入交易接口；只有 `api_key_type=broker` 的 TenantAPI 才能指定本租户客户进入交易接口。
 - 所有租户/用户身份最终以 LoginSvr Session 为准。
+
+
+## Rate Limits
+
+OpenAPI 当前限流实现、默认 profile、错误码与后续规划：
+
+- [OpenAPI Rate Limits](../api/RATE_LIMITS.zh-CN.md)
