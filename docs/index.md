@@ -130,3 +130,8 @@ implementation
 
 - [SDK Guide](openapi/SDK_GUIDE.zh-CN.md)
 - [Versioning & Changelog](openapi/VERSIONING_CHANGELOG.zh-CN.md)
+
+
+## 发布状态
+
+当前 Open API v1 仍是 **Pre-GA / Developer Preview**。正式对外发布门槛见 [External GA Checklist](openapi/EXTERNAL_GA_CHECKLIST.zh-CN.md)，Sandbox 规划见 [Sandbox Strategy](openapi/SANDBOX_STRATEGY.zh-CN.md)。
