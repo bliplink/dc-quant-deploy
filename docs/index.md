@@ -2,6 +2,8 @@
 
 DC Developers 是 DC Core Architecture 对外开发者文档入口。
 
+第一次接入建议先阅读 [Quick Start](openapi/QUICK_START.zh-CN.md)。
+
 当前 Open API v1 面向三类集成方：
 
 - **Trader**：普通交易用户、量化程序和自动化策略，只操作自己的交易账户。
@@ -122,3 +124,9 @@ implementation
 - static Developer Portal CI 验证
 - sandbox / demo credentials strategy
 - versioned changelog
+
+
+## SDK 与版本
+
+- [SDK Guide](openapi/SDK_GUIDE.zh-CN.md)
+- [Versioning & Changelog](openapi/VERSIONING_CHANGELOG.zh-CN.md)
