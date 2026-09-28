@@ -6,6 +6,8 @@
 
 ## 文档入口
 
+- [Quick Start](QUICK_START.zh-CN.md)：5 分钟完成签名登录、行情、下单、余额和持仓查询。
+
 - [Trading API v1](TRADING_API_V1.zh-CN.md)：Trader 与 Broker 共用的行情/订单/成交/账户交易合同。
 - [Core Trading API Reference v1](CORE_TRADING_REFERENCE_V1.zh-CN.md)：Place Order、Cancel Order、Open Orders、Balance、Position 的接口级参考。
 - [Authentication API Reference v1](AUTHENTICATION_REFERENCE_V1.zh-CN.md)：API Key 登录、签名、Session、IP 白名单和重连。
@@ -18,6 +20,8 @@
 - [Tenant Management API Reference v1](TENANT_MANAGEMENT_REFERENCE_V1.zh-CN.md)：User、Symbol、Robot、Settings、Trade Query 的接口级参考。
 - [WebSocket / Topic Reference v1](WEBSOCKET_TOPICS_V1.zh-CN.md)：行情、订单、成交、资金、持仓订阅以及重连/Gap 规则。
 - [OpenAPI 3.0 HTTP 传输规范](crypto-openapi-v1.yaml)：机器可读 HTTP envelope / response schema。
+- [SDK Guide](SDK_GUIDE.zh-CN.md)：SDK 必须封装的认证、恢复、幂等和 Broker customer scope。
+- [Versioning & Changelog](VERSIONING_CHANGELOG.zh-CN.md)：v1 兼容策略、breaking change 和变更记录。
 - [总体架构与安全基线](../CRYPTO_OPEN_API_V1.zh-CN.md)。
 - [字段级调用参考与公共错误码](../DC_OPEN_API_V1_REFERENCE.zh-CN.md)。
 
