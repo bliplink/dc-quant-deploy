@@ -60,3 +60,7 @@ DC Quant 是一套单机 Docker Compose 部署的量化策略系统。它覆盖�
 - `EMS`：把信号转成订单，处理订单、成交、持仓和执行回报。
 - `Risk`：在开仓前和持仓中检查仓位、亏损、滑点、止损止盈、运行状态。
 - `Telegram`：提供用户 UI，用来设置 API、启动/停止策略、调整风控参数、查看运行状态和接收群消息。
+
+## 生产运维入口
+
+- [生产对账、验收与会话交接](05-operations/production-reconciliation-and-handoff.zh-CN.md)：包含最近生产基线、executionID 对账补账、风控验收、日志磁盘治理和后续优先级。

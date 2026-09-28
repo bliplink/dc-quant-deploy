@@ -1,8 +1,15 @@
 name: ${COMPOSE_PROJECT_NAME}
 
+x-default-logging: &default-logging
+  driver: json-file
+  options:
+    max-size: "${DOCKER_LOG_MAX_SIZE:-100m}"
+    max-file: "${DOCKER_LOG_MAX_FILE:-3}"
+
 x-java-service-base: &java-service-base
   network_mode: host
   restart: unless-stopped
+  logging: *default-logging
   user: "${RUNTIME_UID}:${RUNTIME_GID}"
   environment:
     TZ: UTC
@@ -19,6 +26,7 @@ services:
     profiles: ["embedded-clickhouse"]
     network_mode: host
     restart: unless-stopped
+    logging: *default-logging
     environment:
       TZ: UTC
       CLICKHOUSE_DB: ${CLICKHOUSE_DB_NAME}
@@ -44,6 +52,7 @@ services:
     container_name: dc-zookeeper
     network_mode: host
     restart: unless-stopped
+    logging: *default-logging
     environment:
       TZ: UTC
       ATS_ROOT: /opt/zookeeper/runtime
@@ -238,6 +247,7 @@ services:
     container_name: dc-web
     network_mode: host
     restart: unless-stopped
+    logging: *default-logging
     volumes:
       - ./web/default.conf.template:/etc/nginx/templates/default.conf.template:ro
     ulimits:
