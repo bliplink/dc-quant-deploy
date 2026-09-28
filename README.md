@@ -4,6 +4,8 @@ This branch deploys the standalone cryptocurrency SaaS product. It does not
 contain or start QuantSvr, INDSvr, CustomIndSvr, SIMSvr, BatchSvr, or the
 quantitative web application.
 
+> **Architecture baseline / 后续会话必读**: before changing deployment, cluster routing, service responsibilities, HA, E2E, or performance behavior, read [docs/DC_CORE_ARCHITECTURE_BASELINE.zh-CN.md](docs/DC_CORE_ARCHITECTURE_BASELINE.zh-CN.md). This file is the project handoff baseline and should be updated whenever the architecture or acceptance baseline materially changes.
+
 ## Runtime boundary
 
 | Layer | Components | Storage |
