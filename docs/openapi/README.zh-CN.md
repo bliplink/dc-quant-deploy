@@ -8,6 +8,9 @@
 
 - [Trading API v1](TRADING_API_V1.zh-CN.md)：Trader 与 Broker 共用的行情/订单/成交/账户交易合同。
 - [Core Trading API Reference v1](CORE_TRADING_REFERENCE_V1.zh-CN.md)：Place Order、Cancel Order、Open Orders、Balance、Position 的接口级参考。
+- [Authentication API Reference v1](AUTHENTICATION_REFERENCE_V1.zh-CN.md)：API Key 登录、签名、Session、IP 白名单和重连。
+- [Market Data API Reference v1](MARKET_DATA_REFERENCE_V1.zh-CN.md)：Public Market、Kline、实时行情和 snapshot/delta。
+- [Trading Operations Reference v1](TRADING_OPERATIONS_REFERENCE_V1.zh-CN.md)：Batch Cancel、Query Order、Executions、Leverage、Position Mode、Durable History。
 - [Trader API v1](TRADER_API_V1.zh-CN.md)：单一交易账号，自始至终只能操作自己。
 - [Broker API v1](BROKER_API_V1.zh-CN.md)：租户代客交易、客户资料、充值和提现。
 - [Tenant Management API v1](TENANT_API_V1.zh-CN.md)：租户后台、租户自动化和管理型 Tenant Service Key 使用。
