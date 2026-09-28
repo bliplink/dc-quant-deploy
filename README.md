@@ -272,6 +272,7 @@ Current operator/developer documentation:
 - [Trading Operations Reference v1](docs/openapi/TRADING_OPERATIONS_REFERENCE_V1.zh-CN.md)
 - [Trader API v1](docs/openapi/TRADER_API_V1.zh-CN.md)
 - [Broker API v1](docs/openapi/BROKER_API_V1.zh-CN.md)
+- [Broker API Reference v1](docs/openapi/BROKER_REFERENCE_V1.zh-CN.md)
 - [Tenant Management API v1](docs/openapi/TENANT_API_V1.zh-CN.md)
 - [WebSocket / Topic Reference v1](docs/openapi/WEBSOCKET_TOPICS_V1.zh-CN.md)
 - [OpenAPI 限流参考](docs/api/RATE_LIMITS.zh-CN.md)
