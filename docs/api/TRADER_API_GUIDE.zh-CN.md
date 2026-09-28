@@ -170,3 +170,35 @@ Trader 可以查询 / 订阅：
 - account balance；
 - reconnect；
 - 权限越权被拒绝。
+
+
+## 11. Rate Limits
+
+普通 Trader API session 当前使用：
+
+`TRADER_STANDARD`
+
+默认：
+
+| Parameter | Value |
+|---|---:|
+| Refill rate | 100 requests / second |
+| Burst | 30 |
+| Scope | sessionId |
+
+算法为 Token Bucket。
+
+当 token 不足时：
+
+```json
+{
+  "code": 10003,
+  "msg": "RATE_LIMIT_EXCEEDED"
+}
+```
+
+当前所有受限业务请求统一消耗 1 token，尚未实现 per-method weight。
+
+完整说明：
+
+`docs/api/RATE_LIMITS.zh-CN.md`
