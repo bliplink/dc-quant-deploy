@@ -380,6 +380,270 @@ components:
         content:
           $ref: '#/components/schemas/QueryTradePositionContent'
 
+    BrokerCashContent:
+      type: object
+      required:
+        - Location
+        - UserID
+        - AccountID
+        - Currency
+        - Amount
+      properties:
+        Location:
+          type: string
+          description: Target customer location; must equal Broker authoritative location.
+        UserID:
+          type: string
+          description: Target customer user id.
+        AccountID:
+          type: string
+          description: Target trading/account id.
+        Currency:
+          type: string
+          example: USDT
+        Amount:
+          type: string
+          description: Decimal amount encoded as string.
+          example: '10000'
+        Info1:
+          type: string
+          description: Current runtime external posting reference. External GA will expose a stable externalRef name.
+        Demo:
+          type: string
+          deprecated: true
+          description: Internal compatibility field. Official SDK/facade must manage it; external clients must not depend on it.
+
+    CashInEnvelope:
+      type: object
+      required: [serverName, method, content]
+      properties:
+        serverName:
+          type: string
+          enum: [TradeSvr]
+        method:
+          type: string
+          enum: [cashIn]
+        content:
+          $ref: '#/components/schemas/BrokerCashContent'
+
+    CashOutEnvelope:
+      type: object
+      required: [serverName, method, content]
+      properties:
+        serverName:
+          type: string
+          enum: [TradeSvr]
+        method:
+          type: string
+          enum: [cashOut]
+        content:
+          $ref: '#/components/schemas/BrokerCashContent'
+
+    TenantUserAdminContent:
+      type: object
+      properties:
+        cid: { type: string }
+        action:
+          type: string
+          enum: [LIST, CREATE, ENABLE, DISABLE, RESET_PASSWORD]
+        request_id: { type: string }
+        location:
+          type: string
+          description: Optional compatibility field; if present must equal authoritative session location.
+        user_id: { type: string }
+        username: { type: string }
+        password:
+          type: string
+          format: password
+        name: { type: string }
+        email: { type: string }
+        enable: { type: string }
+        page_num:
+          type: integer
+          minimum: 0
+          default: 0
+        page_size:
+          type: integer
+          minimum: 1
+          default: 50
+
+    TenantUserAdminEnvelope:
+      type: object
+      required: [serverName, method, content]
+      properties:
+        serverName:
+          type: string
+          enum: [AdminSvr]
+        method:
+          type: string
+          enum: [tenantUserAdmin]
+        content:
+          $ref: '#/components/schemas/TenantUserAdminContent'
+
+    TenantSymbolAdminContent:
+      type: object
+      properties:
+        cid: { type: string }
+        action:
+          type: string
+          enum: [LIST, ENABLE, DISABLE]
+        location:
+          type: string
+          description: Optional compatibility field; if present must equal authoritative session location.
+        request_id: { type: string }
+        security_id: { type: string, example: BTCUSDT }
+        market_indicator: { type: string, example: '4' }
+        enabled: { type: boolean }
+        tick_size: { type: string }
+        qty_tick_size: { type: string }
+        min_order_qty: { type: string }
+        max_order_qty: { type: string }
+        min_notional: { type: string }
+        market_take_bound: { type: string }
+        max_price: { type: string }
+        maker_commission: { type: string }
+        taker_commission: { type: string }
+        funding_interval: { type: integer }
+        risk_tiers: { type: string }
+
+    TenantSymbolAdminEnvelope:
+      type: object
+      required: [serverName, method, content]
+      properties:
+        serverName:
+          type: string
+          enum: [AdminSvr]
+        method:
+          type: string
+          enum: [tenantSymbolAdmin]
+        content:
+          $ref: '#/components/schemas/TenantSymbolAdminContent'
+
+    TenantRobotAdminContent:
+      type: object
+      properties:
+        cid: { type: string }
+        action:
+          type: string
+          enum: [LIST, UPSERT, ENABLE, DISABLE]
+        location:
+          type: string
+          description: Optional compatibility field; if present must equal authoritative session location.
+        request_id: { type: string }
+        robot_id: { type: string }
+        robot_name: { type: string }
+        security_id: { type: string, example: BTCUSDT }
+        api_user_id: { type: string }
+        api_key: { type: string }
+        quote_source: { type: string }
+        enabled: { type: boolean }
+        bid_levels: { type: integer }
+        ask_levels: { type: integer }
+        level_spread_bps: { type: string }
+        level_step_bps: { type: string }
+        order_qty: { type: string }
+        max_position_qty: { type: string }
+        refresh_interval_ms: { type: integer }
+        stale_price_ms: { type: integer }
+        max_deviation_bps: { type: string }
+        circuit_breaker_seconds: { type: integer }
+        hedge_enabled: { type: boolean }
+        hedge_venue: { type: string }
+        hedge_account_ref: { type: string }
+        hedge_api_key: { type: string }
+        hedge_api_secret:
+          type: string
+          format: password
+          writeOnly: true
+        strategy_config:
+          type: string
+          description: Current runtime JSON/string strategy configuration.
+
+    TenantRobotAdminEnvelope:
+      type: object
+      required: [serverName, method, content]
+      properties:
+        serverName:
+          type: string
+          enum: [AdminSvr]
+        method:
+          type: string
+          enum: [tenantRobotAdmin]
+        content:
+          $ref: '#/components/schemas/TenantRobotAdminContent'
+
+    TenantSettingsAdminContent:
+      type: object
+      properties:
+        cid: { type: string }
+        action:
+          type: string
+          enum: [GET, UPDATE, AUDIT]
+        location:
+          type: string
+          description: Optional compatibility field; if present must equal authoritative session location.
+        request_id: { type: string }
+        registration_enabled: { type: boolean }
+        trade_enabled: { type: boolean }
+        default_locale: { type: string }
+        branding:
+          type: string
+          description: Current runtime branding JSON/string.
+        page_num:
+          type: integer
+          minimum: 0
+        page_size:
+          type: integer
+          minimum: 1
+          default: 50
+
+    TenantSettingsAdminEnvelope:
+      type: object
+      required: [serverName, method, content]
+      properties:
+        serverName:
+          type: string
+          enum: [AdminSvr]
+        method:
+          type: string
+          enum: [tenantSettingsAdmin]
+        content:
+          $ref: '#/components/schemas/TenantSettingsAdminContent'
+
+    TenantTradeAdminContent:
+      type: object
+      properties:
+        cid: { type: string }
+        action:
+          type: string
+          enum: [ORDERS, EXECUTIONS, POSITIONS, BALANCES, POSTINGS, LIQUIDATIONS, ADL_EVENTS, ADL_LEDGER]
+        location:
+          type: string
+          description: Optional compatibility field; if present must equal authoritative session location.
+        user_id: { type: string }
+        security_id: { type: string }
+        page_num:
+          type: integer
+          minimum: 0
+        page_size:
+          type: integer
+          minimum: 1
+          maximum: 200
+          default: 50
+
+    TenantTradeAdminEnvelope:
+      type: object
+      required: [serverName, method, content]
+      properties:
+        serverName:
+          type: string
+          enum: [AdminSvr]
+        method:
+          type: string
+          enum: [tenantTradeAdmin]
+        content:
+          $ref: '#/components/schemas/TenantTradeAdminContent'
+
     OpenApiSessionIdentity:
       type: object
       required:
@@ -482,6 +746,21 @@ x-dc-method-schemas:
     request: '#/components/schemas/QueryAccountBalanceEnvelope'
   'TradeSvr/queryTradePosition':
     request: '#/components/schemas/QueryTradePositionEnvelope'
+
+  'TradeSvr/cashIn':
+    request: '#/components/schemas/CashInEnvelope'
+  'TradeSvr/cashOut':
+    request: '#/components/schemas/CashOutEnvelope'
+  'AdminSvr/tenantUserAdmin':
+    request: '#/components/schemas/TenantUserAdminEnvelope'
+  'AdminSvr/tenantSymbolAdmin':
+    request: '#/components/schemas/TenantSymbolAdminEnvelope'
+  'AdminSvr/tenantRobotAdmin':
+    request: '#/components/schemas/TenantRobotAdminEnvelope'
+  'AdminSvr/tenantSettingsAdmin':
+    request: '#/components/schemas/TenantSettingsAdminEnvelope'
+  'AdminSvr/tenantTradeAdmin':
+    request: '#/components/schemas/TenantTradeAdminEnvelope'
 
 x-dc-v1-catalog:
   authentication:
