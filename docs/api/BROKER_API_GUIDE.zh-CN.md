@@ -1,7 +1,8 @@
 # Broker API 接入指南
 
 > 面向自建 Broker / 经纪商后台。  
-> 机器可读规范：`docs/openapi/crypto-openapi-v1.yaml`
+> 机器可读规范：`docs/openapi/crypto-openapi-v1.yaml`  
+> 接口级参考：`docs/openapi/BROKER_REFERENCE_V1.zh-CN.md`
 
 ## 1. Broker API 是什么
 
@@ -202,6 +203,7 @@ Market catalog：
 - ORDER_WRITE
 - TENANT_READ
 - TENANT_WRITE
+- CUSTOMER_CASH
 
 最终权限集合以正式权限模型和 OpenAPI spec 为准。
 
@@ -245,7 +247,7 @@ Market catalog：
 
 当前 GW 已实现 Token Bucket OpenAPI 限流。
 
-Broker API 目前仍使用现有 API / TenantAPI profile，**尚未实现独立 `BROKER_STANDARD`**。
+Broker API 当前登录快照使用 **`TRADER_STANDARD = 100 req/s, burst 30`**；尚未实现独立 `BROKER_STANDARD`。
 
 因此：
 
