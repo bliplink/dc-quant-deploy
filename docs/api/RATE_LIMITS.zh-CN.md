@@ -25,11 +25,26 @@ GW 已经接入：
 
 ## 2. 当前 Profile
 
+真正决定限流参数的是 LoginSvr 写入 Session 的：
+
+`rate_limit_profile`
+
+GW 不会简单地仅根据 `client_type` 推断 QPS。
+
+当前实际映射：
+
+| API Key / Session | client_type | rate_limit_profile | QPS | Burst |
+|---|---|---|---:|---:|
+| Trader Key | API | TRADER_STANDARD | 100 | 30 |
+| Broker Key | TenantAPI | TRADER_STANDARD | 100 | 30 |
+| Tenant / Service Key | TenantAPI | TENANT_STANDARD | 20 | 10 |
+
 ### TRADER_STANDARD
 
-适用于：
+当前用于：
 
-`client_type = API`
+- 普通 Trader API；
+- 当前 Broker API。
 
 默认参数：
 
@@ -48,9 +63,9 @@ GW 已经接入：
 
 ### TENANT_STANDARD
 
-适用于：
+当前用于：
 
-`client_type = TenantAPI`
+- Tenant Service / 管理型 TenantAPI。
 
 默认参数：
 
@@ -104,7 +119,10 @@ LoginSvr 是 session policy 的权威来源。
 登录成功后，session policy 包括：
 
 - `client_type`
+- `api_key_type`
 - `rate_limit_profile`
+
+其中真正选择 Token Bucket 参数的是 `rate_limit_profile`。例如 Broker 当前虽然 `client_type=TenantAPI`，但登录快照为 `TRADER_STANDARD`，因此实际使用 100 req/s、burst 30。
 
 GW 会缓存：
 
@@ -162,8 +180,8 @@ Kline 1000 bars   weight = 10
 
 当前已实现 profile：
 
-- `TRADER_STANDARD`
-- `TENANT_STANDARD`
+- `TRADER_STANDARD`（Trader + 当前 Broker）
+- `TENANT_STANDARD`（Tenant / Service）
 
 目前没有独立：
 
@@ -220,6 +238,7 @@ Trader：
 
 Broker：
 
+- 当前使用 `TRADER_STANDARD = 100 req/s, burst 30`；
 - 多客户并发需要客户端自身做请求队列和速率整形；
 - 不要让单个 customer 的突发流量占满整个 Broker session；
 - 后续如果引入 BROKER_STANDARD，需要根据 Broker 的客户规模决定 profile。
