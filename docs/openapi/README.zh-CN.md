@@ -22,6 +22,8 @@
 - [OpenAPI 3.0 HTTP 传输规范](crypto-openapi-v1.yaml)：机器可读 HTTP envelope / response schema。
 - [SDK Guide](SDK_GUIDE.zh-CN.md)：SDK 必须封装的认证、恢复、幂等和 Broker customer scope。
 - [Versioning & Changelog](VERSIONING_CHANGELOG.zh-CN.md)：v1 兼容策略、breaking change 和变更记录。
+- [Sandbox Strategy](SANDBOX_STRATEGY.zh-CN.md)：外部 Sandbox / Demo 环境、凭证、资金与隔离策略。
+- [External GA Checklist](EXTERNAL_GA_CHECKLIST.zh-CN.md)：正式对外 GA 的工程、SDK、性能、WebSocket、Sandbox 门槛。
 - [总体架构与安全基线](../CRYPTO_OPEN_API_V1.zh-CN.md)。
 - [字段级调用参考与公共错误码](../DC_OPEN_API_V1_REFERENCE.zh-CN.md)。
 
