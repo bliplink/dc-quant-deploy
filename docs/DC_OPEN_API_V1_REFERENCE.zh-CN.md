@@ -150,7 +150,7 @@ Broker 交易请求必须显式指定本租户客户 `userId/customerId`。Trade
 安全边界：
 
 - `API` 会话可进入 Trader 订单/账户 API；
-- `TenantAPI` 会话被 OrderSvr/TradeSvr 拒绝；
+- 普通 `TenantAPI` 管理会话不能进入 Trader OrderSvr/TradeSvr 接口；`api_key_type=broker` 是受控例外，可在同一 authoritative location 内代表被授权 customer 调用交易/账户接口；
 - AdminSvr Tenant Control Plane 只接受 `TenantAdmin` / `TenantAPI` Session；
 - 普通 Trader `API` Session 即使对应用户拥有 TENANT_ADMIN 角色，也不能调用 Tenant Control Plane；
 - Tenant 管理同时继续检查实际 TENANT_ADMIN 角色；
@@ -487,6 +487,32 @@ dc.trade.position.<UserID>.<Location>
 ```
 
 资金、保证金、PnL、强平价和持仓状态必须以 TradeSvr 返回值为准，API 客户端不自行作为权威计算源。
+
+### Broker customer cash
+
+Broker key 具备 `CUSTOMER_CASH` 时，可以对本租户 customer 调用：
+
+```text
+TradeSvr/cashIn
+TradeSvr/cashOut
+```
+
+当前运行时 CashRequest 关键字段：
+
+```text
+Location
+UserID
+AccountID
+Currency
+Amount
+Info1
+```
+
+其中 `Info1` 当前承载外部资金引用。内部 `Demo/Isdemo` 等字段不应成为正式外部客户可控字段，External GA 前应由 SDK / façade / 服务端固定处理。
+
+完整 Broker 接口级参考见：
+
+`docs/openapi/BROKER_REFERENCE_V1.zh-CN.md`
 
 ## 10. Execution private stream
 
