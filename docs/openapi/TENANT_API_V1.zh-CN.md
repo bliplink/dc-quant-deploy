@@ -4,6 +4,8 @@
 
 本文只描述 **Tenant Management API**：租户自己的管理后台和自动化运维。管理型 Tenant Service API Key 的 Session 类型固定为 `TenantAPI`，但不能下单。
 
+接口级字段、action、权限、分页和示例见 [Tenant Management API Reference v1](TENANT_MANAGEMENT_REFERENCE_V1.zh-CN.md)。
+
 如果租户需要自己开发完整交易系统，并代表名下客户下单/撤单/查询账户/充值/提现，应使用 [Broker API v1](BROKER_API_V1.zh-CN.md)。
 
 ## 1. Tenant API 与 Trader API 的边界
