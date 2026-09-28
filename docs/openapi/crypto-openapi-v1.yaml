@@ -127,6 +127,26 @@ paths:
                     OrderQty: '0.010'
                     Price: '60000.0'
                     ClOrdID: tenant-robot-000001
+              cancelOrder:
+                value:
+                  serverName: OrderSvr
+                  method: cancelOrder
+                  content:
+                    SecurityID: BTCUSDT
+                    MarketIndicator: '4'
+                    OrderID: server-order-id
+                    ClOrdID: cancel-request-000001
+              queryAccountBalance:
+                value:
+                  serverName: TradeSvr
+                  method: queryAccountBalance
+                  content: {}
+              queryTradePosition:
+                value:
+                  serverName: TradeSvr
+                  method: queryTradePosition
+                  content:
+                    securityid: BTCUSDT
       responses:
         '200':
           description: GW business response; inspect code/msg/data.
@@ -164,6 +184,202 @@ components:
           oneOf:
             - type: object
             - type: string
+    PlaceOrderContent:
+      type: object
+      required:
+        - SecurityID
+        - MarketIndicator
+        - Side
+        - OCType
+        - OrdType
+        - OrderQty
+        - ClOrdID
+      properties:
+        SecurityID:
+          type: string
+          example: BTCUSDT
+        MarketIndicator:
+          type: string
+          example: '4'
+        Side:
+          type: string
+          enum: [BUY, SELL, Buy, Sell]
+        OCType:
+          type: string
+          enum: [OPEN, CLOSE]
+        OrdType:
+          type: string
+          enum: [Limit, Market]
+        TimeInForce:
+          type: string
+          enum: [GTC, IOC, FOK, PO]
+        OrderQty:
+          type: string
+          description: Decimal quantity encoded as string.
+          example: '0.010'
+        Price:
+          type: string
+          description: Required by Limit orders; decimal encoded as string.
+          example: '60000.0'
+        ClOrdID:
+          type: string
+          description: Client order id / idempotency and tracking key.
+          example: client-order-000001
+        ReduceOnly:
+          description: Reduce-only flag. Current runtime accepts boolean/string compatibility forms.
+          oneOf:
+            - type: boolean
+            - type: string
+              enum: ['true', 'false', '0', '1']
+        Location:
+          type: string
+          description: Broker target-customer compatibility field. Trader identity remains session-authoritative.
+        UserID:
+          type: string
+          description: Broker target customer user id; ignored/rejected when it would widen session scope.
+
+    PlaceOrderEnvelope:
+      type: object
+      required: [serverName, method, content]
+      properties:
+        serverName:
+          type: string
+          enum: [OrderSvr]
+        method:
+          type: string
+          enum: [placeOrder]
+        content:
+          $ref: '#/components/schemas/PlaceOrderContent'
+
+    CancelOrderContent:
+      type: object
+      required:
+        - SecurityID
+        - MarketIndicator
+        - OrderID
+        - ClOrdID
+      properties:
+        SecurityID:
+          type: string
+          example: BTCUSDT
+        MarketIndicator:
+          type: string
+          example: '4'
+        OrderID:
+          type: string
+          description: Server order id.
+        ClOrdID:
+          type: string
+          description: Client id for this cancel request.
+        Location:
+          type: string
+          description: Broker target-customer compatibility field.
+        UserID:
+          type: string
+          description: Broker target customer user id.
+
+    CancelOrderEnvelope:
+      type: object
+      required: [serverName, method, content]
+      properties:
+        serverName:
+          type: string
+          enum: [OrderSvr]
+        method:
+          type: string
+          enum: [cancelOrder]
+        content:
+          $ref: '#/components/schemas/CancelOrderContent'
+
+    QueryOpenOrderContent:
+      type: object
+      properties:
+        securityid:
+          type: string
+          description: Legacy query field currently consumed by runtime.
+          example: BTCUSDT
+        marketIndicator:
+          type: string
+          example: '4'
+        maxOrderCount:
+          type: integer
+          minimum: 1
+          example: 100
+        Location:
+          type: string
+          description: Broker compatibility field; must match authoritative session location.
+        userid:
+          type: string
+          description: Broker target customer id.
+        SecurityID:
+          type: string
+          description: Canonical alias retained for runtime compatibility.
+        MarketIndicator:
+          type: string
+          description: Canonical alias retained for runtime compatibility.
+
+    QueryOpenOrderEnvelope:
+      type: object
+      required: [serverName, method, content]
+      properties:
+        serverName:
+          type: string
+          enum: [OrderSvr]
+        method:
+          type: string
+          enum: [queryOpenOrder]
+        content:
+          $ref: '#/components/schemas/QueryOpenOrderContent'
+
+    QueryAccountBalanceContent:
+      type: object
+      properties:
+        userid:
+          type: string
+          description: Broker target customer id. Trader normally sends an empty object.
+        location:
+          type: string
+          description: Broker customer location; must equal Broker authoritative location.
+
+    QueryAccountBalanceEnvelope:
+      type: object
+      required: [serverName, method, content]
+      properties:
+        serverName:
+          type: string
+          enum: [TradeSvr]
+        method:
+          type: string
+          enum: [queryAccountBalance]
+        content:
+          $ref: '#/components/schemas/QueryAccountBalanceContent'
+
+    QueryTradePositionContent:
+      type: object
+      properties:
+        securityid:
+          type: string
+          example: BTCUSDT
+        userid:
+          type: string
+          description: Broker target customer id.
+        location:
+          type: string
+          description: Broker customer location; must equal Broker authoritative location.
+
+    QueryTradePositionEnvelope:
+      type: object
+      required: [serverName, method, content]
+      properties:
+        serverName:
+          type: string
+          enum: [TradeSvr]
+        method:
+          type: string
+          enum: [queryTradePosition]
+        content:
+          $ref: '#/components/schemas/QueryTradePositionContent'
+
     OpenApiSessionIdentity:
       type: object
       required:
@@ -255,6 +471,18 @@ components:
         cid:
           type: string
           nullable: true
+x-dc-method-schemas:
+  'OrderSvr/placeOrder':
+    request: '#/components/schemas/PlaceOrderEnvelope'
+  'OrderSvr/cancelOrder':
+    request: '#/components/schemas/CancelOrderEnvelope'
+  'OrderSvr/queryOpenOrder':
+    request: '#/components/schemas/QueryOpenOrderEnvelope'
+  'TradeSvr/queryAccountBalance':
+    request: '#/components/schemas/QueryAccountBalanceEnvelope'
+  'TradeSvr/queryTradePosition':
+    request: '#/components/schemas/QueryTradePositionEnvelope'
+
 x-dc-v1-catalog:
   authentication:
     LoginSvr:
