@@ -274,6 +274,7 @@ Current operator/developer documentation:
 - [Broker API v1](docs/openapi/BROKER_API_V1.zh-CN.md)
 - [Broker API Reference v1](docs/openapi/BROKER_REFERENCE_V1.zh-CN.md)
 - [Tenant Management API v1](docs/openapi/TENANT_API_V1.zh-CN.md)
+- [Tenant Management API Reference v1](docs/openapi/TENANT_MANAGEMENT_REFERENCE_V1.zh-CN.md)
 - [WebSocket / Topic Reference v1](docs/openapi/WEBSOCKET_TOPICS_V1.zh-CN.md)
 - [OpenAPI 限流参考](docs/api/RATE_LIMITS.zh-CN.md)
 - [Crypto Open API v1 架构与接口基线](docs/CRYPTO_OPEN_API_V1.zh-CN.md)
