@@ -62,6 +62,8 @@ nav:
       - Topic / Recovery Contract: openapi/WEBSOCKET_TOPICS_V1.zh-CN.md
   - SDK:
       - SDK Guide: openapi/SDK_GUIDE.zh-CN.md
+      - Sandbox Strategy: openapi/SANDBOX_STRATEGY.zh-CN.md
+      - External GA Checklist: openapi/EXTERNAL_GA_CHECKLIST.zh-CN.md
       - Versioning & Changelog: openapi/VERSIONING_CHANGELOG.zh-CN.md
   - Web Products:
       - Platform Web: web/PLATFORM_WEB_GUIDE.zh-CN.md
