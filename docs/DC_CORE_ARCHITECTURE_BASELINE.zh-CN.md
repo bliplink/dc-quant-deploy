@@ -355,85 +355,416 @@ LiqSvr 负责 liquidation 执行。
 
 ---
 
-## 4. Web 与角色模型
+## 4. 三套 Web：产品边界与文档交付
 
-系统有三套 Web：
+系统不是一个 Web，而是三套相互独立、可以分别部署和演进的 Web。后续会话不能把三套 Web 混成一个工程，也不能把平台管理能力重新塞回 Trade Web。
 
-1. **Platform Web**
-   - 平台管理员；
-   - 租户审批；
-   - location 分配；
-   - 集群 / 路由管理；
-   - 系统级管理。
+### 4.1 Platform Web（平台管理端）
 
-2. **Tenant Web**
-   - 租户申请；
-   - 租户登录；
-   - 租户客户 / 交易账户管理；
-   - 自己的 Broker / Trader 管理。
+面向平台运营 / 管理员。
 
-3. **Trade Web**
-   - 核心交易页面；
-   - 行情；
-   - 下单；
-   - Positions；
-   - Account Info；
-   - Open Orders；
-   - TP/SL；
-   - FOK / IOC；
-   - Conditional / Trigger；
-   - Cancel All；
-   - 移动端交易体验。
+核心能力：
+
+- 平台管理员登录；
+- 租户申请审核；
+- 审核通过后生成 / 分配唯一 `location`；
+- 租户状态管理；
+- Order / Trade / MD 集群分配与路由管理；
+- 全平台配置；
+- 服务运行状态 / 管理能力；
+- 平台级审计和运营管理。
+
+边界：
+
+- Platform Web 管理“整个平台”；
+- 不作为普通交易员的交易终端；
+- 不承载核心撮合、资金、持仓业务逻辑；
+- 后端主要通过 GW / AdminSvr / ManagerSvr 等管理接口访问。
+
+必须提供独立的客户/运营文档：
+
+`docs/web/PLATFORM_WEB_GUIDE.zh-CN.md`
+
+文档应该站在平台运营人员角度说明：
+
+- 如何登录；
+- 如何审核租户；
+- location 如何产生；
+- 如何查看 / 调整集群路由；
+- 如何管理租户；
+- 常见操作与异常处理。
+
+### 4.2 Tenant Web（租户 / Broker 管理端）
+
+面向租户 / Broker 管理员。
+
+已知独立仓库：
+
+`bliplink/dc-saas-tenant-web`
+
+核心能力：
+
+- 租户申请入口；
+- 租户登录；
+- Broker / Tenant 基本资料；
+- 客户账户管理；
+- 创建交易账户；
+- API Key 管理；
+- 客户资金操作；
+- 租户级配置；
+- 进入 / 导航到核心 Trade Web；
+- 后续可以扩展 Broker 自有品牌 / 配置能力。
+
+边界：
+
+- Tenant Web 管“这个 Broker 自己的业务”；
+- 不显示其它 location 的数据；
+- 不直接访问 OrderSvr / TradeSvr 物理实例；
+- 与核心交易服务仍通过 GW / 管理 API 交互。
+
+必须提供独立客户文档：
+
+`docs/web/TENANT_WEB_GUIDE.zh-CN.md`
+
+内容至少包括：
+
+- 租户申请；
+- 审批后的登录；
+- 客户 / 交易账户创建；
+- API Key 创建和权限；
+- 充值 / 提现；
+- Broker API 接入入口；
+- 如何进入 Trade Web；
+- location 与客户账户的关系。
+
+### 4.3 Trade Web（专业交易终端）
+
+已知独立仓库：
+
+`bliplink/dc-trade-web@saas-crypto`
+
+发布镜像：
+
+`ghcr.io/bliplink/dc-saas-trade-web:saas-crypto`
+
+Trade Web 面向普通 Trader / Broker 客户，是核心交易页面。
+
+核心能力：
+
+- 实时行情；
+- TradingView / Kline；
+- Order Book；
+- 下单；
+- Limit / Market；
+- IOC / FOK；
+- PostOnly；
+- ReduceOnly；
+- Conditional / Trigger；
+- TP / SL；
+- Cancel / Cancel All；
+- Open Orders；
+- Order History；
+- Trade History；
+- Positions；
+- Account Info；
+- 资金 / 保证金 / 未实现盈亏；
+- Desktop；
+- Mobile。
+
+边界：
+
+- Trade Web 只关注交易；
+- 不重新放置平台租户审核、系统集群管理等平台功能；
+- 实时交易与实时行情统一通过 GW；
+- 历史行情查询通过 AdminSvr + ClickHouse 的统一接口；
+- 前端不应该知道 OrderSvr / TradeSvr / MDSvr 的物理节点。
+
+必须提供独立用户产品文档：
+
+`docs/web/TRADE_WEB_GUIDE.zh-CN.md`
+
+该文档必须站在最终交易用户角度写，不描述后端微服务架构，重点说明“用户能做什么、如何操作、订单类型和风险含义”。
+
+### 4.4 三套 Web 的导航关系
+
+推荐产品关系：
+
+```text
+Platform Web
+  └─ 管全平台 / 租户 / 路由
+
+Tenant Web
+  ├─ 租户申请
+  ├─ 租户登录
+  ├─ 客户 / API Key / 资金管理
+  └─ 导航到 Trade Web
+
+Trade Web
+  └─ 专注专业交易
+```
+
+Trade Web 一级导航可以提供“租户”入口，但应直接导航到 Tenant Web 主页面，不在 Trade Web 内复制租户管理二级菜单。
+
+### 4.5 Web UI 基线
 
 UI 目标：
 
 > 对标 Bybit 等成熟衍生品交易界面，但不复制其后端架构。
 
-当前整体视觉已统一为蓝色主色 + 黑灰交易背景。
+三套 Web 需要保持统一品牌风格：
+
+- 蓝色主色；
+- 黑灰交易背景；
+- 登录页 / 顶部导航 / 菜单布局保持品牌一致；
+- Platform / Tenant 偏管理；
+- Trade Web 偏专业交易。
 
 ---
 
-## 5. API 角色边界
+## 5. 对外 OpenAPI：Broker、Trader、Tenant
 
-系统对外 API 分三类。
+API 是本产品的正式对外能力，不只是内部调试接口。客户既可以直接使用本平台 Web，也可以完全基于 API 构建自己的 Broker / Trader 系统。
 
-### Broker API
+当前规范文件：
 
-Broker 可以：
+`docs/openapi/crypto-openapi-v1.yaml`
 
+当前 OpenAPI 明确复用 GW 原生 HTTP transport，不额外引入 OpenApiSvr；业务语义仍由 LoginSvr、OrderSvr、TradeSvr、MDSvr、ProjectionSvr、AdminSvr、ManagerSvr 等服务负责。
+
+### 5.1 Broker API：客户可以把本平台作为交易核心
+
+Broker API 面向“自建 Broker / 经纪商后台”。
+
+典型场景：
+
+> 客户自己开发网站、App、CRM、账户系统或 Broker 后端，然后通过 Broker API 把订单和账户操作接入本平台交易核心。
+
+Broker API 必须支持：
+
+#### 客户生命周期
+
+- 创建客户；
 - 创建客户交易账户；
-- 客户充值 / 提现；
-- 查询客户信息；
-- 代客户下单 / 撤单；
-- 查询订单 / 成交 / 持仓 / 资金。
+- 查询客户；
+- 查询客户状态；
+- 客户与 `location` 隔离；
+- 客户 API Key / 权限管理。
 
-适合自建 Broker 后端接入。
+#### 资金
 
-### Trader API
+- 客户充值 / cashIn；
+- 客户提现 / cashOut；
+- 查询客户余额；
+- 查询资金流水；
+- 必须限制在当前 Broker / location 范围内。
 
-Trader：
+#### 代客交易
 
-- 使用自己的 API key；
-- 只访问自己的账户；
-- 下单 / 撤单；
-- 查询自己的资金 / 持仓 / 订单 / 成交。
+Broker 可以指定自己管理的 customer / trading user：
 
-### Tenant API
+- 代客户下单；
+- 代客户撤单；
+- Cancel All；
+- Limit；
+- Market；
+- IOC；
+- FOK；
+- PostOnly；
+- ReduceOnly；
+- Conditional / Trigger；
+- TP / SL。
 
-租户可以：
+交易指令本身尽量与 Trader API 共用统一 order schema，不另造两套订单协议。
+
+#### 客户查询
+
+Broker 可以查询自己名下客户的：
+
+- Open Orders；
+- Order History；
+- Trade History；
+- Position；
+- Balance；
+- Margin / risk；
+- Account / trading configuration。
+
+Broker **不能**越过自己的 location 查询其它 Broker 数据。
+
+必须提供面向客户的 Broker 接入文档：
+
+`docs/api/BROKER_API_GUIDE.zh-CN.md`
+
+文档必须至少包含：
+
+- 适用场景；
+- API Key 创建；
+- 签名方式；
+- 登录 / session；
+- 权限模型；
+- customer / user 参数含义；
+- location 隔离；
+- 创建客户完整示例；
+- 充值示例；
+- 代客户下单示例；
+- 撤单示例；
+- 查询订单 / 成交 / 持仓 / 资金示例；
+- 错误码；
+- rate limit；
+- 幂等 / ClOrdID；
+- WebSocket 行情 / 交易事件订阅。
+
+### 5.2 Trader API：普通用户也可以直接使用 API
+
+普通 Trader 不需要成为 Broker，也可以使用 API Key 交易自己的账户。
+
+Trader API 面向：
+
+- 量化用户；
+- API Trader；
+- 自建交易界面的普通客户；
+- 自动化策略。
+
+Trader 可以：
+
+- 创建 / 管理自己的 API Key；
+- 查询自己的账户；
+- 查询自己的余额；
+- 查询自己的持仓；
+- 下单；
+- 撤单；
+- Cancel All；
+- 查询 Open Orders；
+- 查询历史订单；
+- 查询成交；
+- 订阅实时行情；
+- 订阅自己的订单 / 成交 / 账户事件。
+
+权限原则：
+
+- Trader 只能操作自己的 UserID / account；
+- Trader 不能创建其它客户；
+- Trader 不能替别人充值 / 提现；
+- Trader 不能用请求 content 自己扩大 session 权限；
+- API Key permission snapshot 在登录后对 session 生效。
+
+必须提供独立普通用户 API 文档：
+
+`docs/api/TRADER_API_GUIDE.zh-CN.md`
+
+文档应该尽量接近成熟交易所开发者文档体验，提供可直接复制运行的请求示例。
+
+### 5.3 Tenant API：租户自建整套业务系统
+
+Tenant API 比单一 Trader API 范围更大，适合租户基于交易核心开发自己的 SaaS / Broker 平台。
+
+Tenant 可以：
 
 - 创建交易账号；
-- 用户管理；
+- 管理 user；
+- 管理 API Key；
 - 资金操作；
 - 下单 / 撤单；
 - 查询；
-- 基于平台交易核心开发自己的业务系统。
+- 对接自己的行情；
+- 对接自己的 Robot；
+- 在权限允许范围内使用平台提供的行情、品种和流动性能力。
 
-原则：
+Tenant API 仍必须受 location 隔离。
 
-> Broker / Trader 的交易指令可以复用统一协议，但权限和可见数据范围不同。
+必须提供：
 
-统一 OpenAPI 由 GW 作为入口层，必要的聚合查询由 AdminSvr 提供。
+`docs/api/TENANT_API_GUIDE.zh-CN.md`
+
+### 5.4 Broker API 与 Trader API 的关系
+
+核心原则：
+
+> **Broker 和 Trader 共用统一交易核心与统一订单协议，差别主要是“代表谁操作”和权限范围，而不是重新开发一套撮合接口。**
+
+例如：
+
+```text
+Trader placeOrder
+  user = API Key owner
+
+Broker placeOrder
+  broker = API Key owner
+  customer/user = Broker 名下被代理交易账户
+```
+
+两者最终都应通过：
+
+`Client -> GW -> OrderSvr -> TradeSvr`
+
+### 5.5 API 鉴权与安全原则
+
+对外 API 必须明确：
+
+- API Key；
+- Secret Key；
+- HMAC-SHA256 签名；
+- expiry；
+- session；
+- permission；
+- rate limit；
+- location；
+- UserID；
+- Broker customer scope；
+- 幂等；
+- ClOrdID；
+- replay protection；
+- API Key 禁用 / 轮换。
+
+禁止：
+
+- 仅靠前端隐藏字段做权限；
+- 让 Broker 请求跨 location；
+- 让 Trader 指定别人的 UserID；
+- 通过 request content 提升权限。
+
+### 5.6 HTTP 与 WebSocket
+
+API 文档不能只有下单 HTTP。
+
+需要同时提供：
+
+**HTTP / request-response**
+
+- 登录 / API Key login；
+- account query；
+- order command；
+- cancel；
+- cash；
+- history；
+- admin-style customer management（仅 Broker / Tenant）。
+
+**WebSocket / realtime**
+
+- bookTicker；
+- depth；
+- trade；
+- Kline；
+- order update；
+- execution；
+- position；
+- balance / account events。
+
+实时核心交易 / 行情优先走 GW WebSocket，历史查询可以由 AdminSvr 聚合提供。
+
+### 5.7 API 文档最终交付形式
+
+最终客户不应该只看到 YAML。
+
+交付物必须包括：
+
+1. `docs/openapi/crypto-openapi-v1.yaml` — 机器可读标准定义；
+2. `docs/api/BROKER_API_GUIDE.zh-CN.md` — Broker 客户接入说明；
+3. `docs/api/TRADER_API_GUIDE.zh-CN.md` — 普通 API Trader 使用说明；
+4. `docs/api/TENANT_API_GUIDE.zh-CN.md` — 租户系统集成说明；
+5. 从 OpenAPI / Markdown 生成的静态开发者文档站；
+6. Web 中提供 Developer / API Docs 入口。
+
+后续扩展 FX / 商品 / 债券时，优先扩展 schema 和 market/security 维度，不复制一套新的 Crypto-only API。
 
 ---
 
@@ -930,6 +1261,17 @@ Trade Web 对标专业衍生品交易体验。
 - 完成单热点 / 多热点两类 benchmark。
 
 ### P1 — 完整卸载 / 安装 / 初始化 / 自动 E2E
+
+同时完成正式客户文档交付：
+
+- Platform Web 使用文档；
+- Tenant Web 使用文档；
+- Trade Web 用户文档；
+- Broker API 文档；
+- Trader API 文档；
+- Tenant API 文档；
+- OpenAPI YAML -> 静态开发者文档站；
+- Platform / Tenant / Trade Web 中正确的文档与导航入口。
 
 沉淀一整套脚本：
 
