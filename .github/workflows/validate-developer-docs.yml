@@ -1,0 +1,48 @@
+name: Validate Developer Docs
+
+on:
+  push:
+    branches:
+      - saas-crypto
+    paths:
+      - "docs/**"
+      - "mkdocs.yml"
+      - "requirements-docs.txt"
+      - ".github/workflows/validate-developer-docs.yml"
+  pull_request:
+    paths:
+      - "docs/**"
+      - "mkdocs.yml"
+      - "requirements-docs.txt"
+      - ".github/workflows/validate-developer-docs.yml"
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+          cache-dependency-path: requirements-docs.txt
+
+      - name: Install docs dependencies
+        run: python -m pip install -r requirements-docs.txt
+
+      - name: Build Developer Portal
+        run: mkdocs build --clean
+
+      - name: Upload static site artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: dc-developer-portal
+          path: site/
+          if-no-files-found: error
