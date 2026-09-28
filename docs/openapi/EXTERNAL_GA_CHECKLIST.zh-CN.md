@@ -100,6 +100,7 @@
 - [x] MkDocs static portal config
 - [x] CI build
 - [x] OpenAPI spec validator CI
+- [x] OpenAPI catalog coverage CI
 
 ## 3. GA Blockers
 
@@ -135,16 +136,16 @@
 
 ### P0 — Machine-readable OpenAPI
 
-- [x] placeOrder request schema
-- [x] cancelOrder request schema
-- [x] queryOpenOrder request schema
-- [x] queryAccountBalance request schema
-- [x] queryTradePosition request schema
-- [ ] queryOrder / execution / history request schemas
-- [ ] Broker customer scope schemas beyond current compatibility fields
-- [ ] cashIn/cashOut schemas
-- [ ] Tenant action oneOf schemas
+- [x] 28/28 public catalog methods mapped to request schemas
+- [x] authentication / API Key management request schemas
+- [x] market data request schemas
+- [x] trading / account / history request schemas
+- [x] Broker cashIn/cashOut request schemas
+- [x] Tenant control-plane request schemas
+- [x] Broker key type / customer compatibility fields represented
+- [x] CI enforces catalog ↔ request-schema coverage
 - [ ] method-specific response schemas
+- [ ] richer Broker customer ownership constraints represented beyond descriptive fields
 
 ### P0 — Broker Cash Idempotency
 
