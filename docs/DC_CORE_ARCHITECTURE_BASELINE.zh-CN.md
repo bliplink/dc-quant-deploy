@@ -722,7 +722,43 @@ Broker placeOrder
 - 让 Trader 指定别人的 UserID；
 - 通过 request content 提升权限。
 
-### 5.6 HTTP 与 WebSocket
+### 5.6 Open API 限流（当前已实现）
+
+GW 已实现独立的 OpenAPI Token Bucket 限流：
+
+`OpenApiRateLimitSecurityCheck`
+
+当前已经接入 GW `securityChecks`。
+
+当前 profile：
+
+| Profile | client_type | QPS | Burst | Scope |
+|---|---|---:|---:|---|
+| TRADER_STANDARD | API | 100 | 30 | sessionId |
+| TENANT_STANDARD | TenantAPI | 20 | 10 | sessionId |
+
+当前行为：
+
+- `WEB` session 不进入该 OpenAPI limiter；
+- signed `POST /api` 主要用于 API Key 登录交换，不消耗后续业务 session bucket；
+- `POST /httpapi/` 的 API/TenantAPI session 业务请求受限；
+- 每个受限请求当前统一消耗 1 token；
+- 超限：`10003 RATE_LIMIT_EXCEEDED`；
+- 非法 profile：`10005 RATE_LIMIT_PROFILE_INVALID`。
+
+当前尚未实现：
+
+- per-method weight；
+- 独立 `BROKER_STANDARD`；
+- Binance/Bybit 风格的 endpoint weight table。
+
+这些能力属于性能压测完成后的规划项，不能在对外文档里当作当前生产能力。
+
+统一参考：
+
+`docs/api/RATE_LIMITS.zh-CN.md`
+
+### 5.7 HTTP 与 WebSocket
 
 API 文档不能只有下单 HTTP。
 
@@ -751,7 +787,7 @@ API 文档不能只有下单 HTTP。
 
 实时核心交易 / 行情优先走 GW WebSocket，历史查询可以由 AdminSvr 聚合提供。
 
-### 5.7 API 文档最终交付形式
+### 5.8 API 文档最终交付形式
 
 最终客户不应该只看到 YAML。
 
