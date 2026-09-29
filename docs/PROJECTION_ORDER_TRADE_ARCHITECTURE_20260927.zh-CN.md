@@ -1,5 +1,7 @@
 # ProjectionSvr 订单与交易投影架构基线
 
+> 2026-09-29 校正：以下 Trade 部分描述的是目标职责及当时的 event/mutation 归档验收，不表示 Trade 业务表已经由 ProjectionSvr 物化。现有 `TradeProjectionService` 仅持久化原事件、mutation 与 watermark；`dc_users_balance`、`dc_orders_position`、用户配置和 posting 等业务表仍有 TradeSvr 直接 SQL 写入。来源和迁移门禁见 [Trade 本地文件权威恢复](TRADE_LOCAL_FILE_AUTHORITY_20260929.zh-CN.md)。
+
 ## 1. 生产职责
 
 ProjectionSvr 是交易核心的异步持久化/查询投影层，不参与 OrderSvr/TradeSvr 的同步业务决策。
