@@ -23,30 +23,6 @@ if (!password) {
 
 fs.mkdirSync(artifactDir, { recursive: true });
 
-function requestMethod(response) {
-  try {
-    const body = response.request().postDataJSON();
-    return body && (body.method || (body.content && body.content.method));
-  } catch (error) {
-    return '';
-  }
-}
-
-async function invokeFromPage(page, method, action) {
-  const [response] = await Promise.all([
-    page.waitForResponse(
-      candidate => candidate.url().includes('/httpapi/') && requestMethod(candidate) === method,
-      { timeout: 60000 }
-    ),
-    action()
-  ]);
-  const body = await response.json();
-  if (Number(body.code) !== 0) {
-    throw new Error(`${method} failed: ${JSON.stringify(body)}`);
-  }
-  return body;
-}
-
 async function gatewayCall(page, serverName, method, content) {
   return page.evaluate(async request => {
     const login = JSON.parse(sessionStorage.getItem('loginData') || '{}');
@@ -145,10 +121,9 @@ async function deposit(page, amount) {
   await page.locator('.accountInfoWrap').getByText('Deposit', { exact: true }).click();
   const modal = page.locator('.ant-modal:visible').filter({ hasText: 'Deposit' });
   await modal.locator('input').fill(String(amount));
-  await invokeFromPage(page, 'cashIn', () =>
-    modal.getByRole('button', { name: 'Confirm Deposit' }).click()
-  );
-  await page.waitForTimeout(1500);
+  await modal.getByRole('button', { name: 'Confirm Deposit' }).click();
+  await page.getByText('Deposit submitted', {exact: true}).waitFor({timeout: 20000});
+  await modal.waitFor({state: 'hidden', timeout: 20000});
 }
 
 async function placeLimit(page, side, price, amount) {
@@ -163,9 +138,10 @@ async function placeLimit(page, side, price, amount) {
   }
   await priceInput.fill(String(price));
   await amountInput.fill(String(amount));
-  return invokeFromPage(page, 'placeOrder', () =>
-    form.getByRole('button', { name: side }).click()
-  );
+  const amountHandle = await amountInput.elementHandle();
+  await form.getByRole('button', { name: side }).click();
+  await page.waitForFunction(input => input && input.value === '',
+    amountHandle, {timeout: 20000});
 }
 
 async function openOrders(page) {
@@ -181,10 +157,12 @@ async function openOrders(page) {
 async function cancelFirstOpenOrder(page) {
   const rows = await openOrders(page);
   await rows.first().waitFor({ timeout: 15000 });
-  await invokeFromPage(page, 'cancelOrder', () =>
-    rows.first().getByText('Cancel', { exact: true }).click()
-  );
-  await page.waitForTimeout(1200);
+  const before = await rows.count();
+  await rows.first().getByText('Cancel', { exact: true }).click();
+  await page.waitForFunction(expected => [...document.querySelectorAll(
+    '.orderWrap .ant-tabs-tabpane-active .openOrderWrap .ant-table-tbody tr')]
+    .filter(row => row.textContent.includes('BTCUSDT')).length < expected,
+  before, {timeout: 20000});
 }
 
 async function waitForRestingBid(page, expectedPrice) {
@@ -247,9 +225,7 @@ async function clearOpenOrders(page) {
   for (let attempt = 0; attempt < 20; attempt += 1) {
     const rows = await openOrders(page);
     if (await rows.count() === 0) return;
-    await invokeFromPage(page, 'cancelOrder', () =>
-      rows.first().getByText('Cancel', { exact: true }).click()
-    );
+    await rows.first().getByText('Cancel', { exact: true }).click();
     await page.waitForTimeout(500);
   }
   throw new Error('failed to clear existing E2E open orders');
@@ -291,9 +267,8 @@ async function closeFirstPosition(page, side) {
   await rows.first().getByText('Close', { exact: true }).click();
   const modal = page.locator('.closePositionModal').filter({ hasText: 'Close position' }).first();
   await modal.waitFor({ timeout: 15000 });
-  await invokeFromPage(page, 'placeOrder', () =>
-    modal.locator('.ant-modal-footer .ant-btn-primary').click()
-  );
+  await modal.locator('.ant-modal-footer .ant-btn-primary').click();
+  await modal.waitFor({state: 'hidden', timeout: 20000});
 }
 
 async function waitForNoPosition(page) {
