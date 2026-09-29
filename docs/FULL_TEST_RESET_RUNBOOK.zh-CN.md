@@ -14,4 +14,6 @@
 
 本轮预验证：11 个 Java 服务 1152 项测试，0 failure/error，1 项可选数据库测试 skipped；DC Common 34 项、连接器 8 项、交易 Web 19 项；重置安全检查 8 项、空基线安全检查 7 项、assignment 迁移 3 项。它们不等于运行时业务、异常切换或 TPS 验收。
 
+第一次完整重置暴露 ZooKeeper 双卷问题：`data/zookeeper` 是快照卷，`log/zookeeper` 是 `/datalog` 事务日志卷。只删前者会触发 “No snapshot found, but there are log entries”。重置工具已同时枚举两者，并在正常卸载、确认无句柄后删除；不会打开 trust.empty 掩盖丢失快照。另有精确 ClickHouse 日志目录随测试重置删除。新增第 9 项重置安全回归覆盖双卷。
+
 测试日志按大小轮转，每个节点约 64 MiB 上限（16 MiB × 主文件与 3 份轮转），仍保留生命周期/恢复日志。测试安装容量门槛是至少 40 GiB runtime 空间，保留现有内存与 Docker 空间检查；不是生产容量规格。

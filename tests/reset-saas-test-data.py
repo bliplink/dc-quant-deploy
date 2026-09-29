@@ -18,7 +18,7 @@ def exact_targets(root):
     root = Path(root)
     if str(root) not in ROOTS or root.resolve() != root:
         raise ValueError('unsupported/canonical test runtime root')
-    for ancestor in (root, *root.parents, root / 'data', root / 'evidence'):
+    for ancestor in (root, *root.parents, root / 'data', root / 'log', root / 'evidence'):
         if ancestor.is_symlink():
             raise ValueError(f'symbolic-link ancestor refused: {ancestor}')
     data = root / 'data'
@@ -30,6 +30,15 @@ def exact_targets(root):
     if any(path.is_symlink() for path in data.iterdir()):
         raise ValueError('symbolic-link component refused (including dangling links)')
     targets = [data / name for name in COMPONENTS if (data / name).exists()]
+    # ZooKeeper's /datalog is a second authoritative volume, NOT an application
+    # text log. Removing /data alone leaves orphan transactions and prevents a
+    # fresh startup ("No snapshot found, but there are log entries").
+    for name in ('zookeeper', 'clickhouse'):
+        target = root / 'log' / name
+        if target.is_symlink():
+            raise ValueError('linked infrastructure log volume refused')
+        if target.exists():
+            targets.append(target)
     device = data.stat().st_dev
     mounts = [Path(line.split()[4].replace('\\040', ' ')) for line in Path('/proc/self/mountinfo').read_text().splitlines()]
     for target in targets:
@@ -116,7 +125,9 @@ def main():
             raise ValueError('reset did not remove every target; no completed proof emitted')
         result = dict(resetId=args.reset_id, runtimeRoot=str(root), dataResetCompleted=True,
             completedAtMillis=int(time.time() * 1000), backup=False,
-            deletedComponents=[path.name for path in targets], retained=['control', 'evidence', 'build cache'])
+            deletedComponents=[path.name for path in targets if path.parent == root / 'data'],
+            deletedInfrastructureLogDirs=[str(path) for path in targets if path.parent == root / 'log'],
+            retained=['control', 'evidence', 'build cache'])
         proof.write_text(json.dumps(result, indent=2) + '\n')
         print(f'RESET_PASS components={len(targets)} proof={proof} recoverable=false')
 

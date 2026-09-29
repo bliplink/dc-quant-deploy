@@ -31,6 +31,12 @@ class ResetSafetyTest(unittest.TestCase):
         with self.assertRaises(ValueError):
             reset.exact_targets(Path('/'))
 
+    def test_zookeeper_snapshot_and_transaction_logs_are_both_selected(self):
+        (self.root / 'data/zookeeper').mkdir()
+        (self.root / 'log/zookeeper').mkdir(parents=True)
+        (self.root / 'log/zookeeper/orphan-txn').write_text('fixture')
+        self.assertEqual([self.root / 'data/zookeeper', self.root / 'log/zookeeper'], reset.exact_targets(self.root))
+
     def test_unknown_data_component_is_refused(self):
         (self.root / 'data/another-system').mkdir()
         with self.assertRaises(ValueError):
