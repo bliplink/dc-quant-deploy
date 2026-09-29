@@ -1,0 +1,71 @@
+{
+  "date": "2026-09-29",
+  "scope": "default-off cash v2 consumer, synthetic MySQL projection transaction and actual producer interoperability",
+  "status": "PASS_WITH_LIVE_RELEASE_GATES_OPEN",
+  "projectionCommit": "3122a8d0ab94d5e7a4e177951b2e4ed5ee58d38d",
+  "tradeCommitUnchanged": "64acf8e1465f2f68d7182bb8489a8990e6904820",
+  "projectionSuite": {"classes": 12, "cases": 73, "newCases": 17, "failures": 0, "errors": 0, "skipped": 0},
+  "tradeRegressionRerun": {"classes": 64, "cases": 295, "failures": 0, "errors": 0, "skipped": 0},
+  "candidateSwitch": {"name": "projection.trade.cashRequestV2.enabled", "default": false, "requiresCoreAndPosting": true},
+  "candidateResultTable": "dc_trade_projection_cash_request",
+  "resultTableIsCoreRecoverySource": false,
+  "isolatedMysql": {
+    "version": "8.0.36",
+    "casesPerRun": 45,
+    "finalConsecutiveRuns": 3,
+    "status": "PASS",
+    "previousCases": 27,
+    "newOptInCases": 18,
+    "reports": [
+      "/Users/kong/Documents/Codex/.webcodex-managed-worktrees/projectionsvr-fb701727-b941-4ad3-b85b-f38a97872700/target/trade-projection-offline.B6skK9ug/result.json",
+      "/Users/kong/Documents/Codex/.webcodex-managed-worktrees/projectionsvr-fb701727-b941-4ad3-b85b-f38a97872700/target/trade-projection-offline.kMZlKkki/result.json",
+      "/Users/kong/Documents/Codex/.webcodex-managed-worktrees/projectionsvr-fb701727-b941-4ad3-b85b-f38a97872700/target/trade-projection-offline.xpEei6jR/result.json"
+    ],
+    "allRecordedClassAndDependencyHashesMatch": true,
+    "actualProducerOptionalFingerprintFieldsPopulated": true,
+    "syntheticOnly": true,
+    "network": "none; runner shares only isolated container loopback",
+    "hostPorts": false,
+    "liveConfigurationOrDataMounted": false,
+    "ownershipLabel": "dc.projection.offline",
+    "allOwnedTemporaryContainersRemoved": true,
+    "defaultOffV2RejectedWithoutPartialSqlOrWatermark": true,
+    "optInV2BalancePostingOriginalResultArchivesWatermarkAtomic": true,
+    "coreRecoveryFromProjectionSupported": false,
+    "liveCashIdempotencyCovered": false
+  },
+  "classSha256": {
+    "TradeProjectionService": "1114f8e252691f1b84754053419fd147380189ad91bc512987c16fc530ab8b85",
+    "TradeProjectionTransaction": "6a7c7bc502242e9b27e4fc7815124f63f31209a280cd2072d9773e792809961f",
+    "TradeProjectionSchemaGuard": "1da7cd1f901d50a45789d7df37efd93107ef1474ea4d2cf98377cc363af7c0cf",
+    "TradePostingProjection": "061dd46ff51bc70ed4d0d7d4ab80a7cea7689bdea5aa2efbc0c07de8c8452a9c",
+    "TradeCashResultProjection": "d09d2882fa0ccdaf2685cad44340a098debe425881ac3c1454093422db35b90e",
+    "TradeProjectionMysqlOfflineLab": "71cb002ba7aaba2ec79cede44d6bfc69b2c0826e6e1d501e0fcc7725ab806b98",
+    "TradeCashStateBatchBuilder": "88b47ead80f14c1a4d7f7f48ea44397f8ba886b385009b89398d2f9e03cac2f0",
+    "TradeCashRequestResult": "75d90530032e3e8c4328a36a11a71c53a93dda00e92b7d49f1ff76ca9e025684"
+  },
+  "artifactSha256": {
+    "common314": "542d25a3c7345c2d25806fc7c975465e96ff21ac5151dd8c35f13520c006396c",
+    "bridge": "8a22afe1bd404ca5a2613a189df9133025ebc77cca990f9a202cfcaccc899329"
+  },
+  "liveCoreReadOnlyCheck": {"containers": 8, "allRunning": true, "restartCountEach": 0, "anyOomKilled": false, "originalImagesUnchanged": true, "provesBusinessWritableOrHa": false},
+  "liveDeploymentRestartConfigurationOrAssignmentChange": false,
+  "liveSchemaAlterOrHistoryImportRewriteTruncation": false,
+  "liveCashEntryWired": false,
+  "liveCoreSqlWriterRetired": false,
+  "liveFaultStressOrTpsMeasured": false,
+  "consumerObjectRecreationIsProcessKillTest": false,
+  "tcpGapOrReplicationPromotionCovered": false,
+  "wholeProductionSchemaQualified": false,
+  "mixedTransactionIndexCoverageIntegrated": false,
+  "rpoRtoOrHaQualified": false,
+  "openGates": [
+    "explicit API identity/authenticated scope/compatibility and real admission/risk",
+    "mixed transaction index coverage, whole-node recovery capacity and cold retention",
+    "trusted historical baseline and financial reconciliation",
+    "complete production schema/SQL-mode/encoding/trigger/archive capacity qualification",
+    "Projection GAP/rebuild and durable publication delivery semantics",
+    "funding/insurance/ADL local authority and old SQL writer retirement",
+    "Order/Trade/MD reusable recovery adapters, faults/retries, TPS and stability"
+  ]
+}

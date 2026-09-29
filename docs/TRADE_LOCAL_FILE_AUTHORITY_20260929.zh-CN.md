@@ -61,3 +61,5 @@ CashIn/CashOut 还没有天然稳定的业务去重键：`CashRequest` 本身没
 因此当前部署不变。不能仅凭单节点本地文件存在就宣布安全切主；副本追平、epoch fencing 与已确认提交的来源证明仍是独立门禁。
 
 后续候选增量 `64acf8e`：现金纯计算与预留/提交/安装执行器接到真实协调器的显式候选 hook，查重返回原结果、容量跨分区预留、不确定提交保留容量并撤销 READY，安装后核对完整余额后态再推进索引覆盖。Trade 全量 **295 项**通过，Projection 56 项及隔离 MySQL 27 项一轮复验通过；当前消费者仍拒绝 v2。无自动 bean、无线上入口接线，原 `wdBalance` 的 SQL-first 行为未改；真实 API/admission、全事务覆盖、推送补齐、冷留存/历史账实和 SQL 退场仍是门禁。详见 [候选提交/安装闭环](TRADE_CASH_COMMIT_INSTALL_CANDIDATE_20260929.zh-CN.md)，不将此成绩等同于线上文件权威或异常切主验收。
+
+后续消费者候选 `3122a8d` 已增加默认关闭的现金 v2 校验和原结果查询投影，同事务写入余额/流水/结果/归档/watermark；Projection **73 项**及最终 **45 项×3 轮**隔离验证通过，Trade **295 项**复验通过。新表只属于 Projection 查询面，不能让 Trade 从它恢复或拿它充当历史权威。当前线上未升级/开开关/改表，旧 SQL writer 未退场；实际 schema 迁移、全历史对账、混合覆盖和异常/GAP/重试门禁仍在。详见 [消费者候选验收](TRADE_CASH_V2_PROJECTION_CANDIDATE_20260929.zh-CN.md)。
