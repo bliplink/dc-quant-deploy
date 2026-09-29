@@ -340,6 +340,12 @@ async function platformCluster(page) {
     }, service, {timeout: 30000});
   }
 
+  // The placement editor uses the currently loaded service snapshot.
+  await page.locator('.section-head select').selectOption('OrderSvr');
+  await page.waitForFunction(() => {
+    const cards = [...document.querySelectorAll('.service-strip article')];
+    return cards.length === 1 && cards[0].querySelector('strong')?.textContent?.trim() === 'OrderSvr';
+  }, null, {timeout: 30000});
   const serviceSelects = page.locator('.editor select');
   await serviceSelects.first().selectOption('OrderSvr');
   const textarea = page.locator('.editor textarea');
