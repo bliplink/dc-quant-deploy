@@ -20,6 +20,7 @@ COMPOSE_ENV_FILE="${ORDER_CLUSTER_COMPOSE_ENV_FILE:-${DEPLOY_DIR}/.env.prod}"
 USE_CURRENT_FENCED="${ORDER_CLUSTER_RECOVERY_USE_CURRENT_FENCED:-false}"
 USE_CURRENT_PARTIAL="${ORDER_CLUSTER_RECOVERY_USE_CURRENT_PARTIAL:-false}"
 TRADE_CONTAINER="${ORDER_CLUSTER_TRADE_CONTAINER:-dc-saas-tradesvr}"
+TRADE_B_CONTAINER="${ORDER_CLUSTER_TRADE_B_CONTAINER:-dc-saas-tradesvr-b}"
 ORDER_A_GW_PORT="${ORDER_CLUSTER_A_GW_PORT:-33036}"
 ORDER_B_GW_PORT="${ORDER_CLUSTER_B_GW_PORT:-33041}"
 ORDER_C_GW_PORT="${ORDER_CLUSTER_C_GW_PORT:-33044}"
@@ -27,6 +28,7 @@ ORDER_A_REPLICATION_PORT="${ORDER_CLUSTER_A_REPLICATION_PORT:-19121}"
 ORDER_B_REPLICATION_PORT="${ORDER_CLUSTER_B_REPLICATION_PORT:-19122}"
 ORDER_C_REPLICATION_PORT="${ORDER_CLUSTER_C_REPLICATION_PORT:-19123}"
 TRADE_GW_PORT="${ORDER_CLUSTER_TRADE_GW_PORT:-33037}"
+TRADE_B_GW_PORT="${ORDER_CLUSTER_TRADE_B_GW_PORT:-33046}"
 
 log() { printf '[order-cluster-recovery] %s\n' "$*"; }
 die() { printf '[order-cluster-recovery] ERROR: %s\n' "$*" >&2; exit 1; }
@@ -53,6 +55,7 @@ for container in "${containers[@]}"; do
 done
 if [[ "${RESTART_AFTER_FENCE}" == true || "${RECREATE_AFTER_FENCE}" == true ]]; then
   docker inspect "${TRADE_CONTAINER}" >/dev/null 2>&1 || die "Missing container ${TRADE_CONTAINER}"
+  docker inspect "${TRADE_B_CONTAINER}" >/dev/null 2>&1 || die "Missing container ${TRADE_B_CONTAINER}"
 fi
 if [[ "${RECREATE_AFTER_FENCE}" == true ]]; then
   docker compose version >/dev/null 2>&1 || die 'docker compose is required for fenced recreation'
@@ -68,6 +71,7 @@ assignments_tsv="${work_dir}/assignments.tsv"
 recovering_commands="${work_dir}/recovering.commands"
 ready_tsv="${work_dir}/ready.tsv"
 already_ready_tsv="${work_dir}/already-ready.tsv"
+ready_evidence_tsv="${work_dir}/ready-evidence.tsv"
 interactive_log="${work_dir}/interactive-zk.log"
 zk_fifo="${work_dir}/interactive-zk.in"
 zk_write_fd=''
@@ -91,7 +95,7 @@ done
 printf 'quit\n' >>"${zk_input}"
 docker exec -i "${ZK_CONTAINER}" zkCli.sh -server "${ZK_SERVER}" \
   <"${zk_input}" >"${zk_output}" 2>&1 || true
-grep -o '{"partitionId"[^}]*}' "${zk_output}" >"${assignments_json}" || true
+grep -oE '\{[^}]*"partitionId"[^}]*\}' "${zk_output}" >"${assignments_json}" || true
 
 python3 - "${assignments_json}" "${assignments_tsv}" "${EXPECTED_PARTITIONS}" "${ORDER_C_ENABLED}" <<'PY'
 import json
@@ -150,9 +154,14 @@ path, expected_text, epoch_text = sys.argv[1:]
 expected, epoch = int(expected_text), int(epoch_text)
 rows = [json.loads(line) for line in open(path, encoding="utf-8")]
 allowed_states = {"READY", "RECOVERING"}
-if len(rows) != expected or any(int(row.get("epoch", 0)) != epoch or row.get("state") not in allowed_states
-                                for row in rows):
-    raise SystemExit("partial recovery requires one epoch with only READY/RECOVERING assignments")
+if len(rows) != expected or any(row.get("state") not in allowed_states for row in rows):
+    raise SystemExit("partial recovery requires only READY/RECOVERING assignments")
+recovering = [row for row in rows if row.get("state") == "RECOVERING"]
+if any(int(row.get("epoch", 0)) != epoch for row in recovering):
+    raise SystemExit("every RECOVERING assignment must use the target epoch")
+if any(int(row.get("epoch", 0)) <= 0 or int(row.get("epoch", 0)) > epoch
+       for row in rows if row.get("state") == "READY"):
+    raise SystemExit("READY assignments must use a positive epoch no newer than the target epoch")
 PY
 else
   (( target_epoch > max_epoch )) || die "Recovery epoch ${target_epoch} must be greater than current max ${max_epoch}"
@@ -174,7 +183,7 @@ with open(recovering_path, "w", encoding="utf-8", newline="\n") as recovering, \
     for original in rows:
         partition_id = original["partitionId"]
         if use_partial and original.get("state") == "READY":
-            already_ready.write(f"{partition_id}\t{original['primary']}\n")
+            already_ready.write(f"{partition_id}\t{original['primary']}\t{int(original['epoch'])}\n")
             continue
         value = dict(original)
         value["epoch"] = epoch
@@ -239,19 +248,29 @@ PY
 if [[ "${RESTART_AFTER_FENCE}" == true || "${RECREATE_AFTER_FENCE}" == true ]]; then
   restart_containers=("${ORDER_A_CONTAINER}" "${ORDER_B_CONTAINER}")
   [[ "${ORDER_C_ENABLED}" == true ]] && restart_containers+=("${ORDER_C_CONTAINER}")
-  restart_containers+=("${TRADE_CONTAINER}")
+  restart_containers+=("${TRADE_CONTAINER}" "${TRADE_B_CONTAINER}")
 
   if [[ "${RECREATE_AFTER_FENCE}" == true ]]; then
     log "Fence confirmed; recreating OrderSvr cluster and TradeSvr inside epoch ${target_epoch}."
     compose_services=(ordersvr ordersvr-b)
     [[ "${ORDER_C_ENABLED}" == true ]] && compose_services+=(ordersvr-c)
-    compose_services+=(tradesvr)
+    compose_services+=(tradesvr tradesvr-b)
     COMPOSE_PARALLEL_LIMIT=1 docker compose \
       --env-file "${COMPOSE_ENV_FILE}" -f "${COMPOSE_FILE}" \
       up -d --no-deps --force-recreate "${compose_services[@]}"
   else
-    log "Fence confirmed; restarting OrderSvr cluster and TradeSvr inside epoch ${target_epoch}."
-    docker restart "${restart_containers[@]}" >/dev/null
+    log "Fence confirmed; restarting OrderSvr replicas before TradeSvr inside epoch ${target_epoch}."
+    # Start Order replicas first. Recovery promotion performs synchronous peer replication,
+    # so both replication listeners must be online before Trade/GW traffic is restored.
+    docker restart "${ORDER_A_CONTAINER}" "${ORDER_B_CONTAINER}" >/dev/null
+    [[ "${ORDER_C_ENABLED}" == true ]] && docker restart "${ORDER_C_CONTAINER}" >/dev/null
+    wait_for_tcp "${ORDER_A_REPLICATION_PORT}" "${ORDER_A_CONTAINER} replication"
+    wait_for_tcp "${ORDER_B_REPLICATION_PORT}" "${ORDER_B_CONTAINER} replication"
+    if [[ "${ORDER_C_ENABLED}" == true ]]; then
+      wait_for_tcp "${ORDER_C_REPLICATION_PORT}" "${ORDER_C_CONTAINER} replication"
+    fi
+    log "Order replication listeners are ready; restarting TradeSvr A/B."
+    docker restart "${TRADE_CONTAINER}" "${TRADE_B_CONTAINER}" >/dev/null
   fi
   wait_for_tcp "${ORDER_A_GW_PORT}" "${ORDER_A_CONTAINER} gateway"
   wait_for_tcp "${ORDER_B_GW_PORT}" "${ORDER_B_CONTAINER} gateway"
@@ -262,6 +281,7 @@ if [[ "${RESTART_AFTER_FENCE}" == true || "${RECREATE_AFTER_FENCE}" == true ]]; 
     wait_for_tcp "${ORDER_C_REPLICATION_PORT}" "${ORDER_C_CONTAINER} replication"
   fi
   wait_for_tcp "${TRADE_GW_PORT}" "${TRADE_CONTAINER} gateway"
+  wait_for_tcp "${TRADE_B_GW_PORT}" "${TRADE_B_CONTAINER} gateway"
 fi
 sleep "${ASSIGNMENT_SETTLE_SECONDS}"
 
@@ -275,23 +295,34 @@ container_for_node() {
 }
 
 partition_ready() {
-  local container="$1" node="$2" partition_id="$3" since="$4"
+  local container="$1" node="$2" partition_id="$3" since="$4" expected_epoch="${5:-${target_epoch}}"
   docker logs --since "${since}" "${container}" 2>&1 |
-    grep -F "ORDER_PARTITION_PROMOTION_READY node:${node}, partition:${partition_id}, epoch:${target_epoch}" \
+    grep -F "ORDER_PARTITION_PROMOTION_READY node:${node}, partition:${partition_id}, epoch:${expected_epoch}" \
       >/dev/null
 }
 
 recovered=0
 if [[ "${USE_CURRENT_PARTIAL}" == true ]]; then
-  while IFS=$'\t' read -r partition_id primary; do
-    [[ -n "${partition_id}" ]] || continue
-    container="$(container_for_node "${primary}")"
+  : >"${ready_evidence_tsv}"
+  evidence_nodes=(OrderSvrA OrderSvrB)
+  [[ "${ORDER_C_ENABLED}" == true ]] && evidence_nodes+=(OrderSvrC)
+  for node in "${evidence_nodes[@]}"; do
+    container="$(container_for_node "${node}")"
     container_started="$(docker inspect --format '{{.State.StartedAt}}' "${container}")"
-    partition_ready "${container}" "${primary}" "${partition_id}" "${container_started}" ||
-      die "READY assignment lacks current-container promotion evidence: ${partition_id}:${primary} epoch ${target_epoch}"
+    docker logs --since "${container_started}" "${container}" 2>&1 |
+      sed -nE 's/.*ORDER_PARTITION_PROMOTION_READY node:([^,]+), partition:(P[0-9][0-9][0-9]), epoch:([0-9]+).*/\1\t\2\t\3/p' \
+      >>"${ready_evidence_tsv}"
+  done
+  sort -u -o "${ready_evidence_tsv}" "${ready_evidence_tsv}"
+
+  while IFS=$'\t' read -r partition_id primary assignment_epoch; do
+    [[ -n "${partition_id}" ]] || continue
+    evidence="$(printf '%s\t%s\t%s' "${primary}" "${partition_id}" "${assignment_epoch}")"
+    grep -Fqx "${evidence}" "${ready_evidence_tsv}" ||
+      die "READY assignment lacks current-container promotion evidence: ${partition_id}:${primary} epoch ${assignment_epoch}"
     recovered=$((recovered + 1))
   done <"${already_ready_tsv}"
-  log "Validated ${recovered}/${EXPECTED_PARTITIONS} already-ready partitions at epoch ${target_epoch}."
+  log "Validated ${recovered}/${EXPECTED_PARTITIONS} already-ready partitions through epoch ${target_epoch}."
 fi
 
 assignment_rows=()
@@ -343,4 +374,8 @@ PYTIME
   fi
 done
 
-log "Recovery complete: ${recovered}/${EXPECTED_PARTITIONS} partitions READY at epoch ${target_epoch}."
+if [[ "${USE_CURRENT_PARTIAL}" == true ]]; then
+  log "Recovery complete: ${recovered}/${EXPECTED_PARTITIONS} partitions READY through epoch ${target_epoch}."
+else
+  log "Recovery complete: ${recovered}/${EXPECTED_PARTITIONS} partitions READY at epoch ${target_epoch}."
+fi

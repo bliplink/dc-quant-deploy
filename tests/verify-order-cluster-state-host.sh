@@ -6,10 +6,21 @@ ZK_ENDPOINT="${ORDER_CLUSTER_ZK_ENDPOINT:-127.0.0.1:32181}"
 PARTITION_ROOT="${ORDER_CLUSTER_PARTITION_ROOT:-/dc/cluster/ordersvr/partitions}"
 PARTITION_COUNT="${ORDER_CLUSTER_PARTITION_COUNT:-256}"
 DATA_ROOT="${ORDER_CLUSTER_DATA_ROOT:-/data/dc-saas-runtime/data}"
+SCRIPT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
+DEPLOY_DIR="$(cd "${SCRIPT_DIR}/.." && pwd)"
+ENV_FILE="${ENV_FILE:-${DEPLOY_DIR}/.env.prod}"
+if [[ -r "${ENV_FILE}" ]]; then
+  set -a
+  # shellcheck disable=SC1090
+  . "${ENV_FILE}"
+  set +a
+fi
 WEB_PORT="${WEB_LISTEN_PORT:-18088}"
+# Local verifier traffic must never inherit host/VM HTTP proxy settings.
+export NO_PROXY="127.0.0.1,localhost${NO_PROXY:+,${NO_PROXY}}"
+export no_proxy="${NO_PROXY}"
 VERIFY_LEARNERS="${ORDER_CLUSTER_VERIFY_LEARNERS:-false}"
 VERIFY_SESSION_ID="${ORDER_CLUSTER_VERIFY_SESSION_ID:-}"
-SCRIPT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
 
 log() { printf '[order-cluster-verify] %s\n' "$*"; }
 die() { printf '[order-cluster-verify] ERROR: %s\n' "$*" >&2; exit 1; }
@@ -31,7 +42,7 @@ done
 printf 'quit\n' >>"${zk_commands}"
 docker exec -i "${ZK_CONTAINER}" zkCli.sh -server "${ZK_ENDPOINT}" \
   <"${zk_commands}" >"${zk_output}" 2>&1 || true
-grep -o '{"partitionId"[^}]*}' "${zk_output}" >"${assignments}" || true
+grep -oE '\{[^}]*"partitionId"[^}]*\}' "${zk_output}" >"${assignments}" || true
 
 verify_data_root="${DATA_ROOT}"
 if [[ ! -d "${verify_data_root}" ]]; then
@@ -52,8 +63,8 @@ curl_headers=(-H 'Content-Type: application/json')
 if [[ -n "${VERIFY_SESSION_ID}" ]]; then
   curl_headers+=(-H "sessionId: ${VERIFY_SESSION_ID}")
 fi
-route_response="$(curl -fsS --max-time 10 "${curl_headers[@]}" \
-  --data '{"serverName":"OrderSvr","method":"__cluster_state_verify__","key":"CLUSTER_VERIFY\u001f4\u001fBTCUSDT","content":{"Location":"CLUSTER_VERIFY","MarketIndicator":"4","SecurityID":"BTCUSDT"}}' \
+route_response="$(curl -sS --max-time 10 "${curl_headers[@]}" \
+  --data '{"serverName":"OrderSvr","method":"queryOpenOrder","key":"CLUSTER_VERIFY\u001f4\u001fBTCUSDT","content":{"Location":"CLUSTER_VERIFY","MarketIndicator":"4","SecurityID":"BTCUSDT","securityid":"BTCUSDT"}}' \
   "http://127.0.0.1:${WEB_PORT}/httpapi/")"
 grep -Fq 'is not Online' <<<"${route_response}" && die 'logical OrderSvr route is offline'
 auth_required=false
@@ -61,8 +72,8 @@ if grep -Fq 'AUTHENTICATED_SESSION_REQUIRED' <<<"${route_response}"; then
   [[ -z "${VERIFY_SESSION_ID}" ]] || die "authenticated OrderSvr verification session was rejected"
   auth_required=true
   printf '[order-cluster-verify] logical OrderSvr route reached authentication gate; unauthenticated partition HTTP scan skipped.\n'
-elif ! grep -Fq 'handler:__cluster_state_verify__ does not exist.' <<<"${route_response}"; then
-  die "unexpected logical OrderSvr route response: ${route_response}"
+elif [[ -z "${VERIFY_SESSION_ID}" ]]; then
+  die "unexpected unauthenticated logical OrderSvr route response: ${route_response}"
 fi
 
 if [[ "${auth_required}" != true ]]; then

@@ -136,14 +136,30 @@ restart_order_trade_for_e2e() {
       [[ -x "${recovery_script}" ]] ||
         die "Missing executable cluster recovery script: ${recovery_script}"
       log "Keeping GW online while the recovery script fences, restarts and restores clustered OrderSvr A/B."
-      ORDER_CLUSTER_ZK_SERVER="127.0.0.1:${ZOOKEEPER_PORT}" \
-        ORDER_CLUSTER_RESTART_AFTER_FENCE=true \
-        ORDER_CLUSTER_A_GW_PORT="${ORDERSVR_GW_PORT}" \
-        ORDER_CLUSTER_B_GW_PORT="${ORDERSVR_B_GW_PORT}" \
-        ORDER_CLUSTER_A_REPLICATION_PORT="${ORDERSVR_A_REPLICATION_PORT}" \
-        ORDER_CLUSTER_B_REPLICATION_PORT="${ORDERSVR_B_REPLICATION_PORT}" \
-        ORDER_CLUSTER_TRADE_GW_PORT="${TRADESVR_GW_PORT}" \
-        "${recovery_script}"
+      if [[ "$(uname -s)" == "Darwin" ]] && command -v colima >/dev/null 2>&1; then
+        # macOS ships Bash 3.2 (no coproc). Execute the exact Linux recovery
+        # helper inside Colima, where host-network Docker and the repo are shared.
+        colima ssh -- env \
+          ORDER_CLUSTER_ZK_SERVER="127.0.0.1:${ZOOKEEPER_PORT}" \
+          ORDER_CLUSTER_RESTART_AFTER_FENCE=true \
+          ORDER_CLUSTER_A_GW_PORT="${ORDERSVR_GW_PORT}" \
+          ORDER_CLUSTER_B_GW_PORT="${ORDERSVR_B_GW_PORT}" \
+          ORDER_CLUSTER_A_REPLICATION_PORT="${ORDERSVR_A_REPLICATION_PORT}" \
+          ORDER_CLUSTER_B_REPLICATION_PORT="${ORDERSVR_B_REPLICATION_PORT}" \
+          ORDER_CLUSTER_TRADE_GW_PORT="${TRADESVR_GW_PORT}" \
+          ORDER_CLUSTER_TRADE_B_GW_PORT="${TRADESVR_B_GW_PORT}" \
+          bash "${recovery_script}" || exit 1
+      else
+        ORDER_CLUSTER_ZK_SERVER="127.0.0.1:${ZOOKEEPER_PORT}" \
+          ORDER_CLUSTER_RESTART_AFTER_FENCE=true \
+          ORDER_CLUSTER_A_GW_PORT="${ORDERSVR_GW_PORT}" \
+          ORDER_CLUSTER_B_GW_PORT="${ORDERSVR_B_GW_PORT}" \
+          ORDER_CLUSTER_A_REPLICATION_PORT="${ORDERSVR_A_REPLICATION_PORT}" \
+          ORDER_CLUSTER_B_REPLICATION_PORT="${ORDERSVR_B_REPLICATION_PORT}" \
+          ORDER_CLUSTER_TRADE_GW_PORT="${TRADESVR_GW_PORT}" \
+          ORDER_CLUSTER_TRADE_B_GW_PORT="${TRADESVR_B_GW_PORT}" \
+          "${recovery_script}" || exit 1
+      fi
     else
       log "Restarting OrderSvr and TradeSvr on the clean E2E baseline."
       docker restart dc-saas-ordersvr dc-saas-tradesvr >/dev/null
