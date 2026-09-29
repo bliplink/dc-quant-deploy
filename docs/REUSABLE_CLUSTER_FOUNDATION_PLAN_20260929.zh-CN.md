@@ -38,7 +38,7 @@
 
 MD 是序列状态服务，不简单按“无状态服务”处理。后续服务可以只接注册路由，或进一步接恢复/复制/快照能力；不能被迫引入交易专属字段。
 
-## 3. 已落地的第一块公共代码（尚未接入部署）
+## 3. 已落地的公共代码（尚未接入部署）
 
 `app-common/PartitionRecoveryCoordinator` 提供泛型适配接口：
 
@@ -46,11 +46,19 @@ MD 是序列状态服务，不简单按“无状态服务”处理。后续服�
 prepare（只读、锁外）
   -> 分区业务屏障内 install
   -> 服务 verifyPromotion
+  -> adapter closePlan 释放准备资源
   -> 复核控制面、primary、epoch、assignmentVersion、副本/learner 集合
   -> mark READY 后再次复核
 ```
 
-失败或旧 token 不开放 READY；旧恢复不能清掉新 epoch 的 READY。服务仍须用相同分区屏障保护 mutation/recovery/readiness，并在业务入口检查当前归属与 epoch。当前仅为公共恢复协议原语，不含自动选举、持久多数派、执行器或三个服务的完整接入；这些是下一阶段明确交付项。
+失败或旧 token 不开放 READY；旧恢复不能清掉新 epoch 的 READY。服务仍须用相同分区屏障保护 mutation/recovery/readiness，并在业务入口检查当前归属与 epoch。当前为公共恢复协议和调度原语，不含自动选举、持久多数派或三个服务的完整接入；这些是下一阶段明确交付项。
+
+### 有界调度原语增量（2026-09-29）
+
+- app-common 本地提交 `e95850b` 增加 `PartitionRecoveryExecutor`：有限并发/队列/估算资源预算、同分区去重与新旧 generation 串行、协作取消后保留资源占位、有限小任务旁路和严重错误停止接收。自动 retry/backoff、实际 heap/IO 限额和角色变更协议仍由后续适配补齐。
+- Coordinator 增加显式 `closePlan` 钩子，READY 前释放计划输入，stale/install/verify 失败也关闭一次；prepare 部分失败资源由 adapter 自行清理。关闭失败不能开放 READY。默认 no-op 不代替具体服务的资源关闭实现。
+- 全量 24 个测试类 / 83 个用例通过；30 个契约用例重复 8 轮通过。未发布/替换任何运行依赖，MD 仍与 Order、Trade 一起属于首批服务适配范围。
+- 详细 API、取消/预算边界、版本差异和服务接入门禁见 [可复用恢复调度说明](REUSABLE_RECOVERY_SCHEDULER_20260929.zh-CN.md)。
 
 同时为 Trade 增加恢复阶段和快照阶段的耗时日志，保留已有 READY 日志格式以兼容验收工具。未构建/晋级镜像前，运行环境不会产生这些新日志。
 
