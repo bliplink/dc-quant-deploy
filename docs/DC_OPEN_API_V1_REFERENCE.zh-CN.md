@@ -232,6 +232,7 @@ Tenant Service key 不允许调用 OrderSvr/TradeSvr Trader API。
 {
   "serverName": "MDSvr",
   "method": "queryPublicMarket",
+  "key": "TENANT_A",
   "content": {
     "location": "TENANT_A",
     "securityID": "BTCUSDT"
@@ -240,6 +241,8 @@ Tenant Service key 不允许调用 OrderSvr/TradeSvr Trader API。
 ```
 
 返回聚合：
+
+当前网关请求需显式传入租户路由 `key`；本地集群验证中省略时返回 `INTERNAL_ERROR`，补上 `key=location` 后成功。内容中的 `location` 不能替代该路由字段。
 
 - orderBook；
 - ticker；

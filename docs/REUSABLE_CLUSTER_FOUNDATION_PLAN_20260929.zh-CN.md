@@ -1,0 +1,99 @@
+# 可复用集群底座：Order、Trade、MD 首批接入计划
+
+更新：2026-09-29。按最新要求，近期主线调整为**集群底座、压测、异常与稳定性**；管理面与完整业务专项后排。集群测试仍必须守住订单、资金和行情一致性，不能为了 TPS 放宽安全门禁。
+
+## 1. 当前实测与问题边界
+
+- 本地 Colima 的 Trade A/B 当前各有 128 个 Primary，256 个 assignment 均为 READY；当前进程日志存在相应 epoch 的 READY 证据。该证据不等于已验证业务可写或 RPO。
+- 最近一次启动到最后一个本地主分区 READY：A **128.802 秒**，B **79.969 秒**。包含容器启动和初始化，不是单分区重放时长，也不是自动故障切换 RTO。
+- Trade A/B 各约 3.8 GiB journal，没有 `latest.json` 快照，定时快照配置为 `false`。A 的 P204/P122 journal 分别约 1.9/1.3 GiB；恢复需要从历史日志重建。A 原先 384 MiB 堆多次 OOM；调整为 768 MiB 后当前进程未再 OOM。B 尚不能因此被认定有能力接管 A 的大分区。
+- Trade 恢复循环是单线程；大分区重放会延迟排在后面的空/小分区。流式恢复先验证再安装，不能为了缩短时间直接删除预验证或 committed-tail 门禁。
+- Order A/B 各约 3.5 GiB journal、69 MiB snapshot；定时快照关闭。现有设计把快照传输块写入同一 journal，贸然打开会放大日志，必须先验证快照传输与保留策略。
+- **故障语义不同：** Order 运行配置 `replication.required=true`、`SYNC_PER_RECORD`；Trade 是 `state.required=true`、`replication.required=false`，副本失败时允许本地主节点降级提交。Trade 的本地成功不能自动成为副本可证明的 committed prefix，切主前必须验证，不宣称当前 RPO=0。
+- MD 已部署 A/B/C；只读核对 256 个 assignment 均为 READY，A/B 各有 128 个 Primary 与 128 个 Replica，C 当前没有 Primary/Replica/Learner 分配。C 是运行中的未分配节点，不是已经验证的第三副本。MD 必须与 Order、Trade 一起列为首批适配和验收对象；进程数为 3 不证明跨故障域或多数派提交。
+- 本地 A/B/C 共用一个 VM 和磁盘，只能证明进程级行为，不能证明宿主机级 HA。
+
+证据入口：`tests/trade_recovery_baseline_host.py`，只读采集当前进程 READY、启动耗时、快照、资源和 assignment 状态；不注入故障、不修改 ZooKeeper、不导出原始认证日志。本轮数据保存在本地 `.tmp-trade-evidence/recovery-baseline-20260929.json`。
+
+## 2. 框架边界：在现有 Common 上演进
+
+现有 `app-common` 已有 PartitionAssignment/Registry/Runtime、Router、epoch fence、ReadinessGuard、节点/placement 元数据及通用复制传输。保留这些能力，不再建立第二套注册、路由和 fencing 体系。
+
+公共层负责：
+
+1. 服务、节点、逻辑分区与放置策略；assignment 的 CAS/version/epoch 和控制面连接状态。
+2. 统一恢复生命周期与 READY 门禁；有界恢复执行器、分区去重、可协作取消、重试退避与公平调度。重放不得堵塞 ZooKeeper 回调线程。
+3. 可扩展的 journal、snapshot、commit proof、复制 transport 接口；存储格式与业务对象不进入公共生命周期代码。
+4. 明确的一致性策略：本地提交、指定副本确认、多数派提交分别配置、分别验收。策略名称不能代替真实的选举、提交和 fencing 协议；没有实现多数派协议时不暴露“QUORUM 可用”开关。
+5. 健康检测、drain、catch-up、promotion、回切、扩缩容和滚动升级操作；自动化切主必须有权威提交边界证明，不能只看到 heartbeat 消失就改 primary。
+6. 统一观测：阶段耗时、snapshot age/delta、journal bytes、commit/replica lag、READY/DEGRADED 状态、失败原因、内存和恢复进度。认证信息不进入证据。
+
+服务适配器负责：
+
+| 服务 | 状态范围 | READY 前必须证明 |
+| --- | --- | --- |
+| Order | 活动单、撮合簿、幂等结果及相关提交状态 | 已确认 committed prefix、快照与增量一致、复制/epoch fencing 安全，不丢已确认订单、不重复成交 |
+| Trade | 余额、持仓、保证金、费用/资金费效果、执行去重及配置 | 已确认资金效果可恢复、无未解释 dirty tail、降级提交的权威来源明确，不重复入账、不从落后副本静默回退 |
+| MD | order book/ticker/recent trades/kline 与订阅序列 | snapshot + delta 连续、GAP 补齐、行情新鲜度与路由/epoch 正确；旧主不得继续以新主身份发布 |
+
+MD 是序列状态服务，不简单按“无状态服务”处理。后续服务可以只接注册路由，或进一步接恢复/复制/快照能力；不能被迫引入交易专属字段。
+
+## 3. 已落地的第一块公共代码（尚未接入部署）
+
+`app-common/PartitionRecoveryCoordinator` 提供泛型适配接口：
+
+```text
+prepare（只读、锁外）
+  -> 分区业务屏障内 install
+  -> 服务 verifyPromotion
+  -> 复核控制面、primary、epoch、assignmentVersion、副本/learner 集合
+  -> mark READY 后再次复核
+```
+
+失败或旧 token 不开放 READY；旧恢复不能清掉新 epoch 的 READY。服务仍须用相同分区屏障保护 mutation/recovery/readiness，并在业务入口检查当前归属与 epoch。当前仅为公共恢复协议原语，不含自动选举、持久多数派、执行器或三个服务的完整接入；这些是下一阶段明确交付项。
+
+同时为 Trade 增加恢复阶段和快照阶段的耗时日志，保留已有 READY 日志格式以兼容验收工具。未构建/晋级镜像前，运行环境不会产生这些新日志。
+
+## 4. 按顺序交付
+
+### F0：测清现状并统一故障语义
+
+- 锁定镜像 digest、拓扑、资源、快照和 journal 基线；Order/Trade/MD 分开记录。
+- 对齐单节点故障后的可用性目标和成功响应的持久性要求。优先保住已确认状态，不为测试绕过 ACK、epoch 或 READY。
+- 检查 B 接管 A 的容量，不以 B 自身 128 个分区正常推断大分区 promotion 安全。
+- 补齐恢复阶段计时，明确慢在初始化、快照加载、验证、重放、复制追平还是路由刷新。
+
+### F1：先降低恢复成本
+
+- Trade 先在隔离副本数据上验证大快照捕获/加载的峰值内存，再恢复定时快照；不能只打开开关就宣布问题解决。
+- 为活跃与低频分区建立首个快照的最大等待期限，限制 snapshot delta 和最大恢复工作量；快照既要新鲜，也要有经过验证的 committed prefix。
+- 快照 payload 流式加载/安装，去重状态保留策略有明确重试窗口与持久幂等保证，不通过随意缩小去重缓存来换内存。
+- Order 分离快照传输与业务 journal 放大问题；归档/保留由已确认快照及消费者 watermark 驱动，禁止直接清空 journal。
+- 恢复执行器使用小的可配置并行度、内存/IO 预算和公平调度；保留逐分区业务屏障与完整预验证，不做无限并发恢复。
+
+### F2：三服务适配与受控异常演练
+
+- Order/Trade/MD 接入公共恢复状态机、指标与统一验收入口；先保持现有业务语义和存储兼容，再替换重复实现。
+- MD C 先经受控 learner/catch-up 接入，再验证分区迁移、接管与回退；当前运行但未分配的 C 不能算扩容通过。
+- 使用隔离目录、独立端口与 ZooKeeper namespace，先测空/小分区，再测当前规模的大分区；带业务数据的测试同时核对已确认订单/资金效果和 MD 序列。
+- 注入进程退出、暂停/网络隔离、复制迟滞、控制面失联、脏尾和快照不可用。每次记录：检测、fence、生效归属、恢复、Replica ACK、首次成功业务响应、投影/订阅收敛、回切时间。
+- 验证旧主拒写/拒发布、无双主、落后副本不能静默接管、重试不重复成交/入账、MD GAP 可补齐。正常 role reversal 不等于异常切换，日志 READY 不等于业务可写。
+- 单宿主机验证通过后，再做独立故障域演练。三节点 ZooKeeper/MD 并不能自动解决 Order/Trade 双副本可用性。
+
+### F3：分级压测与稳定性
+
+- 先按 300/16 的有界小量基线校验；安全门禁发现旧活动单时退出，不删库重置。
+- 依次量测入场、撤单、撮合完成、复制提交、投影可查与 MD 发布/订阅；只有 shadow probe 的结果不能称为系统交易 TPS。
+- 再增加负载，在受控负载中做故障/恢复，分别报告正常容量、故障降级容量和恢复积压清空时间。
+- 各轮保留 p50/p95/p99、成功/拒绝/超时、commit/replica/projection lag、MD freshness/GAP、CPU/内存/OOM、快照开销与订单/资金一致性。
+- 短测门禁通过后做 24 小时观察与 72 小时候选长稳。时长是计划门槛，不是当前成绩；通过与否以持续记录和不变量判定。
+
+### F4：复用产品化
+
+- 交付按需启用的配置、服务适配模板、公共契约测试、故障注入 harness、版本升级/回滚手册。
+- 用 Order、Trade、MD 三种状态适配证明可复用，再以一个最小新服务证明无需复制集群代码就能接入。
+- 发布不可变 Common 与服务镜像；兼容旧 snapshot/journal/metadata 的升级门禁通过后再晋级，不混用未验证的底层版本。
+
+## 5. 当前未宣称完成
+
+没有新增故障注入或压测；没有接管/修改现有 assignment；没有启用快照或清理日志。初版框架与计时代码尚未部署。自动切换、持续 TPS、业务 RPO=0、跨宿主机 HA 和长期稳定性均需后续实测，不由本计划或单元测试推导。
