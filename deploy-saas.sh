@@ -655,6 +655,7 @@ ensure_trade_cluster_assignments() {
     if ! migration_output="$(python3 "${SCRIPT_DIR}/tests/migrate_trade_cluster_assignments_host.py" \
       --zk-container dc-saas-zookeeper \
       --zk-server "127.0.0.1:${ZOOKEEPER_PORT}" \
+      --zk-client-jvmflags=-Djava.security.auth.login.config=/conf/jaas.ini \
       --partition-root /dc/cluster/tradesvr/partitions \
       --partitions 256 \
       --plan "${migration_plan}" \
@@ -993,6 +994,9 @@ load_env
 validate_runtime_root
 validate_runtime_capacity
 validate_initial_ports
+# Host networking shares the ephemeral range with all SaaS fixed listeners.
+# Reserve BEFORE any infrastructure/client starts; preserve other host reservations.
+python3 "${SCRIPT_DIR}/tests/reserve-saas-service-ports.py" --apply
 prepare_runtime_directories
 "${SCRIPT_DIR}/generate-saas-configs.sh" "${ENV_FILE}"
 if [[ -n "${SAAS_FRESH_TEST_RESET_PROOF:-}" ]]; then

@@ -187,15 +187,20 @@ def validate_transition(current, desired, operation, learner=None, source=None, 
 
 
 class DockerZk:
-    def __init__(self, container, server, root, docker="docker"):
+    def __init__(self, container, server, root, docker="docker", client_jvmflags=None):
         self.container = container
         self.server = server
         self.root = root.rstrip("/")
         self.docker = docker
+        self.client_jvmflags = client_jvmflags
 
     def _zk(self, command, timeout=30):
+        argv = [self.docker, "exec", "-i"]
+        if self.client_jvmflags:
+            argv += ["-e", "CLIENT_JVMFLAGS=" + self.client_jvmflags]
+        argv += [self.container, "zkCli.sh", "-server", self.server]
         result = subprocess.run(
-            [self.docker, "exec", "-i", self.container, "zkCli.sh", "-server", self.server],
+            argv,
             input=command + "\nquit\n",
             text=True,
             stdout=subprocess.PIPE,

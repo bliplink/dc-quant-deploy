@@ -19,3 +19,7 @@
 第一次完整重置暴露 ZooKeeper 双卷问题：`data/zookeeper` 是快照卷，`log/zookeeper` 是 `/datalog` 事务日志卷。只删前者会触发 “No snapshot found, but there are log entries”。重置工具已同时枚举两者，并在正常卸载、确认无句柄后删除；不会打开 trust.empty 掩盖丢失快照。另有精确 ClickHouse 日志目录随测试重置删除。新增第 9 项重置安全回归覆盖双卷。
 
 测试日志按大小轮转，每个节点约 64 MiB 上限（16 MiB × 主文件与 3 份轮转），仍保留生命周期/恢复日志。测试安装容量门槛是至少 40 GiB runtime 空间，保留现有内存与 Docker 空间检查；不是生产容量规格。
+
+第三次安装暴露固定端口与临时客户端端口冲突：Linux 临时端口范围 32768–60999，原保留清单为空，MDSvr 的 ClickHouse 客户端连接实际占用了本地 33038（远端 38123），Liq 因此无法绑定。部署现在在任何服务启动之前合并并持久化配置中的服务端口到 `ip_local_reserved_ports`，保留其他系统已有保留项。已有客户端连接不会被自动回收；本轮仅正常重启 MDSvr/Liq 后确认 33038 监听成功。该问题不是丢失 Trade 快照，也不应靠反复清数据解决。
+
+现有 Trade assignment 的部署检查已显式传入 ZK SASL 客户端配置，避免第一次创建成功、再次部署读取失败。本轮续装实际检查 256 条、changes=0、主副 A/B 各 128，通过后进入默认 API 初始化。

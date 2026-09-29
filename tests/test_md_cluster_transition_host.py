@@ -1,6 +1,9 @@
 import unittest
+from unittest.mock import patch
+from types import SimpleNamespace
 
 from tests.md_cluster_transition_host import (
+    DockerZk,
     apply_records,
     parse_ready_evidence,
     parse_zk_get,
@@ -13,6 +16,15 @@ from tests.md_cluster_transition_host import (
 
 
 class MdClusterTransitionHostTest(unittest.TestCase):
+    def test_explicit_sasl_client_config_is_forwarded(self):
+        with patch('tests.md_cluster_transition_host.subprocess.run',
+                   return_value=SimpleNamespace(returncode=0, stdout='ok')) as run:
+            DockerZk('zk', '127.0.0.1:32181', '/trade',
+                     client_jvmflags='-Djava.security.auth.login.config=/conf/jaas.ini')._zk('ls /trade')
+        argv = run.call_args.args[0]
+        self.assertIn('CLIENT_JVMFLAGS=-Djava.security.auth.login.config=/conf/jaas.ini', argv)
+        self.assertEqual('ls /trade\nquit\n', run.call_args.kwargs['input'])
+
     def test_parse_zk_get_requires_payload_and_data_version(self):
         output = """
 {"partitionId":"P027","epoch":7,"primary":"MDSvrA","replica":"MDSvrB","state":"READY"}

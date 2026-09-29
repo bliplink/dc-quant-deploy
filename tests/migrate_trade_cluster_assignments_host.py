@@ -111,6 +111,7 @@ def main() -> None:
     parser.add_argument("--partition-root", default=DEFAULT_ROOT)
     parser.add_argument("--partitions", type=int, default=256)
     parser.add_argument("--docker-bin", default="docker")
+    parser.add_argument("--zk-client-jvmflags")
     parser.add_argument("--batch-size", type=int, default=32)
     parser.add_argument("--plan", required=True)
     parser.add_argument("--apply", action="store_true")
@@ -123,7 +124,8 @@ def main() -> None:
         raise SystemExit("--apply requires --confirm-root to exactly match --partition-root")
 
     zk = DockerZk(
-        args.zk_container, args.zk_server, args.partition_root, args.docker_bin
+        args.zk_container, args.zk_server, args.partition_root, args.docker_bin,
+        client_jvmflags=args.zk_client_jvmflags,
     )
     snapshots = zk.read_all(args.partitions)
     expected_ids = {f"P{index:03d}" for index in range(args.partitions)}
