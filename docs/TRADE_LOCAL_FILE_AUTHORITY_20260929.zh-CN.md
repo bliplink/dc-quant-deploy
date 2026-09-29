@@ -47,6 +47,8 @@ Trade 的交易状态（余额、持仓、账户交易配置、用户合约配�
 
 CashIn/CashOut 还没有天然稳定的业务去重键：`CashRequest` 本身没有 request ID，`CashResult.request_id` 在当前 `CashInOutFacade` 路径未赋值，`TradeCashStateRecorder` 因此通常只能提交空 requestId。即使补上 POSTING mutation，也不能只凭日志 envelope 随机 eventId 宣称重试不会重复入金/出金；需要在 API 边界引入明确的幂等键和查询/重放契约，并核对已有调用方兼容性。
 
+后续现金/流水候选切片：Trade 本地 `360bda1` / `62615ef` 增加纯事件构造器和 POSTING 恢复预验证，Projection 本地 `dcf26b1` 增加**默认关闭**的 `projection.trade.postingTable.enabled`。候选使用显式客户端操作 ID、稳定流水 ID、请求指纹，将余额后态和完整流水放入同一 STATE_BATCH；旧现金 handler/facade/recorder 未接入，不会因此生成线上 POSTING。真实合成本地日志验证坏流水/未提交状态不安装余额；实际候选构造器的 payload 已通过临时 MySQL 投影验证。Trade 60 类 / 242 用例、Projection 11 类 / 56 用例通过；最终 26 项隔离 MySQL 用例连续 3 轮通过。它不包含请求结果持久去重、现金快照恢复、旧数据迁移、funding/ADL 或 SQL 写入退场，**不能宣布现金 API 已幂等或流水已全量由 Projection 接管**。详见 [现金与流水候选验证](TRADE_CASH_POSTING_CANDIDATE_20260929.zh-CN.md)。
+
 ## 发布门禁与顺序
 
 1. 用只读证据确定每个老分区的起点/缺口和业务配置来源：日志、可信本地快照、Order 已提交状态与独立账务记录交叉核对。SQL 只用来比较投影滞后/差异，不能作为自动修复的唯一权威。

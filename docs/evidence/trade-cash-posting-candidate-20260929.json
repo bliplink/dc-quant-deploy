@@ -1,0 +1,63 @@
+{
+  "schemaVersion": 1,
+  "recordedDate": "2026-09-29",
+  "classification": "synthetic_cash_contract_and_immutable_posting_candidate_qualification",
+  "sourceRevisions": {
+    "trade": "62615ef1a7b07939261a2b74f3dd066f21d46c1f",
+    "projection": "dcf26b16b1990c8113e328ffb9aafa37e133f6dd"
+  },
+  "unitTests": {
+    "trade": {"classes": 60, "cases": 242, "newContractRecoveryCases": 20, "failures": 0, "errors": 0},
+    "projection": {"classes": 11, "cases": 56, "failures": 0, "errors": 0}
+  },
+  "mysqlVersion": "8.0.36",
+  "mysqlImageId": "sha256:a532724022429812ec797c285c1b540a644c15e248579c6bfdf12a8fbaab4964",
+  "casesPerRun": 26,
+  "consecutiveFinalVersionRuns": 3,
+  "status": "PASS",
+  "localResultPathsInProjectionRepository": [
+    "target/trade-projection-offline.SzGfiMT1/result.json",
+    "target/trade-projection-offline.SpxA7HeM/result.json",
+    "target/trade-projection-offline.7f6yjWYe/result.json"
+  ],
+  "baseTransactionEvidence": "trade-projection-transaction-20260929.json",
+  "additionalCases": [
+    "posting_only_configuration_rejected_before_database_bootstrap",
+    "immutable_posting_materialization_and_transport_duplicate",
+    "same_posting_in_new_coordinate_rejects_entire_balance_batch",
+    "posting_identity_conflict_preserves_ledger_and_balance",
+    "malformed_posting_rolls_back_archive_balance_watermark",
+    "posting_default_off_archives_without_materialization",
+    "nontransactional_posting_table_rejected_before_consumption",
+    "actual_trade_cash_builder_payload_to_mysql_atomic_projection"
+  ],
+  "loadedArtifactsSha256": {
+    "TradeProjectionService.class": "904ec6e226d3237555aa58af3a238f551774d55a7df42e1a7c7d39f0a77b31f6",
+    "TradeProjectionTransaction.class": "6a7c7bc502242e9b27e4fc7815124f63f31209a280cd2072d9773e792809961f",
+    "TradeProjectionSchemaGuard.class": "fd077a2ef5e5793d39461cb35cfb27250797e0fa17c015e9e63b7c336e5a28cf",
+    "TradePostingProjection.class": "061dd46ff51bc70ed4d0d7d4ab80a7cea7689bdea5aa2efbc0c07de8c8452a9c",
+    "TradeCashStateBatchBuilder.class": "bb2c849c8fe58e61afd269147eb73a8d3517a3790b5e8d58fcce95e3c43c7505",
+    "TradePostingMutationValidator.class": "f55f0b0de66d3a535a1d26cccc69445811fba8016e73de218c4c79e72df3b3fd",
+    "com.app.common-3.0.14.jar": "542d25a3c7345c2d25806fc7c975465e96ff21ac5151dd8c35f13520c006396c",
+    "com.app.dc-0.0.4-SNAPSHOT.jar": "8a22afe1bd404ca5a2613a189df9133025ebc77cca990f9a202cfcaccc899329"
+  },
+  "realSyntheticChronicleCases": [
+    "committed_cash_posting_replay_without_reapplying_cash_or_sql",
+    "malformed_committed_posting_rejected_before_balance_install_and_recovered_mark",
+    "uncommitted_cash_state_rejected_without_balance_install_or_recovered_mark"
+  ],
+  "actualCashBuilderPayloadProjected": true,
+  "liveCashHandlersUseBuilder": false,
+  "liveCashIdempotencyCovered": false,
+  "cashRequestResultSnapshotRecoveryCovered": false,
+  "historicalBootstrapCovered": false,
+  "fundingInsuranceAdlCovered": false,
+  "postingHistoryRetentionQualified": false,
+  "oldSqlWritesRetired": false,
+  "postingMaterializerDefaultOff": true,
+  "temporaryDatabasesRemoved": true,
+  "liveClusterMutated": false,
+  "deployed": false,
+  "tpsMeasured": false,
+  "failoverRtoMeasured": false
+}
