@@ -45,6 +45,9 @@ def run(command, timeout=30, check=True):
 
 
 def validate(args):
+    capture_trials = getattr(args, "capture_trials", 1)
+    if not 1 <= capture_trials <= 5 or (capture_trials > 1 and (not args.resident or getattr(args, "mode", "recovery") != "recovery")):
+        raise ValueError("capture profiling supports at most five trials with an explicit resident partition")
     if getattr(args, "mode", "recovery") not in ("recovery", "order-history-audit"):
         raise ValueError("unsupported lab mode")
     if getattr(args, "mode", "recovery") == "order-history-audit" and args.resident:
@@ -110,11 +113,14 @@ def execute(args):
         command.extend(["/lab", args.partition, str(args.delta_batches)])
         if args.resident:
             command.append(args.resident)
+            if getattr(args, "capture_trials", 1) > 1:
+                command.append(str(args.capture_trials))
     report = {"generatedAtUtc": dt.datetime.now(dt.timezone.utc).isoformat(),
               "scope": "isolated copied journal; no live failover/business verification",
               "imageId": args.image, "heapMiB": args.heap_mib, "memoryMiB": args.memory_mib,
               "cpus": 1, "timeoutSeconds": args.timeout_seconds, "journalCopyRoot": journal,
               "mode": getattr(args, "mode", "recovery"),
+              "captureTrials": getattr(args, "capture_trials", 1),
               "helperClassesSha256AtLaunch": helper_sha,
               "retainedLabOutputRoot": lab_root, "partition": args.partition, "residentPartition": args.resident}
     run(command)
@@ -173,6 +179,7 @@ def main():
     parser.add_argument("--test-classes", required=True)
     parser.add_argument("--partition", default="P204")
     parser.add_argument("--resident")
+    parser.add_argument("--capture-trials", type=int, default=1)
     parser.add_argument("--mode", choices=("recovery", "order-history-audit"), default="recovery")
     parser.add_argument("--heap-mib", type=int, default=768)
     parser.add_argument("--memory-mib", type=int, default=1536)

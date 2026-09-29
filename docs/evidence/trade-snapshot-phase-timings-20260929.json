@@ -20,8 +20,15 @@
     "directorySyncIsPowerLossProof": false
   },
   "sourceTests": {
-    "classes": 68,
-    "cases": 362,
+    "classes": 67,
+    "cases": 361,
+    "countCorrection": {
+      "originalAggregationClasses": 68,
+      "originalAggregationCases": 362,
+      "excludedStaleReport": "com.app.dc.service.cluster.TradeRecoveryConfigurationCoverageTest",
+      "excludedCases": 1,
+      "reason": "Report directory contained a class no longer present in this source; image tests and copied-journal results unchanged."
+    },
     "fullRuns": 1,
     "failures": 0,
     "errors": 0,

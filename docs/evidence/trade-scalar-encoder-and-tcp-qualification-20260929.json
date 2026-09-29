@@ -1,0 +1,1675 @@
+{
+  "generatedAtUtc": "2026-09-29T12:51:03Z",
+  "outcome": "OFFLINE_SCALAR_ENCODING_QUALIFIED_LIVE_HA_AND_SYSTEM_TPS_NOT_QUALIFIED",
+  "productionSourceRevision": "5c21a5136cb080325dbba003f580913311e5088b",
+  "sourceHeadAndHelperRevision": "4ae585bb5a12263f4bf1b2ae7b17b90dd4b8b80f",
+  "initialImplementationRevision": "520dfc5deaf69a676e31bc1e7a8a6077b1a27575",
+  "image": {
+    "tag": "local/tradesvr:snapshot-encoder-5c21a51",
+    "id": "sha256:2677fbfd4d8df897c5aeee0112c759842534f10488ed48be5b2adb6a5fea1b53",
+    "baseId": "sha256:b8039096ac6396135dc864690ae785a30e6ad6d7614c6cd1f1ba180c85a56845",
+    "files": 312,
+    "codeAndResources": 232,
+    "libraries": 80,
+    "manifestSha256": "b103bd8be75d594c13fa6ec9d3d6727d01659323f37c87f3e831dcc96650e2a0",
+    "allMatchedLocalBuild": true,
+    "comparedToBaseline": {
+      "files": 311,
+      "changedOrAdded": [
+        {
+          "file": "classes/com/app/dc/service/cluster/TradeSnapshotStore$DedupeEncoder.class",
+          "old": null,
+          "current": "ec15b03d7aed25824f749ebe56abf6a1031f6e46b3d348167bbb3961178cc650"
+        },
+        {
+          "file": "classes/com/app/dc/service/cluster/TradeSnapshotStore$MetadataCacheEntry.class",
+          "old": "ff1ad8c3e495fd925149365d8987e239dbfbf8e166b65c064e1c6c4365c18d9d",
+          "current": "c47411cbbde135e1ec6faa4ec71cea0d3d828b3683040526cb16f67dc406ccd7"
+        },
+        {
+          "file": "classes/com/app/dc/service/cluster/TradeSnapshotStore$RecoverySnapshot.class",
+          "old": "d16bf6080d0641429034adbe7592ee423a0787a644ed8d9051670880f25ed35b",
+          "current": "b969dd2fac9430d5fea0378146fe72c94ce64914daadae778e5641ed34b1f462"
+        },
+        {
+          "file": "classes/com/app/dc/service/cluster/TradeSnapshotStore$SaveTiming.class",
+          "old": "ab6ab49954217a3e43dc82b371c236f296be120b904a824cf083af162fc2b535",
+          "current": "0bf11feeacef62836d1003aaf7c25220a06e5030d3e5a5f2486e241d99d91f6f"
+        },
+        {
+          "file": "classes/com/app/dc/service/cluster/TradeSnapshotStore$TimedFile.class",
+          "old": "5257407625f7ff58904b140b303a53ba8ef9edd7aa98f756869b6e8f94bf9bfa",
+          "current": "8245fa2a6a55a9fcff94c7ec0fdb0a204931f71656266c3f4e608b7c93b97a16"
+        },
+        {
+          "file": "classes/com/app/dc/service/cluster/TradeSnapshotStore$TimedSink.class",
+          "old": "2e5ad0166abe4b5630624f880ffb4ff84324186787113375370355261be42d45",
+          "current": "f15520ac9c34a2951eddea826b2a7b526e9312ea4c0537a9e044cf31bd3502fa"
+        },
+        {
+          "file": "classes/com/app/dc/service/cluster/TradeSnapshotStore.class",
+          "old": "d37596adb02115eaf64ac1a8de4d72f17476669e00c367e7dea7f460b9cdb553",
+          "current": "f25e03a0faef3b6c95a51ea5a9024313978159db91d5381450af10201794a26e"
+        }
+      ],
+      "unchanged": 305,
+      "librariesUnchanged": 80,
+      "removed": 0
+    },
+    "pushed": false,
+    "deployed": false
+  },
+  "sourceTests": {
+    "classes": 70,
+    "tests": 377,
+    "failures": 0,
+    "errors": 0,
+    "skipped": 0,
+    "excludedStaleReport": "com.app.dc.service.cluster.TradeRecoveryConfigurationCoverageTest (1 case)",
+    "fullRuns": 1,
+    "jdk": 8,
+    "offline": true
+  },
+  "fixedImageTests": {
+    "classes": 9,
+    "tests": 108,
+    "failures": 0,
+    "errors": 0,
+    "skipped": 0,
+    "elapsedSeconds": 28.379,
+    "imageId": "sha256:2677fbfd4d8df897c5aeee0112c759842534f10488ed48be5b2adb6a5fea1b53"
+  },
+  "hostSafetyTests": {
+    "tests": 11,
+    "failures": 0,
+    "errors": 0,
+    "skipped": 0,
+    "fixtureTimeoutIsExpected": true
+  },
+  "allocationProbe": {
+    "scope": "synthetic scalar encoder allocation; not journal/transport/API TPS",
+    "defaultWriterFeatures": 16384,
+    "defaultWriterDateFormat": "yyyy-MM-dd HH:mm:ss",
+    "outcome": "PASS",
+    "rounds": [
+      {
+        "legacy": {
+          "entries": 100000,
+          "allocatedBytes": 87388768,
+          "elapsedNanos": 169666384,
+          "bytes": 19180361,
+          "sha256": "41d67a64b10416bd01c673ed5ec2eb01796017c1972607894200242aeea2722f"
+        },
+        "candidate": {
+          "entries": 100000,
+          "allocatedBytes": 1288,
+          "elapsedNanos": 27560913,
+          "bytes": 19180361,
+          "sha256": "41d67a64b10416bd01c673ed5ec2eb01796017c1972607894200242aeea2722f"
+        }
+      },
+      {
+        "legacy": {
+          "entries": 100000,
+          "allocatedBytes": 85600024,
+          "elapsedNanos": 91663398,
+          "bytes": 19180361,
+          "sha256": "41d67a64b10416bd01c673ed5ec2eb01796017c1972607894200242aeea2722f"
+        },
+        "candidate": {
+          "entries": 100000,
+          "allocatedBytes": 216,
+          "elapsedNanos": 79349170,
+          "bytes": 19180361,
+          "sha256": "41d67a64b10416bd01c673ed5ec2eb01796017c1972607894200242aeea2722f"
+        }
+      },
+      {
+        "legacy": {
+          "entries": 100000,
+          "allocatedBytes": 85600024,
+          "elapsedNanos": 31077523,
+          "bytes": 19180361,
+          "sha256": "41d67a64b10416bd01c673ed5ec2eb01796017c1972607894200242aeea2722f"
+        },
+        "candidate": {
+          "entries": 100000,
+          "allocatedBytes": 216,
+          "elapsedNanos": 79986002,
+          "bytes": 19180361,
+          "sha256": "41d67a64b10416bd01c673ed5ec2eb01796017c1972607894200242aeea2722f"
+        }
+      }
+    ]
+  },
+  "copiedJournalRuns": [
+    {
+      "rawPath": ".tmp-trade-evidence/snapshot-lab-encoder-baseline-3f0d027-profile-1024.json",
+      "rawSha256": "b212bf7b114d1bea49c65dd7784a5eb4d0ebbfb6c57a7c09934d7b3f98dc9a00",
+      "imageId": "sha256:6505d51b583e5027dfe2b0fa3704436704ebeca77f19875771ba7a5daf21bd9f",
+      "helperClassesSha256AtLaunch": "3da49366e8021d98a26309e74f82f19d5171887fa8debf0a5b9068e75f585bfb",
+      "outcome": "PASS",
+      "elapsedSeconds": 125.253,
+      "heapMiB": 1024,
+      "memoryMiB": 2048,
+      "cpus": 1,
+      "cgroupOomKilled": false,
+      "retainedLabOutputRoot": "/data/dc-saas-isolated-labs/trade-snapshot-run.8ZdmpA0k",
+      "probe": {
+        "baselineFingerprint": {
+          "counts": {
+            "applied": 691065,
+            "balance": 131,
+            "openOrder": 60390,
+            "position": 72,
+            "terminalOrder": 284471
+          },
+          "orderStatusCounts": {
+            "MISSING": 60208,
+            "Suspended": 182
+          },
+          "sha256MultisetSum": "d92971371930c9d0d67b01bc9c6caa3f7d6052b60de2bc10b35c8817b06a4c1c"
+        },
+        "checkpointCommitSeq": 813788,
+        "copiedJournalLastSeq": 815788,
+        "deltaJournalRecords": 2000,
+        "epoch": 1,
+        "heapMaxBytes": 1046937600,
+        "outcome": "PASS",
+        "partition": "P204",
+        "phases": [
+          {
+            "elapsedMillis": 27467,
+            "gcCountDuringPhase": 347,
+            "gcMillisDuringPhase": 4486,
+            "sampledHeapPeakBytes": 306056032,
+            "stage": "residentRecovery"
+          },
+          {
+            "elapsedMillis": 39427,
+            "gcCountDuringPhase": 354,
+            "gcMillisDuringPhase": 4604,
+            "sampledHeapPeakBytes": 648527304,
+            "stage": "checkpointRecovery"
+          },
+          {
+            "elapsedMillis": 2037,
+            "gcCountDuringPhase": 2,
+            "gcMillisDuringPhase": 69,
+            "sampledHeapPeakBytes": 654327184,
+            "stage": "snapshotCapture"
+          },
+          {
+            "elapsedMillis": 39897,
+            "explicitGcMillisExcludedFromRecovery": 1712,
+            "gcCountDuringPhase": 218,
+            "gcMillisDuringPhase": 4394,
+            "quiescentHeapBytesAfterExplicitGc": 468177792,
+            "sampledHeapPeakBytes": 954487944,
+            "stage": "fullJournalRecovery"
+          },
+          {
+            "elapsedMillis": 2048,
+            "gcCountDuringPhase": 5,
+            "gcMillisDuringPhase": 127,
+            "sampledHeapPeakBytes": 681608528,
+            "stage": "fullJournalRecoveryFingerprint"
+          },
+          {
+            "elapsedMillis": 4708,
+            "explicitGcMillisExcludedFromRecovery": 1032,
+            "gcCountDuringPhase": 12,
+            "gcMillisDuringPhase": 884,
+            "quiescentHeapBytesAfterExplicitGc": 499602304,
+            "sampledHeapPeakBytes": 903647640,
+            "stage": "snapshotDeltaRecovery"
+          },
+          {
+            "elapsedMillis": 1084,
+            "gcCountDuringPhase": 5,
+            "gcMillisDuringPhase": 101,
+            "sampledHeapPeakBytes": 716827672,
+            "stage": "snapshotDeltaRecoveryFingerprint"
+          }
+        ],
+        "residentJournalLastSeq": 566728,
+        "residentPartition": "P122",
+        "restoredFingerprint": {
+          "counts": {
+            "applied": 691065,
+            "balance": 131,
+            "openOrder": 60390,
+            "position": 72,
+            "terminalOrder": 284471
+          },
+          "orderStatusCounts": {
+            "MISSING": 60208,
+            "Suspended": 182
+          },
+          "sha256MultisetSum": "d92971371930c9d0d67b01bc9c6caa3f7d6052b60de2bc10b35c8817b06a4c1c"
+        },
+        "scope": "isolated journal copy; no live promotion, DAO, transport or consensus proof",
+        "snapshotBytes": 100473484,
+        "snapshotCaptureBarrierMillis": 1049,
+        "snapshotCaptureTimings": {
+          "attempted": true,
+          "saved": true,
+          "stageNanos": {
+            "accountConfigCopy": 7172,
+            "balanceScan": 52620,
+            "cashResultCopy": 696,
+            "dedupeDtoCopy": 1721,
+            "guardAndLocationScan": 1514762,
+            "lockHeld": 1049345515,
+            "lockWait": 3790224,
+            "openOrderScan": 46426380,
+            "positionScan": 111757,
+            "preScan": 980693668,
+            "releasePayload": 308847,
+            "saveCall": 1000658890,
+            "sealPayload": 94053,
+            "symbolParaCopy": 4057,
+            "total": 2033848502
+          },
+          "storeStages": {
+            "appliedEncodeAndBufferedWriteNanos": 591250734,
+            "bufferDrainNanos": 63281,
+            "coreEncodeAndBufferedWriteNanos": 229768034,
+            "delegateWriteCalls": 1535,
+            "delegateWriteNanos": 165802051,
+            "directorySyncAndCacheNanos": 595314,
+            "encodeAndBufferedWriteNanos": 895672992,
+            "fileCloseNanos": 103975,
+            "fileSetupNanos": 1160681,
+            "fileSyncNanos": 85959366,
+            "installed": true,
+            "partition": "P204",
+            "phase": "installed",
+            "replaceNanos": 5211471,
+            "successfulDelegateBytes": 100473484,
+            "terminalEncodeAndBufferedWriteNanos": 74592060,
+            "totalNanos": 988995927,
+            "validationNanos": 38769
+          },
+          "storeStagesAvailable": true
+        },
+        "stateEquivalent": true
+      }
+    },
+    {
+      "rawPath": ".tmp-trade-evidence/snapshot-lab-encoder-5c21a51-profile-1024-r1.json",
+      "rawSha256": "62eea7cf0f93b429d66a21ff3aeabc4d91f8ed2553edd15aa21f4dafe2e626fc",
+      "imageId": "sha256:2677fbfd4d8df897c5aeee0112c759842534f10488ed48be5b2adb6a5fea1b53",
+      "helperClassesSha256AtLaunch": "3da49366e8021d98a26309e74f82f19d5171887fa8debf0a5b9068e75f585bfb",
+      "outcome": "PASS",
+      "elapsedSeconds": 127.112,
+      "heapMiB": 1024,
+      "memoryMiB": 2048,
+      "cpus": 1,
+      "cgroupOomKilled": false,
+      "retainedLabOutputRoot": "/data/dc-saas-isolated-labs/trade-snapshot-run.zVarVzex",
+      "probe": {
+        "baselineFingerprint": {
+          "counts": {
+            "applied": 691065,
+            "balance": 131,
+            "openOrder": 60390,
+            "position": 72,
+            "terminalOrder": 284471
+          },
+          "orderStatusCounts": {
+            "MISSING": 60208,
+            "Suspended": 182
+          },
+          "sha256MultisetSum": "d92971371930c9d0d67b01bc9c6caa3f7d6052b60de2bc10b35c8817b06a4c1c"
+        },
+        "checkpointCommitSeq": 813788,
+        "copiedJournalLastSeq": 815788,
+        "deltaJournalRecords": 2000,
+        "epoch": 1,
+        "heapMaxBytes": 1046937600,
+        "outcome": "PASS",
+        "partition": "P204",
+        "phases": [
+          {
+            "elapsedMillis": 25878,
+            "gcCountDuringPhase": 328,
+            "gcMillisDuringPhase": 3786,
+            "sampledHeapPeakBytes": 320455704,
+            "stage": "residentRecovery"
+          },
+          {
+            "elapsedMillis": 41598,
+            "gcCountDuringPhase": 352,
+            "gcMillisDuringPhase": 5100,
+            "sampledHeapPeakBytes": 630849200,
+            "stage": "checkpointRecovery"
+          },
+          {
+            "elapsedMillis": 2538,
+            "gcCountDuringPhase": 0,
+            "gcMillisDuringPhase": 0,
+            "sampledHeapPeakBytes": 624589976,
+            "stage": "snapshotCapture"
+          },
+          {
+            "elapsedMillis": 37625,
+            "explicitGcMillisExcludedFromRecovery": 2147,
+            "gcCountDuringPhase": 217,
+            "gcMillisDuringPhase": 3872,
+            "quiescentHeapBytesAfterExplicitGc": 506364904,
+            "sampledHeapPeakBytes": 953787848,
+            "stage": "fullJournalRecovery"
+          },
+          {
+            "elapsedMillis": 2131,
+            "gcCountDuringPhase": 5,
+            "gcMillisDuringPhase": 111,
+            "sampledHeapPeakBytes": 716928440,
+            "stage": "fullJournalRecoveryFingerprint"
+          },
+          {
+            "elapsedMillis": 4982,
+            "explicitGcMillisExcludedFromRecovery": 1778,
+            "gcCountDuringPhase": 12,
+            "gcMillisDuringPhase": 1180,
+            "quiescentHeapBytesAfterExplicitGc": 500432488,
+            "sampledHeapPeakBytes": 919558872,
+            "stage": "snapshotDeltaRecovery"
+          },
+          {
+            "elapsedMillis": 1707,
+            "gcCountDuringPhase": 5,
+            "gcMillisDuringPhase": 124,
+            "sampledHeapPeakBytes": 717657656,
+            "stage": "snapshotDeltaRecoveryFingerprint"
+          }
+        ],
+        "residentJournalLastSeq": 566728,
+        "residentPartition": "P122",
+        "restoredFingerprint": {
+          "counts": {
+            "applied": 691065,
+            "balance": 131,
+            "openOrder": 60390,
+            "position": 72,
+            "terminalOrder": 284471
+          },
+          "orderStatusCounts": {
+            "MISSING": 60208,
+            "Suspended": 182
+          },
+          "sha256MultisetSum": "d92971371930c9d0d67b01bc9c6caa3f7d6052b60de2bc10b35c8817b06a4c1c"
+        },
+        "scope": "isolated journal copy; no live promotion, DAO, transport or consensus proof",
+        "snapshotBytes": 100473484,
+        "snapshotCaptureBarrierMillis": 1705,
+        "snapshotCaptureTimings": {
+          "attempted": true,
+          "saved": true,
+          "stageNanos": {
+            "accountConfigCopy": 40167,
+            "balanceScan": 184238,
+            "cashResultCopy": 996,
+            "dedupeDtoCopy": 996,
+            "guardAndLocationScan": 2639158,
+            "lockHeld": 1705219323,
+            "lockWait": 2829953,
+            "openOrderScan": 194910227,
+            "positionScan": 326689,
+            "preScan": 824856810,
+            "releasePayload": 470849,
+            "saveCall": 1506379064,
+            "sealPayload": 85936,
+            "symbolParaCopy": 26847,
+            "total": 2532929250
+          },
+          "storeStages": {
+            "appliedEncodeAndBufferedWriteNanos": 874014990,
+            "bufferDrainNanos": 226956,
+            "coreEncodeAndBufferedWriteNanos": 326624299,
+            "delegateWriteCalls": 1535,
+            "delegateWriteNanos": 366363557,
+            "directorySyncAndCacheNanos": 201093,
+            "encodeAndBufferedWriteNanos": 1369152591,
+            "fallbackResults": 0,
+            "fileCloseNanos": 34788,
+            "fileSetupNanos": 2364545,
+            "fileSyncNanos": 122186313,
+            "installed": true,
+            "partition": "P204",
+            "phase": "installed",
+            "replaceNanos": 3108966,
+            "reusedScalarResults": 406870,
+            "reusedStrings": 560611,
+            "successfulDelegateBytes": 100473484,
+            "terminalEncodeAndBufferedWriteNanos": 166477144,
+            "totalNanos": 1497496319,
+            "validationNanos": 63279
+          },
+          "storeStagesAvailable": true
+        },
+        "stateEquivalent": true
+      }
+    },
+    {
+      "rawPath": ".tmp-trade-evidence/snapshot-lab-encoder-5c21a51-profile-1024-r2.json",
+      "rawSha256": "0d4365ebf857b0eebac86f0a6b6aa2e8228096838b30a3f914896fedec11d3ed",
+      "imageId": "sha256:2677fbfd4d8df897c5aeee0112c759842534f10488ed48be5b2adb6a5fea1b53",
+      "helperClassesSha256AtLaunch": "3da49366e8021d98a26309e74f82f19d5171887fa8debf0a5b9068e75f585bfb",
+      "outcome": "PASS",
+      "elapsedSeconds": 114.678,
+      "heapMiB": 1024,
+      "memoryMiB": 2048,
+      "cpus": 1,
+      "cgroupOomKilled": false,
+      "retainedLabOutputRoot": "/data/dc-saas-isolated-labs/trade-snapshot-run.s1k1g1nx",
+      "probe": {
+        "baselineFingerprint": {
+          "counts": {
+            "applied": 691065,
+            "balance": 131,
+            "openOrder": 60390,
+            "position": 72,
+            "terminalOrder": 284471
+          },
+          "orderStatusCounts": {
+            "MISSING": 60208,
+            "Suspended": 182
+          },
+          "sha256MultisetSum": "d92971371930c9d0d67b01bc9c6caa3f7d6052b60de2bc10b35c8817b06a4c1c"
+        },
+        "checkpointCommitSeq": 813788,
+        "copiedJournalLastSeq": 815788,
+        "deltaJournalRecords": 2000,
+        "epoch": 1,
+        "heapMaxBytes": 1046937600,
+        "outcome": "PASS",
+        "partition": "P204",
+        "phases": [
+          {
+            "elapsedMillis": 26503,
+            "gcCountDuringPhase": 325,
+            "gcMillisDuringPhase": 4043,
+            "sampledHeapPeakBytes": 332762584,
+            "stage": "residentRecovery"
+          },
+          {
+            "elapsedMillis": 41786,
+            "gcCountDuringPhase": 351,
+            "gcMillisDuringPhase": 4960,
+            "sampledHeapPeakBytes": 651456240,
+            "stage": "checkpointRecovery"
+          },
+          {
+            "elapsedMillis": 2704,
+            "gcCountDuringPhase": 0,
+            "gcMillisDuringPhase": 0,
+            "sampledHeapPeakBytes": 580949904,
+            "stage": "snapshotCapture"
+          },
+          {
+            "elapsedMillis": 28542,
+            "explicitGcMillisExcludedFromRecovery": 1247,
+            "gcCountDuringPhase": 218,
+            "gcMillisDuringPhase": 2838,
+            "quiescentHeapBytesAfterExplicitGc": 468206064,
+            "sampledHeapPeakBytes": 973774768,
+            "stage": "fullJournalRecovery"
+          },
+          {
+            "elapsedMillis": 1438,
+            "gcCountDuringPhase": 5,
+            "gcMillisDuringPhase": 93,
+            "sampledHeapPeakBytes": 673048944,
+            "stage": "fullJournalRecoveryFingerprint"
+          },
+          {
+            "elapsedMillis": 3612,
+            "explicitGcMillisExcludedFromRecovery": 1475,
+            "gcCountDuringPhase": 12,
+            "gcMillisDuringPhase": 783,
+            "quiescentHeapBytesAfterExplicitGc": 499766848,
+            "sampledHeapPeakBytes": 897559096,
+            "stage": "snapshotDeltaRecovery"
+          },
+          {
+            "elapsedMillis": 1292,
+            "gcCountDuringPhase": 5,
+            "gcMillisDuringPhase": 72,
+            "sampledHeapPeakBytes": 716989224,
+            "stage": "snapshotDeltaRecoveryFingerprint"
+          }
+        ],
+        "residentJournalLastSeq": 566728,
+        "residentPartition": "P122",
+        "restoredFingerprint": {
+          "counts": {
+            "applied": 691065,
+            "balance": 131,
+            "openOrder": 60390,
+            "position": 72,
+            "terminalOrder": 284471
+          },
+          "orderStatusCounts": {
+            "MISSING": 60208,
+            "Suspended": 182
+          },
+          "sha256MultisetSum": "d92971371930c9d0d67b01bc9c6caa3f7d6052b60de2bc10b35c8817b06a4c1c"
+        },
+        "scope": "isolated journal copy; no live promotion, DAO, transport or consensus proof",
+        "snapshotBytes": 100473484,
+        "snapshotCaptureBarrierMillis": 1546,
+        "snapshotCaptureTimings": {
+          "attempted": true,
+          "saved": true,
+          "stageNanos": {
+            "accountConfigCopy": 36772,
+            "balanceScan": 1407266,
+            "cashResultCopy": 1490,
+            "dedupeDtoCopy": 4721,
+            "guardAndLocationScan": 7241844,
+            "lockHeld": 1546329112,
+            "lockWait": 18982060,
+            "openOrderScan": 149204112,
+            "positionScan": 541721,
+            "preScan": 1137402242,
+            "releasePayload": 423633,
+            "saveCall": 1386881111,
+            "sealPayload": 174334,
+            "symbolParaCopy": 7909,
+            "total": 2702728042
+          },
+          "storeStages": {
+            "appliedEncodeAndBufferedWriteNanos": 778779786,
+            "bufferDrainNanos": 56523,
+            "coreEncodeAndBufferedWriteNanos": 378303469,
+            "delegateWriteCalls": 1535,
+            "delegateWriteNanos": 208427552,
+            "directorySyncAndCacheNanos": 301470,
+            "encodeAndBufferedWriteNanos": 1276124452,
+            "fallbackResults": 0,
+            "fileCloseNanos": 106706,
+            "fileSetupNanos": 1451160,
+            "fileSyncNanos": 92293538,
+            "installed": true,
+            "partition": "P204",
+            "phase": "installed",
+            "replaceNanos": 6052689,
+            "reusedScalarResults": 406870,
+            "reusedStrings": 560611,
+            "successfulDelegateBytes": 100473484,
+            "terminalEncodeAndBufferedWriteNanos": 117631853,
+            "totalNanos": 1376753112,
+            "validationNanos": 115947
+          },
+          "storeStagesAvailable": true
+        },
+        "stateEquivalent": true
+      }
+    },
+    {
+      "rawPath": ".tmp-trade-evidence/snapshot-lab-encoder-baseline-3f0d027-profile-five.json",
+      "rawSha256": "cb31e7300705bed00d24b6096aa2cac38395352c8fe76a223b59518a7daa188a",
+      "imageId": "sha256:6505d51b583e5027dfe2b0fa3704436704ebeca77f19875771ba7a5daf21bd9f",
+      "helperClassesSha256AtLaunch": "2c3d01719155f255cd49fe1313d6b1e3ee87c735da52e1ebba33e5784043b586",
+      "outcome": "PASS",
+      "elapsedSeconds": 112.611,
+      "heapMiB": 1024,
+      "memoryMiB": 2048,
+      "cpus": 1,
+      "cgroupOomKilled": false,
+      "retainedLabOutputRoot": "/data/dc-saas-isolated-labs/trade-snapshot-run.qFp8Ka6L",
+      "probe": {
+        "baselineFingerprint": {
+          "counts": {
+            "applied": 691065,
+            "balance": 131,
+            "openOrder": 60390,
+            "position": 72,
+            "terminalOrder": 284471
+          },
+          "orderStatusCounts": {
+            "MISSING": 60208,
+            "Suspended": 182
+          },
+          "sha256MultisetSum": "d92971371930c9d0d67b01bc9c6caa3f7d6052b60de2bc10b35c8817b06a4c1c"
+        },
+        "checkpointCommitSeq": 813788,
+        "copiedJournalLastSeq": 815788,
+        "deltaJournalRecords": 2000,
+        "epoch": 1,
+        "heapMaxBytes": 1046937600,
+        "outcome": "PASS",
+        "partition": "P204",
+        "phases": [
+          {
+            "elapsedMillis": 23012,
+            "gcCountDuringPhase": 338,
+            "gcMillisDuringPhase": 3494,
+            "sampledHeapPeakBytes": 319185912,
+            "stage": "residentRecovery"
+          },
+          {
+            "elapsedMillis": 34748,
+            "gcCountDuringPhase": 346,
+            "gcMillisDuringPhase": 4097,
+            "sampledHeapPeakBytes": 651429008,
+            "stage": "checkpointRecovery"
+          },
+          {
+            "elapsedMillis": 2029,
+            "gcCountDuringPhase": 1,
+            "gcMillisDuringPhase": 47,
+            "sampledHeapPeakBytes": 661108488,
+            "stage": "snapshotCapture"
+          },
+          {
+            "elapsedMillis": 1044,
+            "gcCountDuringPhase": 1,
+            "gcMillisDuringPhase": 1,
+            "sampledHeapPeakBytes": 666745008,
+            "stage": "snapshotCaptureTrial2"
+          },
+          {
+            "elapsedMillis": 1089,
+            "gcCountDuringPhase": 1,
+            "gcMillisDuringPhase": 2,
+            "sampledHeapPeakBytes": 666750552,
+            "stage": "snapshotCaptureTrial3"
+          },
+          {
+            "elapsedMillis": 760,
+            "gcCountDuringPhase": 1,
+            "gcMillisDuringPhase": 1,
+            "sampledHeapPeakBytes": 662368336,
+            "stage": "snapshotCaptureTrial4"
+          },
+          {
+            "elapsedMillis": 846,
+            "gcCountDuringPhase": 1,
+            "gcMillisDuringPhase": 2,
+            "sampledHeapPeakBytes": 661835696,
+            "stage": "snapshotCaptureTrial5"
+          },
+          {
+            "elapsedMillis": 29298,
+            "explicitGcMillisExcludedFromRecovery": 1105,
+            "gcCountDuringPhase": 218,
+            "gcMillisDuringPhase": 2773,
+            "quiescentHeapBytesAfterExplicitGc": 505311144,
+            "sampledHeapPeakBytes": 939687984,
+            "stage": "fullJournalRecovery"
+          },
+          {
+            "elapsedMillis": 1607,
+            "gcCountDuringPhase": 5,
+            "gcMillisDuringPhase": 86,
+            "sampledHeapPeakBytes": 715770248,
+            "stage": "fullJournalRecoveryFingerprint"
+          },
+          {
+            "elapsedMillis": 4069,
+            "explicitGcMillisExcludedFromRecovery": 1008,
+            "gcCountDuringPhase": 12,
+            "gcMillisDuringPhase": 942,
+            "quiescentHeapBytesAfterExplicitGc": 460517408,
+            "sampledHeapPeakBytes": 957013968,
+            "stage": "snapshotDeltaRecovery"
+          },
+          {
+            "elapsedMillis": 978,
+            "gcCountDuringPhase": 5,
+            "gcMillisDuringPhase": 61,
+            "sampledHeapPeakBytes": 671531872,
+            "stage": "snapshotDeltaRecoveryFingerprint"
+          }
+        ],
+        "residentJournalLastSeq": 566728,
+        "residentPartition": "P122",
+        "restoredFingerprint": {
+          "counts": {
+            "applied": 691065,
+            "balance": 131,
+            "openOrder": 60390,
+            "position": 72,
+            "terminalOrder": 284471
+          },
+          "orderStatusCounts": {
+            "MISSING": 60208,
+            "Suspended": 182
+          },
+          "sha256MultisetSum": "d92971371930c9d0d67b01bc9c6caa3f7d6052b60de2bc10b35c8817b06a4c1c"
+        },
+        "scope": "isolated journal copy; no live promotion, DAO, transport or consensus proof",
+        "snapshotBytes": 100473484,
+        "snapshotCaptureBarrierMillis": 1677,
+        "snapshotCaptureTimings": {
+          "attempted": true,
+          "saved": true,
+          "stageNanos": {
+            "accountConfigCopy": 7268,
+            "balanceScan": 111904,
+            "cashResultCopy": 744,
+            "dedupeDtoCopy": 1404,
+            "guardAndLocationScan": 1084771,
+            "lockHeld": 1677720546,
+            "lockWait": 2580615,
+            "openOrderScan": 58119284,
+            "positionScan": 115125,
+            "preScan": 347268505,
+            "releasePayload": 296458,
+            "saveCall": 1617717325,
+            "sealPayload": 122930,
+            "symbolParaCopy": 3427,
+            "total": 2027584065
+          },
+          "storeStages": {
+            "appliedEncodeAndBufferedWriteNanos": 961246462,
+            "bufferDrainNanos": 79193,
+            "coreEncodeAndBufferedWriteNanos": 368573377,
+            "delegateWriteCalls": 1535,
+            "delegateWriteNanos": 285695684,
+            "directorySyncAndCacheNanos": 191860,
+            "encodeAndBufferedWriteNanos": 1432957006,
+            "fileCloseNanos": 49237,
+            "fileSetupNanos": 1083161,
+            "fileSyncNanos": 173256698,
+            "installed": true,
+            "partition": "P204",
+            "phase": "installed",
+            "replaceNanos": 3134797,
+            "successfulDelegateBytes": 100473484,
+            "terminalEncodeAndBufferedWriteNanos": 103067094,
+            "totalNanos": 1610931363,
+            "validationNanos": 21183
+          },
+          "storeStagesAvailable": true
+        },
+        "snapshotCaptureTrials": [
+          {
+            "allocationMeasurementAvailable": true,
+            "barrierMillis": 1677,
+            "captureTimings": {
+              "attempted": true,
+              "saved": true,
+              "stageNanos": {
+                "accountConfigCopy": 7268,
+                "balanceScan": 111904,
+                "cashResultCopy": 744,
+                "dedupeDtoCopy": 1404,
+                "guardAndLocationScan": 1084771,
+                "lockHeld": 1677720546,
+                "lockWait": 2580615,
+                "openOrderScan": 58119284,
+                "positionScan": 115125,
+                "preScan": 347268505,
+                "releasePayload": 296458,
+                "saveCall": 1617717325,
+                "sealPayload": 122930,
+                "symbolParaCopy": 3427,
+                "total": 2027584065
+              },
+              "storeStages": {
+                "appliedEncodeAndBufferedWriteNanos": 961246462,
+                "bufferDrainNanos": 79193,
+                "coreEncodeAndBufferedWriteNanos": 368573377,
+                "delegateWriteCalls": 1535,
+                "delegateWriteNanos": 285695684,
+                "directorySyncAndCacheNanos": 191860,
+                "encodeAndBufferedWriteNanos": 1432957006,
+                "fileCloseNanos": 49237,
+                "fileSetupNanos": 1083161,
+                "fileSyncNanos": 173256698,
+                "installed": true,
+                "partition": "P204",
+                "phase": "installed",
+                "replaceNanos": 3134797,
+                "successfulDelegateBytes": 100473484,
+                "terminalEncodeAndBufferedWriteNanos": 103067094,
+                "totalNanos": 1610931363,
+                "validationNanos": 21183
+              },
+              "storeStagesAvailable": true
+            },
+            "currentThreadAllocatedBytes": 382694656,
+            "preTrialExplicitGcExcluded": true,
+            "trial": 1
+          },
+          {
+            "allocationMeasurementAvailable": true,
+            "barrierMillis": 1038,
+            "captureTimings": {
+              "attempted": true,
+              "saved": true,
+              "stageNanos": {
+                "accountConfigCopy": 2112,
+                "balanceScan": 53666,
+                "cashResultCopy": 787,
+                "dedupeDtoCopy": 621,
+                "guardAndLocationScan": 557125,
+                "lockHeld": 1038250100,
+                "lockWait": 16688,
+                "openOrderScan": 32328073,
+                "positionScan": 118224,
+                "preScan": 5826367,
+                "releasePayload": 389569,
+                "saveCall": 1004700583,
+                "sealPayload": 19711,
+                "symbolParaCopy": 1201,
+                "total": 1044103888
+              },
+              "storeStages": {
+                "appliedEncodeAndBufferedWriteNanos": 541338923,
+                "bufferDrainNanos": 47157,
+                "coreEncodeAndBufferedWriteNanos": 275301712,
+                "delegateWriteCalls": 1535,
+                "delegateWriteNanos": 150302566,
+                "directorySyncAndCacheNanos": 334662,
+                "encodeAndBufferedWriteNanos": 876649577,
+                "fileCloseNanos": 30748,
+                "fileSetupNanos": 229409,
+                "fileSyncNanos": 110361392,
+                "installed": true,
+                "partition": "P204",
+                "phase": "installed",
+                "replaceNanos": 16644925,
+                "successfulDelegateBytes": 100473484,
+                "terminalEncodeAndBufferedWriteNanos": 59980400,
+                "totalNanos": 1004331707,
+                "validationNanos": 7330
+              },
+              "storeStagesAvailable": true
+            },
+            "currentThreadAllocatedBytes": 322832296,
+            "preTrialExplicitGcExcluded": true,
+            "trial": 2
+          },
+          {
+            "allocationMeasurementAvailable": true,
+            "barrierMillis": 1088,
+            "captureTimings": {
+              "attempted": true,
+              "saved": true,
+              "stageNanos": {
+                "accountConfigCopy": 1783,
+                "balanceScan": 31970,
+                "cashResultCopy": 539,
+                "dedupeDtoCopy": 498,
+                "guardAndLocationScan": 345320,
+                "lockHeld": 1088496571,
+                "lockWait": 30767,
+                "openOrderScan": 22398904,
+                "positionScan": 135009,
+                "preScan": 833529,
+                "releasePayload": 154873,
+                "saveCall": 1065209092,
+                "sealPayload": 77706,
+                "symbolParaCopy": 539,
+                "total": 1089371114
+              },
+              "storeStages": {
+                "appliedEncodeAndBufferedWriteNanos": 574623514,
+                "bufferDrainNanos": 42524,
+                "coreEncodeAndBufferedWriteNanos": 293680824,
+                "delegateWriteCalls": 1535,
+                "delegateWriteNanos": 162495805,
+                "directorySyncAndCacheNanos": 279834,
+                "encodeAndBufferedWriteNanos": 957982538,
+                "fileCloseNanos": 17632,
+                "fileSetupNanos": 191859,
+                "fileSyncNanos": 92377343,
+                "installed": true,
+                "partition": "P204",
+                "phase": "installed",
+                "replaceNanos": 13468021,
+                "successfulDelegateBytes": 100473484,
+                "terminalEncodeAndBufferedWriteNanos": 89653810,
+                "totalNanos": 1064401510,
+                "validationNanos": 14015
+              },
+              "storeStagesAvailable": true
+            },
+            "currentThreadAllocatedBytes": 321251336,
+            "preTrialExplicitGcExcluded": true,
+            "trial": 3
+          },
+          {
+            "allocationMeasurementAvailable": true,
+            "barrierMillis": 759,
+            "captureTimings": {
+              "attempted": true,
+              "saved": true,
+              "stageNanos": {
+                "accountConfigCopy": 1536,
+                "balanceScan": 15067,
+                "cashResultCopy": 457,
+                "dedupeDtoCopy": 332,
+                "guardAndLocationScan": 355054,
+                "lockHeld": 759798102,
+                "lockWait": 26150,
+                "openOrderScan": 10948640,
+                "positionScan": 82060,
+                "preScan": 685535,
+                "releasePayload": 115183,
+                "saveCall": 748194561,
+                "sealPayload": 29595,
+                "symbolParaCopy": 332,
+                "total": 760519500
+              },
+              "storeStages": {
+                "appliedEncodeAndBufferedWriteNanos": 399674350,
+                "bufferDrainNanos": 139880,
+                "coreEncodeAndBufferedWriteNanos": 170634170,
+                "delegateWriteCalls": 1535,
+                "delegateWriteNanos": 105785237,
+                "directorySyncAndCacheNanos": 217083,
+                "encodeAndBufferedWriteNanos": 638641094,
+                "fileCloseNanos": 30715,
+                "fileSetupNanos": 135522,
+                "fileSyncNanos": 98461379,
+                "installed": true,
+                "partition": "P204",
+                "phase": "installed",
+                "replaceNanos": 10099524,
+                "successfulDelegateBytes": 100473484,
+                "terminalEncodeAndBufferedWriteNanos": 68292228,
+                "totalNanos": 747751553,
+                "validationNanos": 6682
+              },
+              "storeStagesAvailable": true
+            },
+            "currentThreadAllocatedBytes": 321249752,
+            "preTrialExplicitGcExcluded": true,
+            "trial": 4
+          },
+          {
+            "allocationMeasurementAvailable": true,
+            "barrierMillis": 844,
+            "captureTimings": {
+              "attempted": true,
+              "saved": true,
+              "stageNanos": {
+                "accountConfigCopy": 1370,
+                "balanceScan": 15987,
+                "cashResultCopy": 166,
+                "dedupeDtoCopy": 166,
+                "guardAndLocationScan": 226061,
+                "lockHeld": 844977062,
+                "lockWait": 15281,
+                "openOrderScan": 11585170,
+                "positionScan": 124076,
+                "preScan": 673820,
+                "releasePayload": 239186,
+                "saveCall": 832605694,
+                "sealPayload": 32431,
+                "symbolParaCopy": 291,
+                "total": 845698107
+              },
+              "storeStages": {
+                "appliedEncodeAndBufferedWriteNanos": 481100680,
+                "bufferDrainNanos": 70908,
+                "coreEncodeAndBufferedWriteNanos": 168486635,
+                "delegateWriteCalls": 1535,
+                "delegateWriteNanos": 128490325,
+                "directorySyncAndCacheNanos": 599586,
+                "encodeAndBufferedWriteNanos": 715159585,
+                "fileCloseNanos": 32193,
+                "fileSetupNanos": 142637,
+                "fileSyncNanos": 76160393,
+                "installed": true,
+                "partition": "P204",
+                "phase": "installed",
+                "replaceNanos": 39242189,
+                "successfulDelegateBytes": 100473484,
+                "terminalEncodeAndBufferedWriteNanos": 65531646,
+                "totalNanos": 831434734,
+                "validationNanos": 6519
+              },
+              "storeStagesAvailable": true
+            },
+            "currentThreadAllocatedBytes": 321249672,
+            "preTrialExplicitGcExcluded": true,
+            "trial": 5
+          }
+        ],
+        "stateEquivalent": true
+      }
+    },
+    {
+      "rawPath": ".tmp-trade-evidence/snapshot-lab-encoder-5c21a51-profile-five.json",
+      "rawSha256": "2df45aa424498c649d57a3f2a1ac237df78bf1c5098e0f88f9be48034e8ecf8a",
+      "imageId": "sha256:2677fbfd4d8df897c5aeee0112c759842534f10488ed48be5b2adb6a5fea1b53",
+      "helperClassesSha256AtLaunch": "2c3d01719155f255cd49fe1313d6b1e3ee87c735da52e1ebba33e5784043b586",
+      "outcome": "PASS",
+      "elapsedSeconds": 114.609,
+      "heapMiB": 1024,
+      "memoryMiB": 2048,
+      "cpus": 1,
+      "cgroupOomKilled": false,
+      "retainedLabOutputRoot": "/data/dc-saas-isolated-labs/trade-snapshot-run.S7ex3XoT",
+      "probe": {
+        "baselineFingerprint": {
+          "counts": {
+            "applied": 691065,
+            "balance": 131,
+            "openOrder": 60390,
+            "position": 72,
+            "terminalOrder": 284471
+          },
+          "orderStatusCounts": {
+            "MISSING": 60208,
+            "Suspended": 182
+          },
+          "sha256MultisetSum": "d92971371930c9d0d67b01bc9c6caa3f7d6052b60de2bc10b35c8817b06a4c1c"
+        },
+        "checkpointCommitSeq": 813788,
+        "copiedJournalLastSeq": 815788,
+        "deltaJournalRecords": 2000,
+        "epoch": 1,
+        "heapMaxBytes": 1046937600,
+        "outcome": "PASS",
+        "partition": "P204",
+        "phases": [
+          {
+            "elapsedMillis": 23541,
+            "gcCountDuringPhase": 331,
+            "gcMillisDuringPhase": 3498,
+            "sampledHeapPeakBytes": 313411976,
+            "stage": "residentRecovery"
+          },
+          {
+            "elapsedMillis": 34374,
+            "gcCountDuringPhase": 340,
+            "gcMillisDuringPhase": 3947,
+            "sampledHeapPeakBytes": 624131040,
+            "stage": "checkpointRecovery"
+          },
+          {
+            "elapsedMillis": 1344,
+            "gcCountDuringPhase": 0,
+            "gcMillisDuringPhase": 0,
+            "sampledHeapPeakBytes": 536253096,
+            "stage": "snapshotCapture"
+          },
+          {
+            "elapsedMillis": 963,
+            "gcCountDuringPhase": 0,
+            "gcMillisDuringPhase": 0,
+            "sampledHeapPeakBytes": 473231288,
+            "stage": "snapshotCaptureTrial2"
+          },
+          {
+            "elapsedMillis": 818,
+            "gcCountDuringPhase": 0,
+            "gcMillisDuringPhase": 0,
+            "sampledHeapPeakBytes": 473235352,
+            "stage": "snapshotCaptureTrial3"
+          },
+          {
+            "elapsedMillis": 1024,
+            "gcCountDuringPhase": 0,
+            "gcMillisDuringPhase": 0,
+            "sampledHeapPeakBytes": 470510240,
+            "stage": "snapshotCaptureTrial4"
+          },
+          {
+            "elapsedMillis": 881,
+            "gcCountDuringPhase": 0,
+            "gcMillisDuringPhase": 0,
+            "sampledHeapPeakBytes": 470513384,
+            "stage": "snapshotCaptureTrial5"
+          },
+          {
+            "elapsedMillis": 32168,
+            "explicitGcMillisExcludedFromRecovery": 1180,
+            "gcCountDuringPhase": 218,
+            "gcMillisDuringPhase": 3042,
+            "quiescentHeapBytesAfterExplicitGc": 506044984,
+            "sampledHeapPeakBytes": 948813720,
+            "stage": "fullJournalRecovery"
+          },
+          {
+            "elapsedMillis": 1493,
+            "gcCountDuringPhase": 5,
+            "gcMillisDuringPhase": 94,
+            "sampledHeapPeakBytes": 719489328,
+            "stage": "fullJournalRecoveryFingerprint"
+          },
+          {
+            "elapsedMillis": 4425,
+            "explicitGcMillisExcludedFromRecovery": 1120,
+            "gcCountDuringPhase": 12,
+            "gcMillisDuringPhase": 979,
+            "quiescentHeapBytesAfterExplicitGc": 499752712,
+            "sampledHeapPeakBytes": 886062104,
+            "stage": "snapshotDeltaRecovery"
+          },
+          {
+            "elapsedMillis": 1311,
+            "gcCountDuringPhase": 5,
+            "gcMillisDuringPhase": 49,
+            "sampledHeapPeakBytes": 708383480,
+            "stage": "snapshotDeltaRecoveryFingerprint"
+          }
+        ],
+        "residentJournalLastSeq": 566728,
+        "residentPartition": "P122",
+        "restoredFingerprint": {
+          "counts": {
+            "applied": 691065,
+            "balance": 131,
+            "openOrder": 60390,
+            "position": 72,
+            "terminalOrder": 284471
+          },
+          "orderStatusCounts": {
+            "MISSING": 60208,
+            "Suspended": 182
+          },
+          "sha256MultisetSum": "d92971371930c9d0d67b01bc9c6caa3f7d6052b60de2bc10b35c8817b06a4c1c"
+        },
+        "scope": "isolated journal copy; no live promotion, DAO, transport or consensus proof",
+        "snapshotBytes": 100473484,
+        "snapshotCaptureBarrierMillis": 1094,
+        "snapshotCaptureTimings": {
+          "attempted": true,
+          "saved": true,
+          "stageNanos": {
+            "accountConfigCopy": 6080,
+            "balanceScan": 68215,
+            "cashResultCopy": 1957,
+            "dedupeDtoCopy": 4915,
+            "guardAndLocationScan": 1148218,
+            "lockHeld": 1094865044,
+            "lockWait": 3072963,
+            "openOrderScan": 48491242,
+            "positionScan": 91995,
+            "preScan": 245060283,
+            "releasePayload": 342121,
+            "saveCall": 1044363349,
+            "sealPayload": 188531,
+            "symbolParaCopy": 4831,
+            "total": 1343013408
+          },
+          "storeStages": {
+            "appliedEncodeAndBufferedWriteNanos": 587825732,
+            "bufferDrainNanos": 179244,
+            "coreEncodeAndBufferedWriteNanos": 243244317,
+            "delegateWriteCalls": 1535,
+            "delegateWriteNanos": 168901566,
+            "directorySyncAndCacheNanos": 172788,
+            "encodeAndBufferedWriteNanos": 925172724,
+            "fallbackResults": 0,
+            "fileCloseNanos": 38148,
+            "fileSetupNanos": 1147342,
+            "fileSyncNanos": 101647526,
+            "installed": true,
+            "partition": "P204",
+            "phase": "installed",
+            "replaceNanos": 2877685,
+            "reusedScalarResults": 406870,
+            "reusedStrings": 560611,
+            "successfulDelegateBytes": 100473484,
+            "terminalEncodeAndBufferedWriteNanos": 92927888,
+            "totalNanos": 1031447477,
+            "validationNanos": 82834
+          },
+          "storeStagesAvailable": true
+        },
+        "snapshotCaptureTrials": [
+          {
+            "allocationMeasurementAvailable": true,
+            "barrierMillis": 1094,
+            "captureTimings": {
+              "attempted": true,
+              "saved": true,
+              "stageNanos": {
+                "accountConfigCopy": 6080,
+                "balanceScan": 68215,
+                "cashResultCopy": 1957,
+                "dedupeDtoCopy": 4915,
+                "guardAndLocationScan": 1148218,
+                "lockHeld": 1094865044,
+                "lockWait": 3072963,
+                "openOrderScan": 48491242,
+                "positionScan": 91995,
+                "preScan": 245060283,
+                "releasePayload": 342121,
+                "saveCall": 1044363349,
+                "sealPayload": 188531,
+                "symbolParaCopy": 4831,
+                "total": 1343013408
+              },
+              "storeStages": {
+                "appliedEncodeAndBufferedWriteNanos": 587825732,
+                "bufferDrainNanos": 179244,
+                "coreEncodeAndBufferedWriteNanos": 243244317,
+                "delegateWriteCalls": 1535,
+                "delegateWriteNanos": 168901566,
+                "directorySyncAndCacheNanos": 172788,
+                "encodeAndBufferedWriteNanos": 925172724,
+                "fallbackResults": 0,
+                "fileCloseNanos": 38148,
+                "fileSetupNanos": 1147342,
+                "fileSyncNanos": 101647526,
+                "installed": true,
+                "partition": "P204",
+                "phase": "installed",
+                "replaceNanos": 2877685,
+                "reusedScalarResults": 406870,
+                "reusedStrings": 560611,
+                "successfulDelegateBytes": 100473484,
+                "terminalEncodeAndBufferedWriteNanos": 92927888,
+                "totalNanos": 1031447477,
+                "validationNanos": 82834
+              },
+              "storeStagesAvailable": true
+            },
+            "currentThreadAllocatedBytes": 77179856,
+            "preTrialExplicitGcExcluded": true,
+            "trial": 1
+          },
+          {
+            "allocationMeasurementAvailable": true,
+            "barrierMillis": 959,
+            "captureTimings": {
+              "attempted": true,
+              "saved": true,
+              "stageNanos": {
+                "accountConfigCopy": 4831,
+                "balanceScan": 102366,
+                "cashResultCopy": 208,
+                "dedupeDtoCopy": 250,
+                "guardAndLocationScan": 906755,
+                "lockHeld": 959813770,
+                "lockWait": 46935,
+                "openOrderScan": 35952848,
+                "positionScan": 238714,
+                "preScan": 3162751,
+                "releasePayload": 1082167,
+                "saveCall": 921307574,
+                "sealPayload": 49808,
+                "symbolParaCopy": 1791,
+                "total": 963064644
+              },
+              "storeStages": {
+                "appliedEncodeAndBufferedWriteNanos": 446963032,
+                "bufferDrainNanos": 206605,
+                "coreEncodeAndBufferedWriteNanos": 242174352,
+                "delegateWriteCalls": 1535,
+                "delegateWriteNanos": 236458424,
+                "directorySyncAndCacheNanos": 420623,
+                "encodeAndBufferedWriteNanos": 807283990,
+                "fallbackResults": 0,
+                "fileCloseNanos": 36065,
+                "fileSetupNanos": 156547,
+                "fileSyncNanos": 97480819,
+                "installed": true,
+                "partition": "P204",
+                "phase": "installed",
+                "replaceNanos": 15066630,
+                "reusedScalarResults": 406870,
+                "reusedStrings": 560611,
+                "successfulDelegateBytes": 100473484,
+                "terminalEncodeAndBufferedWriteNanos": 118110998,
+                "totalNanos": 920688259,
+                "validationNanos": 6788
+              },
+              "storeStagesAvailable": true
+            },
+            "currentThreadAllocatedBytes": 17072408,
+            "preTrialExplicitGcExcluded": true,
+            "trial": 2
+          },
+          {
+            "allocationMeasurementAvailable": true,
+            "barrierMillis": 816,
+            "captureTimings": {
+              "attempted": true,
+              "saved": true,
+              "stageNanos": {
+                "accountConfigCopy": 1749,
+                "balanceScan": 18824,
+                "cashResultCopy": 375,
+                "dedupeDtoCopy": 333,
+                "guardAndLocationScan": 326046,
+                "lockHeld": 816836212,
+                "lockWait": 16325,
+                "openOrderScan": 24399044,
+                "positionScan": 81917,
+                "preScan": 823713,
+                "releasePayload": 241629,
+                "saveCall": 791563521,
+                "sealPayload": 29943,
+                "symbolParaCopy": 1416,
+                "total": 817695448
+              },
+              "storeStages": {
+                "appliedEncodeAndBufferedWriteNanos": 423347679,
+                "bufferDrainNanos": 60803,
+                "coreEncodeAndBufferedWriteNanos": 247101554,
+                "delegateWriteCalls": 1535,
+                "delegateWriteNanos": 182586203,
+                "directorySyncAndCacheNanos": 413210,
+                "encodeAndBufferedWriteNanos": 751150987,
+                "fallbackResults": 0,
+                "fileCloseNanos": 34316,
+                "fileSetupNanos": 153006,
+                "fileSyncNanos": 28797469,
+                "installed": true,
+                "partition": "P204",
+                "phase": "installed",
+                "replaceNanos": 10372686,
+                "reusedScalarResults": 406870,
+                "reusedStrings": 560611,
+                "successfulDelegateBytes": 100473484,
+                "terminalEncodeAndBufferedWriteNanos": 80635912,
+                "totalNanos": 791010214,
+                "validationNanos": 8037
+              },
+              "storeStagesAvailable": true
+            },
+            "currentThreadAllocatedBytes": 15491392,
+            "preTrialExplicitGcExcluded": true,
+            "trial": 3
+          },
+          {
+            "allocationMeasurementAvailable": true,
+            "barrierMillis": 1022,
+            "captureTimings": {
+              "attempted": true,
+              "saved": true,
+              "stageNanos": {
+                "accountConfigCopy": 4789,
+                "balanceScan": 59262,
+                "cashResultCopy": 458,
+                "dedupeDtoCopy": 416,
+                "guardAndLocationScan": 780943,
+                "lockHeld": 1022087867,
+                "lockWait": 45478,
+                "openOrderScan": 12387887,
+                "positionScan": 147842,
+                "preScan": 1554805,
+                "releasePayload": 285649,
+                "saveCall": 1008095201,
+                "sealPayload": 50100,
+                "symbolParaCopy": 1249,
+                "total": 1023708973
+              },
+              "storeStages": {
+                "appliedEncodeAndBufferedWriteNanos": 416571444,
+                "bufferDrainNanos": 104615,
+                "coreEncodeAndBufferedWriteNanos": 317338626,
+                "delegateWriteCalls": 1535,
+                "delegateWriteNanos": 162248562,
+                "directorySyncAndCacheNanos": 614526,
+                "encodeAndBufferedWriteNanos": 833731717,
+                "fallbackResults": 0,
+                "fileCloseNanos": 66300,
+                "fileSetupNanos": 161544,
+                "fileSyncNanos": 147167004,
+                "installed": true,
+                "partition": "P204",
+                "phase": "installed",
+                "replaceNanos": 25094780,
+                "reusedScalarResults": 406870,
+                "reusedStrings": 560611,
+                "successfulDelegateBytes": 100473484,
+                "terminalEncodeAndBufferedWriteNanos": 99739230,
+                "totalNanos": 1006966890,
+                "validationNanos": 7330
+              },
+              "storeStagesAvailable": true
+            },
+            "currentThreadAllocatedBytes": 15489960,
+            "preTrialExplicitGcExcluded": true,
+            "trial": 4
+          },
+          {
+            "allocationMeasurementAvailable": true,
+            "barrierMillis": 880,
+            "captureTimings": {
+              "attempted": true,
+              "saved": true,
+              "stageNanos": {
+                "accountConfigCopy": 1124,
+                "balanceScan": 14826,
+                "cashResultCopy": 167,
+                "dedupeDtoCopy": 125,
+                "guardAndLocationScan": 199651,
+                "lockHeld": 880675859,
+                "lockWait": 16700,
+                "openOrderScan": 9039853,
+                "positionScan": 54348,
+                "preScan": 631767,
+                "releasePayload": 102490,
+                "saveCall": 871078326,
+                "sealPayload": 119399,
+                "symbolParaCopy": 291,
+                "total": 881338777
+              },
+              "storeStages": {
+                "appliedEncodeAndBufferedWriteNanos": 482855910,
+                "bufferDrainNanos": 288272,
+                "coreEncodeAndBufferedWriteNanos": 201593570,
+                "delegateWriteCalls": 1535,
+                "delegateWriteNanos": 193338311,
+                "directorySyncAndCacheNanos": 257205,
+                "encodeAndBufferedWriteNanos": 744586979,
+                "fallbackResults": 0,
+                "fileCloseNanos": 38606,
+                "fileSetupNanos": 137806,
+                "fileSyncNanos": 94769717,
+                "installed": true,
+                "partition": "P204",
+                "phase": "installed",
+                "replaceNanos": 30439565,
+                "reusedScalarResults": 406870,
+                "reusedStrings": 560611,
+                "successfulDelegateBytes": 100473484,
+                "terminalEncodeAndBufferedWriteNanos": 60086067,
+                "totalNanos": 870594860,
+                "validationNanos": 4039
+              },
+              "storeStagesAvailable": true
+            },
+            "currentThreadAllocatedBytes": 15489776,
+            "preTrialExplicitGcExcluded": true,
+            "trial": 5
+          }
+        ],
+        "stateEquivalent": true
+      }
+    }
+  ],
+  "fiveCaptureComparison": {
+    "baseline": {
+      "barrierMs": [
+        1677,
+        1038,
+        1088,
+        759,
+        844
+      ],
+      "allocatedBytes": [
+        382694656,
+        322832296,
+        321251336,
+        321249752,
+        321249672
+      ],
+      "allMedianBarrierMs": 1038,
+      "warmMedianBarrierMs": 941,
+      "warmMedianAllocatedBytes": 321250544
+    },
+    "candidate": {
+      "barrierMs": [
+        1094,
+        959,
+        816,
+        1022,
+        880
+      ],
+      "allocatedBytes": [
+        77179856,
+        17072408,
+        15491392,
+        15489960,
+        15489776
+      ],
+      "allMedianBarrierMs": 959,
+      "warmMedianBarrierMs": 919.5,
+      "warmMedianAllocatedBytes": 15490676
+    },
+    "warmAllocationReductionPercent": 95.17800785420616,
+    "warmBarrierReductionPercent": 2.284803400637625,
+    "interpretation": "95.2% capture-thread allocation reduction. Warm barrier medians differ only 21.5 ms; uncontrolled shared VM/JIT/IO noise plus slower single candidate runs preclude claiming significant latency gain. Pre-trial explicit GC is excluded, only mutator-thread allocation measured; not retained heap or p99."
+  },
+  "capacitySetupFailure": {
+    "exitCode": 1,
+    "reason": "Probe reused test fixture requiring org.junit.Assert; initial isolated main classpath omitted JUnit. No production code changed; rerun with read-only JUnit/hamcrest like image suite.",
+    "attemptOutcome": "SETUP_FAILURE"
+  },
+  "candidateCashCapacity": {
+    "outcome": "PASS",
+    "scope": "synthetic single-partition cash candidate + actual loopback TCP/Chronicle; NOT system trading TPS/promotion/power-loss",
+    "rounds": [
+      {
+        "requests": 300,
+        "concurrency": 16,
+        "warmupRequestsExcluded": 1,
+        "elapsedNanos": 2955278373,
+        "cashCandidateCommitsPerSecond": 101.51327967641173,
+        "p50Nanos": 5128643,
+        "p95Nanos": 843517114,
+        "p99Nanos": 1259461122,
+        "primaryAndReplicaSeq": 604,
+        "allRetriesNoNewAppend": true,
+        "localRecoveryBalanceEquivalent": true
+      },
+      {
+        "requests": 300,
+        "concurrency": 16,
+        "warmupRequestsExcluded": 1,
+        "elapsedNanos": 981278074,
+        "cashCandidateCommitsPerSecond": 305.72373718400235,
+        "p50Nanos": 1070714,
+        "p95Nanos": 339390886,
+        "p99Nanos": 588562197,
+        "primaryAndReplicaSeq": 604,
+        "allRetriesNoNewAppend": true,
+        "localRecoveryBalanceEquivalent": true
+      },
+      {
+        "requests": 300,
+        "concurrency": 16,
+        "warmupRequestsExcluded": 1,
+        "elapsedNanos": 1419847847,
+        "cashCandidateCommitsPerSecond": 211.29024538359567,
+        "p50Nanos": 2743461,
+        "p95Nanos": 391878879,
+        "p99Nanos": 548182438,
+        "primaryAndReplicaSeq": 604,
+        "allRetriesNoNewAppend": true,
+        "localRecoveryBalanceEquivalent": true
+      }
+    ],
+    "memoryMiB": 1024,
+    "heapMiB": 512,
+    "cpus": 1,
+    "network": "none; loopback inside container",
+    "wallClockSystemTpsClaim": false,
+    "allRoundsFinalBalance": "3110"
+  },
+  "liveReadOnly": {
+    "observedAtUtc": "2026-09-29T12:51:03Z",
+    "containers": [
+      {
+        "name": "/dc-saas-ordersvr",
+        "imageId": "sha256:edc9fa11aea0bac6584b71e9c9bdb71a721dd0d6c73f2341ec3e0b0ff9eee721",
+        "running": true,
+        "oomKilled": false,
+        "restartCount": 0
+      },
+      {
+        "name": "/dc-saas-ordersvr-b",
+        "imageId": "sha256:edc9fa11aea0bac6584b71e9c9bdb71a721dd0d6c73f2341ec3e0b0ff9eee721",
+        "running": true,
+        "oomKilled": false,
+        "restartCount": 0
+      },
+      {
+        "name": "/dc-saas-tradesvr",
+        "imageId": "sha256:a74092669b0cee679c6be25ab8212d42497660e627b0c685d5c0750954571e51",
+        "running": true,
+        "oomKilled": false,
+        "restartCount": 0
+      },
+      {
+        "name": "/dc-saas-tradesvr-b",
+        "imageId": "sha256:a74092669b0cee679c6be25ab8212d42497660e627b0c685d5c0750954571e51",
+        "running": true,
+        "oomKilled": false,
+        "restartCount": 0
+      },
+      {
+        "name": "/dc-saas-mdsvr",
+        "imageId": "sha256:a6d06002e8776c15bd7e23e69d16617762cf419169ff77ffa2e188bd6805702d",
+        "running": true,
+        "oomKilled": false,
+        "restartCount": 0
+      },
+      {
+        "name": "/dc-saas-mdsvr-b",
+        "imageId": "sha256:a6d06002e8776c15bd7e23e69d16617762cf419169ff77ffa2e188bd6805702d",
+        "running": true,
+        "oomKilled": false,
+        "restartCount": 0
+      },
+      {
+        "name": "/dc-saas-mdsvr-c",
+        "imageId": "sha256:a6d06002e8776c15bd7e23e69d16617762cf419169ff77ffa2e188bd6805702d",
+        "running": true,
+        "oomKilled": false,
+        "restartCount": 0
+      },
+      {
+        "name": "/dc-saas-projectionsvr",
+        "imageId": "sha256:c761d1fec7253506eafda3486cbc523e134a0d5145bd258f42e575a6edf34f74",
+        "running": true,
+        "oomKilled": false,
+        "restartCount": 0
+      }
+    ],
+    "baselineRawPath": ".tmp-trade-evidence/recovery-baseline-encoder-gate-20260929.json",
+    "baselineRawSha256": "51b08b6715dbdb86c912629e8f30c7d2d4c7a4c755432c446e2ba8825c4590a0",
+    "assignmentsReady": 256,
+    "tradeAHeapMiB": 768,
+    "tradeBHeapMiB": 384,
+    "tradeAJournalKiB": 4431484,
+    "tradeBJournalKiB": 4431544,
+    "periodicSnapshotsEnabled": false,
+    "tradeReplicaRequired": false
+  },
+  "invariants": {
+    "partitionBarrierRetained": true,
+    "originalJsonCompatibility": true,
+    "fullRecoveryPrevalidationRetained": true,
+    "noDedupeEvictionChange": true,
+    "noSqlAsRecoveryAuthority": true,
+    "liveJournalOrHistoryChanged": false,
+    "liveAssignmentOrConfigurationChanged": false,
+    "directorySyncIsPowerLossProof": false,
+    "syntheticTcpTestsAreLivePromotion": false
+  },
+  "remainingGates": [
+    "actual API pure business adapter/local-file authority and complete transaction coverage",
+    "complete node heap/direct memory/handle/IO budget; Trade B 384 MiB not qualified",
+    "trustworthy historical business/config state or explicit independent test-cluster route",
+    "Common bounded lifecycle adapters for Order/Trade/MD",
+    "real node control-plane promotion, stale-primary fencing and financial/order/MD reconciliation",
+    "Broker API order/matching/MD/Projection system throughput and controlled load fault recovery",
+    "retention/GAP compatibility and multi-fault-domain/long stability tests"
+  ]
+}

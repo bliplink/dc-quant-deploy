@@ -49,6 +49,15 @@ class OfflineLabSafetyTest(unittest.TestCase):
         with self.assertRaises(ValueError): validate(self.args)
         self.assertEqual("existing evidence", target.read_text())
 
+    def test_capture_trials_are_bounded_and_require_explicit_resident(self):
+        for value in (0, 6):
+            self.args.capture_trials = value
+            with self.assertRaises(ValueError): validate(self.args)
+        self.args.capture_trials = 5
+        with self.assertRaises(ValueError): validate(self.args)
+        self.args.resident = "P122"
+        validate(self.args)
+
     def test_helper_fingerprint_includes_nested_classes_and_rejects_escape(self):
         first = helper_fingerprint(self.args.test_classes)
         nested = Path(self.args.test_classes) / "com/app/dc/service/cluster/TradeSnapshotOfflineLab$Context.class"

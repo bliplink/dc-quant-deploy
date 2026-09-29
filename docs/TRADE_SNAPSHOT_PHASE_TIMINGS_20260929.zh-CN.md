@@ -20,6 +20,8 @@
 
 ## 3. 来源与测试
 
+计数修正（后续编码验收时发现）：下段原 68 类 / 362 项的聚合包含已无当前源码的 `TradeRecoveryConfigurationCoverageTest` 旧报告 1 项，实际应为 **67 类 / 361 项**；镜像内 92 项和本页副本实测不变。结构化证据保留原聚合值与修正原因，不删除原报告。详见 [后续编码与 TCP 验收](TRADE_SCALAR_ENCODER_AND_TCP_QUALIFICATION_20260929.zh-CN.md)。
+
 Java 8 缓存依赖、断网完整回归 **68 类 / 362 项**，零失败/错误/跳过。本轮新增 6 项诊断契约；原隔离实验测试进一步检查捕获/保存阶段存在、成功字节与快照长度一致。包括 retained/live 成功、不可变摘要/无载荷泄漏、精确 ID 与旧/其他分区拒配、流失败保留 latest/pinned、校验失败未安装、disabled 不伪造尝试/证明。没有用性能阈值写成单测。
 
 候选镜像 `local/tradesvr:snapshot-stages-3f0d027`，Linux arm64，ID `sha256:6505d51b583e5027dfe2b0fa3704436704ebeca77f19875771ba7a5daf21bd9f`。全部 **311 文件（231 代码/资源、80 依赖）**与本地产物一致，`LC_ALL=C` 相对路径 sha256sum 清单摘要 `91d03ff070a303abd7415080e7db3af1870c8a0972ece5c401ab0f2080e0676e`。相比 `ce38b04`，仅 manager/store 相关 9 个 class 新增/改变，302 文件不变，80 依赖一致。独立依赖目录 `target/dependency-snapshot-stages-candidate`，缓存 base `sha256:b8039096ac6396135dc864690ae785a30e6ad6d7614c6cd1f1ba180c85a56845`；未下载依赖、推送或部署。
