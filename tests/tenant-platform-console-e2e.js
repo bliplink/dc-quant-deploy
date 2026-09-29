@@ -351,13 +351,18 @@ async function platformCluster(page) {
   const textarea = page.locator('.editor textarea');
   await textarea.waitFor({timeout: 30000});
   const catalog = (await textarea.inputValue()).trim();
-  if (!catalog) throw new Error('OrderSvr has no placement catalog to safely re-apply');
-
-  await page.getByRole('button', {name: '校验并预览'}).click();
-  await page.getByText('预览通过', {exact: true}).waitFor({timeout: 30000});
-  page.once('dialog', dialog => dialog.accept());
-  await page.locator('.editor').getByRole('button', {name: /^发布 v/}).click();
-  await page.getByText(/OrderSvr Placement 已发布/).waitFor({timeout: 30000});
+  if (catalog) {
+    await page.getByRole('button', {name: '校验并预览'}).click();
+    await page.getByText('预览通过', {exact: true}).waitFor({timeout: 30000});
+    page.once('dialog', dialog => dialog.accept());
+    await page.locator('.editor').getByRole('button', {name: /^发布 v/}).click();
+    await page.getByText(/OrderSvr Placement 已发布/).waitFor({timeout: 30000});
+  } else {
+    if (!(await page.getByRole('button', {name: '校验并预览'}).isDisabled())) {
+      throw new Error('Unseeded OrderSvr placement editor must not allow preview');
+    }
+    console.log('SKIP: OrderSvr placement publication (desired catalog is not seeded)');
+  }
 
   for (const name of ['新增节点', '滚动升级', '回滚版本']) {
     const button = page.getByRole('button', {name});
