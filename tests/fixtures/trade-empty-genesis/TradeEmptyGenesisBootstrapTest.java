@@ -19,6 +19,7 @@ public final class TradeEmptyGenesisBootstrapTest {
         JSONObject value = new JSONObject(); value.put("runtimeRoot", root.toString()); value.put("resetId", id);
         value.put("dataResetCompleted", true); value.put("completedAtMillis", System.currentTimeMillis());
         value.put("deletedComponents", Arrays.asList("TradeSvrA", "TradeSvrB", "zookeeper"));
+        value.put("confirmedAbsentComponents", Arrays.asList("TradeSvrA", "TradeSvrB", "zookeeper"));
         Path path = root.resolve("reset.json"); Files.write(path, JSON.toJSONBytes(value)); return path;
     }
     static Path catalog(Path root) throws Exception {

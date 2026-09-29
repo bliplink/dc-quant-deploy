@@ -25,7 +25,8 @@ def main():
         raise ValueError('release evidence identity mismatch')
     values = {'IMAGE_SOURCE': 'registry', 'ORDER_CLUSTER_ENABLED': 'true', 'ORDER_CLUSTER_C_ENABLED': 'false',
         'MD_CLUSTER_ENABLED': 'true', 'MD_CLUSTER_C_ENABLED': 'true', 'TRADE_CLUSTER_ENABLED': 'true',
-        'ORDER_CLUSTER_PERIODIC_SNAPSHOT_ENABLED': 'true', 'TRADE_CLUSTER_PERIODIC_SNAPSHOT_ENABLED': 'true'}
+        'ORDER_CLUSTER_PERIODIC_SNAPSHOT_ENABLED': 'true', 'TRADE_CLUSTER_PERIODIC_SNAPSHOT_ENABLED': 'true',
+        'ZOOKEEPER_CPU_LIMIT': '0.50'}
     for component in lock['components']:
         built = evidence['components'].get(component['name'], {})
         if built.get('revision') != component['revision']:

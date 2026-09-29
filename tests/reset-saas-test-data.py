@@ -126,6 +126,7 @@ def main():
         result = dict(resetId=args.reset_id, runtimeRoot=str(root), dataResetCompleted=True,
             completedAtMillis=int(time.time() * 1000), backup=False,
             deletedComponents=[path.name for path in targets if path.parent == root / 'data'],
+            confirmedAbsentComponents=list(COMPONENTS),
             deletedInfrastructureLogDirs=[str(path) for path in targets if path.parent == root / 'log'],
             retained=['control', 'evidence', 'build cache'])
         proof.write_text(json.dumps(result, indent=2) + '\n')

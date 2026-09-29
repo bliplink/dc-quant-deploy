@@ -69,10 +69,10 @@ public final class TradeEmptyGenesisBootstrap {
         require(reset.getBooleanValue("dataResetCompleted") && root.toString().equals(reset.getString("runtimeRoot")),
                 "missing successful reset proof");
         require(resetId != null && resetId.matches("reset-[a-zA-Z0-9-]{8,80}"), "invalid reset ID");
-        require(reset.getJSONArray("deletedComponents") != null
-                && reset.getJSONArray("deletedComponents").contains("TradeSvrA")
-                && reset.getJSONArray("deletedComponents").contains("TradeSvrB")
-                && reset.getJSONArray("deletedComponents").contains("zookeeper"), "incomplete reset proof");
+        require(reset.getJSONArray("confirmedAbsentComponents") != null
+                && reset.getJSONArray("confirmedAbsentComponents").contains("TradeSvrA")
+                && reset.getJSONArray("confirmedAbsentComponents").contains("TradeSvrB")
+                && reset.getJSONArray("confirmedAbsentComponents").contains("zookeeper"), "incomplete reset scope proof");
         long age = System.currentTimeMillis() - reset.getLongValue("completedAtMillis");
         require(age >= 0 && age <= 3600000L, "reset proof expired");
         validateAssignments(assignmentFile);
