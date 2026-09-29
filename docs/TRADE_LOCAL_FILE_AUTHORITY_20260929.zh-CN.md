@@ -2,7 +2,7 @@
 
 日期：2026-09-29。对应 TradeSvr 本地候选代码；**未替换运行镜像、未重启节点、未做故障注入或业务晋级**。
 
-本地候选镜像（均未推送/部署）：TradeSvr `sha256:646c20379813dd9c09da4bbe469fc48fffd9a70f718b8258a711b495b36f2624`（源码 `480ddad`），ProjectionSvr `sha256:f3cf8b70d6422e37dafcf4f015a9491ee624c8f4eabf7e64b6801bfed9bfadfe`（源码 `5209b2d`）。镜像内关键 class SHA-256 与本地测试产物一致；这只证明打包来源，不是运行/财务验收。只读运行节点核查：Trade A/B 均沿用旧镜像 `sha256:a740926...`，各 128/128 当前主 READY 日志证据；ProjectionSvr 仍为旧镜像 `sha256:c761d1f...`，三容器 0 restart、OOM=false。READY 证据不是业务可写验证。
+历史本地候选镜像（均未推送/部署）：TradeSvr `sha256:646c20379813dd9c09da4bbe469fc48fffd9a70f718b8258a711b495b36f2624`（源码 `480ddad`），ProjectionSvr `sha256:f3cf8b70d6422e37dafcf4f015a9491ee624c8f4eabf7e64b6801bfed9bfadfe`（源码 `5209b2d`）。关键 class 当时与本地产物一致，但不证明完整依赖来源或运行/财务验收。**后续发现旧 Projection 候选使用 common 3.0.13/旧 bridge，与本轮 Maven 解析的 common 3.0.14/bridge 不同；该旧镜像不得复用为本轮验收产物，需重新构建并核对完整依赖。**只读运行节点核查：Trade A/B 均沿用旧镜像 `sha256:a740926...`，各 128/128 当前主 READY 日志证据；ProjectionSvr 仍为旧镜像 `sha256:c761d1f...`，三容器 0 restart、OOM=false。READY 证据不是业务可写验证。
 
 ## 目标与当前改动
 
@@ -15,7 +15,7 @@ Trade 的交易状态（余额、持仓、账户交易配置、用户合约配�
 - 真正有已提交日志或经明确建立的本地快照时，沿现有恢复器重建；快照/增量会覆盖同分区内存，不读 DAO。明确的空快照只适用于可以证明此前从未有业务状态的全新分区；**不能对旧分区随手生成空快照**。
 - `READY` 仍只表示当前程序的分区恢复门禁，不自动证明财务效果、跨节点复制提交、RPO=0 或 API 可交易。
 
-合成测试把 DAO 设置为“一调用就失败”，覆盖无 DAO 启动、失去文件时拒绝、空快照的有限语义、只有提交日志恢复、快照加提交增量恢复及旧模式隔离。Trade 全量 57 个测试类/221 个用例通过；尚不是线上数据正确性证明。
+合成测试把 DAO 设置为“一调用就失败”，覆盖无 DAO 启动、失去文件时拒绝、空快照的有限语义、只有提交日志恢复、快照加提交增量恢复及旧模式隔离。Trade 全量 57 个测试类/222 个用例通过；尚不是线上数据正确性证明。
 
 ## 为什么不能现在晋级镜像
 
@@ -39,7 +39,9 @@ Trade 的交易状态（余额、持仓、账户交易配置、用户合约配�
 
 候选 ProjectionSvr 代码现已增加**默认关闭**的 `projection.trade.configTables.enabled` 首个切片：账户配置和用户合约配置的 UPSERT/REMOVE，可与事件归档及 watermark 在同一事务中应用，校验 location/user/security 键与 payload 一致，不把业务值拼进 SQL。它不是历史回填器，也未覆盖余额、持仓、posting；未经过全量历史重建/双写退场前，**不得在运行环境开启该开关**。上段关于“还没有物化”的表述指当前运行环境及完整业务表集，不能把这个默认关闭的候选切片算作已接管。
 
-第二个**默认关闭**的候选切片 `projection.trade.coreTables.enabled` 现在能从 `ACCOUNT_BALANCE` / `POSITION` 完整后态 mutation 生成租户隔离的 UPSERT/REMOVE，在同一事务内执行。它按既有业务表精度校验，不接受越界/缺字段并阻止 watermark 前进；未覆盖 posting、funding 去重、保险/ADL 的专属状态，也未做真实数据库事务/历史回填验收。ProjectionSvr 全量 8 个测试类 / 33 个用例通过，不能据此开启开关或停用 Trade 的 SQL 写入。
+第二个**默认关闭**的候选切片 `projection.trade.coreTables.enabled` 现在能从 `ACCOUNT_BALANCE` / `POSITION` 完整后态 mutation 生成租户隔离的 UPSERT/REMOVE，在同一事务内执行。它按既有业务表精度校验，不接受越界/缺字段并阻止 watermark 前进；未覆盖 posting、funding 去重、保险/ADL 的专属状态，也未做历史回填验收。
+
+后续 Projection 本地提交 `0a8ccfe` 修复回滚失败仍恢复 auto-commit、严重错误漏回滚及 watermark 并发重复消费死锁，并增加 InnoDB/完整唯一键启动门禁。全量 **10 个测试类 / 48 个用例**通过；使用全新依赖目录的真实 MySQL **18 项隔离用例连续 3 轮通过**，包括提交确认丢失后的幂等重试。仅使用合成数据，未部署/重启/注入线上故障，不能据此开启开关或停用 Trade 的 SQL 写入。详细证据和未覆盖范围见 [Projection 事务隔离验收](TRADE_PROJECTION_TRANSACTION_20260929.zh-CN.md)。
 
 已核查：`TradeStateMutation.POSTING` 只是协议常量/恢复器分支，现有 Trade 业务 recorder 未发出该 mutation；普通流水的 ID 还会在 `MySqlDBTradeDao.putPostingBatch` 中生成。故即使余额/持仓/配置物化补齐，仍无法从本地提交日志独立重建资金流水。迁移要先在核心事务确定稳定流水 ID，把完整 posting 与对应余额后态一起提交，并测试重复事件、崩溃窗口和跨账户财务守恒；不能凭 Projection 读取旧 SQL 反向制造权威事件。
 
