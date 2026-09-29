@@ -1,0 +1,386 @@
+{
+  "generatedAtUtc": "2026-09-29T15:27:29Z",
+  "scope": "authorized historical runtime log cleanup, Linux Trade build and pre-upgrade readiness baseline; not live deployment or business acceptance",
+  "sourceCommit": "31986253ed36117104b5b67b6d3cb2f3e0fefbfb",
+  "tradeImageId": "sha256:f26d45c124776cab631f145b80fe2b536906de5953bf76b03ea46524f142063f",
+  "tradeImageTag": "local/tradesvr:bounded-recovery-3198625",
+  "imageArtifactBytesCompared": false,
+  "linuxBuild": {
+    "sourceFromCommittedGitArchive": true,
+    "offline": true,
+    "buildImage": "maven:3.9.11-eclipse-temurin-8",
+    "containerMemoryMiB": 2048,
+    "cpus": 2,
+    "mavenHeapMiB": 512,
+    "testForkHeapMiB": 1024,
+    "classes": 71,
+    "tests": 396,
+    "failures": 0,
+    "errors": 0,
+    "skipped": 0,
+    "exitCode": 0
+  },
+  "historicalLogCleanup": {
+    "explicitUserAuthorization": true,
+    "archived": false,
+    "recoverableByThisTask": false,
+    "previouslyDeletedPath": "/data/dc-saas-runtime/log/APSSvr.log.2026-09-27",
+    "previouslyDeletedBytes": 5033408854,
+    "files": [
+      {
+        "path": "/data/dc-saas-runtime/log/APSSvr.log.2026-09-26",
+        "sizeBytes": 94521656,
+        "device": 64785,
+        "inode": 397122,
+        "openDescriptors": []
+      },
+      {
+        "path": "/data/dc-saas-runtime/log/APSSvr.log.2026-09-28",
+        "sizeBytes": 95425663,
+        "device": 64785,
+        "inode": 418844,
+        "openDescriptors": []
+      },
+      {
+        "path": "/data/dc-saas-runtime/log/AdminSvr.log.2026-09-26",
+        "sizeBytes": 926471,
+        "device": 64785,
+        "inode": 397129,
+        "openDescriptors": []
+      },
+      {
+        "path": "/data/dc-saas-runtime/log/AdminSvr.log.2026-09-27",
+        "sizeBytes": 3961806,
+        "device": 64785,
+        "inode": 408621,
+        "openDescriptors": []
+      },
+      {
+        "path": "/data/dc-saas-runtime/log/AdminSvr.log.2026-09-28",
+        "sizeBytes": 1012009,
+        "device": 64785,
+        "inode": 421125,
+        "openDescriptors": []
+      },
+      {
+        "path": "/data/dc-saas-runtime/log/GW.log.2026-09-26",
+        "sizeBytes": 47626827,
+        "device": 64785,
+        "inode": 397107,
+        "openDescriptors": []
+      },
+      {
+        "path": "/data/dc-saas-runtime/log/GW.log.2026-09-27",
+        "sizeBytes": 349950772,
+        "device": 64785,
+        "inode": 403174,
+        "openDescriptors": []
+      },
+      {
+        "path": "/data/dc-saas-runtime/log/GW.log.2026-09-28",
+        "sizeBytes": 505727768,
+        "device": 64785,
+        "inode": 418846,
+        "openDescriptors": []
+      },
+      {
+        "path": "/data/dc-saas-runtime/log/LiqSvr.log.2026-09-26",
+        "sizeBytes": 504721,
+        "device": 64785,
+        "inode": 397126,
+        "openDescriptors": []
+      },
+      {
+        "path": "/data/dc-saas-runtime/log/LiqSvr.log.2026-09-27",
+        "sizeBytes": 873857,
+        "device": 64785,
+        "inode": 411016,
+        "openDescriptors": []
+      },
+      {
+        "path": "/data/dc-saas-runtime/log/LiqSvr.log.2026-09-28",
+        "sizeBytes": 667312,
+        "device": 64785,
+        "inode": 419010,
+        "openDescriptors": []
+      },
+      {
+        "path": "/data/dc-saas-runtime/log/LoginSvr.log.2026-09-26",
+        "sizeBytes": 12727480,
+        "device": 64785,
+        "inode": 397128,
+        "openDescriptors": []
+      },
+      {
+        "path": "/data/dc-saas-runtime/log/LoginSvr.log.2026-09-27",
+        "sizeBytes": 12582596,
+        "device": 64785,
+        "inode": 403168,
+        "openDescriptors": []
+      },
+      {
+        "path": "/data/dc-saas-runtime/log/LoginSvr.log.2026-09-28",
+        "sizeBytes": 4122303,
+        "device": 64785,
+        "inode": 418845,
+        "openDescriptors": []
+      },
+      {
+        "path": "/data/dc-saas-runtime/log/MDSvrA.log.2026-09-26",
+        "sizeBytes": 125124,
+        "device": 64785,
+        "inode": 397119,
+        "openDescriptors": []
+      },
+      {
+        "path": "/data/dc-saas-runtime/log/MDSvrA.log.2026-09-27",
+        "sizeBytes": 105299,
+        "device": 64785,
+        "inode": 401902,
+        "openDescriptors": []
+      },
+      {
+        "path": "/data/dc-saas-runtime/log/MDSvrA.log.2026-09-28",
+        "sizeBytes": 17073,
+        "device": 64785,
+        "inode": 417183,
+        "openDescriptors": []
+      },
+      {
+        "path": "/data/dc-saas-runtime/log/MDSvrB.log.2026-09-26",
+        "sizeBytes": 898927,
+        "device": 64785,
+        "inode": 397120,
+        "openDescriptors": []
+      },
+      {
+        "path": "/data/dc-saas-runtime/log/MDSvrB.log.2026-09-27",
+        "sizeBytes": 5029419,
+        "device": 64785,
+        "inode": 416166,
+        "openDescriptors": []
+      },
+      {
+        "path": "/data/dc-saas-runtime/log/MDSvrB.log.2026-09-28",
+        "sizeBytes": 9993838,
+        "device": 64785,
+        "inode": 418942,
+        "openDescriptors": []
+      },
+      {
+        "path": "/data/dc-saas-runtime/log/MDSvrC.log.2026-09-26",
+        "sizeBytes": 5369,
+        "device": 64785,
+        "inode": 397118,
+        "openDescriptors": []
+      },
+      {
+        "path": "/data/dc-saas-runtime/log/MDSvrC.log.2026-09-27",
+        "sizeBytes": 8577,
+        "device": 64785,
+        "inode": 401782,
+        "openDescriptors": []
+      },
+      {
+        "path": "/data/dc-saas-runtime/log/MDSvrC.log.2026-09-28",
+        "sizeBytes": 4314,
+        "device": 64785,
+        "inode": 417247,
+        "openDescriptors": []
+      },
+      {
+        "path": "/data/dc-saas-runtime/log/ManagerSvr.log.2026-09-26",
+        "sizeBytes": 609076,
+        "device": 64785,
+        "inode": 397127,
+        "openDescriptors": []
+      },
+      {
+        "path": "/data/dc-saas-runtime/log/ManagerSvr.log.2026-09-27",
+        "sizeBytes": 3099718,
+        "device": 64785,
+        "inode": 410753,
+        "openDescriptors": []
+      },
+      {
+        "path": "/data/dc-saas-runtime/log/ManagerSvr.log.2026-09-28",
+        "sizeBytes": 814307,
+        "device": 64785,
+        "inode": 419553,
+        "openDescriptors": []
+      },
+      {
+        "path": "/data/dc-saas-runtime/log/OrderSvrA.log.2026-09-26",
+        "sizeBytes": 9971143,
+        "device": 64785,
+        "inode": 397116,
+        "openDescriptors": []
+      },
+      {
+        "path": "/data/dc-saas-runtime/log/OrderSvrA.log.2026-09-27",
+        "sizeBytes": 18743429,
+        "device": 64785,
+        "inode": 416042,
+        "openDescriptors": []
+      },
+      {
+        "path": "/data/dc-saas-runtime/log/OrderSvrA.log.2026-09-28",
+        "sizeBytes": 19169113,
+        "device": 64785,
+        "inode": 419048,
+        "openDescriptors": []
+      },
+      {
+        "path": "/data/dc-saas-runtime/log/OrderSvrB.log.2026-09-26",
+        "sizeBytes": 20204255,
+        "device": 64785,
+        "inode": 397117,
+        "openDescriptors": []
+      },
+      {
+        "path": "/data/dc-saas-runtime/log/OrderSvrB.log.2026-09-27",
+        "sizeBytes": 133034524,
+        "device": 64785,
+        "inode": 403175,
+        "openDescriptors": []
+      },
+      {
+        "path": "/data/dc-saas-runtime/log/OrderSvrB.log.2026-09-28",
+        "sizeBytes": 459127126,
+        "device": 64785,
+        "inode": 418848,
+        "openDescriptors": []
+      },
+      {
+        "path": "/data/dc-saas-runtime/log/ProjectionSvr.log.2026-09-26",
+        "sizeBytes": 569541780,
+        "device": 64785,
+        "inode": 397125,
+        "openDescriptors": []
+      },
+      {
+        "path": "/data/dc-saas-runtime/log/ProjectionSvr.log.2026-09-27",
+        "sizeBytes": 3245252590,
+        "device": 64785,
+        "inode": 416133,
+        "openDescriptors": []
+      },
+      {
+        "path": "/data/dc-saas-runtime/log/ProjectionSvr.log.2026-09-28",
+        "sizeBytes": 1405742035,
+        "device": 64785,
+        "inode": 419118,
+        "openDescriptors": []
+      },
+      {
+        "path": "/data/dc-saas-runtime/log/RobotSvr.log.2026-09-26",
+        "sizeBytes": 5149622,
+        "device": 64785,
+        "inode": 397130,
+        "openDescriptors": []
+      },
+      {
+        "path": "/data/dc-saas-runtime/log/RobotSvr.log.2026-09-27",
+        "sizeBytes": 85390314,
+        "device": 64785,
+        "inode": 403176,
+        "openDescriptors": []
+      },
+      {
+        "path": "/data/dc-saas-runtime/log/RobotSvr.log.2026-09-28",
+        "sizeBytes": 1476645133,
+        "device": 64785,
+        "inode": 418849,
+        "openDescriptors": []
+      },
+      {
+        "path": "/data/dc-saas-runtime/log/TradeSvrA.log.2026-09-26",
+        "sizeBytes": 5235941,
+        "device": 64785,
+        "inode": 397121,
+        "openDescriptors": []
+      },
+      {
+        "path": "/data/dc-saas-runtime/log/TradeSvrA.log.2026-09-27",
+        "sizeBytes": 13521863,
+        "device": 64785,
+        "inode": 403177,
+        "openDescriptors": []
+      },
+      {
+        "path": "/data/dc-saas-runtime/log/TradeSvrA.log.2026-09-28",
+        "sizeBytes": 100784764,
+        "device": 64785,
+        "inode": 418850,
+        "openDescriptors": []
+      },
+      {
+        "path": "/data/dc-saas-runtime/log/TradeSvrB.log.2026-09-26",
+        "sizeBytes": 5691351,
+        "device": 64785,
+        "inode": 397124,
+        "openDescriptors": []
+      },
+      {
+        "path": "/data/dc-saas-runtime/log/TradeSvrB.log.2026-09-27",
+        "sizeBytes": 18116052,
+        "device": 64785,
+        "inode": 413535,
+        "openDescriptors": []
+      },
+      {
+        "path": "/data/dc-saas-runtime/log/TradeSvrB.log.2026-09-28",
+        "sizeBytes": 2679949,
+        "device": 64785,
+        "inode": 418851,
+        "openDescriptors": []
+      }
+    ],
+    "inaccessibleProcessCount": 0,
+    "descriptorsScanned": 6038,
+    "totalBytes": 8745343266,
+    "deletedFilesThisStep": 44,
+    "deletedFilesIncludingPreviousStep": 45,
+    "allCheckedFilesDeleted": true,
+    "afterDeletionNoDatedFilesMatched": true,
+    "activeLogsModified": false,
+    "journalSnapshotOrDatabaseModified": false
+  },
+  "afterHistoricalCleanupDisk": {
+    "usedKiB": 142622776,
+    "nonRootAvailableKiB": 3202560,
+    "dfPercentFull": 98,
+    "capacityQualified": false
+  },
+  "preUpgrade": {
+    "readOnly": true,
+    "existingTradeImagesUnchanged": true,
+    "readyLogEvidenceA": 128,
+    "assignedPrimaryA": 128,
+    "readyLogEvidenceB": 128,
+    "assignedPrimaryB": 128,
+    "businessVerified": false,
+    "detailsPath": "/Users/kong/Documents/Codex/2026-09-28/chatgpt-conversation-6ab8c255-e7ac-83e9-a99c/trade-pre-upgrade-3198625.json",
+    "mysqlHealthStatus": "unhealthy",
+    "snapshotPartitionCountA": 0,
+    "snapshotPartitionCountB": 0
+  },
+  "deployment": {
+    "newTradeImageDeployed": false,
+    "allServicesRebuilt": false,
+    "allServicesUpgraded": false,
+    "boundedRecoveryEnabled": false,
+    "pauseReason": "User requests dirty-data cleanup; exact trading-data scope unconfirmed. No deletion of trading history, journal, snapshot or Projection database authorized by resolved target."
+  },
+  "fullBuildInspection": {
+    "existingScript": "build-saas-images.sh",
+    "coversJavaServices": 11,
+    "coversWebApplications": 3,
+    "fetchesMutableBranches": true,
+    "usesMavenSnapshotUpdateFlag": true,
+    "skipsTests": true,
+    "noNewRecoveryExtensionInstallStep": true,
+    "fullSystemReleaseBaselineQualified": false
+  },
+  "next": "Clarify stress-user cleanup versus full current test-environment trading history reset before data deletion or rollout. Then pin complete source/dependency/image manifest, verify the release and stage upgrades. Never infer that dirty-data cleanup authorizes journal/database deletion."
+}
