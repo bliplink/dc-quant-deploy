@@ -1,0 +1,160 @@
+{
+  "schemaVersion": 1,
+  "releaseId": "cluster-dev-reset-20260930",
+  "sourcePolicy": "committed archives only; uncommitted user changes preserved and excluded",
+  "previousReleaseId": "cluster-dev-reset-20260929",
+  "buildEvidenceFile": "/Users/kong/Documents/Codex/2026-09-28/chatgpt-conversation-6ab8c255-e7ac-83e9-a99c/customer-api-release-20260930.fkjmsGcs/merged-build-evidence.json",
+  "dependencyEvidenceFiles": [
+    "/Users/kong/Documents/Codex/2026-09-28/chatgpt-conversation-6ab8c255-e7ac-83e9-a99c/full-release-20260929.IP799zsO/build-evidence.json",
+    "/Users/kong/Documents/Codex/2026-09-28/chatgpt-conversation-6ab8c255-e7ac-83e9-a99c/customer-api-release-20260930.fkjmsGcs/build-evidence.json"
+  ],
+  "components": {
+    "gateway": {
+      "revision": "e5cc73932acd9eca820714a21733e12c13da6d0c",
+      "image": "local/dc-saas-gateway:cluster-dev-reset-20260929",
+      "imageId": "sha256:b6444a94fc8fe78494653541f8c71e7166c235cce322cc311da9c7808d48c5d8",
+      "tests": {
+        "suites": 4,
+        "tests": 16,
+        "failures": 0,
+        "errors": 0,
+        "skipped": 0
+      }
+    },
+    "ordersvr": {
+      "revision": "2d4a3059d12392a87ae7758d86e48ea0f0642f74",
+      "image": "local/dc-saas-ordersvr:cluster-dev-reset-20260929",
+      "imageId": "sha256:0c49bd51f5793f401adae3e224aef9d4780c877257e17446ecccda6f21f493da",
+      "tests": {
+        "suites": 60,
+        "tests": 222,
+        "failures": 0,
+        "errors": 0,
+        "skipped": 0
+      }
+    },
+    "tradesvr": {
+      "revision": "31986253ed36117104b5b67b6d3cb2f3e0fefbfb",
+      "image": "local/dc-saas-tradesvr:cluster-dev-reset-20260929",
+      "imageId": "sha256:970ccbabe51047e69931fd125f842616d1da2a35eb55d827dac0bd041d875084",
+      "tests": {
+        "suites": 71,
+        "tests": 396,
+        "failures": 0,
+        "errors": 0,
+        "skipped": 0
+      }
+    },
+    "projectionsvr": {
+      "revision": "3122a8d0ab94d5e7a4e177951b2e4ed5ee58d38d",
+      "image": "local/dc-saas-projectionsvr:cluster-dev-reset-20260929",
+      "imageId": "sha256:6b6b0ba39d066caf9e0717750c2f3995a027c765fbc1a2aaefa66b3a1c0f5658",
+      "tests": {
+        "suites": 12,
+        "tests": 73,
+        "failures": 0,
+        "errors": 0,
+        "skipped": 0
+      }
+    },
+    "mdsvr": {
+      "revision": "d3c1f2f27de9233bfafd7fa67b70d3365b1d8bf9",
+      "image": "local/dc-saas-mdsvr:cluster-dev-reset-20260929",
+      "imageId": "sha256:3c13ddef26879b78300ad53ff5eff2307e3b20179cd771036b190e8c32455468",
+      "tests": {
+        "suites": 14,
+        "tests": 40,
+        "failures": 0,
+        "errors": 0,
+        "skipped": 0
+      }
+    },
+    "apssvr": {
+      "revision": "c61ba05ee064179c69114360bb54f226830cb38d",
+      "image": "local/dc-saas-apssvr:cluster-dev-reset-20260929",
+      "imageId": "sha256:910215645ed5e1284bf90d0e5295e9954226d85c142b195c28aa1e82617f6d8f",
+      "tests": {
+        "suites": 8,
+        "tests": 28,
+        "failures": 0,
+        "errors": 0,
+        "skipped": 0
+      }
+    },
+    "adminsvr": {
+      "revision": "353be0c22f95fa063d1bf9fa832fa3aa318870d0",
+      "image": "local/dc-saas-adminsvr:cluster-dev-reset-20260929",
+      "imageId": "sha256:0193df88cdef34ef8bcb89448bd4d2bdb4f968e80a0d39502cc68049b47fee8b",
+      "tests": {
+        "suites": 14,
+        "tests": 59,
+        "failures": 0,
+        "errors": 0,
+        "skipped": 1
+      }
+    },
+    "managersvr": {
+      "revision": "6a8ddbcd9e33bc49001021ff8e108ab07d01fd04",
+      "image": "local/dc-saas-managersvr:cluster-dev-reset-20260929",
+      "imageId": "sha256:512561f9c896aedecb1edad9451db9d4155c8d3072eb926a5a9df2e3b2555738",
+      "tests": {
+        "suites": 15,
+        "tests": 67,
+        "failures": 0,
+        "errors": 0,
+        "skipped": 0
+      }
+    },
+    "robotsvr": {
+      "revision": "8360bc59f05565143a5eed32a2fe1a3531bf924f",
+      "image": "local/dc-saas-robotsvr:cluster-dev-reset-20260930",
+      "imageId": "sha256:ea4ab512f80b04dbd493023a2ba0dbed6b697b2be68ef37cd024a6ba9a8ab3ed",
+      "tests": {
+        "suites": 14,
+        "tests": 97,
+        "failures": 0,
+        "errors": 0,
+        "skipped": 0
+      }
+    },
+    "loginsvr": {
+      "revision": "000c5da59955527e234fbbc79cb3d0086ed3936b",
+      "image": "local/dc-saas-loginsvr:cluster-dev-reset-20260929",
+      "imageId": "sha256:8864a9d3f8edee68eb651d17b66b15630f8faa3916f1b0a8b14af76bebe9b95f",
+      "tests": {
+        "suites": 13,
+        "tests": 40,
+        "failures": 0,
+        "errors": 0,
+        "skipped": 0
+      }
+    },
+    "liqsvr": {
+      "revision": "2ed57377d4fd906a3879d3507efdba1d70401610",
+      "image": "local/dc-saas-liqsvr:cluster-dev-reset-20260929",
+      "imageId": "sha256:b4045db88f4a59fca537050c9458c11d75f4d88342d42ee732c092172412e0e7",
+      "tests": {
+        "suites": 5,
+        "tests": 15,
+        "failures": 0,
+        "errors": 0,
+        "skipped": 0
+      }
+    },
+    "trade-web": {
+      "revision": "ee3935e963c0855f081f719ff90bf74c5c8d8f1b",
+      "image": "local/dc-saas-trade-web:cluster-dev-reset-20260929",
+      "imageId": "sha256:4335e0f08a7354b362e2d2d8b6bb754214e8550acb9b52df2ee0d7c5538eb319"
+    },
+    "tenant-web": {
+      "revision": "1314bcbe35c9c83af5c07d00e48752bd78d480cb",
+      "image": "local/dc-saas-tenant-web:cluster-dev-reset-20260929",
+      "imageId": "sha256:69e295dfecb87bfd7b546e4b3f7b9b75c3bc6aa16b8e06001e202eee06871418"
+    },
+    "platform-web": {
+      "revision": "add1737471bde737d90fcb21c79f124efb185d2a",
+      "image": "local/dc-saas-platform-web:cluster-dev-reset-20260929",
+      "imageId": "sha256:ccc44fbb44da1dcba21e6c249958ec440f1fa6d9265633144b39d6e131cf819c"
+    }
+  }
+}
