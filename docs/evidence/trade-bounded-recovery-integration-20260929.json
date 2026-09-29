@@ -1,7 +1,7 @@
 {
-  "generatedAtUtc": "2026-09-29T15:04:10Z",
+  "generatedAtUtc": "2026-09-29T15:13:32Z",
   "sourceVerifiedAfterAdditionalPrefixCommit": true,
-  "outcome": "OPT_IN_TRADE_LIFECYCLE_SOURCE_QUALIFIED_CONTAINER_PROMOTION_BLOCKED",
+  "outcome": "OPT_IN_TRADE_LIFECYCLE_SOURCE_QUALIFIED_CONTAINER_CREATION_RESTORED_PROMOTION_UNQUALIFIED",
   "commonModuleCommit": "adf16539d7146ab901ca0f5342fd853c146165c5",
   "tradeIntegrationCommit": "4224276188efcd6cc838c154ae061e7cb2715caf",
   "tradeFinalPrefixCommit": "5a870723c3b41c225dbed87a8d10e261dd263221",
@@ -192,8 +192,9 @@
       "inaccessibleProcessCount": 0,
       "descriptorsScanned": 6056,
       "readOnly": true,
-      "authorizationGranted": false,
+      "authorizationGranted": true,
       "moved": false,
+      "deletedAfterExplicitUserAuthorization": true,
       "recheckDescriptorsAndInodeBeforeAnyArchive": true
     }
   },
@@ -239,11 +240,35 @@
       "deleted": false
     }
   ],
+  "authorizedLogCleanup": {
+    "observedAtUtc": "2026-09-29T15:13:32Z",
+    "deletedPath": "/data/dc-saas-runtime/log/APSSvr.log.2026-09-27",
+    "deletedBytes": 5033408854,
+    "archived": false,
+    "recoverableByThisTask": false,
+    "preDeleteRecheck": {
+      "inodeAndSizeUnchanged": true,
+      "openDescriptors": [],
+      "inaccessibleProcessCount": 0,
+      "descriptorsScanned": 6048
+    },
+    "afterDeleteVmUsedKiB": 148775480,
+    "afterDeleteVmNonRootAvailableKiB": 0,
+    "afterDeleteVmDfPercentFull": 100,
+    "afterDeleteVmFreeBlocks": 1248427,
+    "vmBlockBytes": 4096,
+    "networkDisabledReadOnlyTemporaryContainerSucceededAndAutoRemoved": true,
+    "newCandidateImageBuiltOrDeployed": false,
+    "originalEightCoreContainerImageIdsUnchangedRunningRestartZeroOomFalse": true,
+    "isBusinessHealthOrCapacityProof": false
+  },
   "mutations": {
     "runningServiceConfigurationOrImagesChanged": false,
     "assignmentsChanged": false,
     "liveDataOrJournalChanged": false,
-    "runtimeLogsMovedOrDeleted": false,
+    "runtimeLogsMovedOrDeleted": true,
+    "runtimeLogDeletionLimitedToExplicitlyAuthorizedClosedHistoricalFile": true,
+    "activeRuntimeLogsChangedByThisTask": false,
     "periodicSnapshotsEnabled": false,
     "isolatedInputCopyMovedOrDeleted": false,
     "ownCompletedLabOutputsMovedRecoverably": true
@@ -257,5 +282,5 @@
     "Order/MD shared lifecycle adapters",
     "system trading TPS and load fault recovery/long stability"
   ],
-  "next": "Get approval to recoverably archive verified closed historical log(s), recheck space/log retry behavior; then qualify new Linux image and independent small cluster. Do not activate the new lifecycle or legacy cash writes solely because unit tests passed."
+  "next": "Qualify new Linux image and independent small cluster after restored container creation; continue checking storage capacity/log retry growth because non-root available bytes remain zero. Do not activate the new lifecycle or legacy cash writes solely because unit tests or the container creation probe passed."
 }
