@@ -326,7 +326,18 @@ async function platformCluster(page) {
   for (const service of ['OrderSvr', 'MDSvr', 'TradeSvr']) {
     await page.locator('.section-head select').selectOption(service);
     await page.getByRole('button', {name: '刷新拓扑'}).click();
-    await page.getByText(service, {exact: true}).first().waitFor({timeout: 30000});
+    await page.waitForFunction(expected => {
+      const cards = [...document.querySelectorAll('.service-strip article')];
+      const rows = [...document.querySelectorAll('.cluster-control-grid .table-card tbody tr')];
+      const refresh = [...document.querySelectorAll('.section-head button')]
+        .find(button => button.textContent?.trim() === '刷新拓扑');
+      return document.querySelector('.section-head select')?.value === expected
+        && !refresh?.disabled
+        && cards.length === 1
+        && cards[0].querySelector('strong')?.textContent?.trim() === expected
+        && rows.length > 0
+        && rows.every(row => row.cells[0]?.textContent?.trim() === expected);
+    }, service, {timeout: 30000});
   }
 
   const serviceSelects = page.locator('.editor select');
