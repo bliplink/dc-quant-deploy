@@ -1,0 +1,289 @@
+{
+  "schemaVersion": 1,
+  "date": "2026-09-29",
+  "scope": "isolated bounded snapshot write buffering and real copied-journal compatibility; not live HA/TPS",
+  "tradeSourceCommit": "ce38b04e805914f929a8694df6f67aec13c585ec",
+  "change": {
+    "bufferBytes": 65536,
+    "wholeDocumentBuffer": false,
+    "liveDedupeDtoCopyAdded": false,
+    "partitionBarrierRemovedOrMoved": false,
+    "ordering": [
+      "validate/manifest",
+      "temporary file write",
+      "buffer drain",
+      "file descriptor sync",
+      "file close",
+      "existing replace/fallback",
+      "best-effort directory sync",
+      "metadata cache invalidation"
+    ],
+    "snapshotFormatChanged": false,
+    "financialFormulaChanged": false,
+    "projectionProtocolChanged": false,
+    "failedWriteReplacesLatest": false,
+    "directorySyncIsPowerLossProof": false,
+    "largeEntitiesMayBypassBuffer": true
+  },
+  "sourceTests": {
+    "classes": 67,
+    "cases": 356,
+    "fullFinalRunsThisIncrement": 1,
+    "failures": 0,
+    "errors": 0,
+    "skipped": 0,
+    "newBufferCases": 7,
+    "java": 8,
+    "network": "none"
+  },
+  "deterministicSinkProbes": [
+    {
+      "path": "retained DTO",
+      "entries": 4000,
+      "bytes": 680981,
+      "rawDelegateWrites": 16042,
+      "bufferedDelegateWrites": 11
+    },
+    {
+      "path": "live dedupe stream",
+      "entries": 4000,
+      "bytes": 616981,
+      "rawDelegateWrites": 32038,
+      "bufferedDelegateWrites": 10
+    }
+  ],
+  "image": {
+    "tag": "local/tradesvr:snapshot-buffer-ce38b04",
+    "id": "sha256:d6e7781eaf8368cccd34ea5935d30bbf129379a90663584ba51cc9e567d5babd",
+    "architecture": "arm64",
+    "revisionLabelMatches": true,
+    "baseImageId": "sha256:b8039096ac6396135dc864690ae785a30e6ad6d7614c6cd1f1ba180c85a56845",
+    "codeAndResourceFiles": 227,
+    "libraries": 80,
+    "totalFiles": 307,
+    "allFilesMatchLocalSha256": true,
+    "manifestFormat": "sha256sum lines for relative classes/ and lib/ files sorted LC_ALL=C",
+    "manifestSha256": "2af50c729c7525b1453818c97dc30f88088d7a0db7abe1a920506d26366da645",
+    "snapshotStoreClassSha256": "471ac2c409bcb2ba3b7dd561ecacc0ebcda1226507ea7eb346b310713b8e673b",
+    "commonArtifactSha256": "542d25a3c7345c2d25806fc7c975465e96ff21ac5151dd8c35f13520c006396c",
+    "bridgeArtifactSha256": "8a22afe1bd404ca5a2613a189df9133025ebc77cca990f9a202cfcaccc899329",
+    "freshDependencyDirectory": "target/dependency-snapshot-buffer-candidate",
+    "offlineBuild": true,
+    "pushed": false,
+    "deployed": false
+  },
+  "comparisonWithPreviousImage": {
+    "baselineImageId": "sha256:834ebf7ae2eac0a44eb3e88cedd45a39d44d5adfd900c067be329856048ce0dd",
+    "unchangedFiles": 303,
+    "unchangedLibraries": 80,
+    "changedCompiledFiles": [
+      {
+        "file": "classes/com/app/dc/service/cluster/TradeSnapshotStore$MetadataCacheEntry.class",
+        "old": "3cdd388ea8d9d1ece44c2491560a183961eedffff117da0dcfeba6347e88dcd7",
+        "current": "65d9e2d6da0961c92a6f01319781d708a407fe6c7595819df4f43eb50b75d3ce"
+      },
+      {
+        "file": "classes/com/app/dc/service/cluster/TradeSnapshotStore$RecoverySnapshot.class",
+        "old": "51d3366bf1fb079ddf956db6d487e7fa12286adfd5d41dcd6e1986aa46aaaf14",
+        "current": "9d44a4df1687543ee2548f776572540247983975224db725c78e98b582e1c610"
+      },
+      {
+        "file": "classes/com/app/dc/service/cluster/TradeSnapshotStore$SnapshotWriter.class",
+        "old": "b61c72f2fda340e5fbbb94cd885d584b4d855741ee2d6c075b03cd116583e595",
+        "current": "af1d194b7860395f69130c8a84b8dfcf7f14ea55b919ed2cb3a4dce75f2a9226"
+      },
+      {
+        "file": "classes/com/app/dc/service/cluster/TradeSnapshotStore.class",
+        "old": "e7bb14528ae4321d47c3e20924170a8ab9cc40059dfa7823463fc43f4ca9a141",
+        "current": "471ac2c409bcb2ba3b7dd561ecacc0ebcda1226507ea7eb346b310713b8e673b"
+      }
+    ],
+    "onlySnapshotStoreSourceChanged": true
+  },
+  "imageJUnit": {
+    "status": "PASS",
+    "classes": 5,
+    "cases": 86,
+    "elapsedSeconds": 6.259,
+    "heapMiB": 512,
+    "memoryMiB": 1024,
+    "cpus": 1,
+    "network": "none",
+    "productionClassesAndLibrariesFromImage": true,
+    "testClassesMountedReadOnly": true
+  },
+  "copiedJournalRun": {
+    "path": "/Users/kong/dc-quant-deploy/.tmp-trade-evidence/snapshot-lab-combined-write-buffer-ce38b04-1024.json",
+    "sha256": "2a541e1c18afd48876374937c40827c37e8f854f65f731a282bfbd7649c073d0",
+    "report": {
+      "cgroupOomKilled": false,
+      "cpus": 1,
+      "elapsedSeconds": 139.42,
+      "exitCode": 0,
+      "generatedAtUtc": "2026-09-29T10:47:55.155171+00:00",
+      "heapMiB": 1024,
+      "helperClassesSha256AtLaunch": "08f9107ac3182bd80b878858112841032a65bd1db1df48ba48c93f211cfead23",
+      "imageId": "sha256:d6e7781eaf8368cccd34ea5935d30bbf129379a90663584ba51cc9e567d5babd",
+      "journalCopyRoot": "/data/dc-saas-isolated-labs/trade-snapshot-P204.png2waHS/journal",
+      "memoryMiB": 2048,
+      "mode": "recovery",
+      "outcome": "PASS",
+      "partition": "P204",
+      "probe": {
+        "baselineFingerprint": {
+          "counts": {
+            "applied": 691065,
+            "balance": 131,
+            "openOrder": 60390,
+            "position": 72,
+            "terminalOrder": 284471
+          },
+          "orderStatusCounts": {
+            "MISSING": 60208,
+            "Suspended": 182
+          },
+          "sha256MultisetSum": "d92971371930c9d0d67b01bc9c6caa3f7d6052b60de2bc10b35c8817b06a4c1c"
+        },
+        "checkpointCommitSeq": 813788,
+        "copiedJournalLastSeq": 815788,
+        "deltaJournalRecords": 2000,
+        "epoch": 1,
+        "heapMaxBytes": 1046937600,
+        "outcome": "PASS",
+        "partition": "P204",
+        "phases": [
+          {
+            "elapsedMillis": 31668,
+            "gcCountDuringPhase": 330,
+            "gcMillisDuringPhase": 5598,
+            "sampledHeapPeakBytes": 314825776,
+            "stage": "residentRecovery"
+          },
+          {
+            "elapsedMillis": 47004,
+            "gcCountDuringPhase": 323,
+            "gcMillisDuringPhase": 5886,
+            "sampledHeapPeakBytes": 668612496,
+            "stage": "checkpointRecovery"
+          },
+          {
+            "elapsedMillis": 3039,
+            "gcCountDuringPhase": 1,
+            "gcMillisDuringPhase": 91,
+            "sampledHeapPeakBytes": 675689840,
+            "stage": "snapshotCapture"
+          },
+          {
+            "elapsedMillis": 39396,
+            "explicitGcMillisExcludedFromRecovery": 2260,
+            "gcCountDuringPhase": 218,
+            "gcMillisDuringPhase": 4018,
+            "quiescentHeapBytesAfterExplicitGc": 501210256,
+            "sampledHeapPeakBytes": 944745408,
+            "stage": "fullJournalRecovery"
+          },
+          {
+            "elapsedMillis": 1962,
+            "gcCountDuringPhase": 5,
+            "gcMillisDuringPhase": 130,
+            "sampledHeapPeakBytes": 716005160,
+            "stage": "fullJournalRecoveryFingerprint"
+          },
+          {
+            "elapsedMillis": 5052,
+            "explicitGcMillisExcludedFromRecovery": 1423,
+            "gcCountDuringPhase": 12,
+            "gcMillisDuringPhase": 1263,
+            "quiescentHeapBytesAfterExplicitGc": 460795432,
+            "sampledHeapPeakBytes": 922921192,
+            "stage": "snapshotDeltaRecovery"
+          },
+          {
+            "elapsedMillis": 1463,
+            "gcCountDuringPhase": 5,
+            "gcMillisDuringPhase": 60,
+            "sampledHeapPeakBytes": 678019208,
+            "stage": "snapshotDeltaRecoveryFingerprint"
+          }
+        ],
+        "residentJournalLastSeq": 566728,
+        "residentPartition": "P122",
+        "restoredFingerprint": {
+          "counts": {
+            "applied": 691065,
+            "balance": 131,
+            "openOrder": 60390,
+            "position": 72,
+            "terminalOrder": 284471
+          },
+          "orderStatusCounts": {
+            "MISSING": 60208,
+            "Suspended": 182
+          },
+          "sha256MultisetSum": "d92971371930c9d0d67b01bc9c6caa3f7d6052b60de2bc10b35c8817b06a4c1c"
+        },
+        "scope": "isolated journal copy; no live promotion, DAO, transport or consensus proof",
+        "snapshotBytes": 100473484,
+        "snapshotCaptureBarrierMillis": 2067,
+        "stateEquivalent": true
+      },
+      "residentPartition": "P122",
+      "retainedLabOutputRoot": "/data/dc-saas-isolated-labs/trade-snapshot-run.m9SSzCZJ",
+      "scope": "isolated copied journal; no live failover/business verification",
+      "timedOut": false,
+      "timeoutSeconds": 180
+    }
+  },
+  "baselineComparison": {
+    "reportPath": "/Users/kong/dc-quant-deploy/.tmp-trade-evidence/snapshot-lab-combined-node-recovery-a539940-1024.json",
+    "reportSha256": "f0fcec2e1fda3d5d77b23332b922310d810693f270d91ff958ade9eaf5aa517d",
+    "sourceCommit": "a539940d4b83a1010096b8efae68adce56917b8c",
+    "capturedBarrierMillis": 5106,
+    "currentBarrierMillis": 2067,
+    "observedReductionPercent": 59.5,
+    "baselineCaptureMillis": 6212,
+    "currentCaptureMillis": 3039,
+    "stateFingerprintsMatch": true,
+    "budgetHeapMiB": 1024,
+    "budgetMemoryMiB": 2048,
+    "cpus": 1,
+    "eachCandidateRuns": 1,
+    "sharedVm": true,
+    "statisticalPerformanceProof": false,
+    "businessP99Covered": false
+  },
+  "limitations": {
+    "twoPartitionCopyNotCompleteNode": true,
+    "notCrossPartitionAtomicCut": true,
+    "wholeNodeCashRecoveryNotWiredToLiveOrExercisedOnCopiedHistory": true,
+    "compatibilityLabNotAuthoritativeHistoricalBaselineApproval": true,
+    "springOrSqlOrControlPlaneOrTcpCovered": false,
+    "oldMissingOrderStatusesOrConfigRepaired": false,
+    "fullFinancialCorrectnessQualified": false,
+    "completeNodeOr384MiBTakeoverCapacityQualified": false,
+    "budget384RerunThisIncrement": false,
+    "periodicSnapshotsEnabled": false,
+    "coreSqlWritersRetired": false,
+    "actualFailoverRtoRpoOrTpsMeasured": false
+  },
+  "cleanup": {
+    "ownedLabContainersRemoved": true,
+    "inputAndOutputDirectoriesRetained": true,
+    "existingServiceContainersUntouched": true
+  },
+  "liveHealth": {
+    "observedAtUtc": "2026-09-29T10:51:31Z",
+    "kind": "read-only image/process check; not business writable proof",
+    "containersChecked": 8,
+    "allRunning": true,
+    "allRestartCountsZero": true,
+    "allOomKilledFalse": true,
+    "imagesUnchanged": true
+  },
+  "next": [
+    "split remaining capture phase measurement",
+    "bounded immutable freeze/serialization/IO design and business latency qualification",
+    "complete node takeover resource and trusted historical baseline",
+    "actual lifecycle and controlled failover before TPS"
+  ]
+}
