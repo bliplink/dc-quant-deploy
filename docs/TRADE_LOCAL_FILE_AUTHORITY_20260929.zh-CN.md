@@ -6,6 +6,8 @@
 
 ## 目标与当前改动
 
+后续候选增量：Trade `40ae10c` 已补原结果持久记录与快照/日志恢复索引（STATE_BATCH v2 / snapshot v3）；270 项测试通过。旧现金入口和 SQL 先写路径未接入/未退场，当前 Projection 明确拒绝 v2，不能把局部恢复候选当作线上现金幂等完成。见 [本轮验证及下一步门禁](TRADE_CASH_REQUEST_RECOVERY_CANDIDATE_20260929.zh-CN.md)。
+
 Trade 的交易状态（余额、持仓、账户交易配置、用户合约配置、订单镜像、执行幂等状态）以本地快照和已提交分区日志为恢复来源；MySQL/RocksDB 的业务表只能是查询投影或旧模式兼容物，不能在权威模式下填补恢复缺口。AdminSvr 的合约定义订阅属于外部产品配置，不是这些用户交易状态的数据库回退。
 
 候选代码在 `trade.cluster.recovery.authoritative=true` 时：

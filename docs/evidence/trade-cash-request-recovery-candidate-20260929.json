@@ -1,0 +1,104 @@
+{
+  "schemaVersion": 1,
+  "recordedDate": "2026-09-29",
+  "classification": "synthetic_durable_cash_result_and_recovery_candidate_not_live_cash",
+  "status": "PASS",
+  "sourceRevisions": {
+    "trade": "40ae10c7713428118fe300937158daf6de5c0a8a",
+    "projection": "d4cd0545fb7a1b86915f7b284186b71f95ad8baf",
+    "projectionDocumentation": "cc1694f2daede9f88e726fd390190be1fb340c42"
+  },
+  "unitTests": {
+    "trade": {"classes": 62, "cases": 270, "newLedgerRecoveryCases": 28, "failures": 0, "errors": 0, "skipped": 0},
+    "projection": {"classes": 11, "cases": 56, "failures": 0, "errors": 0, "skipped": 0}
+  },
+  "mysqlQualification": {
+    "mysqlVersion": "8.0.36",
+    "imageId": "sha256:a532724022429812ec797c285c1b540a644c15e248579c6bfdf12a8fbaab4964",
+    "casesPerRun": 27,
+    "consecutiveFinalVersionRuns": 3,
+    "resultPathsInProjectionRepository": [
+      "target/trade-projection-offline.Ygup9WMv/result.json",
+      "target/trade-projection-offline.0HytFgT7/result.json",
+      "target/trade-projection-offline.o1RHeSBG/result.json"
+    ],
+    "actualLegacyCashV1PayloadMaterialized": true,
+    "actualDurableCashV2RejectedAtomically": true,
+    "durableCashV2ProjectionSupported": false,
+    "noPartialBalancePostingArchiveWatermarkOnV2Rejection": true,
+    "syntheticOnly": true,
+    "liveCashIdempotencyCovered": false
+  },
+  "loadedArtifactsSha256": {
+    "TradeCashStateBatchBuilder.class": "88b47ead80f14c1a4d7f7f48ea44397f8ba886b385009b89398d2f9e03cac2f0",
+    "TradeCashRequestResult.class": "75d90530032e3e8c4328a36a11a71c53a93dda00e92b7d49f1ff76ca9e025684",
+    "TradeCashRequestLedger.class": "5038af70a0fcb52ca720868da3980b0b7c55ca7e78ab6c15269a7531a6e64dc6",
+    "TradeCashRequestLedger$FrozenRecord.class": "305e8cbed091fca284b77fb437c63d87b506225c2ea44d52ff89ed45354c151a",
+    "TradeSnapshotStore.class": "e7bb14528ae4321d47c3e20924170a8ab9cc40059dfa7823463fc43f4ca9a141",
+    "TradeSnapshotStore$RecoverySnapshot.class": "51d3366bf1fb079ddf956db6d487e7fa12286adfd5d41dcd6e1986aa46aaaf14",
+    "TradeRecoveryApplier.class": "eec62d090cdab974e9784132f8478c062fdead1a99124592206a926d61a91178",
+    "TradeProjectionMysqlOfflineLab.class": "d9fc0ebe6b91390141e631563a6df10ab6decc432c6b08cdf318dc4fc052af87",
+    "TradeProjectionService.class": "904ec6e226d3237555aa58af3a238f551774d55a7df42e1a7c7d39f0a77b31f6",
+    "TradePostingProjection.class": "061dd46ff51bc70ed4d0d7d4ab80a7cea7689bdea5aa2efbc0c07de8c8452a9c",
+    "TradePostingMutationValidator.class": "f55f0b0de66d3a535a1d26cccc69445811fba8016e73de218c4c79e72df3b3fd",
+    "com.app.common-3.0.14.jar": "542d25a3c7345c2d25806fc7c975465e96ff21ac5151dd8c35f13520c006396c",
+    "com.app.dc-0.0.4-SNAPSHOT.jar": "8a22afe1bd404ca5a2613a189df9133025ebc77cca990f9a202cfcaccc899329"
+  },
+  "candidateRecoveryCovered": [
+    "first_full_result_frozen_and_returned_after_current_balance_advances",
+    "equivalent_absolute_amount_matches_and_changed_payload_conflicts",
+    "tenant_user_request_scope_separated_and_malformed_unicode_rejected",
+    "entry_byte_capacity_fails_closed_without_eviction",
+    "committed_identity_never_overwritten_at_another_coordinate",
+    "real_synthetic_chronicle_close_reopen_committed_before_install_or_response",
+    "snapshot_plus_committed_delta_and_repeat_owned_recovery",
+    "uncommitted_duplicate_partial_mismatched_result_rejects_before_balance_install",
+    "missing_ledger_and_stale_assignment_epoch_rejects",
+    "mandatory_cash_snapshot_section_count_digest_and_corruption_detection",
+    "periodic_cash_snapshot_capture_requires_exact_recovered_coordinate",
+    "cash_snapshot_downgrade_refused_and_other_partitions_preserved"
+  ],
+  "formatGates": {
+    "legacyStateBatchVersion": 1,
+    "durableCashStateBatchVersion": 2,
+    "legacySnapshotVersion": 2,
+    "durableCashSnapshotVersion": 3,
+    "newFormatOldBinaryCompatibility": "reject_not_silent_drop",
+    "ledgerHasAutomaticSpringBean": false
+  },
+  "candidateHardBounds": {
+    "nodeMaxRecords": 10000,
+    "nodeMaxSerializedRecordBytes": 16777216,
+    "maxRecordBytes": 65536,
+    "evictionExpiryDeleteApi": false,
+    "productionRetentionQualified": false,
+    "preciseJvmHeapBudgetQualified": false
+  },
+  "runningCoreReadOnlyCheck": {
+    "containers": 8,
+    "allRunning": true,
+    "allRestartCountsZero": true,
+    "allOomKilledFalse": true,
+    "unchangedImageIds": {
+      "OrderA_B": "sha256:edc9fa11aea0bac6584b71e9c9bdb71a721dd0d6c73f2341ec3e0b0ff9eee721",
+      "TradeA_B": "sha256:a74092669b0cee679c6be25ab8212d42497660e627b0c685d5c0750954571e51",
+      "MDA_B_C": "sha256:a6d06002e8776c15bd7e23e69d16617762cf419169ff77ffa2e188bd6805702d",
+      "Projection": "sha256:c761d1fec7253506eafda3486cbc523e134a0d5145bd258f42e575a6edf34f74"
+    },
+    "businessWritableOrHaProven": false
+  },
+  "liveCashHandlersIntegrated": false,
+  "liveCashIdempotencyCovered": false,
+  "liveAtomicCapacityReservationAndCommitAdapterCovered": false,
+  "cashApiOperationIdIntroduced": false,
+  "oldSqlWritesRetired": false,
+  "postingMaterializerDefaultOff": true,
+  "historicalBootstrapCovered": false,
+  "fundingInsuranceAdlCovered": false,
+  "postingHistoryRetentionQualified": false,
+  "temporaryDatabasesAndSyntheticJournalsRemoved": true,
+  "liveClusterMutated": false,
+  "deployed": false,
+  "tpsMeasured": false,
+  "failoverRtoMeasured": false
+}
