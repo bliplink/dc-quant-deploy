@@ -80,11 +80,11 @@ async function tenantUsers(page, api) {
   let row = page.locator('tbody tr').filter({hasText: username});
   await row.waitFor({timeout: 30000});
   await row.getByRole('button', {name: '禁用'}).click();
-  await row.getByText('DISABLED', {exact: true}).waitFor({timeout: 30000});
+  await row.getByRole('cell', {name: 'DISABLED', exact: true}).waitFor({timeout: 30000});
 
   row = page.locator('tbody tr').filter({hasText: username});
   await row.getByRole('button', {name: '启用'}).click();
-  await row.getByText('ENABLED', {exact: true}).waitFor({timeout: 30000});
+  await row.getByRole('cell', {name: 'ENABLED', exact: true}).waitFor({timeout: 30000});
 
   row = page.locator('tbody tr').filter({hasText: username});
   await row.getByRole('button', {name: '重置密码'}).click();
