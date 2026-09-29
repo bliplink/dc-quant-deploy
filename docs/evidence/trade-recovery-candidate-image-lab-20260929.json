@@ -1,0 +1,251 @@
+{
+  "schemaVersion": 1,
+  "date": "2026-09-29",
+  "scope": "immutable candidate image and isolated real copied-journal recovery; not service startup, full-node cash wiring or live HA",
+  "tradeSourceCommit": "a539940d4b83a1010096b8efae68adce56917b8c",
+  "image": {
+    "tag": "local/tradesvr:node-recovery-a539940",
+    "id": "sha256:834ebf7ae2eac0a44eb3e88cedd45a39d44d5adfd900c067be329856048ce0dd",
+    "architecture": "arm64",
+    "revisionLabelMatches": true,
+    "pushed": false,
+    "deployed": false,
+    "baseImageId": "sha256:b8039096ac6396135dc864690ae785a30e6ad6d7614c6cd1f1ba180c85a56845",
+    "classesAndResources": 227,
+    "libraries": 80,
+    "totalFiles": 307,
+    "allFilesMatchLocalSha256": true,
+    "manifestFormat": "sha256sum lines for relative classes/ and lib/ files; LC_ALL=C path sort",
+    "manifestSha256": "f34d2af159a1f58909256fee9de365098f1d7a76458bf5a0717c28ca567e1c0b",
+    "commonArtifactSha256": "542d25a3c7345c2d25806fc7c975465e96ff21ac5151dd8c35f13520c006396c",
+    "bridgeArtifactSha256": "8a22afe1bd404ca5a2613a189df9133025ebc77cca990f9a202cfcaccc899329",
+    "nodeRecoveryClassSha256": "3083ff093ab83baca76297132d35c0270d3a871afc747c7320f3dfaed705cd5e",
+    "recoveryApplierClassSha256": "364cf20e4f707cd81a416e31b95af4b72eff276b3d1d9c2dab3021193ecc3993",
+    "dependencyDirectory": "target/dependency-node-recovery-a539940",
+    "freshRuntimeDependencyDirectory": true,
+    "offlineBuild": true
+  },
+  "imageJUnit": {
+    "status": "PASS",
+    "cases": 79,
+    "classes": 4,
+    "elapsedSeconds": 7.533,
+    "heapMiB": 512,
+    "memoryMiB": 1024,
+    "cpus": 1,
+    "network": "none",
+    "classesUsed": [
+      "TradeCashNodeRecoveryCandidateTest",
+      "TradeCashCandidateExecutorTest",
+      "TradeMixedStateCoverageTest",
+      "TradeSnapshotOfflineLabTest"
+    ],
+    "productionClassesAndLibrariesFromImage": true,
+    "testClassesReadOnlyMount": true,
+    "sourceFullSuite349TwiceIsPreviousIncrementNotThisImageRun": true
+  },
+  "hostLabControllerSafetyTests": {
+    "status": "PASS",
+    "cases": 10
+  },
+  "input": {
+    "copiedExistingJournalOnly": true,
+    "approxTotalGiB": 3.3,
+    "originalRunningDataMounted": false,
+    "noJournalBusinessAppendTruncateOrDelete": true,
+    "copyMetadataMayBeUpdatedByChronicle": true,
+    "notCrossPartitionAtomicCut": true,
+    "trustedHistoricalConfigOrFinancialBaselineQualified": false
+  },
+  "runs": [
+    {
+      "path": "/Users/kong/dc-quant-deploy/.tmp-trade-evidence/snapshot-lab-combined-node-recovery-a539940-1024.json",
+      "sha256": "f0fcec2e1fda3d5d77b23332b922310d810693f270d91ff958ade9eaf5aa517d",
+      "report": {
+        "cgroupOomKilled": false,
+        "cpus": 1,
+        "elapsedSeconds": 149.954,
+        "exitCode": 0,
+        "generatedAtUtc": "2026-09-29T10:30:09.662452+00:00",
+        "heapMiB": 1024,
+        "helperClassesSha256AtLaunch": "08f9107ac3182bd80b878858112841032a65bd1db1df48ba48c93f211cfead23",
+        "imageId": "sha256:834ebf7ae2eac0a44eb3e88cedd45a39d44d5adfd900c067be329856048ce0dd",
+        "journalCopyRoot": "/data/dc-saas-isolated-labs/trade-snapshot-P204.png2waHS/journal",
+        "memoryMiB": 2048,
+        "mode": "recovery",
+        "outcome": "PASS",
+        "partition": "P204",
+        "probe": {
+          "baselineFingerprint": {
+            "counts": {
+              "applied": 691065,
+              "balance": 131,
+              "openOrder": 60390,
+              "position": 72,
+              "terminalOrder": 284471
+            },
+            "orderStatusCounts": {
+              "MISSING": 60208,
+              "Suspended": 182
+            },
+            "sha256MultisetSum": "d92971371930c9d0d67b01bc9c6caa3f7d6052b60de2bc10b35c8817b06a4c1c"
+          },
+          "checkpointCommitSeq": 813788,
+          "copiedJournalLastSeq": 815788,
+          "deltaJournalRecords": 2000,
+          "epoch": 1,
+          "heapMaxBytes": 1046937600,
+          "outcome": "PASS",
+          "partition": "P204",
+          "phases": [
+            {
+              "elapsedMillis": 30474,
+              "gcCountDuringPhase": 331,
+              "gcMillisDuringPhase": 4873,
+              "sampledHeapPeakBytes": 315043600,
+              "stage": "residentRecovery"
+            },
+            {
+              "elapsedMillis": 44564,
+              "gcCountDuringPhase": 356,
+              "gcMillisDuringPhase": 5391,
+              "sampledHeapPeakBytes": 629576000,
+              "stage": "checkpointRecovery"
+            },
+            {
+              "elapsedMillis": 6212,
+              "gcCountDuringPhase": 2,
+              "gcMillisDuringPhase": 229,
+              "sampledHeapPeakBytes": 644355168,
+              "stage": "snapshotCapture"
+            },
+            {
+              "elapsedMillis": 42061,
+              "explicitGcMillisExcludedFromRecovery": 4191,
+              "gcCountDuringPhase": 217,
+              "gcMillisDuringPhase": 4264,
+              "quiescentHeapBytesAfterExplicitGc": 501641312,
+              "sampledHeapPeakBytes": 949158120,
+              "stage": "fullJournalRecovery"
+            },
+            {
+              "elapsedMillis": 3491,
+              "gcCountDuringPhase": 5,
+              "gcMillisDuringPhase": 160,
+              "sampledHeapPeakBytes": 714558968,
+              "stage": "fullJournalRecoveryFingerprint"
+            },
+            {
+              "elapsedMillis": 5440,
+              "explicitGcMillisExcludedFromRecovery": 4318,
+              "gcCountDuringPhase": 12,
+              "gcMillisDuringPhase": 1190,
+              "quiescentHeapBytesAfterExplicitGc": 460493696,
+              "sampledHeapPeakBytes": 964271200,
+              "stage": "snapshotDeltaRecovery"
+            },
+            {
+              "elapsedMillis": 2816,
+              "gcCountDuringPhase": 5,
+              "gcMillisDuringPhase": 151,
+              "sampledHeapPeakBytes": 675320704,
+              "stage": "snapshotDeltaRecoveryFingerprint"
+            }
+          ],
+          "residentJournalLastSeq": 566728,
+          "residentPartition": "P122",
+          "restoredFingerprint": {
+            "counts": {
+              "applied": 691065,
+              "balance": 131,
+              "openOrder": 60390,
+              "position": 72,
+              "terminalOrder": 284471
+            },
+            "orderStatusCounts": {
+              "MISSING": 60208,
+              "Suspended": 182
+            },
+            "sha256MultisetSum": "d92971371930c9d0d67b01bc9c6caa3f7d6052b60de2bc10b35c8817b06a4c1c"
+          },
+          "scope": "isolated journal copy; no live promotion, DAO, transport or consensus proof",
+          "snapshotBytes": 100473484,
+          "snapshotCaptureBarrierMillis": 5106,
+          "stateEquivalent": true
+        },
+        "residentPartition": "P122",
+        "retainedLabOutputRoot": "/data/dc-saas-isolated-labs/trade-snapshot-run.vAxxvVCP",
+        "scope": "isolated copied journal; no live failover/business verification",
+        "timedOut": false,
+        "timeoutSeconds": 180
+      }
+    },
+    {
+      "path": "/Users/kong/dc-quant-deploy/.tmp-trade-evidence/snapshot-lab-combined-node-recovery-a539940-384.json",
+      "sha256": "4e1c8559be0694eb980ee20b2daaaded6e1061f8f851d49af9fccd10231422d2",
+      "report": {
+        "cgroupOomKilled": false,
+        "cpus": 1,
+        "elapsedSeconds": 62.128,
+        "exitCode": 143,
+        "generatedAtUtc": "2026-09-29T10:33:19.186473+00:00",
+        "heapMiB": 384,
+        "helperClassesSha256AtLaunch": "08f9107ac3182bd80b878858112841032a65bd1db1df48ba48c93f211cfead23",
+        "imageId": "sha256:834ebf7ae2eac0a44eb3e88cedd45a39d44d5adfd900c067be329856048ce0dd",
+        "journalCopyRoot": "/data/dc-saas-isolated-labs/trade-snapshot-P204.png2waHS/journal",
+        "memoryMiB": 896,
+        "mode": "recovery",
+        "outcome": "TIMEOUT",
+        "partition": "P204",
+        "residentPartition": "P122",
+        "retainedLabOutputRoot": "/data/dc-saas-isolated-labs/trade-snapshot-run.4TO4i95m",
+        "scope": "isolated copied journal; no live failover/business verification",
+        "timedOut": true,
+        "timeoutSeconds": 60
+      }
+    }
+  ],
+  "conclusions": {
+    "sameRecoveredStateOn1024": true,
+    "fullJournalOrDeltaEquivalenceIsNotBusinessCorrectness": true,
+    "completeNodeHeapBudgetQualified": false,
+    "replica384MiBBudgetQualified": false,
+    "budget384Outcome": "TIMEOUT; not OOM",
+    "snapshotBarrierNeedsBusinessLatencyQualification": true,
+    "productionNodeCashRecoveryWiredOrExercisedOnRealHistory": false,
+    "springServiceStartupCovered": false,
+    "sqlOrControlPlaneOrTcpUsed": false,
+    "newPublicRecoveryExecutorIntegrated": false,
+    "realFailoverOrRtoOrRpoOrTpsCovered": false,
+    "periodicSnapshotsEnabled": false,
+    "oldMissingOrderStatusesOrHistoricalConfigRepaired": false,
+    "coreSqlWritersRetired": false,
+    "perBudgetRuns": 1,
+    "sharedVmLoadPrecludesAttributingDifferenceFromOldNumbersToCodeRegression": true
+  },
+  "liveHealth": {
+    "observedAtUtc": "2026-09-29T10:35:40Z",
+    "kind": "read-only container image/process check; not business API verification",
+    "checked": [
+      "OrderA",
+      "OrderB",
+      "TradeA",
+      "TradeB",
+      "MDA",
+      "MDB",
+      "MDC",
+      "Projection"
+    ],
+    "allRunning": true,
+    "allRestartCountsZero": true,
+    "allOomKilledFalse": true,
+    "imagesUnchanged": true,
+    "existingServicesRestarted": false,
+    "assignmentsOrConfigChanged": false
+  },
+  "cleanup": {
+    "ownedLabContainersRemoved": true,
+    "existingServiceContainersUntouched": true,
+    "inputAndOutputDirectoriesRetained": true
+  }
+}
