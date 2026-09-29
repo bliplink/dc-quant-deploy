@@ -1,6 +1,6 @@
 {
   "schemaVersion": 1,
-  "releaseId": "cluster-dev-reset-20260930",
+  "releaseId": "cluster-dev-reset-20260930-webfix",
   "genericCommon": {
     "gav": "io.github.bliplink:com.app.common:3.0.14",
     "sha256": "542d25a3c7345c2d25806fc7c975465e96ff21ac5151dd8c35f13520c006396c"
@@ -93,10 +93,10 @@
     },
     {
       "name": "trade-web",
-      "repository": "/Users/kong/Documents/Codex/2026-09-19/chatgpt-conversation-6aae3d3b-62a4-83ee-bff4-3/work/dc-saas-build/src/trade-web",
-      "revision": "ee3935e963c0855f081f719ff90bf74c5c8d8f1b",
+      "repository": "/Users/kong/Documents/Codex/.webcodex-managed-worktrees/dc-trade-web-351d7862-4b64-44bc-bc12-59af5da5cba9-8678b8a3-4875-485c-a9ef-48e573a01330",
+      "revision": "1ca247a87f039abea119fa7283798aa176f1d074",
       "type": "web",
-      "image": "local/dc-saas-trade-web:cluster-dev-reset-20260929"
+      "image": "local/dc-saas-trade-web:cluster-dev-reset-20260930-webfix"
     },
     {
       "name": "tenant-web",
