@@ -2,7 +2,7 @@
 
 更新：2026-09-29。按最新要求，近期主线调整为**集群底座、压测、异常与稳定性**；管理面与完整业务专项后排。集群测试仍必须守住订单、资金和行情一致性，不能为了 TPS 放宽安全门禁。
 
-最新候选进度：Trade `d934291` 补齐显式混合非现金提交的现金索引覆盖连续性，全量 **65 类 / 320 项**通过；Projection `3122a8d` 的 **73 项**和 **45 项隔离 MySQL 一轮**复验通过。线上仍未接入候选或退出旧 SQL 写入；下一步先做全节点冷恢复/admission 容量及真实全事务后态核对，之后才是受控异常和 TPS。详见 [混合覆盖候选验收](TRADE_MIXED_STATE_COVERAGE_CANDIDATE_20260929.zh-CN.md)。
+最新候选进度：Trade `a539940` 增加整节点现金索引清点、合并容量预验证和默认关闭的新现金门禁，完整 **66 类 / 349 项×2 轮**通过；Projection `3122a8d` 的 **73 项＋45 项隔离 MySQL 一轮**复验通过。候选无线上接线，旧 SQL writer 仍在；下一步验证隔离大分区 prepare/install 的资源预算与恢复时间，并接入实际有界生命周期 adapter，再做受控异常和业务 TPS。现金索引总容量通过不等于整节点 heap/接管能力通过。详见 [整节点恢复候选验收](TRADE_NODE_CASH_CAPACITY_RECOVERY_CANDIDATE_20260929.zh-CN.md)。
 
 ## 1. 当前实测与问题边界
 
@@ -149,3 +149,9 @@ Projection `3122a8d` 增加**默认关闭**的 v2 消费者，整批校验余额
 Trade `d934291` 在严格分区屏障/primary/epoch/READY/复制 ACK 下为已知 v1 非现金提交推进现金索引覆盖；冻结协议、拒绝旧现金/未来效果、匹配原覆盖且无本分区预留，可信 adapter 安装核对后才推进。旧 `record` 未自动接入，不能跳过未观察的旧提交；安装/发布后的权威和日志尾变化会封住分区。新增 **25 项**，最终全量 **65 类 / 320 项**通过；Projection 源码不变，**73 项＋45 项隔离 MySQL 一轮**复验通过。
 
 当前仍是显式隔离候选，不是全线上业务后态/风险核对或完整 TCP 投递链路。下一步优先全节点冷恢复容量：未恢复分区不能被当成零占用，再补真实全部 adapter、可信历史与留存/GAP 门禁。无部署、重启、assignment/SQL/历史变更或压测，故不宣布 RPO/RTO/TPS/HA。详见 [混合覆盖验收](TRADE_MIXED_STATE_COVERAGE_CANDIDATE_20260929.zh-CN.md)。
+
+### 后续增量：整节点现金索引容量与恢复门禁
+
+Trade `a539940` 的显式候选从完整 assignment 清点本机 primary/replica/learner；所有本地 snapshot＋committed delta 预验证并合并总容量后才进入业务安装。新现金默认关闭，归属/控制面改变锁闭，低层或单分区 restore 不能绕过；私有 token、原覆盖与 pending 保留，失败资源关闭不能开放。快照精确 prefix 和旧快照隐藏 v2 现金也纳入拒绝条件。新增 **29 项**，最终 **349 项完整两轮**通过；Projection **73 项＋45 项隔离 MySQL 一轮**复验通过。
+
+这是最多 256 resident 的停机维护原语，不是已接线的有界生产调度器；不会 mark READY/promotion。16 MiB 序列化索引预算不等于节点 heap；cached assignment 验证不等于租约/CAS，多分区 prepare 的真实内存/句柄/IO 及逐笔清单检查 TPS 成本未验收。下一步回到隔离大分区预算/耗时、三服务生命周期 adapter、真实业务后态/可信历史与冷留存，再做故障与 TPS。8 运行容器原镜像、0 restart/OOM 的只读状态不作为业务可写证据。详见 [整节点验收与边界](TRADE_NODE_CASH_CAPACITY_RECOVERY_CANDIDATE_20260929.zh-CN.md)。

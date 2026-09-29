@@ -1,0 +1,179 @@
+{
+  "schemaVersion": 1,
+  "observedAtUtc": "2026-09-29T10:03:21Z",
+  "scope": "isolated unwired whole-node cash index recovery/admission candidate; not live HA or financial qualification",
+  "trade": {
+    "commit": "a539940d4b83a1010096b8efae68adce56917b8c",
+    "branch": "fix/trade-recovery-timing",
+    "suite": {
+      "classes": 66,
+      "cases": 349,
+      "fullFinalRuns": 2,
+      "failures": 0,
+      "errors": 0,
+      "skipped": 0,
+      "newNodeCases": 29
+    },
+    "execution": {
+      "java": 8,
+      "maven": "3.9.11-eclipse-temurin-8",
+      "network": "none",
+      "memoryLimit": "1g",
+      "cpus": 1,
+      "mavenMaxHeap": "512m",
+      "dependencyMode": "cached offline",
+      "installedOrPublished": false
+    },
+    "classSha256": {
+      "TradeCashNodeRecoveryCandidate": "3083ff093ab83baca76297132d35c0270d3a871afc747c7320f3dfaed705cd5e",
+      "TradeCashCandidateExecutor": "70f1f569bbac34c9fc3185afededf8644d8e6027a5eeac97f916c37164f8afc6",
+      "TradeCashRequestLedger": "6cc28f65f37c7c681c598da222e0c5b98058b5588dfe6a025b536e5cd5efcc08",
+      "TradeRecoveryApplier": "364cf20e4f707cd81a416e31b95af4b72eff276b3d1d9c2dab3021193ecc3993",
+      "TradeRecoveryPlanner": "ce9445b1072093afea4715315673cb74784cef2fc5a1a52aa3ffc6b9f52c2d92",
+      "TradeStateCoordinator": "ef57ddcca069a8d55c262e7684bc73f44cc60581997e32ec79ea7d42732b1a1a",
+      "TradeCashNodeRecoveryCandidateTest": "e417281ff1e387057f1b13bd09d8e024aed3b8b87b31ef4b445f1b46df89689b"
+    }
+  },
+  "projection": {
+    "commit": "3122a8d0ab94d5e7a4e177951b2e4ed5ee58d38d",
+    "sourceChanged": false,
+    "suite": {
+      "classes": 12,
+      "cases": 73,
+      "failures": 0,
+      "errors": 0,
+      "skipped": 0
+    },
+    "mysql": {
+      "status": "PASS",
+      "cases": 45,
+      "finalRunsThisIncrement": 1,
+      "version": "8.0.36",
+      "syntheticOnly": true,
+      "liveClusterTouched": false,
+      "liveCashIdempotencyCovered": false,
+      "durableCashV2ProjectionSupported": true,
+      "cashV2DefaultOff": true,
+      "coreRecoveryFromProjectionSupported": false,
+      "actualCashContractClassesUsed": true,
+      "reportPath": "/Users/kong/Documents/Codex/.webcodex-managed-worktrees/projectionsvr-fb701727-b941-4ad3-b85b-f38a97872700/target/trade-projection-offline.osJtUJqz/result.json",
+      "reportSha256": "922742156f42924d1aec362e7bac28276d4a8cc0f51fb34b9105dbc6464654f8",
+      "mysqlImage": "sha256:a532724022429812ec797c285c1b540a644c15e248579c6bfdf12a8fbaab4964",
+      "hostPorts": false,
+      "liveDataMounts": false,
+      "temporaryContainerRemoved": true,
+      "cashBuilderClassSha256": "88b47ead80f14c1a4d7f7f48ea44397f8ba886b385009b89398d2f9e03cac2f0",
+      "cashRequestResultClassSha256": "75d90530032e3e8c4328a36a11a71c53a93dda00e92b7d49f1ff76ca9e025684",
+      "postingValidatorClassSha256": "f55f0b0de66d3a535a1d26cccc69445811fba8016e73de218c4c79e72df3b3fd",
+      "commonArtifactSha256": "542d25a3c7345c2d25806fc7c975465e96ff21ac5151dd8c35f13520c006396c",
+      "bridgeArtifactSha256": "8a22afe1bd404ca5a2613a189df9133025ebc77cca990f9a202cfcaccc899329"
+    }
+  },
+  "candidateBounds": {
+    "maxServicePartitions": 4096,
+    "maxResidentPartitions": 256,
+    "maxIndexEntries": 10000,
+    "maxSerializedIndexBytes": 16777216,
+    "maxSerializedRecordBytes": 65536,
+    "heapQuota": false
+  },
+  "assertions": {
+    "indexAggregateCapacityBeforeMoneyInstallCovered": true,
+    "allResidentRolesCovered": true,
+    "defaultClosedNewCashGate": true,
+    "inventoryInvalidationLatched": true,
+    "lowLevelSinglePartitionRestoreInvalidatesProof": true,
+    "exactSnapshotPrefixGuardCovered": true,
+    "legacySnapshotCoveredCashGuardCovered": true,
+    "privateTokenAndUncertainReservationCovered": true,
+    "closeBeforeAdmissionCovered": true,
+    "boundary256UsesPristineSyntheticEmptySnapshots": true,
+    "fullNodeHeapCapacityQualified": false,
+    "productionLifecycleWired": false,
+    "readyOrPromotionAutomaticallyPublished": false,
+    "realTcpOrProcessKillCovered": false,
+    "globalAtomicAssignmentLeaseProven": false,
+    "fullFinancialReconciliationCovered": false,
+    "coreSqlWritersRetired": false,
+    "coldRetentionOrCompactionImplemented": false,
+    "rtoMeasured": false,
+    "rpoZeroProven": false,
+    "tpsMeasured": false
+  },
+  "liveReadOnlyHealth": {
+    "kind": "container image/process inspect only; not business writability",
+    "containers": [
+      {
+        "name": "dc-saas-ordersvr",
+        "image": "sha256:edc9fa11aea0bac6584b71e9c9bdb71a721dd0d6c73f2341ec3e0b0ff9eee721",
+        "running": true,
+        "restartCount": 0,
+        "oomKilled": false
+      },
+      {
+        "name": "dc-saas-ordersvr-b",
+        "image": "sha256:edc9fa11aea0bac6584b71e9c9bdb71a721dd0d6c73f2341ec3e0b0ff9eee721",
+        "running": true,
+        "restartCount": 0,
+        "oomKilled": false
+      },
+      {
+        "name": "dc-saas-tradesvr",
+        "image": "sha256:a74092669b0cee679c6be25ab8212d42497660e627b0c685d5c0750954571e51",
+        "running": true,
+        "restartCount": 0,
+        "oomKilled": false
+      },
+      {
+        "name": "dc-saas-tradesvr-b",
+        "image": "sha256:a74092669b0cee679c6be25ab8212d42497660e627b0c685d5c0750954571e51",
+        "running": true,
+        "restartCount": 0,
+        "oomKilled": false
+      },
+      {
+        "name": "dc-saas-mdsvr",
+        "image": "sha256:a6d06002e8776c15bd7e23e69d16617762cf419169ff77ffa2e188bd6805702d",
+        "running": true,
+        "restartCount": 0,
+        "oomKilled": false
+      },
+      {
+        "name": "dc-saas-mdsvr-b",
+        "image": "sha256:a6d06002e8776c15bd7e23e69d16617762cf419169ff77ffa2e188bd6805702d",
+        "running": true,
+        "restartCount": 0,
+        "oomKilled": false
+      },
+      {
+        "name": "dc-saas-mdsvr-c",
+        "image": "sha256:a6d06002e8776c15bd7e23e69d16617762cf419169ff77ffa2e188bd6805702d",
+        "running": true,
+        "restartCount": 0,
+        "oomKilled": false
+      },
+      {
+        "name": "dc-saas-projectionsvr",
+        "image": "sha256:c761d1fec7253506eafda3486cbc523e134a0d5145bd258f42e575a6edf34f74",
+        "running": true,
+        "restartCount": 0,
+        "oomKilled": false
+      }
+    ]
+  },
+  "prohibitedWorkNotPerformed": [
+    "live cash/API transaction",
+    "live admission or stress load",
+    "live failure injection/restart",
+    "assignment/config/history modification",
+    "SQL schema enablement",
+    "image push/deployment",
+    "journal truncation or identity eviction"
+  ],
+  "next": [
+    "copied large-partition prepare/install resource and duration qualification",
+    "bounded per-service lifecycle adapters for Order/Trade/MD",
+    "real business post-state, trusted baseline, cold lookup and delivery/GAP gates",
+    "controlled fault/retry then successful-business TPS/RTO/RPO"
+  ]
+}
