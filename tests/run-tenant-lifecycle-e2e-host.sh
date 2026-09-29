@@ -339,6 +339,11 @@ settings_response="$(api_call "${settings_payload}" "${admin_token_a}")"
 expect_ok "tenant settings" "${settings_response}"
 
 suspend_payload="$(printf '{"serverName":"ManagerSvr","method":"tenantApproval","content":{"action":"UPDATE_TENANT","cid":"SUSPEND_E2E","request_id":"SUSPEND_%s","location":"%s","status":"SUSPENDED"}}' "${E2E_SUFFIX}" "${E2E_LOCATION_A}")"
+# Manager sessions are single-active per platform user; another console or
+# acceptance browser login can revoke the token held since tenant approval.
+platform_login="$(login "${platform_user}" "${platform_password}" Manager PLATFORM PLATFORM_REFRESH_E2E)"
+expect_ok "refresh platform manager session" "${platform_login}"
+platform_token="$(printf '%s' "${platform_login}" | json_eval 'd["data"]["token"]')"
 suspend_response="$(api_call "${suspend_payload}" "${platform_token}")"
 expect_ok "suspend tenant" "${suspend_response}"
 suspended_login="$(login "${E2E_SHARED_USER}" "${trader_password_a}" WEB "${E2E_LOCATION_A}" SUSPENDED_LOGIN_E2E)"
