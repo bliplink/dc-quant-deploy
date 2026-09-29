@@ -1,6 +1,6 @@
 {
   "schemaVersion": 1,
-  "releaseId": "cluster-dev-reset-20260930-webfix",
+  "releaseId": "cluster-dev-reset-20260930-projectionfix",
   "genericCommon": {
     "gav": "io.github.bliplink:com.app.common:3.0.14",
     "sha256": "542d25a3c7345c2d25806fc7c975465e96ff21ac5151dd8c35f13520c006396c"
@@ -38,9 +38,9 @@
     {
       "name": "projectionsvr",
       "repository": "/Users/kong/Documents/Codex/.webcodex-managed-worktrees/projectionsvr-fb701727-b941-4ad3-b85b-f38a97872700",
-      "revision": "3122a8d0ab94d5e7a4e177951b2e4ed5ee58d38d",
+      "revision": "d091dd3a4b02f3ef62e26aa99d5c70ec0bae911e",
       "type": "java",
-      "image": "local/dc-saas-projectionsvr:cluster-dev-reset-20260929"
+      "image": "local/dc-saas-projectionsvr:cluster-dev-reset-20260930-projectionfix"
     },
     {
       "name": "mdsvr",

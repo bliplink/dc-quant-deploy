@@ -1,0 +1,15 @@
+{
+  "schemaVersion": 1,
+  "releaseId": "cluster-dev-reset-20260930-projectionfix",
+  "previousReleaseId": "cluster-dev-reset-20260930-webfix",
+  "previousEvidence": "docs/evidence/full-release-build-20260930-webfix.json",
+  "scopedBuildEvidenceFile": "/Users/kong/Documents/Codex/2026-09-28/chatgpt-conversation-6ab8c255-e7ac-83e9-a99c/projection-release-20260930.p5Mpjv/build-evidence.json",
+  "mergedBuildEvidenceFile": "/Users/kong/Documents/Codex/2026-09-28/chatgpt-conversation-6ab8c255-e7ac-83e9-a99c/projection-release-20260930.p5Mpjv/merged-build-evidence.json",
+  "rebuiltComponent": {
+    "name": "projectionsvr",
+    "revision": "d091dd3a4b02f3ef62e26aa99d5c70ec0bae911e",
+    "image": "local/dc-saas-projectionsvr:cluster-dev-reset-20260930-projectionfix",
+    "imageId": "sha256:4a35f0c61fb9638bf89ab7589d9ebee0d8646207f492adc3c12edb10209fd4af",
+    "tests": {"suites": 13, "tests": 75, "failures": 0, "errors": 0, "skipped": 0}
+  }
+}
