@@ -1,0 +1,501 @@
+{
+  "schemaVersion": 1,
+  "date": "2026-09-29",
+  "scope": "bounded snapshot phase diagnostics; isolated copied-journal compatibility, not live HA/RTO/TPS",
+  "tradeSourceCommit": "3f0d027816872cdda82820fe1126efa127c493d7",
+  "change": {
+    "diagnosticOnly": true,
+    "snapshotFormatChanged": false,
+    "financialFormulaChanged": false,
+    "barrierRemovedOrMoved": false,
+    "orderingChanged": false,
+    "wholeDedupeDtoCopyAdded": false,
+    "boundedLatestStoreSummaries": 1,
+    "requiresExactSnapshotIdMatch": true,
+    "missingDiagnosticsIsNotSafetyFailure": true,
+    "summaryContainsBusinessRowsOrKeys": false,
+    "fatalJvmErrorsSwallowed": false,
+    "fileWriteMetricBelowBuffer": true,
+    "delegateWritesAreKernelSyscalls": false,
+    "directorySyncIsPowerLossProof": false
+  },
+  "sourceTests": {
+    "classes": 68,
+    "cases": 362,
+    "fullRuns": 1,
+    "failures": 0,
+    "errors": 0,
+    "skipped": 0,
+    "newTimingCases": 6,
+    "java": 8,
+    "network": "none"
+  },
+  "image": {
+    "tag": "local/tradesvr:snapshot-stages-3f0d027",
+    "id": "sha256:6505d51b583e5027dfe2b0fa3704436704ebeca77f19875771ba7a5daf21bd9f",
+    "architecture": "arm64",
+    "revisionLabelMatches": true,
+    "baseImageId": "sha256:b8039096ac6396135dc864690ae785a30e6ad6d7614c6cd1f1ba180c85a56845",
+    "files": 311,
+    "codeAndResources": 231,
+    "libraries": 80,
+    "allFilesMatchLocalSha256": true,
+    "manifestFormat": "sha256sum relative classes/lib paths sorted LC_ALL=C",
+    "manifestSha256": "91d03ff070a303abd7415080e7db3af1870c8a0972ece5c401ab0f2080e0676e",
+    "storeClassSha256": "d37596adb02115eaf64ac1a8de4d72f17476669e00c367e7dea7f460b9cdb553",
+    "managerClassSha256": "931e7bbf0e14bf4f0fa771ef2c3dff5fd409614c541b9b6c6a92d173c7c1768b",
+    "commonArtifactSha256": "542d25a3c7345c2d25806fc7c975465e96ff21ac5151dd8c35f13520c006396c",
+    "freshDependencyDirectory": "target/dependency-snapshot-stages-candidate",
+    "offlineBuild": true,
+    "pushed": false,
+    "deployed": false
+  },
+  "imageComparison": {
+    "baselineImageId": "sha256:d6e7781eaf8368cccd34ea5935d30bbf129379a90663584ba51cc9e567d5babd",
+    "unchangedFiles": 302,
+    "unchangedLibraries": 80,
+    "removedFiles": 0,
+    "changedOrAddedFiles": [
+      {
+        "file": "classes/com/app/dc/service/cluster/TradeSnapshotManager$CaptureTiming.class",
+        "old": null,
+        "current": "c179709e549e71aafb5c73c2a8954db24456b96f021b926947c28e4e87272b8b"
+      },
+      {
+        "file": "classes/com/app/dc/service/cluster/TradeSnapshotManager$LocationScan.class",
+        "old": "0d3cf3bf0a4fee493eefc297345203e0fe1ab10defc38e30932a05663f8ed45d",
+        "current": "4761d67e11406f39edd7c5d288770da3b04b5c1545127e69cf6a1d8cbcdc2e1b"
+      },
+      {
+        "file": "classes/com/app/dc/service/cluster/TradeSnapshotManager.class",
+        "old": "a9e8918dfe609b568fce3e4caa116fdafa5c3fa40427dfc47cb7348b0c34b4af",
+        "current": "931e7bbf0e14bf4f0fa771ef2c3dff5fd409614c541b9b6c6a92d173c7c1768b"
+      },
+      {
+        "file": "classes/com/app/dc/service/cluster/TradeSnapshotStore$MetadataCacheEntry.class",
+        "old": "65d9e2d6da0961c92a6f01319781d708a407fe6c7595819df4f43eb50b75d3ce",
+        "current": "ff1ad8c3e495fd925149365d8987e239dbfbf8e166b65c064e1c6c4365c18d9d"
+      },
+      {
+        "file": "classes/com/app/dc/service/cluster/TradeSnapshotStore$RecoverySnapshot.class",
+        "old": "9d44a4df1687543ee2548f776572540247983975224db725c78e98b582e1c610",
+        "current": "d16bf6080d0641429034adbe7592ee423a0787a644ed8d9051670880f25ed35b"
+      },
+      {
+        "file": "classes/com/app/dc/service/cluster/TradeSnapshotStore$SaveTiming.class",
+        "old": null,
+        "current": "ab6ab49954217a3e43dc82b371c236f296be120b904a824cf083af162fc2b535"
+      },
+      {
+        "file": "classes/com/app/dc/service/cluster/TradeSnapshotStore$TimedFile.class",
+        "old": null,
+        "current": "5257407625f7ff58904b140b303a53ba8ef9edd7aa98f756869b6e8f94bf9bfa"
+      },
+      {
+        "file": "classes/com/app/dc/service/cluster/TradeSnapshotStore$TimedSink.class",
+        "old": null,
+        "current": "2e5ad0166abe4b5630624f880ffb4ff84324186787113375370355261be42d45"
+      },
+      {
+        "file": "classes/com/app/dc/service/cluster/TradeSnapshotStore.class",
+        "old": "471ac2c409bcb2ba3b7dd561ecacc0ebcda1226507ea7eb346b310713b8e673b",
+        "current": "d37596adb02115eaf64ac1a8de4d72f17476669e00c367e7dea7f460b9cdb553"
+      }
+    ]
+  },
+  "imageJUnit": {
+    "status": "PASS",
+    "classes": 6,
+    "cases": 92,
+    "elapsedSeconds": 4.983,
+    "heapMiB": 512,
+    "memoryMiB": 1024,
+    "cpus": 1,
+    "network": "none",
+    "productionClassesAndLibsFromImage": true,
+    "testClassesReadOnly": true
+  },
+  "hostRunnerSafetyTests": {
+    "cases": 10,
+    "status": "PASS"
+  },
+  "copiedJournalRuns": [
+    {
+      "path": "/Users/kong/dc-quant-deploy/.tmp-trade-evidence/snapshot-lab-combined-stages-3f0d027-1024.json",
+      "sha256": "f34e75b108cc1ec9f62b9002db19ce5b18b2ad678a1f2f2cc1c401d2051bab45",
+      "report": {
+        "cgroupOomKilled": false,
+        "cpus": 1,
+        "elapsedSeconds": 104.276,
+        "exitCode": 0,
+        "generatedAtUtc": "2026-09-29T11:35:13.880813+00:00",
+        "heapMiB": 1024,
+        "helperClassesSha256AtLaunch": "d0cf9f995152e8db6fa9db6823153df72f01b473ea3d619d681e602ed556f729",
+        "imageId": "sha256:6505d51b583e5027dfe2b0fa3704436704ebeca77f19875771ba7a5daf21bd9f",
+        "journalCopyRoot": "/data/dc-saas-isolated-labs/trade-snapshot-P204.png2waHS/journal",
+        "memoryMiB": 2048,
+        "mode": "recovery",
+        "outcome": "PASS",
+        "partition": "P204",
+        "probe": {
+          "baselineFingerprint": {
+            "counts": {
+              "applied": 691065,
+              "balance": 131,
+              "openOrder": 60390,
+              "position": 72,
+              "terminalOrder": 284471
+            },
+            "orderStatusCounts": {
+              "MISSING": 60208,
+              "Suspended": 182
+            },
+            "sha256MultisetSum": "d92971371930c9d0d67b01bc9c6caa3f7d6052b60de2bc10b35c8817b06a4c1c"
+          },
+          "checkpointCommitSeq": 813788,
+          "copiedJournalLastSeq": 815788,
+          "deltaJournalRecords": 2000,
+          "epoch": 1,
+          "heapMaxBytes": 1046937600,
+          "outcome": "PASS",
+          "partition": "P204",
+          "phases": [
+            {
+              "elapsedMillis": 23857,
+              "gcCountDuringPhase": 336,
+              "gcMillisDuringPhase": 3556,
+              "sampledHeapPeakBytes": 317531064,
+              "stage": "residentRecovery"
+            },
+            {
+              "elapsedMillis": 34072,
+              "gcCountDuringPhase": 333,
+              "gcMillisDuringPhase": 4090,
+              "sampledHeapPeakBytes": 648883712,
+              "stage": "checkpointRecovery"
+            },
+            {
+              "elapsedMillis": 1892,
+              "gcCountDuringPhase": 1,
+              "gcMillisDuringPhase": 50,
+              "sampledHeapPeakBytes": 658357728,
+              "stage": "snapshotCapture"
+            },
+            {
+              "elapsedMillis": 30061,
+              "explicitGcMillisExcludedFromRecovery": 1705,
+              "gcCountDuringPhase": 217,
+              "gcMillisDuringPhase": 3169,
+              "quiescentHeapBytesAfterExplicitGc": 506048352,
+              "sampledHeapPeakBytes": 945218000,
+              "stage": "fullJournalRecovery"
+            },
+            {
+              "elapsedMillis": 1679,
+              "gcCountDuringPhase": 5,
+              "gcMillisDuringPhase": 105,
+              "sampledHeapPeakBytes": 718718648,
+              "stage": "fullJournalRecoveryFingerprint"
+            },
+            {
+              "elapsedMillis": 3565,
+              "explicitGcMillisExcludedFromRecovery": 1013,
+              "gcCountDuringPhase": 12,
+              "gcMillisDuringPhase": 883,
+              "quiescentHeapBytesAfterExplicitGc": 500507256,
+              "sampledHeapPeakBytes": 917668656,
+              "stage": "snapshotDeltaRecovery"
+            },
+            {
+              "elapsedMillis": 1178,
+              "gcCountDuringPhase": 5,
+              "gcMillisDuringPhase": 86,
+              "sampledHeapPeakBytes": 711516176,
+              "stage": "snapshotDeltaRecoveryFingerprint"
+            }
+          ],
+          "residentJournalLastSeq": 566728,
+          "residentPartition": "P122",
+          "restoredFingerprint": {
+            "counts": {
+              "applied": 691065,
+              "balance": 131,
+              "openOrder": 60390,
+              "position": 72,
+              "terminalOrder": 284471
+            },
+            "orderStatusCounts": {
+              "MISSING": 60208,
+              "Suspended": 182
+            },
+            "sha256MultisetSum": "d92971371930c9d0d67b01bc9c6caa3f7d6052b60de2bc10b35c8817b06a4c1c"
+          },
+          "scope": "isolated journal copy; no live promotion, DAO, transport or consensus proof",
+          "snapshotBytes": 100473484,
+          "snapshotCaptureBarrierMillis": 1343,
+          "snapshotCaptureTimings": {
+            "attempted": true,
+            "saved": true,
+            "stageNanos": {
+              "accountConfigCopy": 7708,
+              "balanceScan": 62374,
+              "cashResultCopy": 792,
+              "dedupeDtoCopy": 709,
+              "guardAndLocationScan": 1096578,
+              "lockHeld": 1343481226,
+              "lockWait": 2748986,
+              "openOrderScan": 46733483,
+              "positionScan": 96416,
+              "preScan": 542932003,
+              "releasePayload": 386665,
+              "saveCall": 1294726919,
+              "sealPayload": 112791,
+              "symbolParaCopy": 2375,
+              "total": 1889186215
+            },
+            "storeStages": {
+              "appliedEncodeAndBufferedWriteNanos": 727353074,
+              "bufferDrainNanos": 166832,
+              "coreEncodeAndBufferedWriteNanos": 335838296,
+              "delegateWriteCalls": 1535,
+              "delegateWriteNanos": 163555563,
+              "directorySyncAndCacheNanos": 2706987,
+              "encodeAndBufferedWriteNanos": 1134450818,
+              "fileCloseNanos": 43833,
+              "fileSetupNanos": 982287,
+              "fileSyncNanos": 120684543,
+              "installed": true,
+              "partition": "P204",
+              "phase": "installed",
+              "replaceNanos": 17088792,
+              "successfulDelegateBytes": 100473484,
+              "terminalEncodeAndBufferedWriteNanos": 71197115,
+              "totalNanos": 1276386383,
+              "validationNanos": 87999
+            },
+            "storeStagesAvailable": true
+          },
+          "stateEquivalent": true
+        },
+        "residentPartition": "P122",
+        "retainedLabOutputRoot": "/data/dc-saas-isolated-labs/trade-snapshot-run.QDRrX6qt",
+        "scope": "isolated copied journal; no live failover/business verification",
+        "timedOut": false,
+        "timeoutSeconds": 180
+      }
+    },
+    {
+      "path": "/Users/kong/dc-quant-deploy/.tmp-trade-evidence/snapshot-lab-combined-stages-3f0d027-1024-r2.json",
+      "sha256": "5f042fced016856a0d1f3cb6d73afeddec5b22c6be4a10dfa575c32ca42fcc8a",
+      "report": {
+        "cgroupOomKilled": false,
+        "cpus": 1,
+        "elapsedSeconds": 114.81,
+        "exitCode": 0,
+        "generatedAtUtc": "2026-09-29T11:38:09.183495+00:00",
+        "heapMiB": 1024,
+        "helperClassesSha256AtLaunch": "d0cf9f995152e8db6fa9db6823153df72f01b473ea3d619d681e602ed556f729",
+        "imageId": "sha256:6505d51b583e5027dfe2b0fa3704436704ebeca77f19875771ba7a5daf21bd9f",
+        "journalCopyRoot": "/data/dc-saas-isolated-labs/trade-snapshot-P204.png2waHS/journal",
+        "memoryMiB": 2048,
+        "mode": "recovery",
+        "outcome": "PASS",
+        "partition": "P204",
+        "probe": {
+          "baselineFingerprint": {
+            "counts": {
+              "applied": 691065,
+              "balance": 131,
+              "openOrder": 60390,
+              "position": 72,
+              "terminalOrder": 284471
+            },
+            "orderStatusCounts": {
+              "MISSING": 60208,
+              "Suspended": 182
+            },
+            "sha256MultisetSum": "d92971371930c9d0d67b01bc9c6caa3f7d6052b60de2bc10b35c8817b06a4c1c"
+          },
+          "checkpointCommitSeq": 813788,
+          "copiedJournalLastSeq": 815788,
+          "deltaJournalRecords": 2000,
+          "epoch": 1,
+          "heapMaxBytes": 1046937600,
+          "outcome": "PASS",
+          "partition": "P204",
+          "phases": [
+            {
+              "elapsedMillis": 29631,
+              "gcCountDuringPhase": 331,
+              "gcMillisDuringPhase": 5065,
+              "sampledHeapPeakBytes": 312795752,
+              "stage": "residentRecovery"
+            },
+            {
+              "elapsedMillis": 45084,
+              "gcCountDuringPhase": 350,
+              "gcMillisDuringPhase": 6167,
+              "sampledHeapPeakBytes": 625814992,
+              "stage": "checkpointRecovery"
+            },
+            {
+              "elapsedMillis": 2352,
+              "gcCountDuringPhase": 2,
+              "gcMillisDuringPhase": 98,
+              "sampledHeapPeakBytes": 640551064,
+              "stage": "snapshotCapture"
+            },
+            {
+              "elapsedMillis": 25348,
+              "explicitGcMillisExcludedFromRecovery": 1430,
+              "gcCountDuringPhase": 217,
+              "gcMillisDuringPhase": 2475,
+              "quiescentHeapBytesAfterExplicitGc": 506377008,
+              "sampledHeapPeakBytes": 952941896,
+              "stage": "fullJournalRecovery"
+            },
+            {
+              "elapsedMillis": 1464,
+              "gcCountDuringPhase": 5,
+              "gcMillisDuringPhase": 85,
+              "sampledHeapPeakBytes": 719386888,
+              "stage": "fullJournalRecoveryFingerprint"
+            },
+            {
+              "elapsedMillis": 2978,
+              "explicitGcMillisExcludedFromRecovery": 672,
+              "gcCountDuringPhase": 12,
+              "gcMillisDuringPhase": 661,
+              "quiescentHeapBytesAfterExplicitGc": 460491704,
+              "sampledHeapPeakBytes": 955927024,
+              "stage": "snapshotDeltaRecovery"
+            },
+            {
+              "elapsedMillis": 1003,
+              "gcCountDuringPhase": 5,
+              "gcMillisDuringPhase": 74,
+              "sampledHeapPeakBytes": 664822152,
+              "stage": "snapshotDeltaRecoveryFingerprint"
+            }
+          ],
+          "residentJournalLastSeq": 566728,
+          "residentPartition": "P122",
+          "restoredFingerprint": {
+            "counts": {
+              "applied": 691065,
+              "balance": 131,
+              "openOrder": 60390,
+              "position": 72,
+              "terminalOrder": 284471
+            },
+            "orderStatusCounts": {
+              "MISSING": 60208,
+              "Suspended": 182
+            },
+            "sha256MultisetSum": "d92971371930c9d0d67b01bc9c6caa3f7d6052b60de2bc10b35c8817b06a4c1c"
+          },
+          "scope": "isolated journal copy; no live promotion, DAO, transport or consensus proof",
+          "snapshotBytes": 100473484,
+          "snapshotCaptureBarrierMillis": 1549,
+          "snapshotCaptureTimings": {
+            "attempted": true,
+            "saved": true,
+            "stageNanos": {
+              "accountConfigCopy": 8875,
+              "balanceScan": 66167,
+              "cashResultCopy": 2000,
+              "dedupeDtoCopy": 4834,
+              "guardAndLocationScan": 1407120,
+              "lockHeld": 1549773467,
+              "lockWait": 4554190,
+              "openOrderScan": 45058818,
+              "positionScan": 118333,
+              "preScan": 795532794,
+              "releasePayload": 338916,
+              "saveCall": 1502558282,
+              "sealPayload": 97874,
+              "symbolParaCopy": 2625,
+              "total": 2349868201
+            },
+            "storeStages": {
+              "appliedEncodeAndBufferedWriteNanos": 1018431691,
+              "bufferDrainNanos": 72875,
+              "coreEncodeAndBufferedWriteNanos": 338235054,
+              "delegateWriteCalls": 1535,
+              "delegateWriteNanos": 253301567,
+              "directorySyncAndCacheNanos": 146707,
+              "encodeAndBufferedWriteNanos": 1449272997,
+              "fileCloseNanos": 34250,
+              "fileSetupNanos": 796039,
+              "fileSyncNanos": 42720495,
+              "installed": true,
+              "partition": "P204",
+              "phase": "installed",
+              "replaceNanos": 2892447,
+              "successfulDelegateBytes": 100473484,
+              "terminalEncodeAndBufferedWriteNanos": 92366462,
+              "totalNanos": 1496075642,
+              "validationNanos": 35750
+            },
+            "storeStagesAvailable": true
+          },
+          "stateEquivalent": true
+        },
+        "residentPartition": "P122",
+        "retainedLabOutputRoot": "/data/dc-saas-isolated-labs/trade-snapshot-run.wMneQrE4",
+        "scope": "isolated copied journal; no live failover/business verification",
+        "timedOut": false,
+        "timeoutSeconds": 180
+      }
+    }
+  ],
+  "interpretation": {
+    "sharedVm": true,
+    "controlledCpuProfiler": false,
+    "runs": 2,
+    "parentsAndChildrenMustNotBeAdded": true,
+    "encodingIncludesTraversalAllocationGcAndDelegateIo": true,
+    "encodingMinusDelegateIoIsNotCpuTime": true,
+    "latencyImprovementAttributedToDiagnostics": false,
+    "notP99OrRtoOrTps": true,
+    "lockHeldMillis": [
+      1343.481226,
+      1549.773467
+    ],
+    "encodingFractionOfLock": [
+      0.8444113665641949,
+      0.9351515094689642
+    ],
+    "deltaRetainedHeapBytes": [
+      500507256,
+      460491704
+    ],
+    "retainedHeapVariationCauseNotEstablished": true,
+    "heap384MiBTakeoverApproved": false
+  },
+  "consistencyBoundary": {
+    "balancePositionOrderListsContainMutableReferences": true,
+    "liveDedupeNeedsSamePartitionBarrier": true,
+    "offLockSerializationSafeNow": false,
+    "immutableFreezeOrCowAndResourceProofRequired": true
+  },
+  "liveReadOnlyHealth": {
+    "checkedAtUtc": "2026-09-29 11:40:04 UTC",
+    "containers": 8,
+    "allRunning": true,
+    "allRestartCount": 0,
+    "allOomKilled": false,
+    "imagesUnchanged": true,
+    "businessWritableProof": false
+  },
+  "notQualified": [
+    "trusted historical config/order/financial baseline",
+    "complete node takeover heap/direct-memory/connection budget",
+    "bounded immutable freeze and business p99",
+    "actual Order/Trade/MD lifecycle adapter and bounded executor integration",
+    "committed replica catch-up/promotion and old-primary fencing",
+    "live cash API migration from SQL-first to journal plus projection",
+    "cross-host HA, RPO=0, fault RTO, sustained business TPS and long stability"
+  ],
+  "nextScopedStep": "Verify bounded reduction of applied-result serialization allocation in isolation with byte equivalence, failure ordering and unchanged fingerprints; do not move mutable capture off barrier. Complete node resources and trusted history before live promotion."
+}
