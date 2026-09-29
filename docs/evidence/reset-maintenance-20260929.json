@@ -1,0 +1,172 @@
+{
+  "generatedAtUtc": "2026-09-29T15:35:21Z",
+  "userConfirmedTradingDataReset": true,
+  "backupRequested": false,
+  "stoppedBusinessContainers": [
+    "dc-saas-gateway",
+    "dc-saas-robotsvr",
+    "dc-saas-liqsvr",
+    "dc-saas-apssvr",
+    "dc-saas-adminsvr",
+    "dc-saas-managersvr",
+    "dc-saas-loginsvr",
+    "dc-saas-ordersvr",
+    "dc-saas-ordersvr-b",
+    "dc-saas-tradesvr",
+    "dc-saas-tradesvr-b",
+    "dc-saas-projectionsvr",
+    "dc-saas-mdsvr",
+    "dc-saas-mdsvr-b",
+    "dc-saas-mdsvr-c"
+  ],
+  "stoppedWritersBeforeLogDeletion": true,
+  "deletedFormerActiveLogs": {
+    "files": [
+      {
+        "path": "/data/dc-saas-runtime/log/APSSvr.log",
+        "sizeBytes": 4834320968,
+        "device": 64785,
+        "inode": 419992,
+        "openDescriptors": []
+      },
+      {
+        "path": "/data/dc-saas-runtime/log/AdminSvr.log",
+        "sizeBytes": 19044310,
+        "device": 64785,
+        "inode": 420108,
+        "openDescriptors": []
+      },
+      {
+        "path": "/data/dc-saas-runtime/log/GW.log",
+        "sizeBytes": 245659508,
+        "device": 64785,
+        "inode": 419554,
+        "openDescriptors": []
+      },
+      {
+        "path": "/data/dc-saas-runtime/log/LiqSvr.log",
+        "sizeBytes": 589836,
+        "device": 64785,
+        "inode": 420799,
+        "openDescriptors": []
+      },
+      {
+        "path": "/data/dc-saas-runtime/log/LoginSvr.log",
+        "sizeBytes": 15255479,
+        "device": 64785,
+        "inode": 419995,
+        "openDescriptors": []
+      },
+      {
+        "path": "/data/dc-saas-runtime/log/MDSvrA.log",
+        "sizeBytes": 1862507,
+        "device": 64785,
+        "inode": 410484,
+        "openDescriptors": []
+      },
+      {
+        "path": "/data/dc-saas-runtime/log/MDSvrB.log",
+        "sizeBytes": 9479526,
+        "device": 64785,
+        "inode": 419930,
+        "openDescriptors": []
+      },
+      {
+        "path": "/data/dc-saas-runtime/log/MDSvrC.log",
+        "sizeBytes": 3948736,
+        "device": 64785,
+        "inode": 422802,
+        "openDescriptors": []
+      },
+      {
+        "path": "/data/dc-saas-runtime/log/ManagerSvr.log",
+        "sizeBytes": 20652693,
+        "device": 64785,
+        "inode": 420044,
+        "openDescriptors": []
+      },
+      {
+        "path": "/data/dc-saas-runtime/log/OrderSvrA.log",
+        "sizeBytes": 4713979,
+        "device": 64785,
+        "inode": 419990,
+        "openDescriptors": []
+      },
+      {
+        "path": "/data/dc-saas-runtime/log/OrderSvrB.log",
+        "sizeBytes": 200619784,
+        "device": 64785,
+        "inode": 419556,
+        "openDescriptors": []
+      },
+      {
+        "path": "/data/dc-saas-runtime/log/ProjectionSvr.log",
+        "sizeBytes": 57760474494,
+        "device": 64785,
+        "inode": 420064,
+        "openDescriptors": []
+      },
+      {
+        "path": "/data/dc-saas-runtime/log/RobotSvr.log",
+        "sizeBytes": 1287368311,
+        "device": 64785,
+        "inode": 420111,
+        "openDescriptors": []
+      },
+      {
+        "path": "/data/dc-saas-runtime/log/TradeSvrA.log",
+        "sizeBytes": 39105015,
+        "device": 64785,
+        "inode": 419550,
+        "openDescriptors": []
+      },
+      {
+        "path": "/data/dc-saas-runtime/log/TradeSvrB.log",
+        "sizeBytes": 22003711,
+        "device": 64785,
+        "inode": 419987,
+        "openDescriptors": []
+      }
+    ],
+    "descriptorsScanned": 1286,
+    "inaccessibleProcessCount": 0,
+    "totalBytes": 64465098857,
+    "deleted": true,
+    "archived": false,
+    "recoverableByThisTask": false
+  },
+  "afterCleanupDf": {
+    "volume": "/dev/vdb1",
+    "sizeGiB": 147,
+    "usedGiB": 78,
+    "availableGiB": 62,
+    "usedPercent": 56,
+    "rounded": true
+  },
+  "mysqlObservation": {
+    "serverLogHadBindPort33306AddressInUse": true,
+    "observedHealthyAfterBusinessServicesStopped": true,
+    "informationSchemaDcTableQuerySucceeded": true,
+    "restartCount": 17,
+    "processKilledToResolveConflict": false,
+    "dbFilesDeleted": false
+  },
+  "financialDataDeleted": false,
+  "journalsDeleted": false,
+  "snapshotsDeleted": false,
+  "projectionTablesTruncated": false,
+  "newImagesDeployed": false,
+  "existingUninstallInspection": {
+    "defaultPreservesRuntimeData": true,
+    "purgeDataDeletesEntireRuntimeRoot": true,
+    "purgeDataDeletesDedicatedSourceAndMavenCache": true,
+    "wholePurgeIncludesTenantIdentityAndConfig": true
+  },
+  "existingInitializationInspection": {
+    "installWrapsDeployAndBootstrap": true,
+    "demoBootstrapCreatesBalanceRowsViaSql": true,
+    "localAuthoritativeGenesisWorkflowComplete": false
+  },
+  "status": "MAINTENANCE_WRITERS_STOPPED_LOGS_CLEARED_AWAITING_PRESERVED_CONFIG_VS_WHOLE_REINSTALL_SCOPE",
+  "note": "The original confirmation allowed full trading-history reset, not deletion of tenant/user/permission/configuration identities; subsequent proposed one-click purge would expand the scope."
+}
