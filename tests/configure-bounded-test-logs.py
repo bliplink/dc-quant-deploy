@@ -12,13 +12,15 @@ NODES = ('GW', 'LoginSvr', 'MDSvr', 'MDSvrA', 'MDSvrB', 'MDSvrC', 'APSSvr',
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--runtime-root', required=True, type=Path)
+    parser.add_argument('--reload-running', action='store_true',
+                        help='update logging-only config watched by running test services')
     args = parser.parse_args()
     root = args.runtime_root
     if str(root) not in {'/data/dc-saas-runtime', '/opt/dc-saas-runtime'} or root.resolve() != root:
         raise ValueError('unexpected test runtime root')
     running = subprocess.check_output(['docker', 'ps', '--format', '{{.Names}}'], text=True).split()
     infra = {'dc-saas-mysql', 'dc-saas-zookeeper', 'dc-saas-clickhouse'}
-    if any(name.startswith('dc-saas-') and name not in infra for name in running):
+    if not args.reload_running and any(name.startswith('dc-saas-') and name not in infra for name in running):
         raise ValueError('configure fresh logs before starting business services')
     for node in NODES:
         path = root / f'control/overrides/{node}/config/log4j.ini'

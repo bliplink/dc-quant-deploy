@@ -1001,6 +1001,8 @@ prepare_runtime_directories
 "${SCRIPT_DIR}/generate-saas-configs.sh" "${ENV_FILE}"
 if [[ -n "${SAAS_FRESH_TEST_RESET_PROOF:-}" ]]; then
   python3 "${SCRIPT_DIR}/tests/configure-bounded-test-logs.py" --runtime-root "${DEPLOY_ROOT}"
+elif [[ "${SAAS_BOUNDED_TEST_LOGS:-false}" == "true" ]]; then
+  python3 "${SCRIPT_DIR}/tests/configure-bounded-test-logs.py" --runtime-root "${DEPLOY_ROOT}" --reload-running
 fi
 verify_ghcr_access
 

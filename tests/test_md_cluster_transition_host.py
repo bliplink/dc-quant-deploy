@@ -16,6 +16,11 @@ from tests.md_cluster_transition_host import (
 
 
 class MdClusterTransitionHostTest(unittest.TestCase):
+    def test_test_profile_sasl_applies_to_transition_clients(self):
+        with patch.dict('os.environ', {'SAAS_ZK_CLIENT_JVMFLAGS': '-Djava.security.auth.login.config=/conf/jaas.ini'}):
+            zk = DockerZk('dc-saas-zookeeper', '127.0.0.1:32181', '/trade')
+        self.assertEqual('-Djava.security.auth.login.config=/conf/jaas.ini', zk.client_jvmflags)
+
     def test_explicit_sasl_client_config_is_forwarded(self):
         with patch('tests.md_cluster_transition_host.subprocess.run',
                    return_value=SimpleNamespace(returncode=0, stdout='ok')) as run:

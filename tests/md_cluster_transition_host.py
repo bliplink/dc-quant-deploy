@@ -10,6 +10,7 @@ and reads the value back before continuing.
 import argparse
 import datetime as dt
 import json
+import os
 import re
 import subprocess
 import sys
@@ -192,7 +193,8 @@ class DockerZk:
         self.server = server
         self.root = root.rstrip("/")
         self.docker = docker
-        self.client_jvmflags = client_jvmflags
+        self.client_jvmflags = (client_jvmflags if client_jvmflags is not None
+                                else os.environ.get('SAAS_ZK_CLIENT_JVMFLAGS'))
 
     def _zk(self, command, timeout=30):
         argv = [self.docker, "exec", "-i"]
