@@ -72,3 +72,5 @@
 3. 门禁通过后，实际节点/控制面故障检测、旧主 fencing、promotion、恢复、首个成功响应、订单/资金/行情对账，再完整 300/16、持续系统 TPS、负载中故障与长稳。
 
 结构化逐轮证据：[trade-scalar-encoder-and-tcp-qualification-20260929.json](evidence/trade-scalar-encoder-and-tcp-qualification-20260929.json)。保留准备失败、全部单轮/五轮、指纹、分配/耗时、产物身份、候选吞吐、只读健康和未通过门禁。
+
+后续位置更新：本页五份完成的 VM 快照实验输出已可恢复转移到本机工作目录，快照前后 hash 一致、journal 输入不动；原报告路径是历史位置，当前目录映射见 [后续接线证据](evidence/trade-bounded-recovery-integration-20260929.json) 的 archivedOwnLabOutputs。未删实验数据或修改本页原计量结果。

@@ -1,0 +1,261 @@
+{
+  "generatedAtUtc": "2026-09-29T15:04:10Z",
+  "sourceVerifiedAfterAdditionalPrefixCommit": true,
+  "outcome": "OPT_IN_TRADE_LIFECYCLE_SOURCE_QUALIFIED_CONTAINER_PROMOTION_BLOCKED",
+  "commonModuleCommit": "adf16539d7146ab901ca0f5342fd853c146165c5",
+  "tradeIntegrationCommit": "4224276188efcd6cc838c154ae061e7cb2715caf",
+  "tradeFinalPrefixCommit": "5a870723c3b41c225dbed87a8d10e261dd263221",
+  "tradeFinalSourceCommit": "31986253ed36117104b5b67b6d3cb2f3e0fefbfb",
+  "extension": {
+    "coordinate": "io.github.bliplink:com.app.cluster-recovery:3.0.14-recovery-e95850b-1",
+    "jarSha256": "eaa0da8f2d405f68b99611bdf571a278e9afe88795b407e3a3c692951db01bfc",
+    "classCount": 17,
+    "compiledOutputClassCount": 17,
+    "overlappingBaselineClasses": 0,
+    "primitiveSourceCommit": "e95850b94206d699689683d61fa177ff3fa13b4d",
+    "published": false,
+    "replacedExistingCommonJar": false
+  },
+  "baseline": {
+    "coordinate": "io.github.bliplink:com.app.common:3.0.14",
+    "jarSha256": "542d25a3c7345c2d25806fc7c975465e96ff21ac5151dd8c35f13520c006396c",
+    "runtimeCodeSourceAssertionsPassed": true
+  },
+  "sourceTests": {
+    "classes": 71,
+    "tests": 396,
+    "failures": 0,
+    "errors": 0,
+    "skipped": 0,
+    "fullQualifiedRuns": 1,
+    "excludedStaleReports": [
+      "com.app.dc.service.cluster.TradeRecoveryConfigurationCoverageTest"
+    ],
+    "environment": "macOS aarch64, native Zulu Java 8.0.504, Maven 3.8.7, Surefire 2.12.4; isolated copied Maven repository; test fork not resource-constrained like target containers"
+  },
+  "extensionTests": {
+    "classes": 2,
+    "tests": 30,
+    "failures": 0,
+    "errors": 0,
+    "skipped": 0,
+    "fullRuns": 1,
+    "actualBaseline": "3.0.14",
+    "environment": "native macOS Java 8; Surefire 3.2.5"
+  },
+  "extensionHostGuardTests": {
+    "tests": 6,
+    "failures": 0,
+    "errors": 0
+  },
+  "repeatedFinalContracts": {
+    "testsPerRun": 19,
+    "runs": 3,
+    "totalTests": 57,
+    "failures": 0,
+    "errors": 0,
+    "skipped": 0
+  },
+  "defaults": {
+    "enabled": false,
+    "parallelism": 1,
+    "maxPending": 256,
+    "budgetMiB": 128,
+    "estimatedMiB": 64,
+    "deadlineMillis": 180000,
+    "resourceUnitsAreMeasuredHeap": false,
+    "deadlineIsHardIoTimeout": false
+  },
+  "behavior": {
+    "actualManagerOptInWired": true,
+    "startupRequiresStrictReplicationAndExactSources": true,
+    "currentDegradedReplicationConfigurationCanEnableOptIn": false,
+    "offPollingThreadPreparation": true,
+    "sharedBusinessInstallBarrier": true,
+    "exactCommittedTailRecheckedBeforeAndAfterInstall": true,
+    "snapshotExactPrefixAndHiddenCashGuardSharedWithNodeRecovery": true,
+    "assignmentVersionProtocolRolesAndConnectivityRechecked": true,
+    "planClosedBeforeReady": true,
+    "noSamePartitionOverlap": true,
+    "cancelledWorkRetainsBudgetUntilExit": true,
+    "fatalStopsFurtherRecoveryAdmission": true,
+    "sqlRecoveryFallbackAdded": false,
+    "journalTruncationAdded": false,
+    "actualCashApiMigrated": false,
+    "orderAndMdAdaptersMigrated": false
+  },
+  "preparationIssues": [
+    {
+      "outcome": "BLOCKED_ENVIRONMENT",
+      "reason": "Docker snapshot creation failed: no space left on device. No new candidate image/container qualified."
+    },
+    {
+      "outcome": "SETUP_FAILURE",
+      "reason": "First standalone build needed cached install plugin 2.4; no Common 3.0.14 overwrite."
+    },
+    {
+      "outcome": "SETUP_FAILURE",
+      "reason": "macOS native Chronicle profile required JNA/JNA-platform 5.8.0 absent from copied Linux cache; fetched into isolated task cache with snapshot updates disabled, then subsequent tests offline."
+    },
+    {
+      "outcome": "REJECTED_ARTIFACT",
+      "coordinate": "3.0.14-recovery-e95850b",
+      "reason": "Native implicit javac source compilation added 20 shadow baseline classes: 37 output/JAR classes. Provisional tests using that artifact are excluded from final qualification. Empty sourcepath, -implicit:none, packaging allowlist, fresh output and new -1 coordinate resolve it."
+    },
+    {
+      "outcome": "DIAGNOSTIC_TOOL_UNAVAILABLE",
+      "reason": "lsof unavailable in VM; read-only /proc inode/descriptor comparison used for exact historical log candidate."
+    }
+  ],
+  "liveReadOnly": {
+    "observedAtUtc": "2026-09-29T14:46:25Z",
+    "containers": [
+      {
+        "container": "/dc-saas-ordersvr",
+        "imageId": "sha256:edc9fa11aea0bac6584b71e9c9bdb71a721dd0d6c73f2341ec3e0b0ff9eee721",
+        "running": true,
+        "oomKilled": false,
+        "restartCount": 0
+      },
+      {
+        "container": "/dc-saas-ordersvr-b",
+        "imageId": "sha256:edc9fa11aea0bac6584b71e9c9bdb71a721dd0d6c73f2341ec3e0b0ff9eee721",
+        "running": true,
+        "oomKilled": false,
+        "restartCount": 0
+      },
+      {
+        "container": "/dc-saas-tradesvr",
+        "imageId": "sha256:a74092669b0cee679c6be25ab8212d42497660e627b0c685d5c0750954571e51",
+        "running": true,
+        "oomKilled": false,
+        "restartCount": 0
+      },
+      {
+        "container": "/dc-saas-tradesvr-b",
+        "imageId": "sha256:a74092669b0cee679c6be25ab8212d42497660e627b0c685d5c0750954571e51",
+        "running": true,
+        "oomKilled": false,
+        "restartCount": 0
+      },
+      {
+        "container": "/dc-saas-mdsvr",
+        "imageId": "sha256:a6d06002e8776c15bd7e23e69d16617762cf419169ff77ffa2e188bd6805702d",
+        "running": true,
+        "oomKilled": false,
+        "restartCount": 0
+      },
+      {
+        "container": "/dc-saas-mdsvr-b",
+        "imageId": "sha256:a6d06002e8776c15bd7e23e69d16617762cf419169ff77ffa2e188bd6805702d",
+        "running": true,
+        "oomKilled": false,
+        "restartCount": 0
+      },
+      {
+        "container": "/dc-saas-mdsvr-c",
+        "imageId": "sha256:a6d06002e8776c15bd7e23e69d16617762cf419169ff77ffa2e188bd6805702d",
+        "running": true,
+        "oomKilled": false,
+        "restartCount": 0
+      },
+      {
+        "container": "/dc-saas-projectionsvr",
+        "imageId": "sha256:c761d1fec7253506eafda3486cbc523e134a0d5145bd258f42e575a6edf34f74",
+        "running": true,
+        "oomKilled": false,
+        "restartCount": 0
+      }
+    ],
+    "filesystems": {
+      "vmTotalKiB": 153705936,
+      "vmUsedKiB": 153689552,
+      "vmAvailableKiB": 0,
+      "vmPercentFull": 100
+    },
+    "runtimeLogKiB": 74759864,
+    "runtimeDataKiB": 43140444,
+    "projectionActiveLogBytes": 57760452608,
+    "logFrameSample": {
+      "scope": "last 3000 lines, sanitized level/frame counts only; not a proven root cause",
+      "warnLines": 168,
+      "infoLines": 20,
+      "requestGapFrames": 333,
+      "requestAsyncToPartitionFrames": 332
+    },
+    "closedHistoricalLogCandidate": {
+      "path": "/data/dc-saas-runtime/log/APSSvr.log.2026-09-27",
+      "sizeBytes": 5033408854,
+      "device": 64785,
+      "inode": 403143,
+      "openDescriptors": [],
+      "inaccessibleProcessCount": 0,
+      "descriptorsScanned": 6056,
+      "readOnly": true,
+      "authorizationGranted": false,
+      "moved": false,
+      "recheckDescriptorsAndInodeBeforeAnyArchive": true
+    }
+  },
+  "archivedOwnLabOutputs": [
+    {
+      "originalPath": "/data/dc-saas-isolated-labs/trade-snapshot-run.S7ex3XoT",
+      "currentPath": "/Users/kong/Documents/Codex/2026-09-28/chatgpt-conversation-6ab8c255-e7ac-83e9-a99c/retained-snapshot-output-20260929/trade-snapshot-run.S7ex3XoT",
+      "snapshotSha256BeforeAndAfter": "e9b92ac09cb683fae19b4cf1b5d2c2f4fe0bcbf9fe5c6d4cfc10f23abdf14890",
+      "isolationMarkersMatched": true,
+      "notMountedByRunningContainers": true,
+      "deleted": false
+    },
+    {
+      "originalPath": "/data/dc-saas-isolated-labs/trade-snapshot-run.qFp8Ka6L",
+      "currentPath": "/Users/kong/Documents/Codex/2026-09-28/chatgpt-conversation-6ab8c255-e7ac-83e9-a99c/retained-snapshot-output-20260929/trade-snapshot-run.qFp8Ka6L",
+      "snapshotSha256BeforeAndAfter": "baf6a95648cb710a31ea7ffbfa90c2c26917d34d5776ddfe78f222e9cde8d54f",
+      "isolationMarkersMatched": true,
+      "notMountedByRunningContainers": true,
+      "deleted": false
+    },
+    {
+      "originalPath": "/data/dc-saas-isolated-labs/trade-snapshot-run.zVarVzex",
+      "currentPath": "/Users/kong/Documents/Codex/2026-09-28/chatgpt-conversation-6ab8c255-e7ac-83e9-a99c/retained-snapshot-output-20260929/trade-snapshot-run.zVarVzex",
+      "snapshotSha256BeforeAndAfter": "a3c675d75bde3f61d1e0aa5c5bf87413028d986234c298718cd06bb5d4da2b7e",
+      "isolationMarkersMatched": true,
+      "notMountedByRunningContainers": true,
+      "deleted": false
+    },
+    {
+      "originalPath": "/data/dc-saas-isolated-labs/trade-snapshot-run.s1k1g1nx",
+      "currentPath": "/Users/kong/Documents/Codex/2026-09-28/chatgpt-conversation-6ab8c255-e7ac-83e9-a99c/retained-snapshot-output-20260929/trade-snapshot-run.s1k1g1nx",
+      "snapshotSha256BeforeAndAfter": "efd86fd1038023716b42ffb0c5c1670e4c192d723feba52cd93baa19e8d57637",
+      "isolationMarkersMatched": true,
+      "notMountedByRunningContainers": true,
+      "deleted": false
+    },
+    {
+      "originalPath": "/data/dc-saas-isolated-labs/trade-snapshot-run.8ZdmpA0k",
+      "currentPath": "/Users/kong/Documents/Codex/2026-09-28/chatgpt-conversation-6ab8c255-e7ac-83e9-a99c/retained-snapshot-output-20260929/trade-snapshot-run.8ZdmpA0k",
+      "snapshotSha256BeforeAndAfter": "479f70593223d6bfc0d308dfb94f7dae6c007a9a05f24dd886446adf8d624a49",
+      "isolationMarkersMatched": true,
+      "notMountedByRunningContainers": true,
+      "deleted": false
+    }
+  ],
+  "mutations": {
+    "runningServiceConfigurationOrImagesChanged": false,
+    "assignmentsChanged": false,
+    "liveDataOrJournalChanged": false,
+    "runtimeLogsMovedOrDeleted": false,
+    "periodicSnapshotsEnabled": false,
+    "isolatedInputCopyMovedOrDeleted": false,
+    "ownCompletedLabOutputsMovedRecoverably": true
+  },
+  "notQualified": [
+    "new Linux immutable candidate image",
+    "full node resource/IO capacity and large history prefix scan time",
+    "actual ZooKeeper promotion and independent nodes/fault domains",
+    "real API file-authority pure business adapters and coverage",
+    "trusted baseline/configuration/account initialization and retention/GAP",
+    "Order/MD shared lifecycle adapters",
+    "system trading TPS and load fault recovery/long stability"
+  ],
+  "next": "Get approval to recoverably archive verified closed historical log(s), recheck space/log retry behavior; then qualify new Linux image and independent small cluster. Do not activate the new lifecycle or legacy cash writes solely because unit tests passed."
+}
