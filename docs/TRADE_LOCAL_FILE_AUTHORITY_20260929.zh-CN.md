@@ -43,6 +43,8 @@ Trade 的交易状态（余额、持仓、账户交易配置、用户合约配�
 
 已核查：`TradeStateMutation.POSTING` 只是协议常量/恢复器分支，现有 Trade 业务 recorder 未发出该 mutation；普通流水的 ID 还会在 `MySqlDBTradeDao.putPostingBatch` 中生成。故即使余额/持仓/配置物化补齐，仍无法从本地提交日志独立重建资金流水。迁移要先在核心事务确定稳定流水 ID，把完整 posting 与对应余额后态一起提交，并测试重复事件、崩溃窗口和跨账户财务守恒；不能凭 Projection 读取旧 SQL 反向制造权威事件。
 
+CashIn/CashOut 还没有天然稳定的业务去重键：`CashRequest` 本身没有 request ID，`CashResult.request_id` 在当前 `CashInOutFacade` 路径未赋值，`TradeCashStateRecorder` 因此通常只能提交空 requestId。即使补上 POSTING mutation，也不能只凭日志 envelope 随机 eventId 宣称重试不会重复入金/出金；需要在 API 边界引入明确的幂等键和查询/重放契约，并核对已有调用方兼容性。
+
 ## 发布门禁与顺序
 
 1. 用只读证据确定每个老分区的起点/缺口和业务配置来源：日志、可信本地快照、Order 已提交状态与独立账务记录交叉核对。SQL 只用来比较投影滞后/差异，不能作为自动修复的唯一权威。
