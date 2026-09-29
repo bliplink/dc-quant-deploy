@@ -2,6 +2,8 @@
 
 日期：2026-09-29。范围：降低快照恢复额外内存、补齐低频分区首快照候选门槛。未做新的业务压测、故障注入或现有节点重启，未清理真实 journal、数据库或快照。
 
+后续真实 journal 副本实验、近尾 seek、双分区容量与订单镜像业务门禁见 [真实日志副本验证](TRADE_REAL_JOURNAL_RECOVERY_LAB_20260929.zh-CN.md)。下面保留 `083e1c8` 阶段的版本和测试基线，不把后续结果混入旧候选镜像。
+
 源码提交：Trade `083e1c8832e8cf6287065f3767d66edffe190359`（本地提交，未推送）。
 
 本地候选镜像：`local/tradesvr:recovery-stream-083e1c8`，Linux arm64，image ID `sha256:9781936cd58e71d20e3dfe74a3e3a060c37d4b67ffa6b81dac5eb7564b0b06de`。**尚未部署、未发布到镜像仓库**。内置 DC Common 依赖与现有 Trade 运行依赖一致，JAR SHA-256 为 `8a22afe1bd404ca5a2613a189df9133025ebc77cca990f9a202cfcaccc899329`；未混入尚未适配服务的新公共恢复原语。
