@@ -37,6 +37,8 @@ Trade 的交易状态（余额、持仓、账户交易配置、用户合约配�
 
 候选 ProjectionSvr 代码现已增加**默认关闭**的 `projection.trade.configTables.enabled` 首个切片：账户配置和用户合约配置的 UPSERT/REMOVE，可与事件归档及 watermark 在同一事务中应用，校验 location/user/security 键与 payload 一致，不把业务值拼进 SQL。它不是历史回填器，也未覆盖余额、持仓、posting；未经过全量历史重建/双写退场前，**不得在运行环境开启该开关**。上段关于“还没有物化”的表述指当前运行环境及完整业务表集，不能把这个默认关闭的候选切片算作已接管。
 
+第二个**默认关闭**的候选切片 `projection.trade.coreTables.enabled` 现在能从 `ACCOUNT_BALANCE` / `POSITION` 完整后态 mutation 生成租户隔离的 UPSERT/REMOVE，在同一事务内执行。它按既有业务表精度校验，不接受越界/缺字段并阻止 watermark 前进；未覆盖 posting、funding 去重、保险/ADL 的专属状态，也未做真实数据库事务/历史回填验收。ProjectionSvr 全量 8 个测试类 / 33 个用例通过，不能据此开启开关或停用 Trade 的 SQL 写入。
+
 ## 发布门禁与顺序
 
 1. 用只读证据确定每个老分区的起点/缺口和业务配置来源：日志、可信本地快照、Order 已提交状态与独立账务记录交叉核对。SQL 只用来比较投影滞后/差异，不能作为自动修复的唯一权威。
