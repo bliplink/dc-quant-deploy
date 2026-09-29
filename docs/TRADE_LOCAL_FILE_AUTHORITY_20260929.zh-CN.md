@@ -63,3 +63,5 @@ CashIn/CashOut 还没有天然稳定的业务去重键：`CashRequest` 本身没
 后续候选增量 `64acf8e`：现金纯计算与预留/提交/安装执行器接到真实协调器的显式候选 hook，查重返回原结果、容量跨分区预留、不确定提交保留容量并撤销 READY，安装后核对完整余额后态再推进索引覆盖。Trade 全量 **295 项**通过，Projection 56 项及隔离 MySQL 27 项一轮复验通过；当前消费者仍拒绝 v2。无自动 bean、无线上入口接线，原 `wdBalance` 的 SQL-first 行为未改；真实 API/admission、全事务覆盖、推送补齐、冷留存/历史账实和 SQL 退场仍是门禁。详见 [候选提交/安装闭环](TRADE_CASH_COMMIT_INSTALL_CANDIDATE_20260929.zh-CN.md)，不将此成绩等同于线上文件权威或异常切主验收。
 
 后续消费者候选 `3122a8d` 已增加默认关闭的现金 v2 校验和原结果查询投影，同事务写入余额/流水/结果/归档/watermark；Projection **73 项**及最终 **45 项×3 轮**隔离验证通过，Trade **295 项**复验通过。新表只属于 Projection 查询面，不能让 Trade 从它恢复或拿它充当历史权威。当前线上未升级/开开关/改表，旧 SQL writer 未退场；实际 schema 迁移、全历史对账、混合覆盖和异常/GAP/重试门禁仍在。详见 [消费者候选验收](TRADE_CASH_V2_PROJECTION_CANDIDATE_20260929.zh-CN.md)。
+
+后续混合覆盖候选 `d934291` 为严格已提交的已知 v1 非现金区间衔接现金原结果覆盖，不能越过未观察旧提交；本地文件恢复可重新证明连续覆盖，未改核心数据来源。新增 25 项后 Trade **320 项**通过，Projection **73 项＋45 项隔离 MySQL 一轮**复验通过。普通成交等真实 adapter 和旧 SQL writer 未改，可信业务后态/历史、全节点冷恢复容量和发布/GAP 仍是门禁；不据原结果索引可恢复宣称线上全业务文件权威完成。详见 [混合交易覆盖候选](TRADE_MIXED_STATE_COVERAGE_CANDIDATE_20260929.zh-CN.md)。

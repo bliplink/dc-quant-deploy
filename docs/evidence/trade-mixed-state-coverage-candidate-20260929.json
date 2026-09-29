@@ -1,0 +1,76 @@
+{
+  "date": "2026-09-29",
+  "scope": "explicit unwired mixed non-cash commit coverage candidate and synthetic file recovery",
+  "status": "PASS_WITH_LIVE_RELEASE_GATES_OPEN",
+  "tradeCommit": "d9342916ce8f6e88f83ddfe52ea02f26870d9eb1",
+  "projectionCommitUnchanged": "3122a8d0ab94d5e7a4e177951b2e4ed5ee58d38d",
+  "tradeSuite": {"classes": 65, "cases": 320, "newMixedCases": 25, "failures": 0, "errors": 0, "skipped": 0},
+  "projectionSuite": {"classes": 12, "cases": 73, "failures": 0, "errors": 0, "skipped": 0},
+  "tradeReportDirectory": "/Users/kong/Documents/Codex/.webcodex-managed-worktrees/tradesvr-rebuild-common314/target/surefire-reports",
+  "projectionMysql": {
+    "report": "/Users/kong/Documents/Codex/.webcodex-managed-worktrees/projectionsvr-fb701727-b941-4ad3-b85b-f38a97872700/target/trade-projection-offline.x4tbtM3b/result.json",
+    "version": "8.0.36", "cases": 45, "rerunsThisSlice": 1, "status": "PASS",
+    "syntheticOnly": true, "actualCashProducerResultAndDependencyHashesUnchanged": true,
+    "liveClusterTouched": false, "liveCashIdempotencyCovered": false,
+    "cashV2DefaultOff": true, "coreRecoveryFromProjectionSupported": false,
+    "hostPorts": false, "externalNetwork": false, "liveConfigOrDataMounted": false,
+    "allOwnedTemporaryContainersRemoved": true
+  },
+  "classSha256": {
+    "TradeStateCoordinator": "bd62926932be46034202d3ef9bf58ddd641b3b6919f95d5a99c97e51f735601e",
+    "TradeCashRequestLedger": "09243b894175f70e417c344015a2d84434d4d48f48e34a0a16bea956bed80569",
+    "TradeNonCashStateCoverage": "8e49d08511bf6801c36eef56bb1976c66676ad130e32ba0e09efe60329c6de34",
+    "TradeMixedStateCoverageTest": "bc0bf6557438441092aacf091426d08ea7a67474412619c5d7ec44435ed1bebe"
+  },
+  "candidate": {
+    "automaticComponentOrLiveRecorderWiring": false,
+    "exactPreviousCoverageRequired": true,
+    "legacyUnobservedCommitsCannotBeSkipped": true,
+    "cashEffectsAndUnknownProtocolRejectedBeforeAppend": true,
+    "strictMatchingStateAndCommitReplicaAcksRequired": true,
+    "installAndVerifyTrustedCallbackRequired": true,
+    "fullFinancialCalculationOrAllFieldSchemaValidator": false,
+    "cashOriginalRecordsInsertedDeletedOrEvictedByNeutralInterval": false,
+    "ownedPendingReservationBlocksNeutralInterval": true,
+    "uncertainAppendInstallOrPublicationRevokesReady": true,
+    "authorityAndJournalTailRecheckedAfterInstallAndPublication": true,
+    "oldCashCandidateAlsoUsesFinalAuthorityAndTailChecks": true
+  },
+  "syntheticCoverage": [
+    "cash/non-cash/cash and original first response after balance changes",
+    "actual ordinary execution recorder with explicit test-only adapter",
+    "multi-entity images and v3 snapshot with mixed committed delta",
+    "primary and replica Chronicle files closed/reopened; not promotion",
+    "exact/stale/missing coverage and assignment epoch recovery",
+    "same/foreign partition pending capacity and full index without eviction",
+    "v1 disguised cash, future effects, duplicate/malformed and Unicode identities",
+    "actual execution/lifecycle dedupe identities and REMOVE replay",
+    "state/commit ACK identity/epoch/sequence mismatch and ACK loss",
+    "dirty tail remains fenced, no history truncation",
+    "partial/failed verification, fatal Error and publication failure",
+    "frozen input/callback DTO and concurrent cash held behind partition barrier",
+    "authority and unexpected journal movement during install/publication"
+  ],
+  "liveCoreReadOnlyCheck": {
+    "checkedAtUtc": "2026-09-29 09:09:40 UTC", "containers": 8,
+    "allRunning": true, "restartCountEach": 0, "anyOomKilled": false,
+    "originalImagesUnchanged": true, "provesBusinessWritableOrHa": false
+  },
+  "liveDeploymentRestartConfigurationAssignmentOrSchemaChange": false,
+  "historicalImportRewriteTruncationOrFakeBaseline": false,
+  "liveCashEntryWiredOrOldSqlWriterRetired": false,
+  "allLiveMixedAdaptersIntegrated": false,
+  "wholeNodeColdRecoveryCapacityQualified": false,
+  "durableOutboxOrColdRetentionQualified": false,
+  "coreTcpProjectionMixedEndToEndFlowQualified": false,
+  "tcpProcessFaultPromotionStressOrTpsMeasured": false,
+  "rpoRtoQuorumLeaseOrCrossHostHaQualified": false,
+  "openGates": [
+    "whole-node trusted cold recovery capacity reservation before READY/admission",
+    "every real ordinary/configuration/funding/insurance/ADL post-state adapter and risk/financial verification",
+    "authenticated cash API identity/compatibility and trusted history reconciliation",
+    "durable cold identity/posting retention and publication/Projection GAP convergence",
+    "Order/Trade/MD reusable adapters, actual replica takeover budget and controlled faults",
+    "small admission, tiered trading TPS and long stability only after correctness/recovery gates"
+  ]
+}
