@@ -1,0 +1,18 @@
+{
+  "schemaVersion": 1,
+  "releaseId": "cluster-dev-reset-connector-20260929",
+  "genericCommon": {
+    "gav": "io.github.bliplink:com.app.common:3.0.14",
+    "sha256": "542d25a3c7345c2d25806fc7c975465e96ff21ac5151dd8c35f13520c006396c"
+  },
+  "sourcePolicy": "committed archives only; uncommitted user changes preserved and excluded",
+  "components": [
+    {
+      "name": "connector",
+      "repository": "/Users/kong/Documents/Codex/2026-09-19/chatgpt-conversation-6aae3d3b-62a4-83ee-bff4-3/work/dc-saas-build/src/connector",
+      "revision": "a6d3f480fdc2cdc41d1031195d60a6b5e84a9a05",
+      "type": "library",
+      "image": null
+    }
+  ]
+}

@@ -1,4 +1,5 @@
 .env.prod
+.env.reset-*
 .env.prod.bak*
 .last_backup
 .compose.config.check.yaml

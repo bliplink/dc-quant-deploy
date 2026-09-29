@@ -1,0 +1,116 @@
+{
+  "schemaVersion": 1,
+  "releaseId": "cluster-dev-reset-20260929",
+  "genericCommon": {
+    "gav": "io.github.bliplink:com.app.common:3.0.14",
+    "sha256": "542d25a3c7345c2d25806fc7c975465e96ff21ac5151dd8c35f13520c006396c"
+  },
+  "sourcePolicy": "committed archives only; uncommitted user changes preserved and excluded",
+  "components": [
+    {
+      "name": "common",
+      "repository": "/Users/kong/Documents/Codex/.webcodex-managed-worktrees/common-4810db6d-d4fe-4262-ab5f-5e9250282152",
+      "revision": "c234682e27c463e173288f88b7b691583cf26d9a",
+      "type": "library",
+      "image": null
+    },
+    {
+      "name": "gateway",
+      "repository": "/Users/kong/Documents/Codex/.webcodex-managed-worktrees/gateway-636143ce-590d-4504-9802-45ec28e5676c-7d4b6294-4713-4f81-b079-ee7e461cc30c",
+      "revision": "e5cc73932acd9eca820714a21733e12c13da6d0c",
+      "type": "java",
+      "image": "local/dc-saas-gateway:cluster-dev-reset-20260929"
+    },
+    {
+      "name": "ordersvr",
+      "repository": "/Users/kong/Documents/Codex/.webcodex-managed-worktrees/ordersvr-callback-batch-opt",
+      "revision": "2d4a3059d12392a87ae7758d86e48ea0f0642f74",
+      "type": "java",
+      "image": "local/dc-saas-ordersvr:cluster-dev-reset-20260929"
+    },
+    {
+      "name": "tradesvr",
+      "repository": "/Users/kong/Documents/Codex/.webcodex-managed-worktrees/tradesvr-rebuild-common314",
+      "revision": "31986253ed36117104b5b67b6d3cb2f3e0fefbfb",
+      "type": "java",
+      "image": "local/dc-saas-tradesvr:cluster-dev-reset-20260929"
+    },
+    {
+      "name": "projectionsvr",
+      "repository": "/Users/kong/Documents/Codex/.webcodex-managed-worktrees/projectionsvr-fb701727-b941-4ad3-b85b-f38a97872700",
+      "revision": "3122a8d0ab94d5e7a4e177951b2e4ed5ee58d38d",
+      "type": "java",
+      "image": "local/dc-saas-projectionsvr:cluster-dev-reset-20260929"
+    },
+    {
+      "name": "mdsvr",
+      "repository": "/Users/kong/Documents/Codex/.webcodex-managed-worktrees/mdsvr-7e8673e9-bc61-4ebf-acf2-f6f561028ae4",
+      "revision": "d3c1f2f27de9233bfafd7fa67b70d3365b1d8bf9",
+      "type": "java",
+      "image": "local/dc-saas-mdsvr:cluster-dev-reset-20260929"
+    },
+    {
+      "name": "apssvr",
+      "repository": "/Users/kong/Documents/Codex/.webcodex-managed-worktrees/apssvr-6b523639-4707-43dc-9551-da6e7afa32d7",
+      "revision": "c61ba05ee064179c69114360bb54f226830cb38d",
+      "type": "java",
+      "image": "local/dc-saas-apssvr:cluster-dev-reset-20260929"
+    },
+    {
+      "name": "adminsvr",
+      "repository": "/Users/kong/Documents/Codex/.webcodex-managed-worktrees/adminsvr-f64db6f0-5d11-46ba-8cfc-4f6b2e98c531",
+      "revision": "353be0c22f95fa063d1bf9fa832fa3aa318870d0",
+      "type": "java",
+      "image": "local/dc-saas-adminsvr:cluster-dev-reset-20260929"
+    },
+    {
+      "name": "managersvr",
+      "repository": "/Users/kong/Documents/Codex/.webcodex-managed-worktrees/managersvr-runtime-lockfix",
+      "revision": "6a8ddbcd9e33bc49001021ff8e108ab07d01fd04",
+      "type": "java",
+      "image": "local/dc-saas-managersvr:cluster-dev-reset-20260929"
+    },
+    {
+      "name": "robotsvr",
+      "repository": "/Users/kong/Documents/Codex/.webcodex-managed-worktrees/robotsvr-21477625-4e5f-43e4-b365-9785b6ac5194",
+      "revision": "69cdc3f7d8abd64bdd7f17d32d04a4324dd5c8de",
+      "type": "java",
+      "image": "local/dc-saas-robotsvr:cluster-dev-reset-20260929"
+    },
+    {
+      "name": "loginsvr",
+      "repository": "/Users/kong/Documents/Codex/2026-09-19/chatgpt-conversation-6aae3d3b-62a4-83ee-bff4-3/work/dc-saas-build/src/loginsvr",
+      "revision": "000c5da59955527e234fbbc79cb3d0086ed3936b",
+      "type": "java",
+      "image": "local/dc-saas-loginsvr:cluster-dev-reset-20260929"
+    },
+    {
+      "name": "liqsvr",
+      "repository": "/Users/kong/Documents/Codex/2026-09-19/chatgpt-conversation-6aae3d3b-62a4-83ee-bff4-3/work/dc-saas-build/src/liqsvr",
+      "revision": "2ed57377d4fd906a3879d3507efdba1d70401610",
+      "type": "java",
+      "image": "local/dc-saas-liqsvr:cluster-dev-reset-20260929"
+    },
+    {
+      "name": "trade-web",
+      "repository": "/Users/kong/Documents/Codex/2026-09-19/chatgpt-conversation-6aae3d3b-62a4-83ee-bff4-3/work/dc-saas-build/src/trade-web",
+      "revision": "ee3935e963c0855f081f719ff90bf74c5c8d8f1b",
+      "type": "web",
+      "image": "local/dc-saas-trade-web:cluster-dev-reset-20260929"
+    },
+    {
+      "name": "tenant-web",
+      "repository": "/Users/kong/Documents/Codex/2026-09-19/chatgpt-conversation-6aae3d3b-62a4-83ee-bff4-3/work/dc-saas-build/src/tenant-web",
+      "revision": "1314bcbe35c9c83af5c07d00e48752bd78d480cb",
+      "type": "web",
+      "image": "local/dc-saas-tenant-web:cluster-dev-reset-20260929"
+    },
+    {
+      "name": "platform-web",
+      "repository": "/Users/kong/Documents/Codex/2026-09-19/chatgpt-conversation-6aae3d3b-62a4-83ee-bff4-3/work/dc-saas-build/src/platform-web",
+      "revision": "add1737471bde737d90fcb21c79f124efb185d2a",
+      "type": "web",
+      "image": "local/dc-saas-platform-web:cluster-dev-reset-20260929"
+    }
+  ]
+}

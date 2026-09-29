@@ -649,9 +649,31 @@ ensure_trade_cluster_assignments() {
   existing_output="$({ printf 'ls /dc/cluster/tradesvr/partitions\nquit\n'; } | docker exec -i -e CLIENT_JVMFLAGS=-Djava.security.auth.login.config=/conf/jaas.ini dc-saas-zookeeper zkCli.sh -server "127.0.0.1:${ZOOKEEPER_PORT}" 2>&1 || true)"
   existing_count="$(grep -oE 'P[0-9]{3}' <<<"${existing_output}" | sort -u | wc -l | tr -d ' ' || true)"
   if [[ "${existing_count}" == "256" ]]; then
-    log "ZooKeeper TradeSvr assignments are already ready: 256 partitions."
+    command -v python3 >/dev/null 2>&1 || die "python3 is required to validate/migrate TradeSvr assignments."
+    local migration_plan migration_output
+    migration_plan="$(mktemp)"
+    if ! migration_output="$(python3 "${SCRIPT_DIR}/tests/migrate_trade_cluster_assignments_host.py" \
+      --zk-container dc-saas-zookeeper \
+      --zk-server "127.0.0.1:${ZOOKEEPER_PORT}" \
+      --partition-root /dc/cluster/tradesvr/partitions \
+      --partitions 256 \
+      --plan "${migration_plan}" \
+      --apply \
+      --confirm-root /dc/cluster/tradesvr/partitions 2>&1)"; then
+      rm -f -- "${migration_plan}"
+      printf '%s\n' "${migration_output}" >&2
+      die "Could not validate/migrate existing TradeSvr partition assignments."
+    fi
+    rm -f -- "${migration_plan}"
+    printf '%s\n' "${migration_output}"
+    grep -Fq 'migration=PASS partitions=256' <<<"${migration_output}" ||
+      die "TradeSvr assignment v3 migration did not report PASS."
+    log "ZooKeeper TradeSvr assignments are ready: 256 protocol-v3 partitions."
     return 0
   fi
+  [[ "${existing_count}" == "0" ]] ||
+    die "Expected 0 or 256 TradeSvr assignments before initialization, found ${existing_count}."
+
   local commands output status count partition node replica
   commands="$(mktemp)"
   {
@@ -661,8 +683,8 @@ ensure_trade_cluster_assignments() {
     printf 'create /dc/cluster/tradesvr/partitions x\n'
     for ((partition=0; partition<256; partition++)); do
       if (( partition % 2 == 0 )); then node=TradeSvrA; replica=TradeSvrB; else node=TradeSvrB; replica=TradeSvrA; fi
-      printf 'create /dc/cluster/tradesvr/partitions/P%03d {"partitionId":"P%03d","epoch":1,"primary":"%s","replica":"%s","state":"READY"}\n' \
-        "${partition}" "${partition}" "${node}" "${replica}"
+      printf 'create /dc/cluster/tradesvr/partitions/P%03d {"partitionId":"P%03d","epoch":1,"assignmentVersion":1,"protocolVersion":3,"primary":"%s","replica":"%s","replicas":["%s"],"learners":[],"placementGroup":"","nodePool":"trade-ab","state":"READY"}\n' \
+        "${partition}" "${partition}" "${node}" "${replica}" "${replica}"
     done
     printf 'quit\n'
   } > "${commands}"
@@ -674,7 +696,7 @@ ensure_trade_cluster_assignments() {
   output="$({ printf 'ls /dc/cluster/tradesvr/partitions\nquit\n'; } | docker exec -i -e CLIENT_JVMFLAGS=-Djava.security.auth.login.config=/conf/jaas.ini dc-saas-zookeeper zkCli.sh -server "127.0.0.1:${ZOOKEEPER_PORT}" 2>&1)"
   count="$(grep -oE 'P[0-9]{3}' <<<"${output}" | sort -u | wc -l | tr -d ' ')"
   [[ "${count}" == "256" ]] || die "Expected 256 TradeSvr assignments, found ${count}."
-  log "ZooKeeper TradeSvr assignments are ready: 256 partitions, alternating A/B primaries."
+  log "ZooKeeper TradeSvr assignments are ready: 256 protocol-v3 partitions, alternating A/B primaries."
 }
 
 ensure_md_cluster_assignments() {
@@ -973,6 +995,9 @@ validate_runtime_capacity
 validate_initial_ports
 prepare_runtime_directories
 "${SCRIPT_DIR}/generate-saas-configs.sh" "${ENV_FILE}"
+if [[ -n "${SAAS_FRESH_TEST_RESET_PROOF:-}" ]]; then
+  python3 "${SCRIPT_DIR}/tests/configure-bounded-test-logs.py" --runtime-root "${DEPLOY_ROOT}"
+fi
 verify_ghcr_access
 
 compose config --quiet
@@ -1008,6 +1033,14 @@ wait_for_health dc-saas-zookeeper 120
   ensure_order_cluster_assignments
   ensure_trade_cluster_assignments
   ensure_md_cluster_assignments
+if [[ -n "${SAAS_FRESH_TEST_RESET_PROOF:-}" ]]; then
+  # Explicit disposable-test genesis only. Ordinary deploy/recovery NEVER seeds lost state.
+  python3 "${SCRIPT_DIR}/tests/bootstrap-trade-empty-genesis.py" \
+    --runtime-root "${DEPLOY_ROOT}" \
+    --reset-proof "${SAAS_FRESH_TEST_RESET_PROOF}" \
+    --trade-image "${TRADESVR_IMAGE_REPOSITORY}:${TRADESVR_TAG}" \
+    --zk-port "${ZOOKEEPER_PORT}"
+fi
 apply_mysql_migrations
 provision_platform_admin
 provision_robot_runtime_identity

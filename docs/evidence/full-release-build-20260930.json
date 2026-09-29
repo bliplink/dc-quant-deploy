@@ -1,0 +1,202 @@
+{
+  "releaseId": "cluster-dev-reset-20260929",
+  "mavenImage": "sha256:e3c149f44c95b0e9dd131862b3df67b3f061f7f6f3898a87b170564b3a943611",
+  "jreImage": "sha256:b8039096ac6396135dc864690ae785a30e6ad6d7614c6cd1f1ba180c85a56845",
+  "components": {
+    "common": {
+      "revision": "c234682e27c463e173288f88b7b691583cf26d9a",
+      "image": null,
+      "imageId": null,
+      "tests": {
+        "suites": 7,
+        "tests": 34,
+        "failures": 0,
+        "errors": 0,
+        "skipped": 0
+      },
+      "cachedWebBases": null
+    },
+    "gateway": {
+      "revision": "e5cc73932acd9eca820714a21733e12c13da6d0c",
+      "image": "local/dc-saas-gateway:cluster-dev-reset-20260929",
+      "imageId": "sha256:b6444a94fc8fe78494653541f8c71e7166c235cce322cc311da9c7808d48c5d8",
+      "tests": {
+        "suites": 4,
+        "tests": 16,
+        "failures": 0,
+        "errors": 0,
+        "skipped": 0
+      },
+      "cachedWebBases": null
+    },
+    "ordersvr": {
+      "revision": "2d4a3059d12392a87ae7758d86e48ea0f0642f74",
+      "image": "local/dc-saas-ordersvr:cluster-dev-reset-20260929",
+      "imageId": "sha256:0c49bd51f5793f401adae3e224aef9d4780c877257e17446ecccda6f21f493da",
+      "tests": {
+        "suites": 60,
+        "tests": 222,
+        "failures": 0,
+        "errors": 0,
+        "skipped": 0
+      },
+      "cachedWebBases": null
+    },
+    "projectionsvr": {
+      "revision": "3122a8d0ab94d5e7a4e177951b2e4ed5ee58d38d",
+      "image": "local/dc-saas-projectionsvr:cluster-dev-reset-20260929",
+      "imageId": "sha256:6b6b0ba39d066caf9e0717750c2f3995a027c765fbc1a2aaefa66b3a1c0f5658",
+      "tests": {
+        "suites": 12,
+        "tests": 73,
+        "failures": 0,
+        "errors": 0,
+        "skipped": 0
+      },
+      "cachedWebBases": null
+    },
+    "tradesvr": {
+      "revision": "31986253ed36117104b5b67b6d3cb2f3e0fefbfb",
+      "image": "local/dc-saas-tradesvr:cluster-dev-reset-20260929",
+      "imageId": "sha256:970ccbabe51047e69931fd125f842616d1da2a35eb55d827dac0bd041d875084",
+      "tests": {
+        "suites": 71,
+        "tests": 396,
+        "failures": 0,
+        "errors": 0,
+        "skipped": 0
+      },
+      "cachedWebBases": null
+    },
+    "mdsvr": {
+      "revision": "d3c1f2f27de9233bfafd7fa67b70d3365b1d8bf9",
+      "image": "local/dc-saas-mdsvr:cluster-dev-reset-20260929",
+      "imageId": "sha256:3c13ddef26879b78300ad53ff5eff2307e3b20179cd771036b190e8c32455468",
+      "tests": {
+        "suites": 14,
+        "tests": 40,
+        "failures": 0,
+        "errors": 0,
+        "skipped": 0
+      },
+      "cachedWebBases": null
+    },
+    "adminsvr": {
+      "revision": "353be0c22f95fa063d1bf9fa832fa3aa318870d0",
+      "image": "local/dc-saas-adminsvr:cluster-dev-reset-20260929",
+      "imageId": "sha256:0193df88cdef34ef8bcb89448bd4d2bdb4f968e80a0d39502cc68049b47fee8b",
+      "tests": {
+        "suites": 14,
+        "tests": 59,
+        "failures": 0,
+        "errors": 0,
+        "skipped": 1
+      },
+      "cachedWebBases": null
+    },
+    "managersvr": {
+      "revision": "6a8ddbcd9e33bc49001021ff8e108ab07d01fd04",
+      "image": "local/dc-saas-managersvr:cluster-dev-reset-20260929",
+      "imageId": "sha256:512561f9c896aedecb1edad9451db9d4155c8d3072eb926a5a9df2e3b2555738",
+      "tests": {
+        "suites": 15,
+        "tests": 67,
+        "failures": 0,
+        "errors": 0,
+        "skipped": 0
+      },
+      "cachedWebBases": null
+    },
+    "robotsvr": {
+      "revision": "69cdc3f7d8abd64bdd7f17d32d04a4324dd5c8de",
+      "image": "local/dc-saas-robotsvr:cluster-dev-reset-20260929",
+      "imageId": "sha256:1729a65e44850dd92d2b8fffd7d23488aa7d8a162c5c5aa43df1de776332d3bb",
+      "tests": {
+        "suites": 14,
+        "tests": 96,
+        "failures": 0,
+        "errors": 0,
+        "skipped": 0
+      },
+      "cachedWebBases": null
+    },
+    "loginsvr": {
+      "revision": "000c5da59955527e234fbbc79cb3d0086ed3936b",
+      "image": "local/dc-saas-loginsvr:cluster-dev-reset-20260929",
+      "imageId": "sha256:8864a9d3f8edee68eb651d17b66b15630f8faa3916f1b0a8b14af76bebe9b95f",
+      "tests": {
+        "suites": 13,
+        "tests": 40,
+        "failures": 0,
+        "errors": 0,
+        "skipped": 0
+      },
+      "cachedWebBases": null
+    },
+    "liqsvr": {
+      "revision": "2ed57377d4fd906a3879d3507efdba1d70401610",
+      "image": "local/dc-saas-liqsvr:cluster-dev-reset-20260929",
+      "imageId": "sha256:b4045db88f4a59fca537050c9458c11d75f4d88342d42ee732c092172412e0e7",
+      "tests": {
+        "suites": 5,
+        "tests": 15,
+        "failures": 0,
+        "errors": 0,
+        "skipped": 0
+      },
+      "cachedWebBases": null
+    },
+    "tenant-web": {
+      "revision": "1314bcbe35c9c83af5c07d00e48752bd78d480cb",
+      "image": "local/dc-saas-tenant-web:cluster-dev-reset-20260929",
+      "imageId": "sha256:69e295dfecb87bfd7b546e4b3f7b9b75c3bc6aa16b8e06001e202eee06871418",
+      "tests": null,
+      "cachedWebBases": {
+        "node": "sha256:b27e719ecbfef153e13fd24e8341736733bf2658b229677eb21ff57ff5d7fb29",
+        "nginxRuntime": "sha256:30a81a822e10642cde33aa198fca7af802bfcdfad5aca305b8c7d93536d071ab",
+        "dockerfileSha256": "de5b61f000232bd801c631e18ab53401c3691e7b0f01fd9d30da97a19f0da81e"
+      }
+    },
+    "platform-web": {
+      "revision": "add1737471bde737d90fcb21c79f124efb185d2a",
+      "image": "local/dc-saas-platform-web:cluster-dev-reset-20260929",
+      "imageId": "sha256:ccc44fbb44da1dcba21e6c249958ec440f1fa6d9265633144b39d6e131cf819c",
+      "tests": null,
+      "cachedWebBases": {
+        "node": "sha256:b27e719ecbfef153e13fd24e8341736733bf2658b229677eb21ff57ff5d7fb29",
+        "nginxRuntime": "sha256:5a7a5318ea0bff04f36d84f93ab0f062cc4a5bfb7b472bcc06d381416b42a953",
+        "dockerfileSha256": "de5b61f000232bd801c631e18ab53401c3691e7b0f01fd9d30da97a19f0da81e"
+      }
+    },
+    "apssvr": {
+      "revision": "c61ba05ee064179c69114360bb54f226830cb38d",
+      "image": "local/dc-saas-apssvr:cluster-dev-reset-20260929",
+      "imageId": "sha256:910215645ed5e1284bf90d0e5295e9954226d85c142b195c28aa1e82617f6d8f",
+      "tests": {
+        "suites": 8,
+        "tests": 28,
+        "failures": 0,
+        "errors": 0,
+        "skipped": 0
+      },
+      "cachedWebBases": null
+    },
+    "trade-web": {
+      "revision": "ee3935e963c0855f081f719ff90bf74c5c8d8f1b",
+      "image": "local/dc-saas-trade-web:cluster-dev-reset-20260929",
+      "imageId": "sha256:4335e0f08a7354b362e2d2d8b6bb754214e8550acb9b52df2ee0d7c5538eb319",
+      "tests": null,
+      "cachedWebBases": {
+        "node": "sha256:5c66ecb30d2469b2203e1d79ce1e372afcd325a14ea40468586f5be29bcbb60a",
+        "nginxRuntime": "sha256:a42fcae6a24f7a9e08d6ab02b940c11d025ca47ee7a57abcf0f377b296878cda",
+        "dockerfileSha256": "95d4cbbaddf0af3c32b8368458074346049d4a6a268d297850b4f0d6721af5f1"
+      }
+    }
+  },
+  "genesisSafetyTests": 7,
+  "resetSafetyTests": 8,
+  "assignmentMigrationTests": 3,
+  "tradeWebUnitTests": 19,
+  "deploymentStatus": "built-not-yet-installed",
+  "backupPolicy": "none for disposable dc-saas test data; retain code and installation inputs"
+}
