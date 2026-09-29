@@ -82,7 +82,9 @@ taker_clordid="$(python3 -c 'import json,sys; print(json.loads(sys.argv[1])["tak
   die "broker reconnect was not verified"
 
 log "Verifying authoritative cash and execution persistence."
-db_result="$(mysql_exec dc -e "
+persisted="false"
+for ((attempt=1; attempt<=30; attempt++)); do
+  db_result="$(mysql_exec dc -e "
 SELECT COUNT(*) FROM dc_users_posting
  WHERE location='${BROKER_E2E_LOCATION}'
    AND user_id='${BROKER_E2E_MAKER_CUSTOMER_ID}'
@@ -106,13 +108,17 @@ SELECT COUNT(*) FROM dc_orders_execorders e
    AND e.user_id='${BROKER_E2E_TAKER_CUSTOMER_ID}'
    AND o.clord_id='${taker_clordid}' AND e.last_qty > 0;
 ")"
-rows=()
-while IFS= read -r row || [[ -n "${row}" ]]; do
-  rows+=("${row}")
-done <<<"${db_result}"
-[[ "${#rows[@]}" -eq 5 ]] || die "Unexpected Broker DB verification output: ${db_result}"
-for i in 0 1 2 3 4; do
-  (( rows[i] >= 1 )) || die "Broker DB assertion ${i} failed: ${db_result}"
+  rows=()
+  while IFS= read -r row || [[ -n "${row}" ]]; do
+    rows+=("${row}")
+  done <<<"${db_result}"
+  if [[ "${#rows[@]}" -eq 5 ]] &&
+     (( rows[0] >= 1 && rows[1] >= 1 && rows[2] >= 1 && rows[3] >= 1 && rows[4] >= 1 )); then
+    persisted="true"
+    break
+  fi
+  (( attempt == 30 )) || sleep 1
 done
+[[ "${persisted}" == "true" ]] || die "Broker DB projection did not converge within 30s: ${db_result}"
 
 log "PASS: Broker API customer management/trading/cash/reconnect/isolation flow succeeded."
