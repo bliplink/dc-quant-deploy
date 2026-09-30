@@ -3,6 +3,8 @@
 > 更新时间：2026-09-30
 > 目标读者：新的 ChatGPT/Codex 会话、另一 GitHub/ChatGPT 账号、接手研发/部署人员。
 > 开始任何修改前，请先完整阅读本文，并重新 fetch 对应仓库最新分支。文中的 commit 仅是快照，不是永久锁定版本。
+>
+> 当前问题清单：[`docs/CURRENT_ISSUES_20261001.zh-CN.md`](docs/CURRENT_ISSUES_20261001.zh-CN.md)
 
 ---
 
