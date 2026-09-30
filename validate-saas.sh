@@ -325,8 +325,13 @@ clickhouse_view="$(
 
 docker exec dc-saas-trade-web wget -qO- "http://127.0.0.1:${WEB_LISTEN_PORT}/healthz" | grep -q '^ok$' ||
   die "dc-trade-web health endpoint failed."
-docker exec dc-saas-trade-web wget -qO- "http://127.0.0.1:${WEB_LISTEN_PORT}/" | grep -qi '<title>Trade</title>' ||
-  die "dc-trade-web index page is not the trade application."
+trade_web_index="$(docker exec dc-saas-trade-web wget -qO- "http://127.0.0.1:${WEB_LISTEN_PORT}/")"
+printf '%s' "${trade_web_index}" | grep -q '<div id="main"' ||
+  die "dc-trade-web index page is missing the trade application root."
+printf '%s' "${trade_web_index}" | grep -Eq 'res/main_[^"]+\.js' ||
+  die "dc-trade-web index page is missing its compiled main JS bundle."
+printf '%s' "${trade_web_index}" | grep -Eq 'res/main_[^"]+\.css' ||
+  die "dc-trade-web index page is missing its compiled main CSS bundle."
 
 wait_for_gateway_route() {
   local server="$1" response start
