@@ -56,3 +56,14 @@ OpenTradingCore 的目标不是只交付交易页面或做市机器人，而是�
 - 08:05 再次在仍运行的 A 上观测到同类冷扫，改为 P050 从 seq 1 反复读约 26 万条；说明这不只属于已故障的 P019。已从 A 实际字节码确认 `computeIfAbsent` 水位缓存和增量 replay 确实存在，排除了“镜像标签新、类文件旧”。提交 `0ad1373` 增加冷扫/重置原因日志；提交 `943b6dd` 将尾序号读取移入缓存锁，并以双线程确定性交错测试确认只解码新增记录，两者已推送至同一 OrderSvr 分支。**修复仍未部署**，所以线上是否消除 P019/P050 的冷扫要待安全滚动后验证。
 - 次日继续验证：使用 P019 事发前日志副本和原快照元数据，`943b6dd` 可在约 1.3 秒验证短尾快照边界并算出 committedStateSeq 718976、commitMarkerSeq 718982、lastStateSeq 718985、`uncommittedTail=true`，证明提速没有把未提交状态当成已提交。带认证管理员会话的 `verify-order-cluster-state-host.sh` 真实跑出 256/256 route PASS（255 分区 epoch 6、P019 epoch 7）。验收脚本已改为正式模式自动取得 Demo 管理员会话后逐分区检查；首次初始化无账户时，仅显式 `ORDER_CLUSTER_VERIFY_ALLOW_AUTH_SKIP=true` 允许 assignment/snapshot 预检，并明确输出 PARTIAL，不能再把未扫描路由报作 PASS。另修正 ZK JSON `partitionId` 不在首字段时漏掉 P019 的解析问题。
 - 已构建但**未运行**的固定本地镜像：`local/dc-saas-ordersvr:sha-943b6dd`，image ID `sha256:f37734f6c93a972737ceed13e3c4154ad839fda0666b84819209010e863de9d5`，Common 依赖仍为 `3.0.14`。正式验证脚本修复在 deploy 隔离分支提交 `5dffe73`，强制认证模式和显式 PARTIAL 模式均在当前本地集群实测。当前 A/B 仍跑旧 `2d4a305` 镜像，**不能把镜像已构建误写为已部署**。
+
+## 2026-10-01 Order A/B 在线替换验收（10:13–10:17 CST）
+
+本节覆盖上文“已构建但未运行”的旧状态。用户明确要求**Robot 不停机**，因此保持 Robot、Trade、GW、Projection 运行，只逐个重建 Order 容器；没有清理持久数据、强制标记 READY 或批量升纪元。使用固定本地镜像 `local/dc-saas-ordersvr:sha-943b6dd`，不是等待中的 GitHub Actions 产物。
+
+- 替换前：认证逐分区路由 256/256 PASS，快照集合一致 256/256；epoch 6 有 255 个分区、P019 为 epoch 7，A/B 各 128 primary。四个启用策略 `BH8DF8/E2E001/XD6PK5/ZS1YUW` 均 `RUNNING`、各 20 张活动单。Order/Robot/Projection 无 OOM。
+- 10:13:39 CST 仅重建 OrderSvrA，镜像变为 `sha-943b6dd`；P050 在 10:14:26 记录 `ORDER_PARTITION_SAME_EPOCH_RESTART` 与 `ORDER_PARTITION_PROMOTION_READY`，随后副本追赶。恢复期间 Robot 容器未重启，但四个策略短暂 `DEGRADED/RUNTIME_FAILURE`、活动单计数暂时为 0；A 恢复后自动回到 `RUNNING/20`。认证路由 256/256、快照一致性与投影检查通过，才开始替换 B。
+- 10:15:33 CST 仅重建 OrderSvrB，镜像也变为 `sha-943b6dd`；P019 epoch 7 在 10:16:18–10:16:19 记录同纪元恢复与 READY，之后继续副本追赶。Robot 再次短暂 DEGRADED，但进程始终 0 restart、0 OOM，并自行回到四策略 `RUNNING/20`。两节点最终均 running、0 restart、0 OOM。
+- 最终认证逐分区路由 256/256 PASS、快照集合一致 256/256；分区归属和纪元未改变。全局投影一致性脚本 PASS：Order/Trade 水位尾无不匹配、无孤儿 mutation。P019 durable 水位继续到 `7:938309`，P050 到 `6:393768`。新镜像启动后的筛选日志未再出现 `ORDER_JOURNAL_REPLAY_SLOW` 或 `ORDER_PARTITION_RECOVERY_FAILED`，但这只是短窗口观察，尚不能证明长稳。
+- 结论需精确区分：**Robot 进程不停 + 策略自动恢复**已验证；**升级全程不断单/盘口不中断**未验证且本轮事实上出现 DEGRADED 窗口。两次重要分区从容器启动到 READY 约 46–47 秒，尚未做请求级 RTO、已确认订单逐笔对账或持续压测。若目标是无感滚动升级，应先实现安全的主分区排空/切主与副本追赶门禁，再替换承载该 primary 的节点；不能把本轮“自动恢复”写成“零中断”。
+- 本次仅 local 镜像晋级；`.env.reset-20260930-verify013` 中的默认 Order 镜像标签仍指向旧版。后续使用 compose 重建 Order 服务时必须显式指定固定 `sha-943b6dd` 或先完成受审的发布配置更新，否则可能回退旧镜像。Projection 的 60000ms 本地超时 override 也仍是临时缓解，配置生成器尚未统一。
