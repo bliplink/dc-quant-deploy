@@ -266,7 +266,17 @@ def main():
                        (LOCATION, USER_ID, LOCATION, closing_id))
     if Decimal(closing_exec[0][0]) != Decimal("0.0001"):
         raise RuntimeError("Closing execution projection mismatch: %s" % closing_exec)
-    log("PASS close=%s, position=0, trader active orders=0; Robot remains enabled." % closing_id)
+
+    def robot_replenished():
+        rows = sql("SELECT enabled,runtime_status,open_order_count FROM dc_tenant_robot "
+                   "WHERE location='%s' AND robot_id='%s'" % (LOCATION, robots[0][0]))
+        bids, asks = market_book()
+        return rows[0] if rows and rows[0] == ["1", "RUNNING", "20"] and len(bids) == 10 \
+            and len(asks) == 10 else None
+
+    wait("Robot replenishment after trader round trip", robot_replenished, seconds=90)
+    log("PASS close=%s, position=0, trader active orders=0; Robot RUNNING with 10+10 book." %
+        closing_id)
 
 
 if __name__ == "__main__":
