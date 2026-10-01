@@ -92,6 +92,8 @@ nginx config
 
 2026-10-01 补充：40 档 Robot 验收中的 50 轮吃单/平仓共约 100 个 `placeOrder` 请求，未出现 timeout；p95 约 7.7 ms，但最大约 2143.7 ms。测试包含开仓和 Reduce-Only 平仓，且没有逐阶段 trace，因此不能以该轮无 timeout 否定用户此前观察，也不能把 2.14 秒直接归因于 OrderSvr。同一时段 OrderSvrA 的 P050 日志有本地 journal `lockWaitMs` 约 514–747 ms、`commitAppendMs` 约 583–747 ms、回调处理约 780 ms 的慢告警；没有 CID 关联，现阶段只是值得追踪的线索。测试脚本今后对 ≥500 ms 的订单会打印 ClOrdID/阶段，便于做下一轮端到端关联。
 
+2026-10-01 18:33–18:37 复测补充：隔离租户 `EX2ENF` 30 轮连续吃单/平仓 PASS；约 60 次下单 p95 9.9 ms，最大一笔 Reduce-Only 平仓 1316.4 ms，CID `RPL-18335156F2-C7-0`。GW 18:34:49.050 收到、18:34:50.389 回包；同窗无 Order journal/state 慢告警。故此前 P050 锁等待不是这笔慢单的已证根因，接单门禁/同步复制/策略处理仍需分阶段计时。另一次公开盘口 `visible_full_ms=2231.6` 但观测到的金额偏离仅 112.1 ms；首个采样可能被行情查询延迟遮蔽。脚本已增加慢行情请求时戳；Order 分阶段慢日志提交 `c595bfc` 位于隔离分支 `diag/order-admission-stage-timing-20261001`，5 项聚焦测试通过，**未上运行镜像**。测试租户已正常暂停清场。
+
 需要特别区分两类情况：
 
 1. 订单确实没有进入 OrderSvr；

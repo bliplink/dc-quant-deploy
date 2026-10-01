@@ -7,6 +7,7 @@ positions. Business mutations use public/service APIs; SQL is read-only.
 """
 
 import argparse
+from datetime import datetime
 import importlib.util
 import json
 import os
@@ -26,7 +27,14 @@ ACTIVE_RUN_ID = None
 
 
 def depth():
+    started_at = datetime.now().astimezone().isoformat(timespec="milliseconds")
+    started = time.monotonic()
     entries = api.market_entries()
+    elapsed_ms = (time.monotonic() - started) * 1000
+    if elapsed_ms >= 500:
+        print("[robot-replenish] SLOW_DEPTH location=%s started_at=%s finished_at=%s duration_ms=%.1f" %
+              (api.LOCATION, started_at, datetime.now().astimezone().isoformat(timespec="milliseconds"),
+               elapsed_ms), flush=True)
     book = {}
     for side in ("0", "1"):
         rows = [(Decimal(str(x["MDEntryPx"])), Decimal(str(x["MDEntrySize"])))
@@ -61,6 +69,7 @@ def place(token, cid, side, quantity, price, close=False):
     }
     if close:
         content.update({"PositionSide": "Long", "ReduceOnly": "true"})
+    started_at = datetime.now().astimezone().isoformat(timespec="milliseconds")
     started = time.monotonic()
     try:
         api.call("OrderSvr", "placeOrder", content, token,
@@ -71,8 +80,10 @@ def place(token, cid, side, quantity, price, close=False):
         raise RuntimeError("Ambiguous placeOrder outcome for %s; inspect before retry" % cid)
     elapsed_ms = (time.monotonic() - started) * 1000
     if elapsed_ms >= 500:
-        print("[robot-replenish] SLOW_PLACE cid=%s side=%s close=%s duration_ms=%.1f" %
-              (cid, side, close, elapsed_ms), flush=True)
+        finished_at = datetime.now().astimezone().isoformat(timespec="milliseconds")
+        print("[robot-replenish] SLOW_PLACE cid=%s side=%s close=%s started_at=%s "
+              "finished_at=%s duration_ms=%.1f" %
+              (cid, side, close, started_at, finished_at, elapsed_ms), flush=True)
     return elapsed_ms
 
 
