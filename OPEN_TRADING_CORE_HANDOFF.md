@@ -10,7 +10,10 @@
 
 ## 0. 2026-10-01 最新接续点（优先于下文旧快照）
 
-- 19:06 发布/故障门禁预检曾误报 `P019` 缺失：ZooKeeper 实际返回 `P019/epoch 7/OrderSvrB primary/OrderSvrA replica/READY`，但校验和恢复脚本假定 JSON 必须以 `partitionId` 字段开头，漏掉以 `epoch` 开头的合法记录。已改为共享的 JSON 解析器并增加字段顺序/坏数据回归测试；复跑真实门禁 `256/256 READY`、双侧 256 份 snapshot 一致、Order A/B 0 restart/OOM。当前混合 epoch 为 `P019=7`、其余 255 分区 `6`，这不是本次故障注入；诊断版 Order 尚未发布，故障注入也尚未开始。
+- 订单集群的**单分区双向切换业务验收**已通过：隔离测试租户 `EX2ENF` 的 `BTCUSDT` 映射 `P110`，真实挂入并确认一笔 GTC 订单后，以 ZooKeeper 版本 CAS 将 `P110` 从 `OrderSvrA primary / B replica / epoch 6` 切到 `B primary / A replica / epoch 7`，再切回 `A primary / B replica / epoch 8`；两次新主均出现 `ORDER_PARTITION_PROMOTION_READY`，已确认订单在每次切换后仍可查，最终通过正常 `cancelAllOrder` 撤销。测试租户已恢复 `SUSPENDED`、Robot `STOPPED/0`，无活动客户单或非零持仓。脚本 `tests/run-order-live-role-reversal-e2e.py` 需要显式 `ORDER_LIVE_ROLE_REVERSAL_CONFIRM=EX2ENF:P110`，并在运行前执行完整集群门禁。**这不是节点宕机或自动接管验证**：现有生命周期管理器可响应 assignment 变化并恢复分区，但尚无控制器在节点失联后自动改派；当前双节点 `SYNC_PER_RECORD` 的副本确认门禁也会在副本不可用时拒单，不能宣称单节点继续接单已实现。
+- Order Git/运行基线已对齐：运行中的 Order A/B 仍是同一 `local/dc-saas-ordersvr:sha-943b6dd` 镜像，0 restart/OOM；其 9 个原先仅在本机的提交经审阅后已将 `943b6dd` 快进推送至远端 `saas-crypto`，完整 Maven 测试 **226/226 PASS**。慢单分阶段计时提交 `c595bfc` 仍只在隔离分支 `diag/order-admission-stage-timing-20261001`，本地诊断镜像 `local/dc-saas-ordersvr:diag-c595bfc-20261001` 已构建、**未部署**，因此尚无新的 `ORDER_NEW_ADMISSION_SLOW / ORDER_COMMAND_GATE_SLOW / ORDER_COMMAND_REPLICA_SLOW` 运行样本。要采样须按 Order 发布 runbook 成对替换 A/B、完成全分区恢复和交易门禁，不能单侧热换。
+- 单分区双向切换后再次执行真实集群校验：`256/256 READY`、A/B 主分区各 128、双侧 256 份 snapshot 一致、0 restart/OOM；当前 `P019=epoch 7`、`P110=epoch 8`、其余 254 分区 `epoch 6`。整套 `validate-saas.sh --env-file .env.reset-20260930-verify013` PASS（21 个预期容器、GW Trade/TDSvr 在线）。
+- 19:06 发布/故障门禁预检曾误报 `P019` 缺失：ZooKeeper 实际返回 `P019/epoch 7/OrderSvrB primary/OrderSvrA replica/READY`，但校验和恢复脚本假定 JSON 必须以 `partitionId` 字段开头，漏掉以 `epoch` 开头的合法记录。已改为共享的 JSON 解析器并增加字段顺序/坏数据回归测试，提交 `f8500ab` 已推送部署仓库 `saas-crypto`；复跑真实门禁通过。此条为切换测试**之前**的历史快照，当前 epoch 见上条。
 - 2026-10-01 新增真实 Demo 业务链路验收：通过公开 `ManagerSvr.tenantApplication` 申请单品种租户 `T17QGO`，自动审批及 `dc_tenant_liquidity_bootstrap=COMPLETE`，Robot 为 `NOTIONAL_ZONES/RUNNING`；**这是旧模板的 10 买 + 10 卖、20 单基线**，每侧金额按 3/3/4 区域分布，约 463 USDT。新注册交易员经 `Demo=1` 入金 1000，IOC 买入 0.0001 BTC 成交，订单/成交/Long 持仓一致；随后 Reduce-Only IOC 卖出平仓，最终持仓、占用保证金和交易员活动单均为 0。可复跑脚本：`tests/run-auto-tenant-trading-e2e.py`（现已调整为新 40 单模板；先 export 当前本机受保护 env；所有业务写入走 API，MySQL 只读验收）。此为单次业务验收，**不是**长期稳定性或外部 GA 证明。
 - **2026-10-01 流动性目标修正为总共 40 档：买 20 + 卖 20。** Robot 引擎原本支持 20/20，问题在 Admin 自动审批试用租户的默认模板仍写死 10/10 和金额区 3/3/4。`TrialLiquidityBootstrapWorker` 现改成 20/20、金额区 6/6/8、权重仍 3/3/4；Admin 63 项测试通过，提交 `0409add` 已快进推送到 `saas-crypto`，本机镜像 `local/dc-saas-adminsvr:trial-depth40-20261001`。新试用租户 `Z669FQ` 自动初始化 `COMPLETE`，Robot `RUNNING/40`；公开 `MDSvr.queryPublicMarket` 按原有设计只返回每侧前 10 档，并不表示后 10 档没有挂单。**既有** `T17QGO` 和 `E2E001` 仍是旧 10/10 配置，未静默迁移。
 - 租户管理热更新真实通过：新租户 `RTTKFL` 使用 `TenantAdmin` 会话调用 `tenantLiquidityProfileAdmin` 的 `UPSERT → APPLY`，先从 20/20 改为 15/15（Robot 30 单），再恢复 20/20（40 单），Robot 容器 ID 未改变。验收脚本：`tests/run-tenant-liquidity-hotedit-e2e.py`。首次试验 `PYFT1S` 因脚本误用普通 `WEB` 会话被控制面安全策略拒绝；没有修改该租户 Robot 参数，改为真实 `TenantAdmin` 身份后通过。
@@ -530,6 +533,6 @@ docs/DC_OPEN_API_V1_REFERENCE.zh-CN.md
 
 ## 23. 当前接手最重要的三件事
 
-1. **先修 Trade Web 黑屏，但必须从最新合并 Git 完整构建，不再做 index/JS/CSS 拼接。**
-2. **恢复 GitHub Actions 正常发布能力，把 Web 镜像统一改成 Actions 完整构建/发布。**
-3. **任何新会话开始前先读本文，先 fetch/rebase，再动代码。**
+1. **先定位 Order 1–2 秒下单长尾：按成对发布和 256 READY 门禁部署分阶段计时镜像，再用小样本关联同一 ClOrdID 的 GW、Order 和 Trade 阶段。**
+2. **完成真实节点失联自动接管设计与隔离故障注入：单分区手动双向切换已通过，但自动选主、单副本不可用时的同步/降级确认语义及回归同步尚未验收。**
+3. **公开前继续交易与 Robot 长稳、匿名盘口、租户体验、邮箱激活和外部 Broker/Trader API 真实接入门禁；新会话先以最新运行态和 Git 校验本节快照。**
