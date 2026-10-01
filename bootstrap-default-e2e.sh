@@ -23,7 +23,10 @@ verify_order_cluster_ready() {
   [[ "${ORDER_CLUSTER_ENABLED:-false}" == "true" ]] || return 0
   local verifier="${SCRIPT_DIR}/tests/verify-order-cluster-state-host.sh"
   [[ -f "${verifier}" ]] || die "Order cluster verifier is missing: ${verifier}"
-  if ! /bin/bash "${verifier}" >/dev/null 2>&1; then
+  # Before this bootstrap creates the default tenant there is no account to
+  # authenticate the 256-route scan. This explicitly requests the weaker
+  # assignment/snapshot preflight; full acceptance must run the authenticated gate.
+  if ! ORDER_CLUSTER_VERIFY_ALLOW_AUTH_SKIP=true /bin/bash "${verifier}" >/dev/null 2>&1; then
     die "Order cluster is not fully READY; recover all partitions before bootstrapping ${LOCATION}."
   fi
 }

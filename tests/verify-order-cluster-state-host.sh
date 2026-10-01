@@ -1,6 +1,16 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
+SCRIPT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
+DEPLOY_DIR="$(cd "${SCRIPT_DIR}/.." && pwd)"
+ENV_FILE="${ENV_FILE:-${DEPLOY_DIR}/.env.prod}"
+if [[ -r "${ENV_FILE}" ]]; then
+  set -a
+  # shellcheck disable=SC1090
+  . "${ENV_FILE}"
+  set +a
+fi
+
 ZK_CONTAINER="${ORDER_CLUSTER_ZK_CONTAINER:-dc-saas-zookeeper}"
 ZK_ENDPOINT="${ORDER_CLUSTER_ZK_ENDPOINT:-127.0.0.1:32181}"
 PARTITION_ROOT="${ORDER_CLUSTER_PARTITION_ROOT:-/dc/cluster/ordersvr/partitions}"
@@ -9,7 +19,7 @@ DATA_ROOT="${ORDER_CLUSTER_DATA_ROOT:-/data/dc-saas-runtime/data}"
 WEB_PORT="${WEB_LISTEN_PORT:-18088}"
 VERIFY_LEARNERS="${ORDER_CLUSTER_VERIFY_LEARNERS:-false}"
 VERIFY_SESSION_ID="${ORDER_CLUSTER_VERIFY_SESSION_ID:-}"
-SCRIPT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
+ALLOW_AUTH_SKIP="${ORDER_CLUSTER_VERIFY_ALLOW_AUTH_SKIP:-false}"
 
 log() { printf '[order-cluster-verify] %s\n' "$*"; }
 die() { printf '[order-cluster-verify] ERROR: %s\n' "$*" >&2; exit 1; }
@@ -18,6 +28,52 @@ command -v docker >/dev/null || die 'docker is required'
 docker inspect "${ZK_CONTAINER}" >/dev/null 2>&1 || die 'Docker/ZooKeeper is not readable; run with sufficient permission (sudo on Linux when required)'
 command -v python3 >/dev/null || die 'python3 is required'
 command -v curl >/dev/null || die 'curl is required'
+[[ "${ALLOW_AUTH_SKIP}" == true || "${ALLOW_AUTH_SKIP}" == false ]] ||
+  die 'ORDER_CLUSTER_VERIFY_ALLOW_AUTH_SKIP must be true or false'
+
+if [[ -z "${VERIFY_SESSION_ID}" && "${ALLOW_AUTH_SKIP}" != true ]]; then
+  [[ -n "${DEFAULT_E2E_ADMIN_PASSWORD:-}" ]] ||
+    die 'authenticated route scan requires ORDER_CLUSTER_VERIFY_SESSION_ID or DEFAULT_E2E_ADMIN_PASSWORD'
+  VERIFY_SESSION_ID="$(python3 - "${WEB_PORT}" <<'PY'
+import json
+import os
+import sys
+import urllib.request
+
+port = sys.argv[1]
+username = os.environ.get("DEFAULT_E2E_ADMIN_USERNAME", "tenantadmin")
+location = os.environ.get("DEFAULT_E2E_LOCATION", "E2E001")
+request = {
+    "serverName": "LoginSvr",
+    "method": "SYS.ATS.LOGIN",
+    "content": {
+        "method": "login",
+        "cid": "ORDER_CLUSTER_VERIFY",
+        "user_id": username,
+        "user_name": username,
+        "password": os.environ["DEFAULT_E2E_ADMIN_PASSWORD"],
+        "client_type": "Manager",
+        "Location": location,
+    },
+}
+try:
+    body = json.dumps(request, separators=(",", ":")).encode()
+    http = urllib.request.Request(
+        "http://127.0.0.1:{}/httpapi/".format(port), data=body,
+        headers={"Content-Type": "application/json"},
+    )
+    with urllib.request.urlopen(http, timeout=30) as response:
+        payload = json.load(response)
+    token = (payload.get("data") or {}).get("token")
+    if payload.get("code") != 0 or not token:
+        raise ValueError("login code {}".format(payload.get("code")))
+    print(token)
+except Exception as error:
+    print("authenticated route scan login failed: {}".format(error), file=sys.stderr)
+    sys.exit(1)
+PY
+)" || die 'cannot obtain authenticated OrderSvr verification session'
+fi
 
 work_dir="$(mktemp -d)"
 trap 'rm -rf -- "${work_dir}"' EXIT
@@ -31,7 +87,8 @@ done
 printf 'quit\n' >>"${zk_commands}"
 docker exec -i "${ZK_CONTAINER}" zkCli.sh -server "${ZK_ENDPOINT}" \
   <"${zk_commands}" >"${zk_output}" 2>&1 || true
-grep -o '{"partitionId"[^}]*}' "${zk_output}" >"${assignments}" || true
+# ZK CAS writers need not serialize partitionId as the first JSON field.
+grep -oE '\{[^}]*"partitionId"[^}]*\}' "${zk_output}" >"${assignments}" || true
 
 verify_data_root="${DATA_ROOT}"
 if [[ ! -d "${verify_data_root}" ]]; then
@@ -60,7 +117,8 @@ auth_required=false
 if grep -Fq 'AUTHENTICATED_SESSION_REQUIRED' <<<"${route_response}"; then
   [[ -z "${VERIFY_SESSION_ID}" ]] || die "authenticated OrderSvr verification session was rejected"
   auth_required=true
-  printf '[order-cluster-verify] logical OrderSvr route reached authentication gate; unauthenticated partition HTTP scan skipped.\n'
+  [[ "${ALLOW_AUTH_SKIP}" == true ]] || die 'unauthenticated partition route scan cannot be reported as PASS'
+  log 'PARTIAL: bootstrap-only; unauthenticated partition HTTP scan skipped.'
 elif ! grep -Fq 'handler:__cluster_state_verify__ does not exist.' <<<"${route_response}"; then
   die "unexpected logical OrderSvr route response: ${route_response}"
 fi
@@ -152,4 +210,8 @@ for container in "${containers[@]}"; do
   log "${container} image=${image} status=${status} restarts=${restarts} oom=${oom}"
 done
 
-log 'PASS: assignments, snapshots, route and container state are consistent.'
+if [[ "${auth_required}" == true ]]; then
+  log 'PARTIAL: assignments, snapshots and containers verified; partition routes NOT verified.'
+else
+  log 'PASS: assignments, snapshots, authenticated routes and container state are consistent.'
+fi
