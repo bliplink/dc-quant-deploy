@@ -41,3 +41,14 @@ OpenTradingCore 的目标不是只交付交易页面或做市机器人，而是�
 - 用户选择默认做市使用**模拟资金**，不自动划拨真实资金。具体额度应通过有上限的环境配置决定并记录在任务中，不能直接把 UI 示例预算当成充值金额。
 - 邮箱验证仍为公开开放前的安全门禁，目前是待办；内部功能测试不代表可公开放开申请。
 - GitHub Actions 要等下个月恢复。本地构建应固定源码 commit、构建完整镜像，并经隔离验收后晋级；不要用单独替换静态文件的方式发布。
+
+## 2026-10-01 P019 故障追因与恢复增量（约 08:00 CST）
+
+本节覆盖上文 03:10 的 P019 未恢复状态；**不是**全 256 分区的新一轮验收。
+
+- 运行中的 Order A/B 镜像源码为 `2d4a305`。P019 的 A/B 快照字节一致：epoch 6、snapshotSeq 717204、committedStateSeq 717201、commitMarkerSeq 717202。A/B 日志尾也一致，末尾 seq 718985；最后累计提交证明为 marker 718982 → state 718976，后面还有未提交的 `STATE_REMOVE`。这些尾部 mutation 不能擅自作为已确认订单恢复。同纪元重启因 `EPOCH_NOT_ADVANCED` 拒绝开放 P019 是正确的安全门禁。
+- 重启前 A 对 P019 反复从基线 seq 88961 扫约 62 万条历史，单次由约 56 秒升至 234 秒；出现 append 锁等待和 8–28 秒的批量状态写入。离线日志副本连续调用同一 watermark 对象时，第一次扫描约 4 秒、第二次约 0 毫秒，故**线上反复冷扫的缓存重置/调用触发尚未最终证明**。A 于 02:33:46 重启（exit 0、非 OOM）；重启原因也尚未确认，不能断言由扫描直接造成。
+- 快照边界存在可证实的保守误判：717202 是有效累计 marker，717203–717204 是针对更早 state 的旧 marker；旧代码只允许 `commitMarkerSeq == snapshotSeq`，于是放弃快照快速路径并回扫全部历史。OrderSvr 独立分支 `fix/order-recovery-boundary` 提交 `e674dae` 已经 10808 代理推送：仅在逐条验证短尾全为同纪元旧提交标记时启用快照快路径；任何 mutation/缺口/错误标记仍回退完整验证。另为 Projection 拉取归档段加入 Chronicle 索引 seek。聚焦测试 `OrderCommitWatermarkTest,OrderCommittedRecoveryTest,OrderProjectionCommittedReaderTest` 通过。**新代码尚未部署**；分支基于运行版 `2d4a305`，包含该版尚未合入远端 `saas-crypto` 的性能提交，合并前需审查来源。
+- 07:52 对**单个 P019** 用 `tests/promote-fenced-order-partition-host.py` 的快照哈希/ZK CAS 门禁执行 A→B、epoch 6→7；B 记录 `ORDER_PARTITION_UNCOMMITTED_TAIL_ARCHIVED` 与 `ORDER_PARTITION_PROMOTION_READY`，A/B 新快照再次一致。其他 255 分区没有切换。不要直接改 ZK `READY` 或删除未提交尾巴。
+- B READY 后 ProjectionSvr 一度仍卡在 `6:718970`：归档拉取每次从头扫描约 62 万条，超过 5 秒 `projection.binary.fetchTimeoutMs`，迟到响应被丢弃。仅本地 override 改为 60000 并重建 **ProjectionSvr 单容器**，使其追赶；约 07:59 MySQL durable order projection watermark 为 `P019 7:728588`，E2E001 `default-depth10` 从 DEGRADED 恢复为 `RUNNING`、20 张活动单、无当前错误码。这个超时是临时缓解；`generate-saas-configs.sh` 仍生成 5000，重新生成配置会覆盖临时值。待归档 seek 代码完成隔离构建/部署验证后，再评估恢复 5000。
+- 尚需：查清为何线上 watermark 游标反复冷扫、A 的重启触发源和最后未提交 mutation 的客户端确认/业务对账；补充逐分区带认证的 readiness/route 验证，修复当前 `verify-order-cluster-state-host.sh` 的 256/256 假阳性；对 P019 做订单/资金/投影一致性核对后才算事故关闭。当前不宜直接继续高 TPS 压测。
