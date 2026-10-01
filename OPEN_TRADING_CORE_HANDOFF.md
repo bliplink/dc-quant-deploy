@@ -10,7 +10,7 @@
 
 ## 0. 2026-10-01 最新接续点（优先于下文旧快照）
 
-- API 开发者文档已从 `dc-quant-deploy/docs/openapi/crypto-openapi-v1.yaml` 和公开指南构建成独立静态 Docker 站点：`https://api.opentradingcore.com/`。部署仓库提交 `fd78f01`，运行镜像 `local/opentradingcore-api-docs:sha-fd78f013882b`，容器 `opentradingcore-api-docs` 使用 host network 监听 `18096`；Cloudflare Tunnel 新增同名 hostname -> `127.0.0.1:18096`，DNS CNAME 已建立。主站没有 `/docs/` 代理，只有指向独立域名的 Docs 链接。主站提交 `1348359`，运行镜像 `local/opentradingcore-web:sha-1348359aad27`。
+- API 开发者文档已从 `dc-quant-deploy/docs/openapi/crypto-openapi-v1.yaml` 和公开指南构建成独立静态 Docker 站点：`https://api.opentradingcore.com/`。部署仓库提交 `fd78f01`，运行镜像 `local/opentradingcore-api-docs:sha-fd78f013882b`，容器 `opentradingcore-api-docs` 使用 host network 监听 `18096`；Cloudflare Tunnel 新增同名 hostname -> `127.0.0.1:18096`，DNS CNAME 已建立。主站没有 `/docs/` 代理，也没有独立的 Docs 菜单项；桌面和手机菜单中的 **API** 均直接打开该二级域名。主站提交 `fe5653a`，运行镜像 `local/opentradingcore-web:sha-fe5653ad60e5`，手机/桌面实际点击均验收为 200、无 pageerror。
 - 两个镜像都从明确 Git 提交完整本机构建；源码分别已推送至 `dc-quant-deploy@saas-crypto` 和 `opentradingcore-web@main`。GitHub Actions 目前仍受 Billing 限制，恢复后应回到 Actions/GHCR 正式发布链路；不要把本地镜像视作 GA 发布证明。
 - API YAML validator、28/28 方法/请求 schema 检查和 MkDocs strict build 通过。公网首页、YAML、方法目录均返回 200；桌面/手机浏览器无 pageerror 或横向溢出；两个容器 healthy、0 restart、无 OOM。原 API 文档候选容器和原主站容器都作为停止状态的回滚副本保留。构建/部署步骤见 `docs/public-api/README.md`。
 - 公开站点当前为 **Developer Preview / demo funds only / NOT External GA**。本轮用户视角检查发现：未登录 Trade Web 的 E2E001 Order Book 为空，而登录后有买卖各 10 档；Robot/Tenant Liquidity 同时显示运行中、20 单。此为待查现象，不能直接归因为 MDSvr 或 Robot。主站公开目录含可点击的 `SUSPENDED` 租户；租户控制台 Liquidity 表格操作列在桌面和手机上均不易发现，Settings 样式也不统一。公开前还需邮箱激活门禁、长时间交易稳定性/异常切换、Broker/Trader API 真正外部接入验收。详见后续任务，不要把单次容器健康当成稳定性结论。
