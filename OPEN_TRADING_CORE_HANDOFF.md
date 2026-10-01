@@ -1,10 +1,20 @@
 # OpenTradingCore 项目总览与跨账号交接
 
-> 更新时间：2026-09-30
+> 更新时间：2026-10-01
 > 目标读者：新的 ChatGPT/Codex 会话、另一 GitHub/ChatGPT 账号、接手研发/部署人员。
 > 开始任何修改前，请先完整阅读本文，并重新 fetch 对应仓库最新分支。文中的 commit 仅是快照，不是永久锁定版本。
 >
 > 当前问题清单：[`docs/CURRENT_ISSUES_20261001.zh-CN.md`](docs/CURRENT_ISSUES_20261001.zh-CN.md)
+
+---
+
+## 0. 2026-10-01 最新接续点（优先于下文旧快照）
+
+- API 开发者文档已从 `dc-quant-deploy/docs/openapi/crypto-openapi-v1.yaml` 和公开指南构建成独立静态 Docker 站点：`https://api.opentradingcore.com/`。部署仓库提交 `fd78f01`，运行镜像 `local/opentradingcore-api-docs:sha-fd78f013882b`，容器 `opentradingcore-api-docs` 使用 host network 监听 `18096`；Cloudflare Tunnel 新增同名 hostname -> `127.0.0.1:18096`，DNS CNAME 已建立。主站没有 `/docs/` 代理，只有指向独立域名的 Docs 链接。主站提交 `1348359`，运行镜像 `local/opentradingcore-web:sha-1348359aad27`。
+- 两个镜像都从明确 Git 提交完整本机构建；源码分别已推送至 `dc-quant-deploy@saas-crypto` 和 `opentradingcore-web@main`。GitHub Actions 目前仍受 Billing 限制，恢复后应回到 Actions/GHCR 正式发布链路；不要把本地镜像视作 GA 发布证明。
+- API YAML validator、28/28 方法/请求 schema 检查和 MkDocs strict build 通过。公网首页、YAML、方法目录均返回 200；桌面/手机浏览器无 pageerror 或横向溢出；两个容器 healthy、0 restart、无 OOM。原 API 文档候选容器和原主站容器都作为停止状态的回滚副本保留。构建/部署步骤见 `docs/public-api/README.md`。
+- 公开站点当前为 **Developer Preview / demo funds only / NOT External GA**。本轮用户视角检查发现：未登录 Trade Web 的 E2E001 Order Book 为空，而登录后有买卖各 10 档；Robot/Tenant Liquidity 同时显示运行中、20 单。此为待查现象，不能直接归因为 MDSvr 或 Robot。主站公开目录含可点击的 `SUSPENDED` 租户；租户控制台 Liquidity 表格操作列在桌面和手机上均不易发现，Settings 样式也不统一。公开前还需邮箱激活门禁、长时间交易稳定性/异常切换、Broker/Trader API 真正外部接入验收。详见后续任务，不要把单次容器健康当成稳定性结论。
+- 下文“Trade Web 黑屏待修”和 `docs/CURRENT_ISSUES_20261001.zh-CN.md` 中相同内容是旧快照：之后的完整 Web E2E、300/16、Order 256/256 READY、Trade P000 双向切换均已通过。继续工作时先以实时容器、远端 Git 和最新测试证据复核，勿重复执行已通过的大型压测。
 
 ---
 
@@ -312,9 +322,9 @@ nginx config
 
 ---
 
-## 12. 当前 P0：Trade Web 黑屏
+## 12. 历史 P0：Trade Web 黑屏（后续已用完整镜像修复）
 
-截至本快照，`https://trade.opentradingcore.com/#/trade?location=E2E001` 出现黑屏。
+以下记录的是 2026-09-30 的历史故障，不代表 2026-10-01 的实时状态。`https://trade.opentradingcore.com/#/trade?location=E2E001` 当时出现黑屏。
 
 已定位根因不是后端，也不是 WSS，而是静态 bundle 版本错配：
 
@@ -352,6 +362,7 @@ Playwright 必须验证：HTML 200、JS/CSS 200、Content-Type 正确、body 非
 - 租户入口：`https://tenant.opentradingcore.com/`
 - 具体租户：`https://tenant.opentradingcore.com/?location=<LOCATION>`
 - 平台：`https://platform.opentradingcore.com/`
+- API 文档：`https://api.opentradingcore.com/`（独立容器；主站不挂载 `/docs/`）
 
 HTTPS 交易 Web 必须使用 `wss://trade.opentradingcore.com/gateway`，不能使用 `ws://...`。
 
