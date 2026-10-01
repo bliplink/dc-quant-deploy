@@ -50,14 +50,93 @@ if docker logs --since 5m dc-saas-tradesvr-b 2>&1 | grep -Eq 'TRADE_PARTITION_RE
 if docker logs --since 2m dc-saas-projectionsvr 2>&1 | grep -Eq 'PARTITION_NOT_READY|is not Online'; then log 'FAIL ProjectionSvr sees unroutable partitions'; exit 1; fi
 log 'PASS  Trade/Projection recovery log gate'
 
-log 'Checking Trade 256-partition READY evidence'
-a_ready="$(mktemp)"; b_ready="$(mktemp)"; trap 'rm -f "$a_ready" "$b_ready"' EXIT
-docker logs dc-saas-tradesvr 2>&1 | sed -n 's/.*TRADE_PARTITION_READY node:TradeSvrA, partition:\(P[0-9][0-9][0-9]\).*/\1/p' | sort -u > "$a_ready"
-docker logs dc-saas-tradesvr-b 2>&1 | sed -n 's/.*TRADE_PARTITION_READY node:TradeSvrB, partition:\(P[0-9][0-9][0-9]\).*/\1/p' | sort -u > "$b_ready"
-a_count="$(wc -l < "$a_ready" | tr -d ' ')"; b_count="$(wc -l < "$b_ready" | tr -d ' ')"
-total="$(cat "$a_ready" "$b_ready" | sort -u | wc -l | tr -d ' ')"; overlap="$(comm -12 "$a_ready" "$b_ready" | wc -l | tr -d ' ')"
-[[ "$a_count" -gt 0 && "$b_count" -gt 0 && "$total" -eq 256 && "$overlap" -eq 0 ]] || { log "FAIL Trade READY coverage A=$a_count B=$b_count total=$total overlap=$overlap"; exit 1; }
-log "PASS  Trade READY coverage 256/256 A=$a_count B=$b_count"
+log 'Checking Trade 256-partition current READY evidence'
+trade_ready_dir="$(mktemp -d)"
+trap 'rm -rf "$trade_ready_dir"' EXIT
+trade_partition_root="${TRADE_CLUSTER_PARTITION_ROOT:-/dc/cluster/tradesvr/partitions}"
+trade_zk_server="127.0.0.1:${ZOOKEEPER_PORT:-32181}"
+trade_zk_commands="$trade_ready_dir/zk.commands"
+trade_zk_output="$trade_ready_dir/zk.output"
+trade_a_log="$trade_ready_dir/trade-a.log"
+trade_b_log="$trade_ready_dir/trade-b.log"
+for ((index=0; index<256; index++)); do
+  printf 'get -s %s/P%03d\n' "$trade_partition_root" "$index" >>"$trade_zk_commands"
+done
+printf 'quit\n' >>"$trade_zk_commands"
+docker exec -i dc-saas-zookeeper zkCli.sh -server "$trade_zk_server"   <"$trade_zk_commands" >"$trade_zk_output" 2>&1 || true
+docker logs dc-saas-tradesvr >"$trade_a_log" 2>&1
+docker logs dc-saas-tradesvr-b >"$trade_b_log" 2>&1
+if ! trade_ready_summary="$(python3 - "$trade_zk_output" "$trade_a_log" "$trade_b_log" <<'PY'
+import json
+import re
+import sys
+
+zk_path, a_log_path, b_log_path = sys.argv[1:]
+assignments = {}
+for raw in open(zk_path, encoding="utf-8", errors="ignore"):
+    line = raw.strip()
+    if not line.startswith("{") or '"partitionId"' not in line:
+        continue
+    try:
+        value = json.loads(line)
+    except json.JSONDecodeError:
+        continue
+    partition_id = str(value.get("partitionId") or "")
+    if re.fullmatch(r"P\d{3}", partition_id):
+        assignments[partition_id] = value
+
+expected = [f"P{i:03d}" for i in range(256)]
+if sorted(assignments) != expected:
+    missing = sorted(set(expected) - set(assignments))
+    extra = sorted(set(assignments) - set(expected))
+    raise SystemExit(
+        f"expected 256 current Trade assignments, found {len(assignments)} "
+        f"missing={missing[:8]} extra={extra[:8]}"
+    )
+
+ready = set()
+pattern = re.compile(
+    r"TRADE_PARTITION_READY node:(TradeSvr[AB]), partition:(P\d{3}), epoch:(\d+)"
+)
+for node, path in (("TradeSvrA", a_log_path), ("TradeSvrB", b_log_path)):
+    for raw in open(path, encoding="utf-8", errors="ignore"):
+        match = pattern.search(raw)
+        if match and match.group(1) == node:
+            ready.add((node, match.group(2), int(match.group(3))))
+
+primary_counts = {"TradeSvrA": 0, "TradeSvrB": 0}
+errors = []
+for partition_id in expected:
+    value = assignments[partition_id]
+    state = str(value.get("state") or "")
+    primary = str(value.get("primary") or "")
+    try:
+        epoch = int(value.get("epoch"))
+    except (TypeError, ValueError):
+        errors.append(f"{partition_id}:invalid_epoch={value.get('epoch')!r}")
+        continue
+    if state != "READY":
+        errors.append(f"{partition_id}:state={state}")
+        continue
+    if primary not in primary_counts:
+        errors.append(f"{partition_id}:primary={primary}")
+        continue
+    primary_counts[primary] += 1
+    if (primary, partition_id, epoch) not in ready:
+        errors.append(f"{partition_id}:missing_READY node={primary} epoch={epoch}")
+
+if errors:
+    raise SystemExit("current Trade READY verification failed: " + "; ".join(errors[:12]))
+
+print(
+    f"256/256 A={primary_counts['TradeSvrA']} B={primary_counts['TradeSvrB']}"
+)
+PY
+)"; then
+  log 'FAIL Trade current READY verification'
+  exit 1
+fi
+log "PASS  Trade current READY coverage ${trade_ready_summary}"
 
 if [[ "$MODE" == full ]]; then
   [[ -n "${E2E_PASSWORD:-}" ]] || { log 'FAIL E2E_PASSWORD is required for --full'; exit 1; }
