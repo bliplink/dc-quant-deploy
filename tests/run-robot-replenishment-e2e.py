@@ -70,6 +70,9 @@ def place(token, cid, side, quantity, price, close=False):
         # retry its ClOrdID; the operator must inspect the order state first.
         raise RuntimeError("Ambiguous placeOrder outcome for %s; inspect before retry" % cid)
     elapsed_ms = (time.monotonic() - started) * 1000
+    if elapsed_ms >= 500:
+        print("[robot-replenish] SLOW_PLACE cid=%s side=%s close=%s duration_ms=%.1f" %
+              (cid, side, close, elapsed_ms), flush=True)
     return elapsed_ms
 
 
