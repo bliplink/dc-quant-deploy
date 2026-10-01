@@ -16,10 +16,6 @@ on:
       - .github/workflows/publish-public-api-docs.yml
   workflow_dispatch:
 
-concurrency:
-  group: public-api-docs-saas-crypto
-  cancel-in-progress: false
-
 env:
   IMAGE: ghcr.io/bliplink/opentradingcore-api-docs
 
@@ -27,6 +23,9 @@ jobs:
   publish:
     if: github.ref == 'refs/heads/saas-crypto'
     runs-on: ubuntu-latest
+    concurrency:
+      group: public-api-docs-publish
+      cancel-in-progress: false
     permissions:
       contents: read
       packages: write
@@ -75,8 +74,12 @@ jobs:
             NGINX_IMAGE=nginx:1.27-alpine
 
   deploy:
+    if: github.event_name == 'workflow_dispatch'
     needs: publish
     runs-on: [self-hosted, macOS, ARM64, otc-api-docs]
+    concurrency:
+      group: public-api-docs-deploy
+      cancel-in-progress: false
     environment: local-api-docs
     permissions:
       contents: read
