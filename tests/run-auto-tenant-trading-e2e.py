@@ -34,11 +34,15 @@ def log(message):
 def sql(query):
     env = os.environ.copy()
     env["MYSQL_PWD"] = os.environ["MYSQL_PASSWORD"]
-    result = subprocess.run(
-        ["docker", "exec", "-i", "-e", "MYSQL_PWD=" + env["MYSQL_PWD"],
-         "dc-saas-mysql", "mysql", "-u" + env["MYSQL_USERNAME"], "-N", "dc", "-e", query],
-        capture_output=True, text=True, timeout=15, check=True,
-    )
+    try:
+        result = subprocess.run(
+            ["docker", "exec", "-i", "-e", "MYSQL_PWD",
+             "dc-saas-mysql", "mysql", "-u" + env["MYSQL_USERNAME"], "-N", "dc", "-e", query],
+            capture_output=True, text=True, timeout=15, check=True, env=env,
+        )
+    except (subprocess.CalledProcessError, subprocess.TimeoutExpired):
+        # Keep database error details out of E2E logs and tracebacks.
+        raise RuntimeError("read-only SQL convergence probe failed") from None
     return [line.split("\t") for line in result.stdout.splitlines()]
 
 
@@ -89,24 +93,20 @@ def verify_notional_zones():
     for side in ("0", "1"):
         rows = sorted((x for x in entries if str(x.get("MDEntryType")) == side),
                       key=lambda x: Decimal(str(x["MDEntryPx"])), reverse=side == "0")
+        # queryPublicMarket intentionally exposes only the top ten levels.
+        # The deeper ten are checked through Robot's target/open-order state.
         if len(rows) != 10:
-            raise RuntimeError("Expected 10 Robot levels on side %s, got %s" % (side, len(rows)))
+            raise RuntimeError("Expected 10 visible Robot levels on side %s, got %s" % (side, len(rows)))
         quantities = [Decimal(str(x["MDEntrySize"])) for x in rows]
         if len(set(quantities)) < 2:
             raise RuntimeError("Robot levels have fixed quantity on side %s" % side)
         notionals = [Decimal(str(x["MDEntryPx"])) * quantity
                      for x, quantity in zip(rows, quantities)]
         total = sum(notionals)
-        zone_sums = [sum(notionals[start:end]) for start, end in ((0, 3), (3, 6), (6, 10))]
-        if not Decimal("300") < total < Decimal("700"):
-            raise RuntimeError("Robot side %s notional is outside trial budget: %s" % (side, total))
-        if any(abs(zone / total - weight) > Decimal("0.10")
-               for zone, weight in zip(zone_sums, map(Decimal, ("0.3", "0.3", "0.4")))):
-            raise RuntimeError("Robot side %s notional zones disagree with 3/3/4 weights: %s" %
-                               (side, zone_sums))
-        report.append("%s=%s (%s)" %
-                      ("bid" if side == "0" else "ask", round(total, 2),
-                       "/".join(str(round(value, 2)) for value in zone_sums)))
+        if not Decimal("100") < total < Decimal("500"):
+            raise RuntimeError("Visible Robot side %s notional is implausible: %s" % (side, total))
+        report.append("%s_visible_top10=%s" %
+                      ("bid" if side == "0" else "ask", round(total, 2)))
     return ", ".join(report)
 
 
@@ -181,9 +181,12 @@ def main():
 
     wait("automatic liquidity bootstrap", bootstrap_done, seconds=180, interval=3)
     robots = sql("SELECT robot_id,api_user_id,enabled,runtime_status,open_order_count,"
+                 "bid_levels,ask_levels,JSON_EXTRACT(strategy_config,'$.depth_zone_levels'),"
+                 "JSON_EXTRACT(strategy_config,'$.depth_zone_weights'),"
                  "JSON_UNQUOTE(JSON_EXTRACT(strategy_config,'$.depth_quantity_mode')) "
                  "FROM dc_tenant_robot WHERE location='%s'" % LOCATION)
-    if len(robots) != 1 or robots[0][2:4] != ["1", "RUNNING"] or robots[0][5] != "NOTIONAL_ZONES":
+    if len(robots) != 1 or robots[0][2:7] != ["1", "RUNNING", "40", "20", "20"] \
+            or robots[0][7:10] != ["[6, 6, 8]", "[3, 3, 4]", "NOTIONAL_ZONES"]:
         raise RuntimeError("Default Robot not running in notional-zones mode: %s" % robots)
     def full_book():
         bids, asks = market_book()
@@ -193,9 +196,9 @@ def main():
     if max(bids) >= min(asks):
         raise RuntimeError("Robot book crossed")
     zone_report = verify_notional_zones()
-    log("Robot=%s RUNNING, mode=NOTIONAL_ZONES, open=%s, book=%s bids/%s asks; spread=%s/%s." %
+    log("Robot=%s RUNNING, mode=NOTIONAL_ZONES, open=%s, visible book=%s bids/%s asks; spread=%s/%s." %
         (robots[0][0], robots[0][4], len(bids), len(asks), max(bids), min(asks)))
-    log("Amount-based depth verified: %s." % zone_report)
+    log("40-order target (6/6/8) and non-fixed visible quantities verified: %s." % zone_report)
 
     registration = call("AdminSvr", "tenantUserRegistration", {
         "action": "REGISTER", "cid": "REGISTER_" + RUN,
@@ -247,7 +250,7 @@ def main():
             time.sleep(1)
             continue
         cid = closing_id if attempt == 0 else closing_id + "-" + str(attempt)
-        state = place(token, cid, "ClOSE", "Sell", max(bids), "Long")
+        state = place(token, cid, "CLOSE", "Sell", max(bids), "Long")
         if state[0] == "Filled":
             closing_id = cid
             break
@@ -271,11 +274,11 @@ def main():
         rows = sql("SELECT enabled,runtime_status,open_order_count FROM dc_tenant_robot "
                    "WHERE location='%s' AND robot_id='%s'" % (LOCATION, robots[0][0]))
         bids, asks = market_book()
-        return rows[0] if rows and rows[0] == ["1", "RUNNING", "20"] and len(bids) == 10 \
+        return rows[0] if rows and rows[0] == ["1", "RUNNING", "40"] and len(bids) == 10 \
             and len(asks) == 10 else None
 
     wait("Robot replenishment after trader round trip", robot_replenished, seconds=90)
-    log("PASS close=%s, position=0, trader active orders=0; Robot RUNNING with 10+10 book." %
+    log("PASS close=%s, position=0, trader active orders=0; Robot RUNNING with 20+20 orders, visible top10+top10." %
         closing_id)
 
 
