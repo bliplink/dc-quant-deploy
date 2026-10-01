@@ -1,6 +1,6 @@
 # Release status
 
-OpenTradingCore's public Trader and Broker API documentation is available as a **Developer Preview**. This is a demo-funds environment, not an External GA service or a production SLA.
+OpenTradingCore's public Trader and Broker API documentation is available as a **Developer Preview**. This is a demo-funds environment, not an External GA service or a production SLA. A [Chinese edition](/zh/status/) is available.
 
 The current method catalog and request schemas are generated from the checked OpenAPI YAML. They describe the gateway's existing API envelope; a conventional REST `/v1/*` API is not currently available.
 

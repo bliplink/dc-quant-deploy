@@ -9,11 +9,11 @@ Build a trading client with the Trader API, or connect your own customer applica
 
 | I want to… | Start here |
 | --- | --- |
-| Trade my own account or write a strategy Robot | [Trader guide](api/TRADER_API_GUIDE.zh-CN.md) and [Quick Start](openapi/QUICK_START.zh-CN.md) |
-| Build a Broker website or backend for my customers | [Broker guide](api/BROKER_API_GUIDE.zh-CN.md) and [Broker reference](openapi/BROKER_REFERENCE_V1.zh-CN.md) |
+| Trade my own account or write a strategy Robot | [Trader guide](trader.md) and [Quick start](quick-start.md) |
+| Build a Broker website or backend for my customers | [Broker guide](broker.md) and [Authentication](authentication.md) |
 | Inspect current method names, permissions and request schemas | [YAML-derived method catalog](openapi/CATALOG_GENERATED.md) or [download OpenAPI YAML](openapi/crypto-openapi-v1.yaml) |
-| Handle streaming and reconnects | [WebSocket topic and recovery contract](openapi/WEBSOCKET_TOPICS_V1.zh-CN.md) |
+| Handle streaming and reconnects | [Realtime and recovery guide](realtime.md) |
 
-The current gateway transport is `POST /api` for signed API-key login and `POST /httpapi/` for authenticated requests. The [Quick Start](openapi/QUICK_START.zh-CN.md) shows the actual envelope; REST-style `/v1/order` paths are **not** part of this version.
+The current gateway transport is `POST /api` for signed API-key login and `POST /httpapi/` for authenticated requests. The [Quick start](quick-start.md) shows the actual envelope; REST-style `/v1/order` paths are **not** part of this version.
 
-Most detailed reference pages are currently in Chinese. English reference coverage and installable SDKs remain release work, not hidden production features. See the [release status](status.md) for the outstanding gates.
+This English edition covers the integration path and all 28 method names. The full field-level reference is currently available in [简体中文](/zh/); English field-by-field translations and installable SDKs remain release work. See the [release status](status.md) for the outstanding gates.

@@ -1,0 +1,62 @@
+site_name: OpenTradingCore 开发者文档
+site_description: OpenTradingCore API 开发者预览版
+site_url: https://api.opentradingcore.com/zh/
+docs_dir: docs/zh
+site_dir: site/zh
+
+theme:
+  name: material
+  language: zh
+  features:
+    - navigation.tabs
+    - navigation.sections
+    - navigation.top
+    - content.code.copy
+    - search.suggest
+    - search.highlight
+  palette:
+    scheme: slate
+    primary: blue
+    accent: blue
+
+plugins:
+  - search
+
+markdown_extensions:
+  - admonition
+  - tables
+  - attr_list
+  - pymdownx.details
+  - pymdownx.superfences
+
+extra_javascript:
+  - assets/language-switch.js
+
+extra:
+  alternate:
+    - name: English
+      link: /en/
+      lang: en
+    - name: 简体中文
+      link: /zh/
+      lang: zh
+
+nav:
+  - 总览: index.md
+  - 快速接入:
+      - 快速开始: quick-start.md
+      - 认证与权限: authentication.md
+      - 限流: rate-limits.md
+  - Trader API: trader.md
+  - Broker API: broker.md
+  - 实时订阅: realtime.md
+  - 完整参考:
+      - YAML 方法目录: openapi/CATALOG_GENERATED.md
+      - 更新记录: changelog.md
+      - 认证字段: openapi/AUTHENTICATION_REFERENCE_V1.zh-CN.md
+      - 交易字段: openapi/CORE_TRADING_REFERENCE_V1.zh-CN.md
+      - Broker 字段: openapi/BROKER_REFERENCE_V1.zh-CN.md
+      - 行情字段: openapi/MARKET_DATA_REFERENCE_V1.zh-CN.md
+      - WebSocket Topic: openapi/WEBSOCKET_TOPICS_V1.zh-CN.md
+      - 公共错误码: DC_OPEN_API_V1_REFERENCE.zh-CN.md
+      - 发布状态: status.md

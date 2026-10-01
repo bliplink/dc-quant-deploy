@@ -30,15 +30,26 @@ fi
 for _ in {1..30}; do
   if [[ "$(docker inspect "$NAME" --format '{{.State.Health.Status}}')" == healthy ]] && \
       curl --fail --silent --show-error --max-time 2 http://127.0.0.1:18096/healthz >/dev/null; then
-    printf '[public-api-docs] deployed %s\n' "$IMAGE"
-    if "$had_previous"; then
-      printf '[public-api-docs] previous container preserved as %s\n' "$BACKUP"
+    ready=true
+    for path in en/ zh/ en/openapi/CATALOG_GENERATED/ zh/openapi/CATALOG_GENERATED/ \
+      en/openapi/crypto-openapi-v1.yaml zh/openapi/crypto-openapi-v1.yaml; do
+      if ! curl --fail --silent --show-error --max-time 5 "http://127.0.0.1:18096/$path" >/dev/null; then
+        ready=false
+        break
+      fi
+    done
+    if "$ready"; then
+      printf '[public-api-docs] deployed %s\n' "$IMAGE"
+      if "$had_previous"; then
+        printf '[public-api-docs] previous container preserved as %s\n' "$BACKUP"
+      fi
+      exit 0
     fi
-    exit 0
+    break
   fi
   sleep 2
 done
 
-printf '[public-api-docs] health check failed; restoring previous container\n' >&2
+printf '[public-api-docs] health or bilingual route check failed; restoring previous container\n' >&2
 restore_previous
 exit 1

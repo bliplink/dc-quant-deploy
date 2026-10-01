@@ -7,13 +7,17 @@ on:
     paths:
       - "docs/**"
       - "mkdocs.yml"
+      - "mkdocs.public*.yml"
       - "requirements-docs.txt"
+      - "scripts/*public-api*"
       - ".github/workflows/validate-developer-docs.yml"
   pull_request:
     paths:
       - "docs/**"
       - "mkdocs.yml"
+      - "mkdocs.public*.yml"
       - "requirements-docs.txt"
+      - "scripts/*public-api*"
       - ".github/workflows/validate-developer-docs.yml"
   workflow_dispatch:
 
@@ -26,6 +30,8 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
 
       - name: Setup Python
         uses: actions/setup-python@v5
@@ -43,12 +49,40 @@ jobs:
       - name: Validate OpenAPI catalog coverage
         run: python scripts/validate-openapi-catalog.py
 
+      - name: Validate paired public API languages
+        env:
+          BASE_REF: ${{ github.event.pull_request.base.sha || github.event.before }}
+        run: |
+          if [ -n "$BASE_REF" ] && git cat-file -e "$BASE_REF^{commit}"; then
+            python scripts/check-public-api-docs-i18n.py --base-ref "$BASE_REF"
+          else
+            python scripts/check-public-api-docs-i18n.py
+          fi
+
       - name: Build Developer Portal
         run: mkdocs build --clean
+
+      - name: Build bilingual public API portal
+        env:
+          PUBLIC_API_DOCS_TAG: local/opentradingcore-api-docs:ci
+          PUBLIC_API_DOCS_PYTHON_IMAGE: python:3.12-slim
+        run: |
+          scripts/build-public-api-docs-image.sh
+          docker create --name public-api-docs-artifact local/opentradingcore-api-docs:ci
+          mkdir -p site-public
+          docker cp public-api-docs-artifact:/usr/share/nginx/html/. site-public/
+          docker rm public-api-docs-artifact
 
       - name: Upload static site artifact
         uses: actions/upload-artifact@v4
         with:
           name: dc-developer-portal
           path: site/
+          if-no-files-found: error
+
+      - name: Upload bilingual public API artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: opentradingcore-public-api-en-zh
+          path: site-public/
           if-no-files-found: error
