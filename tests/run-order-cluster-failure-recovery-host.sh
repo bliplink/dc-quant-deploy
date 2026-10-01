@@ -9,6 +9,7 @@ GW_URL="${ORDER_CLUSTER_GW_URL:-http://127.0.0.1:33302}"
 ZK_CONTAINER="${ZOOKEEPER_CONTAINER:-dc-saas-cluster-zookeeper}"
 ZK_ENDPOINT="${ZOOKEEPER_ENDPOINT:-127.0.0.1:32182}"
 PARTITION_PATH="/dc/cluster/ordersvr-dev/partitions/P027"
+ASSIGNMENT_TOOL="${CHECKOUT}/tests/order_cluster_zk_assignment.py"
 RUN_ID="$(date -u +%Y%m%d-%H%M%S)"
 STARTED_AT="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
 EVIDENCE="${ROOT}/evidence/${RUN_ID}-node-failure-recovery"
@@ -22,10 +23,28 @@ ASSIGNMENT_CHANGED=false
 log() { printf '[order-cluster-failure-recovery] %s\n' "$*"; }
 die() { printf '[order-cluster-failure-recovery] ERROR: %s\n' "$*" >&2; exit 1; }
 zk() { printf '%s\nquit\n' "$1" | sudo docker exec -i "${ZK_CONTAINER}" zkCli.sh -server "${ZK_ENDPOINT}" 2>/dev/null; }
-read_assignment() { zk "get ${PARTITION_PATH}" | grep -E '^\{"partitionId"' | tail -n 1; }
+read_assignment() {
+  zk "get -s ${PARTITION_PATH}" | python3 "${ASSIGNMENT_TOOL}" read "${PARTITION_PATH}"
+}
 set_assignment() {
-  local epoch="$1" primary="$2" replica="$3"
-  zk "set ${PARTITION_PATH} {\"partitionId\":\"P027\",\"epoch\":${epoch},\"primary\":\"${primary}\",\"replica\":\"${replica}\",\"state\":\"READY\"}" >/dev/null
+  local epoch="$1" primary="$2" replica="$3" expected_epoch="$4" expected_primary="$5"
+  local before command response after
+  before="$(zk "get -s ${PARTITION_PATH}")"
+  command="$(printf '%s\n' "${before}" | python3 "${ASSIGNMENT_TOOL}" transition \
+    "${PARTITION_PATH}" "${epoch}" "${primary}" "${replica}" \
+    "${expected_epoch}" "${expected_primary}")"
+  response="$(zk "${command}")"
+  [[ "${response}" != *BadVersion* && "${response}" != *KeeperErrorCode* ]] ||
+    die "versioned assignment update was rejected"
+  after="$(read_assignment)"
+  python3 - "${after}" "${epoch}" "${primary}" "${replica}" <<'PY'
+import json
+import sys
+row = json.loads(sys.argv[1])
+if (row.get("epoch"), row.get("primary"), row.get("replica"), row.get("state")) != \
+        (int(sys.argv[2]), sys.argv[3], sys.argv[4], "READY"):
+    raise SystemExit("versioned assignment update did not converge")
+PY
 }
 
 start_node_a() {
@@ -78,7 +97,23 @@ wait_ready_probe() {
 
 restore() {
   if [[ "${NODE_A_STOPPED}" == true ]]; then start_node_a || true; fi
-  if [[ "${ASSIGNMENT_CHANGED}" == true ]]; then set_assignment "${RESTORE_EPOCH}" OrderSvrA OrderSvrB || true; fi
+  if [[ "${ASSIGNMENT_CHANGED}" == true ]]; then
+    local current current_epoch current_primary current_replica current_state node_a_health
+    current="$(read_assignment)" || return 0
+    current_epoch="$(python3 -c 'import json,sys; print(json.loads(sys.argv[1])["epoch"])' "${current}")"
+    current_primary="$(python3 -c 'import json,sys; print(json.loads(sys.argv[1])["primary"])' "${current}")"
+    current_replica="$(python3 -c 'import json,sys; print(json.loads(sys.argv[1])["replica"])' "${current}")"
+    current_state="$(python3 -c 'import json,sys; print(json.loads(sys.argv[1])["state"])' "${current}")"
+    node_a_health="$(sudo docker inspect -f '{{if .State.Health}}{{.State.Health.Status}}{{else}}missing{{end}}' "${NODE_A}" 2>/dev/null || true)"
+    if [[ "${current_epoch}" == "${B_EPOCH}" && "${current_primary}" == OrderSvrB &&
+          "${current_replica}" == OrderSvrA && "${current_state}" == READY &&
+          "${node_a_health}" == healthy ]]; then
+      set_assignment "${RESTORE_EPOCH}" OrderSvrA OrderSvrB "${B_EPOCH}" OrderSvrB || true
+    elif [[ "${current_epoch}" != "${A_EPOCH}" || "${current_primary}" != OrderSvrA ||
+            "${current_replica}" != OrderSvrB || "${current_state}" != READY ]]; then
+      log "Assignment or node health changed unexpectedly; leaving assignment untouched for manual review"
+    fi
+  fi
 }
 trap restore EXIT
 
@@ -93,6 +128,14 @@ GW_CLUSTER_DEV_IMAGE="$(sudo docker inspect -f '{{.Config.Image}}' dc-saas-clust
 ORIGINAL="$(read_assignment)"
 [[ -n "${ORIGINAL}" ]] || die 'P027 assignment is missing'
 ORIGINAL_EPOCH="$(python3 -c 'import json,sys; print(json.loads(sys.argv[1])["epoch"])' "${ORIGINAL}")"
+python3 - "${ORIGINAL}" <<'PY'
+import json
+import sys
+row = json.loads(sys.argv[1])
+if (row.get("primary"), row.get("replica"), row.get("state")) != \
+        ("OrderSvrA", "OrderSvrB", "READY"):
+    raise SystemExit("isolated P027 must start READY on A with B replica")
+PY
 BASE_EPOCH="$(date +%s%N | cut -c1-15)"
 if (( BASE_EPOCH <= ORIGINAL_EPOCH )); then BASE_EPOCH="$((ORIGINAL_EPOCH + 100))"; fi
 B_EPOCH="${BASE_EPOCH}"
@@ -105,7 +148,7 @@ B_START="$(( $(sudo wc -l "${LOG_B}" | awk '{print $1}') + 1 ))"
 log 'Stopping the isolated current primary OrderSvrA'
 sudo docker stop "${NODE_A}" >/dev/null
 NODE_A_STOPPED=true
-set_assignment "${B_EPOCH}" OrderSvrB OrderSvrA
+set_assignment "${B_EPOCH}" OrderSvrB OrderSvrA "${ORIGINAL_EPOCH}" OrderSvrA
 ASSIGNMENT_CHANGED=true
 
 wait_log "${LOG_B}" "ORDER_PARTITION_RECOVERY_FAILED node:OrderSvrB, partition:P027, epoch:${B_EPOCH}"
@@ -120,7 +163,7 @@ wait_ready_probe "RECOVER-B-${RUN_ID}" "${LOG_B}" "${B_EPOCH}"
 wait_log "${LOG_B}" "ORDER_PARTITION_PROMOTION_READY node:OrderSvrB, partition:P027, epoch:${B_EPOCH}"
 
 log 'Returning P027 to OrderSvrA through another recovery barrier'
-set_assignment "${A_EPOCH}" OrderSvrA OrderSvrB
+set_assignment "${A_EPOCH}" OrderSvrA OrderSvrB "${B_EPOCH}" OrderSvrB
 wait_ready_probe "RECOVER-A-${RUN_ID}" "${LOG_A}" "${A_EPOCH}"
 wait_log "${LOG_A}" "ORDER_PARTITION_PROMOTION_READY node:OrderSvrA, partition:P027, epoch:${A_EPOCH}"
 ASSIGNMENT_CHANGED=false
