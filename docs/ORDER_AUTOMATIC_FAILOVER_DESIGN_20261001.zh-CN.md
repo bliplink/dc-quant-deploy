@@ -5,7 +5,7 @@
 ## 当前事实
 
 - Order A/B 采用 256 个分区、ZooKeeper assignment、`SYNC_PER_RECORD`、本地 journal/snapshot、复制 ACK 和 commit-aware promotion。`OrderPartitionLifecycleManager` 轮询 assignment，并在完成恢复及 promotion barrier 后开放本地主分区。
-- assignment 的故障检测、选主和 epoch 推进仍靠操作脚本。当前双节点同步模式在副本失联时，`OrderReplicationManager` 的复制发送或 promotion snapshot transfer 失败，相关分区拒单。现有隔离节点故障脚本验证的是 fail-closed 后待旧节点重返才恢复，而非自动继续接单。
+- assignment 的故障检测、选主和 epoch 推进仍靠操作脚本。当前双节点同步模式在副本失联时，`OrderReplicationManager` 的复制发送或 promotion snapshot transfer 失败，相关分区拒单。2026-10-01 在当前 `sha-943b6dd` 镜像的独立 Colima 栈中实测停 A、手动 CAS 改派 B：B 因缺必需副本而 fail-closed；A 回来并完成 snapshot rebase/恢复屏障后才 READY；返回 A 后路由和复制复测通过。证据在 `/data/dc-saas-order-cluster-dev/evidence/20261001-120638-node-failure-recovery/result.json`。这不是自动继续接单。
 - 两个 Order 容器位于同一 Mac mini。它们能隔离单 JVM 故障，不能把同机断电、磁盘损坏或 ZooKeeper 单点故障算作已解决。
 
 ## 必须明确的可用性与数据承诺
@@ -36,4 +36,4 @@
 
 ## 当前下一步
 
-先在隔离栈把 controller、显式降级模式和上述故障矩阵跑通，再考虑当前业务栈的单分区灰度。现有隔离故障脚本已修为 versioned CAS 和条件恢复，单元测试通过；但隔离 Compose 当前未运行，脚本尚未执行。Order 接单阶段计时镜像 `c595bfc` 也尚未部署；当前 63 个活跃租户与 39 个非零持仓下，诊断发布需完整 A/B 围栏、Trade 配套重启、256 READY、业务和投影回归，不应单侧热换。
+隔离栈的**当前行为基线**已跑通：路由/同步 ACK → 停 A → 缺副本拒单 → A 恢复后 B READY → 切回 A → 路由/复制复测，随后隔离容器已停止并保留证据。下一步才是在隔离栈实现 controller、显式降级模式和剩余故障矩阵，再考虑当前业务栈的单分区灰度。Order 接单阶段计时镜像 `c595bfc` 也尚未部署；当前 63 个活跃租户与 39 个非零持仓下，诊断发布需完整 A/B 围栏、Trade 配套重启、256 READY、业务和投影回归，不应单侧热换。

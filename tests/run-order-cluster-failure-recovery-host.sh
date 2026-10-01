@@ -48,9 +48,11 @@ PY
 }
 
 start_node_a() {
+  local pull_args=()
   export ORDER_CLUSTER_DEV_ROOT="${ROOT}"
   export ORDERSVR_CLUSTER_DEV_IMAGE GW_CLUSTER_DEV_IMAGE
-  sudo -E docker compose -p "${PROJECT}" -f "${COMPOSE}" up -d ordersvr-a >/dev/null
+  [[ "${ORDERSVR_CLUSTER_DEV_IMAGE}" == local/* ]] && pull_args=(--pull never)
+  sudo -E docker compose -p "${PROJECT}" -f "${COMPOSE}" up -d "${pull_args[@]}" ordersvr-a >/dev/null
   NODE_A_STOPPED=false
 }
 

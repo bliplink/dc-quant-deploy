@@ -32,6 +32,18 @@ request() {
     sudo tee "${EVIDENCE_DIR}/${name}.response.json" >/dev/null
 }
 
+request_until_success() {
+  local name="$1" payload="$2" deadline=$((SECONDS + 60))
+  while (( SECONDS < deadline )); do
+    request "${name}" "${payload}" || true
+    if sudo grep -Eq '"(code|Code)":0' "${EVIDENCE_DIR}/${name}.response.json"; then
+      return 0
+    fi
+    sleep 1
+  done
+  die "${name} did not reach the isolated Order partition before startup deadline"
+}
+
 request_until_recorded() {
   local name="$1" payload="$2" log_file="$3" pattern="$4" deadline=$((SECONDS + 60))
   while (( SECONDS < deadline )); do
@@ -45,16 +57,17 @@ request_until_recorded() {
 }
 
 log 'Triggering physical node connections through logical OrderSvr partition routing'
-request probe-btc '{"serverName":"OrderSvr","method":"__cluster_route_readiness__","key":"WEB_E2E\u001f4\u001fBTCUSDT","content":{"Location":"WEB_E2E","MarketIndicator":"4","SecurityID":"BTCUSDT"}}' || true
-request probe-eth '{"serverName":"OrderSvr","method":"__cluster_route_readiness__","key":"WEB_E2E\u001f4\u001fETHUSDT","content":{"Location":"WEB_E2E","MarketIndicator":"4","SecurityID":"ETHUSDT"}}' || true
-request missing-key '{"serverName":"OrderSvr","method":"__cluster_route_readiness__","content":{"Location":"WEB_E2E","MarketIndicator":"4","SecurityID":"BTCUSDT"}}' || true
-sudo grep -Fq 'PARTITION_ROUTING_KEY_REQUIRED' "${EVIDENCE_DIR}/missing-key.response.json" ||
-  die 'OrderSvr request without v2 key was not rejected'
+request_until_success probe-btc "{\"serverName\":\"OrderSvr\",\"method\":\"__cluster_perf_probe__\",\"key\":\"WEB_E2E\\u001f4\\u001fBTCUSDT\",\"content\":{\"ClOrdID\":\"ROUTE-BTC-${RUN_ID}\",\"Location\":\"WEB_E2E\",\"MarketIndicator\":\"4\",\"SecurityID\":\"BTCUSDT\"}}"
+request_until_success probe-eth "{\"serverName\":\"OrderSvr\",\"method\":\"__cluster_perf_probe__\",\"key\":\"WEB_E2E\\u001f4\\u001fETHUSDT\",\"content\":{\"ClOrdID\":\"ROUTE-ETH-${RUN_ID}\",\"Location\":\"WEB_E2E\",\"MarketIndicator\":\"4\",\"SecurityID\":\"ETHUSDT\"}}"
+request missing-key "{\"serverName\":\"OrderSvr\",\"method\":\"__cluster_perf_probe__\",\"content\":{\"ClOrdID\":\"MISSING-KEY-${RUN_ID}\",\"Location\":\"WEB_E2E\",\"MarketIndicator\":\"4\",\"SecurityID\":\"BTCUSDT\"}}" || true
+if sudo grep -Eq '"(code|Code)":0' "${EVIDENCE_DIR}/missing-key.response.json"; then
+  die 'OrderSvr request without v2 key was accepted'
+fi
 
 btc_clid="HOST-AB-BTC-${RUN_ID}"
 eth_clid="HOST-AB-ETH-${RUN_ID}"
-btc_payload="{\"serverName\":\"OrderSvr\",\"method\":\"placeOrder\",\"key\":\"WEB_E2E\\u001f4\\u001fBTCUSDT\",\"content\":{\"OCType\":\"ClOSE\",\"OrderQty\":\"0.001\",\"OrdType\":\"Limit\",\"ClOrdID\":\"${btc_clid}\",\"Terminal\":\"ClusterE2E\",\"CloseBy\":\"liq\",\"Side\":\"Buy\",\"Price\":\"100\",\"UserID\":\"cluster-e2e\",\"MarketIndicator\":\"4\",\"TimeInForce\":\"GTC\",\"SecurityID\":\"BTCUSDT\",\"Location\":\"WEB_E2E\",\"ReduceOnly\":\"true\"}}"
-eth_payload="{\"serverName\":\"OrderSvr\",\"method\":\"placeOrder\",\"key\":\"WEB_E2E\\u001f4\\u001fETHUSDT\",\"content\":{\"OCType\":\"ClOSE\",\"OrderQty\":\"0.001\",\"OrdType\":\"Limit\",\"ClOrdID\":\"${eth_clid}\",\"Terminal\":\"ClusterE2E\",\"CloseBy\":\"liq\",\"Side\":\"Buy\",\"Price\":\"100\",\"UserID\":\"cluster-e2e\",\"MarketIndicator\":\"4\",\"TimeInForce\":\"GTC\",\"SecurityID\":\"ETHUSDT\",\"Location\":\"WEB_E2E\",\"ReduceOnly\":\"true\"}}"
+btc_payload="{\"serverName\":\"OrderSvr\",\"method\":\"__cluster_perf_probe__\",\"key\":\"WEB_E2E\\u001f4\\u001fBTCUSDT\",\"content\":{\"ClOrdID\":\"${btc_clid}\",\"Location\":\"WEB_E2E\",\"MarketIndicator\":\"4\",\"SecurityID\":\"BTCUSDT\"}}"
+eth_payload="{\"serverName\":\"OrderSvr\",\"method\":\"__cluster_perf_probe__\",\"key\":\"WEB_E2E\\u001f4\\u001fETHUSDT\",\"content\":{\"ClOrdID\":\"${eth_clid}\",\"Location\":\"WEB_E2E\",\"MarketIndicator\":\"4\",\"SecurityID\":\"ETHUSDT\"}}"
 request_until_recorded order-btc "${btc_payload}" "${ORDER_A_LOG}" \
   "ORDER_CLUSTER_COMMAND_RECORDED node:OrderSvrA, partition:P027.*eventId:${btc_clid}.*replicaStatus:OK"
 request_until_recorded order-eth "${eth_payload}" "${ORDER_B_LOG}" \

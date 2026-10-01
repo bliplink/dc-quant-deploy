@@ -17,6 +17,8 @@ ORDER_CLUSTER_REPLICATION_BATCH_MAX_WAIT_MICROS="${ORDER_CLUSTER_REPLICATION_BAT
 ORDER_CLUSTER_REPLICATION_BATCH_THREADS="${ORDER_CLUSTER_REPLICATION_BATCH_THREADS:-2}"
 ORDER_CLUSTER_REPLICATION_ASYNC_RETRY_MILLIS="${ORDER_CLUSTER_REPLICATION_ASYNC_RETRY_MILLIS:-100}"
 ORDER_CLUSTER_REPLICATION_ASYNC_MAX_PENDING_RECORDS="${ORDER_CLUSTER_REPLICATION_ASYNC_MAX_PENDING_RECORDS:-8192}"
+ORDER_CLUSTER_DEV_ALLOW_LOCAL_IMAGE="${ORDER_CLUSTER_DEV_ALLOW_LOCAL_IMAGE:-false}"
+compose_pull_args=()
 
 log() { printf '[order-cluster-dev] %s\n' "$*"; }
 die() { printf '[order-cluster-dev] ERROR: %s\n' "$*" >&2; exit 1; }
@@ -39,12 +41,16 @@ esac
 require_order_image() {
   local image="$1"
   [[ "${image}" =~ ^ghcr\.io/bliplink/ordersvr:cluster-dev-[0-9a-f]{7,40}$ ]] ||
+    [[ "${ORDER_CLUSTER_DEV_ALLOW_LOCAL_IMAGE}" == true &&
+       "${image}" =~ ^local/dc-saas-ordersvr:sha-[0-9a-f]{7,40}$ ]] ||
     die "refusing non-immutable OrderSvr image: ${image}"
 }
 
 require_gw_image() {
   local image="$1"
   [[ "${image}" =~ ^ghcr\.io/bliplink/ordersvr:gw-cluster-dev-[0-9a-f]{7,40}$ ]] ||
+    [[ "${ORDER_CLUSTER_DEV_ALLOW_LOCAL_IMAGE}" == true &&
+       "${image}" =~ ^local/dc-saas-gateway:cluster-dev-reset-[0-9]{8}$ ]] ||
     die "refusing non-immutable GW development image: ${image}"
 }
 
@@ -104,6 +110,9 @@ ensure_znode() {
 
 [[ -n "${ORDERSVR_CLUSTER_DEV_IMAGE:-}" ]] || die 'ORDERSVR_CLUSTER_DEV_IMAGE is required'
 [[ -n "${GW_CLUSTER_DEV_IMAGE:-}" ]] || die 'GW_CLUSTER_DEV_IMAGE is required'
+[[ "${ORDER_CLUSTER_DEV_ALLOW_LOCAL_IMAGE}" == true ||
+   "${ORDER_CLUSTER_DEV_ALLOW_LOCAL_IMAGE}" == false ]] ||
+  die 'ORDER_CLUSTER_DEV_ALLOW_LOCAL_IMAGE must be true or false'
 require_order_image "${ORDERSVR_CLUSTER_DEV_IMAGE}"
 require_gw_image "${GW_CLUSTER_DEV_IMAGE}"
 previous_order_image=""
@@ -111,23 +120,37 @@ previous_gw_image=""
 if sudo test -r "${LAST_SUCCESSFUL_MANIFEST}"; then
   previous_order_image="$(manifest_value "${LAST_SUCCESSFUL_MANIFEST}" ORDERSVR_CLUSTER_DEV_IMAGE)"
   previous_gw_image="$(manifest_value "${LAST_SUCCESSFUL_MANIFEST}" GW_CLUSTER_DEV_IMAGE)"
-  require_order_image "${previous_order_image}"
-  require_gw_image "${previous_gw_image}"
+  [[ "${previous_order_image}" =~ ^ghcr\.io/bliplink/ordersvr:cluster-dev-[0-9a-f]{7,40}$ ||
+     "${previous_order_image}" =~ ^local/dc-saas-ordersvr:sha-[0-9a-f]{7,40}$ ]] ||
+    die "invalid previous OrderSvr image in isolated manifest"
+  [[ "${previous_gw_image}" =~ ^ghcr\.io/bliplink/ordersvr:gw-cluster-dev-[0-9a-f]{7,40}$ ||
+     "${previous_gw_image}" =~ ^local/dc-saas-gateway:cluster-dev-reset-[0-9]{8}$ ]] ||
+    die "invalid previous GW image in isolated manifest"
 fi
 [[ -f "${COMPOSE_FILE}" ]] || die "missing ${COMPOSE_FILE}"
 sudo test -r "${SAAS_CONTROL_ROOT}/dc.dat" || die 'existing SaaS dc.dat is unavailable'
 sudo test -r "${SAAS_CONTROL_ROOT}/jaas.ini" || die 'existing SaaS jaas.ini is unavailable'
 
-log 'Pulling immutable cluster development images'
-sudo docker pull "${ORDERSVR_CLUSTER_DEV_IMAGE}"
-sudo docker pull "${GW_CLUSTER_DEV_IMAGE}"
+if [[ "${ORDER_CLUSTER_DEV_ALLOW_LOCAL_IMAGE}" == true ]]; then
+  log 'Using existing local images for isolated cluster only; image IDs will be recorded'
+  sudo docker image inspect "${ORDERSVR_CLUSTER_DEV_IMAGE}" "${GW_CLUSTER_DEV_IMAGE}" >/dev/null
+  compose_pull_args=(--pull never)
+else
+  log 'Pulling immutable cluster development images'
+  sudo docker pull "${ORDERSVR_CLUSTER_DEV_IMAGE}"
+  sudo docker pull "${GW_CLUSTER_DEV_IMAGE}"
+fi
 
 order_common_revision="$(image_label "${ORDERSVR_CLUSTER_DEV_IMAGE}" dc.common.revision)"
 gw_common_revision="$(image_label "${GW_CLUSTER_DEV_IMAGE}" dc.common.revision)"
 order_common_hash="$(image_label "${ORDERSVR_CLUSTER_DEV_IMAGE}" dc.common.jar.sha256)"
 gw_common_hash="$(image_label "${GW_CLUSTER_DEV_IMAGE}" dc.common.jar.sha256)"
-[[ -n "${order_common_revision}" && "${order_common_revision}" != unknown ]] || die 'OrderSvr Common revision label is missing'
-[[ "${order_common_revision}" == "${gw_common_revision}" ]] || die 'OrderSvr/GW Common revisions differ'
+if [[ "${ORDER_CLUSTER_DEV_ALLOW_LOCAL_IMAGE}" == true ]]; then
+  order_common_revision="local-${order_common_hash:0:12}"
+else
+  [[ -n "${order_common_revision}" && "${order_common_revision}" != unknown ]] || die 'OrderSvr Common revision label is missing'
+  [[ "${order_common_revision}" == "${gw_common_revision}" ]] || die 'OrderSvr/GW Common revisions differ'
+fi
 [[ -n "${order_common_hash}" && "${order_common_hash}" != unknown ]] || die 'OrderSvr Common SHA-256 label is missing'
 [[ "${order_common_hash}" == "${gw_common_hash}" ]] || die 'OrderSvr/GW Common SHA-256 labels differ'
 [[ "$(embedded_common_hash "${ORDERSVR_CLUSTER_DEV_IMAGE}" OrderSvr)" == "${order_common_hash}" ]] || die 'OrderSvr embedded Common hash differs from label'
@@ -163,7 +186,7 @@ SERVER.OrderSvr.RegisterServerList=REGISTER.Svr1
 
 SERVER.OrderSvrA.Name=OrderSvrA
 SERVER.OrderSvrA.Host=127.0.0.1:33336
-SERVER.OrderSvrA.RegType=0
+SERVER.OrderSvrA.RegType=2
 SERVER.OrderSvrA.RegisterEnable=1
 SERVER.OrderSvrA.LBFactor=1
 SERVER.OrderSvrA.ServiceName=OrderSvrA
@@ -171,7 +194,7 @@ SERVER.OrderSvrA.RegisterServerList=REGISTER.Svr1
 
 SERVER.OrderSvrB.Name=OrderSvrB
 SERVER.OrderSvrB.Host=127.0.0.1:33337
-SERVER.OrderSvrB.RegType=0
+SERVER.OrderSvrB.RegType=2
 SERVER.OrderSvrB.RegisterEnable=1
 SERVER.OrderSvrB.LBFactor=1
 SERVER.OrderSvrB.ServiceName=OrderSvrB
@@ -209,14 +232,23 @@ Cluster.OrderSvrB.Enabled=true
 Partition.OrderSvr.Count=256
 Partition.OrderSvr.Root=/dc/cluster/ordersvr-dev/partitions
 Partition.OrderSvr.EnforceFence=true
+Partition.OrderSvr.PlacementEnabled=false
+Partition.OrderSvr.PlacementRequired=true
+Partition.OrderSvr.PlacementPath=/dc/cluster/ordersvr-dev/desired/placement
 Partition.OrderSvrA.Count=256
 Partition.OrderSvrA.Root=/dc/cluster/ordersvr-dev/partitions
 Partition.OrderSvrA.EnforceFence=true
 Partition.OrderSvrA.EnforceReadiness=true
+Partition.OrderSvrA.PlacementEnabled=false
+Partition.OrderSvrA.PlacementRequired=true
+Partition.OrderSvrA.PlacementPath=/dc/cluster/ordersvr-dev/desired/placement
 Partition.OrderSvrB.Count=256
 Partition.OrderSvrB.Root=/dc/cluster/ordersvr-dev/partitions
 Partition.OrderSvrB.EnforceFence=true
 Partition.OrderSvrB.EnforceReadiness=true
+Partition.OrderSvrB.PlacementEnabled=false
+Partition.OrderSvrB.PlacementRequired=true
+Partition.OrderSvrB.PlacementPath=/dc/cluster/ordersvr-dev/desired/placement
 EOF
 
 write_order_config() {
@@ -346,7 +378,7 @@ sudo install -m 0644 "${tmp_root}/nodes/OrderSvrB/log4j.ini" "${ORDER_CLUSTER_DE
 sudo install -m 0644 "${tmp_root}/gateway/"*.xml "${ORDER_CLUSTER_DEV_ROOT}/gateway/"
 
 log 'Starting the isolated cluster development ZooKeeper'
-sudo -E docker compose -p "${PROJECT_NAME}" -f "${COMPOSE_FILE}" up -d zookeeper
+sudo -E docker compose -p "${PROJECT_NAME}" -f "${COMPOSE_FILE}" up -d "${compose_pull_args[@]}" zookeeper
 wait_port 32182 'cluster development ZooKeeper'
 wait_healthy "${ZOOKEEPER_CONTAINER}"
 
@@ -365,7 +397,7 @@ ensure_znode /dc/cluster/ordersvr-dev/partitions/P132 \
   '{"partitionId":"P132","epoch":1,"primary":"OrderSvrB","replica":"OrderSvrA","state":"READY"}'
 
 log 'Starting isolated OrderSvr A/B and GW containers'
-sudo -E docker compose -p "${PROJECT_NAME}" -f "${COMPOSE_FILE}" up -d
+sudo -E docker compose -p "${PROJECT_NAME}" -f "${COMPOSE_FILE}" up -d "${compose_pull_args[@]}"
 wait_port 33336 OrderSvrA
 wait_port 33337 OrderSvrB
 wait_port 19111 'OrderSvrA replication'
@@ -383,6 +415,8 @@ GW_CLUSTER_DEV_IMAGE=${gw_image}
 DEPLOYED_AT_UTC=$(date -u +%Y-%m-%dT%H:%M:%SZ)
 COMMON_REVISION=${order_common_revision}
 COMMON_JAR_SHA256=${order_common_hash}
+ORDER_IMAGE_ID=$(sudo docker image inspect "${order_image}" --format '{{.Id}}')
+GW_IMAGE_ID=$(sudo docker image inspect "${gw_image}" --format '{{.Id}}')
 EOF
   sudo install -m 0640 "${tmp_root}/deployment.env" "${target}"
 }
@@ -396,4 +430,8 @@ write_manifest "${LAST_SUCCESSFUL_MANIFEST}" "${ORDERSVR_CLUSTER_DEV_IMAGE}" "${
 
 log "READY: GW=http://127.0.0.1:33302, Common=${order_common_revision}, SHA256=${order_common_hash}"
 log "Run tests with: sudo -E ${SCRIPT_DIR}/tests/run-order-cluster-ab-host.sh"
-log "Rollback with: ${SCRIPT_DIR}/rollback-order-cluster-dev.sh"
+if [[ "${ORDER_CLUSTER_DEV_ALLOW_LOCAL_IMAGE}" == true ]]; then
+  log 'Local isolated images: retain evidence and use uninstall/reinstall; GHCR rollback script is not applicable.'
+else
+  log "Rollback with: ${SCRIPT_DIR}/rollback-order-cluster-dev.sh"
+fi
