@@ -91,7 +91,7 @@ done
 printf 'quit\n' >>"${zk_input}"
 docker exec -i "${ZK_CONTAINER}" zkCli.sh -server "${ZK_SERVER}" \
   <"${zk_input}" >"${zk_output}" 2>&1 || true
-grep -o '{"partitionId"[^}]*}' "${zk_output}" >"${assignments_json}" || true
+python3 "${SCRIPT_DIR}/extract_order_cluster_assignments.py" "${zk_output}" >"${assignments_json}"
 
 python3 - "${assignments_json}" "${assignments_tsv}" "${EXPECTED_PARTITIONS}" "${ORDER_C_ENABLED}" <<'PY'
 import json

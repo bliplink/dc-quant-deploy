@@ -31,7 +31,7 @@ done
 printf 'quit\n' >>"${zk_commands}"
 docker exec -i "${ZK_CONTAINER}" zkCli.sh -server "${ZK_ENDPOINT}" \
   <"${zk_commands}" >"${zk_output}" 2>&1 || true
-grep -o '{"partitionId"[^}]*}' "${zk_output}" >"${assignments}" || true
+python3 "${SCRIPT_DIR}/extract_order_cluster_assignments.py" "${zk_output}" >"${assignments}"
 
 verify_data_root="${DATA_ROOT}"
 if [[ ! -d "${verify_data_root}" ]]; then

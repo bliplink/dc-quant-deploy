@@ -10,6 +10,7 @@
 
 ## 0. 2026-10-01 最新接续点（优先于下文旧快照）
 
+- 19:06 发布/故障门禁预检曾误报 `P019` 缺失：ZooKeeper 实际返回 `P019/epoch 7/OrderSvrB primary/OrderSvrA replica/READY`，但校验和恢复脚本假定 JSON 必须以 `partitionId` 字段开头，漏掉以 `epoch` 开头的合法记录。已改为共享的 JSON 解析器并增加字段顺序/坏数据回归测试；复跑真实门禁 `256/256 READY`、双侧 256 份 snapshot 一致、Order A/B 0 restart/OOM。当前混合 epoch 为 `P019=7`、其余 255 分区 `6`，这不是本次故障注入；诊断版 Order 尚未发布，故障注入也尚未开始。
 - 2026-10-01 新增真实 Demo 业务链路验收：通过公开 `ManagerSvr.tenantApplication` 申请单品种租户 `T17QGO`，自动审批及 `dc_tenant_liquidity_bootstrap=COMPLETE`，Robot 为 `NOTIONAL_ZONES/RUNNING`；**这是旧模板的 10 买 + 10 卖、20 单基线**，每侧金额按 3/3/4 区域分布，约 463 USDT。新注册交易员经 `Demo=1` 入金 1000，IOC 买入 0.0001 BTC 成交，订单/成交/Long 持仓一致；随后 Reduce-Only IOC 卖出平仓，最终持仓、占用保证金和交易员活动单均为 0。可复跑脚本：`tests/run-auto-tenant-trading-e2e.py`（现已调整为新 40 单模板；先 export 当前本机受保护 env；所有业务写入走 API，MySQL 只读验收）。此为单次业务验收，**不是**长期稳定性或外部 GA 证明。
 - **2026-10-01 流动性目标修正为总共 40 档：买 20 + 卖 20。** Robot 引擎原本支持 20/20，问题在 Admin 自动审批试用租户的默认模板仍写死 10/10 和金额区 3/3/4。`TrialLiquidityBootstrapWorker` 现改成 20/20、金额区 6/6/8、权重仍 3/3/4；Admin 63 项测试通过，提交 `0409add` 已快进推送到 `saas-crypto`，本机镜像 `local/dc-saas-adminsvr:trial-depth40-20261001`。新试用租户 `Z669FQ` 自动初始化 `COMPLETE`，Robot `RUNNING/40`；公开 `MDSvr.queryPublicMarket` 按原有设计只返回每侧前 10 档，并不表示后 10 档没有挂单。**既有** `T17QGO` 和 `E2E001` 仍是旧 10/10 配置，未静默迁移。
 - 租户管理热更新真实通过：新租户 `RTTKFL` 使用 `TenantAdmin` 会话调用 `tenantLiquidityProfileAdmin` 的 `UPSERT → APPLY`，先从 20/20 改为 15/15（Robot 30 单），再恢复 20/20（40 单），Robot 容器 ID 未改变。验收脚本：`tests/run-tenant-liquidity-hotedit-e2e.py`。首次试验 `PYFT1S` 因脚本误用普通 `WEB` 会话被控制面安全策略拒绝；没有修改该租户 Robot 参数，改为真实 `TenantAdmin` 身份后通过。
