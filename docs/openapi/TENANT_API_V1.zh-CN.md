@@ -164,7 +164,7 @@ burst  = 10
 
 Tenant Service Key 同样支持 expiry、IP whitelist、last_used_time 和 GW 公共错误脱敏。
 
-公共错误码见 [字段级调用参考](../DC_OPEN_API_V1_REFERENCE.zh-CN.md#121-open-api-v1-公共错误码白名单)。
+公共错误码见 [字段级调用参考](../DC_OPEN_API_V1_REFERENCE.zh-CN.md)。
 
 ## 9. Web 集成
 

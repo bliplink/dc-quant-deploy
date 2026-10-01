@@ -175,7 +175,7 @@ burst  = 30
 - scope 门禁；
 - GW 最终错误脱敏。
 
-公共错误码见 [字段级调用参考](../DC_OPEN_API_V1_REFERENCE.zh-CN.md#121-open-api-v1-公共错误码白名单)。
+公共错误码见 [字段级调用参考](../DC_OPEN_API_V1_REFERENCE.zh-CN.md)。
 
 ## 8. 不属于 Trader API 的能力
 

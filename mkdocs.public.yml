@@ -1,0 +1,55 @@
+site_name: OpenTradingCore Developers
+site_description: Developer Preview for OpenTradingCore Trader and Broker APIs
+site_url: https://api.opentradingcore.com/
+docs_dir: docs
+site_dir: site
+
+theme:
+  name: material
+  language: en
+  features:
+    - navigation.tabs
+    - navigation.sections
+    - navigation.top
+    - content.code.copy
+    - search.suggest
+    - search.highlight
+  palette:
+    scheme: slate
+    primary: blue
+    accent: blue
+
+plugins:
+  - search
+
+markdown_extensions:
+  - admonition
+  - tables
+  - attr_list
+  - pymdownx.details
+  - pymdownx.superfences
+
+nav:
+  - Overview: index.md
+  - Get started:
+      - Quick Start: openapi/QUICK_START.zh-CN.md
+      - Authentication: openapi/AUTHENTICATION_REFERENCE_V1.zh-CN.md
+      - Rate Limits: api/RATE_LIMITS.zh-CN.md
+  - Trader API:
+      - Trader guide: api/TRADER_API_GUIDE.zh-CN.md
+      - Trading contract: openapi/TRADING_API_V1.zh-CN.md
+      - Core trading reference: openapi/CORE_TRADING_REFERENCE_V1.zh-CN.md
+      - Trading operations: openapi/TRADING_OPERATIONS_REFERENCE_V1.zh-CN.md
+      - Market data: openapi/MARKET_DATA_REFERENCE_V1.zh-CN.md
+  - Broker API:
+      - Broker guide: api/BROKER_API_GUIDE.zh-CN.md
+      - Broker overview: openapi/BROKER_API_V1.zh-CN.md
+      - Broker reference: openapi/BROKER_REFERENCE_V1.zh-CN.md
+  - Realtime and recovery:
+      - WebSocket topics: openapi/WEBSOCKET_TOPICS_V1.zh-CN.md
+      - SDK guide: openapi/SDK_GUIDE.zh-CN.md
+  - Reference:
+      - YAML-derived method catalog: openapi/CATALOG_GENERATED.md
+      - Public error codes: DC_OPEN_API_V1_REFERENCE.zh-CN.md
+      - Versioning: openapi/VERSIONING_CHANGELOG.zh-CN.md
+      - Release status: status.md
