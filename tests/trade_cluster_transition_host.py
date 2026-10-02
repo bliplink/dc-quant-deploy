@@ -13,6 +13,7 @@ import datetime as dt
 import json
 import re
 import sys
+import time
 
 try:
     from tests.md_cluster_transition_host import DockerZk, canonical
@@ -175,6 +176,24 @@ def command_switch(args, zk: DockerZk) -> None:
     print("assignment_switch=APPLIED readiness=PENDING")
 
 
+def verify_assignments(plan: dict, zk: DockerZk) -> None:
+    for record in plan["records"]:
+        current = zk.read(record["partitionId"])
+        desired = record["desired"]
+        if canonical(current["value"]) != canonical(desired):
+            raise RuntimeError(f"assignment changed after switch: {record['partitionId']}")
+
+
+def missing_ready_partitions(plan: dict, target: str, evidence: set[tuple[str, str, int]]) -> list[str]:
+    missing = []
+    for record in plan["records"]:
+        desired = record["desired"]
+        key = (target, record["partitionId"], int(desired["epoch"]))
+        if key not in evidence:
+            missing.append(record["partitionId"])
+    return missing
+
+
 def command_verify(args, zk: DockerZk) -> None:
     plan = load_plan(args.plan)
     if plan.get("partitionRoot") != args.partition_root:
@@ -182,27 +201,32 @@ def command_verify(args, zk: DockerZk) -> None:
     if args.target_node and args.target_node != plan.get("target"):
         raise ValueError("target node does not match plan")
 
+    if args.timeout_seconds <= 0:
+        raise ValueError("timeout seconds must be positive")
+    if args.poll_seconds <= 0:
+        raise ValueError("poll seconds must be positive")
+
     target = str(plan["target"])
-    evidence = parse_ready_evidence(zk.logs(args.target_container, plan["createdAt"]))
-    missing = []
+    verify_assignments(plan, zk)
+    deadline = time.monotonic() + args.timeout_seconds
+    missing = [record["partitionId"] for record in plan["records"]]
 
-    for record in plan["records"]:
-        current = zk.read(record["partitionId"])
-        desired = record["desired"]
-        if canonical(current["value"]) != canonical(desired):
-            raise RuntimeError(f"assignment changed after switch: {record['partitionId']}")
-        key = (target, record["partitionId"], int(desired["epoch"]))
-        if key not in evidence:
-            missing.append(record["partitionId"])
-
-    if missing:
-        raise RuntimeError(
-            "target has not emitted TRADE_PARTITION_READY for: " + ",".join(missing[:20])
-        )
-    print(
-        f"readiness=PASS target={target} partitions={len(plan['records'])} "
-        f"assignment_and_epoch=verified"
-    )
+    while True:
+        evidence = parse_ready_evidence(zk.logs(args.target_container, plan["createdAt"]))
+        missing = missing_ready_partitions(plan, target, evidence)
+        if not missing:
+            verify_assignments(plan, zk)
+            print(
+                f"readiness=PASS target={target} partitions={len(plan['records'])} "
+                f"assignment_and_epoch=verified"
+            )
+            return
+        remaining = deadline - time.monotonic()
+        if remaining <= 0:
+            raise RuntimeError(
+                "target has not emitted TRADE_PARTITION_READY for: " + ",".join(missing[:20])
+            )
+        time.sleep(min(args.poll_seconds, remaining))
 
 
 def parser() -> argparse.ArgumentParser:
@@ -229,6 +253,8 @@ def parser() -> argparse.ArgumentParser:
     verify.add_argument("--plan", required=True)
     verify.add_argument("--target-node", choices=sorted(DEFAULT_NODES))
     verify.add_argument("--target-container", required=True)
+    verify.add_argument("--timeout-seconds", type=float, default=30.0)
+    verify.add_argument("--poll-seconds", type=float, default=0.5)
 
     return result
 
