@@ -697,7 +697,7 @@ replicaStatus=OK
 - **新 Order 自动 failover + Trade/Projection 持续真实业务流的同一套 integration 环境联合故障回归：已关闭并通过。**
 - 故障后的业务分区能自动切主并继续撮合/平仓；不满足同步副本门槛的其它分区保持 fail-closed，没有误切主。
 
-仍保留一个发布前工程项：旧 primary 作为 learner 追平后，目前需要 durable proof 门禁 + CAS 才能重新提升为同步 replica；自动冗余自愈尚未工程化。正式环境仍未部署本轮自动 failover 代码。
+旧 primary 作为 learner 追平后的自动冗余自愈也已在后续第 19 节工程化并通过真机验证：只有 durable proof 完全一致、无未提交 STATE tail、controller lease 有效且 ZooKeeper CAS 成功时，learner 才会自动晋回同步 replica。正式环境仍未部署本轮自动 failover 代码。
 
 ## 16. 256 分区独立 bridge 复核
 
@@ -921,4 +921,123 @@ state=READY
 
 A/C 两节点随后均能以 `SYNC_REPLICA` 身份重新提供一致的 `FAILOVER_PROOF`。
 
-因此第 15.4 节的“新 Order 自动 failover + 持续真实业务流联合故障回归”门禁正式关闭。剩余独立工程项为：将“learner durable proof 已追平 -> 自动 CAS 晋回同步 replica”做成正式自动冗余自愈能力，避免当前验证中所需的人工 proof+CAS 恢复步骤。
+因此第 15.4 节的“新 Order 自动 failover + 持续真实业务流联合故障回归”门禁正式关闭。随后第 19 节已继续完成“learner durable proof 已追平 -> 自动 CAS 晋回同步 replica”的自动冗余自愈能力，因此该人工恢复步骤也不再是发布阻塞项。
+## 19. learner 自动冗余自愈验证
+
+持续业务 failover 验收暴露的最后一个工程缺口是：旧 primary 作为 learner 恢复后，即使 durable prefix 已与同步副本完全一致，assignment 仍会停留在 learner，必须人工 proof + CAS 才能恢复双同步副本。
+
+OrderSvr 增加自动冗余修复能力：
+
+```text
+local test commit: dae88083bf063c2e270934bd13fa9a55c08672d7
+remote commit:     a45a739cc609f803a76f75ff9fdf0077dc8b6ac5
+message:           feat(order): auto-repair caught-up learners
+```
+
+实现仍沿用现有自动 failover controller 的同一 ZooKeeper session 与 controller lease，不创建第二套控制权。默认低频扫描：
+
+```text
+order.cluster.failover.replicaRepairPollMillis=5000
+```
+
+只有当前 controller lease holder 执行 repair。每个 learner 晋升前必须同时满足：
+
+1. control plane connected 且 lease 仍由当前 controller 持有；
+2. assignment 仍为 READY/ACTIVE，primary membership 在线；
+3. 至少一个现有同步 replica 在线并能提供合法 `FAILOVER_PROOF`；
+4. learner 在线并能提供合法 `LEARNER_PROOF`；
+5. 同步副本 proof 与 learner proof 均无 uncommitted STATE tail；
+6. durable prefix 完全一致：`journalLastSeq`、`committedStateSeq`、`committedStateEpoch`、`commitMarkerSeq`、`lastStateSeq`、`baselineEpoch`；
+7. CAS 前重新读取 assignment，ZooKeeper dataVersion / epoch / primary / replica / learner 角色均未变化；
+8. CAS 只做 `learner -> replicas`、`assignmentVersion +1`，不改变 primary、epoch 或 state。
+
+任何 proof 不一致、membership 变化、lease 丢失、assignment stale 或 CAS conflict 都保持 learner，不降低 fail-closed 门槛。
+
+新增 focused tests 覆盖 durable prefix 一致/不一致、uncommitted tail、无 lease、primary/learner 离线、CAS 前 assignment 变化、多 learner 顺序修复，以及从 recovered assignment learners 恢复 managed nodes。
+
+最终 Order 全量：
+
+```text
+tests=258
+failures=0
+errors=0
+skipped=0
+```
+
+### 19.1 256 分区历史现场自动恢复
+
+三台 integration OrderSvr 滚动到：
+
+```text
+local/dc-saas-ordersvr:auto-repair-dae8808-20261002
+Order revision: dae88083bf063c2e270934bd13fa9a55c08672d7
+Common revision: 97d4eff30bd3
+```
+
+升级前环境保留了多轮真实故障后的 learner 拓扑。新 controller lease 由 OrderSvrC 持有后，runtime 自动逐分区做 proof + CAS。最终：
+
+```text
+partitions=256
+replica_counts={2:256}
+learner_counts={0:256}
+```
+
+即 256/256 分区全部恢复成双同步副本。此前曾因跨 epoch GAP 等待 snapshot rebase 的 P059，也只有在重启/rebase 完成并能提供与同步副本一致的 durable proof 后才自动晋升，没有绕过 proof 门禁。
+
+### 19.2 P143 受控 learner 自动晋升
+
+为排除大规模历史修复只是偶然的可能，对已健康的 P143 做单分区受控实验。实验前：
+
+```text
+primary=OrderSvrB
+replicas=[OrderSvrC,OrderSvrA]
+learners=[]
+epoch=5
+assignmentVersion=9
+dataVersion=8
+state=READY
+```
+
+先通过 A/C `FAILOVER_PROOF` 验证两同步副本 durable prefix 完全一致、无 uncommitted tail；然后仅通过 ZooKeeper CAS 将 A 降成 learner：
+
+```text
+primary=OrderSvrB
+replicas=[OrderSvrC]
+learners=[OrderSvrA]
+epoch=5
+assignmentVersion=10
+state=READY
+```
+
+之后不执行任何人工 proof/CAS 恢复，只观察自动 repair runtime。结果：
+
+```text
+demotion -> automatic repair = 1158ms
+log: ORDER_AUTO_REPLICA_REPAIRED partition:P143 learner:OrderSvrA
+```
+
+自动恢复后：
+
+```text
+primary=OrderSvrB
+replicas=[OrderSvrC,OrderSvrA]
+learners=[]
+epoch=5
+assignmentVersion=11
+dataVersion=10
+state=READY
+```
+
+primary 与 epoch 均未变化。最终 A/C 再次都以 `SYNC_REPLICA` 身份提供 `FAILOVER_PROOF`，且以下字段完全一致：
+
+```text
+journalLastSeq=101
+committedStateSeq=97
+committedStateEpoch=5
+commitMarkerSeq=98
+lastStateSeq=97
+lastScannedSeq=101
+baselineEpoch=5
+```
+
+因此“故障节点回来后自动恢复冗余”门禁已关闭：Order 自动 HA 现在覆盖 `primary failover -> learner catch-up -> proof-guarded replica repair` 完整闭环。
