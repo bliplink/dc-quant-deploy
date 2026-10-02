@@ -1294,3 +1294,98 @@ Maven Central Common 3.0.15
 -> authoritative DB reconciliation
 -> killed node replica repair
 ```
+## 22. 全正式镜像链最终复验：OFC003 / OFC004
+
+在第 21 节验收之后，正式发布链继续完成两项收口：ProjectionSvr `saas-crypto` 更新到 `1adddfbae28d1308be0b1eb50f3140ec292d4eef`，GitHub Actions run `37077823628` 成功；GW 则移除服务层直接 Common 依赖与直接 clone/build Common 的旁路，改为 clone/build `com.app.dc:saas-crypto`，并排除 `io.github.bliplink:gw:3.0.12` 自带的旧 Common 3.0.12。
+
+GW PR #1 合并 commit 为 `6a84739d2149da0eaaf1ea64f485a2a19843f78d`。正式 GitHub Actions run `37079340393` 成功，重新发布真正的多架构镜像：
+
+```text
+linux/amd64 sha256:842c6e339927244e843c846361fc80ce15d72c58c605b5006b077a514893d812
+linux/arm64 sha256:9e0a1cae06628491496839d4186128f8b4abbcbce4b04ac7cd2d1d997e3d6a5c
+COMMON_REVISION=com-app-common-v3.0.15
+COMMON_GAV=io.github.bliplink:com.app.common:3.0.15
+COMMON_JAR_SHA256=ae32a07b098daaa1f17afaebf2a49f6c15f52e55d4c225bd244b64c01d012152
+```
+
+integration GW 随后切换到 `ghcr.io/bliplink/gw:saas-crypto`，镜像 revision 为 `6a84739d2149da0eaaf1ea64f485a2a19843f78d`。重建后 34602 正常监听，Trade Web -> GW -> AdminSvr 的 `publicTenantDirectory` HTTP 请求返回 `code=0`。
+
+### 22.1 全正式镜像无故障业务基线：OFC003_E2E
+
+使用全新 tenant `OFC003_E2E`，在 GW、Trade Web、Login、Admin、Order、Trade、Projection、APS 均为 GitHub Actions 正式镜像的条件下再次执行完整浏览器业务闭环。public registration、buyer/seller login、wrong-location reject、deposit、resting limit order、cancel、matched execution、position update、reduce-only close、authoritative MySQL 全部 PASS，浏览器最终 `status=PASS`。
+
+隔离 failover 栈仍未配置可路由 MDSvr 分区，因此 recent-trade/K-line 继续按测试设计标记 `SKIPPED_MDSVR_NOT_ROUTABLE`；这不影响 Order/Trade/Projection/GW 正式镜像验收。
+
+### 22.2 全正式镜像最终 live failover：OFC004_E2E
+
+业务键 `OFC004_E2E + 4 + BTCUSDT` 命中 `P049`。故障前：
+
+```text
+primary=OrderSvrC
+replicas=[OrderSvrA,OrderSvrB]
+learners=[]
+epoch=9
+assignmentVersion=17
+state=READY
+```
+
+浏览器完成登录、入金及真实订单流后进入 failover probe；收到 `fault-ready` 后，对正式 GHCR `OrderSvrC` 执行 SIGKILL。结果：
+
+```text
+C -> A
+epoch: 9 -> 10
+kill -> new primary READY: 7402ms
+firstFailureMs: 775ms
+recoveryMs: 9918ms
+business outageMs: 9143ms
+browser_rc: 0
+```
+
+浏览器恢复后继续完成真实撮合、execution 校验与 reduce-only 平仓，最终 `status=PASS`。恢复被 kill 的 C 后，自动 learner catch-up / replica repair 完成，最终：
+
+```text
+primary=OrderSvrA
+replicas=[OrderSvrB,OrderSvrC]
+learners=[]
+epoch=10
+assignmentVersion=19
+state=READY
+```
+
+MySQL 最终权威状态：
+
+```text
+orders=5
+executions=4
+open_orders=0
+nonflat_positions=0
+balances_nonflat=0
+duplicate_clord=0
+buyer/seller used_margin=0
+buyer/seller freezed_margin=0
+buyer/seller freezed_commission=0
+buyer balance=99999.952
+seller balance=99999.952
+```
+
+Projection 最终也与本轮业务完全对齐。Order projection 为 `P049 / source_epoch=10 / journal_seq=113 / event_id=P049:10:113`。Trade projection 中 `OFC004_E2E` 实际映射到 `P208`，共观察到 42 条 mutation，最大 journal seq 为 23；对应 watermark 为 `P208 / source_epoch=1 / journal_seq=23`。
+
+恢复后对 Order A/B/C、Trade A/B、Projection 和 GW 检查 `AUTO_FAILOVER_FAILED`、`PROMOTION_UNSAFE`、`RECOVERY_FAILED`、`STALE_EPOCH`、`invalid projection wire magic`、`OutOfMemory`、`FATAL`，均未发现新记录。
+
+最终正式发布路径已闭环：
+
+```text
+Common 3.0.15
+-> Maven Central
+-> com.app.dc:saas-crypto
+-> service GitHub Actions
+-> GHCR amd64/arm64 images
+-> all-official integration baseline
+-> real browser business flow
+-> primary SIGKILL
+-> automatic failover
+-> post-failover matching/close
+-> DB reconciliation
+-> Order + Trade Projection watermark convergence
+-> killed node automatic replica repair
+```
