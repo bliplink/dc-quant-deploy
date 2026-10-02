@@ -99,3 +99,5 @@ INDSvr 提交 `6753e80` 调整了判断顺序：只有缓存中实际存在选�
 该次验收又发现历史窗口只有 `barCount=1`。根因是 INDSvr 启动时 APSSvr 尚未连通，首次 `queryKline` 失败后返回空结果，但 PriceInput 仍把品种标为 `READY`，且连接恢复后只重新请求 ticker，没有重试历史 K 线。后续修复要求空历史结果 fail-closed 为 `FAILED`，保留目标品种，并在 APSSvr 连通后按 `1s` 首次延迟、`3s` 间隔、最多 `5` 次重新装载；历史数据真实装载并完成订阅后才能标记 `READY`。
 
 生产部署验证中，10 个品种首次均正确进入 `FAILED`，第二轮恢复时每个品种装入 50 根 15m K 线并全部进入 `READY`。同时发现升级后的第一根自然 K 线可能早于每分钟一次的 ACTIVE 策略装载任务约 2 秒到达，因而被 fail-closed 为 `active_strategy_missing`。INDSvr 后续增加启动预热：启动后 3 秒主动装载 ACTIVE 注册表，失败时每 3 秒重试，最多 5 次；定时分钟级刷新保持不变。
+
+最终版本 `76aa04b` 于 14:37 上线：启动后约 5.5 秒完成 100 条 ACTIVE 注册记录和 100 个运行定义预热，随后 10 个品种各恢复 50 根 15m 历史。14:45 自然闭线时，BTCUSDT 完整经过 `bar_received`、`scene_resolved`、`strategy_selected`、`series_ready(barCount=50)`、`strategy_active` 和 `strategy_primary_no_signal`；未再出现 `active_strategy_missing`、`selected_strategy_blank` 或持续连接异常。该根 K 线没有入场信号是策略在完整数据上的正常决策，不再是运行链路故障。
