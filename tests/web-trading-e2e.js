@@ -11,6 +11,7 @@ const buyerId = process.env.E2E_BUYER_ID || buyer;
 const sellerId = process.env.E2E_SELLER_ID || seller;
 const artifactDir = process.env.E2E_ARTIFACT_DIR || '/artifacts';
 const browserExecutable = process.env.E2E_BROWSER_EXECUTABLE;
+const faultProbeEnabled = process.env.E2E_FAULT_PROBE === '1';
 const ignoredConsoleErrors = [
   // TradingView rejects late historical bars after a newer snapshot; this does
   // not affect the authenticated order, execution, balance, or recent-trade flow.
@@ -47,7 +48,7 @@ async function invokeFromPage(page, method, action) {
   return body;
 }
 
-async function gatewayCall(page, serverName, method, content) {
+async function gatewayCall(page, serverName, method, content, key) {
   return page.evaluate(async request => {
     const login = JSON.parse(sessionStorage.getItem('loginData') || '{}');
     const response = await fetch('/httpapi/', {
@@ -56,7 +57,60 @@ async function gatewayCall(page, serverName, method, content) {
       body: JSON.stringify(request)
     });
     return response.json();
-  }, {serverName, method, content});
+  }, key ? {serverName, method, key, content} : {serverName, method, content});
+}
+
+async function probeOrderFailover(page) {
+  const routingKey = `${location}\u001f4\u001fBTCUSDT`;
+  const query = {
+    userid: buyerId,
+    securityid: 'BTCUSDT',
+    MarketIndicator: '4',
+    Location: location
+  };
+  const preflight = await gatewayCall(page, 'OrderSvr', 'queryOpenOrder', query, routingKey);
+  if (Number(preflight && preflight.code) !== 0) {
+    throw new Error(`fault probe preflight failed: ${JSON.stringify(preflight)}`);
+  }
+
+  const startedAt = Date.now();
+  fs.writeFileSync(path.join(artifactDir, 'fault-ready'), String(startedAt));
+  const samples = [];
+  let firstFailureAt = null;
+  let recoveredAt = null;
+
+  for (let attempt = 0; attempt < 240; attempt += 1) {
+    const now = Date.now();
+    try {
+      const body = await gatewayCall(page, 'OrderSvr', 'queryOpenOrder', query, routingKey);
+      const code = Number(body && body.code);
+      const ok = code === 0;
+      samples.push({ offsetMs: now - startedAt, ok, code });
+      if (!ok && firstFailureAt === null) firstFailureAt = now;
+      if (firstFailureAt !== null && ok) {
+        recoveredAt = Date.now();
+        break;
+      }
+    } catch (error) {
+      samples.push({ offsetMs: now - startedAt, ok: false, error: String(error && error.message || error) });
+      if (firstFailureAt === null) firstFailureAt = now;
+    }
+    await page.waitForTimeout(250);
+  }
+
+  const result = {
+    startedAt,
+    firstFailureAt,
+    recoveredAt,
+    firstFailureMs: firstFailureAt === null ? null : firstFailureAt - startedAt,
+    recoveryMs: recoveredAt === null ? null : recoveredAt - startedAt,
+    outageMs: firstFailureAt === null || recoveredAt === null ? null : recoveredAt - firstFailureAt,
+    samples
+  };
+  fs.writeFileSync(path.join(artifactDir, 'fault-probes.json'), JSON.stringify(result, null, 2));
+  if (firstFailureAt === null) throw new Error('fault probe never observed OrderSvr unavailability');
+  if (recoveredAt === null) throw new Error('OrderSvr did not recover within the fault probe window');
+  return result;
 }
 
 async function login(browser, username, expectedUserId) {
@@ -328,6 +382,8 @@ async function waitForNoPosition(page) {
     }
     await cancelFirstOpenOrder(buyerSession.page);
 
+    const failoverProbe = faultProbeEnabled ? await probeOrderFailover(buyerSession.page) : null;
+
     await placeLimit(buyerSession.page, 'Buy / Long', '60000', '0.001');
     await (await openOrders(buyerSession.page)).first().waitFor({ timeout: 15000 });
     await placeLimit(sellerSession.page, 'Sell / Short', '60000', '0.001');
@@ -418,7 +474,8 @@ async function waitForNoPosition(page) {
         buyer: buyerSession.realtimeKline,
         seller: sellerSession.realtimeKline
       },
-      publicMarketPollingCalls: 0
+      publicMarketPollingCalls: 0,
+      failoverProbe
     }, null, 2));
   } catch (error) {
     if (buyerSession) {

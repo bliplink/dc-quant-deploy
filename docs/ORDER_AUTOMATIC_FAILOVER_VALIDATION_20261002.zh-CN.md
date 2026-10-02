@@ -1041,3 +1041,134 @@ baselineEpoch=5
 ```
 
 因此“故障节点回来后自动恢复冗余”门禁已关闭：Order 自动 HA 现在覆盖 `primary failover -> learner catch-up -> proof-guarded replica repair` 完整闭环。
+
+## 20. Web `/httpapi` 旧请求 60 秒悬挂与超时收敛
+
+在第 18/19 节已经验证控制面自动切主和 learner 自动 repair 后，继续对真实浏览器业务流做独立复测，发现一个与控制面不同层次的用户感知问题：**primary 已经在数秒内完成切换，但故障瞬间已经发往旧 primary 的 HTTP 请求可能继续悬挂，直到 Nginx 默认 60 秒 upstream 超时。**
+
+### 20.1 默认 Nginx 超时：控制面 6.5 秒，业务探针被拖到约 59.4 秒
+
+使用 `IHF003_E2E` 做独立复测，业务路由命中 P143。故障注入前实际拓扑：
+
+```text
+primary=OrderSvrB
+replicas=[OrderSvrC,OrderSvrA]
+learners=[]
+epoch=5
+assignmentVersion=11
+state=READY
+```
+
+浏览器完成真实登录、入金、挂单与撤单后启动每 250ms 的 `OrderSvr.queryOpenOrder` 探针，并在 `fault-ready` marker 出现后对当前 primary `OrderSvrB` 执行 SIGKILL。
+
+控制面结果：
+
+```text
+B -> C
+epoch: 5 -> 6
+kill -> new primary READY: 6519ms
+```
+
+但浏览器探针观测为：
+
+```text
+firstFailureMs = 772ms
+recoveryMs     = 60171ms
+outageMs       = 59399ms
+```
+
+其中一笔已经进入旧 backend 的请求在 GW 检测到 B 断开后仍未完成 callback；Trade Web Nginx `/httpapi` 没有显式 `proxy_read_timeout`，因此使用默认 60 秒，最终返回 504。浏览器流程已经完成撮合和平仓，但最终因捕获到这次 504 console error 而 `browser_rc=1`。
+
+MySQL 权威状态仍然收敛：
+
+```text
+orders=5
+executions=4
+nonflat_positions=0
+used/freezed margin=0
+```
+
+恢复 B 后自动冗余修复继续通过：
+
+```text
+ORDER_REPLICA_CATCHUP_OK partition:P143 epoch:6 replicatedSeq:146
+ORDER_AUTO_REPLICA_REPAIRED partition:P143 learner:OrderSvrB
+final primary=OrderSvrC
+final replicas=[OrderSvrA,OrderSvrB]
+learners=[]
+epoch=6
+assignmentVersion=13
+state=READY
+```
+
+### 20.2 显式 12 秒 `/httpapi` 上游等待：完整浏览器交易 PASS
+
+在隔离 Trade Web 上将 `/httpapi` 调整为：
+
+```nginx
+proxy_connect_timeout 2s;
+proxy_read_timeout 12s;
+proxy_send_timeout 12s;
+```
+
+随后使用全新 tenant `IHF004_E2E` 做第二轮独立 live failover。业务路由命中 P149，故障前：
+
+```text
+primary=OrderSvrA
+replicas=[OrderSvrB,OrderSvrC]
+learners=[]
+epoch=4
+assignmentVersion=7
+state=READY
+```
+
+在同样的真实浏览器交易流中 SIGKILL A，结果：
+
+```text
+A -> B
+epoch: 4 -> 5
+kill -> new primary READY: 8912ms
+firstFailureMs = 1046ms
+recoveryMs     = 11695ms
+outageMs       = 10649ms
+probe samples  = 47
+failed samples = 42
+browser_rc     = 0
+```
+
+故障窗口先返回 `1003`，随后短暂返回 `1016`，新 primary 完成 promotion 后恢复 `code=0`。与上一轮约 59.4 秒相比，用户可见业务不可用窗口缩短约 48.75 秒，约 82%。
+
+浏览器继续完成挂单、撤单、撮合、持仓和 reduce-only 平仓。MySQL 最终权威状态：
+
+```text
+orders=5
+executions=4
+nonflat_positions=0
+balances_nonzero_margin=0
+buyer balance=99999.952
+seller balance=99999.952
+```
+
+恢复 A 后，自动 learner catch-up / replica repair 也再次通过：
+
+```text
+ORDER_REPLICA_CATCHUP_OK partition:P149 epoch:5 replicatedSeq:94
+ORDER_AUTO_REPLICA_REPAIRED partition:P149 learner:OrderSvrA
+final primary=OrderSvrB
+final replicas=[OrderSvrC,OrderSvrA]
+learners=[]
+epoch=5
+assignmentVersion=9
+state=READY
+```
+
+Trade Web 正式修复已提交：
+
+```text
+repository: bliplink/dc-trade-web
+branch: fix/httpapi-failover-timeout
+commit: 7a9607438d81e1e8f7b72403c9add2069067a96b
+PR: #1
+```
+
+该改动**不做透明订单重试**，避免在请求结果未知时制造重复下单风险；它只把失败旧连接的 HTTP 等待时间从默认 60 秒收敛到有界窗口。更底层的长期优化仍是让 GW/gateway connector 在 backend 断开时主动完成或失败该连接上的 pending callback，使用户感知恢复进一步贴近实际 primary READY 时间。

@@ -212,6 +212,7 @@ docker exec \
   -e E2E_SELLER="${E2E_SELLER}" \
   -e E2E_BUYER_ID="${E2E_BUYER_ID}" \
   -e E2E_SELLER_ID="${E2E_SELLER_ID}" \
+  -e E2E_FAULT_PROBE="${E2E_FAULT_PROBE:-0}" \
   -e E2E_PASSWORD="${E2E_PASSWORD}" \
   -e E2E_ARTIFACT_DIR=/artifacts \
   "${E2E_RUNNER_NAME}" bash /work/run-web-trading-e2e.sh
