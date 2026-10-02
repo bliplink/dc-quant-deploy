@@ -79,3 +79,21 @@ strategy.selection.backtest-qualification.max-drawdown-pct=0.15
 刷新资格快照后，ACTIVE 合格数由 3 增加到 4，缺少 v4 证据的 ACTIVE 数由 74 降至 70。随后手工刷新 BTCUSDT 场景选择，结果从 `no_scene_candidates` 变为 `SELECT`，候选数为 1。
 
 本批拒绝率为 7/8，达到“停止扩大重验、转入策略质量分析”的条件。因此未继续堆积下一批任务；后续由每天 8 条、30 天冷却的定时轮转逐步补齐证据，并根据失败原因改进策略逻辑和样本覆盖。
+
+## 2026-10-02 INDSvr 冷启动恢复修复
+
+首批复核恢复 BTCUSDT channel 候选后，INDSvr 重启暴露出一个独立问题：进程内选策缓存为空时，`getSelectedStrategy` 先把空的 `selectedAt` 当成“选策已过期”并直接返回，导致持久化在 ClickHouse 中的最新选策记录没有机会通过单点查询重新载入。表现为行情和场景都正常，但闭线执行记录为 `selected_strategy_blank`。
+
+INDSvr 提交 `6753e80` 调整了判断顺序：只有缓存中实际存在选策值时才执行缓存过期判断；冷缓存继续进入 DAO 查询并恢复选策。对应回归测试覆盖“启动初始化时 DAO 暂不可用、随后恢复”的场景，确保无需等待下一次定时选策即可恢复已有结果。
+
+生产验收要求：
+
+- 容器镜像 revision 为 `6753e80` 或其后继版本，容器保持 `running` 且 `RestartCount=0`；
+- 重启后 APSSvr、MDSvr、SIMSvr 和 QuantSvr 连接恢复，配置的品种均进入 `READY`；
+- 下一根 15 分钟自然闭线时，BTCUSDT 不再出现 `selected_strategy_blank`；
+- 允许策略正常返回无信号，但必须先进入 `strategy_selected`/策略执行路径；
+- 不以强制下单作为恢复标准，也不为制造成交而放松 v4 资格门槛。
+
+自然闭线验收已于 14:15 完成：BTCUSDT 依次进入 `bar_received`、`scene_resolved`、`strategy_selected`、`strategy_active` 和 `strategy_primary_no_signal`，确认冷启动选策恢复有效。
+
+该次验收又发现历史窗口只有 `barCount=1`。根因是 INDSvr 启动时 APSSvr 尚未连通，首次 `queryKline` 失败后返回空结果，但 PriceInput 仍把品种标为 `READY`，且连接恢复后只重新请求 ticker，没有重试历史 K 线。后续修复要求空历史结果 fail-closed 为 `FAILED`，保留目标品种，并在 APSSvr 连通后按 `1s` 首次延迟、`3s` 间隔、最多 `5` 次重新装载；历史数据真实装载并完成订阅后才能标记 `READY`。

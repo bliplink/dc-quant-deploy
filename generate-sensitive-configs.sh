@@ -420,6 +420,9 @@ initial.kline.backfill.delayMs=30000
 symbolList=TRXUSDT|ETHUSDT|SOLUSDT|LINKUSDT|XRPUSDT|DOGEUSDT|ADAUSDT|BNBUSDT|BTCUSDT|UNIUSDT
 queryKlineCount=50
 queryKlineCount1d=400
+priceInput.bootstrapReconnectDelayMs=1000
+priceInput.bootstrapRetryDelayMs=3000
+priceInput.bootstrapRetryMaxAttempts=5
 
 log4j.file=./config/log4j.ini
 log4j.thread=1
