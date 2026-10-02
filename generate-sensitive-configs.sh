@@ -467,6 +467,13 @@ strategy.live.upgrade.auto.cron=0 20 */2 * * ?
 strategy.live.upgrade.auto.limit=6
 strategy.live.upgrade.auto.retryCooldownHours=12
 strategy.live.upgrade.auto.maxAttemptsPerVersion=2
+strategy.live.recheck.auto.enabled=true
+strategy.live.recheck.auto.cron=0 30 3 * * ?
+strategy.live.recheck.defaultRangeDays=365
+strategy.live.recheck.defaultEndDaysAgo=1
+strategy.live.recheck.defaultCooldownHours=720
+strategy.live.recheck.defaultLimit=8
+strategy.live.recheck.defaultPriority=5
 
 signalCron=0 0/15 * * * ?
 deepSeekJobSignalCron=0 5 0 * * ?
@@ -494,7 +501,7 @@ strategy.selection.backtest-qualification.execution-model-version=v4_non_overlap
 strategy.selection.backtest-qualification.max-age-days=45
 strategy.selection.backtest-qualification.min-trades=20
 strategy.selection.backtest-qualification.min-profit-factor=1.20
-strategy.selection.backtest-qualification.max-drawdown=0.15
+strategy.selection.backtest-qualification.max-drawdown-pct=0.15
 
 binanceStageGuardEnabled=true
 binanceRangeAllowedStages=0,2,B
