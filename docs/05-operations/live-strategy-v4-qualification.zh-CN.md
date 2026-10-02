@@ -101,3 +101,27 @@ INDSvr 提交 `6753e80` 调整了判断顺序：只有缓存中实际存在选�
 生产部署验证中，10 个品种首次均正确进入 `FAILED`，第二轮恢复时每个品种装入 50 根 15m K 线并全部进入 `READY`。同时发现升级后的第一根自然 K 线可能早于每分钟一次的 ACTIVE 策略装载任务约 2 秒到达，因而被 fail-closed 为 `active_strategy_missing`。INDSvr 后续增加启动预热：启动后 3 秒主动装载 ACTIVE 注册表，失败时每 3 秒重试，最多 5 次；定时分钟级刷新保持不变。
 
 最终版本 `76aa04b` 于 14:37 上线：启动后约 5.5 秒完成 100 条 ACTIVE 注册记录和 100 个运行定义预热，随后 10 个品种各恢复 50 根 15m 历史。14:45 自然闭线时，BTCUSDT 完整经过 `bar_received`、`scene_resolved`、`strategy_selected`、`series_ready(barCount=50)`、`strategy_active` 和 `strategy_primary_no_signal`；未再出现 `active_strategy_missing`、`selected_strategy_blank` 或持续连接异常。该根 K 线没有入场信号是策略在完整数据上的正常决策，不再是运行链路故障。
+
+## 2026-10-02 当前场景定向复核与策略修复止损
+
+在基础链路恢复后，生产审计显示 100 条 ACTIVE 中只有 4 条通过当前 v4 门槛。12:05 的最新选策结果中，9 个品种为 `NO_TRADE/no_scene_candidates`；UNIUSDT/range 虽有 1 个合格候选，但模型认为价格位于区间中部、日线背景偏多，与候选的做空入场位置不匹配，因此继续空仓。该状态说明“没有成交”已经从基础设施故障收敛为合格策略覆盖不足与正常交易纪律，不能通过放宽门槛或强制制造信号处理。
+
+先对两个看似最有修复价值的策略做了非发布源码修复验证：
+
+- LINKUSDT channel `lcr1_link_cha_df7684cd@v3`：以 ATR 为单位有界放宽双确认和入场阈值，16 组网格、`FEE_ADJUSTED_PROFIT_FIRST`；结果只有 12 笔，PF 1.3583，扣费后验证 -11.91、前瞻 -57.32。
+- ADAUSDT range `research_r34_ada_compressed_bollinger_range_reentry_short@v3`：增加长期均线漂移和 ATR 跌破深度过滤，16 组网格；结果 15 笔，PF 2.6375，扣费后验证 +357.60、前瞻 -28.91。
+
+两项均记录 `workflowMode=live_recheck`、`published_live=0`、`autoPublishAction=SKIP` 和 `autoPublishReason=live recheck is validation only`。线上 ACTIVE 仍为 LINK v2 和 ADA v1。两个假设均未改善核心失败项，停止继续参数挖掘；后续若再研究，必须提出新的场景/结构假设，而不是降低 20 笔、PF、OOS 或前瞻收益门槛。
+
+随后按最新市场场景，从尚无 v4 证据的 ACTIVE 中每个缺口单元只挑 1 个候选，提交 6 条精确 live-recheck：
+
+| 品种 / 场景 | 策略 | 交易数 | PF | 扣费后验证 | 扣费后前瞻 | 结论 |
+|---|---|---:|---:|---:|---:|---|
+| ADA / trend | `research_r15_ada_kama_efficiency_continuation_long@v2` | 10 | 2.4118 | +304.19 | -84.06 | 拒绝：OOS 与样本均不足 |
+| BTC / trend | `lcr1_btc_tre_925541c0@v2` | 24 | 1.9848 | +257.74 | +21.16 | 通过 |
+| DOGE / trend | `lcr1_doge_tre_e63b9e4e@v2` | 13 | 3.4107 | +655.74 | -92.26 | 拒绝：OOS 与样本均不足 |
+| ETH / trend | `lcr1_eth_tre_24849d54@v2` | 52 | 2.0527 | +969.82 | -208.48 | 拒绝：OOS/前瞻失效 |
+| LINK / channel | `research_r19_link_flat_channel_wick_reentry_short@v2` | 7 | 1.5539 | +31.42 | +20.33 | 拒绝：少于 20 笔 |
+| XRP / trend | `lcr1_xrp_tre_8b8eb3e3@v2` | 12 | 110.5895 | +905.93 | +93.94 | 拒绝：少于 20 笔 |
+
+刷新资格快照后，ACTIVE 合格数从 4 增加到 5，`realistic_backtest_missing` 从 70 降到 64。13:18 手工刷新 BTCUSDT/trend 选策，结果从 `NO_TRADE/no_scene_candidates` 恢复为 `SELECT lcr1_btc_tre_925541c0@v2`，候选数为 1。恢复标准是策略重新进入正常选策和闭线执行路径；实际下单仍须等待其自身的流动性扫单、回踩和回收条件满足。
