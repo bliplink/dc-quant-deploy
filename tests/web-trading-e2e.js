@@ -198,14 +198,32 @@ async function deposit(page, amount) {
   await page.locator('.accountInfoWrap').getByText('Deposit', { exact: true }).click();
   const modal = page.locator('.ant-modal:visible').filter({ hasText: 'Deposit' });
   await modal.locator('input').fill(String(amount));
-  await invokeFromPage(page, 'cashIn', () =>
-    modal.getByRole('button', { name: 'Confirm Deposit' }).click()
-  );
+  const confirm = modal.getByRole('button', { name: 'Confirm Deposit' });
+  await confirm.waitFor({ state: 'visible', timeout: 15000 });
+  const deadline = Date.now() + 15000;
+  while (await confirm.isDisabled()) {
+    if (Date.now() >= deadline) throw new Error('Confirm Deposit did not become enabled');
+    await page.waitForTimeout(50);
+  }
+  await invokeFromPage(page, 'cashIn', () => confirm.click());
   await page.waitForTimeout(1500);
 }
 
-async function placeLimit(page, side, price, amount) {
+async function waitForInteractiveOrderForm(page) {
   const form = page.locator('.placeOrderWrap');
+  await form.waitFor({ state: 'visible', timeout: 30000 });
+  await page.waitForFunction(() => {
+    const wrap = document.querySelector('.placeOrderWrap');
+    if (!wrap || wrap.classList.contains('publicMode')) return false;
+    const limit = [...wrap.querySelectorAll('button')]
+      .find((button) => button.textContent.trim() === 'Limit');
+    return Boolean(limit && getComputedStyle(limit).pointerEvents !== 'none');
+  }, null, { timeout: 30000 });
+  return form;
+}
+
+async function placeLimit(page, side, price, amount) {
+  const form = await waitForInteractiveOrderForm(page);
   await form.getByRole('button', { name: 'Limit', exact: true }).click();
   const priceInput = form.getByRole('textbox', { name: 'Limit Price', exact: true });
   const amountInput = form.getByRole('textbox', { name: 'Amount', exact: true });
@@ -222,10 +240,13 @@ async function placeLimit(page, side, price, amount) {
 }
 
 async function openOrders(page) {
-  // The live order book continuously relayouts this section. Force the tab
-  // click after resolving the exact visible control so Playwright does not
-  // spend its action timeout waiting for a permanently "stable" bounding box.
-  await page.locator('.orderWrap').getByText('Open Orders', { exact: true }).click({ force: true });
+  // The live order book continuously relayouts this section. Do not click the
+  // tab again when it is already active; otherwise force the exact resolved
+  // control so Playwright does not wait for a permanently stable box.
+  const tab = page.locator('.orderWrap').getByText('Open Orders', { exact: true });
+  if (await tab.getAttribute('aria-selected') !== 'true') {
+    await tab.click({ force: true });
+  }
   return page
     .locator('.orderWrap .ant-tabs-tabpane-active .openOrderWrap .ant-table-tbody tr')
     .filter({ hasText: 'BTCUSDT' });

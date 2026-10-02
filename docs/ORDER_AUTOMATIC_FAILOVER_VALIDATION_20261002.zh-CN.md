@@ -1172,3 +1172,125 @@ PR: #1
 ```
 
 该改动**不做透明订单重试**，避免在请求结果未知时制造重复下单风险；它只把失败旧连接的 HTTP 等待时间从默认 60 秒收敛到有界窗口。更底层的长期优化仍是让 GW/gateway connector 在 backend 断开时主动完成或失败该连接上的 pending callback，使用户感知恢复进一步贴近实际 primary READY 时间。
+
+## 21. GitHub Actions / GHCR 正式镜像最终验收
+
+在 Common 3.0.15 按与 3.0.14 相同的真实 tag push 流程发布 Maven Central 后，`com.app.dc:saas-crypto` 已统一引用：
+
+```text
+io.github.bliplink:com.app.common:3.0.15
+```
+
+随后所有 SaaS Java 服务均由 GitHub Actions 重新构建镜像。Actions 日志逐一确认服务在 build 阶段从 Maven Central 下载或打包 `com.app.common-3.0.15.jar`；服务 POM 不再直接声明 Common，服务 workflow 也不再直接 clone/build `com.app.common`，只保留 clone/build `com.app.dc`。
+
+隔离 integration 栈的核心正式镜像包括：
+
+```text
+LoginSvr      ghcr.io/bliplink/loginsvr@sha256:e8db1d8f90cc7908bf852c2ea0d3562cc185fa66c9949afd0466d62b9399594c
+AdminSvr      ghcr.io/bliplink/adminsvr@sha256:007e2549d0702a0cc2b58d41ecbd285f59ec72a3adee4beb6213588e611821a4
+OrderSvr A/B/C ghcr.io/bliplink/ordersvr@sha256:eb7fe76a179db4f9bceeafabe0cd639939f44eb3ecac0ac0c83bc97aae3da48a
+TradeSvr A/B  ghcr.io/bliplink/tradesvr@sha256:1ca81617f3c694fd0e52a84b4c6089d8526243f3c212e58702fddbae6feda5c9
+ProjectionSvr ghcr.io/bliplink/projectionsvr@sha256:889ea7555dc4060c94a22c461d23e165e91ce55ef48dfb1ab000ba4d5bd11587
+APSSvr        ghcr.io/bliplink/apssvr@sha256:b789a3766d546f67203460bb3b42460def5e5c9580bd3c0c182bb7239019ef63
+```
+
+运行中的 Login/Admin/Order/Trade/Projection 容器内部均确认存在：
+
+```text
+/srv/dc/dc/<Service>/lib/com.app.common-3.0.15.jar
+```
+
+### 21.1 正式镜像浏览器业务基线：GHCR01_E2E
+
+使用全新 tenant `GHCR01_E2E`，在正式 GHCR 后端上执行真实浏览器流程：
+
+```text
+public registration     PASS
+buyer/seller login      PASS
+deposit                 PASS
+resting limit order     PASS
+cancel                  PASS
+matched execution       PASS
+position update         PASS
+reduce-only close       PASS
+final flat position     PASS
+```
+
+最终浏览器输出 `status=PASS`。隔离栈未为该 tenant 配置可路由 MDSvr 分区，因此 recent-trade/K-line 门禁按测试设计标记 `SKIPPED_MDSVR_NOT_ROUTABLE`，不影响 Order/Trade/Projection 正式镜像验收。
+
+为消除浏览器自动化误报，正式 E2E 同步修复了三个纯 UI 时序点：
+
+- Deposit 填值后等待 `Confirm Deposit` 从 disabled 变为 enabled 再点击；
+- 下单前等待 `.placeOrderWrap` 退出 `publicMode` 且 Limit 按钮恢复 pointer-events；
+- `Open Orders` 已经 `aria-selected=true` 时不再重复点击。
+
+连续浏览器测试还暴露出测试机自身内存耗尽：Colima 16 GiB 内存仅剩约 200 MiB、无 swap，旧 Playwright runner 曾出现 `OOMKilled=true` 且 `/dev/shm=64MiB`。测试环境增加 2 GiB 临时 swap，并将 runner 以 `--ipc=host` 重建后，`/dev/shm` 提升到约 7.8 GiB，后续正式镜像基线稳定通过。该问题属于验收基础设施资源不足，不是服务进程 OOM。
+
+### 21.2 正式镜像 live failover：GHCR02_E2E
+
+使用全新 tenant `GHCR02_E2E`。业务键 `GHCR02_E2E + 4 + BTCUSDT` 命中 P046，故障前：
+
+```text
+primary=OrderSvrB
+replicas=[OrderSvrC,OrderSvrA]
+learners=[]
+epoch=5
+assignmentVersion=9
+state=READY
+```
+
+浏览器完成登录、两边入金、10000 价位真实挂单与撤单后启动 `queryOpenOrder` failover probe。收到 `fault-ready` 后确认当前 primary 仍为 B，并对正式 GHCR OrderSvrB 执行 SIGKILL：
+
+```text
+killed image:
+ghcr.io/bliplink/ordersvr@sha256:eb7fe76a179db4f9bceeafabe0cd639939f44eb3ecac0ac0c83bc97aae3da48a
+
+B -> C
+epoch: 5 -> 6
+kill -> new primary READY: 6942ms
+firstFailureMs: 793ms
+recoveryMs: 8274ms
+business outageMs: 7481ms
+browser_rc: 0
+```
+
+切主后浏览器继续完成 60000 买卖撮合、execution history 校验与 reduce-only 平仓，最终 `status=PASS`。
+
+MySQL 最终权威状态：
+
+```text
+orders=5
+executions=4
+open_orders=0
+nonflat_positions=0
+buyer used/freezed margin=0
+seller used/freezed margin=0
+buyer balance=99999.952
+seller balance=99999.952
+```
+
+恢复被 kill 的 OrderSvrB 后，它重新注册并自动完成 learner catch-up / replica repair，最终：
+
+```text
+primary=OrderSvrC
+replicas=[OrderSvrA,OrderSvrB]
+learners=[]
+epoch=6
+assignmentVersion=11
+state=READY
+```
+
+本轮没有观察到 `ORDER_AUTO_FAILOVER_FAILED`、`PROMOTION_UNSAFE`、`RECOVERY_FAILED` 或服务 OOM。至此，正式 GitHub Actions 镜像已经完成：
+
+```text
+Maven Central Common 3.0.15
+-> com.app.dc source build
+-> GitHub Actions service image
+-> GHCR immutable digest
+-> real browser business baseline
+-> live primary SIGKILL
+-> automatic failover
+-> post-failover matching/close
+-> authoritative DB reconciliation
+-> killed node replica repair
+```
