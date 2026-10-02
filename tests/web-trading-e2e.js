@@ -7,8 +7,11 @@ const location = process.env.E2E_LOCATION || 'WEB_E2E';
 const password = process.env.E2E_PASSWORD;
 const buyer = process.env.E2E_BUYER || 'webbuyer';
 const seller = process.env.E2E_SELLER || 'webseller';
+const buyerId = process.env.E2E_BUYER_ID || buyer;
+const sellerId = process.env.E2E_SELLER_ID || seller;
 const artifactDir = process.env.E2E_ARTIFACT_DIR || '/artifacts';
 const browserExecutable = process.env.E2E_BROWSER_EXECUTABLE;
+const faultProbeEnabled = process.env.E2E_FAULT_PROBE === '1';
 const ignoredConsoleErrors = [
   // TradingView rejects late historical bars after a newer snapshot; this does
   // not affect the authenticated order, execution, balance, or recent-trade flow.
@@ -45,7 +48,7 @@ async function invokeFromPage(page, method, action) {
   return body;
 }
 
-async function gatewayCall(page, serverName, method, content) {
+async function gatewayCall(page, serverName, method, content, key) {
   return page.evaluate(async request => {
     const login = JSON.parse(sessionStorage.getItem('loginData') || '{}');
     const response = await fetch('/httpapi/', {
@@ -54,10 +57,63 @@ async function gatewayCall(page, serverName, method, content) {
       body: JSON.stringify(request)
     });
     return response.json();
-  }, {serverName, method, content});
+  }, key ? {serverName, method, key, content} : {serverName, method, content});
 }
 
-async function login(browser, username) {
+async function probeOrderFailover(page) {
+  const routingKey = `${location}\u001f4\u001fBTCUSDT`;
+  const query = {
+    userid: buyerId,
+    securityid: 'BTCUSDT',
+    MarketIndicator: '4',
+    Location: location
+  };
+  const preflight = await gatewayCall(page, 'OrderSvr', 'queryOpenOrder', query, routingKey);
+  if (Number(preflight && preflight.code) !== 0) {
+    throw new Error(`fault probe preflight failed: ${JSON.stringify(preflight)}`);
+  }
+
+  const startedAt = Date.now();
+  fs.writeFileSync(path.join(artifactDir, 'fault-ready'), String(startedAt));
+  const samples = [];
+  let firstFailureAt = null;
+  let recoveredAt = null;
+
+  for (let attempt = 0; attempt < 240; attempt += 1) {
+    const now = Date.now();
+    try {
+      const body = await gatewayCall(page, 'OrderSvr', 'queryOpenOrder', query, routingKey);
+      const code = Number(body && body.code);
+      const ok = code === 0;
+      samples.push({ offsetMs: now - startedAt, ok, code });
+      if (!ok && firstFailureAt === null) firstFailureAt = now;
+      if (firstFailureAt !== null && ok) {
+        recoveredAt = Date.now();
+        break;
+      }
+    } catch (error) {
+      samples.push({ offsetMs: now - startedAt, ok: false, error: String(error && error.message || error) });
+      if (firstFailureAt === null) firstFailureAt = now;
+    }
+    await page.waitForTimeout(250);
+  }
+
+  const result = {
+    startedAt,
+    firstFailureAt,
+    recoveredAt,
+    firstFailureMs: firstFailureAt === null ? null : firstFailureAt - startedAt,
+    recoveryMs: recoveredAt === null ? null : recoveredAt - startedAt,
+    outageMs: firstFailureAt === null || recoveredAt === null ? null : recoveredAt - firstFailureAt,
+    samples
+  };
+  fs.writeFileSync(path.join(artifactDir, 'fault-probes.json'), JSON.stringify(result, null, 2));
+  if (firstFailureAt === null) throw new Error('fault probe never observed OrderSvr unavailability');
+  if (recoveredAt === null) throw new Error('OrderSvr did not recover within the fault probe window');
+  return result;
+}
+
+async function login(browser, username, expectedUserId) {
   const context = await browser.newContext({ viewport: { width: 1920, height: 1080 } });
   const page = await context.newPage();
   const pageErrors = [];
@@ -104,8 +160,8 @@ async function login(browser, username) {
   await page.waitForURL(`**/#/trade?location=${encodeURIComponent(location)}`);
   await page.locator('.tradeWrap').waitFor({ timeout: 60000 });
   const loginBody = await page.evaluate(() => JSON.parse(sessionStorage.getItem('loginData') || '{}'));
-  if (loginBody.user_id !== username) {
-    throw new Error(`websocket login returned unexpected user ${loginBody.user_id}`);
+  if (loginBody.user_id !== expectedUserId) {
+    throw new Error(`websocket login returned unexpected user ${loginBody.user_id}, expected ${expectedUserId}`);
   }
   if (loginBody.location !== location) {
     throw new Error(`websocket login returned unexpected location ${loginBody.location}`);
@@ -142,14 +198,32 @@ async function deposit(page, amount) {
   await page.locator('.accountInfoWrap').getByText('Deposit', { exact: true }).click();
   const modal = page.locator('.ant-modal:visible').filter({ hasText: 'Deposit' });
   await modal.locator('input').fill(String(amount));
-  await invokeFromPage(page, 'cashIn', () =>
-    modal.getByRole('button', { name: 'Confirm Deposit' }).click()
-  );
+  const confirm = modal.getByRole('button', { name: 'Confirm Deposit' });
+  await confirm.waitFor({ state: 'visible', timeout: 15000 });
+  const deadline = Date.now() + 15000;
+  while (await confirm.isDisabled()) {
+    if (Date.now() >= deadline) throw new Error('Confirm Deposit did not become enabled');
+    await page.waitForTimeout(50);
+  }
+  await invokeFromPage(page, 'cashIn', () => confirm.click());
   await page.waitForTimeout(1500);
 }
 
-async function placeLimit(page, side, price, amount) {
+async function waitForInteractiveOrderForm(page) {
   const form = page.locator('.placeOrderWrap');
+  await form.waitFor({ state: 'visible', timeout: 30000 });
+  await page.waitForFunction(() => {
+    const wrap = document.querySelector('.placeOrderWrap');
+    if (!wrap || wrap.classList.contains('publicMode')) return false;
+    const limit = [...wrap.querySelectorAll('button')]
+      .find((button) => button.textContent.trim() === 'Limit');
+    return Boolean(limit && getComputedStyle(limit).pointerEvents !== 'none');
+  }, null, { timeout: 30000 });
+  return form;
+}
+
+async function placeLimit(page, side, price, amount) {
+  const form = await waitForInteractiveOrderForm(page);
   await form.getByRole('button', { name: 'Limit', exact: true }).click();
   const priceInput = form.getByRole('textbox', { name: 'Limit Price', exact: true });
   const amountInput = form.getByRole('textbox', { name: 'Amount', exact: true });
@@ -166,10 +240,13 @@ async function placeLimit(page, side, price, amount) {
 }
 
 async function openOrders(page) {
-  // The live order book continuously relayouts this section. Force the tab
-  // click after resolving the exact visible control so Playwright does not
-  // spend its action timeout waiting for a permanently "stable" bounding box.
-  await page.locator('.orderWrap').getByText('Open Orders', { exact: true }).click({ force: true });
+  // The live order book continuously relayouts this section. Do not click the
+  // tab again when it is already active; otherwise force the exact resolved
+  // control so Playwright does not wait for a permanently stable box.
+  const tab = page.locator('.orderWrap').getByText('Open Orders', { exact: true });
+  if (await tab.getAttribute('aria-selected') !== 'true') {
+    await tab.click({ force: true });
+  }
   return page
     .locator('.orderWrap .ant-tabs-tabpane-active .openOrderWrap .ant-table-tbody tr')
     .filter({ hasText: 'BTCUSDT' });
@@ -274,9 +351,8 @@ async function recentTradeText(page) {
 }
 
 async function positionRows(page, side) {
-  await page.locator('.orderWrap').getByText('Positions', { exact: true }).click({ force: true });
   let rows = page
-    .locator('.orderWrap .ant-tabs-tabpane-active .orderPositionWrap .ant-table-tbody tr')
+    .locator('.orderWrap .desktopPositionsPane .orderPositionWrap .ant-table-tbody tr')
     .filter({ hasText: 'BTCUSDT' });
   if (side) rows = rows.filter({ hasText: side });
   return rows;
@@ -309,8 +385,8 @@ async function waitForNoPosition(page) {
   let buyerSession;
   let sellerSession;
   try {
-    buyerSession = await login(browser, buyer);
-    sellerSession = await login(browser, seller);
+    buyerSession = await login(browser, buyer, buyerId);
+    sellerSession = await login(browser, seller, sellerId);
 
     await clearOpenOrders(buyerSession.page);
     await clearOpenOrders(sellerSession.page);
@@ -326,6 +402,8 @@ async function waitForNoPosition(page) {
       throw new Error(`resting order is missing from Open Orders: ${restingBid}`);
     }
     await cancelFirstOpenOrder(buyerSession.page);
+
+    const failoverProbe = faultProbeEnabled ? await probeOrderFailover(buyerSession.page) : null;
 
     await placeLimit(buyerSession.page, 'Buy / Long', '60000', '0.001');
     await (await openOrders(buyerSession.page)).first().waitFor({ timeout: 15000 });
@@ -417,7 +495,8 @@ async function waitForNoPosition(page) {
         buyer: buyerSession.realtimeKline,
         seller: sellerSession.realtimeKline
       },
-      publicMarketPollingCalls: 0
+      publicMarketPollingCalls: 0,
+      failoverProbe
     }, null, 2));
   } catch (error) {
     if (buyerSession) {
