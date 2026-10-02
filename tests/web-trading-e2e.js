@@ -276,9 +276,8 @@ async function recentTradeText(page) {
 }
 
 async function positionRows(page, side) {
-  await page.locator('.orderWrap').getByText('Positions', { exact: true }).click({ force: true });
   let rows = page
-    .locator('.orderWrap .ant-tabs-tabpane-active .orderPositionWrap .ant-table-tbody tr')
+    .locator('.orderWrap .desktopPositionsPane .orderPositionWrap .ant-table-tbody tr')
     .filter({ hasText: 'BTCUSDT' });
   if (side) rows = rows.filter({ hasText: side });
   return rows;

@@ -694,9 +694,10 @@ replicaStatus=OK
 
 - 自动 failover 控制面、proof、CAS、256 分区规模指标：已通过；
 - 当前完整 SaaS 的 Trade/Projection/Robot 业务链：基线已通过；
-- **新 Order 自动 failover + Trade/Projection/Robot 持续业务流的同一套集成环境联合故障回归：仍未关闭。**
+- **新 Order 自动 failover + Trade/Projection 持续真实业务流的同一套 integration 环境联合故障回归：已关闭并通过。**
+- 故障后的业务分区能自动切主并继续撮合/平仓；不满足同步副本门槛的其它分区保持 fail-closed，没有误切主。
 
-原因不是已知业务错误，而是当前完整 SaaS 仍为旧两节点 Order 镜像，而现有隔离 failover 栈没有 Trade/Projection/Robot。正式环境仍未部署本轮自动 failover 代码。
+仍保留一个发布前工程项：旧 primary 作为 learner 追平后，目前需要 durable proof 门禁 + CAS 才能重新提升为同步 replica；自动冗余自愈尚未工程化。正式环境仍未部署本轮自动 failover 代码。
 
 ## 16. 256 分区独立 bridge 复核
 
@@ -717,3 +718,207 @@ replicaStatus=OK
 因此当前单机 Colima 环境下已有两次独立 256 分区样本：样本 A（含 GW）kill→READY p99≈12.03s；样本 B（完全 bridge 隔离）kill→READY p99≈17.20s。两次结果说明当前测试机资源和 JVM/Chronicle 初始化/调度抖动会明显影响 256 分区 promotion tail；容量/SLO 不应只取单次最好值。若按当前两次样本做保守工程门禁，可先把 256 分区 kill→READY p99 预算按约 18 秒看待，再通过多轮重复压测确定稳定分布。
 
 本轮继续尝试验证 A 重返 learner 时，独立 scale 测试的 ZooKeeper/B/C 容器被外部测试流程停止，A 随后因 bridge ZooKeeper DNS 不可解析而启动失败。该现象属于测试环境生命周期中断，不计为 OrderSvr recovery failure；因此本轮 bridge 样本只记为“主故障自动接管 + 256 分区 promotion”通过，不新增“A 重返 learner”PASS。此前 P027 单分区故障矩阵中的 learner 重返与双同步副本恢复证据仍有效。
+
+## 17. 持续真实业务流故障回归发现与 safety 修复
+
+在包含新 Order A/B/C、Trade A/B、Projection、GW、Login、MySQL 和交易 Web 的独立 integration 栈中，使用隔离租户 `HAFO_E2E` 执行持续真实业务流。故障前门禁为 256/256 Order assignment 均为 `A primary + B/C synchronized replicas`、epoch=1、dataVersion=0，controller lease 唯一在 A。
+
+故障前业务已实际通过：
+
+- buyer/seller 正常登录并入金；
+- 一笔 60000 × 0.001 BTCUSDT 真实撮合成功；
+- 连续 3 次挂单 → 撤单循环成功，0 次失败；
+- 随后对 `OrderSvrA` 执行 SIGKILL。
+
+A 的 ZooKeeper ephemeral membership 消失后，controller lease 正确转移到 B，但旧 integration Order 镜像仍未执行 assignment CAS。B 持续返回：
+
+```text
+ORDER_AUTO_FAILOVER_RECONCILE ... outcome:PROMOTION_UNSAFE
+```
+
+直接通过 exact-node replication control RPC 查询 B/C 的 `FAILOVER_PROOF` 后确认，两副本真正的 durable state 前缀一致：
+
+```text
+journalLastSeq           equal
+committedStateSeq        equal
+committedStateEpoch      equal
+commitMarkerSeq          equal
+lastStateSeq             equal
+baselineEpoch            equal
+```
+
+但由于节点恢复/压缩时点不同，snapshot 物理压缩点不同。例如 P000：
+
+```text
+OrderSvrB baselineSeq=0,  baselineSnapshotId=P000-1-0-...
+OrderSvrC baselineSeq=19, baselineSnapshotId=P000-1-19-...
+journalLastSeq=30 on both nodes
+baselineEpoch=1 on both nodes
+```
+
+部署中的旧 `45ac529` safety 实现错误地要求 `baselineSeq` 与 `baselineSnapshotId` 也完全相同，因此把“相同 durable prefix、不同 snapshot compaction point”的同步副本误判为不安全。
+
+修复内容：
+
+```text
+fix(order): allow equivalent replica snapshot baselines
+remote commit: e7535d075ac24732f9b9ba380cd0bc1537fd260b
+```
+
+修复后的 safety 仍要求 journal / committed state / commit marker / last state / baseline epoch 一致，只取消对 snapshot 物理文件身份和压缩 seq 完全一致的要求。新增测试覆盖：
+
+- 相同 durable state + 不同 snapshot compaction point：允许 promotion；
+- baseline epoch 不同：仍拒绝 promotion。
+
+验证：
+
+```text
+focused OrderFailoverPromotionSafetyTest: PASS
+Order full suite: 243 tests
+failures: 0
+errors: 0
+```
+
+随后不恢复 A、不清空故障现场，只把 C、B 依次替换成包含该提交的新 Order integration 镜像。B 重启期间只有 C 一个同步副本时继续 fail-closed；B 返回后，controller 自动完成：
+
+```text
+256/256 automatic CAS
+primary=OrderSvrB
+replicas=[OrderSvrC]
+learners=[OrderSvrA]
+epoch=2
+assignmentVersion=2
+dataVersion=1
+state=READY
+```
+
+原故障现场修复后的真实业务恢复验证：
+
+```text
+order churn: 18/18 success
+failed cycles: 0
+matched trade #1: PASS, ~1.91s
+matched trade #2: PASS, ~1.79s
+```
+
+MySQL 权威状态检查：
+
+```text
+HAFO_E2E orders=48
+executions=8
+open_orders=0
+duplicate ClOrdID=0
+duplicate ExecID=0
+```
+
+Order B/C、Trade A/B、GW 均保持运行且无 OOM。Projection 在 B/C 重启/切换窗口出现过短暂 `invalid projection wire magic`，但稳定后连续 5 分钟：
+
+```text
+invalid projection wire magic = 0
+Projection GAP retry          = 0
+```
+
+因此本轮证明：
+
+1. 持续真实业务流能够暴露旧 snapshot-identity safety 误判；
+2. fail-closed 行为本身正确，没有发生不安全切主或双主；
+3. 修复后的 safety 可在原故障现场完成 256/256 自动接管；
+4. 接管后的 Order/Trade 真实交易与数据库一致性恢复通过。
+
+仍需最后补一轮“故障前即全部使用 e7535d0 新镜像”的干净连续业务流 + SIGKILL A 复测，才能把第 15.4 节的联合故障回归门禁改为完全关闭。
+
+## 18. 干净持续业务流 + SIGKILL primary 最终联合回归
+
+使用独立 integration tenant `IHF003_E2E`，通过真实 Web 登录、入金、挂单、撤单、撮合、持仓和平仓链路执行最终联合故障回归。业务路由键 `IHF003_E2E\u001f4\u001fBTCUSDT` 按 CRC32/256 映射到 `P143`。
+
+故障前 `P143` 通过 exact-node control RPC 证明为安全双副本拓扑：
+
+```text
+primary=OrderSvrA
+replicas=[OrderSvrB,OrderSvrC]
+learners=[]
+epoch=4
+assignmentVersion=7
+state=READY
+```
+
+故障注入点位于 buyer/seller 登录、两笔入金、10000 限价挂单与撤单完成之后；浏览器随后每 250ms 通过真实 `/httpapi/ -> OrderSvr.queryOpenOrder` 持续探测业务可用性。收到 `fault-ready` 后立即对 `OrderSvrA` 执行 SIGKILL。
+
+浏览器实际观测：
+
+```text
+firstFailureMs = 265ms
+recoveryMs     = 7069ms
+outageMs       = 6804ms
+probe samples  = 27
+failed samples = 25
+```
+
+故障期间返回业务错误码 `1003`，恢复后重新返回 `code=0`。自动 failover 最终将 P143 切到：
+
+```text
+primary=OrderSvrB
+replicas=[OrderSvrC]
+learners=[OrderSvrA]
+epoch=5
+assignmentVersion=8
+state=READY
+```
+
+同一节点故障中，其余 254 个仍只有一个同步副本的 A-primary 分区全部保持：
+
+```text
+outcome=INSUFFICIENT_SYNCHRONIZED_REPLICAS
+```
+
+它们没有发生不安全 CAS；故障后 primary 统计仍有 254 个 assignment 保持 `OrderSvrA`，从而同时验证了“安全分区接管、非安全分区 fail-closed”。
+
+P143 恢复后，原浏览器流程继续完成：
+
+```text
+login: PASS
+deposit: PASS
+cancel: PASS
+execution: PASS
+closePosition: PASS
+reduceOnlyPreview: PASS
+```
+
+MySQL 最终权威状态：
+
+```text
+orders=5
+executions=4
+open_orders=0
+nonflat_positions=0
+used_margin=0
+freezed_margin=0
+freezed_commission=0
+```
+
+随后恢复 OrderSvrA。A 以 learner 身份重新追平 P143 后，通过 `OrderSvrC FAILOVER_PROOF` 与 `OrderSvrA LEARNER_PROOF` 比对，以下 durable prefix 完全一致：
+
+```text
+journalLastSeq=98
+committedStateSeq=97
+committedStateEpoch=5
+commitMarkerSeq=98
+lastStateSeq=97
+lastScannedSeq=98
+baselineEpoch=5
+```
+
+在 proof 无差异且无 uncommitted tail 的门禁下，以 ZooKeeper dataVersion CAS 将 A 从 learner 提回同步 replica。最终 P143：
+
+```text
+primary=OrderSvrB
+replicas=[OrderSvrC,OrderSvrA]
+learners=[]
+epoch=5
+assignmentVersion=9
+state=READY
+```
+
+A/C 两节点随后均能以 `SYNC_REPLICA` 身份重新提供一致的 `FAILOVER_PROOF`。
+
+因此第 15.4 节的“新 Order 自动 failover + 持续真实业务流联合故障回归”门禁正式关闭。剩余独立工程项为：将“learner durable proof 已追平 -> 自动 CAS 晋回同步 replica”做成正式自动冗余自愈能力，避免当前验证中所需的人工 proof+CAS 恢复步骤。
