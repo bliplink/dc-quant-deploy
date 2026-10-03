@@ -4,6 +4,7 @@ set -euo pipefail
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 ENV_FILE="${ROOT_DIR}/.env.prod"
 UPDATE_SCRIPT="${ROOT_DIR}/auto-update-all-services.sh"
+PRUNE_LOGS_SCRIPT="${ROOT_DIR}/prune-runtime-logs.sh"
 BEGIN_MARKER="# BEGIN DC AUTO UPDATE"
 END_MARKER="# END DC AUTO UPDATE"
 
@@ -17,6 +18,10 @@ END_MARKER="# END DC AUTO UPDATE"
 }
 [[ -x "${UPDATE_SCRIPT}" ]] || {
   echo "Missing executable updater: ${UPDATE_SCRIPT}" >&2
+  exit 1
+}
+[[ -x "${PRUNE_LOGS_SCRIPT}" ]] || {
+  echo "Missing executable log housekeeping script: ${PRUNE_LOGS_SCRIPT}" >&2
   exit 1
 }
 
@@ -37,6 +42,8 @@ cleaned="$(printf '%s\n' "${existing}" | awk -v begin="${BEGIN_MARKER}" -v end="
   printf '%s\n' "${BEGIN_MARKER}"
   printf '* * * * * /usr/bin/flock -n /tmp/dc-auto-update-all-cron.lock %q >> %q 2>&1\n' \
     "${UPDATE_SCRIPT}" "${DEPLOY_ROOT}/log/auto-update-all-services.log"
+  printf '17 0 * * * /usr/bin/flock -n /tmp/dc-prune-runtime-logs.lock %q >> %q 2>&1\n' \
+    "${PRUNE_LOGS_SCRIPT}" "${DEPLOY_ROOT}/log/prune-runtime-logs.log"
   printf '%s\n' "${END_MARKER}"
 } | sed '/^[[:space:]]*$/N;/^\n$/D' | crontab -
 

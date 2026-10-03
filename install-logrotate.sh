@@ -28,8 +28,7 @@ temporary_file="$(mktemp)"
 trap 'rm -f "${temporary_file}"' EXIT
 cat > "${temporary_file}" <<EOF
 "${DEPLOY_ROOT}/log/"*.log {
-    daily
-    maxsize 100M
+    size 100M
     rotate 14
     compress
     delaycompress

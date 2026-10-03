@@ -36,7 +36,8 @@
 - 根分区在清理后曾降至约 24%，到本次验收已回升到约 54%。主要增长源仍是 APSSvr 和 MDSvr 高频日志；日志轮转是 P0，不能仅清理业务日志后视为解决。
 - APSSvr `4faf492` 已将逐 tick 原始 Binance JSON 降到 DEBUG，并把高频 `GwServerResource` 发布日志限制为 WARN；MDSvr `255109c` 已将逐 K 线持久化日志从 WARN 降到 DEBUG。
 - 部署仓库已为全部长期运行容器设置 Docker `json-file` 默认滚动：单文件 100MB、保留 3 份；可用 `DOCKER_LOG_MAX_SIZE` 和 `DOCKER_LOG_MAX_FILE` 覆盖。
-- `install-auto-update-cron.sh` 会同时安装 `/etc/logrotate.d/dc-quant-runtime`：`${DEPLOY_ROOT}/log/*.log` 每日检查、单文件超过 100MB 时提前滚动、保留 14 份并压缩，使用 `copytruncate` 兼容仍持有文件句柄的 Java 服务。
+- `install-auto-update-cron.sh` 会同时安装 `/etc/logrotate.d/dc-quant-runtime`：`${DEPLOY_ROOT}/log/*.log` 每日检查，单文件超过 100MB 时滚动，保留 14 份并压缩，使用 `copytruncate` 兼容仍持有文件句柄的 Java 服务。
+- Java 日志组件自行生成的 `*.log.YYYY-MM-DD` 归档不属于 `logrotate` 的轮转文件；每日 00:17 UTC 由 `prune-runtime-logs.sh` 以最低 CPU/IO 优先级压缩两天前的归档，并删除超过 14 天的归档。可用 `APPLICATION_LOG_COMPRESS_AFTER_DAYS` 和 `APPLICATION_LOG_RETENTION_DAYS` 覆盖。
 
 ## 3. executionID 对账流程
 
