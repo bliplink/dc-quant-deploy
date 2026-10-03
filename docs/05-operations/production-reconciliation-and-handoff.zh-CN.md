@@ -38,6 +38,10 @@
 - 部署仓库已为全部长期运行容器设置 Docker `json-file` 默认滚动：单文件 100MB、保留 3 份；可用 `DOCKER_LOG_MAX_SIZE` 和 `DOCKER_LOG_MAX_FILE` 覆盖。
 - `install-auto-update-cron.sh` 会同时安装 `/etc/logrotate.d/dc-quant-runtime`：`${DEPLOY_ROOT}/log/*.log` 每日检查，单文件超过 100MB 时滚动，保留 14 份并压缩，使用 `copytruncate` 兼容仍持有文件句柄的 Java 服务。
 - Java 日志组件自行生成的 `*.log.YYYY-MM-DD` 归档不属于 `logrotate` 的轮转文件；每日 00:17 UTC 由 `prune-runtime-logs.sh` 以最低 CPU/IO 优先级压缩两天前的归档，并删除超过 14 天的归档。可用 `APPLICATION_LOG_COMPRESS_AFTER_DAYS` 和 `APPLICATION_LOG_RETENTION_DAYS` 覆盖。
+- 2026-10-03 首次执行归档治理时，361 个未压缩归档由约 16.76GB 压缩到约 1.92GB，未删除仍在 14 天保留期内的文件；根分区使用率从 45% 降到 36%。
+- 2026-10-03 只读运行基线：近 24 小时和近 3 天均无成交；近 7 天有 2 个执行、毛收益 `+6.0236`、费用 `1.40255456`、净收益 `+4.62104544 USDT`。最近一笔成交为 2026-09-27 19:17:55 UTC。
+- 场景选择链路仍在运行：最近 24 小时产生 42 次选择，覆盖 10 个品种；最近 7 天仅出现 2 个开仓信号，当前低成交首先是合格策略触发稀疏，不是交易服务停止。
+- 同期发现一套旧真实量化配置对应的 APSSvr 用户已不存在，其挂单、持仓和余额查询均失败；ClickHouse 中 ETH/SOL 非零持仓只是 2026-09-10 的陈旧投影，不能作为当前真实持仓使用。有效模拟账户权威查询成功且当前无持仓。
 
 ## 3. executionID 对账流程
 
