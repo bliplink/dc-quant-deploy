@@ -281,9 +281,14 @@ apply_full_cluster_profile() {
   set_env_value MD_CLUSTER_ENABLED true
   set_env_value MD_CLUSTER_C_ENABLED true
   set_env_value ORDER_CLUSTER_ENABLED true
-  set_env_value ORDER_CLUSTER_C_ENABLED false
+  set_env_value ORDER_CLUSTER_C_ENABLED true
   set_env_value TRADE_CLUSTER_ENABLED true
-  log "Enabled full cluster topology: MD A/B/C, Order A/B, Trade A/B, ProjectionSvr."
+  set_env_value TRADE_CLUSTER_REPLICATION_REQUIRED true
+  set_env_value TRADE_CLUSTER_FAILOVER_ENABLED true
+  set_env_value TRADE_CLUSTER_ROLLBACK_UNCOMMITTED_TAIL_ENABLED true
+  set_env_value TRADESVR_ZOOKEEPER_SESSION_TIMEOUT_MS 6000
+  set_env_value TRADESVR_ZOOKEEPER_CONNECTION_TIMEOUT_MS 5000
+  log "Enabled full cluster topology: MD A/B/C, Order A/B/C, Trade A/B with automatic failover, ProjectionSvr."
 }
 
 env_file_value() {
