@@ -40,5 +40,7 @@ cleaned="$(printf '%s\n' "${existing}" | awk -v begin="${BEGIN_MARKER}" -v end="
   printf '%s\n' "${END_MARKER}"
 } | sed '/^[[:space:]]*$/N;/^\n$/D' | crontab -
 
+"${ROOT_DIR}/install-logrotate.sh"
+
 echo "Installed one-minute auto-update cron for all deployed application services."
 crontab -l | sed -n "/${BEGIN_MARKER}/,/${END_MARKER}/p"
