@@ -7,6 +7,7 @@ ENV_FILE="${ENV_FILE:-${DEPLOY_DIR}/.env.prod}"
 E2E_LOCATION="${E2E_LOCATION:-WEB_E2E}"
 E2E_BUYER="${E2E_BUYER:-webbuyer}"
 E2E_SELLER="${E2E_SELLER:-webseller}"
+MYSQL_CONTAINER="${MYSQL_CONTAINER:-dc-saas-mysql}"
 
 log() {
   printf '[web-e2e-prepare] %s\n' "$*"
@@ -41,9 +42,15 @@ password_hash="$(printf '%s' "${E2E_PASSWORD}" | sha256sum | awk '{print $1}')"
 [[ "${password_hash}" =~ ^[0-9a-f]{64}$ ]] || die "Could not calculate the password hash"
 
 mysql_exec() {
-  docker exec -i -e MYSQL_PWD="${MYSQL_PASSWORD}" dc-saas-mysql \
+  docker exec -i -e MYSQL_PWD="${MYSQL_PASSWORD}" "${MYSQL_CONTAINER}" \
     mysql -u"${MYSQL_USERNAME}" -N "$@"
 }
+
+existing_trade_history="$(mysql_exec dc -e "SELECT COUNT(*) FROM dc_trade_projection_mutation WHERE location='${E2E_LOCATION}';")"
+[[ "${existing_trade_history}" =~ ^[0-9]+$ ]] ||
+  die "Could not validate durable Trade projection history for ${E2E_LOCATION}"
+[[ "${existing_trade_history}" == "0" ]] ||
+  die "E2E_LOCATION ${E2E_LOCATION} already has durable Trade projection history (${existing_trade_history} mutations); use a fresh isolated tenant instead of resetting MySQL projection state"
 
 log "Preparing isolated tenant ${E2E_LOCATION} for public self-service registration."
 {
