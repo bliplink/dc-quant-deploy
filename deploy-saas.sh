@@ -126,6 +126,15 @@ ensure_env_file() {
 }
 
 ensure_env_defaults() {
+  # A copied .env.example is a supported one-click starting point. Replace all
+  # placeholder runtime secrets even when the env file already exists.
+  ensure_generated_env_secret MYSQL_PASSWORD
+  ensure_generated_env_secret MYSQL_ROOT_PASSWORD
+  ensure_generated_env_secret CLICKHOUSE_PASSWORD
+  ensure_generated_env_secret LOGIN_DEFAULT_PASSWORD
+  ensure_generated_env_secret PLATFORM_ADMIN_PASSWORD
+  ensure_generated_env_secret DC_HEDGE_CREDENTIAL_MASTER_KEY
+
   if ! grep -q '^IMAGE_SOURCE=' "${ENV_FILE}"; then
     printf '\nIMAGE_SOURCE=registry\n' >> "${ENV_FILE}"
   fi

@@ -150,6 +150,8 @@ jobs:
         run: bash tests/test-release-image-lock.sh
       - name: Validate release-lock application
         run: bash tests/test-release-lock-apply.sh
+      - name: Validate env secret bootstrap
+        run: bash tests/test-env-secret-bootstrap.sh
       - name: Validate generated cluster configurations
         run: |
           tests/test-md-cluster-config.sh
