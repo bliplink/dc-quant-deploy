@@ -40,6 +40,11 @@ done
 
 ORDER_CLUSTER_ENABLED="${ORDER_CLUSTER_ENABLED:-false}"
 ORDER_CLUSTER_C_ENABLED="${ORDER_CLUSTER_C_ENABLED:-false}"
+ORDER_CLUSTER_FAILOVER_ENABLED="${ORDER_CLUSTER_FAILOVER_ENABLED:-false}"
+ORDER_CLUSTER_FAILOVER_NODES="${ORDER_CLUSTER_FAILOVER_NODES:-OrderSvrA,OrderSvrB,OrderSvrC}"
+ORDER_CLUSTER_FAILOVER_SAFETY_POLL_MILLIS="${ORDER_CLUSTER_FAILOVER_SAFETY_POLL_MILLIS:-1000}"
+ORDER_CLUSTER_FAILOVER_MINIMUM_LIVE_SYNCHRONIZED_REPLICAS="${ORDER_CLUSTER_FAILOVER_MINIMUM_LIVE_SYNCHRONIZED_REPLICAS:-2}"
+ORDER_CLUSTER_FAILOVER_REPLICA_REPAIR_POLL_MILLIS="${ORDER_CLUSTER_FAILOVER_REPLICA_REPAIR_POLL_MILLIS:-5000}"
 MD_CLUSTER_ENABLED="${MD_CLUSTER_ENABLED:-false}"
 MD_CLUSTER_C_ENABLED="${MD_CLUSTER_C_ENABLED:-false}"
 TRADE_CLUSTER_ENABLED="${TRADE_CLUSTER_ENABLED:-false}"
@@ -103,6 +108,19 @@ if [[ "${ORDER_CLUSTER_C_ENABLED}" == "true" ]]; then
   for name in ORDERSVR_C_GW_PORT ORDERSVR_C_REPLICATION_PORT; do
     [[ -n "${!name:-}" ]] || die "Missing required OrderSvrC variable: ${name}"
   done
+fi
+if [[ "${ORDER_CLUSTER_FAILOVER_ENABLED}" == "true" ]]; then
+  [[ "${ORDER_CLUSTER_ENABLED}" == "true" && "${ORDER_CLUSTER_C_ENABLED}" == "true" ]] ||
+    die "ORDER_CLUSTER_FAILOVER_ENABLED requires the three-node Order cluster"
+  [[ -n "${ORDER_CLUSTER_FAILOVER_NODES}" ]] || die "ORDER_CLUSTER_FAILOVER_NODES cannot be empty"
+  [[ "${ORDER_CLUSTER_FAILOVER_SAFETY_POLL_MILLIS}" =~ ^[1-9][0-9]*$ ]] ||
+    die "ORDER_CLUSTER_FAILOVER_SAFETY_POLL_MILLIS must be a positive integer"
+  [[ "${ORDER_CLUSTER_FAILOVER_MINIMUM_LIVE_SYNCHRONIZED_REPLICAS}" =~ ^[0-9]+$ ]] ||
+    die "ORDER_CLUSTER_FAILOVER_MINIMUM_LIVE_SYNCHRONIZED_REPLICAS must be numeric"
+  (( ORDER_CLUSTER_FAILOVER_MINIMUM_LIVE_SYNCHRONIZED_REPLICAS >= 2 )) ||
+    die "ORDER_CLUSTER_FAILOVER_MINIMUM_LIVE_SYNCHRONIZED_REPLICAS must be at least 2"
+  [[ "${ORDER_CLUSTER_FAILOVER_REPLICA_REPAIR_POLL_MILLIS}" =~ ^[1-9][0-9]*$ ]] ||
+    die "ORDER_CLUSTER_FAILOVER_REPLICA_REPAIR_POLL_MILLIS must be a positive integer"
 fi
 if [[ "${MD_CLUSTER_ENABLED}" == "true" ]]; then
   [[ -n "${MDSVR_B_GW_PORT:-}" ]] || die "Missing required cluster variable: MDSVR_B_GW_PORT"
@@ -630,6 +648,11 @@ order.cluster.lifecycle.bootstrap.enabled=true
 order.cluster.lifecycle.sameEpochRestart.enabled=true
 order.cluster.lifecycle.pollMillis=1000
 order.cluster.lifecycle.retryMillis=5000
+order.cluster.failover.enabled=${ORDER_CLUSTER_FAILOVER_ENABLED}
+order.cluster.failover.nodes=${ORDER_CLUSTER_FAILOVER_NODES}
+order.cluster.failover.safetyPollMillis=${ORDER_CLUSTER_FAILOVER_SAFETY_POLL_MILLIS}
+order.cluster.failover.minimumLiveSynchronizedReplicas=${ORDER_CLUSTER_FAILOVER_MINIMUM_LIVE_SYNCHRONIZED_REPLICAS}
+order.cluster.failover.replicaRepairPollMillis=${ORDER_CLUSTER_FAILOVER_REPLICA_REPAIR_POLL_MILLIS}
 order.cluster.perfProbe.enabled=false
 order.cluster.recovery.rollbackUncommittedTail.enabled=true
 order.cluster.replication.enabled=true
