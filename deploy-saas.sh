@@ -872,6 +872,34 @@ gateway_routes_need_refresh() {
   return 1
 }
 
+verify_mysql_runtime_schema() {
+  local expected_columns column missing=0
+  expected_columns=(
+    application_id location status step funding_request_id maker_user_id api_key
+    funding_amount funding_confirmed attempts next_attempt_time lease_owner lease_until
+    last_error_code last_error_message create_time update_time complete_time
+  )
+
+  local table_count
+  table_count="$(docker exec -e MYSQL_PWD="${MYSQL_ROOT_PASSWORD}" dc-saas-mysql \
+    mysql --protocol=TCP -h127.0.0.1 -P"${MYSQL_PORT}" -uroot -N -e \
+    "SELECT COUNT(*) FROM information_schema.tables WHERE table_schema='dc' AND table_name='dc_tenant_liquidity_bootstrap';")"
+  [[ "${table_count}" == "1" ]] || die "Required MySQL table dc_tenant_liquidity_bootstrap is missing after migrations."
+
+  local actual_columns
+  actual_columns="$(docker exec -e MYSQL_PWD="${MYSQL_ROOT_PASSWORD}" dc-saas-mysql \
+    mysql --protocol=TCP -h127.0.0.1 -P"${MYSQL_PORT}" -uroot -N -e \
+    "SELECT column_name FROM information_schema.columns WHERE table_schema='dc' AND table_name='dc_tenant_liquidity_bootstrap';")"
+  for column in "${expected_columns[@]}"; do
+    if ! grep -Fxq "${column}" <<<"${actual_columns}"; then
+      log "Missing dc_tenant_liquidity_bootstrap column after migrations: ${column}"
+      missing=1
+    fi
+  done
+  (( missing == 0 )) || die "Required MySQL trial-liquidity bootstrap schema is incomplete."
+  log "Required MySQL trial-liquidity bootstrap schema verified."
+}
+
 apply_mysql_migrations() {
   local migration
   local migrations=()
@@ -1014,6 +1042,7 @@ wait_for_health dc-saas-zookeeper 120
   ensure_trade_cluster_assignments
   ensure_md_cluster_assignments
 apply_mysql_migrations
+verify_mysql_runtime_schema
 provision_platform_admin
 provision_robot_runtime_identity
 
