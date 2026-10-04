@@ -128,6 +128,7 @@ expected_containers=(
   dc-saas-loginsvr dc-saas-mdsvr dc-saas-apssvr dc-saas-ordersvr
   dc-saas-tradesvr dc-saas-liqsvr dc-saas-managersvr dc-saas-adminsvr
   dc-saas-robotsvr dc-saas-trade-web dc-saas-tenant-web dc-saas-platform-web
+  dc-saas-public-web dc-saas-api-docs
 )
 if [[ "${ORDER_CLUSTER_ENABLED:-false}" == "true" ]]; then
   expected_containers+=(dc-saas-ordersvr-b)
@@ -156,7 +157,7 @@ for container in "${expected_containers[@]}"; do
   }
 done
 
-for container in dc-saas-mysql dc-saas-clickhouse dc-saas-zookeeper dc-saas-trade-web dc-saas-tenant-web dc-saas-platform-web; do
+for container in dc-saas-mysql dc-saas-clickhouse dc-saas-zookeeper dc-saas-trade-web dc-saas-tenant-web dc-saas-platform-web dc-saas-public-web dc-saas-api-docs; do
   health="$(docker inspect --format '{{.State.Health.Status}}' "${container}" 2>/dev/null || true)"
   [[ "${health}" == "healthy" ]] || die "${container} health is ${health:-missing}."
 done
@@ -176,7 +177,7 @@ required_ports=(
   "${ZOOKEEPER_PORT}" "${GW_TCP_PORT}" "${GW_WEBSOCKET_PORT}" "${GW_HTTP_PORT}"
   "${LOGINSVR_HTTP_PORT}" "${LOGINSVR_GW_PORT}" "${MDSVR_GW_PORT}" "${APSSVR_GW_PORT}"
   "${ORDERSVR_GW_PORT}" "${TRADESVR_GW_PORT}" "${LIQSVR_GW_PORT}"
-  "${MANAGERSVR_GW_PORT}" "${ADMINSVR_GW_PORT}" "${WEB_LISTEN_PORT}" "18092" "18090"
+  "${MANAGERSVR_GW_PORT}" "${ADMINSVR_GW_PORT}" "${WEB_LISTEN_PORT}" "18092" "18090" "18094" "18096"
 )
 if [[ "${ORDER_CLUSTER_ENABLED:-false}" == "true" || "${TRADE_CLUSTER_ENABLED:-false}" == "true" ]]; then
   required_ports+=("${PROJECTIONSVR_GW_PORT:-33042}")
@@ -337,6 +338,16 @@ docker exec dc-saas-trade-web wget -qO- "http://127.0.0.1:${WEB_LISTEN_PORT}/hea
   die "dc-trade-web health endpoint failed."
 docker exec dc-saas-trade-web wget -qO- "http://127.0.0.1:${WEB_LISTEN_PORT}/" | grep -qi '<title>OpenTradingCore</title>' ||
   die "dc-trade-web index page is not the trade application."
+docker exec dc-saas-public-web wget -qO- http://127.0.0.1:18094/healthz | grep -q '^ok$' ||
+  die "OpenTradingCore public web health endpoint failed."
+docker exec dc-saas-public-web wget -qO- http://127.0.0.1:18094/ | grep -qi 'OpenTradingCore' ||
+  die "OpenTradingCore public web index page failed."
+docker exec dc-saas-api-docs wget -qO- http://127.0.0.1:18096/healthz | grep -q '^ok$' ||
+  die "OpenTradingCore API docs health endpoint failed."
+docker exec dc-saas-api-docs wget -qO- http://127.0.0.1:18096/en/ >/dev/null ||
+  die "OpenTradingCore API docs English route failed."
+docker exec dc-saas-api-docs wget -qO- http://127.0.0.1:18096/zh/ >/dev/null ||
+  die "OpenTradingCore API docs Chinese route failed."
 
 wait_for_gateway_route() {
   local server="$1" response start

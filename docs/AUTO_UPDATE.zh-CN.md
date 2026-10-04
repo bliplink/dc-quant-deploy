@@ -13,7 +13,7 @@
 
 量化系统可以逐服务比较运行容器和最新镜像后重启。SaaS 的 OrderSvr、TradeSvr、AdminSvr 等会共享公共协议并依赖数据库迁移，因此这里按一个完整发布批次处理：
 
-1. 通过 GHCR Registry API 读取当前应用集合的 manifest digest，不下载镜像层。常规集合包含 Gateway、Login、MD、APS、Order、Trade、Liq、Manager、Admin、Robot、Trade Web、Tenant Web、Platform Web；启用 Order 或 Trade 集群时还包含 ProjectionSvr。
+1. 通过 GHCR Registry API 读取当前应用集合的 manifest digest，不下载镜像层。常规集合包含 Gateway、Login、MD、APS、Order、Trade、Liq、Manager、Admin、Robot、Trade Web、Tenant Web、Platform Web、主站 Web、API Docs Web；启用 Order 或 Trade 集群时还包含 ProjectionSvr。
 2. digest 集合保持稳定达到安静窗口后，才认为同批 GitHub Actions 已构建完成。
 3. 先快进部署仓库，确保数据库迁移和镜像版本同步。
 4. 仅对变化或运行版本漂移的服务执行串行 `docker pull`。

@@ -1,3 +1,5 @@
+> **Migrated:** The canonical API Docs source and GHCR publisher now live in `bliplink/opentradingcore-api-docs` on the `saas-crypto` branch. This directory is retained as a migration/history snapshot and is no longer the production publishing source. Deployment is owned by this repository through the `api-docs` Compose service and `release/saas-crypto-images.env`.
+
 # Public API documentation deployment
 
 This image publishes an allowlisted subset of `docs/openapi/` and `docs/api/` as a standalone static site. It validates the OpenAPI YAML, generates an English and Chinese 28-method catalog from that YAML, and runs strict MkDocs builds for `/en/` and `/zh/`. Internal deploy notes and evidence are not copied into the build context. The English edition covers core integration guides; the full field-level reference remains in Chinese and is linked explicitly.

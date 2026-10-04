@@ -12,7 +12,7 @@ FORCE="false"
 SKIP_GIT_UPDATE="false"
 
 APP_SERVICES=(
-  gateway loginsvr mdsvr apssvr ordersvr tradesvr liqsvr managersvr adminsvr robotsvr web tenant-web platform-web
+  gateway loginsvr mdsvr apssvr ordersvr tradesvr liqsvr managersvr adminsvr robotsvr web tenant-web platform-web public-web api-docs
 )
 
 log() {
@@ -101,6 +101,8 @@ service_image_ref() {
     web) echo "${TRADE_WEB_IMAGE_REPOSITORY:-ghcr.io/bliplink/dc-saas-trade-web}:${TRADE_WEB_TAG:-saas-crypto}" ;;
     tenant-web) echo "${TENANT_WEB_IMAGE_REPOSITORY:-ghcr.io/bliplink/dc-saas-tenant-web}:${TENANT_WEB_TAG:-saas-crypto}" ;;
     platform-web) echo "${PLATFORM_WEB_IMAGE_REPOSITORY:-ghcr.io/bliplink/dc-saas-platform-web}:${PLATFORM_WEB_TAG:-saas-crypto}" ;;
+    public-web) echo "${PUBLIC_WEB_IMAGE_REPOSITORY:-ghcr.io/bliplink/opentradingcore-web}:${PUBLIC_WEB_TAG:-saas-crypto}" ;;
+    api-docs) echo "${API_DOCS_IMAGE_REPOSITORY:-ghcr.io/bliplink/opentradingcore-api-docs-web}:${API_DOCS_TAG:-saas-crypto}" ;;
     *) return 1 ;;
   esac
 }
@@ -111,6 +113,8 @@ service_container_name() {
     web) echo "dc-saas-trade-web" ;;
     tenant-web) echo "dc-saas-tenant-web" ;;
     platform-web) echo "dc-saas-platform-web" ;;
+    public-web) echo "dc-saas-public-web" ;;
+    api-docs) echo "dc-saas-api-docs" ;;
     loginsvr|mdsvr|apssvr|ordersvr|projectionsvr|tradesvr|liqsvr|managersvr|adminsvr|robotsvr)
       echo "dc-saas-$1"
       ;;
