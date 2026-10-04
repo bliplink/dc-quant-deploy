@@ -452,7 +452,19 @@ validate_runtime_capacity() {
 
 port_is_listening() {
   local port="$1"
-  ss -lnt | awk 'NR > 1 {print $4}' | grep -Eq "[:.]${port}$"
+  if command -v ss >/dev/null 2>&1; then
+    ss -lnt | awk 'NR > 1 {print $4}' | grep -Eq "[:.]${port}$"
+    return $?
+  fi
+  if command -v lsof >/dev/null 2>&1; then
+    lsof -nP -iTCP:"${port}" -sTCP:LISTEN >/dev/null 2>&1
+    return $?
+  fi
+  if command -v nc >/dev/null 2>&1; then
+    nc -z -w 1 127.0.0.1 "${port}" >/dev/null 2>&1
+    return $?
+  fi
+  die "No supported TCP listener probe is available (need ss, lsof, or nc)."
 }
 
 validate_initial_ports() {
