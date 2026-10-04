@@ -15,6 +15,7 @@ if [[ ! -f "$ENV_FILE" ]]; then
 fi
 
 "${SCRIPT_DIR}/scripts/apply-release-image-lock.sh" "$ENV_FILE" "${RELEASE_IMAGE_LOCK:-${SCRIPT_DIR}/release/saas-crypto-images.env}"
+"${SCRIPT_DIR}/scripts/configure-macos-binance-feed.sh" "$ENV_FILE"
 "${SCRIPT_DIR}/scripts/upsert-env-value.sh" "$ENV_FILE" DEPLOY_ROOT "${MACOS_DEPLOY_ROOT:-${HOME}/.opentradingcore/dc-saas-runtime}"
 "${SCRIPT_DIR}/scripts/upsert-env-value.sh" "$ENV_FILE" BUILD_ROOT "${MACOS_BUILD_ROOT:-${HOME}/.opentradingcore/dc-saas-build}"
 mkdir -p "${MACOS_DEPLOY_ROOT:-${HOME}/.opentradingcore/dc-saas-runtime}" "${MACOS_BUILD_ROOT:-${HOME}/.opentradingcore/dc-saas-build}"

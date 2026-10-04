@@ -712,3 +712,19 @@ public hostnames
 当删除组件时也必须同时清理以上路径，避免出现“代码已经不用，但 deployment 仍然拉镜像”的幽灵依赖。
 
 本文档应在发布架构、仓库拆分、端口、镜像名称或正式分支策略发生变化时同步更新。
+
+
+## 17. macOS 外部行情预检
+
+`deploy-saas-macos.sh` 默认使用 `MACOS_BINANCE_FEED_PROFILE=auto`。在 `.env.example`
+仍为标准 Binance Futures live 地址时，wrapper 会先探测 live REST；live 可用就保持
+live，不可用但 Binance Futures testnet 可用时，自动将当前本机 `.env.prod` 切换到：
+
+```text
+APSSVR_BINANCE_REST_URL=https://testnet.binancefuture.com
+APSSVR_BINANCE_WS_URL=wss://stream.binancefuture.com/ws
+```
+
+这是 macOS 本地/demo 验收的网络兼容策略，不改变 Linux 正式生产默认 live 配置。
+可用 `MACOS_BINANCE_FEED_PROFILE=live|testnet` 强制指定；若用户已经明确配置了自定义
+APS endpoint，`auto` 不覆盖。

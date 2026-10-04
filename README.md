@@ -367,3 +367,11 @@ ENV_FILE="$PWD/.env.prod" ./deploy-saas-macos.sh --full-cluster
 Do not use `local/*` images for release acceptance. If the locked GHCR packages
 require authentication, provide Docker credentials with `read:packages` or set
 protected `GHCR_USERNAME` / `GHCR_TOKEN` runtime variables; never commit them.
+
+On macOS, `MACOS_BINANCE_FEED_PROFILE=auto` is the default. The wrapper keeps the
+normal Binance Futures live endpoint when it is reachable; if the host cannot
+reach it but Binance Futures testnet is available, it selects the testnet REST
+and WebSocket endpoints for local/demo acceptance. Set the profile explicitly to
+`live` or `testnet` to disable auto-selection. Explicit custom APS endpoints are
+preserved. Linux production deployment is unchanged and continues to use the
+configured live endpoints by default.
