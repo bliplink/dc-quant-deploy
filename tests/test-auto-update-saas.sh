@@ -258,6 +258,10 @@ grep -Fq 'MARKET_READ,ACCOUNT_READ,ORDER_READ,ORDER_WRITE' "${SCRIPT_DIR}/mysql/
   fail "Open API trader permission defaults are missing"
 grep -Fq "open_api_key_policy_columns" "${SCRIPT_DIR}/validate-saas.sh" ||
   fail "runtime validation does not require the Open API key policy schema"
+grep -Fq '<title>OpenTradingCore</title>' "${SCRIPT_DIR}/validate-saas.sh" ||
+  fail "runtime validation still expects the obsolete Trade Web page title"
+! grep -Fq '<title>Trade</title>' "${SCRIPT_DIR}/validate-saas.sh" ||
+  fail "runtime validation must not require the obsolete Trade Web title"
 grep -Fq 'Trade Web: `18088`' "${SCRIPT_DIR}/README.md" ||
   fail "README does not document the current Trade Web port"
 grep -Fq 'Platform Web: `18090`' "${SCRIPT_DIR}/README.md" ||
