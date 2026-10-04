@@ -250,20 +250,17 @@ ensure_env_defaults() {
   if ! grep -q '^PLATFORM_WEB_TAG=' "${ENV_FILE}"; then
     printf 'PLATFORM_WEB_TAG=saas-crypto\n' >> "${ENV_FILE}"
   fi
-  if grep -q '^TRADESVR_TAG=sha-' "${ENV_FILE}"; then
-    sed -i 's/^TRADESVR_TAG=sha-.*/TRADESVR_TAG=saas-crypto/' "${ENV_FILE}"
-  fi
-  # Public application images use the moving saas-crypto tag so the
-  # digest-based updater can detect each newly published Web build. Migrate
-  # every historical source/CI pin instead of maintaining an ever-growing
-  # release-specific allow-list.
-  if grep -Eq '^TRADE_WEB_TAG=(source-|sha-)' "${ENV_FILE}"; then
+  # Moving saas-crypto tags remain the default for continuously updated
+  # installs, but an explicit sha-* tag is an immutable release lock and must
+  # never be rewritten by deployment-time compatibility migration. Only
+  # historical non-release aliases are normalized here.
+  if grep -Eq '^TRADE_WEB_TAG=source-' "${ENV_FILE}"; then
     sed -i 's/^TRADE_WEB_TAG=.*/TRADE_WEB_TAG=saas-crypto/' "${ENV_FILE}"
   fi
-  if grep -Eq '^TENANT_WEB_TAG=(main|source-|sha-)' "${ENV_FILE}"; then
+  if grep -Eq '^TENANT_WEB_TAG=(main|source-)' "${ENV_FILE}"; then
     sed -i 's/^TENANT_WEB_TAG=.*/TENANT_WEB_TAG=saas-crypto/' "${ENV_FILE}"
   fi
-  if grep -Eq '^PLATFORM_WEB_TAG=(saas|source-|sha-)' "${ENV_FILE}"; then
+  if grep -Eq '^PLATFORM_WEB_TAG=(saas|source-)' "${ENV_FILE}"; then
     sed -i 's/^PLATFORM_WEB_TAG=.*/PLATFORM_WEB_TAG=saas-crypto/' "${ENV_FILE}"
   fi
   migrate_env_value REQUIRE_GHCR_LOGIN true false

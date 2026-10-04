@@ -154,6 +154,14 @@ grep -Fq 'tests/run-robot-liquidity-e2e-host.sh' "${SCRIPT_DIR}/acceptance-saas.
   fail "unified acceptance does not run RobotSvr liquidity business validation"
 grep -Fq 'tests/run-trade-cluster-role-reversal-host.sh' "${SCRIPT_DIR}/acceptance-saas.sh" ||
   fail "unified acceptance does not exercise TradeSvr role reversal"
+! grep -Fq "TRADESVR_TAG=sha-.*/TRADESVR_TAG=saas-crypto" "${SCRIPT_DIR}/deploy-saas.sh" ||
+  fail "deploy must preserve an explicit immutable TradeSvr sha tag"
+! grep -Fq "TRADE_WEB_TAG=(source-|sha-)" "${SCRIPT_DIR}/deploy-saas.sh" ||
+  fail "deploy must preserve an explicit immutable Trade Web sha tag"
+! grep -Fq "TENANT_WEB_TAG=(main|source-|sha-)" "${SCRIPT_DIR}/deploy-saas.sh" ||
+  fail "deploy must preserve an explicit immutable Tenant Web sha tag"
+! grep -Fq "PLATFORM_WEB_TAG=(saas|source-|sha-)" "${SCRIPT_DIR}/deploy-saas.sh" ||
+  fail "deploy must preserve an explicit immutable Platform Web sha tag"
 [[ "$(grep -Fc 'validate-saas.sh' "${SCRIPT_DIR}/acceptance-saas.sh")" -ge 2 ]] ||
   fail "unified acceptance must validate health before and after business/failover tests"
 grep -Fq 'acceptance-summary.json' "${SCRIPT_DIR}/acceptance-saas.sh" ||
