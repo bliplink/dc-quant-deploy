@@ -621,3 +621,36 @@ services:
       start_period: 10s
     mem_limit: ${PLATFORM_WEB_MEMORY_LIMIT:-128m}
     cpus: ${PLATFORM_WEB_CPU_LIMIT:-0.05}
+
+  public-web:
+    image: ${PUBLIC_WEB_IMAGE_REPOSITORY:-ghcr.io/bliplink/opentradingcore-web}:${PUBLIC_WEB_TAG:-saas-crypto}
+    container_name: dc-saas-public-web
+    network_mode: host
+    restart: unless-stopped
+    logging: *default-logging
+    depends_on:
+      gateway:
+        condition: service_started
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://127.0.0.1:18094/healthz | grep -q '^ok$'"]
+      interval: 15s
+      timeout: 5s
+      retries: 10
+      start_period: 10s
+    mem_limit: ${PUBLIC_WEB_MEMORY_LIMIT:-128m}
+    cpus: ${PUBLIC_WEB_CPU_LIMIT:-0.05}
+
+  api-docs:
+    image: ${API_DOCS_IMAGE_REPOSITORY:-ghcr.io/bliplink/opentradingcore-api-docs-web}:${API_DOCS_TAG:-saas-crypto}
+    container_name: dc-saas-api-docs
+    network_mode: host
+    restart: unless-stopped
+    logging: *default-logging
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://127.0.0.1:18096/healthz | grep -q '^ok$'"]
+      interval: 15s
+      timeout: 5s
+      retries: 10
+      start_period: 10s
+    mem_limit: ${API_DOCS_MEMORY_LIMIT:-256m}
+    cpus: ${API_DOCS_CPU_LIMIT:-0.10}

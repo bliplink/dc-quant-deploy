@@ -459,7 +459,7 @@ validate_initial_ports() {
   existing="$(docker ps -a --format '{{.Names}}' | grep '^dc-saas-' || true)"
   [[ -z "${existing}" ]] || return 0
 
-  local ports=("${MYSQL_PORT}" "${CLICKHOUSE_HTTP_PORT}" "${CLICKHOUSE_NATIVE_PORT}" "${ZOOKEEPER_PORT}" "${ZOOKEEPER_JMX_PORT}" "${GW_TCP_PORT}" "${GW_WEBSOCKET_PORT}" "${GW_HTTP_PORT}" "${LOGINSVR_HTTP_PORT}" "${LOGINSVR_GW_PORT}" "${MDSVR_GW_PORT}" "${APSSVR_GW_PORT}" "${ORDERSVR_GW_PORT}" "${PROJECTIONSVR_GW_PORT:-33042}" "${TRADESVR_GW_PORT}" "${LIQSVR_GW_PORT}" "${MANAGERSVR_GW_PORT}" "${ADMINSVR_GW_PORT}" "${WEB_LISTEN_PORT}" "18092" "18090")
+  local ports=("${MYSQL_PORT}" "${CLICKHOUSE_HTTP_PORT}" "${CLICKHOUSE_NATIVE_PORT}" "${ZOOKEEPER_PORT}" "${ZOOKEEPER_JMX_PORT}" "${GW_TCP_PORT}" "${GW_WEBSOCKET_PORT}" "${GW_HTTP_PORT}" "${LOGINSVR_HTTP_PORT}" "${LOGINSVR_GW_PORT}" "${MDSVR_GW_PORT}" "${APSSVR_GW_PORT}" "${ORDERSVR_GW_PORT}" "${PROJECTIONSVR_GW_PORT:-33042}" "${TRADESVR_GW_PORT}" "${LIQSVR_GW_PORT}" "${MANAGERSVR_GW_PORT}" "${ADMINSVR_GW_PORT}" "${WEB_LISTEN_PORT}" "18092" "18090" "18094" "18096")
   if [[ "${ORDER_CLUSTER_ENABLED:-false}" == "true" ]]; then
     ports+=("${ORDERSVR_B_GW_PORT}" "${ORDERSVR_A_REPLICATION_PORT}" "${ORDERSVR_B_REPLICATION_PORT}")
     if [[ "${ORDER_CLUSTER_C_ENABLED:-false}" == "true" ]]; then
@@ -1069,7 +1069,7 @@ verify_mysql_runtime_schema
 provision_platform_admin
 provision_robot_runtime_identity
 
-log "Starting SaaS services plus Trade Web, Tenant Web and Platform Web."
+log "Starting SaaS services plus Trade Web, Tenant Web, Platform Web, public Web and API Docs."
 compose_up -d
 # ApiKeyService loads its in-memory key map when LoginSvr starts.  Restart it
 # only when provisioning actually changed the Robot credential.  The previous
@@ -1083,6 +1083,8 @@ fi
 wait_for_health dc-saas-trade-web 300
 wait_for_health dc-saas-tenant-web 300
 wait_for_health dc-saas-platform-web 300
+wait_for_health dc-saas-public-web 300
+wait_for_health dc-saas-api-docs 300
 wait_for_port "${GW_TCP_PORT}" gateway 120
 wait_for_port "${LOGINSVR_GW_PORT}" loginsvr 120
 wait_for_port "${LOGINSVR_HTTP_PORT}" loginsvr 180

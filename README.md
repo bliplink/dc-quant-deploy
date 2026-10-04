@@ -152,9 +152,11 @@ the protected runtime environment as `SOURCE_GIT_TOKEN` (optional
 a temporary `GIT_ASKPASS` helper and is not embedded in repository URLs or
 committed configuration.
 
-`REQUIRE_GHCR_LOGIN` remains available only for operators who replace the
-defaults with their own private registry packages. Credentials must be supplied
-through the protected runtime environment and must never be committed.
+`REQUIRE_GHCR_LOGIN` enables an explicit pre-pull registry access gate. The
+round-two immutable release lock enables this because the public-site packages
+may remain private in GHCR. Supply `GHCR_USERNAME` plus a classic PAT with
+`read:packages` as `GHCR_TOKEN` only in the protected runtime environment; never
+commit registry credentials. Public-only installations may leave the gate off.
 
 ## Validation
 
