@@ -460,8 +460,7 @@ validate_runtime_capacity() {
 }
 
 port_is_listening() {
-  local port="$1"
-  ss -lnt | awk 'NR > 1 {print $4}' | grep -Eq "[:.]${port}$"
+  "${SCRIPT_DIR}/scripts/port-is-listening.sh" "$1"
 }
 
 validate_initial_ports() {

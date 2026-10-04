@@ -41,7 +41,7 @@ if ! docker ps -a --format '{{.Names}}' | grep -q '^dc-saas-'; then
     "${TRADESVR_A_REPLICATION_PORT:-19221}" "${TRADESVR_B_REPLICATION_PORT:-19222}"
   )
   for port in "${ports[@]}"; do
-    if lsof -nP -iTCP:"$port" -sTCP:LISTEN >/dev/null 2>&1; then
+    if "${SCRIPT_DIR}/scripts/port-is-listening.sh" "$port"; then
       echo "[saas-macos] ERROR: port ${port} is already in use." >&2
       exit 1
     fi
