@@ -39,7 +39,11 @@ if [[ ! -d "${verify_data_root}" ]]; then
   # 256 small snapshot.json files required by the same verifier. Linux keeps
   # using DATA_ROOT directly.
   verify_data_root="${work_dir}/runtime-data"
-  for node in OrderSvrA OrderSvrB; do
+  snapshot_nodes=(OrderSvrA OrderSvrB)
+  if docker inspect dc-saas-ordersvr-c >/dev/null 2>&1; then
+    snapshot_nodes+=(OrderSvrC)
+  fi
+  for node in "${snapshot_nodes[@]}"; do
     mkdir -p "${verify_data_root}/${node}/snapshot"
     docker exec dc-saas-ordersvr sh -lc "cd /srv/dc/data/${node}/snapshot && tar -cf - P*/snapshot.json" |
       tar -xf - -C "${verify_data_root}/${node}/snapshot"
