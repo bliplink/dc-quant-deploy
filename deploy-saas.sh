@@ -293,6 +293,13 @@ apply_full_cluster_profile() {
   set_env_value MD_CLUSTER_C_ENABLED true
   set_env_value ORDER_CLUSTER_ENABLED true
   set_env_value ORDER_CLUSTER_C_ENABLED true
+  upsert_env_value ORDER_CLUSTER_FAILOVER_ENABLED true
+  upsert_env_value ORDER_CLUSTER_FAILOVER_NODES OrderSvrA,OrderSvrB,OrderSvrC
+  upsert_env_value ORDER_CLUSTER_FAILOVER_SAFETY_POLL_MILLIS 1000
+  upsert_env_value ORDER_CLUSTER_FAILOVER_MINIMUM_LIVE_SYNCHRONIZED_REPLICAS 2
+  upsert_env_value ORDER_CLUSTER_FAILOVER_REPLICA_REPAIR_POLL_MILLIS 5000
+  upsert_env_value ORDERSVR_ZOOKEEPER_SESSION_TIMEOUT_MS 6000
+  upsert_env_value ORDERSVR_ZOOKEEPER_CONNECTION_TIMEOUT_MS 5000
   set_env_value TRADE_CLUSTER_ENABLED true
   set_env_value TRADE_CLUSTER_REPLICATION_REQUIRED true
   set_env_value TRADE_CLUSTER_FAILOVER_ENABLED true
@@ -628,8 +635,13 @@ ensure_order_cluster_assignments() {
         node=OrderSvrB
         replica=OrderSvrA
       fi
-      printf 'create /dc/cluster/ordersvr/partitions/P%03d {"partitionId":"P%03d","epoch":1,"primary":"%s","replica":"%s","state":"READY"}\n' \
-        "${partition}" "${partition}" "${node}" "${replica}"
+      if [[ "${ORDER_CLUSTER_C_ENABLED:-false}" == "true" ]]; then
+        printf 'create /dc/cluster/ordersvr/partitions/P%03d {\"partitionId\":\"P%03d\",\"epoch\":1,\"assignmentVersion\":1,\"primary\":\"%s\",\"replica\":\"%s\",\"replicas\":[\"%s\",\"OrderSvrC\"],\"learners\":[],\"state\":\"READY\"}\n' \
+          "${partition}" "${partition}" "${node}" "${replica}" "${replica}"
+      else
+        printf 'create /dc/cluster/ordersvr/partitions/P%03d {\"partitionId\":\"P%03d\",\"epoch\":1,\"assignmentVersion\":1,\"primary\":\"%s\",\"replica\":\"%s\",\"replicas\":[\"%s\"],\"learners\":[],\"state\":\"READY\"}\n' \
+          "${partition}" "${partition}" "${node}" "${replica}" "${replica}"
+      fi
     done
     printf 'quit\n'
   } > "${commands}"
@@ -656,7 +668,7 @@ ensure_order_cluster_assignments() {
     dc-saas-zookeeper zkCli.sh -server "127.0.0.1:${ZOOKEEPER_PORT}" 2>&1)"
   count="$(grep -oE 'P[0-9]{3}' <<<"${output}" | sort -u | wc -l | tr -d ' ')"
   [[ "${count}" == "256" ]] || die "Expected 256 OrderSvr assignments, found ${count}."
-  log "ZooKeeper OrderSvr assignments are ready: 256 partitions, alternating A/B primaries."
+  log "ZooKeeper OrderSvr assignments are ready: 256 partitions, alternating A/B primaries with configured synchronized replicas."
 }
 
 ensure_trade_cluster_assignments() {
