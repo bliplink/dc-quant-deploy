@@ -147,7 +147,7 @@ jobs:
       - name: Validate SaaS auto-update wiring
         run: tests/test-auto-update-saas.sh
       - name: Validate immutable release image lock
-        run: tests/test-release-image-lock.sh
+        run: bash tests/test-release-image-lock.sh
       - name: Validate generated cluster configurations
         run: |
           tests/test-md-cluster-config.sh
