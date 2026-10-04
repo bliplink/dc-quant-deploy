@@ -83,8 +83,18 @@ grep -Fq 'overrides/${TRADESVR_CONFIG_NAME:-TradeSvr}/config/application.propert
   fail 'TradeSvrA selected config is not mounted'
 grep -Fqx '  tradesvr-b:' "${DEPLOY_DIR}/compose.yaml" || fail 'tradesvr-b compose service is missing'
 grep -Fq 'profiles: ["trade-cluster"]' "${DEPLOY_DIR}/compose.yaml" || fail 'tradesvr-b compose profile is missing'
+grep -Fq 'Xmx1536m' "${DEPLOY_DIR}/compose.yaml" || fail 'Trade heap default must support full 256-partition HA state'
+grep -Fq 'mem_limit: ${TRADESVR_MEMORY_LIMIT:-2560m}' "${DEPLOY_DIR}/compose.yaml" || fail 'TradeSvrA memory default mismatch'
+grep -Fq 'mem_limit: ${TRADESVR_B_MEMORY_LIMIT:-${TRADESVR_MEMORY_LIMIT:-2560m}}' "${DEPLOY_DIR}/compose.yaml" || fail 'TradeSvrB memory default mismatch'
+grep -Fq 'cpus: ${TRADESVR_CPU_LIMIT:-1.00}' "${DEPLOY_DIR}/compose.yaml" || fail 'TradeSvrA CPU default mismatch'
+grep -Fq 'cpus: ${TRADESVR_B_CPU_LIMIT:-${TRADESVR_CPU_LIMIT:-1.00}}' "${DEPLOY_DIR}/compose.yaml" || fail 'TradeSvrB CPU default mismatch'
 [[ "$(grep -Fc 'DC_ZOOKEEPER_SESSION_TIMEOUT_MS: ${TRADESVR_ZOOKEEPER_SESSION_TIMEOUT_MS:-6000}' "${DEPLOY_DIR}/compose.yaml")" == "2" ]] || fail 'Trade A/B ZooKeeper session timeout override is missing'
 [[ "$(grep -Fc 'DC_ZOOKEEPER_CONNECTION_TIMEOUT_MS: ${TRADESVR_ZOOKEEPER_CONNECTION_TIMEOUT_MS:-5000}' "${DEPLOY_DIR}/compose.yaml")" == "2" ]] || fail 'Trade A/B ZooKeeper connection timeout override is missing'
+grep -Fq 'JAVA_OPTS: ${TRADESVR_B_JAVA_OPTS:-${TRADESVR_JAVA_OPTS:' "${DEPLOY_DIR}/compose.yaml" || fail 'TradeSvrB must inherit TradeSvrA JVM sizing by default'
+grep -Fq 'mem_limit: ${TRADESVR_B_MEMORY_LIMIT:-${TRADESVR_MEMORY_LIMIT:-2560m}}' "${DEPLOY_DIR}/compose.yaml" || fail 'TradeSvrB must inherit TradeSvrA memory limit by default'
+grep -Fq 'cpus: ${TRADESVR_B_CPU_LIMIT:-${TRADESVR_CPU_LIMIT:-1.00}}' "${DEPLOY_DIR}/compose.yaml" || fail 'TradeSvrB must inherit TradeSvrA CPU limit by default'
+grep -Fqx 'TRADESVR_B_MEMORY_LIMIT=2560m' "${DEPLOY_DIR}/.env.example" || fail 'TradeSvrB example memory must be HA-capable'
+grep -Fqx 'TRADESVR_B_CPU_LIMIT=1.00' "${DEPLOY_DIR}/.env.example" || fail 'TradeSvrB example CPU must match TradeSvrA'
 grep -Fq 'profiles: ["order-cluster", "trade-cluster"]' "${DEPLOY_DIR}/compose.yaml" ||
   fail 'ProjectionSvr must start for the trade-cluster profile'
 projection_config="${TEST_ROOT}/runtime/control/overrides/ProjectionSvr/config/application.properties"

@@ -385,7 +385,7 @@ services:
       SERVICE_NAME: TradeSvr
       MAIN_CLASS: TradeSvr
       MALLOC_ARENA_MAX: ${TRADESVR_MALLOC_ARENA_MAX:-2}
-      JAVA_OPTS: ${TRADESVR_JAVA_OPTS:--server -Xms64m -Xmx384m -Xmn96m -Xss256k -XX:MaxDirectMemorySize=128m -XX:+ExitOnOutOfMemoryError -Dgateway.api.workerThreads=32 -Dgateway.api.workerQueueCapacity=10000 -Djava.security.auth.login.config=../../control/jaas.ini}
+      JAVA_OPTS: ${TRADESVR_JAVA_OPTS:--server -Xms256m -Xmx1536m -Xmn384m -Xss256k -XX:MaxDirectMemorySize=128m -XX:+ExitOnOutOfMemoryError -Dgateway.api.workerThreads=32 -Dgateway.api.workerQueueCapacity=10000 -Djava.security.auth.login.config=../../control/jaas.ini}
       DC_ZOOKEEPER_SESSION_TIMEOUT_MS: ${TRADESVR_ZOOKEEPER_SESSION_TIMEOUT_MS:-6000}
       DC_ZOOKEEPER_CONNECTION_TIMEOUT_MS: ${TRADESVR_ZOOKEEPER_CONNECTION_TIMEOUT_MS:-5000}
     volumes:
@@ -394,8 +394,8 @@ services:
       - ${DEPLOY_ROOT}/log:/srv/dc/log
       - ${DEPLOY_ROOT}/control/overrides/${TRADESVR_CONFIG_NAME:-TradeSvr}/config/application.properties:/srv/dc/dc/TradeSvr/config/application.properties:ro
       - ${DEPLOY_ROOT}/control/overrides/${TRADESVR_CONFIG_NAME:-TradeSvr}/config/log4j.ini:/srv/dc/dc/TradeSvr/config/log4j.ini:ro
-    mem_limit: ${TRADESVR_MEMORY_LIMIT:-896m}
-    cpus: ${TRADESVR_CPU_LIMIT:-0.50}
+    mem_limit: ${TRADESVR_MEMORY_LIMIT:-2560m}
+    cpus: ${TRADESVR_CPU_LIMIT:-1.00}
 
   tradesvr-b:
     <<: *java-service-base
@@ -413,7 +413,7 @@ services:
       SERVICE_NAME: TradeSvr
       MAIN_CLASS: TradeSvr
       MALLOC_ARENA_MAX: ${TRADESVR_MALLOC_ARENA_MAX:-2}
-      JAVA_OPTS: ${TRADESVR_B_JAVA_OPTS:--server -Xms32m -Xmx192m -Xmn48m -Xss256k -XX:MaxDirectMemorySize=64m -XX:+ExitOnOutOfMemoryError -Dgateway.api.workerThreads=16 -Dgateway.api.workerQueueCapacity=2000 -Djava.security.auth.login.config=../../control/jaas.ini}
+      JAVA_OPTS: ${TRADESVR_B_JAVA_OPTS:-${TRADESVR_JAVA_OPTS:--server -Xms256m -Xmx1536m -Xmn384m -Xss256k -XX:MaxDirectMemorySize=128m -XX:+ExitOnOutOfMemoryError -Dgateway.api.workerThreads=32 -Dgateway.api.workerQueueCapacity=10000 -Djava.security.auth.login.config=../../control/jaas.ini}}
       DC_ZOOKEEPER_SESSION_TIMEOUT_MS: ${TRADESVR_ZOOKEEPER_SESSION_TIMEOUT_MS:-6000}
       DC_ZOOKEEPER_CONNECTION_TIMEOUT_MS: ${TRADESVR_ZOOKEEPER_CONNECTION_TIMEOUT_MS:-5000}
     volumes:
@@ -422,8 +422,8 @@ services:
       - ${DEPLOY_ROOT}/log:/srv/dc/log
       - ${DEPLOY_ROOT}/control/overrides/TradeSvrB/config/application.properties:/srv/dc/dc/TradeSvr/config/application.properties:ro
       - ${DEPLOY_ROOT}/control/overrides/TradeSvrB/config/log4j.ini:/srv/dc/dc/TradeSvr/config/log4j.ini:ro
-    mem_limit: ${TRADESVR_B_MEMORY_LIMIT:-512m}
-    cpus: ${TRADESVR_B_CPU_LIMIT:-0.25}
+    mem_limit: ${TRADESVR_B_MEMORY_LIMIT:-${TRADESVR_MEMORY_LIMIT:-2560m}}
+    cpus: ${TRADESVR_B_CPU_LIMIT:-${TRADESVR_CPU_LIMIT:-1.00}}
 
   liqsvr:
     <<: *java-service-base
