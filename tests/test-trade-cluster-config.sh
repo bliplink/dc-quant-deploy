@@ -69,7 +69,7 @@ grep -Fqx 'trade.cluster.failover.failureGraceMillis=5000' "${a_config}" || fail
 grep -Fqx 'trade.cluster.failover.maxPromotionsPerPoll=8' "${a_config}" || fail 'Trade failover promotion batch mismatch'
 grep -Fqx 'trade.cluster.failover.requireHealthyReplication=true' "${a_config}" || fail 'Trade failover must require healthy replication'
 grep -Fqx 'trade.cluster.replication.degradedRetryMillis=1000' "${a_config}" || fail 'Trade replica degraded retry interval mismatch'
-grep -Fqx 'trade.cluster.replication.requestTimeoutMs=1000' "${a_config}" || fail 'Trade replica timeout must stay bounded during replica outage'
+grep -Fqx 'trade.cluster.replication.requestTimeoutMs=3000' "${a_config}" || fail 'Trade replica timeout must stay bounded during replica outage'
 grep -Fqx 'trade.cluster.replication.port=19221' "${a_config}" || fail 'TradeSvrA replication port mismatch'
 grep -Fqx 'trade.cluster.replication.port=19222' "${b_config}" || fail 'TradeSvrB replication port mismatch'
 grep -Fqx 'trade.cluster.replication.peers=TradeSvrA=127.0.0.1:19221,TradeSvrB=127.0.0.1:19222' "${a_config}" ||
