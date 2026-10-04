@@ -325,7 +325,7 @@ clickhouse_view="$(
 
 docker exec dc-saas-trade-web wget -qO- "http://127.0.0.1:${WEB_LISTEN_PORT}/healthz" | grep -q '^ok$' ||
   die "dc-trade-web health endpoint failed."
-docker exec dc-saas-trade-web wget -qO- "http://127.0.0.1:${WEB_LISTEN_PORT}/" | grep -qi '<title>Trade</title>' ||
+docker exec dc-saas-trade-web wget -qO- "http://127.0.0.1:${WEB_LISTEN_PORT}/" | grep -qi '<title>OpenTradingCore</title>' ||
   die "dc-trade-web index page is not the trade application."
 
 wait_for_gateway_route() {
