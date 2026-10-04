@@ -161,6 +161,16 @@ for container in dc-saas-mysql dc-saas-clickhouse dc-saas-zookeeper dc-saas-trad
   [[ "${health}" == "healthy" ]] || die "${container} health is ${health:-missing}."
 done
 
+admin_runtime_env="$(docker inspect dc-saas-adminsvr --format '{{range .Config.Env}}{{println .}}{{end}}')"
+grep -Fxq 'TRIAL_LIQUIDITY_BOOTSTRAP_ENABLED=true' <<<"${admin_runtime_env}" ||
+  die "AdminSvr trial-liquidity bootstrap is not enabled."
+grep -Fxq 'TRIAL_LIQUIDITY_DEMO_RETRY_ENABLED=true' <<<"${admin_runtime_env}" ||
+  die "AdminSvr bounded demo-liquidity retry is not enabled."
+trial_liquidity_master_key="$(sed -n 's/^TRIAL_LIQUIDITY_MASTER_KEY=//p' <<<"${admin_runtime_env}" | tail -n 1)"
+[[ ${#trial_liquidity_master_key} -ge 32 ]] ||
+  die "AdminSvr trial-liquidity master key is missing or too short."
+unset trial_liquidity_master_key admin_runtime_env
+
 required_ports=(
   "${MYSQL_PORT}" "${CLICKHOUSE_HTTP_PORT}" "${CLICKHOUSE_NATIVE_PORT}"
   "${ZOOKEEPER_PORT}" "${GW_TCP_PORT}" "${GW_WEBSOCKET_PORT}" "${GW_HTTP_PORT}"

@@ -258,6 +258,16 @@ grep -Fq 'MARKET_READ,ACCOUNT_READ,ORDER_READ,ORDER_WRITE' "${SCRIPT_DIR}/mysql/
   fail "Open API trader permission defaults are missing"
 grep -Fq "open_api_key_policy_columns" "${SCRIPT_DIR}/validate-saas.sh" ||
   fail "runtime validation does not require the Open API key policy schema"
+grep -Fq 'TRIAL_LIQUIDITY_BOOTSTRAP_ENABLED: ${TRIAL_LIQUIDITY_BOOTSTRAP_ENABLED:-true}' "${SCRIPT_DIR}/compose.yaml" ||
+  fail "AdminSvr compose does not enable automatic trial liquidity"
+grep -Fq 'TRIAL_LIQUIDITY_MASTER_KEY: ${TRIAL_LIQUIDITY_MASTER_KEY}' "${SCRIPT_DIR}/compose.yaml" ||
+  fail "AdminSvr compose does not receive the dedicated trial-liquidity master key"
+grep -Fq 'ensure_generated_env_secret TRIAL_LIQUIDITY_MASTER_KEY' "${SCRIPT_DIR}/deploy-saas.sh" ||
+  fail "deploy does not generate the dedicated trial-liquidity master key"
+grep -Fq 'TRIAL_LIQUIDITY_BOOTSTRAP_ENABLED=true' "${SCRIPT_DIR}/.env.example" ||
+  fail "trial-liquidity bootstrap default is missing"
+grep -Fq 'AdminSvr trial-liquidity bootstrap is not enabled.' "${SCRIPT_DIR}/validate-saas.sh" ||
+  fail "runtime validation does not enforce trial-liquidity bootstrap wiring"
 grep -Fq '<title>OpenTradingCore</title>' "${SCRIPT_DIR}/validate-saas.sh" ||
   fail "runtime validation still expects the obsolete Trade Web page title"
 ! grep -Fq '<title>Trade</title>' "${SCRIPT_DIR}/validate-saas.sh" ||
