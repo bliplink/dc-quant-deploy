@@ -59,7 +59,9 @@ while [[ "$#" -gt 0 ]]; do
   shift
 done
 
-[[ "${EUID}" -eq 0 ]] || die "Run as root or with sudo."
+if [[ "${SAAS_ALLOW_UNPRIVILEGED_HOST:-false}" != "true" ]]; then
+  [[ "${EUID}" -eq 0 ]] || die "Run as root or with sudo."
+fi
 cd "${SCRIPT_DIR}"
 
 if [[ "${SAAS_DEPLOY_LOCK_HELD:-false}" != "true" ]]; then
@@ -92,7 +94,7 @@ ensure_generated_env_secret() {
 set_env_value() {
   local key="$1"
   local value="$2"
-  sed -i "s|^${key}=.*$|${key}=${value}|" "${ENV_FILE}"
+  "${SCRIPT_DIR}/scripts/upsert-env-value.sh" "${ENV_FILE}" "${key}" "${value}"
 }
 
 migrate_env_value() {
@@ -269,21 +271,20 @@ ensure_env_defaults() {
   # never be rewritten by deployment-time compatibility migration. Only
   # historical non-release aliases are normalized here.
   if grep -Eq '^TRADE_WEB_TAG=source-' "${ENV_FILE}"; then
-    sed -i 's/^TRADE_WEB_TAG=.*/TRADE_WEB_TAG=saas-crypto/' "${ENV_FILE}"
+    set_env_value TRADE_WEB_TAG saas-crypto
   fi
   if grep -Eq '^TENANT_WEB_TAG=(main|source-)' "${ENV_FILE}"; then
-    sed -i 's/^TENANT_WEB_TAG=.*/TENANT_WEB_TAG=saas-crypto/' "${ENV_FILE}"
+    set_env_value TENANT_WEB_TAG saas-crypto
   fi
   if grep -Eq '^PLATFORM_WEB_TAG=(saas|source-)' "${ENV_FILE}"; then
-    sed -i 's/^PLATFORM_WEB_TAG=.*/PLATFORM_WEB_TAG=saas-crypto/' "${ENV_FILE}"
+    set_env_value PLATFORM_WEB_TAG saas-crypto
   fi
-  migrate_env_value REQUIRE_GHCR_LOGIN true false
   if ! grep -q '^SAAS_MIN_TOTAL_MEMORY_MB=' "${ENV_FILE}"; then
     printf 'SAAS_MIN_TOTAL_MEMORY_MB=7680\n' >> "${ENV_FILE}"
   fi
   migrate_env_value SAAS_MIN_AVAILABLE_MEMORY_MB 8192 2048
   if grep -q '^ZOOKEEPER_TAG=v0.0.3-test$' "${ENV_FILE}"; then
-    sed -i 's/^ZOOKEEPER_TAG=v0.0.3-test$/ZOOKEEPER_TAG=3.8.4/' "${ENV_FILE}"
+    set_env_value ZOOKEEPER_TAG 3.8.4
   fi
 }
 
@@ -1024,9 +1025,13 @@ persist_compose_config_names
 prepare_local_build_identity
 ensure_host_runtime
 load_env
-validate_runtime_root
-validate_runtime_capacity
-validate_initial_ports
+if [[ "${SAAS_SKIP_LINUX_HOST_PREFLIGHT:-false}" != "true" ]]; then
+  validate_runtime_root
+  validate_runtime_capacity
+  validate_initial_ports
+else
+  log "Linux host preflight is handled by the platform-specific deployment entrypoint."
+fi
 prepare_runtime_directories
 "${SCRIPT_DIR}/generate-saas-configs.sh" "${ENV_FILE}"
 verify_ghcr_access

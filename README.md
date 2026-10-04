@@ -338,3 +338,32 @@ Redeploy with preserved data by running `sudo ./install-saas.sh` again, or `sudo
    rolling upgrades, and tenant-level rate limits.
 6. Promote immutable `sha-*` images through QA and staging before production;
    never deploy the moving quant `latest` tags into this stack.
+
+## Immutable one-click deployment
+
+The release baseline is pinned in `release/saas-crypto-images.env`. To apply only
+its registry/image settings to an existing protected `.env.prod` without
+changing runtime secrets:
+
+```bash
+scripts/apply-release-image-lock.sh .env.prod
+```
+
+Linux production hosts use the canonical entrypoint:
+
+```bash
+sudo ENV_FILE="$PWD/.env.prod" ./deploy-saas.sh --full-cluster
+```
+
+macOS + Docker Desktop hosts use the supported wrapper. It applies the same
+release lock, uses writable runtime roots below `~/.opentradingcore`, performs
+macOS preflight, and then invokes the same `deploy-saas.sh` migration, ZooKeeper,
+startup and validation path:
+
+```bash
+ENV_FILE="$PWD/.env.prod" ./deploy-saas-macos.sh --full-cluster
+```
+
+Do not use `local/*` images for release acceptance. If the locked GHCR packages
+require authentication, provide Docker credentials with `read:packages` or set
+protected `GHCR_USERNAME` / `GHCR_TOKEN` runtime variables; never commit them.
