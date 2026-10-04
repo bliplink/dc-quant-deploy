@@ -58,9 +58,16 @@ grep -Fqx 'trade.cluster.snapshot.periodic.maxAgeMillis=300000' "${a_config}" ||
 grep -Fqx 'trade.cluster.snapshot.periodic.minCommittedMutations=10000' "${a_config}" || fail 'Trade periodic snapshot mutation threshold mismatch'
 grep -Fqx 'trade.cluster.lifecycle.enabled=true' "${a_config}" || fail 'Trade recovery lifecycle must be enabled'
 grep -Fqx 'trade.cluster.recovery.authoritative=true' "${a_config}" || fail 'Trade authoritative recovery must be enabled'
+grep -Fqx 'trade.cluster.recovery.rollbackUncommittedTail.enabled=false' "${a_config}" || fail 'Trade rollback must remain opt-in outside full-cluster profile'
 grep -Fqx 'trade.cluster.replication.enabled=true' "${a_config}" || fail 'Trade replication must be enabled'
-grep -Fqx 'trade.cluster.replication.required=false' "${a_config}" || fail 'TradeSvrA replica ACK must not gate Primary availability'
-grep -Fqx 'trade.cluster.replication.required=false' "${b_config}" || fail 'TradeSvrB replica ACK must not gate Primary availability'
+grep -Fqx 'trade.cluster.replication.required=true' "${a_config}" || fail 'TradeSvrA replica ACK must gate safe failover commits'
+grep -Fqx 'trade.cluster.replication.required=true' "${b_config}" || fail 'TradeSvrB replica ACK must gate safe failover commits'
+grep -Fqx 'trade.cluster.failover.enabled=true' "${a_config}" || fail 'TradeSvrA automatic failover must be enabled'
+grep -Fqx 'trade.cluster.failover.enabled=true' "${b_config}" || fail 'TradeSvrB automatic failover must be enabled'
+grep -Fqx 'trade.cluster.failover.pollMillis=500' "${a_config}" || fail 'Trade failover poll interval mismatch'
+grep -Fqx 'trade.cluster.failover.failureGraceMillis=5000' "${a_config}" || fail 'Trade failover grace interval mismatch'
+grep -Fqx 'trade.cluster.failover.maxPromotionsPerPoll=8' "${a_config}" || fail 'Trade failover promotion batch mismatch'
+grep -Fqx 'trade.cluster.failover.requireHealthyReplication=true' "${a_config}" || fail 'Trade failover must require healthy replication'
 grep -Fqx 'trade.cluster.replication.degradedRetryMillis=1000' "${a_config}" || fail 'Trade replica degraded retry interval mismatch'
 grep -Fqx 'trade.cluster.replication.requestTimeoutMs=1000' "${a_config}" || fail 'Trade replica timeout must stay bounded during replica outage'
 grep -Fqx 'trade.cluster.replication.port=19221' "${a_config}" || fail 'TradeSvrA replication port mismatch'
@@ -76,6 +83,8 @@ grep -Fq 'overrides/${TRADESVR_CONFIG_NAME:-TradeSvr}/config/application.propert
   fail 'TradeSvrA selected config is not mounted'
 grep -Fqx '  tradesvr-b:' "${DEPLOY_DIR}/compose.yaml" || fail 'tradesvr-b compose service is missing'
 grep -Fq 'profiles: ["trade-cluster"]' "${DEPLOY_DIR}/compose.yaml" || fail 'tradesvr-b compose profile is missing'
+[[ "$(grep -Fc 'DC_ZOOKEEPER_SESSION_TIMEOUT_MS: ${TRADESVR_ZOOKEEPER_SESSION_TIMEOUT_MS:-6000}' "${DEPLOY_DIR}/compose.yaml")" == "2" ]] || fail 'Trade A/B ZooKeeper session timeout override is missing'
+[[ "$(grep -Fc 'DC_ZOOKEEPER_CONNECTION_TIMEOUT_MS: ${TRADESVR_ZOOKEEPER_CONNECTION_TIMEOUT_MS:-5000}' "${DEPLOY_DIR}/compose.yaml")" == "2" ]] || fail 'Trade A/B ZooKeeper connection timeout override is missing'
 grep -Fq 'profiles: ["order-cluster", "trade-cluster"]' "${DEPLOY_DIR}/compose.yaml" ||
   fail 'ProjectionSvr must start for the trade-cluster profile'
 projection_config="${TEST_ROOT}/runtime/control/overrides/ProjectionSvr/config/application.properties"
@@ -126,10 +135,16 @@ grep -Fq 'set_env_value MD_CLUSTER_C_ENABLED true' "${DEPLOY_DIR}/deploy-saas.sh
   fail 'full cluster must enable MDSvrC'
 grep -Fq 'set_env_value ORDER_CLUSTER_ENABLED true' "${DEPLOY_DIR}/deploy-saas.sh" ||
   fail 'full cluster must enable Order cluster'
-grep -Fq 'set_env_value ORDER_CLUSTER_C_ENABLED false' "${DEPLOY_DIR}/deploy-saas.sh" ||
-  fail 'full cluster topology must keep OrderSvr at A/B'
+grep -Fq 'set_env_value ORDER_CLUSTER_C_ENABLED true' "${DEPLOY_DIR}/deploy-saas.sh" ||
+  fail 'full cluster topology must enable OrderSvr A/B/C'
 grep -Fq 'set_env_value TRADE_CLUSTER_ENABLED true' "${DEPLOY_DIR}/deploy-saas.sh" ||
   fail 'full cluster must enable Trade cluster'
+grep -Fq 'set_env_value TRADE_CLUSTER_REPLICATION_REQUIRED true' "${DEPLOY_DIR}/deploy-saas.sh" ||
+  fail 'full cluster must require Trade replication'
+grep -Fq 'set_env_value TRADE_CLUSTER_FAILOVER_ENABLED true' "${DEPLOY_DIR}/deploy-saas.sh" ||
+  fail 'full cluster must enable Trade automatic failover'
+grep -Fq 'set_env_value TRADE_CLUSTER_ROLLBACK_UNCOMMITTED_TAIL_ENABLED true' "${DEPLOY_DIR}/deploy-saas.sh" ||
+  fail 'full cluster must enable Trade dirty-tail rollback'
 grep -Fq "printf 'TRADE_CLUSTER_PERIODIC_SNAPSHOT_ENABLED=true" "${DEPLOY_DIR}/deploy-saas.sh" ||
   fail 'deployment must enable Trade periodic snapshots when the env setting is missing'
 grep -Fq 'apply_full_cluster_profile' "${DEPLOY_DIR}/deploy-saas.sh" ||
