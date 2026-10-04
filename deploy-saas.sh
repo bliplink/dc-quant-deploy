@@ -117,6 +117,7 @@ ensure_env_file() {
   set_env_value LOGIN_DEFAULT_PASSWORD "$(generate_secret)"
   set_env_value PLATFORM_ADMIN_PASSWORD "$(generate_secret)"
   set_env_value DC_HEDGE_CREDENTIAL_MASTER_KEY "$(generate_secret)"
+  set_env_value TRIAL_LIQUIDITY_MASTER_KEY "$(generate_secret)"
   set_env_value ROBOT_RUNTIME_API_KEY "$(generate_secret)"
   set_env_value ROBOT_RUNTIME_API_SECRET "$(generate_secret)"
   log "Created ${ENV_FILE} with generated local secrets."
@@ -213,6 +214,19 @@ ensure_env_defaults() {
   ensure_generated_env_secret DEFAULT_E2E_TAPE_PASSWORD
   if ! grep -q '^DC_HEDGE_CREDENTIAL_MASTER_KEY=' "${ENV_FILE}"; then
     printf 'DC_HEDGE_CREDENTIAL_MASTER_KEY=%s\n' "$(generate_secret)" >> "${ENV_FILE}"
+  fi
+  if ! grep -q '^TRIAL_LIQUIDITY_BOOTSTRAP_ENABLED=' "${ENV_FILE}"; then
+    printf 'TRIAL_LIQUIDITY_BOOTSTRAP_ENABLED=true\n' >> "${ENV_FILE}"
+  fi
+  if ! grep -q '^TRIAL_LIQUIDITY_DEMO_RETRY_ENABLED=' "${ENV_FILE}"; then
+    printf 'TRIAL_LIQUIDITY_DEMO_RETRY_ENABLED=true\n' >> "${ENV_FILE}"
+  fi
+  ensure_generated_env_secret TRIAL_LIQUIDITY_MASTER_KEY
+  if ! grep -q '^TRIAL_LIQUIDITY_CASH_AMOUNT=' "${ENV_FILE}"; then
+    printf 'TRIAL_LIQUIDITY_CASH_AMOUNT=10000\n' >> "${ENV_FILE}"
+  fi
+  if ! grep -q '^TRIAL_LIQUIDITY_MARGIN_BUDGET=' "${ENV_FILE}"; then
+    printf 'TRIAL_LIQUIDITY_MARGIN_BUDGET=1000\n' >> "${ENV_FILE}"
   fi
   if ! grep -q '^ROBOT_RUNTIME_LOCATION=' "${ENV_FILE}"; then
     printf 'ROBOT_RUNTIME_LOCATION=PLATFORM\n' >> "${ENV_FILE}"
