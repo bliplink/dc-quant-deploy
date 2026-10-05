@@ -5,9 +5,12 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 DEPLOY_DIR="$(cd "${SCRIPT_DIR}/.." && pwd)"
 ENV_FILE="${ENV_FILE:-${DEPLOY_DIR}/.env.prod}"
 CORE_LOCATION="${CORE_E2E_LOCATION:-CORE_E2E}"
-CORE_BUYER="${CORE_E2E_BUYER:-corebuyer}"
-CORE_SELLER="${CORE_E2E_SELLER:-coreseller}"
-RULE_RUN_ID="${CORE_RULE_E2E_RUN_ID:-$(date +%Y%m%d%H%M%S)}"
+CORE_RUN_ID="${CORE_E2E_RUN_ID:-$(date +%Y%m%d%H%M%S)}"
+CORE_BUYER_PREFIX="${CORE_E2E_BUYER:-corebuyer}"
+CORE_SELLER_PREFIX="${CORE_E2E_SELLER:-coreseller}"
+CORE_BUYER="${CORE_BUYER_PREFIX}_${CORE_RUN_ID}"
+CORE_SELLER="${CORE_SELLER_PREFIX}_${CORE_RUN_ID}"
+RULE_RUN_ID="${CORE_RULE_E2E_RUN_ID:-${CORE_RUN_ID}}"
 
 log() {
   printf '[core-acceptance] %s\n' "$*"
@@ -115,11 +118,11 @@ log "Running strict order-rule validation in an isolated acceptance location."
 ENV_FILE="${ENV_FILE}" \
 RULE_E2E_LOCATION="${CORE_LOCATION}" \
 RULE_E2E_RUN_ID="${RULE_RUN_ID}" \
-RULE_E2E_CLEANUP_PREFIX="${CORE_BUYER}_rule" \
-RULE_E2E_MAKER_ONE="${CORE_BUYER}_rulemaker1_${RULE_RUN_ID}" \
-RULE_E2E_MAKER_TWO="${CORE_BUYER}_rulemaker2_${RULE_RUN_ID}" \
-RULE_E2E_TAKER="${CORE_BUYER}_ruletaker_${RULE_RUN_ID}" \
-RULE_E2E_SELF_USER="${CORE_BUYER}_ruleself_${RULE_RUN_ID}" \
+RULE_E2E_CLEANUP_PREFIX="${CORE_BUYER_PREFIX}_rule" \
+RULE_E2E_MAKER_ONE="${CORE_BUYER_PREFIX}_rulemaker1_${RULE_RUN_ID}" \
+RULE_E2E_MAKER_TWO="${CORE_BUYER_PREFIX}_rulemaker2_${RULE_RUN_ID}" \
+RULE_E2E_TAKER="${CORE_BUYER_PREFIX}_ruletaker_${RULE_RUN_ID}" \
+RULE_E2E_SELF_USER="${CORE_BUYER_PREFIX}_ruleself_${RULE_RUN_ID}" \
   "${SCRIPT_DIR}/run-trading-rules-e2e-host.sh"
 
 log "Running browser login, deposit, order, cancel, match, market close, history and recent-trade flow in ${CORE_LOCATION}."
