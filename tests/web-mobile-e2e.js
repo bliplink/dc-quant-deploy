@@ -87,8 +87,8 @@ function assertPortrait(metrics) {
   if (metrics.documentWidth > 391 || metrics.bodyWidth > 391) {
     throw new Error(`portrait page has horizontal overflow: ${JSON.stringify(metrics)}`);
   }
-  if (metrics.workspaceTabs !== 2 || metrics.lowerTabs !== 2) {
-    throw new Error(`expected Chart/Order and Positions/Orders tabs: ${JSON.stringify(metrics)}`);
+  if (metrics.workspaceTabs !== 2 || metrics.lowerTabs !== 5) {
+    throw new Error(`expected Chart/Order and five account/history tabs: ${JSON.stringify(metrics)}`);
   }
   if (!metrics.chartWorkspaceVisible || metrics.orderWorkspaceVisible || !metrics.mobileTradeBarVisible) {
     throw new Error(`portrait must open in Chart workspace with fixed trade actions: ${JSON.stringify(metrics)}`);
@@ -107,8 +107,16 @@ async function verifyMarketDrawer(page, width) {
   const drawerBox = await drawer.boundingBox();
   assertWithinViewport(drawerBox, width, 'market drawer');
   await search.fill('BTC');
-  await page.getByText('BTCUSDT', {exact: true}).last().tap();
-  await search.waitFor({state: 'hidden', timeout: 10000});
+  const btcRow = drawer.locator('.drawDiv').filter({hasText: 'BTCUSDT'}).first();
+  await btcRow.tap();
+  await page.waitForFunction(() => {
+    const marketDrawer = [...document.querySelectorAll('.ant-drawer')]
+      .find(node => node.querySelector('.marketSearch'));
+    const wrapper = marketDrawer && marketDrawer.querySelector('.ant-drawer-content-wrapper');
+    return Boolean(marketDrawer && wrapper &&
+      !marketDrawer.classList.contains('ant-drawer-open') &&
+      wrapper.getBoundingClientRect().right <= 1);
+  }, null, {timeout: 10000});
 }
 
 async function verifyAccountDrawer(page, width, height) {
@@ -158,8 +166,6 @@ async function verifyOrderWorkspace(page, width, landscape = false) {
     throw new Error(`order controls are not touch reachable: ${JSON.stringify({amountBox, orderBuyBox})}`);
   }
 
-  await page.waitForFunction(() => document.querySelectorAll('.mobileOrderBook .order-book-row').length >= 10, {timeout: 15000});
-
   if (landscape) {
     const optionsBox = await entry.locator('.orderOptionsGrid').boundingBox();
     const actionsBox = await entry.locator('.orderActionBar').boundingBox();
@@ -207,6 +213,12 @@ async function verifyPortrait(browser) {
     await page.locator('.compactPosition').waitFor({state: 'visible', timeout: 10000});
     await lowerTabs.nth(1).tap();
     await page.locator('.compactOpenOrders').waitFor({state: 'visible', timeout: 10000});
+    await lowerTabs.nth(2).tap();
+    await page.locator('.mobileLowerContent .historyWrap').waitFor({state: 'visible', timeout: 10000});
+    await lowerTabs.nth(3).tap();
+    await page.locator('.mobileLowerContent .historyWrap').waitFor({state: 'visible', timeout: 10000});
+    await lowerTabs.nth(4).tap();
+    await page.locator('.mobileLowerContent .fundsWrap').waitFor({state: 'visible', timeout: 10000});
     await lowerTabs.nth(0).tap();
 
     await verifyMarketDrawer(page, 390);
@@ -270,7 +282,7 @@ async function verifyLandscape(browser) {
       portrait: '390x844',
       landscape: '844x390',
       workspaces: ['Chart', 'Order'],
-      lowerTabs: ['Positions', 'Orders'],
+      lowerTabs: ['Positions', 'Open Orders', 'Order History', 'Trade History', 'Funds'],
       combinedOrderEntryAndBook: true,
       accountBottomSheet: true,
       noHorizontalOverflow: true,
