@@ -135,7 +135,7 @@ function layoutItem(snapshot, breakpoint, key) {
     assertChartFillsPanel(initialChartFill);
 
     // Establish a deterministic English default before exercising persistence.
-    await page.locator('.languageSwitch button').nth(1).click();
+    await page.getByLabel('Language', {exact: true}).selectOption('en');
     const configPill = page.locator('.tradeConfigPill');
     await configPill.waitFor({state: 'visible', timeout: 10000});
     if (!/(Cross|Isolated)/.test(await configPill.innerText()) || !/x/.test(await configPill.innerText())) {
@@ -256,7 +256,12 @@ function layoutItem(snapshot, breakpoint, key) {
     }
     await page.getByLabel('Limit Price').fill('');
 
-    await page.getByText('Last Price', {exact: true}).first().waitFor({timeout: 10000});
+    const lastPriceValue = page.locator('.symbolMarketWrap .marketLastPrice strong').first();
+    await lastPriceValue.waitFor({timeout: 10000});
+    await page.waitForFunction(() => {
+      const node = document.querySelector('.symbolMarketWrap .marketLastPrice strong');
+      return node && node.textContent && !node.textContent.includes('--') && /\d/.test(node.textContent);
+    }, null, {timeout: 10000});
     const buyButton = page.locator('.orderBuyBtn');
     await buyButton.waitFor({state: 'visible', timeout: 10000});
     const buyLabel = (await buyButton.innerText()).trim();
@@ -381,9 +386,12 @@ function layoutItem(snapshot, breakpoint, key) {
     }
 
     await page.reload({waitUntil: 'domcontentloaded'});
-    await page.waitForURL(`**/#/login?location=${encodeURIComponent(location)}`);
-    await login(page);
+    await page.waitForURL(`**/#/trade?location=${encodeURIComponent(location)}`, {timeout: 30000});
     await page.locator('.tradeGrid').waitFor({timeout: 30000});
+    await page.waitForFunction(() => {
+      const loginData = JSON.parse(sessionStorage.getItem('loginData') || '{}');
+      return Boolean(sessionStorage.getItem('token') && loginData.user_id);
+    }, null, {timeout: 30000});
     await page.waitForTimeout(1500);
     const reloaded = await layoutSnapshot(page);
     const savedChart = layoutItem(customized, 'lg', 'chart');
@@ -395,7 +403,7 @@ function layoutItem(snapshot, breakpoint, key) {
 
     await page.screenshot({path: path.join(artifactDir, 'workspace-en.png'), fullPage: true});
 
-    await page.locator('.languageSwitch button').nth(0).click();
+    await page.getByLabel('Language', {exact: true}).selectOption('zh');
     await page.getByText('订单簿', {exact: true}).first().waitFor({timeout: 10000});
     await page.getByText('交易品种', {exact: true}).first().waitFor({timeout: 10000});
     if (await page.getByRole('button', {name: /编辑布局|锁定布局/}).count() !== 0) {
@@ -419,7 +427,7 @@ function layoutItem(snapshot, breakpoint, key) {
       draggable: true,
       resizable: true,
       persisted: true,
-      refreshRequiresWebSocketReauthentication: true,
+      refreshResumesAuthenticatedSession: true,
       invalidWebSocketCredentialsRejected: true,
       hoverDragZone: true,
       resetLayout: true,
