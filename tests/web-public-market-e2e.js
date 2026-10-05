@@ -101,29 +101,34 @@ function timeout(ms, message) {
 
     await page.locator('.publicActions').waitFor({state: 'visible', timeout: 15000});
     const navItems = await page.locator('.head-user .navItem').allInnerTexts();
-    if (!navItems.includes('Trade') || !navItems.includes('Tenant')) fail('public navigation is incomplete', navItems);
+    if (!navItems.includes('Trade') || !navItems.includes('Tenant Portal')) fail('public navigation is incomplete', navItems);
     if (navItems.includes('Tenant Admin') || navItems.includes('Derivatives')) {
       fail('public user can see a restricted navigation item', navItems);
     }
 
     const guestOrders = page.locator('.guestOrdersSplit');
     await guestOrders.waitFor({state: 'visible', timeout: 15000});
-    if (await guestOrders.locator('section').count() !== 2
-      || await guestOrders.locator('.loginRequiredInline').count() !== 2) {
-      fail('positions and open orders are not protected for anonymous users');
+    if (await guestOrders.locator('section').count() !== 2) {
+      fail('positions and open orders are not visible for anonymous users');
     }
-    const publicOrderActions = page.locator('.placeOrderWrap.publicMode .publicOrderActions');
-    await publicOrderActions.waitFor({state: 'visible', timeout: 15000});
-    if (await publicOrderActions.locator('button').count() !== 2) {
-      fail('public order panel does not expose register and login actions');
+    if (await guestOrders.locator('.loginRequiredInline').count() !== 0) {
+      fail('anonymous private panels repeat authentication calls to action');
     }
-    if (await page.locator('.placeOrderWrap.publicMode .orderActionBar').count() !== 0) {
-      fail('anonymous user can see live buy/sell order actions');
+    if (await page.locator('.placeOrderWrap.publicMode .publicOrderActions').count() !== 0) {
+      fail('public order panel exposes deprecated authentication actions');
     }
-    const accountPublicActions = page.locator('.accountPublicActions');
-    await accountPublicActions.waitFor({state: 'visible', timeout: 15000});
-    if (await accountPublicActions.locator('button').count() !== 2) {
-      fail('public account panel does not expose register and login actions');
+    const orderActionBar = page.locator('.placeOrderWrap.publicMode .orderActionBar');
+    await orderActionBar.waitFor({state: 'visible', timeout: 15000});
+    if (await orderActionBar.locator('button').count() !== 2) {
+      fail('anonymous order panel does not expose buy and sell intents');
+    }
+    if (await page.locator('.accountPublicActions').count() !== 0) {
+      fail('public account panel repeats authentication actions');
+    }
+    const topLoginButtons = page.locator('.publicActions button').filter({hasText: /^Log in$/});
+    const topCreateButtons = page.locator('.publicActions button').filter({hasText: /^Create account$/});
+    if (await topLoginButtons.count() !== 1 || await topCreateButtons.count() !== 1) {
+      fail('top-level anonymous authentication actions are incomplete');
     }
 
     try {
@@ -300,7 +305,7 @@ function timeout(ms, message) {
       status: 'PASS', location, market, historyRows: history.rows, historyRequest: history.request,
       chartHistory, chartCanvases: chartRender.canvases,
       realtimeKline,
-      navItems, protectedPanels: 2, publicOrderActions: 2, publicMarketPollingCalls: 0, depthScreenshot,
+      navItems, protectedPanels: 2, publicOrderActions: 0, accountPublicActions: 0, orderActionButtons: 2, publicMarketPollingCalls: 0, depthScreenshot,
       dragAffordance, registrationTenant: location, screenshot
     }, null, 2)}\n`);
   } finally {

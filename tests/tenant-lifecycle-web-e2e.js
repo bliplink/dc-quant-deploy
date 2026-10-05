@@ -3,6 +3,7 @@ const path = require('path');
 const {chromium} = require('playwright');
 
 const baseUrl = process.env.E2E_BASE_URL || 'http://127.0.0.1:18088';
+const tenantPortalBaseUrl = process.env.TENANT_PORTAL_BASE_URL || 'http://127.0.0.1:18092';
 const locationA = process.env.E2E_LOCATION_A;
 const locationB = process.env.E2E_LOCATION_B;
 const adminUser = process.env.E2E_ADMIN_USER || 'tenantadmin';
@@ -50,31 +51,37 @@ async function tenantAdminLogin(page, username, password, location) {
   page.on('pageerror', error => pageErrors.push(error.message));
 
   try {
-    await page.goto(`${baseUrl}/#/trade`, {waitUntil: 'domcontentloaded'});
-    await page.waitForURL('**/#/tenant', {timeout: 15000});
+    await page.goto(`${tenantPortalBaseUrl}/`, {waitUntil: 'domcontentloaded'});
+    await page.getByRole('heading', {name: 'Tenant Portal'}).waitFor({timeout: 15000});
+    await page.getByRole('button', {name: 'Create Tenant', exact: true}).waitFor();
+    await page.getByRole('button', {name: 'Tenant Sign In', exact: true}).waitFor();
+    const portalText = (await page.locator('body').innerText()).replace(/\s+/g, ' ');
+    for (const internalCopy of ['Location', 'Application ID', 'sandbox', 'Provisioning']) {
+      if (portalText.includes(internalCopy)) throw new Error(`tenant portal exposes internal copy: ${internalCopy}`);
+    }
 
-    await page.goto(`${baseUrl}/#/tenant`, {waitUntil: 'domcontentloaded'});
-    await page.locator('.tenant-language button').nth(1).click();
-    await page.getByRole('heading', {name: 'Tenant Services'}).waitFor({timeout: 15000});
-    await page.getByRole('button', {name: 'Start application'}).waitFor();
-    await page.getByRole('button', {name: 'Tenant sign in'}).waitFor();
-
-    await page.goto(`${baseUrl}/#/apply`, {waitUntil: 'domcontentloaded'});
-    await page.getByRole('heading', {name: 'Apply for a SaaS Trading Trial'}).waitFor({timeout: 15000});
-    if (await page.locator('.tenant-card input').count() < 8) throw new Error('trial application form is incomplete');
+    await page.goto(`${tenantPortalBaseUrl}/?mode=apply`, {waitUntil: 'domcontentloaded'});
+    await page.getByRole('heading', {name: 'Create Tenant'}).waitFor({timeout: 15000});
+    const tenantInputs = page.locator('.tenant-application-form input');
+    if (await tenantInputs.count() !== 4) throw new Error('tenant creation form must contain organization, email, admin username and admin password');
+    const readOnlyAdmin = tenantInputs.nth(2);
+    if (!(await readOnlyAdmin.isDisabled().catch(() => false)) && !(await readOnlyAdmin.getAttribute('readonly') !== null)) {
+      throw new Error('tenant admin username must be read-only');
+    }
+    if (await readOnlyAdmin.inputValue() !== 'tenantadmin') throw new Error('tenant admin username is unexpected');
     await page.screenshot({path: screenshotPath('tenant-application-en.png'), fullPage: true});
 
     await page.setViewportSize({width: 390, height: 844});
     await page.goto(`${baseUrl}/#/register?location=${encodeURIComponent(locationA)}`, {waitUntil: 'domcontentloaded'});
     await page.locator('.tenant-language button').nth(1).click();
-    await page.getByRole('heading', {name: 'Create Trading Account'}).waitFor({timeout: 15000});
+    await page.getByRole('heading', {name: 'Create account'}).waitFor({timeout: 15000});
     const registerInputs = page.locator('.tenant-card input');
     if (await registerInputs.count() !== 5) {
       throw new Error('registration must not expose an editable tenant/location input');
     }
     const boundLocation = (await page.locator('.tenant-route-context strong').textContent() || '').trim();
     if (boundLocation !== locationA) {
-      throw new Error(`dedicated URL did not bind registration location: ${boundLocation}`);
+      throw new Error(`tenant ID did not bind registration to the requested tenant: ${boundLocation}`);
     }
     await page.screenshot({path: screenshotPath('tenant-registration-mobile-en.png'), fullPage: true});
 

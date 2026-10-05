@@ -132,10 +132,10 @@ gw
 
 | GitHub 代码路径 | 分支 | 当前 HEAD | 作用 | GHCR 镜像 | 本机端口 |
 |---|---|---|---|---|---:|
-| `bliplink/dc-trade-web` | `saas-crypto` | `39804280ace009f44d48f697257d5d8cd0866643` | 最终 Trader 交易 Web | `ghcr.io/bliplink/dc-saas-trade-web:sha-39804280ace009f44d48f697257d5d8cd0866643` | 18088 |
+| `bliplink/dc-trade-web` | `saas-crypto` | `cd330ac7c71bed16f35094e3c7c27ef2b431182d` | 最终 Trader 交易 Web | `ghcr.io/bliplink/dc-saas-trade-web:sha-cd330ac7c71bed16f35094e3c7c27ef2b431182d` | 18088 |
 | `bliplink/dc-saas-platform-web` | `saas-crypto` | `9cecccce383c7d6e87649b8a10b0b1f4ac4f0f8c` | Platform 管理后台 | `ghcr.io/bliplink/dc-saas-platform-web:sha-9cecccce383c7d6e87649b8a10b0b1f4ac4f0f8c` | 18090 |
-| `bliplink/dc-saas-tenant-web` | `saas-crypto` | `e2eedbab96093464ca093a73d4376cc2912efdb8` | Tenant Admin 管理后台 | `ghcr.io/bliplink/dc-saas-tenant-web:sha-e2eedbab96093464ca093a73d4376cc2912efdb8` | 18092 |
-| `bliplink/opentradingcore-web` | `saas-crypto` | `2732ad53e77b39b4f569dc77c09239d927a1ff3a` | `opentradingcore.com` 对外主站、产品介绍与入口 | `ghcr.io/bliplink/opentradingcore-web:sha-2732ad53e77b39b4f569dc77c09239d927a1ff3a` | 18094 |
+| `bliplink/dc-saas-tenant-web` | `saas-crypto` | `5ad8a568cfdb974284c15e94b1ec41d3a2aa2311` | Tenant Portal：创建/登录租户与 Tenant Admin 控制台 | `ghcr.io/bliplink/dc-saas-tenant-web:sha-5ad8a568cfdb974284c15e94b1ec41d3a2aa2311` | 18092 |
+| `bliplink/opentradingcore-web` | `saas-crypto` | `e4d98b190ce520223d1208196eb16e8cec2887d7` | `opentradingcore.com` 对外主站、产品介绍与入口 | `ghcr.io/bliplink/opentradingcore-web:sha-e4d98b190ce520223d1208196eb16e8cec2887d7` | 18094 |
 | `bliplink/opentradingcore-api-docs` | `saas-crypto` | `9d739c30646b28249a9685c38a0d7633f16c11ee` | `api.opentradingcore.com` API Docs / OpenAPI / 中英文开发文档 | `ghcr.io/bliplink/opentradingcore-api-docs-web:sha-9d739c30646b28249a9685c38a0d7633f16c11ee` | 18096 |
 
 所有上表 Web 镜像的当前正式构建都必须是：
@@ -248,10 +248,10 @@ bliplink/opentradingcore-api-docs/saas-crypto
 | ManagerSvr | `ghcr.io/bliplink/managersvr:sha-938a3776b5aca7a09baad3a6de09be363a79a081` |
 | AdminSvr | `ghcr.io/bliplink/adminsvr:sha-0409add2495da84c51e3d46cbfefa3b4c3d7ec58` |
 | RobotSvr | `ghcr.io/bliplink/robotsvr:sha-abd7efa1ffa7921f8c384f92c09f25c46419f63b` |
-| Trade Web | `ghcr.io/bliplink/dc-saas-trade-web:sha-39804280ace009f44d48f697257d5d8cd0866643` |
-| Tenant Web | `ghcr.io/bliplink/dc-saas-tenant-web:sha-e2eedbab96093464ca093a73d4376cc2912efdb8` |
+| Trade Web | `ghcr.io/bliplink/dc-saas-trade-web:sha-cd330ac7c71bed16f35094e3c7c27ef2b431182d` |
+| Tenant Web | `ghcr.io/bliplink/dc-saas-tenant-web:sha-5ad8a568cfdb974284c15e94b1ec41d3a2aa2311` |
 | Platform Web | `ghcr.io/bliplink/dc-saas-platform-web:sha-9cecccce383c7d6e87649b8a10b0b1f4ac4f0f8c` |
-| Public Web | `ghcr.io/bliplink/opentradingcore-web:sha-2732ad53e77b39b4f569dc77c09239d927a1ff3a` |
+| Public Web | `ghcr.io/bliplink/opentradingcore-web:sha-e4d98b190ce520223d1208196eb16e8cec2887d7` |
 | API Docs | `ghcr.io/bliplink/opentradingcore-api-docs-web:sha-9d739c30646b28249a9685c38a0d7633f16c11ee` |
 
 其中主站当前双架构 manifest list：

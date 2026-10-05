@@ -20,6 +20,7 @@ set -a
 set +a
 
 E2E_BASE_URL="${E2E_BASE_URL:-http://127.0.0.1:${WEB_LISTEN_PORT}}"
+TENANT_PORTAL_BASE_URL="${TENANT_PORTAL_BASE_URL:-http://127.0.0.1:${TENANT_WEB_LISTEN_PORT:-18092}}"
 artifact_dir="${E2E_ARTIFACT_DIR:-${DEPLOY_ROOT}/e2e-artifacts/tenant-${E2E_SUFFIX}}"
 admin_password_a="$(openssl rand -hex 16)"
 admin_password_b="$(openssl rand -hex 16)"
@@ -55,6 +56,7 @@ fi
 container_artifact_dir="/artifacts/tenant-${E2E_SUFFIX}"
 docker exec \
   -e E2E_BASE_URL="${E2E_BASE_URL}" \
+  -e TENANT_PORTAL_BASE_URL="${TENANT_PORTAL_BASE_URL}" \
   -e E2E_LOCATION_A="${E2E_LOCATION_A}" -e E2E_LOCATION_B="${E2E_LOCATION_B}" \
   -e E2E_ADMIN_USER="${E2E_ADMIN_USER}" -e E2E_ADMIN_PASSWORD_A="${admin_password_a}" \
   -e PLATFORM_ADMIN_USERNAME="${PLATFORM_ADMIN_USERNAME}" -e PLATFORM_ADMIN_PASSWORD="${PLATFORM_ADMIN_PASSWORD}" \
