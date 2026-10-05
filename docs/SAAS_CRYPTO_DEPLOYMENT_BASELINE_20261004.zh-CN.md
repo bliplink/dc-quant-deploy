@@ -132,7 +132,7 @@ gw
 
 | GitHub 代码路径 | 分支 | 当前 HEAD | 作用 | GHCR 镜像 | 本机端口 |
 |---|---|---|---|---|---:|
-| `bliplink/dc-trade-web` | `saas-crypto` | `cd330ac7c71bed16f35094e3c7c27ef2b431182d` | 最终 Trader 交易 Web | `ghcr.io/bliplink/dc-saas-trade-web:sha-cd330ac7c71bed16f35094e3c7c27ef2b431182d` | 18088 |
+| `bliplink/dc-trade-web` | `saas-crypto` | `9cb34fe3361026b40ce7f57903012bf152057631` | 最终 Trader 交易 Web | `ghcr.io/bliplink/dc-saas-trade-web:sha-9cb34fe3361026b40ce7f57903012bf152057631` | 18088 |
 | `bliplink/dc-saas-platform-web` | `saas-crypto` | `9cecccce383c7d6e87649b8a10b0b1f4ac4f0f8c` | Platform 管理后台 | `ghcr.io/bliplink/dc-saas-platform-web:sha-9cecccce383c7d6e87649b8a10b0b1f4ac4f0f8c` | 18090 |
 | `bliplink/dc-saas-tenant-web` | `saas-crypto` | `5ad8a568cfdb974284c15e94b1ec41d3a2aa2311` | Tenant Portal：创建/登录租户与 Tenant Admin 控制台 | `ghcr.io/bliplink/dc-saas-tenant-web:sha-5ad8a568cfdb974284c15e94b1ec41d3a2aa2311` | 18092 |
 | `bliplink/opentradingcore-web` | `saas-crypto` | `e4d98b190ce520223d1208196eb16e8cec2887d7` | `opentradingcore.com` 对外主站、产品介绍与入口 | `ghcr.io/bliplink/opentradingcore-web:sha-e4d98b190ce520223d1208196eb16e8cec2887d7` | 18094 |
@@ -248,7 +248,7 @@ bliplink/opentradingcore-api-docs/saas-crypto
 | ManagerSvr | `ghcr.io/bliplink/managersvr:sha-938a3776b5aca7a09baad3a6de09be363a79a081` |
 | AdminSvr | `ghcr.io/bliplink/adminsvr:sha-0409add2495da84c51e3d46cbfefa3b4c3d7ec58` |
 | RobotSvr | `ghcr.io/bliplink/robotsvr:sha-abd7efa1ffa7921f8c384f92c09f25c46419f63b` |
-| Trade Web | `ghcr.io/bliplink/dc-saas-trade-web:sha-cd330ac7c71bed16f35094e3c7c27ef2b431182d` |
+| Trade Web | `ghcr.io/bliplink/dc-saas-trade-web:sha-9cb34fe3361026b40ce7f57903012bf152057631` |
 | Tenant Web | `ghcr.io/bliplink/dc-saas-tenant-web:sha-5ad8a568cfdb974284c15e94b1ec41d3a2aa2311` |
 | Platform Web | `ghcr.io/bliplink/dc-saas-platform-web:sha-9cecccce383c7d6e87649b8a10b0b1f4ac4f0f8c` |
 | Public Web | `ghcr.io/bliplink/opentradingcore-web:sha-e4d98b190ce520223d1208196eb16e8cec2887d7` |
