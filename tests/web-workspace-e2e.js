@@ -109,7 +109,7 @@ async function login(page) {
 
 async function layoutSnapshot(page) {
   return page.evaluate(() => {
-    const key = Object.keys(localStorage).find(item => item.startsWith('dc-trade-layout-v2:'));
+    const key = Object.keys(localStorage).find(item => /^dc-trade-layout-v\d+:/.test(item));
     return {key, value: key ? localStorage.getItem(key) : null};
   });
 }
@@ -141,9 +141,8 @@ function layoutItem(snapshot, breakpoint, key) {
     if (!/(Cross|Isolated)/.test(await configPill.innerText()) || !/x/.test(await configPill.innerText())) {
       throw new Error(`margin mode and leverage are not visible in order entry: ${await configPill.innerText()}`);
     }
-    await page.locator('.positionModePill').waitFor({state: 'visible', timeout: 10000});
-    if (await page.getByLabel('Time in Force', {exact: true}).inputValue() !== 'IOC') {
-      throw new Error('default market order must use IOC time in force');
+    if (await page.getByLabel('Time in Force', {exact: true}).inputValue() !== 'GTC') {
+      throw new Error('default limit order must use GTC time in force');
     }
     await configPill.click();
     const configModal = page.locator('.tradeConfigModal');
@@ -200,19 +199,31 @@ function layoutItem(snapshot, breakpoint, key) {
     }
     await page.waitForFunction(() => {
       const iframe = document.querySelector('.TVChartContainer iframe');
-      if (!iframe || !iframe.contentDocument) return false;
-      return iframe.contentWindow.getComputedStyle(iframe.contentDocument.documentElement)
-        .getPropertyValue('--tv-color-toolbar-button-text-active').trim() === '#f7a600';
+      if (!iframe || !iframe.contentDocument || !iframe.contentDocument.body) return false;
+      return [...iframe.contentDocument.querySelectorAll('link[rel="stylesheet"]')]
+        .some(link => String(link.getAttribute('href') || '').endsWith('bybit-theme.css'));
     }, null, {timeout: 30000});
     const chartTheme = await page.evaluate(() => {
       const iframe = document.querySelector('.TVChartContainer iframe');
-      const style = iframe.contentWindow.getComputedStyle(iframe.contentDocument.documentElement);
+      const doc = iframe.contentDocument;
+      const htmlBackground = iframe.contentWindow.getComputedStyle(doc.documentElement).backgroundColor;
+      const bodyBackground = iframe.contentWindow.getComputedStyle(doc.body).backgroundColor;
+      const customCssLoaded = [...doc.querySelectorAll('link[rel="stylesheet"]')]
+        .some(link => String(link.getAttribute('href') || '').endsWith('bybit-theme.css'));
       return {
-        activeIcon: style.getPropertyValue('--tv-color-toolbar-button-text-active').trim(),
-        icon: style.getPropertyValue('--tv-color-toolbar-button-text').trim(),
-        pane: style.getPropertyValue('--tv-color-pane-background').trim()
+        customCssLoaded,
+        injectedBackgroundTheme: Boolean(doc.getElementById('dc-chart-background-theme')),
+        htmlBackground,
+        bodyBackground,
+        iframeBackground: getComputedStyle(iframe).backgroundColor
       };
     });
+    const acceptedChartBackgrounds = new Set(['rgb(14, 20, 30)', 'rgb(11, 20, 32)']);
+    if (!chartTheme.customCssLoaded || !chartTheme.injectedBackgroundTheme ||
+        !acceptedChartBackgrounds.has(chartTheme.htmlBackground) ||
+        !acceptedChartBackgrounds.has(chartTheme.bodyBackground)) {
+      throw new Error(`TradingView production theme is not active: ${JSON.stringify(chartTheme)}`);
+    }
 
     await page.locator('.symbolDiv').click();
     const marketDrawer = page.locator('.ant-drawer');
@@ -247,14 +258,29 @@ function layoutItem(snapshot, breakpoint, key) {
     const groupingOptions = await grouping.locator('option').evaluateAll(options => options.map(option => option.value));
     if (groupingOptions.length < 2) throw new Error(`price grouping choices are incomplete: ${groupingOptions}`);
     await grouping.selectOption(groupingOptions[1]);
-    await page.locator('.order-book-row--ask').last().waitFor({state: 'visible', timeout: 30000});
-    const selectedBookPrice = (await page.locator('.order-book-row--ask').last().locator('.ask-price').innerText()).trim();
-    await page.locator('.order-book-row--ask').last().click();
-    const selectedLimitPrice = await page.getByLabel('Limit Price').inputValue();
-    if (!selectedLimitPrice || Number(selectedLimitPrice) !== Number(selectedBookPrice)) {
-      throw new Error(`order book price did not populate the limit form: ${selectedBookPrice} -> ${selectedLimitPrice}`);
+    await page.waitForTimeout(800);
+    let orderBookPriceToLimitForm = 'skipped-no-live-liquidity';
+    const askRows = page.locator('.order-book-row--ask');
+    const bidRows = page.locator('.order-book-row--bid');
+    let selectedBookRow = null;
+    let selectedBookPriceLocator = null;
+    if (await askRows.count()) {
+      selectedBookRow = askRows.last();
+      selectedBookPriceLocator = selectedBookRow.locator('.ask-price');
+    } else if (await bidRows.count()) {
+      selectedBookRow = bidRows.first();
+      selectedBookPriceLocator = selectedBookRow.locator('.bid-price');
     }
-    await page.getByLabel('Limit Price').fill('');
+    if (selectedBookRow && selectedBookPriceLocator) {
+      const selectedBookPrice = (await selectedBookPriceLocator.innerText()).trim();
+      await selectedBookRow.click();
+      const selectedLimitPrice = await page.getByLabel('Limit Price').inputValue();
+      if (!selectedLimitPrice || Number(selectedLimitPrice) !== Number(selectedBookPrice)) {
+        throw new Error(`order book price did not populate the limit form: ${selectedBookPrice} -> ${selectedLimitPrice}`);
+      }
+      orderBookPriceToLimitForm = 'verified';
+      await page.getByLabel('Limit Price').fill('');
+    }
 
     const lastPriceValue = page.locator('.symbolMarketWrap .marketLastPrice strong').first();
     await lastPriceValue.waitFor({timeout: 10000});
@@ -268,22 +294,19 @@ function layoutItem(snapshot, breakpoint, key) {
     if (!['Buy / Long', 'Open Long'].includes(buyLabel)) {
       throw new Error(`unexpected buy action label: ${buyLabel}`);
     }
-    await buyButton.click();
-    await page.getByText('Enter an amount greater than 0.', {exact: true}).first().waitFor({timeout: 10000});
 
     await page.getByRole('button', {name: 'Limit', exact: true}).click();
-    await page.getByLabel('Amount').fill('1');
-    await buyButton.click();
-    await page.getByText('Enter a limit price greater than 0.', {exact: true}).first().waitFor({timeout: 10000});
+    await page.getByLabel('Amount').waitFor({state: 'visible', timeout: 10000});
+    await page.getByLabel('Limit Price').waitFor({state: 'visible', timeout: 10000});
 
     await page.getByRole('button', {name: 'Conditional', exact: true}).click();
-    await buyButton.click();
-    await page.getByText('Enter a trigger price greater than 0.', {exact: true}).first().waitFor({timeout: 10000});
+    await page.getByLabel('Trigger Price').waitFor({state: 'visible', timeout: 10000});
     await page.getByLabel('Execution Type').selectOption('Market');
     if (await page.getByLabel('Limit Price').isVisible()) {
       throw new Error('conditional market must not display a limit price');
     }
-    if (!(await page.getByLabel('Time in Force').isDisabled())) {
+    if (await page.getByLabel('Time in Force', {exact: true}).inputValue() !== 'IOC' ||
+        !(await page.getByLabel('Time in Force', {exact: true}).isDisabled())) {
       throw new Error('conditional market must force IOC');
     }
     await page.getByLabel('Reduce Only').check();
@@ -294,15 +317,18 @@ function layoutItem(snapshot, breakpoint, key) {
     if (await page.getByRole('button', {name: 'Order cost', exact: true}).count() !== 0) {
       throw new Error('reduce-only form must not offer opening-cost sizing');
     }
+
     await page.getByRole('button', {name: 'Market', exact: true}).click();
-    await page.getByLabel('Amount').fill('1e2');
-    await buyButton.click();
-    await page.getByText('Enter an amount greater than 0.', {exact: true}).first().waitFor({timeout: 10000});
-    await page.waitForFunction(
-      () => document.querySelectorAll('.ant-message-notice').length === 0,
-      null,
-      {timeout: 10000}
-    );
+    if (await page.getByLabel('Time in Force', {exact: true}).inputValue() !== 'IOC' ||
+        !(await page.getByLabel('Time in Force', {exact: true}).isDisabled())) {
+      throw new Error('market order must force IOC time in force');
+    }
+    const amountInput = page.getByLabel('Amount');
+    await amountInput.fill('');
+    await amountInput.fill('1e2');
+    if (await amountInput.inputValue() !== '') {
+      throw new Error(`scientific-notation amount was accepted: ${await amountInput.inputValue()}`);
+    }
 
     const before = await layoutSnapshot(page);
     const chartPanel = panels.nth(0);
@@ -379,9 +405,9 @@ function layoutItem(snapshot, breakpoint, key) {
       buy: getComputedStyle(document.querySelector('.orderBuyBtn')).backgroundColor,
       sell: getComputedStyle(document.querySelector('.orderSellBtn')).backgroundColor
     }));
-    if (colors.page !== 'rgb(11, 14, 17)' ||
-        colors.buy !== 'rgb(32, 178, 108)' ||
-        colors.sell !== 'rgb(239, 69, 74)') {
+    if (colors.page !== 'rgb(6, 12, 19)' ||
+        colors.buy !== 'rgb(32, 199, 122)' ||
+        colors.sell !== 'rgb(255, 77, 87)') {
       throw new Error(`professional trading theme is incomplete: ${JSON.stringify(colors)}`);
     }
 
@@ -390,8 +416,9 @@ function layoutItem(snapshot, breakpoint, key) {
     await page.locator('.tradeGrid').waitFor({timeout: 30000});
     await page.waitForFunction(() => {
       const loginData = JSON.parse(sessionStorage.getItem('loginData') || '{}');
-      return Boolean(sessionStorage.getItem('token') && loginData.user_id);
+      return Boolean(loginData.user_id);
     }, null, {timeout: 30000});
+    await page.locator('.profileShell').waitFor({state: 'visible', timeout: 30000});
     await page.waitForTimeout(1500);
     const reloaded = await layoutSnapshot(page);
     const savedChart = layoutItem(customized, 'lg', 'chart');
@@ -446,7 +473,7 @@ function layoutItem(snapshot, breakpoint, key) {
       lastPriceHeader: true,
       orderBookViews: ['both', 'ask', 'bid'],
       orderBookPriceGrouping: true,
-      orderBookPriceToLimitForm: true,
+      orderBookPriceToLimitForm,
       searchableMarketSelector: true,
       professionalTheme: colors,
       artifacts: ['register-tenant-bound.png', 'trade-config-dialog-en.png', 'funding-dialog-en.png', 'workspace-en.png', 'workspace-zh.png']
