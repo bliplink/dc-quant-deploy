@@ -169,7 +169,8 @@ WHERE location='${E2E_LOCATION}' AND user_id IN ('${buyer_id}','${seller_id}')
   AND security_id='BTCUSDT';
 SQL
 } | mysql_exec dc)"
-mapfile -t rows <<<"${verification}"
+rows=()
+while IFS= read -r line; do rows[${#rows[@]}]="$line"; done <<<"${verification}"
 [[ "${#rows[@]}" -eq 5 ]] || die "Unexpected registration verification output: ${verification}"
 [[ "${rows[0]}" == "2" ]] || die "Registered users are incomplete: ${rows[0]}/2"
 [[ "${rows[1]}" == "2" ]] || die "Registered TRADER roles are incomplete: ${rows[1]}/2"

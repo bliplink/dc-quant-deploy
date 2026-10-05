@@ -186,7 +186,8 @@ WHERE location='${OTHER_LOCATION}' AND user_id='adl_foreign' AND security_id='BT
 SQL
 } | mysql_exec)"
 
-mapfile -t rows <<<"${result}"
+rows=()
+while IFS= read -r line; do rows[${#rows[@]}]="$line"; done <<<"${result}"
 [[ "${#rows[@]}" -eq 9 ]] || die "Unexpected ADL verification row count: ${#rows[@]} (${result})"
 [[ "${rows[0]}" == $'COMPLETED\t99.0480000000000000\t0.0000000000000000\t99.0480000000000000\t0.0000000000000000\tCOMPLETED\t2' ]] ||
   die "ADL event/deficit mismatch: ${rows[0]}"

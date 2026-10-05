@@ -256,7 +256,8 @@ JOIN dc.dc_users_balance b ON b.location=p.location AND b.user_id=p.user_id
 WHERE p.location='${OTHER_LOCATION}' AND p.user_id='${FOREIGN_USER}' AND p.security_id='BTCUSDT';
 SQL
 } | mysql_exec dc)"
-mapfile -t rows <<<"${verification}"
+rows=()
+while IFS= read -r line; do rows[${#rows[@]}]="$line"; done <<<"${verification}"
 [[ "${#rows[@]}" -eq 3 ]] || die "Unexpected liquidation verification output: ${verification}"
 if ! python3 - "${rows[0]}" "${rows[1]}" "${rows[2]}" "${entry_price}" \
   "${initial_balance}" "${initial_margin}" <<'PY'

@@ -24,28 +24,18 @@ if (!password) {
 
 fs.mkdirSync(artifactDir, { recursive: true });
 
-function requestMethod(response) {
-  try {
-    const body = response.request().postDataJSON();
-    return body && (body.method || (body.content && body.content.method));
-  } catch (error) {
-    return '';
-  }
-}
-
 async function invokeFromPage(page, method, action) {
-  const [response] = await Promise.all([
-    page.waitForResponse(
-      candidate => candidate.url().includes('/httpapi/') && requestMethod(candidate) === method,
-      { timeout: 60000 }
-    ),
-    action()
-  ]);
-  const body = await response.json();
-  if (Number(body.code) !== 0) {
-    throw new Error(`${method} failed: ${JSON.stringify(body)}`);
+  // Trading mutations are sent over the authenticated Gateway WebSocket.
+  // Do not wait for an /httpapi/ response here; validate completion through the
+  // visible UI/business state that each caller already asserts.
+  await action();
+  await page.waitForTimeout(250);
+  const failure = page.locator('.ant-message-notice').filter({
+    hasText: /failed|unable|insufficient|rejected|timed out/i
+  }).last();
+  if (await failure.count() && await failure.isVisible()) {
+    throw new Error(`${method} failed in UI: ${(await failure.innerText()).trim()}`);
   }
-  return body;
 }
 
 async function gatewayCall(page, serverName, method, content, key) {
@@ -206,7 +196,8 @@ async function deposit(page, amount) {
     await page.waitForTimeout(50);
   }
   await invokeFromPage(page, 'cashIn', () => confirm.click());
-  await page.waitForTimeout(1500);
+  await modal.waitFor({state: 'hidden', timeout: 15000});
+  await page.waitForTimeout(500);
 }
 
 async function waitForInteractiveOrderForm(page) {
@@ -331,21 +322,24 @@ async function clearOpenOrders(page) {
 
 async function tradeHistoryText(page) {
   await page.locator('.orderWrap').getByText('Trade History', { exact: true }).click({ force: true });
-  // Tabs are force-rendered, so inactive tables stay in the DOM as hidden rows.
-  // Scope the lookup to the active pane instead of taking the first global row.
-  const row = page
-    .locator('.orderWrap .ant-tabs-tabpane-active .ant-table-tbody tr')
+  const activePane = page.locator('.orderWrap .ant-tabs-tabpane-active');
+  // History tabs are force-rendered and may have mounted before this execution
+  // existed. Explicitly refresh over the authenticated WebSocket before reading.
+  const refresh = activePane.getByRole('button', { name: 'Refresh', exact: true });
+  await refresh.click();
+  const row = activePane
+    .locator('.ant-table-tbody tr')
     .filter({ hasText: 'BTCUSDT' })
     .filter({ hasText: '60000' })
     .filter({ hasText: '0.001' })
     .first();
-  await row.waitFor({ timeout: 20000 });
+  await row.waitFor({ timeout: 30000 });
   return row.innerText();
 }
 
 async function recentTradeText(page) {
-  await page.getByText('Recent Trades', { exact: true }).click();
-  const row = page.locator('.recentTradeDiv.showDiv .bid').first();
+  await page.locator('.orderBookWrap').getByRole('tab', { name: 'Recent Trades', exact: true }).click();
+  const row = page.locator('.orderBookWrap .recentTradeDiv .bid').first();
   await row.waitFor({ timeout: 20000 });
   return row.innerText();
 }

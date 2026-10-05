@@ -293,7 +293,8 @@ SELECT IF(ABS(balance-${insurance_balance})<0.00000001,1,0) FROM dc.dc_insurance
 WHERE location='${LIQ_LOCATION}' AND security_id='BTCUSDT';
 SQL
   } | mysql_exec dc)"
-  mapfile -t checks <<<"${verification}"
+  checks=()
+  while IFS= read -r line; do checks[${#checks[@]}]="$line"; done <<<"${verification}"
   [[ "${#checks[@]}" -eq 6 ]] || die "Unexpected full-fill verification output: ${verification}"
   for index in "${!checks[@]}"; do
     [[ "${checks[${index}]}" == "1" ]] ||
@@ -337,7 +338,8 @@ WHERE location='${LIQ_LOCATION}' AND user_id='${LIQ_USER}' AND source_id='${liqu
   AND source='BankruptcyTransfer';
 SQL
   } | mysql_exec dc)"
-  mapfile -t checks <<<"${verification}"
+  checks=()
+  while IFS= read -r line; do checks[${#checks[@]}]="$line"; done <<<"${verification}"
   [[ "${#checks[@]}" -eq 6 ]] || die "Unexpected full-insurance verification output: ${verification}"
   for index in "${!checks[@]}"; do
     [[ "${checks[${index}]}" == "1" ]] ||
@@ -398,7 +400,8 @@ WHERE location='${LIQ_LOCATION}' AND user_id='${LIQ_USER}' AND source_id='${liqu
   AND source='BankruptcyTransfer';
 SQL
 } | mysql_exec dc)"
-mapfile -t checks <<<"${verification}"
+checks=()
+while IFS= read -r line; do checks[${#checks[@]}]="$line"; done <<<"${verification}"
 [[ "${#checks[@]}" -eq 8 ]] || die "Unexpected final-liquidation verification output: ${verification}"
 for index in "${!checks[@]}"; do
   [[ "${checks[${index}]}" == "1" ]] ||

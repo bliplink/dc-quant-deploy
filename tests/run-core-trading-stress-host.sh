@@ -287,7 +287,8 @@ SELECT COUNT(*) FROM dc.dc_users_posting WHERE location='${LOAD_LOCATION}'
   AND user_id IN ('${LOAD_MAKER}','${LOAD_TAKER}') AND source='Trade';
 SQL
   } | mysql_exec dc)"
-  mapfile -t progress <<<"${persisted}"
+  progress=()
+  while IFS= read -r line; do progress[${#progress[@]}]="$line"; done <<<"${persisted}"
   if (( ${progress[2]:-0} > 0 )); then
     timeout_rejections="$({
       cat <<SQL
@@ -359,7 +360,8 @@ SELECT IF(
   1,0);
 SQL
 } | mysql_exec dc)"
-mapfile -t checks <<<"${verification}"
+checks=()
+while IFS= read -r line; do checks[${#checks[@]}]="$line"; done <<<"${verification}"
 [[ "${#checks[@]}" -eq 10 ]] || die "Unexpected load verification output: ${verification}"
 for index in "${!checks[@]}"; do
   if [[ "${checks[${index}]}" != "1" ]]; then

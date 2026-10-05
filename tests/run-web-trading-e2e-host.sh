@@ -253,7 +253,8 @@ WHERE location='${E2E_LOCATION}'
   AND user_id IN ('${E2E_BUYER_ID}','${E2E_SELLER_ID}') AND type=1 AND amount='100000';
 SQL
   } | mysql_exec dc)"
-  mapfile -t db_rows <<<"${db_result}"
+  db_rows=()
+  while IFS= read -r line; do db_rows[${#db_rows[@]}]="$line"; done <<<"${db_result}"
   if [[ "${#db_rows[@]}" -eq 7 ]] \
     && [[ "${db_rows[0]}" == "0" ]] \
     && [[ "${db_rows[1]}" == "0" ]] \
