@@ -55,15 +55,15 @@ async function chartFillSnapshot(page) {
   return page.evaluate(() => {
     const chart = document.querySelector('.chartWrap');
     const panelBody = chart && chart.closest('.tradePanelBody');
-    const header = chart && chart.querySelector('.head');
+    const layout = chart && chart.querySelector('.chartLayout');
     const container = chart && chart.querySelector('.TVChartContainer');
     const iframe = container && container.querySelector('iframe');
-    if (!chart || !panelBody || !header || !container || !iframe) return null;
+    if (!chart || !panelBody || !layout || !container || !iframe) return null;
     const height = element => element.getBoundingClientRect().height;
     return {
       panelBody: height(panelBody),
       chart: height(chart),
-      header: height(header),
+      layout: height(layout),
       container: height(container),
       iframe: height(iframe)
     };
@@ -73,7 +73,8 @@ async function chartFillSnapshot(page) {
 function assertChartFillsPanel(snapshot) {
   if (!snapshot ||
       Math.abs(snapshot.chart - snapshot.panelBody) > 2 ||
-      Math.abs(snapshot.container - (snapshot.chart - snapshot.header)) > 2 ||
+      Math.abs(snapshot.layout - snapshot.chart) > 2 ||
+      Math.abs(snapshot.container - snapshot.layout) > 2 ||
       Math.abs(snapshot.iframe - snapshot.container) > 2 ||
       snapshot.container < 300) {
     throw new Error(`TradingView chart does not fill its workspace panel: ${JSON.stringify(snapshot)}`);
