@@ -69,7 +69,7 @@ SQL
 
 register_user() {
   local username="$1" role="$2" email request_file response user_id
-  email="${role,,}-${E2E_LOCATION,,}@acceptance.invalid"
+  email="$(printf '%s-%s@acceptance.invalid' "${role}" "${E2E_LOCATION}" | tr '[:upper:]' '[:lower:]')"
   request_file="$(mktemp)"
   chmod 0600 "${request_file}"
   python3 - "${E2E_LOCATION}" "${username}" "${role}" "${email}" "${E2E_PASSWORD}" "${request_file}" <<'PY'
