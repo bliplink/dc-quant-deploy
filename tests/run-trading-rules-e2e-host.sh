@@ -10,6 +10,7 @@ MAKER_TWO="${RULE_E2E_MAKER_TWO:-rulemaker2}"
 TAKER="${RULE_E2E_TAKER:-ruletaker}"
 SELF_USER="${RULE_E2E_SELF_USER:-ruleself}"
 RUN_ID="${RULE_E2E_RUN_ID:-$(date +%Y%m%d%H%M%S)}"
+CLEANUP_PREFIX="${RULE_E2E_CLEANUP_PREFIX:-}"
 RULE_PASSWORD="${RULE_E2E_PASSWORD:-${E2E_PASSWORD:-}}"
 
 log() { printf '[rules-e2e] %s\n' "$*"; }
@@ -21,6 +22,9 @@ safe_identifier() { [[ "$1" =~ ^[A-Za-z0-9_.-]+$ ]]; }
 for value in "${RULE_LOCATION}" "${MAKER_ONE}" "${MAKER_TWO}" "${TAKER}" "${SELF_USER}" "${RUN_ID}"; do
   safe_identifier "${value}" || die "Unsupported identifier: ${value}"
 done
+if [[ -n "${CLEANUP_PREFIX}" ]]; then
+  safe_identifier "${CLEANUP_PREFIX}" || die "Unsupported cleanup prefix: ${CLEANUP_PREFIX}"
+fi
 
 set -a
 # shellcheck disable=SC1090
@@ -158,6 +162,52 @@ api() {
   rm -f "${request}"
 }
 
+best_effort_cancel_user() {
+  local user="$1" login_request login_response token cancel_request
+  safe_identifier "${user}" || return 0
+  login_request="$(mktemp)"
+  cancel_request="$(mktemp)"
+  chmod 0600 "${login_request}" "${cancel_request}"
+  printf '{"serverName":"LoginSvr","method":"SYS.ATS.LOGIN","content":{"user_id":"%s","user_name":"%s","password":"%s","method":"login","client_type":"WEB","cid":"RULE_CLEANUP_%s","Location":"%s"}}\n' \
+    "${user}" "${user}" "${RULE_PASSWORD}" "${user}" "${RULE_LOCATION}" >"${login_request}"
+  login_response="$(curl -fsS --max-time 10 -H 'Content-Type: application/json' \
+    --data-binary "@${login_request}" "http://127.0.0.1:${WEB_LISTEN_PORT}/httpapi/" 2>/dev/null || true)"
+  token="$(sed -n 's/.*"token"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/p' <<<"${login_response}")"
+  if [[ -n "${token}" ]]; then
+    printf '{"serverName":"OrderSvr","method":"cancelAllOrder","key":"%s\\u001f4\\u001fBTCUSDT","content":{"UserID":"%s","SecurityID":"BTCUSDT","MarketIndicator":"4","AlgoName":"cross","Location":"%s"}}\n' \
+      "${RULE_LOCATION}" "${user}" "${RULE_LOCATION}" >"${cancel_request}"
+    curl -fsS --max-time 15 -H 'Content-Type: application/json' -H "sessionId: ${token}" \
+      --data-binary "@${cancel_request}" "http://127.0.0.1:${WEB_LISTEN_PORT}/httpapi/" >/dev/null 2>&1 || true
+  fi
+  rm -f "${login_request}" "${cancel_request}"
+}
+
+cleanup_current_rule_state() {
+  local user
+  for user in "${MAKER_ONE}" "${MAKER_TWO}" "${TAKER}" "${SELF_USER}"; do
+    best_effort_cancel_user "${user}" || true
+  done
+  restore_liqsvr
+}
+trap cleanup_current_rule_state EXIT
+
+cleanup_prior_rule_orders() {
+  local user cleaned=0
+  [[ -n "${CLEANUP_PREFIX}" ]] || return 0
+  while IFS= read -r user; do
+    [[ -n "${user}" ]] || continue
+    case "${user}" in
+      "${MAKER_ONE}"|"${MAKER_TWO}"|"${TAKER}"|"${SELF_USER}") continue ;;
+    esac
+    best_effort_cancel_user "${user}" || true
+    cleaned=$((cleaned + 1))
+  done < <(mysql_exec -e "SELECT user_name FROM dc.dc_users WHERE location='${RULE_LOCATION}' AND user_name LIKE '${CLEANUP_PREFIX}%';" dc)
+  if (( cleaned > 0 )); then
+    log "Requested hot-state mass cancel for ${cleaned} prior rule-test users."
+    sleep 2
+  fi
+}
+
 place() {
   local user="$1" side="$2" qty="$3" price="$4" tif="$5" clid="$6"
   local ord_type="${7:-Limit}" oc_type="${8:-OPEN}" reduce_only="${9:-false}"
@@ -244,6 +294,7 @@ wait_for_route TradeSvr
 # Keep MDSvr online as well. Its Common client must restore OrderSvr execution
 # subscriptions when the A/B connections return.
 wait_for_route MDSvr
+cleanup_prior_rule_orders
 for user in "${MAKER_ONE}" "${MAKER_TWO}" "${TAKER}" "${SELF_USER}"; do
   login_user "${user}"
   # Direct SQL is only the durable baseline. Publish the account through the
@@ -430,7 +481,7 @@ wait_order "RULE-${RUN_ID}-CLOSE-LONG" Filled
 log "Checking attached TP/SL creation, last-price trigger, OCO sibling cancel and reduce-only close."
 place "${MAKER_ONE}" Sell 0.0003 60400 GTC "RULE-${RUN_ID}-BRACKET-MAKER"; assert_success
 wait_order "RULE-${RUN_ID}-BRACKET-MAKER" New
-api placeOrder "{\"OCType\":\"OPEN\",\"OrderQty\":\"0.0003\",\"OrdType\":\"Limit\",\"ClOrdID\":\"RULE-${RUN_ID}-BRACKET-OPEN\",\"Terminal\":\"API\",\"AlgoName\":\"cross\",\"Side\":\"Buy\",\"Price\":\"60400\",\"UserID\":\"${TAKER}\",\"MarketIndicator\":\"4\",\"TimeInForce\":\"GTC\",\"SecurityID\":\"BTCUSDT\",\"ReduceOnly\":\"false\",\"TakeProfitPrice\":\"60500\",\"StopLossPrice\":\"60300\",\"TriggerType\":\"LastPrice\",\"Location\":\"${RULE_LOCATION}\"}" "${TAKER}"
+api placeOrder "{\"OCType\":\"OPEN\",\"OrderQty\":\"0.0003\",\"OrdType\":\"Limit\",\"ClOrdID\":\"RULE-${RUN_ID}-BRACKET-OPEN\",\"Terminal\":\"API\",\"AlgoName\":\"cross\",\"Side\":\"Buy\",\"Price\":\"60400\",\"UserID\":\"${TAKER}\",\"MarketIndicator\":\"4\",\"TimeInForce\":\"GTC\",\"SecurityID\":\"BTCUSDT\",\"ReduceOnly\":\"false\",\"TakeProfitPrice\":\"60500\",\"StopLossPrice\":\"59000\",\"TriggerType\":\"LastPrice\",\"Location\":\"${RULE_LOCATION}\"}" "${TAKER}"
 assert_success
 wait_order "RULE-${RUN_ID}-BRACKET-OPEN" Filled
 bracket_parent_id="$({

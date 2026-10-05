@@ -373,6 +373,40 @@ async function closeFirstPosition(page, side) {
   );
 }
 
+async function verifyReduceOnlyCloseUi(page, side, expectedMax, expectedHalf) {
+  const rows = await positionRows(page, side);
+  await rows.first().waitFor({ timeout: 15000 });
+  await rows.first().getByText('Close', { exact: true }).click();
+  const modal = page.locator('.closePositionModal').filter({ hasText: 'Close position' }).first();
+  await modal.waitFor({ timeout: 15000 });
+
+  const summary = await modal.innerText();
+  if (!summary.includes(`Maximum close quantity: ${expectedMax}`)) {
+    throw new Error(`close modal maximum quantity is incorrect: ${summary}`);
+  }
+
+  await modal.getByRole('button', { name: '50%', exact: true }).click();
+  const qty = modal.locator('input').last();
+  await page.waitForFunction(
+    ({selector, expected}) => {
+      const modal = [...document.querySelectorAll('.closePositionModal')]
+        .find(node => node.textContent && node.textContent.includes('Close position'));
+      if (!modal) return false;
+      const inputs = modal.querySelectorAll(selector);
+      const input = inputs[inputs.length - 1];
+      return input && input.value === expected;
+    },
+    {selector: 'input', expected: String(expectedHalf)},
+    {timeout: 5000}
+  );
+  if (await qty.inputValue() !== String(expectedHalf)) {
+    throw new Error(`50% close quantity is incorrect: ${await qty.inputValue()}`);
+  }
+
+  await modal.locator('.ant-modal-close').click();
+  await modal.waitFor({state: 'hidden', timeout: 10000});
+}
+
 async function waitForNoPosition(page) {
   for (let attempt = 0; attempt < 30; attempt += 1) {
     if (await (await positionRows(page)).count() === 0) return;
@@ -434,24 +468,7 @@ async function waitForNoPosition(page) {
       fullPage: true
     });
 
-    const reduceOnlyPreview = await gatewayCall(buyerSession.page, 'TradeSvr', 'previewOrder', {
-      SecurityID: 'BTCUSDT',
-      Side: 'Sell',
-      OrderType: 'Market',
-      InputMode: 'Quantity',
-      InputValue: '',
-      Percentage: 50,
-      ReduceOnly: true,
-      PositionSide: 'Long'
-    });
-    if (Number(reduceOnlyPreview.code) !== 0 || !reduceOnlyPreview.data ||
-        String(reduceOnlyPreview.data.valid).toLowerCase() !== 'true' ||
-        Number(reduceOnlyPreview.data.maximumCloseQuantity) !== 0.001 ||
-        Number(reduceOnlyPreview.data.quantity) !== 0.0005 ||
-        Number(reduceOnlyPreview.data.initialMargin) !== 0 ||
-        reduceOnlyPreview.data.riskPreviewMode !== 'REDUCE_ONLY_NO_NEW_RISK') {
-      throw new Error(`reduce-only close preview is incorrect: ${JSON.stringify(reduceOnlyPreview)}`);
-    }
+    await verifyReduceOnlyCloseUi(buyerSession.page, 'Long', '0.001', '0.0005');
 
     // Rest an offsetting buy for the short account, then exercise the Web
     // reduce-only Market/IOC close action for the long account. The same match
@@ -486,7 +503,7 @@ async function waitForNoPosition(page) {
       cancel: 'PASS',
       execution: 'PASS',
       closePosition: 'PASS',
-      reduceOnlyPreview: 'PASS',
+      reduceOnlyCloseUi: 'PASS',
       buyerTrade,
       sellerTrade,
       recentTrade,
