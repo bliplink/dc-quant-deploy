@@ -274,8 +274,18 @@ async function waitForRestingBid(page, expectedPrice) {
   return text;
 }
 
+async function waitForLastPrice(page) {
+  const value = page.locator('.symbolMarketWrap .marketLastPrice strong').first();
+  await value.waitFor({timeout: 20000});
+  await page.waitForFunction(() => {
+    const node = document.querySelector('.symbolMarketWrap .marketLastPrice strong');
+    return node && node.textContent && !node.textContent.includes('--') && /\d/.test(node.textContent);
+  }, null, {timeout: 20000});
+  return value.innerText();
+}
+
 async function waitForMarketMetric(page, label) {
-  const metric = page.locator('.symbolMarketWrap > .df.fdc').filter({
+  const metric = page.locator('.symbolMarketWrap .marketMetric').filter({
     has: page.getByText(label, {exact: true})
   }).first();
   await metric.waitFor({timeout: 20000});
@@ -285,7 +295,7 @@ async function waitForMarketMetric(page, label) {
       const node = nodes.find(item => item.innerText.includes(text));
       return node && !node.innerText.includes('--') && /\d/.test(node.innerText);
     },
-    {selector: '.symbolMarketWrap > .df.fdc', text: label},
+    {selector: '.symbolMarketWrap .marketMetric', text: label},
     {timeout: 20000}
   );
   return metric.innerText();
@@ -302,7 +312,7 @@ async function verifyKlineAndMarketData(page) {
   }, null, {timeout: 60000});
   const klineStatus = await page.evaluate(() => window.__dcKlineStatus);
   await page.locator('.TVChartContainer iframe').waitFor({timeout: 30000});
-  const lastPrice = await waitForMarketMetric(page, 'Last Price');
+  const lastPrice = await waitForLastPrice(page);
   const markPrice = await waitForMarketMetric(page, 'Mark Price');
   const indexPrice = await waitForMarketMetric(page, 'Index Price');
   return {klineRows: klineStatus.receivedRows, klineStatus, lastPrice, markPrice, indexPrice};
