@@ -11,6 +11,7 @@ CORE_SELLER_PREFIX="${CORE_E2E_SELLER:-coreseller}"
 CORE_BUYER="${CORE_BUYER_PREFIX}_${CORE_RUN_ID}"
 CORE_SELLER="${CORE_SELLER_PREFIX}_${CORE_RUN_ID}"
 RULE_RUN_ID="${CORE_RULE_E2E_RUN_ID:-${CORE_RUN_ID}}"
+RULE_LOCATION="${CORE_RULE_E2E_LOCATION:-CORE_RULE_E2E}"
 
 log() {
   printf '[core-acceptance] %s\n' "$*"
@@ -25,6 +26,10 @@ die() {
 [[ -n "${E2E_PASSWORD:-}" ]] || die "E2E_PASSWORD is required"
 [[ "${CORE_LOCATION}" == *_E2E ]] ||
   die "CORE_E2E_LOCATION must be an isolated *_E2E location"
+[[ "${RULE_LOCATION}" == *_E2E ]] ||
+  die "CORE_RULE_E2E_LOCATION must be an isolated *_E2E location"
+[[ "${RULE_LOCATION}" != "${CORE_LOCATION}" ]] ||
+  die "CORE_RULE_E2E_LOCATION must be separate from CORE_E2E_LOCATION"
 
 set -a
 # shellcheck disable=SC1090
@@ -116,7 +121,7 @@ fi
 
 log "Running strict order-rule validation in an isolated acceptance location."
 ENV_FILE="${ENV_FILE}" \
-RULE_E2E_LOCATION="${CORE_LOCATION}" \
+RULE_E2E_LOCATION="${RULE_LOCATION}" \
 RULE_E2E_RUN_ID="${RULE_RUN_ID}" \
 RULE_E2E_CLEANUP_PREFIX="${CORE_BUYER_PREFIX}_rule" \
 RULE_E2E_MAKER_ONE="${CORE_BUYER_PREFIX}_rulemaker1_${RULE_RUN_ID}" \
