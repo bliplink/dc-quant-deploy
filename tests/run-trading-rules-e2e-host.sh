@@ -44,15 +44,33 @@ else
 fi
 
 liq_was_running="$(docker inspect --format '{{.State.Running}}' dc-saas-liqsvr 2>/dev/null || true)"
+robot_was_running="$(docker inspect --format '{{.State.Running}}' dc-saas-robotsvr 2>/dev/null || true)"
+
 restore_liqsvr() {
   if [[ "${liq_was_running}" == "true" ]]; then
     docker start dc-saas-liqsvr >/dev/null 2>&1 || true
   fi
 }
-trap restore_liqsvr EXIT
+
+restore_robotsvr() {
+  if [[ "${robot_was_running}" == "true" ]]; then
+    docker start dc-saas-robotsvr >/dev/null 2>&1 || true
+  fi
+}
+
+restore_background_services() {
+  restore_liqsvr
+  restore_robotsvr
+}
+
+trap restore_background_services EXIT
 if [[ "${liq_was_running}" == "true" ]]; then
   log "Pausing LiqSvr so background liquidation cannot consume deterministic rule-test liquidity."
   docker stop dc-saas-liqsvr >/dev/null
+fi
+if [[ "${robot_was_running}" == "true" ]]; then
+  log "Pausing RobotSvr for the full deterministic rule suite so external strategy liquidity cannot alter FOK/IOC/FIFO/STP assertions."
+  docker stop dc-saas-robotsvr >/dev/null
 fi
 
 mysql_exec() {
@@ -187,7 +205,7 @@ cleanup_current_rule_state() {
   for user in "${MAKER_ONE}" "${MAKER_TWO}" "${TAKER}" "${SELF_USER}"; do
     best_effort_cancel_user "${user}" || true
   done
-  restore_liqsvr
+  restore_background_services
 }
 trap cleanup_current_rule_state EXIT
 
