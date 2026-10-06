@@ -88,6 +88,35 @@ login_user() {
   printf '%s' "${token}"
 }
 
+fund_trade_account() {
+  local user="$1" token="$2" target_balance="${3:-100000}" response current_balance top_up code
+  response="$(curl -fsS --max-time 30 -H 'Content-Type: application/json' -H "sessionId: ${token}" \
+    --data "{\"serverName\":\"TradeSvr\",\"method\":\"cashOut\",\"key\":\"${LIQ_LOCATION}\",\"content\":{\"Amount\":\"0\",\"UserID\":\"${user}\",\"Location\":\"${LIQ_LOCATION}\",\"Demo\":\"1\"}}" \
+    "http://127.0.0.1:${WEB_LISTEN_PORT}/httpapi/")" ||
+    die "Could not initialize TradeSvr account state for ${user}"
+  IFS=$'\t' read -r code current_balance < <(printf '%s' "${response}" | python3 -c 'import json,sys
+d=json.load(sys.stdin); x=d.get("data") or {}
+print("{}\t{}".format(d.get("code",-1),x.get("Balance",x.get("balance",0))))')
+  [[ "${code}" == "0" ]] || die "TradeSvr cashOut(0) rejected for ${user}: ${response}"
+  top_up="$(python3 - "${target_balance}" "${current_balance}" <<'PY'
+from decimal import Decimal
+import sys
+target,current=map(Decimal,sys.argv[1:3])
+delta=target-current
+print(format(delta if delta > 0 else Decimal(0),'f'))
+PY
+)"
+  if [[ "${top_up}" != "0" ]]; then
+    response="$(curl -fsS --max-time 30 -H 'Content-Type: application/json' -H "sessionId: ${token}" \
+      --data "{\"serverName\":\"TradeSvr\",\"method\":\"cashIn\",\"key\":\"${LIQ_LOCATION}\",\"content\":{\"Amount\":\"${top_up}\",\"UserID\":\"${user}\",\"Location\":\"${LIQ_LOCATION}\",\"Demo\":\"1\"}}" \
+      "http://127.0.0.1:${WEB_LISTEN_PORT}/httpapi/")" ||
+      die "Could not fund TradeSvr account state for ${user}"
+    grep -Eq '"code"[[:space:]]*:[[:space:]]*0' <<<"${response}" ||
+      die "TradeSvr cashIn rejected for ${user}: ${response}"
+  fi
+  log "TradeSvr hot account initialized for ${user}; top_up=${top_up}"
+}
+
 wait_for_port() {
   local port="$1" service="$2" start
   start="$(date +%s)"
@@ -207,6 +236,7 @@ restart_order_trade_for_e2e
 wait_for_route OrderSvr
 wait_for_route TradeSvr
 maker_session="$(login_user "${MAKER_USER}")"
+fund_trade_account "${MAKER_USER}" "${maker_session}" 100000
 
 maker_request="$(mktemp)"
 cat >"${maker_request}" <<JSON
