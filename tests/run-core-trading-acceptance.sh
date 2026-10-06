@@ -12,6 +12,7 @@ CORE_BUYER="${CORE_BUYER_PREFIX}_${CORE_RUN_ID}"
 CORE_SELLER="${CORE_SELLER_PREFIX}_${CORE_RUN_ID}"
 RULE_RUN_ID="${CORE_RULE_E2E_RUN_ID:-${CORE_RUN_ID}}"
 RULE_LOCATION="${CORE_RULE_E2E_LOCATION:-CORE_RULE_E2E}"
+WEB_LOCATION="${CORE_WEB_E2E_LOCATION:-${CORE_LOCATION}_WEB_${CORE_RUN_ID}}"
 
 log() {
   printf '[core-acceptance] %s\n' "$*"
@@ -30,6 +31,12 @@ die() {
   die "CORE_RULE_E2E_LOCATION must be an isolated *_E2E location"
 [[ "${RULE_LOCATION}" != "${CORE_LOCATION}" ]] ||
   die "CORE_RULE_E2E_LOCATION must be separate from CORE_E2E_LOCATION"
+[[ "${WEB_LOCATION}" =~ (^|_)E2E($|_) ]] ||
+  die "CORE_WEB_E2E_LOCATION must be an isolated *_E2E location"
+[[ "${WEB_LOCATION}" =~ ^[A-Za-z0-9_.-]+$ ]] ||
+  die "CORE_WEB_E2E_LOCATION contains unsupported characters"
+[[ "${WEB_LOCATION}" != "${CORE_LOCATION}" && "${WEB_LOCATION}" != "${RULE_LOCATION}" ]] ||
+  die "CORE_WEB_E2E_LOCATION must be separate from core and rule locations"
 
 set -a
 # shellcheck disable=SC1090
@@ -130,24 +137,24 @@ RULE_E2E_TAKER="${CORE_BUYER_PREFIX}_ruletaker_${RULE_RUN_ID}" \
 RULE_E2E_SELF_USER="${CORE_BUYER_PREFIX}_ruleself_${RULE_RUN_ID}" \
   "${SCRIPT_DIR}/run-trading-rules-e2e-host.sh"
 
-log "Running browser login, deposit, order, cancel, match, market close, history and recent-trade flow in ${CORE_LOCATION}."
+log "Running browser login, deposit, order, cancel, match, market close, history and recent-trade flow in isolated ${WEB_LOCATION}."
 ENV_FILE="${ENV_FILE}" \
-E2E_LOCATION="${CORE_LOCATION}" \
+E2E_LOCATION="${WEB_LOCATION}" \
 E2E_BUYER="${CORE_BUYER}" \
 E2E_SELLER="${CORE_SELLER}" \
 E2E_PASSWORD="${E2E_PASSWORD}" \
   "${SCRIPT_DIR}/run-web-trading-e2e-host.sh"
 
-log "Validating the draggable, resizable, persistent and bilingual professional Web workspace."
+log "Validating the draggable, resizable, persistent and bilingual professional Web workspace in ${WEB_LOCATION}."
 ENV_FILE="${ENV_FILE}" \
-E2E_LOCATION="${CORE_LOCATION}" \
+E2E_LOCATION="${WEB_LOCATION}" \
 E2E_USER="${CORE_BUYER}" \
 E2E_PASSWORD="${E2E_PASSWORD}" \
   "${SCRIPT_DIR}/run-web-workspace-e2e-host.sh"
 
-log "Validating the 390px touch-friendly, overflow-free and bilingual mobile trading workspace."
+log "Validating the 390px touch-friendly, overflow-free and bilingual mobile trading workspace in ${WEB_LOCATION}."
 ENV_FILE="${ENV_FILE}" \
-E2E_LOCATION="${CORE_LOCATION}" \
+E2E_LOCATION="${WEB_LOCATION}" \
 E2E_USER="${CORE_BUYER}" \
 E2E_PASSWORD="${E2E_PASSWORD}" \
   "${SCRIPT_DIR}/run-web-mobile-e2e-host.sh"
