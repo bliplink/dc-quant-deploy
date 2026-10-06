@@ -48,7 +48,7 @@ trap cleanup EXIT
 query_mark_price() {
   local response
   response="$(curl -fsS --max-time 30 -H 'Content-Type: application/json' \
-    --data "{\"serverName\":\"MDSvr\",\"method\":\"queryPublicMarket\",\"content\":{\"securityID\":\"BTCUSDT\",\"Location\":\"${LIQ_LOCATION}\"}}" \
+    --data "{\"serverName\":\"MDSvr\",\"method\":\"queryPublicMarket\",\"key\":\"${LIQ_LOCATION}\\u001f4\\u001fBTCUSDT\",\"content\":{\"securityID\":\"BTCUSDT\",\"location\":\"${LIQ_LOCATION}\"}}" \
     "http://127.0.0.1:${WEB_LISTEN_PORT}/httpapi/")" ||
     die "Could not query the current tenant MarkPrice"
   printf '%s' "${response}" | python3 -c '
@@ -83,7 +83,19 @@ login_user() {
 wait_for_port() {
   local port="$1" service="$2" start
   start="$(date +%s)"
-  until ss -lnt | awk 'NR > 1 {print $4}' | grep -Eq "[:.]${port}$"; do
+  until python3 - "${port}" <<'PY' >/dev/null 2>&1
+import socket
+import sys
+
+sock = socket.socket()
+sock.settimeout(1)
+try:
+    status = sock.connect_ex(("127.0.0.1", int(sys.argv[1])))
+finally:
+    sock.close()
+raise SystemExit(0 if status == 0 else 1)
+PY
+  do
     if (( $(date +%s) - start >= 120 )); then
       docker logs --tail 120 "${service}" >&2 || true
       die "${service} did not listen on ${port}"
