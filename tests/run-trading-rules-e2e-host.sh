@@ -389,6 +389,7 @@ place "${MAKER_TWO}" Sell 0.0001 60200 GTC "RULE-${RUN_ID}-FIFO-TWO"; assert_suc
 wait_order "RULE-${RUN_ID}-FIFO-TWO" New
 place "${TAKER}" Buy 0.0001 60200 GTC "RULE-${RUN_ID}-FIFO-TAKER"; assert_success
 wait_order "RULE-${RUN_ID}-FIFO-TAKER" Filled
+wait_order "RULE-${RUN_ID}-FIFO-ONE" Filled
 fifo_check="$({
   cat <<SQL
 SELECT IF((SELECT ord_status FROM dc.dc_orders WHERE location='${RULE_LOCATION}' AND clord_id='RULE-${RUN_ID}-FIFO-ONE')='Filled'
