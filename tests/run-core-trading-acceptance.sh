@@ -28,6 +28,7 @@ set -a
 # shellcheck disable=SC1090
 . "${ENV_FILE}"
 set +a
+E2E_PASSWORD="${E2E_PASSWORD:-${LOGIN_DEFAULT_PASSWORD:-}}"
 [[ -n "${E2E_PASSWORD:-}" ]] || die "E2E_PASSWORD is required"
 [[ "${CORE_LOCATION}" == *_E2E ]] ||
   die "CORE_E2E_LOCATION must be an isolated *_E2E location"
