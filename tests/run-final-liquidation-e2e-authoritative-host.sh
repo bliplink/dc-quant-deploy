@@ -16,13 +16,23 @@ ADL_USER="${FINAL_LIQ_E2E_ADL_USER:-final_adl}_${RUN_ID}"
 FOREIGN_USER="${FINAL_LIQ_E2E_FOREIGN_USER:-final_foreign}_${RUN_ID}"
 FOREIGN_OPEN_USER="${FINAL_LIQ_E2E_FOREIGN_OPEN_USER:-final_foreign_open}_${RUN_ID}"
 
-liq_test_stopped=false
 override_installed=false
 override_session=""
 
 log() { printf '[final-liq-e2e] %s\n' "$*"; }
 die() { printf '[final-liq-e2e] ERROR: %s\n' "$*" >&2; exit 1; }
 safe_identifier() { [[ "$1" =~ ^[A-Za-z0-9_.-]+$ ]]; }
+decimal_equal() {
+  python3 - "$1" "$2" <<'PY' >/dev/null 2>&1
+from decimal import Decimal, InvalidOperation
+import sys
+try:
+    equal = Decimal(sys.argv[1]) == Decimal(sys.argv[2])
+except (InvalidOperation, ValueError):
+    equal = False
+raise SystemExit(0 if equal else 1)
+PY
+}
 
 [[ -r "${ENV_FILE}" ]] || die "Cannot read ${ENV_FILE}"
 command -v python3 >/dev/null 2>&1 || die "python3 is required"
@@ -46,6 +56,10 @@ E2E_PASSWORD="${E2E_PASSWORD:-${LOGIN_DEFAULT_PASSWORD:-}}"
   die "MDSVR_E2E_MARK_PRICE_OVERRIDE_ENABLED=true is required"
 [[ -n "${MDSVR_E2E_MARK_PRICE_OVERRIDE_TOKEN:-}" ]] ||
   die "MDSVR_E2E_MARK_PRICE_OVERRIDE_TOKEN is required"
+[[ "${LIQSVR_E2E_READINESS_ENABLED:-false}" == "true" ]] ||
+  die "LIQSVR_E2E_READINESS_ENABLED=true is required"
+[[ -n "${LIQSVR_E2E_READINESS_TOKEN:-}" ]] ||
+  die "LIQSVR_E2E_READINESS_TOKEN is required"
 
 # shellcheck source=liquidation-e2e-common.sh
 . "${SCRIPT_DIR}/liquidation-e2e-common.sh"
@@ -53,9 +67,6 @@ E2E_PASSWORD="${E2E_PASSWORD:-${LOGIN_DEFAULT_PASSWORD:-}}"
 cleanup() {
   if [[ "${override_installed}" == "true" ]]; then
     e2e_clear_mark_override "${LIQ_LOCATION}" "${override_session}" || true
-  fi
-  if [[ "${liq_test_stopped}" == "true" ]]; then
-    docker start dc-saas-liqsvr >/dev/null 2>&1 || true
   fi
 }
 trap cleanup EXIT
@@ -80,17 +91,13 @@ ON DUPLICATE KEY UPDATE
 SQL
 }
 
-wait_liq_startup_image() {
-  local baseline="$1" count
-  for _ in $(seq 1 120); do
-    count="$(docker logs dc-saas-liqsvr 2>&1 | grep -c 'TradeSvr partition startup image replayed, topic:dc.trade.position.\*\*' || true)"
-    if (( count > baseline )); then
-      return 0
-    fi
-    sleep 1
-  done
-  docker logs --tail 220 dc-saas-liqsvr >&2 || true
-  return 1
+ensure_liqsvr_running() {
+  local running
+  running="$(docker inspect -f '{{.State.Running}}' dc-saas-liqsvr 2>/dev/null || true)"
+  if [[ "${running}" != "true" ]]; then
+    docker start dc-saas-liqsvr >/dev/null
+  fi
+  e2e_wait_port "${LIQSVR_GW_PORT}" dc-saas-liqsvr
 }
 
 parse_long_risk() {
@@ -119,12 +126,11 @@ try:
  d=json.load(sys.stdin); p=d.get("data") or {}
  key="LongPosition" if side=="Long" else "ShortPosition"
  alt="longPosition" if side=="Long" else "shortPosition"
- q=Decimal(str(p.get(key,p.get(alt,0))))
- print("0" if q == 0 else q)
+ print(Decimal(str(p.get(key,p.get(alt,0)))))
 except Exception:
- print("0")
-' "${side}" 2>/dev/null || printf '0')"
-    [[ "${value}" == "${expected}" ]] && return 0
+ print('__ERR__')
+' "${side}" 2>/dev/null || printf '__ERR__')"
+    decimal_equal "${value}" "${expected}" && return 0
     sleep 0.5
   done
   die "${user}@${location} ${side} position did not reach ${expected}; last=${value}"
@@ -140,8 +146,6 @@ ON DUPLICATE KEY UPDATE balance=VALUES(balance),update_time=VALUES(update_time);
 SQL
 }
 
-# LiqSvr creates the bounded final order with closeBy=liq, then BankruptcyCoordinator
-# upgrades the authoritative Order projection marker to liq_v2 after TradeSvr capability validation.
 final_order_row() {
   local expected_status="$1"
   e2e_mysql -e "SELECT
@@ -160,9 +164,8 @@ final_order_row() {
     ORDER BY create_time DESC,journal_seq DESC LIMIT 1;" dc
 }
 
-log "Stopping LiqSvr while authoritative final-liquidation positions are constructed."
-docker stop dc-saas-liqsvr >/dev/null
-liq_test_stopped=true
+log "Keeping LiqSvr online while authoritative positions are constructed under a verified safe MarkPrice."
+ensure_liqsvr_running || die "LiqSvr did not become ready"
 
 log "Provisioning LoginSvr identities only; user balances/positions remain service-owned."
 provision_users
@@ -265,7 +268,7 @@ position_response="$(e2e_query_position "${LIQ_LOCATION}" "${LIQ_USER}" "${liq_s
 IFS=$'\t' read -r target_qty target_avg target_liq target_bank target_status < <(
   printf '%s' "${position_response}" | parse_long_risk
 )
-[[ "${target_qty}" == "0.0002" ]] || die "Unexpected target quantity before collateral adjustment: ${target_qty}"
+decimal_equal "${target_qty}" "0.0002" || die "Unexpected target quantity before collateral adjustment: ${target_qty}"
 
 account_response="$(e2e_query_account "${LIQ_LOCATION}" "${LIQ_USER}" "${liq_session}")"
 current_mark="$(e2e_query_mark "${LIQ_LOCATION}")"
@@ -299,7 +302,7 @@ for _ in $(seq 1 100); do
   IFS=$'\t' read -r target_qty target_avg target_liq target_bank target_status < <(
     printf '%s' "${position_response}" | parse_long_risk 2>/dev/null || printf '0\t0\t0\t0\t'
   )
-  if [[ "${target_qty}" == "0.0002" && "${target_status}" == "1" ]] &&
+  if decimal_equal "${target_qty}" "0.0002" && [[ "${target_status}" == "1" ]] &&
      python3 - "${target_liq}" "${target_bank}" <<'PY' >/dev/null 2>&1
 from decimal import Decimal
 import sys
@@ -310,7 +313,7 @@ PY
   fi
   sleep 0.5
 done
-[[ "${target_qty}" == "0.0002" && "${target_status}" == "1" ]] ||
+decimal_equal "${target_qty}" "0.0002" && [[ "${target_status}" == "1" ]] ||
   die "TradeSvr did not publish authoritative final-liquidation risk: ${position_response}"
 
 insurance_seed="$(python3 - "${SCENARIO}" "${target_bank}" <<'PY'
@@ -355,13 +358,13 @@ print(mark)
 PY
 )"
 
-startup_before="$(docker logs dc-saas-liqsvr 2>&1 | grep -c 'TradeSvr partition startup image replayed, topic:dc.trade.position.\*\*' || true)"
-log "Starting LiqSvr under safe market state; no user login is required by LiqSvr."
-docker start dc-saas-liqsvr >/dev/null
-liq_test_stopped=false
-wait_liq_startup_image "${startup_before}" || die "LiqSvr did not replay authoritative Trade position image"
-e2e_wait_route "${LIQ_LOCATION}" OrderSvr || die "OrderSvr route not ready after LiqSvr start"
-e2e_wait_route "${LIQ_LOCATION}" TradeSvr || die "TradeSvr route not ready after LiqSvr start"
+log "LiqSvr stayed online; waiting for live Trade updates for this run before the one-shot unsafe MarkPrice event."
+ensure_liqsvr_running || die "LiqSvr did not remain ready"
+e2e_wait_route "${LIQ_LOCATION}" OrderSvr || die "OrderSvr route not ready"
+e2e_wait_route "${LIQ_LOCATION}" TradeSvr || die "TradeSvr route not ready"
+log "Waiting for LiqSvr to cache this run's authoritative position before the one-shot unsafe MarkPrice event."
+e2e_wait_liq_position_ready "${LIQ_LOCATION}" "${LIQ_USER}" "${liq_session}" 0.0002 ||
+  die "LiqSvr did not become position-ready for the final-liquidation target"
 
 log "Applying tenant-only unsafe MarkPrice ${unsafe_mark}; foreign tenant remains live."
 e2e_set_mark_override "${LIQ_LOCATION}" "${override_session}" "${unsafe_mark}" ||
@@ -375,22 +378,62 @@ done
 [[ "${seen:-}" == "${unsafe_mark}" ]] || die "Target tenant did not observe unsafe MarkPrice"
 foreign_mark_after="$(e2e_query_mark "${OTHER_LOCATION}")"
 [[ "${foreign_mark_after}" != "${unsafe_mark}" ]] || die "Tenant MarkPrice override leaked to foreign tenant"
-
 expected_status="Cancelled"
 [[ "${SCENARIO}" == "full_fill" ]] && expected_status="Filled"
 liquidation_order_id=""
 liquidation_clid=""
-for _ in $(seq 1 600); do
+observed_unsafe=false
+last_readiness=""
+log "Waiting for either LiqSvr UNSAFE_LONG diagnostics or an already-completed authoritative liq_v2 order."
+for _ in $(seq 1 120); do
   row="$(final_order_row "${expected_status}")"
   if [[ -n "${row}" ]]; then
     IFS=$'\t' read -r liquidation_order_id liquidation_clid <<<"${row}"
+    log "Fast-path final liquidation observed before the diagnostic sampler caught UNSAFE_LONG."
     break
   fi
-  sleep 0.2
+  last_readiness="$(e2e_api_call LiqSvr liqReadiness "${LIQ_LOCATION}" \
+    "{\"location\":\"${LIQ_LOCATION}\",\"userID\":\"${LIQ_USER}\",\"securityID\":\"BTCUSDT\",\"token\":\"${LIQSVR_E2E_READINESS_TOKEN}\"}" \
+    "${liq_session}" 2>/dev/null || true)"
+  if python3 - "${unsafe_mark}" "${last_readiness}" <<'PY' >/dev/null 2>&1
+import json,sys
+from decimal import Decimal
+expected=Decimal(sys.argv[1])
+try:
+    payload=json.loads(sys.argv[2])
+    data=payload.get('data') or {}
+    mark=Decimal(str(data.get('markPrice','0')))
+    liq=Decimal(str(data.get('longLiqPrice','0')))
+    decision=str(data.get('liqLastDecision') or '')
+    ready=(payload.get('code') == 0 and data.get('allReady') is True and data.get('riskValid') is True
+           and mark == expected and liq > 0 and mark <= liq and decision == 'UNSAFE_LONG')
+except Exception:
+    ready=False
+raise SystemExit(0 if ready else 1)
+PY
+  then
+    observed_unsafe=true
+    break
+  fi
+  sleep 0.25
 done
+if [[ "${observed_unsafe}" != "true" && -z "${liquidation_order_id}" ]]; then
+  die "Neither LiqSvr UNSAFE_LONG diagnostics nor a final liq_v2 order appeared; last=${last_readiness}"
+fi
+
+if [[ -z "${liquidation_order_id}" ]]; then
+  for _ in $(seq 1 600); do
+    row="$(final_order_row "${expected_status}")"
+    if [[ -n "${row}" ]]; then
+      IFS=$'\t' read -r liquidation_order_id liquidation_clid <<<"${row}"
+      break
+    fi
+    sleep 0.2
+  done
+fi
 if [[ -z "${liquidation_order_id}" ]]; then
   docker logs --tail 260 dc-saas-liqsvr >&2 || true
-  die "No final liq_v2 Limit/IOC ${expected_status} event appeared in Order projection journal"
+  die "No final liquidation (closeBy=liq_v2) Limit/IOC ${expected_status} event appeared in Order projection journal"
 fi
 
 e2e_clear_mark_override "${LIQ_LOCATION}" "${override_session}"
@@ -400,11 +443,11 @@ log "Final liquidation order ${liquidation_order_id} reached ${expected_status};
 if [[ "${SCENARIO}" == "full_fill" ]]; then
   for _ in $(seq 1 100); do
     response="$(e2e_query_position "${LIQ_LOCATION}" "${LIQ_USER}" "${liq_session}" 2>/dev/null || true)"
-    qty="$(printf '%s' "${response}" | python3 -c 'import json,sys; from decimal import Decimal; d=json.load(sys.stdin); p=d.get("data") or {}; q=Decimal(str(p.get("LongPosition",p.get("longPosition",0)))); print("0" if q == 0 else q)' 2>/dev/null || printf '1')"
-    [[ "${qty}" == "0" ]] && break
+    qty="$(printf '%s' "${response}" | python3 -c 'import json,sys; from decimal import Decimal; d=json.load(sys.stdin); p=d.get("data") or {}; print(Decimal(str(p.get("LongPosition",p.get("longPosition",0)))))' 2>/dev/null || printf '1')"
+    decimal_equal "${qty}" "0" && break
     sleep 0.5
   done
-  [[ "${qty}" == "0" ]] || die "Fully-filled final liquidation did not flatten target position"
+  decimal_equal "${qty}" "0" || die "Fully-filled final liquidation did not flatten target position: ${qty}"
   transfer_count="$(e2e_mysql -e "SELECT COUNT(*) FROM dc.dc_bankruptcy_transfer WHERE location='${LIQ_LOCATION}' AND liquidation_order_id='${liquidation_order_id}';" dc)"
   [[ "${transfer_count}" == "0" ]] || die "Full-fill scenario unexpectedly entered bankruptcy takeover"
   filled_qty="$(e2e_mysql -e "SELECT JSON_UNQUOTE(JSON_EXTRACT(payload,'$.execution.qty'))
@@ -412,7 +455,7 @@ if [[ "${SCENARIO}" == "full_fill" ]]; then
     WHERE JSON_UNQUOTE(JSON_EXTRACT(payload,'$.order.orderId'))='${liquidation_order_id}'
       AND JSON_UNQUOTE(JSON_EXTRACT(payload,'$.order.orderStatus'))='Filled'
     ORDER BY create_time DESC,journal_seq DESC LIMIT 1;" dc)"
-  [[ "${filled_qty}" == "0.0002" ]] || die "Full-fill execution quantity mismatch: ${filled_qty}"
+  decimal_equal "${filled_qty}" "0.0002" || die "Full-fill execution quantity mismatch: ${filled_qty}"
 elif [[ "${SCENARIO}" == "full_insurance" ]]; then
   completed=0
   for _ in $(seq 1 300); do
@@ -428,11 +471,7 @@ elif [[ "${SCENARIO}" == "full_insurance" ]]; then
   [[ "${completed}" == "1" ]] || die "Full insurance takeover did not complete"
   insurance_qty="$(e2e_mysql -e "SELECT quantity FROM dc.dc_insurance_position
     WHERE location='${LIQ_LOCATION}' AND security_id='BTCUSDT' AND position_side='LONG';" dc)"
-  python3 - "${insurance_qty}" <<'PY' >/dev/null || die "Insurance position quantity mismatch: ${insurance_qty}"
-from decimal import Decimal
-import sys
-assert Decimal(sys.argv[1]) == Decimal("0.0002")
-PY
+  decimal_equal "${insurance_qty}" "0.0002" || die "Insurance position quantity mismatch: ${insurance_qty}"
 elif [[ "${SCENARIO}" == "mixed" ]]; then
   completed=0
   for _ in $(seq 1 400); do

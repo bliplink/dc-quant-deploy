@@ -195,3 +195,82 @@ e2e_wait_route() {
     sleep 2
   done
 }
+
+# Public GW may still require an authenticated session, but LiqSvr itself does
+# not use that session to resolve the target account. This gate proves that the
+# authoritative Trade startup image plus Order/MD dependencies are present in
+# LiqSvr before a one-shot unsafe MarkPrice event is injected.
+e2e_wait_liq_position_ready() {
+  local location="$1" user="$2" session="$3" expected_long="$4"
+  local start response
+  start="$(date +%s)"
+  while true; do
+    response="$(e2e_api_call LiqSvr liqReadiness "${location}" \
+      "{\"location\":\"${location}\",\"userID\":\"${user}\",\"securityID\":\"BTCUSDT\",\"token\":\"${LIQSVR_E2E_READINESS_TOKEN}\"}" \
+      "${session}" 2>/dev/null || true)"
+    if python3 - "${expected_long}" "${response}" <<'PY' >/dev/null 2>&1
+import json,sys
+from decimal import Decimal
+expected=Decimal(sys.argv[1])
+try:
+    payload=json.loads(sys.argv[2])
+    data=payload.get('data') or {}
+    ready=(payload.get('code') == 0 and data.get('allReady') is True and data.get('riskValid') is True
+           and Decimal(str(data.get('longPosition','0'))) == expected
+           and Decimal(str(data.get('longLiqPrice','0'))) > 0
+           and Decimal(str(data.get('longBankruptcyPrice','0'))) > 0
+           and int(data.get('positionVersion',0)) > 0
+           and int(data.get('accountVersion',0)) > 0)
+except Exception:
+    ready=False
+raise SystemExit(0 if ready else 1)
+PY
+    then
+      return 0
+    fi
+    if (( $(date +%s) - start >= 120 )); then
+      printf '[liquidation-e2e-common] ERROR: LiqSvr did not cache authoritative position for %s@%s; last=%s\n' \
+        "${user}" "${location}" "${response}" >&2
+      return 1
+    fi
+    sleep 1
+  done
+}
+
+# Prove that the tenant-only unsafe mark has propagated into LiqSvr's own
+# MarketPrice cache, not merely into the public MDSvr query path.
+e2e_wait_liq_mark_ready() {
+  local location="$1" user="$2" session="$3" expected_mark="$4"
+  local start response
+  start="$(date +%s)"
+  while true; do
+    response="$(e2e_api_call LiqSvr liqReadiness "${location}" \
+      "{\"location\":\"${location}\",\"userID\":\"${user}\",\"securityID\":\"BTCUSDT\",\"token\":\"${LIQSVR_E2E_READINESS_TOKEN}\"}" \
+      "${session}" 2>/dev/null || true)"
+    if python3 - "${expected_mark}" "${response}" <<'PY' >/dev/null 2>&1
+import json,sys
+from decimal import Decimal
+expected=Decimal(sys.argv[1])
+try:
+    payload=json.loads(sys.argv[2])
+    data=payload.get('data') or {}
+    mark=Decimal(str(data.get('markPrice','0')))
+    liq=Decimal(str(data.get('longLiqPrice','0')))
+    bankruptcy=Decimal(str(data.get('longBankruptcyPrice','0')))
+    ready=(payload.get('code') == 0 and data.get('allReady') is True and data.get('riskValid') is True
+           and mark == expected and liq > 0 and bankruptcy > 0 and mark <= liq)
+except Exception:
+    ready=False
+raise SystemExit(0 if ready else 1)
+PY
+    then
+      return 0
+    fi
+    if (( $(date +%s) - start >= 30 )); then
+      printf '[liquidation-e2e-common] ERROR: LiqSvr did not observe an authoritative unsafe state at MarkPrice %s for %s@%s; last=%s\n' \
+        "${expected_mark}" "${user}" "${location}" "${response}" >&2
+      return 1
+    fi
+    sleep 0.25
+  done
+}
