@@ -172,10 +172,10 @@ log "Running natural final-liquidation, insurance and step-aligned ADL flow in $
 ENV_FILE="${ENV_FILE}" \
 FINAL_LIQ_E2E_LOCATION="${CORE_LOCATION}" \
 FINAL_LIQ_E2E_OTHER_LOCATION="${CORE_LOCATION}_FOREIGN" \
-FINAL_LIQ_E2E_USER="${CORE_BUYER}_final" \
-FINAL_LIQ_E2E_MAKER="${CORE_BUYER}_finalmaker" \
-FINAL_LIQ_E2E_ADL_USER="${CORE_BUYER}_finaladl" \
-FINAL_LIQ_E2E_FOREIGN_USER="${CORE_BUYER}_finalforeign" \
+FINAL_LIQ_E2E_USER="core_final" \
+FINAL_LIQ_E2E_MAKER="core_maker" \
+FINAL_LIQ_E2E_ADL_USER="core_adl" \
+FINAL_LIQ_E2E_FOREIGN_USER="core_foreign" \
   "${SCRIPT_DIR}/run-final-liquidation-e2e-host.sh"
 
 log "Running authoritative multi-candidate ADL flow in the same ${CORE_LOCATION} location."

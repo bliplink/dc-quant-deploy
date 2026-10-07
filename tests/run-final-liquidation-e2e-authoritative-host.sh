@@ -36,9 +36,12 @@ PY
 
 [[ -r "${ENV_FILE}" ]] || die "Cannot read ${ENV_FILE}"
 command -v python3 >/dev/null 2>&1 || die "python3 is required"
-for value in "${RUN_ID}" "${LIQ_LOCATION}" "${OTHER_LOCATION}" "${LIQ_USER}" "${OPEN_USER}" \
-  "${MAKER_USER}" "${ADL_USER}" "${FOREIGN_USER}" "${FOREIGN_OPEN_USER}"; do
+for value in "${RUN_ID}" "${LIQ_LOCATION}" "${OTHER_LOCATION}"; do
   safe_identifier "${value}" || die "Unsupported identifier: ${value}"
+done
+for user in "${LIQ_USER}" "${OPEN_USER}" "${MAKER_USER}" "${ADL_USER}" "${FOREIGN_USER}" "${FOREIGN_OPEN_USER}"; do
+  safe_identifier "${user}" || die "Unsupported user identifier: ${user}"
+  [[ ${#user} -le 45 ]] || die "User identifier exceeds dc_users_balance.user_id limit (45): ${user}"
 done
 [[ "${LIQ_LOCATION}" != "${OTHER_LOCATION}" ]] || die "Final-liquidation locations must differ"
 case "${SCENARIO}" in
