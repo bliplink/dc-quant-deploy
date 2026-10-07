@@ -24,6 +24,10 @@ die() {
 }
 
 [[ -r "${ENV_FILE}" ]] || die "Cannot read ${ENV_FILE}"
+set -a
+# shellcheck disable=SC1090
+. "${ENV_FILE}"
+set +a
 [[ -n "${E2E_PASSWORD:-}" ]] || die "E2E_PASSWORD is required"
 [[ "${CORE_LOCATION}" == *_E2E ]] ||
   die "CORE_E2E_LOCATION must be an isolated *_E2E location"
@@ -37,11 +41,6 @@ die() {
   die "CORE_WEB_E2E_LOCATION contains unsupported characters"
 [[ "${WEB_LOCATION}" != "${CORE_LOCATION}" && "${WEB_LOCATION}" != "${RULE_LOCATION}" ]] ||
   die "CORE_WEB_E2E_LOCATION must be separate from core and rule locations"
-
-set -a
-# shellcheck disable=SC1090
-. "${ENV_FILE}"
-set +a
 
 PROJECTION_BASELINE=""
 cleanup_projection_baseline() {
