@@ -119,9 +119,10 @@ try:
  d=json.load(sys.stdin); p=d.get("data") or {}
  key="LongPosition" if side=="Long" else "ShortPosition"
  alt="longPosition" if side=="Long" else "shortPosition"
- print(Decimal(str(p.get(key,p.get(alt,0)))))
+ q=Decimal(str(p.get(key,p.get(alt,0))))
+ print("0" if q == 0 else q)
 except Exception:
- print(Decimal(0))
+ print("0")
 ' "${side}" 2>/dev/null || printf '0')"
     [[ "${value}" == "${expected}" ]] && return 0
     sleep 0.5
