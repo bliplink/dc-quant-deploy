@@ -326,5 +326,11 @@ grep -q 'verify_projection_watermarks_advanced' "${SCRIPT_DIR}/tests/run-core-tr
 grep -q 'Fence confirmed; restarting OrderSvr cluster and TradeSvr inside epoch' \
   "${SCRIPT_DIR}/tests/recover-order-cluster-partitions-host.sh" ||
   fail "cluster recovery does not own the fenced restart boundary"
+grep -q 'restart_containers+=("${TRADE_B_CONTAINER}")' \
+  "${SCRIPT_DIR}/tests/recover-order-cluster-partitions-host.sh" ||
+  fail "cluster recovery does not reload TradeSvrB in Trade cluster mode"
+grep -q 'wait_for_tcp "${TRADE_B_GW_PORT}" "${TRADE_B_CONTAINER} gateway"' \
+  "${SCRIPT_DIR}/tests/recover-order-cluster-partitions-host.sh" ||
+  fail "cluster recovery does not wait for TradeSvrB gateway readiness"
 
 printf 'PASS: SaaS deploy/update static checks\n'

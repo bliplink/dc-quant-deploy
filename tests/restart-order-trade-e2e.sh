@@ -143,6 +143,7 @@ restart_order_trade_for_e2e() {
         ORDER_CLUSTER_A_REPLICATION_PORT="${ORDERSVR_A_REPLICATION_PORT}" \
         ORDER_CLUSTER_B_REPLICATION_PORT="${ORDERSVR_B_REPLICATION_PORT}" \
         ORDER_CLUSTER_TRADE_GW_PORT="${TRADESVR_GW_PORT}" \
+        ORDER_CLUSTER_TRADE_B_GW_PORT="${TRADESVR_B_GW_PORT:-}" \
         "${recovery_script}"
     else
       log "Restarting OrderSvr and TradeSvr on the clean E2E baseline."
@@ -150,6 +151,9 @@ restart_order_trade_for_e2e() {
       wait_for_port "${ORDERSVR_GW_PORT}" dc-saas-ordersvr
     fi
     wait_for_port "${TRADESVR_GW_PORT}" dc-saas-tradesvr
+    if [[ "${TRADE_CLUSTER_ENABLED:-false}" == "true" ]]; then
+      wait_for_port "${TRADESVR_B_GW_PORT}" dc-saas-tradesvr-b
+    fi
   ) || restart_status=$?
 
   if (( restart_status == 0 )) && [[ -n "${projection_before}" ]]; then

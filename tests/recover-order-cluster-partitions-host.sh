@@ -20,6 +20,7 @@ COMPOSE_ENV_FILE="${ORDER_CLUSTER_COMPOSE_ENV_FILE:-${DEPLOY_DIR}/.env.prod}"
 USE_CURRENT_FENCED="${ORDER_CLUSTER_RECOVERY_USE_CURRENT_FENCED:-false}"
 USE_CURRENT_PARTIAL="${ORDER_CLUSTER_RECOVERY_USE_CURRENT_PARTIAL:-false}"
 TRADE_CONTAINER="${ORDER_CLUSTER_TRADE_CONTAINER:-dc-saas-tradesvr}"
+TRADE_B_CONTAINER="${ORDER_CLUSTER_TRADE_B_CONTAINER:-dc-saas-tradesvr-b}"
 ORDER_A_GW_PORT="${ORDER_CLUSTER_A_GW_PORT:-33036}"
 ORDER_B_GW_PORT="${ORDER_CLUSTER_B_GW_PORT:-33041}"
 ORDER_C_GW_PORT="${ORDER_CLUSTER_C_GW_PORT:-33044}"
@@ -27,6 +28,7 @@ ORDER_A_REPLICATION_PORT="${ORDER_CLUSTER_A_REPLICATION_PORT:-19121}"
 ORDER_B_REPLICATION_PORT="${ORDER_CLUSTER_B_REPLICATION_PORT:-19122}"
 ORDER_C_REPLICATION_PORT="${ORDER_CLUSTER_C_REPLICATION_PORT:-19123}"
 TRADE_GW_PORT="${ORDER_CLUSTER_TRADE_GW_PORT:-33037}"
+TRADE_B_GW_PORT="${ORDER_CLUSTER_TRADE_B_GW_PORT:-${TRADESVR_B_GW_PORT:-}}"
 
 log() { printf '[order-cluster-recovery] %s\n' "$*"; }
 die() { printf '[order-cluster-recovery] ERROR: %s\n' "$*" >&2; exit 1; }
@@ -53,6 +55,10 @@ for container in "${containers[@]}"; do
 done
 if [[ "${RESTART_AFTER_FENCE}" == true || "${RECREATE_AFTER_FENCE}" == true ]]; then
   docker inspect "${TRADE_CONTAINER}" >/dev/null 2>&1 || die "Missing container ${TRADE_CONTAINER}"
+  if [[ "${TRADE_CLUSTER_ENABLED:-false}" == true ]]; then
+    docker inspect "${TRADE_B_CONTAINER}" >/dev/null 2>&1 || die "Missing container ${TRADE_B_CONTAINER}"
+    [[ "${TRADE_B_GW_PORT}" =~ ^[0-9]+$ ]] || die 'Trade cluster recovery requires TRADESVR_B_GW_PORT'
+  fi
 fi
 if [[ "${RECREATE_AFTER_FENCE}" == true ]]; then
   docker compose version >/dev/null 2>&1 || die 'docker compose is required for fenced recreation'
@@ -240,17 +246,27 @@ if [[ "${RESTART_AFTER_FENCE}" == true || "${RECREATE_AFTER_FENCE}" == true ]]; 
   restart_containers=("${ORDER_A_CONTAINER}" "${ORDER_B_CONTAINER}")
   [[ "${ORDER_C_ENABLED}" == true ]] && restart_containers+=("${ORDER_C_CONTAINER}")
   restart_containers+=("${TRADE_CONTAINER}")
+  [[ "${TRADE_CLUSTER_ENABLED:-false}" == true ]] && restart_containers+=("${TRADE_B_CONTAINER}")
 
   if [[ "${RECREATE_AFTER_FENCE}" == true ]]; then
-    log "Fence confirmed; recreating OrderSvr cluster and TradeSvr inside epoch ${target_epoch}."
+    if [[ "${TRADE_CLUSTER_ENABLED:-false}" == true ]]; then
+      log "Fence confirmed; recreating OrderSvr cluster and TradeSvr A/B inside epoch ${target_epoch}."
+    else
+      log "Fence confirmed; recreating OrderSvr cluster and TradeSvr inside epoch ${target_epoch}."
+    fi
     compose_services=(ordersvr ordersvr-b)
     [[ "${ORDER_C_ENABLED}" == true ]] && compose_services+=(ordersvr-c)
     compose_services+=(tradesvr)
+    [[ "${TRADE_CLUSTER_ENABLED:-false}" == true ]] && compose_services+=(tradesvr-b)
     COMPOSE_PARALLEL_LIMIT=1 docker compose \
       --env-file "${COMPOSE_ENV_FILE}" -f "${COMPOSE_FILE}" \
       up -d --no-deps --force-recreate "${compose_services[@]}"
   else
-    log "Fence confirmed; restarting OrderSvr cluster and TradeSvr inside epoch ${target_epoch}."
+    if [[ "${TRADE_CLUSTER_ENABLED:-false}" == true ]]; then
+      log "Fence confirmed; restarting OrderSvr cluster and TradeSvr A/B inside epoch ${target_epoch}."
+    else
+      log "Fence confirmed; restarting OrderSvr cluster and TradeSvr inside epoch ${target_epoch}."
+    fi
     docker restart "${restart_containers[@]}" >/dev/null
   fi
   wait_for_tcp "${ORDER_A_GW_PORT}" "${ORDER_A_CONTAINER} gateway"
@@ -262,6 +278,9 @@ if [[ "${RESTART_AFTER_FENCE}" == true || "${RECREATE_AFTER_FENCE}" == true ]]; 
     wait_for_tcp "${ORDER_C_REPLICATION_PORT}" "${ORDER_C_CONTAINER} replication"
   fi
   wait_for_tcp "${TRADE_GW_PORT}" "${TRADE_CONTAINER} gateway"
+  if [[ "${TRADE_CLUSTER_ENABLED:-false}" == true ]]; then
+    wait_for_tcp "${TRADE_B_GW_PORT}" "${TRADE_B_CONTAINER} gateway"
+  fi
 fi
 sleep "${ASSIGNMENT_SETTLE_SECONDS}"
 
