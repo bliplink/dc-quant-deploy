@@ -333,4 +333,21 @@ grep -q 'wait_for_tcp "${TRADE_B_GW_PORT}" "${TRADE_B_CONTAINER} gateway"' \
   "${SCRIPT_DIR}/tests/recover-order-cluster-partitions-host.sh" ||
   fail "cluster recovery does not wait for TradeSvrB gateway readiness"
 
+for script in \
+  "${SCRIPT_DIR}/tests/run-final-liquidation-e2e-authoritative-host.sh" \
+  "${SCRIPT_DIR}/tests/run-adl-e2e-host.sh"; do
+  if grep -Eq 'INSERT INTO dc(\\.)?dc_orders_position|UPDATE dc(\\.)?dc_orders_position|DELETE FROM dc(\\.)?dc_orders_position|docker restart dc-saas-tradesvr([[:space:]]|$)|dc_orders_execorders' "${script}"; then
+    fail "authoritative liquidation/ADL acceptance regressed to direct Trade position fixture or single-node Trade restart: ${script}"
+  fi
+done
+grep -q 'dc_order_projection_event' \
+  "${SCRIPT_DIR}/tests/run-final-liquidation-e2e-authoritative-host.sh" ||
+  fail "final-liquidation acceptance does not use the authoritative Order projection journal for Demo orders"
+grep -q 'FINAL_LIQ_E2E_SCENARIO=adl_multi' \
+  "${SCRIPT_DIR}/tests/run-adl-e2e-host.sh" ||
+  fail "ADL acceptance is not routed through the authoritative multi-candidate final-liquidation flow"
+grep -q 'candidate_user_id' \
+  "${SCRIPT_DIR}/tests/run-final-liquidation-e2e-authoritative-host.sh" ||
+  fail "multi-candidate ADL acceptance does not assert candidate ranking"
+
 printf 'PASS: SaaS deploy/update static checks\n'

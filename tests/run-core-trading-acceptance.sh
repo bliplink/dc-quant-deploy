@@ -178,18 +178,18 @@ FINAL_LIQ_E2E_ADL_USER="${CORE_BUYER}_finaladl" \
 FINAL_LIQ_E2E_FOREIGN_USER="${CORE_BUYER}_finalforeign" \
   "${SCRIPT_DIR}/run-final-liquidation-e2e-host.sh"
 
-log "Running deterministic multi-candidate ADL ranking flow in the same ${CORE_LOCATION} location."
+log "Running authoritative multi-candidate ADL flow in the same ${CORE_LOCATION} location."
 ENV_FILE="${ENV_FILE}" \
 ADL_E2E_LOCATION="${CORE_LOCATION}" \
 ADL_E2E_OTHER_LOCATION="${CORE_LOCATION}_FOREIGN" \
 ADL_E2E_REFERENCE_PRICE=60000 \
   "${SCRIPT_DIR}/run-adl-e2e-host.sh"
 
-log "Waiting for the running GW to reconnect after the ADL fixture restarted TradeSvr."
+log "Revalidating Order/Trade routing and health after authoritative ADL settlement."
 wait_for_gateway_route OrderSvr
 wait_for_gateway_route TradeSvr
 
-log "Revalidating health after TradeSvr restart and ADL settlement."
+log "Revalidating health after ADL settlement."
 "${DEPLOY_DIR}/validate-saas.sh" --env-file "${ENV_FILE}"
 
 if [[ -n "${PROJECTION_BASELINE}" ]]; then
