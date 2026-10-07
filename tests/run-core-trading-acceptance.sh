@@ -232,6 +232,21 @@ memory_limit_bytes() {
   fi
 }
 
+expected_xmx_from_opts() {
+  local opts="$1" fallback="$2"
+  if [[ -z "${opts}" ]]; then
+    printf '%s\n' "${fallback}"
+    return 0
+  fi
+  if [[ "${opts}" =~ (^|[[:space:]])-Xmx([^[:space:]]+) ]]; then
+    printf '%s\n' "${BASH_REMATCH[2]}"
+    return 0
+  fi
+  die "JAVA_OPTS does not define -Xmx: ${opts}"
+}
+
+tradesvr_expected_xmx="$(expected_xmx_from_opts "${TRADESVR_JAVA_OPTS:-}" 1536m)"
+
 while read -r container expected_xmx configured_memory; do
   expected_memory="$(memory_limit_bytes "${configured_memory}")"
   java_command="$(docker exec "${container}" sh -c "ps -ef | grep '[j]ava' | head -n 1")"
@@ -250,7 +265,7 @@ dc-saas-loginsvr 256m ${LOGINSVR_MEMORY_LIMIT:-384m}
 dc-saas-mdsvr 448m ${MDSVR_MEMORY_LIMIT:-640m}
 dc-saas-apssvr 448m ${APSSVR_MEMORY_LIMIT:-640m}
 dc-saas-ordersvr 2048m ${ORDERSVR_MEMORY_LIMIT:-3072m}
-dc-saas-tradesvr 384m ${TRADESVR_MEMORY_LIMIT:-896m}
+dc-saas-tradesvr ${tradesvr_expected_xmx} ${TRADESVR_MEMORY_LIMIT:-1536m}
 dc-saas-liqsvr 256m ${LIQSVR_MEMORY_LIMIT:-384m}
 dc-saas-managersvr 256m ${MANAGERSVR_MEMORY_LIMIT:-384m}
 dc-saas-adminsvr 256m ${ADMINSVR_MEMORY_LIMIT:-640m}
