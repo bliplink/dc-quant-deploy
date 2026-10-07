@@ -148,7 +148,7 @@ final_order_row() {
     WHERE JSON_UNQUOTE(JSON_EXTRACT(payload,'$.order.location'))='${LIQ_LOCATION}'
       AND JSON_UNQUOTE(JSON_EXTRACT(payload,'$.order.userId'))='${LIQ_USER}'
       AND JSON_UNQUOTE(JSON_EXTRACT(payload,'$.order.securityId'))='BTCUSDT'
-      AND JSON_UNQUOTE(JSON_EXTRACT(payload,'$.order.closeBy'))='liq_v2'
+      AND JSON_UNQUOTE(JSON_EXTRACT(payload,'$.order.closeBy'))='liq'
       AND JSON_UNQUOTE(JSON_EXTRACT(payload,'$.order.orderStatus'))='${expected_status}'
       AND JSON_UNQUOTE(JSON_EXTRACT(payload,'$.order.orderType'))='Limit'
       AND JSON_UNQUOTE(JSON_EXTRACT(payload,'$.order.timeInForce'))='IOC'
@@ -387,7 +387,7 @@ for _ in $(seq 1 600); do
 done
 if [[ -z "${liquidation_order_id}" ]]; then
   docker logs --tail 260 dc-saas-liqsvr >&2 || true
-  die "No final liq_v2 Limit/IOC ${expected_status} event appeared in Order projection journal"
+  die "No final liquidation (closeBy=liq) Limit/IOC ${expected_status} event appeared in Order projection journal"
 fi
 
 e2e_clear_mark_override "${LIQ_LOCATION}" "${override_session}"
