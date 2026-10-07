@@ -399,7 +399,7 @@ log "Final liquidation order ${liquidation_order_id} reached ${expected_status};
 if [[ "${SCENARIO}" == "full_fill" ]]; then
   for _ in $(seq 1 100); do
     response="$(e2e_query_position "${LIQ_LOCATION}" "${LIQ_USER}" "${liq_session}" 2>/dev/null || true)"
-    qty="$(printf '%s' "${response}" | python3 -c 'import json,sys; from decimal import Decimal; d=json.load(sys.stdin); p=d.get("data") or {}; print(Decimal(str(p.get("LongPosition",p.get("longPosition",0)))))' 2>/dev/null || printf '1')"
+    qty="$(printf '%s' "${response}" | python3 -c 'import json,sys; from decimal import Decimal; d=json.load(sys.stdin); p=d.get("data") or {}; q=Decimal(str(p.get("LongPosition",p.get("longPosition",0)))); print("0" if q == 0 else q)' 2>/dev/null || printf '1')"
     [[ "${qty}" == "0" ]] && break
     sleep 0.5
   done
