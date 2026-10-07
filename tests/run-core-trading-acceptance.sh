@@ -13,6 +13,8 @@ CORE_SELLER="${CORE_SELLER_PREFIX}_${CORE_RUN_ID}"
 RULE_RUN_ID="${CORE_RULE_E2E_RUN_ID:-${CORE_RUN_ID}}"
 RULE_LOCATION="${CORE_RULE_E2E_LOCATION:-CORE_RULE_E2E}"
 WEB_LOCATION="${CORE_WEB_E2E_LOCATION:-${CORE_LOCATION}_WEB_${CORE_RUN_ID}}"
+ADL_LOCATION="${CORE_ADL_E2E_LOCATION:-${CORE_LOCATION}_ADL_${CORE_RUN_ID}}"
+ADL_OTHER_LOCATION="${CORE_ADL_E2E_OTHER_LOCATION:-${ADL_LOCATION}_FOREIGN}"
 
 log() {
   printf '[core-acceptance] %s\n' "$*"
@@ -42,6 +44,16 @@ export E2E_PASSWORD="${E2E_PASSWORD:-${LOGIN_DEFAULT_PASSWORD:-}}"
   die "CORE_WEB_E2E_LOCATION contains unsupported characters"
 [[ "${WEB_LOCATION}" != "${CORE_LOCATION}" && "${WEB_LOCATION}" != "${RULE_LOCATION}" ]] ||
   die "CORE_WEB_E2E_LOCATION must be separate from core and rule locations"
+[[ "${ADL_LOCATION}" =~ (^|_)E2E($|_) ]] ||
+  die "CORE_ADL_E2E_LOCATION must be an isolated E2E location"
+[[ "${ADL_LOCATION}" =~ ^[A-Za-z0-9_.-]+$ ]] ||
+  die "CORE_ADL_E2E_LOCATION contains unsupported characters"
+[[ ${#ADL_LOCATION} -le 64 && ${#ADL_OTHER_LOCATION} -le 64 ]] ||
+  die "ADL E2E location exceeds the 64-character location limit"
+[[ "${ADL_LOCATION}" != "${CORE_LOCATION}" && "${ADL_LOCATION}" != "${RULE_LOCATION}" && "${ADL_LOCATION}" != "${WEB_LOCATION}" ]] ||
+  die "CORE_ADL_E2E_LOCATION must be separate from core, rule and web locations"
+[[ "${ADL_OTHER_LOCATION}" != "${ADL_LOCATION}" ]] ||
+  die "CORE_ADL_E2E_OTHER_LOCATION must differ from CORE_ADL_E2E_LOCATION"
 
 PROJECTION_BASELINE=""
 cleanup_projection_baseline() {
@@ -178,10 +190,10 @@ FINAL_LIQ_E2E_ADL_USER="core_adl" \
 FINAL_LIQ_E2E_FOREIGN_USER="core_foreign" \
   "${SCRIPT_DIR}/run-final-liquidation-e2e-host.sh"
 
-log "Running authoritative multi-candidate ADL flow in the same ${CORE_LOCATION} location."
+log "Running authoritative multi-candidate ADL flow in isolated ${ADL_LOCATION}."
 ENV_FILE="${ENV_FILE}" \
-ADL_E2E_LOCATION="${CORE_LOCATION}" \
-ADL_E2E_OTHER_LOCATION="${CORE_LOCATION}_FOREIGN" \
+ADL_E2E_LOCATION="${ADL_LOCATION}" \
+ADL_E2E_OTHER_LOCATION="${ADL_OTHER_LOCATION}" \
 ADL_E2E_REFERENCE_PRICE=60000 \
   "${SCRIPT_DIR}/run-adl-e2e-host.sh"
 
