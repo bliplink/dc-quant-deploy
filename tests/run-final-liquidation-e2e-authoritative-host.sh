@@ -428,8 +428,11 @@ elif [[ "${SCENARIO}" == "full_insurance" ]]; then
   [[ "${completed}" == "1" ]] || die "Full insurance takeover did not complete"
   insurance_qty="$(e2e_mysql -e "SELECT quantity FROM dc.dc_insurance_position
     WHERE location='${LIQ_LOCATION}' AND security_id='BTCUSDT' AND position_side='LONG';" dc)"
-  [[ "${insurance_qty}" == "0.0002000000000000" || "${insurance_qty}" == "0.0002" ]] ||
-    die "Insurance position quantity mismatch: ${insurance_qty}"
+  python3 - "${insurance_qty}" <<'PY' >/dev/null || die "Insurance position quantity mismatch: ${insurance_qty}"
+from decimal import Decimal
+import sys
+assert Decimal(sys.argv[1]) == Decimal("0.0002")
+PY
 elif [[ "${SCENARIO}" == "mixed" ]]; then
   completed=0
   for _ in $(seq 1 400); do
