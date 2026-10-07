@@ -25,6 +25,8 @@ URL = "http://127.0.0.1:%s/httpapi/" % os.environ["WEB_LISTEN_PORT"]
 OPENER = urllib.request.build_opener(urllib.request.ProxyHandler({}))
 LOCATION = None
 USER_ID = None
+MAX_ACTIVE_TENANTS = int(os.environ.get("AUTO_TENANT_MAX_ACTIVE", "200"))
+BOOTSTRAP_TIMEOUT = int(os.environ.get("AUTO_TENANT_BOOTSTRAP_TIMEOUT", "360"))
 
 
 def log(message):
@@ -151,8 +153,9 @@ def place(token, cid, oc_type, side, price, position_side=None):
 def main():
     global LOCATION, USER_ID
     active = int(sql("SELECT COUNT(*) FROM dc_tenant WHERE status IN ('ACTIVE','TRIAL')")[0][0])
-    if active >= 200:
-        raise RuntimeError("Auto-approval safety gate reached: %s active tenants" % active)
+    if MAX_ACTIVE_TENANTS > 0 and active >= MAX_ACTIVE_TENANTS:
+        raise RuntimeError("Auto-approval safety gate reached: %s active tenants (limit=%s)" %
+                           (active, MAX_ACTIVE_TENANTS))
     log("Submitting one-symbol trial application; active tenants before=%s." % active)
     submission = call("ManagerSvr", "tenantApplication", {
         "action": "SUBMIT", "cid": REQUEST_ID, "request_id": REQUEST_ID,
@@ -179,7 +182,7 @@ def main():
             raise RuntimeError("Bootstrap %s step=%s error=%s" % (state, step, error))
         return rows[0] if state == "COMPLETE" and funded == "1" else None
 
-    wait("automatic liquidity bootstrap", bootstrap_done, seconds=180, interval=3)
+    wait("automatic liquidity bootstrap", bootstrap_done, seconds=BOOTSTRAP_TIMEOUT, interval=3)
     robots = sql("SELECT robot_id,api_user_id,enabled,runtime_status,open_order_count,"
                  "bid_levels,ask_levels,JSON_EXTRACT(strategy_config,'$.depth_zone_levels'),"
                  "JSON_EXTRACT(strategy_config,'$.depth_zone_weights'),"
