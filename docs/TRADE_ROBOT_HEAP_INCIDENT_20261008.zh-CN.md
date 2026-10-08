@@ -177,3 +177,12 @@ docker stats --no-stream dc-saas-tradesvr dc-saas-tradesvr-b dc-saas-robotsvr
 - `SYNC_BATCHED` 源码已存在，Batcher 设计要求累计 ACK 覆盖请求 seq 才返回；不能在未完成同步副本耐久、网络分区/GC/failover 回归和独立压测时把线上 `SYNC_PER_RECORD` 改成 `SYNC_BATCHED`，尤其禁止 `ASYNC_BATCHED` 伪装无丢单。
 
 剩余优先级：GHCR 新镜像完整 CI 验收→生成安全滚动/回退方案→JVM GC/调度停顿证据采集→独立环境验证 SYNC_BATCHED 和 ZK 15s→Projection P232/P054 历史权威一致性→50租户长稳→200租户分批压测。
+
+## 2026-10-08 20:20–20:29 在线限流与 JVM GC 非侵入诊断
+
+- 20:20 当前 50 Robot RUNNING / 2000 报价记录，Order A/B/C 与 Trade A/B 未重启；VM 8 CPU/16GiB，CPU PSI some avg60 74.55%，MemAvailable 746,216 KiB、SwapFree 212 KiB。Order A/B/C 均为旧镜像 sha-26b01eb，ZK session 仍 6,000ms。
+- **可回退 CPU 试验已恢复**：ClickHouse 在线从 0.75 CPU 临时降至 0.40，四次采样中 CH `SELECT 1` 正常、Robot 50/50，然而 VM CPU PSI avg60 从 76.75% 上升到 81.13%，未见整体容量改善；随后执行 docker update --cpus 0.75 回滚，docker inspect 验证容器 0 重启、配额 750000000、业务正常。没有提交未证实的 CPU 调整为部署默认值。
+- A/B/C JVM 是 Temurin Java 8，`/tmp/hsperfdata_root/7` 含 Java HotSpot PerfData。**新增只读 GC 采样脚本** `scripts/observe-order-jvm-gc.py`，通过 `docker exec base64` 读取计数器，不发送 JVM 信号、不附加调试器、不修改日志/JVM/交易数据。`tests/test_order_gc_perfdata.py` 六项测试通过；部署 Actions [37777131096](https://github.com/bliplink/dc-quant-deploy/actions/runs/37777131096) success。
+- 20:26:14–20:27:21 十轮增量观测：Order A 约每 6–7 秒 1–3 次 Young GC，窗口累计 177–505ms；Order B 约 1–3 次、窗口累计 227–742ms；Order C 一次 Full GC 增量约 852ms。未在该窗口观察到 >6 秒的单次 GC；这些 PerfData 累积增量**不能替代 safepoint/GC 逐次日志，也不能证明其他时段没有长 GC**。20:25:55–20:28:56 ZooKeeper、Order 日志无新增 Expired/切主；不能把本窗口当成 HA 稳定验收。
+- `com.app.common` `ZookeeperClient` 从 `DC_ZOOKEEPER_SESSION_TIMEOUT_MS` 初始化 ZkClient，会话值在客户端建立时协商。事件通知包含同步业务回调，但还无证据证明回调阻塞 ZK 心跳 SendThread；不要误报确定 GC、事件回调或 virtiofs 是唯一根因。
+- 下一步仍优先在可恢复的维护条件下给 Order A/B/C **上线已准备的 15,000ms**，随后进行同期 JVM GC/VM CPU PSI/复本 journal 已提交 watermark/HA 角色等权威持续验收。不得通过禁用同步 ACK、手改 epoch/watermark、清库或启动 200 租户来绕过阻断。
