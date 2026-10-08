@@ -286,7 +286,7 @@ services:
       SERVICE_NAME: OrderSvr
       MAIN_CLASS: OrderSvr
       JAVA_OPTS: ${ORDERSVR_JAVA_OPTS:--server -Xms256m -Xmx2048m -Xmn512m -Xss256k -XX:MaxDirectMemorySize=256m -XX:+ExitOnOutOfMemoryError -Djava.security.auth.login.config=../../control/jaas.ini}
-      DC_ZOOKEEPER_SESSION_TIMEOUT_MS: ${ORDERSVR_ZOOKEEPER_SESSION_TIMEOUT_MS:-6000}
+      DC_ZOOKEEPER_SESSION_TIMEOUT_MS: ${ORDERSVR_ZOOKEEPER_SESSION_TIMEOUT_MS:-15000}
       DC_ZOOKEEPER_CONNECTION_TIMEOUT_MS: ${ORDERSVR_ZOOKEEPER_CONNECTION_TIMEOUT_MS:-5000}
     volumes:
       - ${DEPLOY_ROOT}/control:/srv/dc/control:ro
@@ -313,7 +313,7 @@ services:
       SERVICE_NAME: OrderSvr
       MAIN_CLASS: OrderSvr
       JAVA_OPTS: ${ORDERSVR_JAVA_OPTS:--server -Xms256m -Xmx2048m -Xmn512m -Xss256k -XX:MaxDirectMemorySize=256m -XX:+ExitOnOutOfMemoryError -Djava.security.auth.login.config=../../control/jaas.ini}
-      DC_ZOOKEEPER_SESSION_TIMEOUT_MS: ${ORDERSVR_ZOOKEEPER_SESSION_TIMEOUT_MS:-6000}
+      DC_ZOOKEEPER_SESSION_TIMEOUT_MS: ${ORDERSVR_ZOOKEEPER_SESSION_TIMEOUT_MS:-15000}
       DC_ZOOKEEPER_CONNECTION_TIMEOUT_MS: ${ORDERSVR_ZOOKEEPER_CONNECTION_TIMEOUT_MS:-5000}
     volumes:
       - ${DEPLOY_ROOT}/control:/srv/dc/control:ro
@@ -340,7 +340,7 @@ services:
       SERVICE_NAME: OrderSvr
       MAIN_CLASS: OrderSvr
       JAVA_OPTS: ${ORDERSVR_JAVA_OPTS:--server -Xms256m -Xmx2048m -Xmn512m -Xss256k -XX:MaxDirectMemorySize=256m -XX:+ExitOnOutOfMemoryError -Djava.security.auth.login.config=../../control/jaas.ini}
-      DC_ZOOKEEPER_SESSION_TIMEOUT_MS: ${ORDERSVR_ZOOKEEPER_SESSION_TIMEOUT_MS:-6000}
+      DC_ZOOKEEPER_SESSION_TIMEOUT_MS: ${ORDERSVR_ZOOKEEPER_SESSION_TIMEOUT_MS:-15000}
       DC_ZOOKEEPER_CONNECTION_TIMEOUT_MS: ${ORDERSVR_ZOOKEEPER_CONNECTION_TIMEOUT_MS:-5000}
     volumes:
       - ${DEPLOY_ROOT}/control:/srv/dc/control:ro
