@@ -1,6 +1,6 @@
 # Projection Binary 批内水位：隔离 JDBC/MySQL 事务回归（2026-10-08）
 
-**当前状态：已提交 Projection 真正源码仓库 `bliplink/com-app-dc-projectionsvr` `saas-crypto`，H2 隔离 SQL 回归通过；真实 MySQL 8.0 CI 已配置，最终状态须以对应 GitHub Actions 为准。生产 Projection 未重启、未升级，`projection.order.binary.watermarkBatchOptimized` 默认 false。**
+**当前状态：Projection 真正源码仓库 `bliplink/com-app-dc-projectionsvr` `saas-crypto` 的 H2 + 真实隔离 MySQL 8.0 原始 5 项 JDBC 事务测试及 Maven/amd64/arm64 镜像构建均已通过（[GitHub Actions 37785116134](https://github.com/bliplink/com-app-dc-projectionsvr/actions/runs/37785116134)）。额外新增的提交前连接故障注入测试位于后续源码提交 `60f1e4a0e`，其最终 CI 状态须另行确认。生产 Projection 未重启、未升级，`projection.order.binary.watermarkBatchOptimized` 默认 false。**
 
 ## 改造动机
 
@@ -14,6 +14,8 @@
 - 重复 event ID、跨 partition 的批次、错误的业务 payload 在写入中途发生错误时，全事务回滚。
 
 **这些测试不能替代 MySQL/InnoDB 的锁语义验证。** 因此源码 CI 配置使用 GitHub Actions 私有 runner service `mysql:8.0`，在单独步骤设置 `PROJECTION_TEST_MYSQL_ROOT_URL=jdbc:mysql://127.0.0.1:3306/` 和非生产的临时测试密码，重复执行相同 5 项事务测试。测试 Java 代码强制 URL 必须指向回环地址，且每个用例创建唯一 DB；它不会读取 Mac mini 私有 env 或连接生产 MySQL。CI 完成后临时数据库和 runner 全部销毁。
+
+新增一项**COMMIT 之前连接异常**故障注入：通过 JDBC Connection 包装器在应用发送 COMMIT 前抛出 SQLException，要求事务捕获异常后能够 rollback，且库中订单、成交、事件、水位均无残留。该测试不会模拟 COMMIT 已在 MySQL 成功、但响应在网络中丢失的“模糊提交”；后者仍需要事件 ID 幂等与灾难恢复单独验证。
 
 ## 明确不能由此宣布的验收
 
