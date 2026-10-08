@@ -33,3 +33,13 @@
 3. 独立回归真实 MySQL 并发 commit 争抢、重复事件 ID、连接中断、部分提交/断电及 fetch GAP，确保 fail-closed。
 4. 将运行中的 Projection/Trade 与 committed CQ watermark 权威对齐，解决 P054/P232 既有缺口，不允许盲改数据库水位。
 5. 进入安全维护窗口后新镜像先以优化关闭的方式部署、确认 50 Robot 与历史查询、HA、投影追平，再考虑按独立变更启用 flag=true。投影实时 buffer reset/GAP retry 必须持续观测并量化，禁止因速度提高而隐藏 gap。
+
+## 并发死锁与 500 事件批次补充（2026-10-08）
+
+- **CI 修复**：Projection 的 Maven lifecycle `package` 阶段已经自动执行 runtime-only 依赖拷贝，但构建脚本重复在命令行执行 `dependency:copy-dependencies`，使 test-scoped H2 再次进入 `target/dependency`。CI [37786099144](https://github.com/bliplink/com-app-dc-projectionsvr/actions/runs/37786099144) 因防护检查报错，是有效阻断；已删除重复 CLI invocation，改用 `mvn clean package -DskipTests`，保留 `h2-*.jar` fail-closed 检查，[CI 37788211405](https://github.com/bliplink/com-app-dc-projectionsvr/actions/runs/37788211405) 已全部成功。
+- **独立 InnoDB 竞争测试发现真实 1213**：两个并发写入者在同一分区同一 committed event 上并行插入/锁定水位时，可能出现 `MySQLTransactionRollbackException: Deadlock found when trying to get lock; try restarting transaction`。最初测试错误地要求两个调用都立即返回成功，CI [37788374502](https://github.com/bliplink/com-app-dc-projectionsvr/actions/runs/37788374502) 暴露此问题；生产 BinaryConsumer 的 live batch 失败会转入 GAP_RECOVERING，从权威 journal watermark 补拉；隔离测试现采用**仅对 1213/SQLState 40001 有界重投递**验证原子回滚后的幂等结果，其他 SQL 错误仍 fail-closed，绝不跳过事务锁/降低隔离级别。后续仍需验证生产 GAP 重试节流，不得认为死锁已从服务器端消除。
+- **模糊 COMMIT 响应**：新增 JDBC 代理在数据库 COMMIT 实际成功之后模拟响应丢失。客户端虽收到 SQLException，再投递同一批次时按已持久化 watermark 返回，无重复 `dc_order_projection_event`、`dc_orders`、`dc_orders_execorders`，且不倒退 watermark。此测试与 COMMIT 前异常回滚互补。
+- **500 条真实 JDBC/SQL 批次**：`OrderProjectionJdbcTransactionTest.maxBatchOf500EventsPersistsWatermarkAndEveryEvent` 在 H2 和隔离 MySQL 8.0 的旧版/优化版分别完成测试；对 500 条事件里 50 条非 Demo 订单和 25 条成交检查最终库行、回放幂等及 watermark。通过 JDBC `prepareStatement` 实际计数验证 watermark 相关 SQL **旧版 1500 次，新版 3 次**。在 [CI 37788752951](https://github.com/bliplink/com-app-dc-projectionsvr/actions/runs/37788752951) 中，单轮隔离 MySQL 的批次耗时 **legacy 1079ms、optimized 280ms**（约降低 74%），H2 相应 **500ms/28ms**；数值是**单次不含生产负载的样本**，不能视为现网 p95/TPS 提升。该次 CI 的并发断言因上述正常 InnoDB deadlock 而失败，已专门调整重试测试。
+- 包含新竞争重投递、模糊 COMMIT 和 500 条批次 SQL 计数的最新 Projection 源码提交 `623bd68ca`、[CI 37789104203](https://github.com/bliplink/com-app-dc-projectionsvr/actions/runs/37789104203)：JDK8/H2 与隔离 MySQL 8.0 测试步骤**均已通过**，后续镜像构建最终结果须查 Actions。优化开关 **`projection.order.binary.watermarkBatchOptimized=false` 默认关闭**；现网仍为旧 Projection 镜像，未启动安全上线窗口。
+
+**剩余门禁**：真实环境 MySQL 并发冲突频率与 GAP backoff、断电后自动恢复、多个分区并行吞吐、500条 *多轮*负载统计、Order P054/Trade P232 历史 GAP 一致性，以及 Robot 50租户长时间稳定性。未经这些检查不得启用优化开关或启动 200 租户压测。
