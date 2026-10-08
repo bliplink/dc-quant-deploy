@@ -50,3 +50,14 @@
 - **修复尚未成功**：19:14:47 ZooKeeper Expiring session OrderSvrA（6000ms），Order 控制器 4 次切主；19:17:03 发生 OrderSvrB 6000ms Expired，控制器 12 次切主。说明高优先级只能缓解部分 CPU 饥饿，无法解决 Order JVM 6s 会话与全 VM 资源争抢。
 - 19:15 CPU PSI avg60 约 67%，MemAvailable ~947444KiB、SwapFree ~260KiB。仍不满足滚动重启/Colima 整体停机恢复门禁，暂时保留正在运行的订单数据和 journal。
 - 下一步：在可执行的维护窗口中评估扩大 VM 至适当配置与 Order A/B/C 的 15s session 受控滚动，先做权威分区和 journal consistency、备份/回滚方案；不得宣称 200 租户容量或高可用验收通过。
+
+## 19:50–20:00 独立备份/Colima 扩容门禁（实时检查 NO-GO）
+
+- 19:49 Mac mini：物理 10 logical CPU、24GiB RAM；Colima default 当前 8 vCPU、16GiB RAM，整机 CPU PSI avg60=64.78%，VM MemAvailable≈1GiB、SwapFree≈216KiB。Order A/B/C 和 ZooKeeper 均运行，Robot 50/50 RUNNING、活动报价 2000。近 30 分钟 ZooKeeper 仍有 5 次 6000ms session expiry，Order HA 38 次分区切主，证明尚未稳定。
+- 核心数据 volume 经 docker inspect 确认为 Mac 主机目录 bind mount。只读 du: Order A/B/C、Trade A/B、MySQL、ClickHouse、ZooKeeper 合计 **88.82 GiB**；Mac 数据卷剩余约 **53GiB**，/Volumes 仅 Macintosh HD、无独立外置备份盘。因此不能将现有 bind mount 误称为独立备份，也不能先停 VM 才补备份。
+- `tests/colima_resize_preflight.py` 是不含执行/停机能力的只读 Colima 扩容前置检查；`tests/test_colima_resize_preflight.py` 包含 11 个回归场景。期望保留至少 1 host CPU 和 4GiB host RAM，要求独立备份盘剩余空间≥当前关键数据量的 1.2 倍、全部关键容器有序停止、Robot 受控暂停、Order/Trade journal 承诺/同步副本与 Projection 权威一致性证明、恢复方案已验证，才可能给出静态 PRECHECK_PASS；即使 PASS 也**不授权自动停机**。
+- Mac mini 实测命令：`python3 tests/colima_resize_preflight.py --target-cpu 9 --target-memory-gib 18`；结果 **exit=2 `COLIMA_RESIZE_NO_GO`**。原因：无独立备份盘、无20%额外备份空间、关键服务正在运行、Robot 未停、journal/Projection/恢复证据未通过。GitHub CI [37773830864](https://github.com/bliplink/dc-quant-deploy/actions/runs/37773830864) success。
+- 19:55 针对 OrderSvrB 进行了短时在线 `docker update --cpu-shares 2048` 试验（内核 cpu.weight 从100变为174），未重启；短窗口 CPU PSI 仍处于 ~18–19%，不能得出足以修复 ZK 过期的结论。随后使用 `docker update --cpu-shares 1024` 恢复内核实际默认 weight=100，保留 JVM 启动时间不变，**没有将试验性调度参数入库**。注意 `--cpu-shares 0` 在当前 Docker 运行时没有恢复默认，已复核。
+- 19:58:17 Robot 再次 50/50 RUNNING/2000；但最近10分钟 ZooKeeper仍有2次过期，OrderSvrC 控制器20次自动切主。因此 50/50 是业务快照，绝不等同 HA 长稳验收。**仍禁止 200 租户压测和 Tape 开启**。本轮未执行 `colima stop/start`、没有重建 Order/Trade、没有清理 journal 或私有数据。
+
+待处理：首先获得独立的约110GiB以上备份介质（加上其他数据和增长余量），进行业务 quiesce、Order/Trade 权威 journal watermark 与 Projection 一致性核对、测试恢复/回退流程，再进入受控 Colima 资源提升与 Order A/B/C 15s ZooKeeper 会话安全滚动。
