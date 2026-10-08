@@ -76,6 +76,8 @@ services:
       - ${DEPLOY_ROOT}/log/clickhouse:/var/log/clickhouse-server
       - ./clickhouse/saas-init:/docker-entrypoint-initdb.d:ro
       - ./clickhouse/users.d/20-saas-memory.xml:/etc/clickhouse-server/users.d/20-saas-memory.xml:ro
+      # Low-noise demo profile: only applies on a controlled ClickHouse recreate.
+      - ./clickhouse/config.d/90-saas-demo-quiet.xml:/etc/clickhouse-server/config.d/90-saas-demo-quiet.xml:ro
       - ${DEPLOY_ROOT}/control/clickhouse-ports.xml:/etc/clickhouse-server/config.d/10-saas-ports.xml:ro
       - ${DEPLOY_ROOT}/control/clickhouse-client.xml:/etc/clickhouse-client/config.xml:ro
       - ${DEPLOY_ROOT}/control/clickhouse-docker-related.xml:/etc/clickhouse-server/config.d/docker_related_config.xml:ro
