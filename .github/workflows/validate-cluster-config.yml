@@ -57,6 +57,8 @@ on:
       - scripts/observe-order-jvm-gc.py
       - tests/test_order_gc_perfdata.py
       - tests/test_projection_watermark_opt_in.py
+      - tests/projection_watermark_tail_gate.py
+      - tests/test_projection_watermark_tail_gate.py
       - clickhouse/config.d/**
       - tests/test_clickhouse_demo_log_config.py
       - tests/test-trade-cluster-config.sh
@@ -132,6 +134,8 @@ on:
       - scripts/observe-order-jvm-gc.py
       - tests/test_order_gc_perfdata.py
       - tests/test_projection_watermark_opt_in.py
+      - tests/projection_watermark_tail_gate.py
+      - tests/test_projection_watermark_tail_gate.py
       - clickhouse/config.d/**
       - tests/test_clickhouse_demo_log_config.py
       - tests/test-trade-cluster-config.sh
@@ -192,6 +196,8 @@ jobs:
           tests/test-placement-routing-key.sh
       - name: Validate safe ClickHouse demo logging
         run: python3 -m unittest discover -s tests -p 'test_clickhouse_demo_log_config.py' -v
+      - name: Validate fail-closed Projection event tail gate
+        run: python3 -m unittest discover -s tests -p 'test_projection_watermark_tail_gate.py' -v
       - name: Validate opt-in Projection batch watermark safety
         run: python3 -m unittest discover -s tests -p 'test_projection_watermark_opt_in.py' -v
       - name: Validate read-only Order JVM GC observability
