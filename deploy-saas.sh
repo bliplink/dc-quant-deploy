@@ -317,8 +317,13 @@ apply_full_cluster_profile() {
   upsert_env_value ORDER_CLUSTER_FAILOVER_SAFETY_POLL_MILLIS 1000
   upsert_env_value ORDER_CLUSTER_FAILOVER_MINIMUM_LIVE_SYNCHRONIZED_REPLICAS 2
   upsert_env_value ORDER_CLUSTER_FAILOVER_REPLICA_REPAIR_POLL_MILLIS 5000
-  upsert_env_value ORDERSVR_ZOOKEEPER_SESSION_TIMEOUT_MS 6000
-  upsert_env_value ORDERSVR_ZOOKEEPER_CONNECTION_TIMEOUT_MS 5000
+  # Keep explicit operator-tuned ZooKeeper timeouts across full-cluster redeploys.
+  if ! grep -q "^ORDERSVR_ZOOKEEPER_SESSION_TIMEOUT_MS=" "${ENV_FILE}"; then
+    upsert_env_value ORDERSVR_ZOOKEEPER_SESSION_TIMEOUT_MS 6000
+  fi
+  if ! grep -q "^ORDERSVR_ZOOKEEPER_CONNECTION_TIMEOUT_MS=" "${ENV_FILE}"; then
+    upsert_env_value ORDERSVR_ZOOKEEPER_CONNECTION_TIMEOUT_MS 5000
+  fi
   set_env_value TRADE_CLUSTER_ENABLED true
   set_env_value TRADE_CLUSTER_REPLICATION_REQUIRED true
   set_env_value TRADE_CLUSTER_FAILOVER_ENABLED true
