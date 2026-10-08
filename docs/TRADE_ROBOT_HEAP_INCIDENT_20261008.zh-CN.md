@@ -126,3 +126,9 @@ docker stats --no-stream dc-saas-tradesvr dc-saas-tradesvr-b dc-saas-robotsvr
 - 过去约 8 分钟 Order A 的 `ORDER_STATE_BATCH_SLOW` 记录 1498 条、B 为 3290 条；这些**慢日志子样本**的 totalMs 最大分别 5183/5080ms，慢日志内 p95 分别约 692/666ms（不是全量订单 TPS/延迟统计，不得误报）。大量慢调用涉及 stateReplicaMs、commitReplicaMs、journal 写入与 callback 队列；需要独立确定 Order B 在 failover 窗口被判不健康是心跳/GC/持久化延迟/连接事件哪一种，**不能凭现象直接关闭故障切换或放宽 ACK quorum**。
 - Trade 投影仍有 P232 epoch1 seq7025 孤立事件/基线缺口，Order 投影 P054 epoch85 seq109061 落后 109062 事件；投影一致性未关闭。Tape 保持 false，暂不启动 200 租户测试、kill primary 或其他故障注入。
 - 后续工作优先级：验证 Order failover 的原始存活判定与时间线、进程 GC 与 event loop 和同步 journal 延迟；优化 Order 状态批量持久化/投影日志读取上的热点并加回归测试；全链路 50/50 长稳及历史订单/成交/余额/持仓一致性通过后再启动单租户 Tape。
+
+### 17:18 Robot 波动复核与复制模式（只读）
+
+- 四个 7 秒间隔的 Robot 快照：17:18:05 `50 RUNNING/2000`、17:18:12 `48 RUNNING/2 DEGRADED/1920`、17:18:19 仍 48、17:18:27 `44 RUNNING/6 DEGRADED/1760`。**不可引用 50/50 的瞬间恢复宣告“持续正常”。**
+- 三台现网 OrderSvr 的 `order.cluster.replication.consistencyMode=SYNC_PER_RECORD` 且 `order.cluster.replication.requestTimeoutMs=10000`，`replication.required=true`；源码支持 `SYNC_BATCHED` 通过 `OrderReplicationBatcher` 与累计 ACK，允许保留同步持久化语义并减少单条往返，但在这台高负载机器上尚未执行隔离回归/benchmark，**不得直接线上切换**。
+- 下一步先补齐失去 OrderSvrB live 证明的事件时间线（ZooKeeper 会话、线程/GC、commit fsync、网络事件循环）；在隔离环境测试 `SYNC_BATCHED` 对混合订单/成交/撤单、failover+恢复、丢单/重复成交/双主的影响，再决定是否灰度上线。长期目标还需要记录全量 p95/p99，不能以 WARN-only 的样本分位替代全流量指标。
