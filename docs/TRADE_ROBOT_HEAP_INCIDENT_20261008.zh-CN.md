@@ -100,3 +100,10 @@ docker stats --no-stream dc-saas-tradesvr dc-saas-tradesvr-b dc-saas-robotsvr
 - 滚动发布流程：16:35:04 只重建 B，随后使用 ZooKeeper 256 个分区 assignment 交叉验证当前 B 主分区 **110/110 分区 READY（同 epoch）**，拓扑无主副本重叠，0 新 OOM/重启；16:37:23 只重建 A，证实新配置值是 3000ms，B 未重启。截至 16:40:57 A 还在有序恢复重日志分区（20 条 READY），0 OOM/重启。**这时 Robot 暂时仅 14 RUNNING/36 ERROR，不能当成上线成功**；不得启动 Tape/增租户/故障注入，待 256 分区与 50/50 双边盘口恢复并稳定。
 - 部署仓库 `generate-saas-configs.sh` 新增 Trade 集群超时上下限保护（3000–30000ms），`tests/test-trade-cluster-config.sh` 新增 1000ms 私有环境覆盖值的拒绝回归；避免下一次重部署退回 1 秒。提交 `78a1fff`、`d1cd57a`，须持续查看 Actions 结果。
 - 不得为加速重启跳过原始 journal 检查点、删除 dirty tail/归档或手动将分区改为 READY。等 A 恢复完再收集超时前后定量指标；如仍有 ACK 超时，继续定位 DirectNetty 请求排队、接收侧 fsync、事件循环延迟，不要直接关掉持久化复制门禁。
+
+## 2026-10-08 16:44 A 滚动恢复耗时与下一阶段门禁
+
+- 将线上 ACK timeout 从 1000ms 调整到 3000ms 后，B 于 16:35 重建并通过 ZooKeeper **110/110 同 epoch 主分区**恢复验收。A 于 16:37:23 重建，两节点均实测 `trade.cluster.replication.requestTimeoutMs=3000`。直到 16:43 的日志窗口，未观察到新 ACK timeout、JVM OOM 或容器重启；但这段窗口仍处于 A 恢复且低于满载，**不能据此宣布故障已根治**。
+- A 载有较大历史 Trade journal，当前 `TradePartitionLifecycleManager` 以 `Executors.newSingleThreadScheduledExecutor` 串行处理 146 个主分区；多个 dirty-tail 分区需要 30–40 秒分别执行 committed replay、snapshot checkpoint 和 journal rebase。16:44 时约 44 READY/146，Robot 暂时为约 22 RUNNING/28 ERROR。禁止把因滚动更新造成的长时间不可用解释为正式可用性通过。
+- 后续要在测试环境设计有明确内存预算与并发上限的恢复调度/快照加速，并严格测试不同分区之间隔离、提交标记、epoch fencing、未提交尾部与重复投影；不要在线跳过检查点或强行开放 readyness。
+- 恢复验收门槛：完成 A 146/B 110 对应当前 ZK epoch 的 READY、50/50 Robot 双边 MDSvr 盘口、5–10 分钟甚至更长的 0 新 ACK timeout/0 OOM/0 容器重启，再做 Order/Trade/Projection 权威一致性。Projection P232 rebase 与 P054 watermark GAP **仍另行阻断 Tape/200 租户测试**。
