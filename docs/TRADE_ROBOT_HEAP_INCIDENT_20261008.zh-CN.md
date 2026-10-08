@@ -107,3 +107,10 @@ docker stats --no-stream dc-saas-tradesvr dc-saas-tradesvr-b dc-saas-robotsvr
 - A 载有较大历史 Trade journal，当前 `TradePartitionLifecycleManager` 以 `Executors.newSingleThreadScheduledExecutor` 串行处理 146 个主分区；多个 dirty-tail 分区需要 30–40 秒分别执行 committed replay、snapshot checkpoint 和 journal rebase。16:44 时约 44 READY/146，Robot 暂时为约 22 RUNNING/28 ERROR。禁止把因滚动更新造成的长时间不可用解释为正式可用性通过。
 - 后续要在测试环境设计有明确内存预算与并发上限的恢复调度/快照加速，并严格测试不同分区之间隔离、提交标记、epoch fencing、未提交尾部与重复投影；不要在线跳过检查点或强行开放 readyness。
 - 恢复验收门槛：完成 A 146/B 110 对应当前 ZK epoch 的 READY、50/50 Robot 双边 MDSvr 盘口、5–10 分钟甚至更长的 0 新 ACK timeout/0 OOM/0 容器重启，再做 Order/Trade/Projection 权威一致性。Projection P232 rebase 与 P054 watermark GAP **仍另行阻断 Tape/200 租户测试**。
+
+## 2026-10-08 16:56 3s ACK 灰度恢复快照（进行中，未通过）
+
+- B 已在 16:35 以 3000ms ACK timeout 重新上线并通过 110/110 ZK 同 epoch READY 核对；A 自 16:37:23 开始独立恢复，在 16:56:20 只记录 116/146 READY，尚缺 30 个主分区。这证明当前单线程生命周期对大量历史日志的恢复时间过长，也是上线可用性 P0，不能视为正式 HA 演练通过。
+- 50 个启用 Robot 约 44 RUNNING / 6 ERROR，reported open orders=1760；零新 JVM OOM、零恢复失败与 A/B 零次容器重启。此时**不能保证全部盘口可交易**，不运行 Tape 或 200 租户测试。
+- 调整后 A/B 过去数分钟没有观察到 `replication ack timeout`。B 在 A 的复制端口停止时有 6 次 `Connection refused`，属于节点重建期间的预期连接失败，不能与在线 ACK 超时混为一谈；更不能以部分恢复期无 ACK timeout 证明满载稳定。
+- 后续必须再次实测 ZooKeeper 256 分区 readiness、50/50 Robot、50 租户公开盘口与连续窗口复制尾延迟；并另行关闭 P232 Trade Projection 重建、P054 Order watermark GAP 的一致性阻断。
