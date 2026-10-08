@@ -52,6 +52,8 @@ on:
       - tests/test-order-cluster-c-config.sh
       - tests/order_ha_rollout_gate.py
       - tests/test_order_ha_rollout_gate.py
+      - tests/colima_resize_preflight.py
+      - tests/test_colima_resize_preflight.py
       - clickhouse/config.d/**
       - tests/test_clickhouse_demo_log_config.py
       - tests/test-trade-cluster-config.sh
@@ -122,6 +124,8 @@ on:
       - tests/test-order-cluster-c-config.sh
       - tests/order_ha_rollout_gate.py
       - tests/test_order_ha_rollout_gate.py
+      - tests/colima_resize_preflight.py
+      - tests/test_colima_resize_preflight.py
       - clickhouse/config.d/**
       - tests/test_clickhouse_demo_log_config.py
       - tests/test-trade-cluster-config.sh
@@ -182,6 +186,10 @@ jobs:
           tests/test-placement-routing-key.sh
       - name: Validate safe ClickHouse demo logging
         run: python3 -m unittest discover -s tests -p 'test_clickhouse_demo_log_config.py' -v
+      - name: Validate fail-closed Colima VM resize preflight
+        run: |
+          python3 -m py_compile tests/colima_resize_preflight.py
+          python3 -m unittest discover -s tests -p 'test_colima_resize_preflight.py' -v
       - name: Validate fail-closed Order HA rollout preflight
         run: |
           python3 -m py_compile tests/order_ha_rollout_gate.py
