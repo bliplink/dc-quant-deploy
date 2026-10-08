@@ -82,3 +82,12 @@ docker stats --no-stream dc-saas-tradesvr dc-saas-tradesvr-b dc-saas-robotsvr
 - 部署 repo 的 `compose.yaml` 默认 ProjectionSvr 资源已同步到 768 MiB / CPU 1.0 / Xmx320m。不会改写 Trade/Order/MySQL 权威数据或已存在的 journal/snapshot。
 - 基础账务表只读检查：订单 940、成交 582、持仓 560、余额 645；未发现负的订单 leaves/cum qty、成交数量/价格、余额、冻结/占用保证金。**另发现 1 条 BTCUSDT Cross 多头数量为 -0.0002**，需依据相关撮合/成交与 Trade 权威状态判定是否合法，不应臆断资金损失或直接改库。
 - 解除 P0 的验收条件：定位归档/重建路径，P232 孤立变更归属得到解释且事件/变更一致，P054 watermark/事件物化严格原子，全部必要 Trade/Order watermark 与源头 committed seq、快照和历史订单/成交/资金/持仓一致；Trade 复制 ACK 与 50/50 Robot 继续长稳。未通过这些验收前，保持 `TRIAL_LIQUIDITY_TAPE_ENABLED=false`、禁止 200 租户负载测试与故障注入。
+
+## 2026-10-08 16:17 归档恢复源码调查（待开发，不允许直接在线改水位）
+
+- `bliplink/com.app.dc.tradesvr@saas-crypto` 的 `TradePartitionJournal` 已保留 Chronicle Queue `.archive` 历史分段，并提供 `replayConcurrentReadOnly` / `readTailRangeConcurrentReadOnly` 等归档只读读取能力。Mac Demo `TradeSvrA/journal/.archive` 中 P232 有多段旧归档，最早目录含原始未 rebase 队列，活动 baseline 为 56460（committedStateSeq=56459）。**潜在有源数据可用于补齐历史**，但尚未验证从 seq7025 起所有已提交事件是否完整连续。
+- 当前 `TradeProjectionCommittedReader.read()` 在 `request.watermarkSeq < baseline.committedStateSeq` 时立即返回 `BASELINE_MOVED`；其 `readProjectionBatch` 对远距追赶采用的 `journal.readBatch` 仅遍历活动队列，不读归档。这解释了为什么仅扩大 Projection 堆和 CPU 不能消除 `PROJECTION_REBASE_REQUIRED`。
+- **不能直接去掉 BASELINE_MOVED 检查**：归档段可能保留故障切换前未提交的 `STATE_BATCH` 尾部，单凭 seq <= 当前 committedHigh 无法保证该归档事件已提交。若误放行，会将旧主未提交状态作为真实交易流水。
+- 修复应在独立代码分支设计“有界只读归档扫描 + STATE_BATCH/STATE_COMMIT 配对认证 + 断档 fail-closed + 跨 epoch/rollback 基线约束 + 响应字节数限制 + 测试原子一致性”，覆盖断档、脏尾、重复状态、回滚、巨大 journal、重新选主；**归档缺段一律拒绝，不自动跳水位**。
+- P232 mutation seq7111 需要从归档中证明对应事件已提交、可安全重建；而 P054 的 Order Projection 109062 event/109061 watermark 必须证明事务与物化效果，不可单纯 `UPDATE watermark`。相关恢复应经隔离环境回归和正式 GHCR 镜像发布。
+- 另已提交 `tests/run-trial-tape-canary-host.sh` 的只读 Projection 一致性硬门禁：`check-projection-consistency-host.sh` 不通过时，在任何 Tape canary 状态写入之前退出。当前灰度仍关闭。
