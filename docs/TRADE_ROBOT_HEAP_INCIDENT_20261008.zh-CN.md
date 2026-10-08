@@ -152,3 +152,16 @@ docker stats --no-stream dc-saas-tradesvr dc-saas-tradesvr-b dc-saas-robotsvr
 - 未改存储、未清空 journal、未动复制 quorum 或订单 epoch，未重启任何 Order 服务，Tape 继续关闭；200 租户压测仍禁止。
 - **上线门禁**：在隔离/低风险场景验证三节点滚动更新时每个分区的同步副本/learner、journal/水位和回退策略，避免因为 session 调整而人为触发一轮重的 Order HA failover/长期报价中断；持续监控迁移前后 ZooKeeper Expired、批量复制 p95/p99、Robot 50/50、实盘盘口与 Projection 一致性。15s 增加真实故障检测/切换时延，是可用性取舍而非永久性能修复。
 - 下一阶段同时需要处理资源压力：8 vCPU VM 的持续 load>15、CPU PSI>60% 和 swap 几乎耗尽。如果考虑增加 Colima vCPU/内存，必须计划停机维护，不能在交易持续运行时随意重启整个 VM。
+
+## 2026-10-08 18:25–18:31 Order HA 滚动发布门禁执行结果：**NO-GO**
+
+本轮没有在线滚动重启，亦没有开启 Tape/扩容或变更任何订单、持仓、资金/journal。安全门禁明确禁止在当前 Docker VM 资源过载时执行节点重建。
+
+- Order A/B/C 容器均 running，restartCount=0、OOMKilled=false；Trade A/B、Robot、Projection 与 ZooKeeper 也仍在运行。18:24 单点 Robot 为 50/50 RUNNING、记录活动订单 2000，**仅单点观测，不代表长稳**。
+- ZooKeeper 逐分区读取 `/dc/cluster/ordersvr/partitions/P000..P255`，**256/256** assignment `state=READY`，主节点分布 A=97、B=141、C=18；副本参与节点分布 A=141、B=115、C=238，部分分区的 A 为 learner。**C 仍拥有 18 个主分区，不是可直接摘除的空闲节点**。Assignment READY 也不能单独作为 committed watermark 的一致性证明。
+- Colima/Docker Linux VM 8 vCPU、约 15.6 GiB。18:24 观测 1m load=22.48、`cpu.pressure some avg10=78.60%`、MemAvailable=1,121,576KiB、SwapFree=28KiB；同期 Order A/B 负载约 103%/108% CPU，各用约 2.6 GiB/3 GiB。
+- 新增只读 `tests/order_ha_rollout_gate.py --target OrderSvrC`（支持 `--snapshot` 脱机验证）。**先看 CPU PSI avg60<=30%、MemAvailable>=2GiB、SwapFree>=256MiB、三个 Order 容器健康、50/50 Robot/2000 挂单，再读取 256 分区拓扑**。当计划移除节点仍承载主分区或同步 replica 时，一律 `NO-GO`，要求先完成受控 drain/quorum 评估。门禁 PASS **仅表示静态预检通过，不是最终发布授权**，还需权威副本同步和持久化证据。
+- `tests/test_order_ha_rollout_gate.py` 覆盖 9 个正/负向情景，Mac mini 本地只读测试全部通过；部署 CI `Validate cluster deployment configuration` 已把它列入强制测试，Actions [37763654762](https://github.com/bliplink/dc-quant-deploy/actions/runs/37763654762) 成功。
+- 现场执行 `--target OrderSvrC` 返回 **exit 2, NO-GO**：CPU PSI avg60=79.07%>30%；MemAvailable=1,088,992KiB<2,097,152；SwapFree=400KiB<262,144。工具未在不安全环境继续执行 256 次 ZK 查询。
+- 现网私有 env 已备份预置 `ORDERSVR_ZOOKEEPER_SESSION_TIMEOUT_MS=15000`，Compose desired A/B/C 均是 15000，但运行中的三个 Order JVM 仍为 6000。**因此“代码/环境配置就绪”不是“现网运行参数已生效”。**
+- 下次发布前必须降低 CPU/内存压力（停交易后的维护窗口可以重新评估 Colima 资源方案），并形成主分区迁移、同步副本证明、回滚时 epoch/journal 的验证脚本。不要直接执行 `docker compose up --force-recreate ordersvr*`，也不要以禁用自动切主或异步 ACK 回避风险。
