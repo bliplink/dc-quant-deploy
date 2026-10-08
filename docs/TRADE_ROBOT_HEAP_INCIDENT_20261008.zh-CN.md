@@ -165,3 +165,15 @@ docker stats --no-stream dc-saas-tradesvr dc-saas-tradesvr-b dc-saas-robotsvr
 - 现场执行 `--target OrderSvrC` 返回 **exit 2, NO-GO**：CPU PSI avg60=79.07%>30%；MemAvailable=1,088,992KiB<2,097,152；SwapFree=400KiB<262,144。工具未在不安全环境继续执行 256 次 ZK 查询。
 - 现网私有 env 已备份预置 `ORDERSVR_ZOOKEEPER_SESSION_TIMEOUT_MS=15000`，Compose desired A/B/C 均是 15000，但运行中的三个 Order JVM 仍为 6000。**因此“代码/环境配置就绪”不是“现网运行参数已生效”。**
 - 下次发布前必须降低 CPU/内存压力（停交易后的维护窗口可以重新评估 Colima 资源方案），并形成主分区迁移、同步副本证明、回滚时 epoch/journal 的验证脚本。不要直接执行 `docker compose up --force-recreate ordersvr*`，也不要以禁用自动切主或异步 ACK 回避风险。
+
+## 2026-10-08 20:06–20:13 Order journal 高频日志诊断（源码优化、尚未上线）
+
+- 20:06 50/50 Robot RUNNING / 活动报价 2000；Order/Trade/Projection/ZK 容器正常运行、0次重启；VM CPU PSI avg60 72.66%、MemAvailable 1,015,092 KiB、SwapFree 732 KiB。19:57:19 OrderSvrB 6 秒 ZK session 过期，控制器随后 7 次自动切主。因此 Order HA/Projection/200租户压测均未通过。
+- 19:56:30–19:58:00 Order A/B/C 日志中 `ORDER_STATE_BATCH_SLOW` 样本数分别为 159/260/85，`ORDER_REPLICA_CATCHUP_OK` 也以高频 INFO 输出。之后 2min 抽样 Order A/B/C 合计日志约 3.7 MB、近 24,879 行，其中 slow 1006 条、catchup success 692 条。
+- 最近 3min 的**只含 >=100ms WARN 的子样本**：Order A 慢日志样本 N=483，total avg 273ms、p95 570ms、p99 944ms；Order B N=664，avg 280ms、p95 677ms、p99 1018ms；Order C N=326，avg 259ms、p95 763ms、p99 1067ms。STATE/COMMIT 同步 replica 两阶段及 journal 写入都占明显耗时，publish 接近0。以上绝不代表全部订单的真实 p95/p99 或 TPS。
+- 源码 `bliplink/com.app.dc.ordersvr` `saas-crypto` 提交至 `370a8f33a`，新增 `OrderSlowBatchLogLimiter`：100–999ms routine WARN 每秒最多 1 次、累计 suppressed 记录数随下次 WARN 一起输出；所有 >=1000ms slow 仍逐条 WARN；`ORDER_REPLICA_CATCHUP_OK` INFO 降为 DEBUG，**失败日志和复制/commit/epoch/quorum 逻辑没有修改**。4 项 JUnit 新测试，JDK8 helper 单独编译与行为 smoke 通过。完整 OrderSvr GitHub Actions [37774932516](https://github.com/bliplink/com.app.dc.ordersvr/actions/runs/37774932516) 用于最终验证，须查最终成功后才能宣称最新 GHCR 镜像已发布。
+- 新源码**尚未上线**：现网镜像仍 `ghcr.io/bliplink/ordersvr:sha-26b01eb`，运行中 ZK 会话仍 6000ms。无安全 Order HA 滚动窗口前不可因源码构建成功而直接重建线上 A/B/C。
+- Order journal 与日志位于 Mac mini 的 virtiofs 宿主机挂载；容器 overlay 是另一种文件系统。安全的 32×4KiB 同步写入探测（测试文件已删除）得到 `/tmp` 83–132ms、virtiofs 57–318ms，波动大，**不能下结论认为 virtiofs 是唯一根因**，更不允许迁移正在写入的 journal。
+- `SYNC_BATCHED` 源码已存在，Batcher 设计要求累计 ACK 覆盖请求 seq 才返回；不能在未完成同步副本耐久、网络分区/GC/failover 回归和独立压测时把线上 `SYNC_PER_RECORD` 改成 `SYNC_BATCHED`，尤其禁止 `ASYNC_BATCHED` 伪装无丢单。
+
+剩余优先级：GHCR 新镜像完整 CI 验收→生成安全滚动/回退方案→JVM GC/调度停顿证据采集→独立环境验证 SYNC_BATCHED 和 ZK 15s→Projection P232/P054 历史权威一致性→50租户长稳→200租户分批压测。
