@@ -144,6 +144,15 @@ if [[ "${TRADE_CLUSTER_ENABLED}" == "true" ]]; then
   for name in TRADESVR_B_GW_PORT TRADESVR_A_REPLICATION_PORT TRADESVR_B_REPLICATION_PORT; do
     [[ -n "${!name:-}" ]] || die "Missing required Trade cluster variable: ${name}"
   done
+  # 1s ACK budgets repeatedly fenced live partitions during 50-tenant robot
+  # load (2026-10-08), despite both Trade nodes being healthy. Enforce the
+  # tested 3s lower bound rather than allowing an unnoticed .env override.
+  TRADE_CLUSTER_REPLICATION_REQUEST_TIMEOUT_MS="${TRADE_CLUSTER_REPLICATION_REQUEST_TIMEOUT_MS:-3000}"
+  [[ "${TRADE_CLUSTER_REPLICATION_REQUEST_TIMEOUT_MS}" =~ ^[1-9][0-9]*$ ]] ||
+    die "TRADE_CLUSTER_REPLICATION_REQUEST_TIMEOUT_MS must be a positive integer"
+  (( TRADE_CLUSTER_REPLICATION_REQUEST_TIMEOUT_MS >= 3000 &&
+     TRADE_CLUSTER_REPLICATION_REQUEST_TIMEOUT_MS <= 30000 )) ||
+    die "TRADE_CLUSTER_REPLICATION_REQUEST_TIMEOUT_MS must be between 3000 and 30000 ms"
   [[ "${TRADE_CLUSTER_REPLICATION_REQUIRED}" == "true" || "${TRADE_CLUSTER_REPLICATION_REQUIRED}" == "false" ]] ||
     die "TRADE_CLUSTER_REPLICATION_REQUIRED must be true or false"
   [[ "${TRADE_CLUSTER_FAILOVER_ENABLED}" == "true" || "${TRADE_CLUSTER_FAILOVER_ENABLED}" == "false" ]] ||
