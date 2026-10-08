@@ -24,6 +24,17 @@ sed \
 
 "${DEPLOY_DIR}/generate-saas-configs.sh" "${TEST_ROOT}/cluster.env" >/dev/null
 
+# A private 6s override expired the live OrderSvrB ZooKeeper session under
+# 50-tenant load, causing 27 automatic partitions to fail over. Fail closed.
+sed 's/^ORDERSVR_ZOOKEEPER_SESSION_TIMEOUT_MS=.*/ORDERSVR_ZOOKEEPER_SESSION_TIMEOUT_MS=6000/' \
+  "${TEST_ROOT}/cluster.env" > "${TEST_ROOT}/unsafe-order-session.env"
+if "${DEPLOY_DIR}/generate-saas-configs.sh" "${TEST_ROOT}/unsafe-order-session.env" > "${TEST_ROOT}/unsafe-order-session.log" 2>&1; then
+  fail '6-second Order HA ZooKeeper session must be rejected'
+fi
+grep -Fq 'ORDERSVR_ZOOKEEPER_SESSION_TIMEOUT_MS must be between 15000 and 40000 ms' \
+  "${TEST_ROOT}/unsafe-order-session.log" || fail 'unsafe Order session must produce a clear error'
+
+
 ats="${TEST_ROOT}/runtime/control/ATSConfig.ini"
 a_config="${TEST_ROOT}/runtime/control/overrides/OrderSvrA/config/application.properties"
 b_config="${TEST_ROOT}/runtime/control/overrides/OrderSvrB/config/application.properties"
@@ -52,10 +63,10 @@ for config in "${a_config}" "${b_config}" "${c_config}"; do
   grep -Fqx 'order.cluster.failover.replicaRepairPollMillis=5000' "${config}" || fail "replica auto-repair poll is incorrect in ${config}"
 done
 
-[[ "$(grep -Fc 'DC_ZOOKEEPER_SESSION_TIMEOUT_MS: ${ORDERSVR_ZOOKEEPER_SESSION_TIMEOUT_MS:-6000}' "${DEPLOY_DIR}/compose.yaml")" -eq 3 ]] || fail 'all three Order nodes must request 6000ms ZooKeeper sessions'
+[[ "$(grep -Fc 'DC_ZOOKEEPER_SESSION_TIMEOUT_MS: ${ORDERSVR_ZOOKEEPER_SESSION_TIMEOUT_MS:-15000}' "${DEPLOY_DIR}/compose.yaml")" -eq 3 ]] || fail 'all three Order nodes must request 15000ms ZooKeeper sessions'
 [[ "$(grep -Fc 'DC_ZOOKEEPER_CONNECTION_TIMEOUT_MS: ${ORDERSVR_ZOOKEEPER_CONNECTION_TIMEOUT_MS:-5000}' "${DEPLOY_DIR}/compose.yaml")" -eq 3 ]] || fail 'all three Order nodes must request 5000ms ZooKeeper connections'
 grep -Fq 'upsert_env_value ORDER_CLUSTER_FAILOVER_ENABLED true' "${DEPLOY_DIR}/deploy-saas.sh" || fail 'full-cluster profile does not enable Order failover'
-grep -Fq 'upsert_env_value ORDERSVR_ZOOKEEPER_SESSION_TIMEOUT_MS 6000' "${DEPLOY_DIR}/deploy-saas.sh" || fail 'full-cluster profile does not pin Order ZooKeeper session timeout'
+grep -Fq 'upsert_env_value ORDERSVR_ZOOKEEPER_SESSION_TIMEOUT_MS 15000' "${DEPLOY_DIR}/deploy-saas.sh" || fail 'full-cluster profile does not pin Order ZooKeeper session timeout'
 python3 - "${DEPLOY_DIR}/deploy-saas.sh" <<'PY2'
 from pathlib import Path
 import sys
