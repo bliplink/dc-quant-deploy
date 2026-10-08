@@ -14,5 +14,11 @@ matches = re.findall(r"(?m)^    cpus: \$\{ZOOKEEPER_CPU_LIMIT:-([^}]+)\}$", comp
 assert matches == ["0.50"], "Compose ZooKeeper CPU fallback must be 0.50"
 assert 'container_name: dc-saas-zookeeper' in compose
 assert 'ZOOKEEPER_MEMORY_LIMIT:-384m' in compose
-print("[zookeeper-cpu-config] PASS: 0.50 CPU defaults, existing data/services untouched")
+for name in ("MYSQL", "APSSVR"):
+    key = name + "_CPU_LIMIT"
+    values = re.findall(r"(?m)^" + key + r"=([^\r\n]+)$", env)
+    assert values == ["0.75"], key + " must default to 0.75"
+    expected = "cpus: ${" + key + ":-0.75}"
+    assert compose.count(expected) == 1, key + " Compose default must be 0.75"
+print("[zookeeper-cpu-config] PASS: 0.50 ZK, 0.75 MySQL/APSSvr CPU defaults")
 PY
