@@ -54,6 +54,8 @@ on:
       - tests/test_order_ha_rollout_gate.py
       - tests/colima_resize_preflight.py
       - tests/test_colima_resize_preflight.py
+      - scripts/observe-order-jvm-gc.py
+      - tests/test_order_gc_perfdata.py
       - clickhouse/config.d/**
       - tests/test_clickhouse_demo_log_config.py
       - tests/test-trade-cluster-config.sh
@@ -126,6 +128,8 @@ on:
       - tests/test_order_ha_rollout_gate.py
       - tests/colima_resize_preflight.py
       - tests/test_colima_resize_preflight.py
+      - scripts/observe-order-jvm-gc.py
+      - tests/test_order_gc_perfdata.py
       - clickhouse/config.d/**
       - tests/test_clickhouse_demo_log_config.py
       - tests/test-trade-cluster-config.sh
@@ -186,6 +190,10 @@ jobs:
           tests/test-placement-routing-key.sh
       - name: Validate safe ClickHouse demo logging
         run: python3 -m unittest discover -s tests -p 'test_clickhouse_demo_log_config.py' -v
+      - name: Validate read-only Order JVM GC observability
+        run: |
+          python3 -m py_compile scripts/observe-order-jvm-gc.py
+          python3 -m unittest discover -s tests -p 'test_order_gc_perfdata.py' -v
       - name: Validate fail-closed Colima VM resize preflight
         run: |
           python3 -m py_compile tests/colima_resize_preflight.py
