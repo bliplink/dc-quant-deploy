@@ -132,3 +132,23 @@ docker stats --no-stream dc-saas-tradesvr dc-saas-tradesvr-b dc-saas-robotsvr
 - 四个 7 秒间隔的 Robot 快照：17:18:05 `50 RUNNING/2000`、17:18:12 `48 RUNNING/2 DEGRADED/1920`、17:18:19 仍 48、17:18:27 `44 RUNNING/6 DEGRADED/1760`。**不可引用 50/50 的瞬间恢复宣告“持续正常”。**
 - 三台现网 OrderSvr 的 `order.cluster.replication.consistencyMode=SYNC_PER_RECORD` 且 `order.cluster.replication.requestTimeoutMs=10000`，`replication.required=true`；源码支持 `SYNC_BATCHED` 通过 `OrderReplicationBatcher` 与累计 ACK，允许保留同步持久化语义并减少单条往返，但在这台高负载机器上尚未执行隔离回归/benchmark，**不得直接线上切换**。
 - 下一步先补齐失去 OrderSvrB live 证明的事件时间线（ZooKeeper 会话、线程/GC、commit fsync、网络事件循环）；在隔离环境测试 `SYNC_BATCHED` 对混合订单/成交/撤单、failover+恢复、丢单/重复成交/双主的影响，再决定是否灰度上线。长期目标还需要记录全量 p95/p99，不能以 WARN-only 的样本分位替代全流量指标。
+
+## 2026-10-08 17:31 Order ZooKeeper 6s 假离线与 Docker VM 压力（P0）
+
+### 已核对的触发证据
+
+- 17:12:18.707 ZooKeeper 服务端日志：`Expiring session ... timeout of 6000ms exceeded`，同一会话属于 OrderSvrB：17:12:18.629 B 的 ZkClient `Disconnected`，17:12:20.308 `Expired`，17:12:20.406 B 取得新 ZooKeeper 会话。随后的 Order HA 控制器发生 **27 次** `ORDER_AUTO_FAILOVER_APPLIED`（原主为 B）及相应 learner 副本修复。OrderSvrB 容器本身没有重启。
+- 17:27:55.116 ZooKeeper 又过期一条 6000ms 会话，这次对应 OrderSvrA；17:27:55.764 A 报 `Expired`，Order 控制器随后将 P240/P242/P244 三个分区从 A 切到 B。证明 B 不是孤例，**6s session budget 对此环境过紧**。
+- A/B/C 在 17:12:14–17:12:17 的日志都发生 4–5s 同步静默；B 还有更长日志间隔。此现象与 VM 资源争用/GC/调度暂停相符，尚不可据此断言具体停顿来源。
+- 17:31 Colima/Docker VM 有 **8 vCPU、约 15.6GiB 内存**，load average 1m/5m/15m 分别为 17.21/15.99/15.67；`/proc/pressure/cpu` `some avg10=73.85 avg60=68.80 avg300=63.62`，`/proc/meminfo` MemAvailable ~1,073,020 KiB、SwapFree ~260 KiB；Order A/B 各耗 ~2.59/2.57 GiB（限制 3 GiB），容器 CPU 分别 ~126%/126%，均未 OOM。此为高资源争用与极低 swap 余量证据；不能基于慢日志子样本声称全流量延迟/TPS。
+- 同期 Robot 的状态会在 `50 RUNNING/2000` 与 `DEGRADED` 间波动，Trade 的 256/256 ZK 主分区 READY 且 Trade ACK timeout 最近日志未复现；Order 高负载/会话过期是当前关键 P0。
+
+### 已实施的部署代码改动（未上线到运行中 JVM）
+
+- `.env.example`、`compose.yaml` 的 Order A/B/C ZK session timeout 默认从 6000 改为 **15000 ms**，连接超时仍为 5000ms，Trade 默认 **6000ms 未改**。
+- `deploy-saas.sh` 全 HA 配置不再把 Order 强行回写为 6000ms，而使用 15000ms。
+- `generate-saas-configs.sh` 在 Order cluster 开启时强制校验 **15000–40000ms**，`tests/test-order-cluster-c-config.sh` 反向验证 6000ms 会拒绝。GitHub Actions **37756851858** 完成 success。修复测试时发现 `.env.example` 注释换行错误（之前的 CI 失败），已修复并复验通过。
+- Mac mini 私有部署 `.env` **已做备份并预置 15000ms**，实际 `docker compose ... config --format json` 验证三个 Order 节点期望环境均为 15000ms，Trade A/B 仍为 6000ms；**线上 A/B/C 的当前进程环境仍是 6000ms**，不重建便不会生效。
+- 未改存储、未清空 journal、未动复制 quorum 或订单 epoch，未重启任何 Order 服务，Tape 继续关闭；200 租户压测仍禁止。
+- **上线门禁**：在隔离/低风险场景验证三节点滚动更新时每个分区的同步副本/learner、journal/水位和回退策略，避免因为 session 调整而人为触发一轮重的 Order HA failover/长期报价中断；持续监控迁移前后 ZooKeeper Expired、批量复制 p95/p99、Robot 50/50、实盘盘口与 Projection 一致性。15s 增加真实故障检测/切换时延，是可用性取舍而非永久性能修复。
+- 下一阶段同时需要处理资源压力：8 vCPU VM 的持续 load>15、CPU PSI>60% 和 swap 几乎耗尽。如果考虑增加 Colima vCPU/内存，必须计划停机维护，不能在交易持续运行时随意重启整个 VM。
