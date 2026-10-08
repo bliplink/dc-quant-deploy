@@ -55,6 +55,7 @@ on:
       - clickhouse/config.d/**
       - tests/test_clickhouse_demo_log_config.py
       - tests/test-trade-cluster-config.sh
+      - tests/test-zookeeper-cpu-config.sh
       - tests/trade_cluster_transition_host.py
       - tests/test_trade_cluster_transition_host.py
       - tests/run-trade-cluster-role-reversal-host.sh
@@ -124,6 +125,7 @@ on:
       - clickhouse/config.d/**
       - tests/test_clickhouse_demo_log_config.py
       - tests/test-trade-cluster-config.sh
+      - tests/test-zookeeper-cpu-config.sh
       - tests/trade_cluster_transition_host.py
       - tests/test_trade_cluster_transition_host.py
       - tests/run-trade-cluster-role-reversal-host.sh
@@ -168,6 +170,8 @@ jobs:
         run: bash tests/test-env-secret-bootstrap.sh
       - name: Validate portable port listener
         run: bash tests/test-port-listener-portable.sh
+      - name: Validate ZooKeeper CPU reservation
+        run: bash tests/test-zookeeper-cpu-config.sh
       - name: Validate generated cluster configurations
         run: |
           tests/test-md-cluster-config.sh
