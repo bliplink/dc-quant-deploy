@@ -29,6 +29,14 @@ read -r expected healthy <<<"$(mysql_read "
     THEN 1 ELSE 0 END),0) FROM dc_tenant_robot WHERE enabled=1;")"
 [[ "${expected:-0}" -gt 0 && "${expected}" == "${healthy:-0}" ]] ||
   { echo "System not ready for tape: healthy Robot ${healthy:-0}/${expected:-0}" >&2; exit 2; }
+# Fail closed if durable Order/Trade projection integrity is not proven.
+# The maker book can be 50/50 RUNNING while historic projection watermarks
+# are stuck behind a compacted journal baseline or mutations lack events.
+# This is a read-only check; keep it before the first UPDATE below.
+if ! ENV_FILE="${ENV_FILE}" MYSQL_CONTAINER=dc-saas-mysql bash "${ROOT}/tests/check-projection-consistency-host.sh"; then
+  echo "System not ready for tape: Projection consistency check failed" >&2
+  exit 2
+fi
 # Do not rewind any uncertain cashIn or already-tape-enabled job.
 read -r status step maker_confirmed tape_enabled tape_confirmed robot_count <<<"$(mysql_read "
   SELECT b.status,b.step,b.funding_confirmed,b.tape_enabled,b.tape_funding_confirmed,
