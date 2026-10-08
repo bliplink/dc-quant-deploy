@@ -91,3 +91,12 @@ docker stats --no-stream dc-saas-tradesvr dc-saas-tradesvr-b dc-saas-robotsvr
 - 修复应在独立代码分支设计“有界只读归档扫描 + STATE_BATCH/STATE_COMMIT 配对认证 + 断档 fail-closed + 跨 epoch/rollback 基线约束 + 响应字节数限制 + 测试原子一致性”，覆盖断档、脏尾、重复状态、回滚、巨大 journal、重新选主；**归档缺段一律拒绝，不自动跳水位**。
 - P232 mutation seq7111 需要从归档中证明对应事件已提交、可安全重建；而 P054 的 Order Projection 109062 event/109061 watermark 必须证明事务与物化效果，不可单纯 `UPDATE watermark`。相关恢复应经隔离环境回归和正式 GHCR 镜像发布。
 - 另已提交 `tests/run-trial-tape-canary-host.sh` 的只读 Projection 一致性硬门禁：`check-projection-consistency-host.sh` 不通过时，在任何 Tape canary 状态写入之前退出。当前灰度仍关闭。
+
+## 2026-10-08 16:35–16:41 Trade ACK 请求超时覆盖值修复（滚动发布观察中）
+
+- 发现线上 **A/B 两台** `/srv/dc/dc/TradeSvr/config/application.properties` 均设 `trade.cluster.replication.requestTimeoutMs=1000`；宿主机私有 `.env` 的 `TRADE_CLUSTER_REPLICATION_REQUEST_TIMEOUT_MS=1000` 覆盖了 `TradeReplicationManager` 源码默认 **3000ms**，也违反 `tests/test-trade-cluster-config.sh` 现有 3000ms 验收预期。
+- 1 秒 deadline 在 Robot 持续更新与复制压力下导致 `TimeoutException: replication ack timeout`，最终分区 `PARTITION_NOT_READY`，连锁造成 Robot 错误/空盘口。**根因不仅可能是 deadline 过小**，还可能包含复制服务处理排队、日志同步/锁争用；必须继续测量长尾和真正的 ACK 链路。
+- 已备份私有 env 和 A/B 生成配置，将 1000ms 恢复为 3000ms。保留原有 required durable ACK / epoch fencing / fail-closed；不涉及改动 Order 或交易数据。原本 3000ms 的部署配置测试通过。
+- 滚动发布流程：16:35:04 只重建 B，随后使用 ZooKeeper 256 个分区 assignment 交叉验证当前 B 主分区 **110/110 分区 READY（同 epoch）**，拓扑无主副本重叠，0 新 OOM/重启；16:37:23 只重建 A，证实新配置值是 3000ms，B 未重启。截至 16:40:57 A 还在有序恢复重日志分区（20 条 READY），0 OOM/重启。**这时 Robot 暂时仅 14 RUNNING/36 ERROR，不能当成上线成功**；不得启动 Tape/增租户/故障注入，待 256 分区与 50/50 双边盘口恢复并稳定。
+- 部署仓库 `generate-saas-configs.sh` 新增 Trade 集群超时上下限保护（3000–30000ms），`tests/test-trade-cluster-config.sh` 新增 1000ms 私有环境覆盖值的拒绝回归；避免下一次重部署退回 1 秒。提交 `78a1fff`、`d1cd57a`，须持续查看 Actions 结果。
+- 不得为加速重启跳过原始 journal 检查点、删除 dirty tail/归档或手动将分区改为 READY。等 A 恢复完再收集超时前后定量指标；如仍有 ACK 超时，继续定位 DirectNetty 请求排队、接收侧 fsync、事件循环延迟，不要直接关掉持久化复制门禁。
