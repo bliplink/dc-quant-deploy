@@ -31,6 +31,21 @@ Projection 的 `projection.order.binary.watermarkBatchOptimized` 仍**默认 fal
 Trade P232 的库内 watermark 与尾部同为 1/7025，但最后更新于 **2026-10-08 09:18**，仍需与 Trade committed journal high watermark 核对。数据库的尾部与水位一致也不能证明与权威源 journal 一致。
 - `P054` 最新事件 `P054:85:109062` 在 12:48:34 写入 `dc_order_projection_event`，水位仍停在 `P054:85:109061`；这需要权威 committed journal / Order-Snapshot / event payload 与业务表逐项审计，**禁止直接 SQL UPDATE watermark、DELETE event、人工填补 seq**，否则可能掩盖未提交资金/成交/历史。
 
+### 22:26 Trade archive 完整性附加核查
+
+对领先于水位的事件做只读 `JSON_LENGTH(payload.mutations)` vs 已存 `dc_trade_projection_mutation` 关联记录计数：
+
+| 分区/seq | 事件内 mutations | 已归档 mutations | 说明 |
+|---|---:|---:|---|
+| Trade P123 / epoch1 / seq3917 | **4** | **0** | 事件已归档但关联变更缺失 |
+| Trade P186 / epoch1 / seq9487 | **4** | **3** | 事件已归档但关联变更少 1 条 |
+
+这两个 payload 至少含 `ACCOUNT_BALANCE` / `POSITION` entity 类型。真实 `TradeProjectionService.archiveMutations` 设计为**每个 mutation 均插入 Archive**, 与事件及 watermark 在同一个 MySQL 事务中提交，没有 `demo=1` 跳过这 4 条 mutation 的分支。故这里不能将缺少归档行解释为正常 Demo 过滤。**这说明 MySQL Projection archive 明确不完整，但不单独证明实时 Trade 内存余额已错误**；需要对照源 Trade committed journal 和 snapshot 才能判定真实状态及安全修复方式。
+
+Order P054/P138 的领先事件均为 `demo=1`、无 `execution`，与上述 Trade Account/Position 归档异常不同，不能打包统一 `UPDATE watermark`。
+
+/Volumes 22:26 实测仅 `Macintosh HD`，没有独立备份盘；Mac 可用存储由约 40GiB 下降至 **38GiB**，备份门禁持续 NO-GO。
+
 ## 新增 fail-closed 门禁
 
 `tests/projection_watermark_tail_gate.py` 是只读校验：两个流逐水位分区使用事件 `(partition_id,source_epoch,journal_seq)` 索引的最后一条已持久化事件做比较，发现差异输出 `PROJECTION_WATERMARK_TAIL_NO_GO` exit code 2，不改变数据。配套 `tests/test_projection_watermark_tail_gate.py` 有已知四缺口、逆序水位、跨 epoch、缺证据、重复分区等测试并接入 GitHub Actions。`PROJECTION_DB_TAIL_MATCH` 也**不授权发布**；还要继续对权威 Order/Trade committed journal、replica、业务表、交易状态的全链路核验。
