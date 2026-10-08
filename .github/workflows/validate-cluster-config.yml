@@ -50,6 +50,8 @@ on:
       - tests/md_cluster_roll_drain_host.py
       - tests/test_md_cluster_roll_drain_host.py
       - tests/test-order-cluster-c-config.sh
+      - tests/order_ha_rollout_gate.py
+      - tests/test_order_ha_rollout_gate.py
       - tests/test-trade-cluster-config.sh
       - tests/trade_cluster_transition_host.py
       - tests/test_trade_cluster_transition_host.py
@@ -115,6 +117,8 @@ on:
       - tests/md_cluster_roll_drain_host.py
       - tests/test_md_cluster_roll_drain_host.py
       - tests/test-order-cluster-c-config.sh
+      - tests/order_ha_rollout_gate.py
+      - tests/test_order_ha_rollout_gate.py
       - tests/test-trade-cluster-config.sh
       - tests/trade_cluster_transition_host.py
       - tests/test_trade_cluster_transition_host.py
@@ -168,6 +172,10 @@ jobs:
           tests/test-trial-liquidity-bootstrap-migration.sh
           tests/test-trial-liquidity-tape-migration.sh
           tests/test-placement-routing-key.sh
+      - name: Validate fail-closed Order HA rollout preflight
+        run: |
+          python3 -m py_compile tests/order_ha_rollout_gate.py
+          python3 -m unittest discover -s tests -p 'test_order_ha_rollout_gate.py' -v
       - name: Validate placement catalogs
         run: |
           python -m unittest tests.test_verify_placement_catalogs tests.test_md_cluster_assignment_plan tests.test_trade_cluster_assignments tests.test_trade_cluster_transition_host tests.test_md_cluster_transition_host tests.test_md_cluster_roll_drain_host
