@@ -1,7 +1,7 @@
 """Deterministic fail-closed Order HA rollout gate regressions; no Docker required."""
 import unittest
 
-from tests.order_ha_rollout_gate import issues_for_snapshot
+from order_ha_rollout_gate import issues_for_snapshot
 
 
 def healthy():
