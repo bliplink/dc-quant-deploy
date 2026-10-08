@@ -28,3 +28,17 @@
 
 ## 后续
 持续观察 ZooKeeper 是否再有 Expired、Order failover、Robot 50/50、各服务 cgroup CPU nr_throttled/nr_periods 的增量、Docker VM CPU PSI、MemAvailable 和 SwapFree；在隔离测试通过后评估 ClickHouse 低噪日志方案及 Order 同步批量复制，再评估 Colima 受控扩容。
+
+## 19:05、19:06、19:10 会话再次过期——资源缓解未解决 P0
+
+19:02:45 之后（即 ZooKeeper CPU 0.10→0.50 已在线生效之后），ZooKeeper 仍明确记录三条 6000ms session expiry：
+
+- 19:05:01.270：OrderSvrB session 过期，Order 控制器至少迁移 P042/P044。
+- 19:06:57.270：OrderSvrA session 过期，Order 控制器发生约 9 次切主（P030–P038）。
+- 19:10:59.267：OrderSvrB 再次过期，控制器发生约 6 次切主（P032/P034/P036/P038/P069/P071）。
+
+共 3 次 session expiry、17 条 ORDER_AUTO_FAILOVER_APPLIED，Order A/B/C 进程未重启。19:09:58–19:10:49 机器人七次间隔采样均显示 50 RUNNING/2000 张报价，但紧接着 19:10:59 又发生故障切换。**不能把机器人间歇性 50/50 当作 HA 稳定验收。**
+
+19:11 VM CPU PSI some avg60=71.73%、MemAvailable=871400 KiB、SwapFree=80 KiB、load avg 1m=22.48；Order A 内存约 2.665GiB/3GiB、B 约 2.55GiB/3GiB。ZooKeeper CPU 配额修复降低了自身 cgroup 限流，却不能消除高压宿主机及 Order 6 秒会话的故障窗口。
+
+**发布门禁继续 NO-GO。** 下阶段主要 P0 为改善 Docker VM CPU/内存争用、制定受控维护（停交易/保留持久化状态）以完成 15 秒 Order 会话参数上线和 HA 权威一致性复核。当前不主动重建 Order、ClickHouse 或 Colima；Tape 及 200 租户仍关闭。
