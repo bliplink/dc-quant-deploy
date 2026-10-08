@@ -747,6 +747,8 @@ projection.binary.subscriptionRefreshMs=5000
 projection.binary.safetyPollMillis=1000
 projection.binary.safetyPollPartitionsPerRun=16
 projection.binary.workerStripes=4
+# Fail closed until Order projection batch watermark behavior is independently proven.
+projection.order.binary.watermarkBatchOptimized=${PROJECTION_ORDER_WATERMARK_BATCH_OPTIMIZED:-false}
 projection.binary.maxBufferedBatchesPerPartition=1024
 projection.trade.binary.enabled=${TRADE_CLUSTER_ENABLED}
 projection.trade.binary.tradeServerKey=SERVER.TradeSvr
