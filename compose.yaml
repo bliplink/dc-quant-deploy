@@ -366,15 +366,15 @@ services:
       DEPLOY_ROOT: /srv/dc
       SERVICE_NAME: ProjectionSvr
       MAIN_CLASS: ProjectionSvr
-      JAVA_OPTS: ${PROJECTIONSVR_JAVA_OPTS:--server -Xms32m -Xmx192m -Xmn48m -Djava.security.auth.login.config=../../control/jaas.ini}
+      JAVA_OPTS: ${PROJECTIONSVR_JAVA_OPTS:--server -Xms64m -Xmx320m -Xmn80m -XX:+ExitOnOutOfMemoryError -Djava.security.auth.login.config=../../control/jaas.ini}
     volumes:
       - ${DEPLOY_ROOT}/control:/srv/dc/control:ro
       - ${DEPLOY_ROOT}/data:/srv/dc/data
       - ${DEPLOY_ROOT}/log:/srv/dc/log
       - ${DEPLOY_ROOT}/control/overrides/ProjectionSvr/config/log4j.ini:/srv/dc/dc/ProjectionSvr/config/log4j.ini:ro
       - ${DEPLOY_ROOT}/control/overrides/ProjectionSvr/config/application.properties:/srv/dc/dc/ProjectionSvr/config/application.properties:ro
-    mem_limit: ${PROJECTIONSVR_MEMORY_LIMIT:-512m}
-    cpus: ${PROJECTIONSVR_CPU_LIMIT:-0.20}
+    mem_limit: ${PROJECTIONSVR_MEMORY_LIMIT:-768m}
+    cpus: ${PROJECTIONSVR_CPU_LIMIT:-1.00}
 
   tradesvr:
     <<: *java-service-base
