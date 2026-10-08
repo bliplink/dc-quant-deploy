@@ -50,4 +50,14 @@ docker logs --since 10m dc-saas-tradesvr 2>&1 | grep -aE 'OutOfMemoryError|TRADE
 docker stats --no-stream dc-saas-tradesvr dc-saas-tradesvr-b dc-saas-robotsvr
 ```
 
-避免将 DB 凭据、API Key、SessionID、用户个人数据、完整未清洗网关请求输出到公开仓库/Issue。 
+避免将 DB 凭据、API Key、SessionID、用户个人数据、完整未清洗网关请求输出到公开仓库/Issue。
+
+## 2026-10-08 15:18 滚动发布记录（持续观察中）
+
+- GitHub Actions [37736264706](https://github.com/bliplink/com.app.dc.tradesvr/actions/runs/37736264706) 成功构建 TradeSvr `e5cebdd2`，GHCR 支持 `linux/arm64`、`linux/amd64`。
+- Colima 直接 `docker pull` 因镜像层下载超时，改用 Mac 现有本机 HTTP 代理（端口 10808）运行 `crane pull --platform linux/arm64`，再用 `docker load` 导入官方镜像（约 211 MB，ARM64 镜像 ID `sha256:bf306c0fef77...`）。未使用本地自行构建镜像。
+- 部署前核对 ZooKeeper 共 256 分区，主节点 A 146 / B 110，没有主副本重叠。先只重建 B，并将 B JVM `-Xmx768m -Xmn192m` 提升至 `-Xmx1152m -Xmn288m`，Docker 内存上限仍为 2 GiB。逐个 epoch 比对结果：当时 B 所属 110 个主分区全部有对应 `TRADE_PARTITION_READY`，0 新 OOM、0 重启。
+- B 恢复完毕后再只重建 A。15:18 两个容器均确认为 GHCR `sha-e5cebdd2aa191e98a3128886634cd3b5eca6d3e6`，JVM `-Xmx1152m`，本轮重启计数均为 0。原 `c19d8d76` 镜像仍保留用于回滚。
+- 15:21 A 仍在逐分区恢复，已记录至少 95 条 `TRADE_PARTITION_READY`；Robot 暂时为 33 RUNNING、17 ERROR，**未完成 50/50 稳定验收**。以上是时间点快照，不能以局部 READY 数推导整个 Trade HA 已恢复。
+- 环境配置文件已在 Mac 主机单独备份；禁止把包含实际密码、API Key 等的私有 .env 上传 GitHub。Tape 开关仍为 false。没有清空 MySQL、Journal、snapshot 或更改租户 enabled 状态；200 租户压测尚未开始。
+- 后续必须再次按 ZooKeeper 256 分区的实际 `(partitionId, epoch, primary)` 与 A/B READY 日志逐一对照，再验证 50/50 Robot、真实委托盘口、Trade/Order/Projection 对账，以及持续无 JVM OOM/重启；在完成这些步骤前**不要启动 Tape**。
