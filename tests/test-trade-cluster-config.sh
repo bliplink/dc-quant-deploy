@@ -22,6 +22,16 @@ sed \
   "${DEPLOY_DIR}/.env.example" > "${TEST_ROOT}/cluster.env"
 
 "${DEPLOY_DIR}/generate-saas-configs.sh" "${TEST_ROOT}/cluster.env" >/dev/null
+# A 1-second request timeout was once accidentally deployed by a private
+# environment override and repeatedly fenced otherwise healthy Trade primaries.
+# Reject it before writing generated configuration.
+cp "${TEST_ROOT}/cluster.env" "${TEST_ROOT}/unsafe-timeout.env"
+printf '%s\n' 'TRADE_CLUSTER_REPLICATION_REQUEST_TIMEOUT_MS=1000' >>"${TEST_ROOT}/unsafe-timeout.env"
+if "${DEPLOY_DIR}/generate-saas-configs.sh" "${TEST_ROOT}/unsafe-timeout.env" >"${TEST_ROOT}/unsafe-timeout.log" 2>&1; then
+  fail 'Trade cluster must reject a 1000ms replication ACK timeout override'
+fi
+grep -Fq 'TRADE_CLUSTER_REPLICATION_REQUEST_TIMEOUT_MS must be between 3000 and 30000 ms' "${TEST_ROOT}/unsafe-timeout.log" ||
+  fail 'Unsafe Trade ACK timeout must fail with an actionable error'
 
 ats="${TEST_ROOT}/runtime/control/ATSConfig.ini"
 a_config="${TEST_ROOT}/runtime/control/overrides/TradeSvrA/config/application.properties"
