@@ -18,6 +18,8 @@ bash tests/run-trial-tape-canary-host.sh
 
 这只将已完成 job 从 `DONE` 重排到 `REVOKE_CASH`，由 AdminSvr 重新进入 Tape 专用步骤，**不会**重复 maker 创建/入金，也不会停止共享 RobotSvr。
 
+脚本先核验**所有已启用 Robot 均为近期心跳正常的 RUNNING 且仍有真实挂单**，任何一个因 Trade 分区恢复进入 ERROR/DEGRADED 都会阻断试点。这是对外 Demo 共享环境的强制安全门禁。
+
 验收：观察该 tenant 的 Bootstrap=COMPLETE、Tape user/key 存在且为不同 user、Tape cashIn 恰好一次、Maker/Tape 的 `enable_cash_in=0`、Robot `RUNNING`、盘口 10+10、最近成交源于 `RobotSvr-Tape` 且实际在 MySQL `dc_orders_execorders` 与资金流水中对账。然后比较其他 tenant 的 10+10 可见盘口、Robot health、Order/Trade/MD/GW 重启/OOM、CPU/内存。失败时暂停该租户 Tape 参数或禁用其 Robot，保留账务取证，不自动重试不确定资金。
 
 扩容严格按 1 → 5 → 10 → 50，并在不同负载下重新做 TPS、P95/P99 和宕机恢复，不得直接据 50 个仅挂单 Robot 的容量结论推断 50 个 Tape 的能力。

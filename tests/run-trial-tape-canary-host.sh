@@ -20,6 +20,15 @@ set +a
 mysql_read() {
   docker exec -i -e MYSQL_PWD="${MYSQL_PASSWORD}" dc-saas-mysql mysql -u"${MYSQL_USERNAME}" -N dc -e "$1"
 }
+# Fail closed unless EVERY enabled Robot has a current, working maker book.
+# A TradeSvr partition recovery can otherwise make a tape pilot look healthy
+# until the first IOC and would hide a real production availability problem.
+read -r expected healthy <<<"$(mysql_read "
+  SELECT COUNT(*),COALESCE(SUM(CASE WHEN runtime_status='RUNNING'
+    AND open_order_count>=2 AND last_heartbeat_time>=DATE_SUB(NOW(),INTERVAL 30 SECOND)
+    THEN 1 ELSE 0 END),0) FROM dc_tenant_robot WHERE enabled=1;")"
+[[ "${expected:-0}" -gt 0 && "${expected}" == "${healthy:-0}" ]] ||
+  { echo "System not ready for tape: healthy Robot ${healthy:-0}/${expected:-0}" >&2; exit 2; }
 # Do not rewind any uncertain cashIn or already-tape-enabled job.
 read -r status step maker_confirmed tape_enabled tape_confirmed robot_count <<<"$(mysql_read "
   SELECT b.status,b.step,b.funding_confirmed,b.tape_enabled,b.tape_funding_confirmed,
