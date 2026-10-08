@@ -124,7 +124,8 @@ services:
       retries: 30
       start_period: 20s
     mem_limit: ${ZOOKEEPER_MEMORY_LIMIT:-384m}
-    cpus: ${ZOOKEEPER_CPU_LIMIT:-0.10}
+    # Do not throttle ZooKeeper heartbeat/HA fencing at the old 0.10 CPU.
+    cpus: ${ZOOKEEPER_CPU_LIMIT:-0.50}
 
   gateway:
     <<: *java-service-base
