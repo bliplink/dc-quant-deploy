@@ -118,9 +118,9 @@ def live_snapshot():
     """Fast resource/health checks first; never start costly ZK scan if unsafe."""
     raw = command(["docker", "exec", "dc-saas-zookeeper", "sh", "-lc",
                    "cat /proc/pressure/cpu; grep -E '^(MemAvailable|SwapFree):' /proc/meminfo"])
-    m_psi = re.search(r"(?m)^some avg10=[\\d.]+ avg60=([\\d.]+)", raw)
-    m_mem = re.search(r"(?m)^MemAvailable:\\s*(\\d+) kB", raw)
-    m_swap = re.search(r"(?m)^SwapFree:\\s*(\\d+) kB", raw)
+    m_psi = re.search(r"(?m)^some avg10=[\d.]+ avg60=([\d.]+)", raw)
+    m_mem = re.search(r"(?m)^MemAvailable:\s*(\d+) kB", raw)
+    m_swap = re.search(r"(?m)^SwapFree:\s*(\d+) kB", raw)
     if not (m_psi and m_mem and m_swap):
         raise RuntimeError("cannot parse VM CPU pressure and memory evidence")
     snapshot = {"resources": {
@@ -144,7 +144,7 @@ def live_snapshot():
                     json.dumps(sql)])
     running = other = count = 0
     for row in rows.splitlines():
-        status, quantity, open_orders = row.split("\\t")
+        status, quantity, open_orders = row.split("\t")
         if status == "RUNNING":
             running += int(quantity)
         else:
@@ -157,8 +157,8 @@ def live_snapshot():
 
 
 def load_topology():
-    queries = "".join("get /dc/cluster/ordersvr/partitions/P%03d\\n" % i
-                      for i in range(EXPECTED_PARTITIONS)) + "quit\\n"
+    queries = "".join("get /dc/cluster/ordersvr/partitions/P%03d\n" % i
+                      for i in range(EXPECTED_PARTITIONS)) + "quit\n"
     stdout = command(["docker", "exec", "-i", "dc-saas-zookeeper",
                       "zkCli.sh", "-server", "127.0.0.1:32181"],
                      stdin=queries, timeout=115)
