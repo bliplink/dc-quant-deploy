@@ -12,6 +12,7 @@ SELF_USER="${RULE_E2E_SELF_USER:-ruleself}"
 RUN_ID="${RULE_E2E_RUN_ID:-$(date +%Y%m%d%H%M%S)}"
 CLEANUP_PREFIX="${RULE_E2E_CLEANUP_PREFIX:-}"
 RULE_PASSWORD="${RULE_E2E_PASSWORD:-${E2E_PASSWORD:-}}"
+RULE_PAUSE_ROBOTSVR="${RULE_PAUSE_ROBOTSVR:-false}"
 
 log() { printf '[rules-e2e] %s\n' "$*"; }
 die() { printf '[rules-e2e] ERROR: %s\n' "$*" >&2; exit 1; }
@@ -19,6 +20,7 @@ safe_identifier() { [[ "$1" =~ ^[A-Za-z0-9_.-]+$ ]]; }
 
 [[ -r "${ENV_FILE}" ]] || die "Cannot read ${ENV_FILE}"
 [[ -n "${RULE_PASSWORD}" ]] || die "RULE_E2E_PASSWORD or E2E_PASSWORD is required"
+[[ "${RULE_PAUSE_ROBOTSVR}" == "true" || "${RULE_PAUSE_ROBOTSVR}" == "false" ]] || die "RULE_PAUSE_ROBOTSVR must be true or false"
 for value in "${RULE_LOCATION}" "${MAKER_ONE}" "${MAKER_TWO}" "${TAKER}" "${SELF_USER}" "${RUN_ID}"; do
   safe_identifier "${value}" || die "Unsupported identifier: ${value}"
 done
@@ -45,6 +47,7 @@ fi
 
 liq_was_running="$(docker inspect --format '{{.State.Running}}' dc-saas-liqsvr 2>/dev/null || true)"
 robot_was_running="$(docker inspect --format '{{.State.Running}}' dc-saas-robotsvr 2>/dev/null || true)"
+robot_paused=false
 
 restore_liqsvr() {
   if [[ "${liq_was_running}" == "true" ]]; then
@@ -53,7 +56,7 @@ restore_liqsvr() {
 }
 
 restore_robotsvr() {
-  if [[ "${robot_was_running}" == "true" ]]; then
+  if [[ "${robot_was_running}" == "true" && "${robot_paused}" == "true" ]]; then
     docker start dc-saas-robotsvr >/dev/null 2>&1 || true
   fi
 }
@@ -68,9 +71,12 @@ if [[ "${liq_was_running}" == "true" ]]; then
   log "Pausing LiqSvr so background liquidation cannot consume deterministic rule-test liquidity."
   docker stop dc-saas-liqsvr >/dev/null
 fi
-if [[ "${robot_was_running}" == "true" ]]; then
-  log "Pausing RobotSvr for the full deterministic rule suite so external strategy liquidity cannot alter FOK/IOC/FIFO/STP assertions."
+if [[ "${RULE_PAUSE_ROBOTSVR}" == "true" && "${robot_was_running}" == "true" ]]; then
+  robot_paused=true
+  log "Pausing RobotSvr because RULE_PAUSE_ROBOTSVR=true."
   docker stop dc-saas-robotsvr >/dev/null
+else
+  log "Keeping RobotSvr online during the isolated trading-rules suite."
 fi
 
 mysql_exec() {

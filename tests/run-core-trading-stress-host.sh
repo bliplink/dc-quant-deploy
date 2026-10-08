@@ -11,6 +11,7 @@ LOAD_ORDERS="${LOAD_ORDERS:-1000}"
 LOAD_CONCURRENCY="${LOAD_CONCURRENCY:-16}"
 LOAD_RELOAD_BEFORE="${LOAD_RELOAD_BEFORE:-true}"
 LOAD_PAUSE_BACKGROUND="${LOAD_PAUSE_BACKGROUND:-true}"
+LOAD_PAUSE_ROBOTSVR="${LOAD_PAUSE_ROBOTSVR:-false}"
 LOAD_VERIFY_RESTART="${LOAD_VERIFY_RESTART:-true}"
 LOAD_RUN_ID="${LOAD_RUN_ID:-$(date +%Y%m%d%H%M%S)}"
 LOAD_RUNNER_NAME="${LOAD_RUNNER_NAME:-dc-saas-web-e2e-runner}"
@@ -27,7 +28,7 @@ for value in "${LOAD_LOCATION}" "${LOAD_MAKER}" "${LOAD_TAKER}" "${LOAD_RUN_ID}"
 done
 [[ "${LOAD_ORDERS}" =~ ^[1-9][0-9]*$ ]] || die "LOAD_ORDERS must be a positive integer"
 [[ "${LOAD_CONCURRENCY}" =~ ^[1-9][0-9]*$ ]] || die "LOAD_CONCURRENCY must be a positive integer"
-for flag in LOAD_RELOAD_BEFORE LOAD_PAUSE_BACKGROUND LOAD_VERIFY_RESTART; do
+for flag in LOAD_RELOAD_BEFORE LOAD_PAUSE_BACKGROUND LOAD_PAUSE_ROBOTSVR LOAD_VERIFY_RESTART; do
   value="${!flag}"
   [[ "${value}" == true || "${value}" == false ]] || die "${flag} must be true or false"
 done
@@ -46,12 +47,13 @@ fi
 liq_was_running="$(docker inspect --format '{{.State.Running}}' dc-saas-liqsvr 2>/dev/null || true)"
 robot_was_running="$(docker inspect --format '{{.State.Running}}' dc-saas-robotsvr 2>/dev/null || true)"
 background_services_paused=false
+robotsvr_paused=false
 restore_background_services() {
   [[ "${background_services_paused}" == true ]] || return 0
-  if [[ "${liq_was_running}" == "true" ]]; then
+  if [[ "${liq_was_running}" == "true" && "${LOAD_PAUSE_BACKGROUND}" == true ]]; then
     timeout 120 docker start dc-saas-liqsvr >/dev/null 2>&1 || true
   fi
-  if [[ "${robot_was_running}" == "true" ]]; then
+  if [[ "${robot_was_running}" == "true" && "${robotsvr_paused}" == true ]]; then
     timeout 120 docker start dc-saas-robotsvr >/dev/null 2>&1 || true
   fi
 }
@@ -62,12 +64,16 @@ if [[ "${LOAD_PAUSE_BACKGROUND}" == true ]]; then
     log "Pausing LiqSvr so background liquidation cannot alter load-test order flow."
     docker stop dc-saas-liqsvr >/dev/null
   fi
-  if [[ "${robot_was_running}" == "true" ]]; then
-    log "Pausing RobotSvr so quote replacement cannot overlap the partition recovery fence."
-    docker stop dc-saas-robotsvr >/dev/null
-  fi
 else
-  log "Keeping LiqSvr and RobotSvr online for non-destructive load validation."
+  log "Keeping LiqSvr online for non-destructive load validation."
+fi
+if [[ "${LOAD_PAUSE_ROBOTSVR}" == true && "${robot_was_running}" == "true" ]]; then
+  background_services_paused=true
+  robotsvr_paused=true
+  log "Pausing RobotSvr because LOAD_PAUSE_ROBOTSVR=true."
+  docker stop dc-saas-robotsvr >/dev/null
+else
+  log "Keeping RobotSvr online during the load test."
 fi
 
 mysql_exec() {

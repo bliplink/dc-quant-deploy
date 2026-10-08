@@ -117,6 +117,7 @@ PY
 
 restart_order_trade_for_e2e() {
   local robot_was_running=false
+  local pause_robotsvr="${E2E_PAUSE_ROBOTSVR:-false}"
   local restart_status=0
   local projection_before=""
   if [[ "${ORDER_CLUSTER_ENABLED:-false}" == "true" || "${TRADE_CLUSTER_ENABLED:-false}" == "true" ]]; then
@@ -124,10 +125,14 @@ restart_order_trade_for_e2e() {
     log "Capturing durable ProjectionSvr watermarks before the Order/Trade recovery boundary."
     snapshot_projection_watermarks "${projection_before}"
   fi
-  if [[ "$(docker inspect --format '{{.State.Running}}' dc-saas-robotsvr 2>/dev/null || true)" == "true" ]]; then
+  [[ "${pause_robotsvr}" == "true" || "${pause_robotsvr}" == "false" ]] ||
+    die "E2E_PAUSE_ROBOTSVR must be true or false"
+  if [[ "${pause_robotsvr}" == "true" && "$(docker inspect --format '{{.State.Running}}' dc-saas-robotsvr 2>/dev/null || true)" == "true" ]]; then
     robot_was_running=true
-    log "Pausing RobotSvr before OrderSvr restart so no strategy write can cross the recovery boundary."
+    log "Pausing RobotSvr before OrderSvr restart because E2E_PAUSE_ROBOTSVR=true."
     docker stop dc-saas-robotsvr >/dev/null
+  else
+    log "Keeping RobotSvr online across the Order/Trade recovery boundary."
   fi
 
   (
