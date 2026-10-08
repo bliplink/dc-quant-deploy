@@ -61,3 +61,12 @@ docker stats --no-stream dc-saas-tradesvr dc-saas-tradesvr-b dc-saas-robotsvr
 - 15:21 A 仍在逐分区恢复，已记录至少 95 条 `TRADE_PARTITION_READY`；Robot 暂时为 33 RUNNING、17 ERROR，**未完成 50/50 稳定验收**。以上是时间点快照，不能以局部 READY 数推导整个 Trade HA 已恢复。
 - 环境配置文件已在 Mac 主机单独备份；禁止把包含实际密码、API Key 等的私有 .env 上传 GitHub。Tape 开关仍为 false。没有清空 MySQL、Journal、snapshot 或更改租户 enabled 状态；200 租户压测尚未开始。
 - 后续必须再次按 ZooKeeper 256 分区的实际 `(partitionId, epoch, primary)` 与 A/B READY 日志逐一对照，再验证 50/50 Robot、真实委托盘口、Trade/Order/Projection 对账，以及持续无 JVM OOM/重启；在完成这些步骤前**不要启动 Tape**。
+
+## 2026-10-08 15:32 复制 ACK 阻断与全量盘口验证
+
+- 15:28:06，Robot 曾短暂达到 `50 RUNNING / 0 ERROR / reported open orders 2000`。ZooKeeper 256 分区当前 assignment 与 A/B 启动以来的 `(partitionId,epoch)` READY 日志全部匹配（A 146/146，B 110/110）。但历史 READY 证据不能证明之后从未 revoke。
+- 对 3 个 RUNNING 租户的真实 `MDSvr.queryPublicMarket` 只读抽查均为 10 bid + 10 ask。扩大到 50 租户时，首轮仅 36/50 达到 10+10；随后的关联验证显示 Robot 同时跌为 37 RUNNING / 13 ERROR，12 个缺档租户全部是 ERROR 且 reported open orders 为 0。因此**没有证据支持把缺档简单归因于 MDSvr 丢数据**，真正上游仍有 Trade 分区失效。
+- 15:23:51 B→A 的 `P030` 复制出现 `TimeoutException: replication ack timeout requestId=7165`，随后写入和 `queryTradePosition` 被 `PARTITION_NOT_READY` 阻断。复制超时会撤销分区就绪状态，Robot 因持仓查询失败进入 `RUNTIME_FAILURE`；对应安全熔断正常但系统可用性下降。
+- 约 15:31 的连续 3 分钟中，A/B 日志分别出现约 24/12 条 `replication ack timeout`、12/6 条 `trade replication failed endpoint`，以及 1835/693 条分区未就绪拒绝；同期 **0 新 OOM**，两个 Trade 容器本轮重启数持续为 0。复制 handler `TRADE_REPLICA_HANDLER_SLOW` 单次执行耗时最高约 224ms（A）/447ms（B），没有观察到单条 handler 执行超过 3 秒。待调查网络事件循环排队、Chronicle 日志同步写入、复制 ACK 等待和默认 `TRADE_CLUSTER_REPLICATION_REQUEST_TIMEOUT_MS=3000` 是否过紧。**不能仅靠上调超时就认定根因已经解决。**
+- 15:32 的 Robot 状态仍为 42 RUNNING / 8 ERROR；最近一分钟 ACK 超时计数为 0，但仍持续有 `PARTITION_NOT_READY`；继续观察分区自恢复能力。**本次上线验证仍为 FAIL/PENDING，不开放 Tape，也不开始 200 租户测试。**
+- 后续修复必须保证异步事件处理不会破坏按分区 journal 严格顺序、epoch fencing、持久化 ACK 以及幂等回放。在没有完整复制一致性与回归证据前禁止通过放宽就绪门禁伪造 50/50。
