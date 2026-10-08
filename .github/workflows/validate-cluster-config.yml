@@ -52,6 +52,8 @@ on:
       - tests/test-order-cluster-c-config.sh
       - tests/order_ha_rollout_gate.py
       - tests/test_order_ha_rollout_gate.py
+      - clickhouse/config.d/**
+      - tests/test_clickhouse_demo_log_config.py
       - tests/test-trade-cluster-config.sh
       - tests/trade_cluster_transition_host.py
       - tests/test_trade_cluster_transition_host.py
@@ -119,6 +121,8 @@ on:
       - tests/test-order-cluster-c-config.sh
       - tests/order_ha_rollout_gate.py
       - tests/test_order_ha_rollout_gate.py
+      - clickhouse/config.d/**
+      - tests/test_clickhouse_demo_log_config.py
       - tests/test-trade-cluster-config.sh
       - tests/trade_cluster_transition_host.py
       - tests/test_trade_cluster_transition_host.py
@@ -172,6 +176,8 @@ jobs:
           tests/test-trial-liquidity-bootstrap-migration.sh
           tests/test-trial-liquidity-tape-migration.sh
           tests/test-placement-routing-key.sh
+      - name: Validate safe ClickHouse demo logging
+        run: python3 -m unittest discover -s tests -p 'test_clickhouse_demo_log_config.py' -v
       - name: Validate fail-closed Order HA rollout preflight
         run: |
           python3 -m py_compile tests/order_ha_rollout_gate.py
