@@ -53,7 +53,7 @@ services:
       retries: 30
       start_period: 30s
     mem_limit: ${MYSQL_MEMORY_LIMIT:-1536m}
-    cpus: ${MYSQL_CPU_LIMIT:-0.50}
+    cpus: ${MYSQL_CPU_LIMIT:-0.75}
 
   clickhouse:
     image: ${CLICKHOUSE_IMAGE_REPOSITORY:-docker.m.daocloud.io/clickhouse/clickhouse-server}:${CLICKHOUSE_IMAGE_TAG:-25.9.3.48}
@@ -272,7 +272,7 @@ services:
       - ${DEPLOY_ROOT}/control/overrides/APSSvr/config/log4j.ini:/srv/dc/dc/APSSvr/config/log4j.ini:ro
       - ${DEPLOY_ROOT}/control/overrides/APSSvr/config/application.properties:/srv/dc/dc/APSSvr/config/application.properties:ro
     mem_limit: ${APSSVR_MEMORY_LIMIT:-640m}
-    cpus: ${APSSVR_CPU_LIMIT:-0.35}
+    cpus: ${APSSVR_CPU_LIMIT:-0.75}
 
   ordersvr:
     <<: *java-service-base
