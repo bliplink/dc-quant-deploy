@@ -114,3 +114,15 @@ docker stats --no-stream dc-saas-tradesvr dc-saas-tradesvr-b dc-saas-robotsvr
 - 50 个启用 Robot 约 44 RUNNING / 6 ERROR，reported open orders=1760；零新 JVM OOM、零恢复失败与 A/B 零次容器重启。此时**不能保证全部盘口可交易**，不运行 Tape 或 200 租户测试。
 - 调整后 A/B 过去数分钟没有观察到 `replication ack timeout`。B 在 A 的复制端口停止时有 6 次 `Connection refused`，属于节点重建期间的预期连接失败，不能与在线 ACK 超时混为一谈；更不能以部分恢复期无 ACK timeout 证明满载稳定。
 - 后续必须再次实测 ZooKeeper 256 分区 readiness、50/50 Robot、50 租户公开盘口与连续窗口复制尾延迟；并另行关闭 P232 Trade Projection 重建、P054 Order watermark GAP 的一致性阻断。
+
+## 2026-10-08 17:16 WebCodex 复核：Trade 全部 READY，Order HA 仍抖动
+
+- 通过 Mac mini WebCodex 只读连接确认 TradeSvr A/B、ProjectionSvr、RobotSvr 容器均 running，滚动升级后 restarts=0、OOMKilled=false，未再重建/清库。
+- ZooKeeper 逐一读取 256 个 Trade assignment：A primary=146，B primary=110；与两个进程日志里当前 `partitionId+epoch` READY 一一核对 **256/256 MATCHED_READY**，无重复主副本。最近五分钟 Trade A/B 没有 `replication ack timeout`、`trade replication failed endpoint` 或 `PARTITION_NOT_READY`。
+- 50 个现有租户的 `MDSvr.queryPublicMarket` 全量只读检查：**50/50 成功返回至少 10 档 bid + 10 档 ask**，但此结果只代表查询采样点，不能替代实时下单压测。
+- Robot 并非持续 50/50：17:11 瞬间 50 RUNNING/2000 报价，17:12 先后波动至 41 RUNNING、再 26 RUNNING/24 DEGRADED，17:15–17:16 又回到 50 RUNNING/2000；不可以宣称已经长稳。
+- DEGRADED 最近日志主因转向 OrderSvr，而非 TradeSvr：`gateway rejected queryOpenOrder: INTERNAL_ERROR`、`gateway TCP response is empty for placeOrder`、`queryOpenOrder: PARTITION_NOT_READY service=OrderSvrA`。Order A/B/C 容器未重启。
+- 17:12 左右 Order 自动故障切换控制器在 C 上记录 **27 次 `ORDER_AUTO_FAILOVER_APPLIED`**（OrderSvrB → OrderSvrA），随后执行 **27 次 `ORDER_AUTO_REPLICA_REPAIRED`**；A 和 C 记录大量 `ORDER_LEARNER_REPLICATION_RETRY learner:OrderSvrB`。Order A/B CPU 采样约 140%/133%，容器内存约 2.59/2.57 GiB（每台限制 3 GiB），JVM 堆均 2048m；暂未观察到 Order OOM。
+- 过去约 8 分钟 Order A 的 `ORDER_STATE_BATCH_SLOW` 记录 1498 条、B 为 3290 条；这些**慢日志子样本**的 totalMs 最大分别 5183/5080ms，慢日志内 p95 分别约 692/666ms（不是全量订单 TPS/延迟统计，不得误报）。大量慢调用涉及 stateReplicaMs、commitReplicaMs、journal 写入与 callback 队列；需要独立确定 Order B 在 failover 窗口被判不健康是心跳/GC/持久化延迟/连接事件哪一种，**不能凭现象直接关闭故障切换或放宽 ACK quorum**。
+- Trade 投影仍有 P232 epoch1 seq7025 孤立事件/基线缺口，Order 投影 P054 epoch85 seq109061 落后 109062 事件；投影一致性未关闭。Tape 保持 false，暂不启动 200 租户测试、kill primary 或其他故障注入。
+- 后续工作优先级：验证 Order failover 的原始存活判定与时间线、进程 GC 与 event loop 和同步 journal 延迟；优化 Order 状态批量持久化/投影日志读取上的热点并加回归测试；全链路 50/50 长稳及历史订单/成交/余额/持仓一致性通过后再启动单租户 Tape。
