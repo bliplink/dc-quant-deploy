@@ -43,3 +43,11 @@
 - 包含新竞争重投递、模糊 COMMIT 和 500 条批次 SQL 计数的最新 Projection 源码提交 `623bd68ca`、[CI 37789104203](https://github.com/bliplink/com-app-dc-projectionsvr/actions/runs/37789104203)：JDK8/H2 与隔离 MySQL 8.0 测试步骤**均已通过**，后续镜像构建最终结果须查 Actions。优化开关 **`projection.order.binary.watermarkBatchOptimized=false` 默认关闭**；现网仍为旧 Projection 镜像，未启动安全上线窗口。
 
 **剩余门禁**：真实环境 MySQL 并发冲突频率与 GAP backoff、断电后自动恢复、多个分区并行吞吐、500条 *多轮*负载统计、Order P054/Trade P232 历史 GAP 一致性，以及 Robot 50租户长时间稳定性。未经这些检查不得启用优化开关或启动 200 租户压测。
+
+### CI 37789104203 最终发布验证
+
+- 真正源码仓库 `bliplink/com-app-dc-projectionsvr` 分支 `saas-crypto` commit **`623bd68caccb823a61fbfa0a37f1ce80d5b71aea`**，完整 [GitHub Actions 37789104203](https://github.com/bliplink/com-app-dc-projectionsvr/actions/runs/37789104203) **success**。JDK8 Maven 测试、隔离 MySQL 8.0 重试与事务测试、生产依赖检查、amd64/arm64 buildx 推送均通过。
+- 镜像 `ghcr.io/bliplink/projectionsvr:sha-623bd68`，不可变多架构 manifest digest `sha256:3dce230a0c39139fef45e32a5b563684edc63db1452802b5f62aa0fe7bfa88aa`。**仅表示 GHCR 已发布，不代表线上部署。**
+- 此次成功 CI 的 500 事件独立 MySQL 8.0 同环境样本：legacy watermark SQL **1500** 次、耗时 **627ms**；opt-in batch watermark SQL **3** 次、耗时 **160ms**，单批耗时下降约 **74.5%**；H2 同次 270ms / 27ms。都是单次样本，不能等同生产 TPS、p95 或真实账本一致性。
+- 该 CI 还覆盖 COMMIT 真正成功但应用层 ACK 丢失的重复回放，以及同一 partition 并发 duplicate-writer 遭遇 MySQL deadlock 后有界（仅 error 1213/SQLState 40001）重投递。事务保证事件行、订单/执行持久化和 watermark 全部最终唯一且匹配。生产 BinaryConsumer 的异常会转为 GAP_RECOVERING 回补，但**尚未验证真实生产负载下 deadlock 频率与恢复时延**。
+- `projection.order.binary.watermarkBatchOptimized=false` 保持默认关闭，禁止将 GHCR 新版构建成功视为已上线或已完成 Order HA / P054/P232 历史一致性验收。
