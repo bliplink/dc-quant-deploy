@@ -90,6 +90,15 @@ if [[ "${ORDER_CLUSTER_ENABLED}" == "true" || "${MD_CLUSTER_ENABLED}" == "true" 
   PROTO_VERSION=2
 fi
 if [[ "${ORDER_CLUSTER_ENABLED}" == "true" ]]; then
+  # A 6s session expired under normal 50-tenant Order load on 2026-10-08.
+  # Keep fencing/ephemeral ownership, but reject an unsafe short session at deploy time.
+  # ZooKeeper default max session for tickTime=2000ms is 40000ms.
+  ORDERSVR_ZOOKEEPER_SESSION_TIMEOUT_MS="${ORDERSVR_ZOOKEEPER_SESSION_TIMEOUT_MS:-15000}"
+  [[ "${ORDERSVR_ZOOKEEPER_SESSION_TIMEOUT_MS}" =~ ^[1-9][0-9]*$ ]] ||
+    die "ORDERSVR_ZOOKEEPER_SESSION_TIMEOUT_MS must be an integer"
+  (( ORDERSVR_ZOOKEEPER_SESSION_TIMEOUT_MS >= 15000 &&
+     ORDERSVR_ZOOKEEPER_SESSION_TIMEOUT_MS <= 40000 )) ||
+    die "ORDERSVR_ZOOKEEPER_SESSION_TIMEOUT_MS must be between 15000 and 40000 ms"
   for name in ORDERSVR_B_GW_PORT ORDERSVR_A_REPLICATION_PORT ORDERSVR_B_REPLICATION_PORT; do
     [[ -n "${!name:-}" ]] || die "Missing required cluster variable: ${name}"
   done
