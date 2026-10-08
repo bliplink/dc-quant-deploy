@@ -126,6 +126,8 @@ services:
     mem_limit: ${ZOOKEEPER_MEMORY_LIMIT:-384m}
     # Do not throttle ZooKeeper heartbeat/HA fencing at the old 0.10 CPU.
     cpus: ${ZOOKEEPER_CPU_LIMIT:-0.50}
+    # Raise relative scheduler priority for HA heartbeats during VM CPU contention.
+    cpu_shares: ${ZOOKEEPER_CPU_SHARES:-4096}
 
   gateway:
     <<: *java-service-base
