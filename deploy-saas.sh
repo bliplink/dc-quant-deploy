@@ -239,6 +239,15 @@ ensure_env_defaults() {
   if ! grep -q '^TRIAL_LIQUIDITY_MARGIN_BUDGET=' "${ENV_FILE}"; then
     printf 'TRIAL_LIQUIDITY_MARGIN_BUDGET=1000\n' >> "${ENV_FILE}"
   fi
+  if ! grep -q '^TRIAL_LIQUIDITY_TAPE_ENABLED=' "${ENV_FILE}"; then
+    printf 'TRIAL_LIQUIDITY_TAPE_ENABLED=false\n' >> "${ENV_FILE}"
+  fi
+  if ! grep -q '^TRIAL_LIQUIDITY_TAPE_CANARY_LOCATION=' "${ENV_FILE}"; then
+    printf 'TRIAL_LIQUIDITY_TAPE_CANARY_LOCATION=\n' >> "${ENV_FILE}"
+  fi
+  if ! grep -q '^TRIAL_LIQUIDITY_TAPE_CASH_AMOUNT=' "${ENV_FILE}"; then
+    printf 'TRIAL_LIQUIDITY_TAPE_CASH_AMOUNT=10000\n' >> "${ENV_FILE}"
+  fi
   if ! grep -q '^ROBOT_RUNTIME_LOCATION=' "${ENV_FILE}"; then
     printf 'ROBOT_RUNTIME_LOCATION=PLATFORM\n' >> "${ENV_FILE}"
   fi
@@ -908,7 +917,9 @@ verify_mysql_runtime_schema() {
   local expected_columns column missing=0
   expected_columns=(
     application_id location status step funding_request_id maker_user_id api_key
-    funding_amount funding_confirmed attempts next_attempt_time lease_owner lease_until
+    funding_amount funding_confirmed tape_enabled tape_user_id tape_api_key
+    tape_funding_request_id tape_funding_amount tape_funding_confirmed
+    attempts next_attempt_time lease_owner lease_until
     last_error_code last_error_message create_time update_time complete_time
   )
 
