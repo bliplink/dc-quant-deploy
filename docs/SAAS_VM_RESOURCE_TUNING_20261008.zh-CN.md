@@ -42,3 +42,11 @@
 19:11 VM CPU PSI some avg60=71.73%、MemAvailable=871400 KiB、SwapFree=80 KiB、load avg 1m=22.48；Order A 内存约 2.665GiB/3GiB、B 约 2.55GiB/3GiB。ZooKeeper CPU 配额修复降低了自身 cgroup 限流，却不能消除高压宿主机及 Order 6 秒会话的故障窗口。
 
 **发布门禁继续 NO-GO。** 下阶段主要 P0 为改善 Docker VM CPU/内存争用、制定受控维护（停交易/保留持久化状态）以完成 15 秒 Order 会话参数上线和 HA 权威一致性复核。当前不主动重建 Order、ClickHouse 或 Colima；Tape 及 200 租户仍关闭。
+
+## 19:14 ZooKeeper 调度权重测试（仍不满足发布门禁）
+
+- 为 ZooKeeper 运行容器执行无重启的 docker update --cpu-shares 4096，HostConfig.CpuShares=4096、cgroup v2 cpu.weight 实测从 100 升至 303；CPU cap 保留 0.50，StartedAt 未变化、restart=0。
+- Mac mini 私有 env 已备份并写入 ZOOKEEPER_CPU_SHARES=4096；saas-crypto 仓库 compose.yaml/.env.example 已加默认值，tests/test-zookeeper-cpu-config.sh 加回归门禁，Actions 37768838086 已成功。
+- **修复尚未成功**：19:14:47 ZooKeeper Expiring session OrderSvrA（6000ms），Order 控制器 4 次切主；19:17:03 发生 OrderSvrB 6000ms Expired，控制器 12 次切主。说明高优先级只能缓解部分 CPU 饥饿，无法解决 Order JVM 6s 会话与全 VM 资源争抢。
+- 19:15 CPU PSI avg60 约 67%，MemAvailable ~947444KiB、SwapFree ~260KiB。仍不满足滚动重启/Colima 整体停机恢复门禁，暂时保留正在运行的订单数据和 journal。
+- 下一步：在可执行的维护窗口中评估扩大 VM 至适当配置与 Order A/B/C 的 15s session 受控滚动，先做权威分区和 journal consistency、备份/回滚方案；不得宣称 200 租户容量或高可用验收通过。
