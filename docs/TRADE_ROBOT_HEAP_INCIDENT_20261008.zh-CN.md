@@ -70,3 +70,15 @@ docker stats --no-stream dc-saas-tradesvr dc-saas-tradesvr-b dc-saas-robotsvr
 - 约 15:31 的连续 3 分钟中，A/B 日志分别出现约 24/12 条 `replication ack timeout`、12/6 条 `trade replication failed endpoint`，以及 1835/693 条分区未就绪拒绝；同期 **0 新 OOM**，两个 Trade 容器本轮重启数持续为 0。复制 handler `TRADE_REPLICA_HANDLER_SLOW` 单次执行耗时最高约 224ms（A）/447ms（B），没有观察到单条 handler 执行超过 3 秒。待调查网络事件循环排队、Chronicle 日志同步写入、复制 ACK 等待和默认 `TRADE_CLUSTER_REPLICATION_REQUEST_TIMEOUT_MS=3000` 是否过紧。**不能仅靠上调超时就认定根因已经解决。**
 - 15:32 的 Robot 状态仍为 42 RUNNING / 8 ERROR；最近一分钟 ACK 超时计数为 0，但仍持续有 `PARTITION_NOT_READY`；继续观察分区自恢复能力。**本次上线验证仍为 FAIL/PENDING，不开放 Tape，也不开始 200 租户测试。**
 - 后续修复必须保证异步事件处理不会破坏按分区 journal 严格顺序、epoch fencing、持久化 ACK 以及幂等回放。在没有完整复制一致性与回归证据前禁止通过放宽就绪门禁伪造 50/50。
+
+## 2026-10-08 16:14 Projection 持久化水位异常（P0，未修复）
+
+- 50 个已启用 Robot 此时均 RUNNING，reported open orders=2000；但订单与历史投影一致性**不可据此视为通过**。
+- 执行只读 `tests/check-projection-consistency-host.sh`，检查失败：`Found 1 orphan trade projection mutations`。定位为 Trade P232, epoch=1, journal_seq=7111, mutation_index=3，entity_type=`DEDUPE_RESULT`；缺少对应 `dc_trade_projection_event`。**不允许删除孤立 mutation 来让校验变绿。**
+- P232 的 `dc_trade_projection_watermark` 为 epoch1/seq7025（最后更新时间 2026-10-08 09:18:55），但 Trade A `TRADE_PARTITION_READY` 后 committedStateSeq 已超过 56000。重启 ProjectionSvr 后明确报告 `PROJECTION_REBASE_REQUIRED partition:P232, watermark:1:7025, baselineSeq:56460, committedHigh:63373`。大量其他 Trade 分区存在同类 `PROJECTION_REBASE_REQUIRED`：**旧 watermark 已早于可直接 FETCH 的 journal 基线，不能只靠重启追平**。需要查归档链或完整、安全的快照/事件重建方案；不允许直接跳过序号。
+- 2026-10-08 16:07：Trade Projection watermark 共 123 条，最新更新时间仅至 13:37:03，123/123 超过 2 小时；Order Projection watermark 共 125 条，多数也较旧（旧更新时间不必然代表错误，但结合下面 GAP 异常属高风险）。
+- Order Projection P054 发生 `projection event exists ahead of watermark`，水位 epoch85/seq109061（12:48:09），已存事件 epoch85/seq109062，且 `Projection GAP retry` 持续出现。**禁止直接手动 UPDATE watermark**；应核对事件/关联物化变更的事务原子性和安全重放。
+- ProjectionSvr 旧环境容器 512 MiB、`-Xmx192m`、CPU 0.2；历史日志明确有 Java heap OOM，队列反复 critical。16:10 单独把查询侧服务重建到容器 768 MiB、堆 320 MiB、CPU 1.0，并留存私有环境文件备份，Trade/Order/Robot 未重建。16:14 观察重启次数 0、内存约 497 MiB、没有新 OOM 或队列 critical，但仍有大量 REBASE_REQUIRED 和 GAP；仅资源瓶颈缓解。
+- 部署 repo 的 `compose.yaml` 默认 ProjectionSvr 资源已同步到 768 MiB / CPU 1.0 / Xmx320m。不会改写 Trade/Order/MySQL 权威数据或已存在的 journal/snapshot。
+- 基础账务表只读检查：订单 940、成交 582、持仓 560、余额 645；未发现负的订单 leaves/cum qty、成交数量/价格、余额、冻结/占用保证金。**另发现 1 条 BTCUSDT Cross 多头数量为 -0.0002**，需依据相关撮合/成交与 Trade 权威状态判定是否合法，不应臆断资金损失或直接改库。
+- 解除 P0 的验收条件：定位归档/重建路径，P232 孤立变更归属得到解释且事件/变更一致，P054 watermark/事件物化严格原子，全部必要 Trade/Order watermark 与源头 committed seq、快照和历史订单/成交/资金/持仓一致；Trade 复制 ACK 与 50/50 Robot 继续长稳。未通过这些验收前，保持 `TRIAL_LIQUIDITY_TAPE_ENABLED=false`、禁止 200 租户负载测试与故障注入。
