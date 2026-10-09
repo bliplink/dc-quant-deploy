@@ -50,6 +50,7 @@
 - 定向补齐批次 `gap_86642944` 严格命中 ADA trend、BTC channel、ETH range、LINK trend、SOL channel、UNI trend、XRP range 共 7 个目标，没有再产生范围外品种；14 个候选全部通过提交前检查并进入异步生成/编译/365 天正式回测。任务进入队列不等于通过资格或已发布，必须继续按生成、回测结果和 live registry 验收。
 - `gap_86642944` 最终 14/14 生成编译成功、14/14 正式回测完成、0 个发布：13 个首先因 OOS 未通过被拒绝；另 1 个 XRP range 候选虽 `oos_pass=1`，但费用后验证收益为负，因此仍被资格门槛拒绝。补缺流程没有用弱策略填满库存，7 个场景继续安全保持 `NO_TRADE`。
 - 同次验收发现 BNB trend 的旧选择仍显示 `online=true`，但最新资格门槛已将其排除，运行时因此反复得到 `active_strategy_missing`。INDSvr `2f731af` 统一了 Workbench 在线状态、运行时有效注册判断和真实回测资格；不合格的旧 `SELECT` 会失效并等待正式选策刷新。相关 Workbench、运行时和经济性聚焦测试共 83/83 通过；生产已自动部署该 revision，启动后 BNB 立即显示 `NO_TRADE / online=false / activeLive={}`，10 个品种 K 线恢复 `READY`，下一根闭合 K 线记录为 `selection_no_trade` 而不再是 `active_strategy_missing`，容器无重启或 OOM。
+- 最终只读选择快照为 1 个 `SELECT`、1 个 `WATCH`、8 个 `NO_TRADE`：TRX range 仍在线并在 06:15 UTC 闭合 K 线上正常返回 `no_signal`，DOGE range 为 `WATCH`，其余品种均未强制交易。该状态表示候选质量不足时系统正确保持空仓，不表示服务停机。
 
 ## 3. executionID 对账流程
 
