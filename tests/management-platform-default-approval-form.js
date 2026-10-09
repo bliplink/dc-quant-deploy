@@ -12,9 +12,14 @@ const {chromium}=require('playwright');
   await page.getByLabel('密码').fill(process.env.PLATFORM_ADMIN_PASSWORD);
   await page.getByRole('button',{name:'登录平台'}).click();
   await page.getByRole('heading',{name:'租户审批'}).waitFor({timeout:29000});
-  await page.locator('.section-head select').selectOption('NEEDS_INFO');
-  const row=page.locator('tbody tr').first();
-  await row.waitFor({timeout:23000});
+  await page.waitForTimeout(1600); // allow the initial PENDING request to settle
+  await page.locator('.section-head select').selectOption(''); // all statuses
+  await page.getByRole('button',{name:'刷新',exact:true}).click();
+  const row=page.locator('tbody tr').filter({hasText:'QA Mobile INFO'}).first();
+  try{await row.waitFor({timeout:23000})}catch(err){
+    const messages=await page.locator('.error.banner').allInnerTexts();
+    throw new Error('No reviewable QA application: '+messages.join('|').slice(0,150));
+  }
   await row.getByRole('button',{name:'审核'}).click();
   const dlg=page.locator('.modal');
   await dlg.waitFor();

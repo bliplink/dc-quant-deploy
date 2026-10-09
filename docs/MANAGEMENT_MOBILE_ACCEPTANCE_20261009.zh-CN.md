@@ -133,6 +133,36 @@ QA_VERIFY_ONLY=1 MANAGEMENT_QA_SCRIPT=management-robot-control-acceptance.js pyt
 - Projection `orphan_mutations=0`，Trade/Order watermark mismatch 均为 `0`；Order HA 快照与分区状态检查 PASS。
 - 后续应在授权运行环境内补平台手工批准开通 UI 验收；租户路由与 Placement 不在当前计划中。
 
+## 2026-10-09：手动审批前置修复（仍不执行路由修改/回滚）
+
+用户要求继续管理功能验收，同时明确暂不验证现有租户路由修改及回滚，也不进行 Placement 写操作。现网快照：12 个已批准试用租户、1 条 NEEDS_INFO、1 条 REJECTED 申请；13 个 Robot 配置，其中 12 条活跃、1 条为 DPGR6B 禁用 QA Robot。
+
+### Robot 新增、编辑的持续状态
+
+- 使用实际 MySQL 只读查询复核：`DPGR6B` 的 `QA Disabled Robot 513861081` 仍为 `enabled=0, STOPPED, open_order_count=0`，已保存 `level_step_bps=3`。原 Maker/Tape Robot 的刷新间隔恢复为 1000ms，`RUNNING/40`。
+- 此项证据与前次浏览器真实新增、参数编辑、恢复验收相互印证。**没有再次生成交易 Robot**，亦未访问 API Key 明文。
+
+### 新租户手工审批默认交易入口缺陷
+
+- 发现：平台 UI 曾默认填充 `<tenantCode>.trade.example.com`，而手工批准使用这个值原样创建租户；新 location 是审批事务中才生成的，保存后的链接可能无效。
+- 修复：平台审批表单默认 `base_url` 为空，提示“留空按分配编号生成主站链接”。ManagerSvr 在分配新的 6 位 location 后，如为空、仍为旧 example.com 占位地址或为自动审批，采用 `https://trade.opentradingcore.com/#/trade?location=<LOCATION>`；明确填写的自定义非占位地址保留。
+- 该修改只影响**新租户获批时创建的数据**，未对任何现存租户执行 UPDATE_ROUTE、路由回滚、Placement、数据库重置。
+- 提交：`com.app.dc.managersvr@f8659fb`；`dc-saas-platform-web@cdc841a`；部署锁 `dc-quant-deploy@b4b2a5e`。两套 GitHub Actions 构建均 `success`，ManagerSvr 的 `TenantApplicationServiceTest` 覆盖空值、旧占位、自动审批及真实自定义链接。
+- 真实 390px Chromium 浏览器登录平台后，在现有 `NEEDS_INFO` 模拟申请上打开审核弹窗，**只读表单验收 PASS**：交易地址默认空白、Location 自动分配提示正确、无旧示例域名。脚本：`tests/management-platform-default-approval-form.js`。截图保存在 Mac mini 的 QA 截图目录。
+- **真实手动 APPROVE 并创建全新租户仍未执行，不得计为通过。** 该环节先前遇到平台执行安全检查拦截，本次没有通过其他路径绕过。自动审批 E2E 与纯 UI 表单检查都无法替代管理员点击“批准并开通”的最终验收。
+
+## 2026-10-09：继续推进审批表单，保持路由冻结
+
+- 保持用户约束：**不测试现有租户服务路由修改及回滚，不发布 Placement**。
+- Robot 复验：`DPGR6B` 新增禁用 QA Robot `QA Disabled Robot 513861081` 持久化 `level_step_bps=3`，`enabled=0`、`STOPPED`、0 单；原 Trial Liquidity Robot `refresh_interval_ms=1000`、`RUNNING/40`。全局 13 条 Robot：12 条启用且 40 单、1 条禁用且 0 单。
+- 发现手动审批表单默认 `<tenantCode>.trade.example.com`，而平台实际在审批事务中才分配 location，若保留占位地址将产生无效登录入口。
+- 修复**仅限新获批租户初始化**：ManagerSvr 的 `effectiveApprovalBaseUrl` 在地址空白、旧 example.com 占位或自动审批情况下使用 `https://trade.opentradingcore.com/#/trade?location=<新分配的6位编号>`，显式提供的真实自定义地址仍保留。平台审批 UI 默认地址改为空值，并提示留空自动生成。
+- 代码：`com.app.dc.managersvr@f8659fb`、`dc-saas-platform-web@cdc841a`；部署锁 `dc-quant-deploy@b4b2a5e`。两套 GitHub Actions `success`，ManagerSvr 已执行 `TenantApplicationServiceTest` 与 Robot 指标回归测试；正式镜像已更新、平台 Web Healthy、ManagerSvr 无重启。
+- 实际浏览器 `management-platform-default-approval-form.js` 只读表单检查 **PASS**：平台管理员登录，在已有测试申请上打开审批弹窗，`base_url` 和 `location` 均为空；没有点击批准，没有修改申请状态或创建新租户。
+- 发布后 UI 完整回归 **33/33 PASS**：租户 8 页 + 平台 3 页，390/768/1366px；字体与横向溢出检查通过。完整截图及 `qa-results.json` 位于 Mac mini `/Users/kong/.opentradingcore/dc-saas-runtime-fresh2-20261005/e2e-artifacts/management-qa-20261009/`。
+- 全局一致性：Robot 总数 13（12 RUNNING/40 + 1 STOPPED/0）、失败初始化任务 0、历史租户表中无 `trade.example.com` 链接、Projection orphan mutation 0、Trade/Order watermark mismatch 0、Order HA 快照一致。
+- **未通过的最后一项**：平台管理员真实 `APPROVE` 并开通新租户的完整 E2E。此前该执行步骤受到安全检查拦截，本次没有尝试绕过；代码单元测试、表单预检不等同于真实批准通过。
+
 ## 状态限制
 
 以上说明的是 Demo 环境的即时验收快照，不是 200 租户容量测试结果。UI 及管理功能重建过程中，仅替换租户与平台 Web 容器，未重启 Order/Trade 核心节点；仍应继续执行 Projection / Order HA 一致性检查。
