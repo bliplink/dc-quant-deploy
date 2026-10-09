@@ -36,7 +36,8 @@ const out=process.env.E2E_ARTIFACT_DIR||'/artifacts/first-paint';
         if(st.price&&st.price!=='--'&&!('priceMs' in marks))marks.priceMs=elapsed;
         if(st.statusReady==='true'&&!('marketReadyMs' in marks))marks.marketReadyMs=elapsed;
         marks.last=st;
-        if('chartBarsMs'in marks&&'bookFullMs'in marks&&'priceMs'in marks)break;
+        if('chartBarsMs'in marks&&'bookFullMs'in marks&&'priceMs'in marks&&
+          (st.statusReady===null || st.statusReady==='true'))break;
         await p.waitForTimeout(250);
       }
       console.log('FIRST_PAINT_TIMING',JSON.stringify(marks));
