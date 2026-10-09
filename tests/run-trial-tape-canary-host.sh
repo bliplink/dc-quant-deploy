@@ -15,8 +15,8 @@ set -a
 set +a
 [[ "${TRIAL_LIQUIDITY_TAPE_ENABLED:-false}" == true ]] ||
   { echo "Enable TRIAL_LIQUIDITY_TAPE_ENABLED in the deployed AdminSvr first" >&2; exit 2; }
-[[ "${TRIAL_LIQUIDITY_TAPE_CANARY_LOCATION:-}" == "${LOCATION}" ]] ||
-  { echo "AdminSvr canary does not match requested location" >&2; exit 2; }
+[[ -z "${TRIAL_LIQUIDITY_TAPE_CANARY_LOCATION:-}" || "${TRIAL_LIQUIDITY_TAPE_CANARY_LOCATION}" == "${LOCATION}" ]] ||
+  { echo "AdminSvr is restricted to a different canary location" >&2; exit 2; }
 mysql_read() {
   docker exec -i -e MYSQL_PWD="${MYSQL_PASSWORD}" dc-saas-mysql mysql -u"${MYSQL_USERNAME}" -N dc -e "$1"
 }

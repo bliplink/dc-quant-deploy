@@ -9,8 +9,8 @@ for column in tape_enabled tape_user_id tape_api_key tape_funding_request_id tap
   grep -q "${column}" "${ROOT}/deploy-saas.sh"
 done
 grep -Fq 'uq_tenant_liquidity_tape_funding' "${MIGRATION}"
-grep -Fq 'TRIAL_LIQUIDITY_TAPE_ENABLED: ${TRIAL_LIQUIDITY_TAPE_ENABLED:-false}' "${ROOT}/compose.yaml"
+grep -Fq 'TRIAL_LIQUIDITY_TAPE_ENABLED: ${TRIAL_LIQUIDITY_TAPE_ENABLED:-true}' "${ROOT}/compose.yaml"
 grep -Fq 'TRIAL_LIQUIDITY_TAPE_CANARY_LOCATION:' "${ROOT}/compose.yaml"
 grep -Fq 'TRIAL_LIQUIDITY_TAPE_CASH_AMOUNT:' "${ROOT}/compose.yaml"
-grep -Fq 'TRIAL_LIQUIDITY_TAPE_ENABLED=false' "${ROOT}/.env.example"
+grep -Fq 'TRIAL_LIQUIDITY_TAPE_ENABLED=true' "${ROOT}/.env.example"
 echo '[trial-liquidity-tape-migration-test] PASS'

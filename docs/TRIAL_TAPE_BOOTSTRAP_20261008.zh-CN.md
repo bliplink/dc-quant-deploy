@@ -1,5 +1,13 @@
 # Trial Tape 自动成交试点与验收（2026-10-08）
 
+## 2026-10-09：所有新试用租户默认开启 Tape
+
+- 新部署默认 `TRIAL_LIQUIDITY_TAPE_ENABLED=true`，`TRIAL_LIQUIDITY_TAPE_CANARY_LOCATION=`（空值）。所有**自动审批且通过安全检查的 TRIAL 租户**，在注册后依次创建独立 Tape 账户、幂等确认 Demo 入金、启动 Maker 20+20 与 Tape 主动 IOC。普通正式 ACTIVE 租户不走 Trial Bootstrap，不允许借此自动入金。
+- 若需要故障隔离，可设置 `TRIAL_LIQUIDITY_TAPE_ENABLED=false` 或限定 `TRIAL_LIQUIDITY_TAPE_CANARY_LOCATION=<LOCATION>`；这只影响尚未经过 `REVOKE_CASH` 的新 Bootstrap，**不会自动关闭已经启用的 Tape 机器人**。停用现有机器需使用租户 Robot 管理接口。
+- 之前 `COMPLETE/DONE` 的 Maker-only 租户**不会因为默认开关改变而自动补建账户**。升级时，在已经确认全部 Robot 健康、Projection 水位一致后逐个执行 `tests/run-trial-tape-canary-host.sh`，提供每个租户明确的 `TAPE_CANARY_LOCATION`、`TAPE_CANARY_CONFIRM` 和 `TAPE_CANARY_APPLY=YES`；新版脚本允许当前全局灰度限制为空。脚本只排队该租户的 `REVOKE_CASH` 后续步骤，不重复 Maker 入金，不能对未确认 Tape 入金的任务重置回放。
+- 单实例 Mac mini 8核/16GiB 环境仍需逐批验收 10→50→100→200 租户，观测 CPU PSI、内存、撮合 TPS、Trade/Order 分区延迟、Projection 水位。**默认开启不代表 200 个租户压测已经通过**。
+- Tape Demo=1 的 IOC 成交需要同时以 MDSvr `recentTrades` 最新成交、Tape 用户 `dc_users_posting` 中 `source='Trade'` 的增长、持仓与资金一致性核验；`dc_orders_execorders` 不一定包含这些内部 Demo 成交。使用 `tests/verify-trial-tape-live-host.py` 做时间窗只读验收。
+
 目标：试用 tenant 自动审批后保留 Maker 20+20 档，并可为指定租户启用 Binance aggTrade 模拟成交量主动点价。真实币安对冲仍关闭，不涉及真实资产。
 
 - `TRIAL_LIQUIDITY_TAPE_ENABLED=false` 默认为关闭；`TRIAL_LIQUIDITY_TAPE_CANARY_LOCATION=<LOCATION>` 限制在一个租户。只有 `REVOKE_CASH` 状态被处理时才写入持久化的 `tape_enabled=1`，随后该决定不受环境变化影响。
