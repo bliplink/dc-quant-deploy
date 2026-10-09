@@ -22,6 +22,34 @@
 5. 验收 Broker/Trader 签名登录、个人/代客交易权限、客户归属隔离、入出金和成交，按权威数据库与 `ClOrdID` / `ExecID` 核对，最后验证撤销 Key 后不能再登录。
 6. 全程保留可追溯的 Git commit、镜像 digest、时间、租户（脱敏）、业务响应状态与数据库核对结果；**不能以离线 mock 或页面 HTTP 200 替代真实交易证据**。
 
+## Mac mini / Colima GHCR ARM64 镜像无侵入导入
+
+2026-10-09，Colima Docker daemon 的 `HTTPProxy` / `HTTPSProxy` 为空，直接 `docker pull` 两次在 layer 下载处超时。本机 `127.0.0.1:10808` 有可用代理、`/opt/homebrew/bin/crane` 已安装。**不重启 Docker、不修改生产 Robot，也不关闭镜像门禁**，使用以下方法将已由 GitHub Actions 发布、完整提交 SHA 锁定的 ARM64 镜像导入：
+
+```sh
+IMAGE=ghcr.io/bliplink/robotsvr:sha-36b80cfca6c70e9c13e1b5f0114b4eb87d0d9872
+ARCHIVE="$HOME/.opentradingcore/verify-images/robotsvr-36b80cf-arm64.tar"
+mkdir -p "$(dirname "$ARCHIVE")"
+HTTPS_PROXY=http://127.0.0.1:10808 \
+HTTP_PROXY=http://127.0.0.1:10808 \
+ALL_PROXY= NO_PROXY=localhost,127.0.0.1 \
+crane pull --platform linux/arm64 "$IMAGE" "$ARCHIVE" --format=tarball
+
+# 校验 tar 内镜像配置与 GHCR 原始 ARM64 config digest 一致
+tar -xOf "$ARCHIVE" 'sha256:4ccac4846d00051053e9fb89ae1ca4e0f89f9124b6e16a3045ea3f967428f75e' | shasum -a 256
+docker load -i "$ARCHIVE"
+docker image inspect -f '{{.Id}}|{{.Architecture}}' "$IMAGE"
+```
+
+本次核对得到：
+
+- GHCR ARM64 child manifest：`sha256:bb09fc1e98538435a0fe3c4ad7edc8e15a3db3cd64ec2e14342e4343e8ed0038`。
+- 原始 config digest 及再次 `docker save` 的实际 config SHA：`sha256:4ccac4846d00051053e9fb89ae1ca4e0f89f9124b6e16a3045ea3f967428f75e`；12 层 RootFS diff IDs、Entrypoint、历史、配置均完全一致。
+- Colima `docker image inspect .Id`：`sha256:98c3a2bb1793b06b0c369f00372d18dee54da31363fc9525e268fd6783210a9a`。是本地 OCI/import 的不可变 image ID，必须在审批清单中有明确审查记录才能执行隔离 Broker Runner。
+- `docker run --network none` 仅启动 Runner 类，未提供业务参数，按预期提示 `BROKER_E2E_LOCATION is required` 并退出；**没有访问真实账户、也没有发起真实下单**。
+
+后续版本**不得复用此提交的 digest**；先核对新 Actions、远端 config 和导入后的 RootFS/config，再审批相应本地 ID。用于演示集群的现有 RobotSvr 始终单独运行，不必升级它才能运行独立测试容器。
+
 ## Projection 最终一致性
 
 `tests/run-broker-api-e2e-host.sh` 中的数据库核对为**只读**，最多等待 45 秒：
