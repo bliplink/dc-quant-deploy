@@ -1,4 +1,4 @@
-# Reviewed architecture-specific Docker image config IDs.
+# Reviewed immutable Docker image IDs for pinned ARM64 GHCR image.
 # This is code/CI approval for isolated Broker acceptance, NOT a live E2E pass.
 #
 # RobotSvr saas-crypto 36b80cfca6c70e9c13e1b5f0114b4eb87d0d9872
@@ -6,14 +6,20 @@
 # Image: ghcr.io/bliplink/robotsvr:sha-36b80cfca6c70e9c13e1b5f0114b4eb87d0d9872
 # GHCR arm64 child manifest:
 # sha256:bb09fc1e98538435a0fe3c4ad7edc8e15a3db3cd64ec2e14342e4343e8ed0038
-# arm64 config image ID below verified via docker manifest inspect.
-# Local download did not finish on first attempt: host docker image inspect
-# must independently resolve this config ID BEFORE any runner can execute.
+# The original config SHA below was validated via GHCR manifest, then
+# `crane pull --platform linux/arm64 --format=tarball` with local proxy.
+# Docker tar config sha256=4ccac... was verified cryptographically, and
+# `docker save` after Colima import retained precisely the SAME config
+# content, 12 RootFS layer diff IDs, EntryPoint, history and other metadata.
+# Colima containerd's `docker image inspect .Id` reports the second,
+# local imported manifest ID (98c3...) instead of the original config ID.
+# BOTH IDs are reviewed only for this exact arm64 image + commit.
 # Backend contract checked: OpenApiAccountAuthority.rejectLocationConflict
 # returns "location conflicts with authenticated session"; Runner accepts
 # that exact denial (also absent-customer denial), but not INTERNAL_ERROR,
 # HTTP failures, missing sessions, or unrelated errors.
 sha256:4ccac4846d00051053e9fb89ae1ca4e0f89f9124b6e16a3045ea3f967428f75e
+sha256:98c3a2bb1793b06b0c369f00372d18dee54da31363fc9525e268fd6783210a9a
 #
 # Previously reviewed 77a77be config 24bb08e1... was superseded; it does
 # not recognize the exact backend cross-tenant denial text.

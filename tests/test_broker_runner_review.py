@@ -14,12 +14,14 @@ class BrokerRunnerReviewTests(unittest.TestCase):
     def test_reviewed_arm64_image_allowed_but_previous_unsafe_image_rejected(self):
         manifest = SRC.with_name("broker-runner-approved-images.txt")
         new_id = "sha256:4ccac4846d00051053e9fb89ae1ca4e0f89f9124b6e16a3045ea3f967428f75e"
+        colima_import_id = "sha256:98c3a2bb1793b06b0c369f00372d18dee54da31363fc9525e268fd6783210a9a"
         self.assertTrue(gate.verify(new_id, manifest))
+        self.assertTrue(gate.verify(colima_import_id, manifest))
         self.assertFalse(gate.verify("sha256:24bb08e1ac73783f87e8c1ac32391004e5bfe4661b9ecc6b72ef2912c45f81fc", manifest))
         self.assertFalse(gate.verify("sha256:" + "a" * 64, manifest))
         self.assertEqual(
             [line for line in manifest.read_text().splitlines() if line.startswith("sha256:")],
-            [new_id],
+            [new_id, colima_import_id],
         )
 
 
