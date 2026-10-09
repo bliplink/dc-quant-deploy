@@ -446,6 +446,11 @@ strategy.runtime.executionText=15m
 strategy.runtime.fallbackCandidates.enabled=false
 strategy.runtime.selectionRefreshOnMissing.enabled=true
 strategy.runtime.selectionRefreshOnMissing.cooldownMs=300000
+strategy.runtime.signalEconomics.enabled=true
+strategy.runtime.signalEconomics.estimatedRoundTripCostPct=0.08
+strategy.runtime.signalEconomics.minTargetCostMultiple=2.0
+strategy.runtime.signalEconomics.minStopCostMultiple=1.5
+strategy.runtime.signalEconomics.minNetRewardRisk=1.2
 strategy.selection.defaults=range=binanceRange,trend=binanceTrend,channel=binanceChannel
 strategy.selection.backend=clickhouse
 deepseek.api.key=${INDSVR_DEEPSEEK_API_KEY}

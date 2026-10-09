@@ -16,6 +16,7 @@
 
 - [部署后快速开始](01-getting-started/quick-start-after-deploy.zh-CN.md)
 - [报告与排障](05-operations/reports-and-troubleshooting.zh-CN.md)
+- [场景、策略选择、信号与下单链路运维](05-operations/strategy-chain-health-and-gap-fill.zh-CN.md)
 - [实盘策略 v4 资格门槛与持续复核](05-operations/live-strategy-v4-qualification.zh-CN.md)
 - [安全说明](05-operations/security.zh-CN.md)
 
@@ -35,6 +36,7 @@
 
 - [核心数据表](04-reference/data-model.zh-CN.md)
 - [核心流程](02-architecture/flows.zh-CN.md)
+- [场景、策略选择、信号与下单链路运维](05-operations/strategy-chain-health-and-gap-fill.zh-CN.md)
 - [报告与排障](05-operations/reports-and-troubleshooting.zh-CN.md)
 
 ## 目录结构
