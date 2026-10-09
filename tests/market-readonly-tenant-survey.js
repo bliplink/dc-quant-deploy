@@ -8,6 +8,9 @@ const locations=(process.env.E2E_TENANTS||'DPGR6B,VPDHPM,BIHZYE,DUJE16,W8OSYE,IS
 const base=process.env.E2E_BASE_URL||'http://127.0.0.1:18088';
 const artifact=process.env.E2E_ARTIFACT_DIR||'/artifacts/market-readonly-survey';
 const timeoutMs=Math.min(30000,Math.max(5000,Number(process.env.E2E_TENANT_TIMEOUT_MS||15000)));
+// Use only after a version with cached-history price initialization is deployed.
+const requirePrice=process.env.E2E_REQUIRE_LAST_PRICE==='1';
+const priceGraceMs=Math.min(12000,Math.max(1000,Number(process.env.E2E_PRICE_GRACE_MS||8000)));
 const results=[];
 (async()=>{
 fs.mkdirSync(artifact,{recursive:true});
@@ -28,6 +31,16 @@ try{
      // Give a bounded second window, then fail if the book is still absent.
      await page.waitForFunction(()=>document.querySelectorAll('.order-book-row--bid').length>=10 && document.querySelectorAll('.order-book-row--ask').length>=10,null,{timeout:timeoutMs});
    }
+   // A full order book can arrive slightly before the history or live trade
+   // that initializes the mid-price. Give it an explicit bounded grace period.
+   const firstPrice=await page.locator('.bookMidPrice span').first().textContent().catch(()=>null);
+   let priceRecoveredAfterGrace=false;
+   if(requirePrice&&(!firstPrice||firstPrice.trim()==='--')) {
+     await page.waitForFunction(()=>{
+       const price=document.querySelector('.bookMidPrice span')?.textContent?.trim();
+       return Boolean(price&&price!=='--');
+     },null,{timeout:priceGraceMs}).then(()=>{priceRecoveredAfterGrace=true}).catch(()=>{});
+   }
    const quote=await page.evaluate(()=>({
       bids:document.querySelectorAll('.order-book-row--bid').length,
       asks:document.querySelectorAll('.order-book-row--ask').length,
@@ -43,14 +56,30 @@ try{
    }));
    const issues=[];
    if(initialQuoteTimeout)issues.push('QUOTE_RECOVERED_AFTER_TIMEOUT');
+   if(priceRecoveredAfterGrace)issues.push('LAST_PRICE_RECOVERED_AFTER_GRACE');
    if(!quote.lastPrice || quote.lastPrice==='--')issues.push('LAST_PRICE_UNINITIALIZED');
    if(!quote.klineStatus)issues.push('KLINE_PUSH_NOT_YET_OBSERVED');
    if(!trades.recentCount)issues.push('NO_RECENT_TRADE_ROWS');
    if(errors.length)issues.push('JS_PAGE_ERROR');
-   detail={location,status:errors.length?'FAIL':issues.length?'WARN':'PASS',http:response.status(),...quote,...trades,issues,errors};
+   const missingRequiredPrice=requirePrice&&issues.includes('LAST_PRICE_UNINITIALIZED');
+   detail={location,status:(errors.length||missingRequiredPrice)?'FAIL':issues.length?'WARN':'PASS',http:response.status(),...quote,...trades,issues,errors};
   }catch(err){
    detail.error=String(err.message||err).slice(0,360);
    detail.errors=errors;
+   // A public market snapshot distinguishes missing server depth from a
+   // browser subscription/hydration failure; it never performs a trade write.
+   try {
+     const key=`${location}\x1f4\x1fBTCUSDT`;
+     const snapshotResponse=await page.request.post(base+'/httpapi/',{
+       data:{serverName:'MDSvr',method:'queryPublicMarket',key,
+         content:{location,securityID:'BTCUSDT'}},timeout:8000
+     });
+     const payload=await snapshotResponse.json();
+     const rows=payload.data?.orderBook?.NoMDEntries||[];
+     detail.publicSnapshot={code:payload.code,
+       bids:rows.filter(x=>String(x.MDEntryType)==='0').length,
+       asks:rows.filter(x=>String(x.MDEntryType)==='1').length};
+   }catch(snapshotError){detail.snapshotError=String(snapshotError.message||snapshotError).slice(0,170)}
    await page.screenshot({path:path.join(artifact,'FAIL-'+location+'.png')}).catch(()=>{});
   }finally{await page.close()}
   results.push(detail);

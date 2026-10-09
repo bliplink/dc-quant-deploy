@@ -37,6 +37,17 @@ bash tests/verify-order-cluster-state-host.sh
 
 `survey-report.json` 保留 `PASS`、`WARN`、`FAIL` 不同状态；`WARN` 含初始价尚未可见、短时 K 线尚未更新、首次盘口加载超时但二次等待恢复。千万不要把 `WARN` 统计成完全通过。生产 Mac mini 现有结果保存在 E2E 容器的 `/artifacts/market-survey-20261009-1300` 和 `/artifacts/market-survey-20261009-1310`。
 
+对于 `dc-trade-web@030df71` **部署后**验收，可以加 `E2E_REQUIRE_LAST_PRICE=1`，将历史成交已载入但最新价仍然 `--` 升级为真正的 FAIL；首次运行旧镜像时不能打开此新版本专用门槛。
+
+## 续验补充：首帧盘口与初始最新价
+
+- `dc-trade-web@030df71` 正式镜像通过发布/视觉/功能/压力四条 CI 并部署；首次启用严格 `E2E_REQUIRE_LAST_PRICE=1` 的 12 户验收得到 **5 PASS、5 WARN、2 FAIL**，FAIL 为 `UJ2WZD`、`QS12O4` 的 `LAST_PRICE_UNINITIALIZED`。
+- 对两户追加逐 2 秒采样：`UJ2WZD` 在约 4 秒之后出现双边 10/10 和最新价，`QS12O4` 在约 4 秒看到最新价，但该次采样直到 12 秒时盘口仍为 0/0；浏览器没有 pageerror。说明初始最新价和盘口首帧是可分离的时序问题。
+- 另对 `QS12O4` 使用只读 `MDSvr.queryPublicMarket`（带原有格式的分区键 `location + U+001F + 4 + U+001F + BTCUSDT`）发现服务端快照是 **10 买、10 卖、最近成交 200**，与 `DPGR6B` 一致；缺少该请求键的请求返回 `code=9000`。故此证据指向浏览器初次 WebSocket 快照/订阅时序问题，**不是此时服务端真的 0 挂单**，也没有发现对应页面 JS 异常。
+- 为避免把首次几秒初始化当成长期故障，验收脚本新增最多 8 秒价格宽限时间和 WARN 状态 `LAST_PRICE_RECOVERED_AFTER_GRACE`；两户再测 **2 WARN、0 FAIL**，分别是 `QUOTE_RECOVERED_AFTER_TIMEOUT` 与价格宽限内恢复。
+- 新增 `a31c3a4` 交易 Web 修复（尚待最终 CI/部署）：WebSocket 完整盘口持续缺失 8 秒时，最多一次读取当前租户公开盘口快照；正常情况下继续纯 WS，不循环轮询；仅传递现有分区路由键，不改变服务端租户路由或 Placement。必须 CI 与真实浏览器一起通过后才能声明修复完成。
+- 验收脚本对持续失败项会额外读取一次服务器公开行情快照（仍为只读），对比服务端是否有 10/10 档位，从而区分服务端空盘口与浏览器订阅缺帧；故障报告保留相应结构化诊断。
+
 ## MDSvr 失败批处理保护：实现前必须满足的门槛
 
 从 `com.app.dc.mdsvr` 和 `com.app.dc` 检查确认：
