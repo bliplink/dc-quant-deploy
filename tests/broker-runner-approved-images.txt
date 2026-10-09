@@ -1,13 +1,18 @@
-# Reviewed Docker image IDs (sha256:<64 lowercase hex>) of BrokerApiE2ERunner.
-# EMPTY BY DESIGN: as of 2026-10-09 current RobotSvr still has:
-# 1. makerResting set after brokerPlace, so transport timeout can miss cleanup.
-# 2. catch (Exception) for foreign-customer test, so network outages appear
-#    like authorization denials.
+# Reviewed *platform-specific Docker image IDs* (sha256:<64 hex>) for
+# the standalone BrokerApiE2ERunner. These are NOT live-E2E pass claims.
 #
-# To approve a new image:
-# - Fix both Java issues and add negative regression tests in RobotSvr.
-# - Publish via GitHub Actions, inspect the immutable image, and review actual
-#   cross-tenant rejection codes.
-# - Record audited sha256 digest here via a reviewed commit.
-# - Never approve a tag, never whitelist the current unsafe image just to
-#   make acceptance green; this gate runs before funds/order side effects.
+# RobotSvr saas-crypto commit 77a77bec8bea0cb02cdb9276b7a60462fbe1a89b
+# GH Actions 37927294455 SUCCESS: Maven tests, amd64/arm64 GHCR build.
+# macOS arm64 image pulled by immutable commit SHA:
+# ghcr.io/bliplink/robotsvr:sha-77a77bec8bea0cb02cdb9276b7a60462fbe1a89b
+# Java review: record cleanup intent before write, cancel only exact run
+# ClOrdIDs, bounded query/reconciliation, explicit scope-denial classifier,
+# positive same-tenant read after foreign denial. The backend's actual
+# cross-tenant error string has NOT yet been independently verified; the
+# runner must fail closed if it differs from the reviewed allowlist.
+sha256:24bb08e1ac73783f87e8c1ac32391004e5bfe4661b9ecc6b72ef2912c45f81fc
+#
+# NEVER approve prior running sha-abd7efa... image or a mutable tag.
+# Add another architecture's config digest only after its own review.
+# This manifest permits isolated test execution after credentials are
+# authorized; it does NOT authorize live E2E or production Robot restart.

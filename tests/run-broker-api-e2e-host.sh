@@ -24,8 +24,14 @@ command -v python3 >/dev/null 2>&1 || die "python3 is required"
 
 # Fail closed *before* reading any credentials or performing side effects.
 # Accept only a specifically audited immutable image, not a floating tag.
-robot_image_id="$(docker inspect --format '{{.Image}}' dc-saas-robotsvr 2>/dev/null || true)"
-[[ -n "${robot_image_id}" ]] || die "dc-saas-robotsvr is not deployed"
+if [[ -n "${BROKER_E2E_RUNNER_IMAGE_REF:-}" ]]; then
+  [[ "${BROKER_E2E_RUNNER_IMAGE_REF}" =~ ^ghcr[.]io/bliplink/robotsvr:sha-[0-9a-f]{40}$ ]] ||
+    die "BROKER_E2E_RUNNER_IMAGE_REF requires an exact RobotSvr commit-SHA tag"
+  robot_image_id="$(docker image inspect --format '{{.Id}}' "${BROKER_E2E_RUNNER_IMAGE_REF}" 2>/dev/null || true)"
+else
+  robot_image_id="$(docker inspect --format '{{.Image}}' dc-saas-robotsvr 2>/dev/null || true)"
+fi
+[[ -n "${robot_image_id}" ]] || die "Broker Runner image is not present locally"
 python3 "${SCRIPT_DIR}/broker-runner-image-review.py" "${robot_image_id}" ||
   die "Broker live E2E blocked: runner cleanup/isolation not approved"
 

@@ -35,8 +35,17 @@ safe_location() {
 # Do not create even temporary accounts if the deployed Java Broker runner has
 # not passed the immutable-image safety review.
 command -v docker >/dev/null 2>&1 || die "docker is required"
-reviewed_broker_image="$(docker inspect --format '{{.Image}}' dc-saas-robotsvr 2>/dev/null || true)"
-[[ -n "${reviewed_broker_image}" ]] || die "RobotSvr image unavailable for Broker E2E safety review"
+# Optional isolated runner image. Running RobotSvr remains untouched.
+# Only a pinned 40-hex commit SHA tag can be selected, and its actual
+# immutable image ID must still appear in the reviewed digest allowlist.
+if [[ -n "${BROKER_E2E_RUNNER_IMAGE_REF:-}" ]]; then
+  [[ "${BROKER_E2E_RUNNER_IMAGE_REF}" =~ ^ghcr[.]io/bliplink/robotsvr:sha-[0-9a-f]{40}$ ]] ||
+    die "BROKER_E2E_RUNNER_IMAGE_REF requires an exact RobotSvr commit-SHA tag"
+  reviewed_broker_image="$(docker image inspect --format '{{.Id}}' "${BROKER_E2E_RUNNER_IMAGE_REF}" 2>/dev/null || true)"
+else
+  reviewed_broker_image="$(docker inspect --format '{{.Image}}' dc-saas-robotsvr 2>/dev/null || true)"
+fi
+[[ -n "${reviewed_broker_image}" ]] || die "Reviewed Broker Runner image is not present locally"
 python3 "${SCRIPT_DIR}/broker-runner-image-review.py" "${reviewed_broker_image}" ||
   die "Isolated tenant lifecycle blocked before any account registration: Broker runner not approved"
 
@@ -522,7 +531,7 @@ broker_admin_response="$(api_call "${users_payload}" "${broker_api_token}")"
 expect_ok "Broker API retains Tenant management access" "${broker_admin_response}"
 broker_actor_user_id="$(printf '%s' "${broker_login_response}" | json_eval 'd["data"]["user_id"]')"
 
-ENV_FILE="${ENV_FILE}" BROKER_E2E_RUN_ID="${E2E_SUFFIX}" BROKER_E2E_LOCATION="${E2E_LOCATION_A}" BROKER_E2E_ACTOR_USER_ID="${broker_actor_user_id}" BROKER_E2E_API_KEY="${broker_api_key}" BROKER_E2E_API_SECRET="${broker_api_secret}" BROKER_E2E_MAKER_CUSTOMER_ID="${user_id_a}" BROKER_E2E_TAKER_CUSTOMER_ID="${overflow_user_id}" BROKER_E2E_FOREIGN_LOCATION="${E2E_LOCATION_B}" BROKER_E2E_FOREIGN_CUSTOMER_ID="${user_id_b}"   "${SCRIPT_DIR}/run-broker-api-e2e-host.sh"
+ENV_FILE="${ENV_FILE}" BROKER_E2E_RUNNER_IMAGE_REF="${BROKER_E2E_RUNNER_IMAGE_REF:-}" BROKER_E2E_RUN_ID="${E2E_SUFFIX}" BROKER_E2E_LOCATION="${E2E_LOCATION_A}" BROKER_E2E_ACTOR_USER_ID="${broker_actor_user_id}" BROKER_E2E_API_KEY="${broker_api_key}" BROKER_E2E_API_SECRET="${broker_api_secret}" BROKER_E2E_MAKER_CUSTOMER_ID="${user_id_a}" BROKER_E2E_TAKER_CUSTOMER_ID="${overflow_user_id}" BROKER_E2E_FOREIGN_LOCATION="${E2E_LOCATION_B}" BROKER_E2E_FOREIGN_CUSTOMER_ID="${user_id_b}"   "${SCRIPT_DIR}/run-broker-api-e2e-host.sh"
 
 # The Broker runner funded the disposable maker account. Verify that an
 # independently issued Trader key with explicit ORDER_WRITE can place and

@@ -11,11 +11,16 @@ spec.loader.exec_module(gate)
 
 
 class BrokerRunnerReviewTests(unittest.TestCase):
-    def test_current_manifest_has_no_approved_unsafe_images(self):
+    def test_reviewed_arm64_image_allowed_but_previous_unsafe_image_rejected(self):
         manifest = SRC.with_name("broker-runner-approved-images.txt")
+        new_id = "sha256:24bb08e1ac73783f87e8c1ac32391004e5bfe4661b9ecc6b72ef2912c45f81fc"
+        self.assertTrue(gate.verify(new_id, manifest))
         self.assertFalse(gate.verify("sha256:" + "a" * 64, manifest))
-        contents = manifest.read_text()
-        self.assertIn("EMPTY BY DESIGN", contents)
+        self.assertEqual(
+            [line for line in manifest.read_text().splitlines() if line.startswith("sha256:")],
+            [new_id],
+        )
+
 
     def test_fail_closed_when_manifest_is_missing(self):
         self.assertFalse(gate.verify("sha256:" + "f" * 64, Path("/missing/broker-images.txt")))
@@ -47,5 +52,18 @@ class BrokerRunnerReviewTests(unittest.TestCase):
                         child.index('[[ -r "${ENV_FILE}" ]]'))
         self.assertLess(child.index('broker-runner-image-review.py'),
                         child.index('docker run --rm --network host'))
+
+    def test_explicit_candidate_requires_immutable_commit_sha_tag(self):
+        parent = SRC.with_name("run-tenant-lifecycle-e2e-host.sh").read_text()
+        child = SRC.with_name("run-broker-api-e2e-host.sh").read_text()
+        for content in (parent, child):
+            self.assertIn('BROKER_E2E_RUNNER_IMAGE_REF', content)
+            self.assertIn('ghcr[.]io/bliplink/robotsvr:sha-[0-9a-f]{40}', content)
+            self.assertIn('docker image inspect', content)
+            self.assertIn('docker inspect', content)
+        self.assertIn(
+            'BROKER_E2E_RUNNER_IMAGE_REF="${BROKER_E2E_RUNNER_IMAGE_REF:-}"',
+            parent,
+        )
 if __name__ == "__main__":
     unittest.main()
