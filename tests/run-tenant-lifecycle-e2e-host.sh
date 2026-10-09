@@ -275,7 +275,27 @@ overflow_user_id="$(printf '%s' "${overflow_response}" | json_eval 'd["data"]["u
 [[ -n "${overflow_user_id}" && "${overflow_user_id}" != "${user_id_a}" ]] ||
   die "second tenant customer did not return a distinct user_id"
 
-broker_key_create_payload="$(printf '{"serverName":"LoginSvr","method":"tenantApiKeyAdmin","content":{"action":"CREATE","type":"broker","label":"broker-e2e-%s","cid":"BROKER_KEY_CREATE_E2E"}}' "${E2E_SUFFIX}")"
+broker_readonly_payload="$(printf '{"serverName":"LoginSvr","method":"tenantApiKeyAdmin","content":{"action":"CREATE","type":"broker","label":"broker-readonly-default-%s","cid":"BROKER_READONLY_CREATE_E2E"}}' "${E2E_SUFFIX}")"
+broker_readonly_response="$(api_call "${broker_readonly_payload}" "${admin_token_a}")"
+expect_ok "broker omitted permissions defaults to read-only" "${broker_readonly_response}"
+[[ "$(printf '%s' "${broker_readonly_response}" | json_eval 'd["data"]["permissions"]')" == "MARKET_READ,ACCOUNT_READ,ORDER_READ" ]] ||
+  die "Broker key without explicit scopes must never receive order writes, cash or tenant management"
+broker_readonly_key="$(printf '%s' "${broker_readonly_response}" | json_eval 'd["data"]["api_key"]')"
+broker_readonly_secret="$(printf '%s' "${broker_readonly_response}" | json_eval 'd["data"]["secret_key"]')"
+broker_readonly_login_payload="$(printf '{"serverName":"LoginSvr","method":"apiKeyLogin","content":{"api_key":"%s","location":"%s","cid":"BROKER_READONLY_LOGIN_E2E"}}' "${broker_readonly_key}" "${E2E_LOCATION_A}")"
+broker_readonly_login_response="$(signed_api_call "${broker_readonly_login_payload}" "${broker_readonly_key}" "${broker_readonly_secret}")"
+expect_ok "broker read-only signed login" "${broker_readonly_login_response}"
+[[ "$(printf '%s' "${broker_readonly_login_response}" | json_eval 'd["data"]["permissions"]')" == "MARKET_READ,ACCOUNT_READ,ORDER_READ" ]] ||
+  die "Broker session widened omitted permissions"
+broker_readonly_token="$(printf '%s' "${broker_readonly_login_response}" | json_eval 'd["data"]["token"]')"
+broker_readonly_admin_response="$(api_call "${users_payload}" "${broker_readonly_token}")"
+expect_rejected "read-only broker cannot administer tenant users" "${broker_readonly_admin_response}"
+broker_readonly_delete_payload="$(printf '{"serverName":"LoginSvr","method":"tenantApiKeyAdmin","content":{"action":"DELETE","api_key":"%s","cid":"BROKER_READONLY_DELETE_E2E"}}' "${broker_readonly_key}")"
+broker_readonly_delete_response="$(api_call "${broker_readonly_delete_payload}" "${admin_token_a}")"
+expect_ok "broker read-only key cleanup" "${broker_readonly_delete_response}"
+log "Broker omitted scope -> read-only signed session; tenant control-plane denied."
+
+broker_key_create_payload="$(printf '{"serverName":"LoginSvr","method":"tenantApiKeyAdmin","content":{"action":"CREATE","type":"broker","permissions":"MARKET_READ,ACCOUNT_READ,ORDER_READ,ORDER_WRITE,TENANT_READ,TENANT_WRITE,CUSTOMER_CASH","label":"broker-e2e-%s","cid":"BROKER_KEY_CREATE_E2E"}}' "${E2E_SUFFIX}")"
 broker_key_create_response="$(api_call "${broker_key_create_payload}" "${admin_token_a}")"
 expect_ok "broker API key creation" "${broker_key_create_response}"
 broker_api_key="$(printf '%s' "${broker_key_create_response}" | json_eval 'd["data"]["api_key"]')"
@@ -285,7 +305,7 @@ broker_api_secret="$(printf '%s' "${broker_key_create_response}" | json_eval 'd[
 [[ "$(printf '%s' "${broker_key_create_response}" | json_eval 'd["data"]["rate_limit_profile"]')" == "TRADER_STANDARD" ]] ||
   die "broker key does not use Trader trading rate profile"
 [[ "$(printf '%s' "${broker_key_create_response}" | json_eval 'd["data"]["permissions"]')" == "MARKET_READ,ACCOUNT_READ,ORDER_READ,ORDER_WRITE,TENANT_READ,TENANT_WRITE,CUSTOMER_CASH" ]] ||
-  die "broker key default permission contract drifted"
+  die "broker key explicit permission contract drifted"
 
 broker_login_payload="$(printf '{"serverName":"LoginSvr","method":"apiKeyLogin","content":{"api_key":"%s","location":"%s","cid":"BROKER_LOGIN_E2E"}}' "${broker_api_key}" "${E2E_LOCATION_A}")"
 broker_login_response="$(signed_api_call "${broker_login_payload}" "${broker_api_key}" "${broker_api_secret}")"
