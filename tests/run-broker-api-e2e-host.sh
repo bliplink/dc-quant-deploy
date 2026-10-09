@@ -53,7 +53,9 @@ set +e
 broker_output="$(docker run --rm --network host   -e MAIN_CLASS=com.app.dc.robot.BrokerApiE2ERunner   -e JAVA_OPTS='-server -Xms32m -Xmx128m -Xmn32m'   -e BROKER_E2E_GATEWAY_HTTP_URL="http://127.0.0.1:${GW_HTTP_PORT}/api"   -e BROKER_E2E_GATEWAY_HOST=127.0.0.1   -e BROKER_E2E_GATEWAY_TCP_PORT="${GW_TCP_PORT}"   -e BROKER_E2E_LOCATION="${BROKER_E2E_LOCATION}"   -e BROKER_E2E_ACTOR_USER_ID="${BROKER_E2E_ACTOR_USER_ID}"   -e BROKER_E2E_API_KEY="${BROKER_E2E_API_KEY}"   -e BROKER_E2E_API_SECRET="${BROKER_E2E_API_SECRET}"   -e BROKER_E2E_MAKER_CUSTOMER_ID="${BROKER_E2E_MAKER_CUSTOMER_ID}"   -e BROKER_E2E_TAKER_CUSTOMER_ID="${BROKER_E2E_TAKER_CUSTOMER_ID}"   -e BROKER_E2E_FOREIGN_LOCATION="${BROKER_E2E_FOREIGN_LOCATION}"   -e BROKER_E2E_FOREIGN_CUSTOMER_ID="${BROKER_E2E_FOREIGN_CUSTOMER_ID}"   -e BROKER_E2E_SYMBOL="${BROKER_E2E_SYMBOL:-BTCUSDT}"   -e BROKER_E2E_MARKET_INDICATOR="${BROKER_E2E_MARKET_INDICATOR:-4}"   -e BROKER_E2E_PRICE="${BROKER_E2E_PRICE:-60000}"   -e BROKER_E2E_QTY="${BROKER_E2E_QTY:-0.001}"   -e BROKER_E2E_DEPOSIT="${deposit}"   -e BROKER_E2E_WITHDRAWAL="${withdrawal}"   -e BROKER_E2E_RUN_ID="${run_id}"   "${robot_image_id}" 2>&1)"
 runner_rc=$?
 set -e
-printf '%s\n' "${broker_output}"
+# Keep the full runner output only in memory for the structured result parser.
+# Its stdout may contain session or key material; never echo it to logs.
+log "Broker Java runner completed with exit_code=${runner_rc}; inspecting structured result (raw logs suppressed)."
 (( runner_rc == 0 )) || die "Broker API runner failed with exit code ${runner_rc}"
 
 summary="$(printf '%s\n' "${broker_output}" | python3 -c '

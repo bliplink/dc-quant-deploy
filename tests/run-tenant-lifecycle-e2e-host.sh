@@ -59,10 +59,10 @@ api_call() {
   local payload="$1" token=""
   if (( $# > 1 )); then token="$2"; fi
   if [[ -n "${token}" ]]; then
-    curl --noproxy '*' -fsS --max-time 30 -H 'Content-Type: application/json' -H "sessionId: ${token}" \
+    curl --noproxy '*' -sS --max-time 30 -H 'Content-Type: application/json' -H "sessionId: ${token}" \
       --data "${payload}" "${E2E_BASE_URL}"
   else
-    curl --noproxy '*' -fsS --max-time 30 -H 'Content-Type: application/json' \
+    curl --noproxy '*' -sS --max-time 30 -H 'Content-Type: application/json' \
       --data "${payload}" "${E2E_BASE_URL}"
   fi
 }
@@ -79,7 +79,9 @@ secret, body, expiry = sys.argv[1:]
 print(hmac.new(secret.encode("utf-8"), (body + expiry).encode("utf-8"), hashlib.sha256).hexdigest())
 PY
 )"
-  curl --noproxy '*' -fsS --max-time 30 \
+  # Negative authentication may return HTTP 401/403 with a structured GW code.
+  # Retain its body so explicit authorization denial can be asserted.
+  curl --noproxy '*' -sS --max-time 30 \
     -H 'Content-Type: application/json' \
     -H "cid: TENANT_API_E2E" \
     -H "apikey: ${api_key}" \
@@ -102,12 +104,16 @@ expect_ok() {
   code="$(code_of "${response}")"
   # Never echo entire gateway responses: key-creation responses contain Secret Key.
   [[ "${code}" == "0" ]] || die "${name} failed (GW code=${code})"
+  log "PASS: ${name}"
 }
 
 expect_rejected() {
   local name="$1" response="$2" code
   code="$(code_of "${response}")"
   [[ "${code}" != "0" ]] || die "${name} unexpectedly succeeded"
+  # A rate limiter or unrelated internal failure is not evidence of RBAC denial.
+  [[ "${code}" != "10003" ]] || die "${name} was throttled, not denied"
+  log "PASS: ${name} (rejected; code=${code})"
 }
 
 mysql_exec() {
