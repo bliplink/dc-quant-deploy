@@ -18,7 +18,7 @@ for name in ("PLATFORM_ADMIN_USERNAME", "PLATFORM_ADMIN_PASSWORD"):
     if not os.environ.get(name):
         raise SystemExit("missing deployment environment variable: " + name)
 script = os.environ.get('MANAGEMENT_QA_SCRIPT', 'management-mobile-acceptance.js')
-if script not in ('management-mobile-acceptance.js', 'management-platform-approval-acceptance.js', 'management-robot-control-acceptance.js', 'management-robot-edit-acceptance.js', 'management-robot-create-acceptance.js'):
+if script not in ('management-mobile-acceptance.js', 'management-platform-approval-acceptance.js', 'management-robot-control-acceptance.js', 'management-robot-edit-acceptance.js', 'management-robot-create-acceptance.js', 'management-platform-default-approval-form.js'):
     raise SystemExit('Unsupported management QA script')
 source = Path(__file__).with_name(script)
 runner = os.environ.get("E2E_RUNNER_NAME", "dc-saas-web-e2e-runner")
