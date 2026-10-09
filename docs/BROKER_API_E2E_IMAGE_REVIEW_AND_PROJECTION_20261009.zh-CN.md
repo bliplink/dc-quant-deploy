@@ -50,6 +50,19 @@ docker image inspect -f '{{.Id}}|{{.Architecture}}' "$IMAGE"
 
 后续版本**不得复用此提交的 digest**；先核对新 Actions、远端 config 和导入后的 RootFS/config，再审批相应本地 ID。用于演示集群的现有 RobotSvr 始终单独运行，不必升级它才能运行独立测试容器。
 
+### 每次独立验收前的无凭据预检
+
+新镜像导入 Colima 后，运行下列命令，无需 `sudo`、无需 `.env` 或任何 API Key：
+
+```sh
+BROKER_E2E_RUNNER_IMAGE_REF=ghcr.io/bliplink/robotsvr:sha-36b80cfca6c70e9c13e1b5f0114b4eb87d0d9872 \
+  bash tests/check-broker-runner-host.sh
+```
+
+通过时输出 `BROKER_RUNNER_OFFLINE_PREFLIGHT_PASS` 与已审查的 image ID、架构。脚本核对 GHCR 40 位提交 SHA 格式、Colima 本地不可变 image ID、`tests/broker-runner-approved-images.txt`，再在 **`docker run --network none`** 中启动 Broker Runner，必须看到缺少测试租户参数的预期拒绝。若镜像未导入、未经审查、入口类错误或行为异常，则失败，不读取任何业务凭据。
+
+真实的 Broker 业务测试仍受另一道隔离租户门禁限制。为了避免从宿主进程命令行暴露 Key/Secret，`tests/run-broker-api-e2e-host.sh` 的 Docker CLI 仅使用 `-e BROKER_E2E_API_KEY -e BROKER_E2E_API_SECRET` 从已存在的受保护测试进程环境继承，不再在 `docker run` 命令行拼接 `-e NAME=value`。不应在操作日志中输出这些值；容器内部仍会接收运行所需的测试凭据，故只能用于隔离验收。
+
 ## Projection 最终一致性
 
 `tests/run-broker-api-e2e-host.sh` 中的数据库核对为**只读**，最多等待 45 秒：

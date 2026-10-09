@@ -6,6 +6,8 @@ on:
     paths:
       - 'tests/run-tenant-lifecycle-e2e-host.sh'
       - 'tests/run-broker-api-e2e-host.sh'
+      - 'tests/check-broker-runner-host.sh'
+      - 'tests/test_broker_preflight_contract.py'
       - 'tests/gw-partition-route.py'
       - 'tests/test_gw_partition_route.py'
       - 'tests/trader-resting-price.py'
@@ -24,6 +26,8 @@ on:
     paths:
       - 'tests/run-tenant-lifecycle-e2e-host.sh'
       - 'tests/run-broker-api-e2e-host.sh'
+      - 'tests/check-broker-runner-host.sh'
+      - 'tests/test_broker_preflight_contract.py'
       - 'tests/gw-partition-route.py'
       - 'tests/test_gw_partition_route.py'
       - 'tests/trader-resting-price.py'
@@ -52,6 +56,7 @@ jobs:
         run: |
           bash -n tests/run-tenant-lifecycle-e2e-host.sh
           bash -n tests/run-broker-api-e2e-host.sh
+          bash -n tests/check-broker-runner-host.sh
       - name: Python and JavaScript test harness syntax
         run: |
           node --check tests/public-api-docs-entry-smoke.js
@@ -70,6 +75,8 @@ jobs:
         run: |
           python3 -m unittest discover -s tests -p 'test_broker_runner_review.py' -v
           python3 -m unittest discover -s tests -p 'test_broker_db_evidence.py' -v
+      - name: Offline image preflight and protected secret transport
+        run: python3 -m unittest discover -s tests -p 'test_broker_preflight_contract.py' -v
       - name: Offline Trader ambiguous-order failure cleanup
         run: python3 -m unittest discover -s tests -p 'test_trader_failure_cleanup.py' -v
       - name: Validate key-handling test guardrails
