@@ -54,6 +54,12 @@ bash tests/verify-order-cluster-state-host.sh
 
 真实浏览器证据：`/Users/kong/.opentradingcore/dc-saas-runtime-fresh2-20261005/e2e-artifacts/acceptance-followup-20261009/`，内含不同租户公共交易页 JSON、手机各页面截图与 `mobile-market-report.json`。
 
+## 后续异常核验补充
+
+- 本轮后续排查确认 MDSvr ClickHouse 行情成交表 `dc.market_trade` 缺失，造成批处理 SQL Code 60 错误和历史成交行情漏写风险；使用幂等 DDL 新增该表后，最新检查已持续写入 12/12 租户，浏览器实时 K 线专项测试重新通过。详情见 `CLICKHOUSE_MARKET_TRADE_INCIDENT_20261009.zh-CN.md`。
+- 浏览器 `T6X2PT` 曾出现短时盘口空白和实时 K 线等待超时，后续同租户全量浏览器 E2E 重试通过，但不据此宣称长时间无间歇故障。
+- 公网 Trade 域名也出现过一次 `Connection reset by peer`，随后强制 IPv4 五次、IPv6 五次均 HTTP 200，本地 Web HTTP 200、Tunnel 进程正常。结合平台站先前一次同类瞬断，建议增加外部多地域可用性检测；暂未归因于某个 Web 容器或 Tunnel 本身。
+
 ## 未验收项及下一阶段
 
 1. 当前真实下单和系统业务订单 TPS、P95/P99（应在隔离环境和配额保护下压测）；Tape 成交是否全部投影到 MySQL、主站 24h Trades 口径及其增长规律。
