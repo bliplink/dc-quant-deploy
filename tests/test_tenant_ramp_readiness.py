@@ -17,10 +17,39 @@ class MultitenantRampGuardTests(unittest.TestCase):
             for index in range(13)
         ]
 
+    def healthy(self):
+        return [{"location": f"A{index:05}", "robotId": "maker",
+                 "status": "RUNNING", "openOrders": 40,
+                 "heartbeatAgeSeconds": 3} for index in range(13)]
+
+    def test_enabled_robot_status_validation(self):
+        payload = "\n".join(["A00001\tmaker\tRUNNING\t40\t2",
+                              "DUJE16\tmaker\tDEGRADED\t0\t4"])
+        robots = gate.parse_enabled_robot_rows(payload)
+        self.assertEqual(len(robots), 2)
+        self.assertEqual(robots[1]["location"], "DUJE16")
+        for invalid in ("", "A00001\tmaker\tRUNNING", "x!\tbot\tRUNNING\t40\t2",
+                        "A00001\tmaker\tRUNNING\t40\tabc",
+                        "A00001\tmaker\tRUNNING\t40\t2\nA00001\tmaker\tRUNNING\t40\t2"):
+            with self.assertRaises(ValueError):
+                gate.parse_enabled_robot_rows(invalid)
+
+    def test_enabled_degraded_robot_blocks_ramp(self):
+        robots = self.healthy()
+        robots[3] = dict(robots[3], location="DUJE16", status="DEGRADED",
+                         openOrders=0, heartbeatAgeSeconds=3)
+        outcome = gate.evaluate(self.sample(), 1.0, 10.0, 20.0,
+            order_gc={"fullGCsIn3Seconds": 0, "oldGenerationMaxPercent": 5.0},
+            enabled_robots=robots)
+        self.assertEqual(outcome["gate"], "NOT_READY")
+        self.assertIn("ENABLED_ROBOTS_UNHEALTHY:1/13", outcome["reasons"])
+        self.assertEqual(outcome["enabledRobotsUnhealthy"][0]["location"], "DUJE16")
+
     def test_current_pressure_and_silent_tenants_block_ramp(self):
         result = gate.evaluate(self.sample(busy=10), 59.68, 83.8, 77.0,
                                order_gc={"fullGCsIn3Seconds": 3,
-                                         "oldGenerationMaxPercent": 99.99})
+                                         "oldGenerationMaxPercent": 99.99},
+                                         enabled_robots=self.healthy())
         self.assertEqual(result["gate"], "NOT_READY")
         self.assertEqual(result["tenantLocations"], 13)
         self.assertEqual(len(result["inactiveTenants"]), 10)
@@ -34,7 +63,8 @@ class MultitenantRampGuardTests(unittest.TestCase):
     def test_healthy_baseline_is_still_not_200_tenant_authorization(self):
         result = gate.evaluate(self.sample(busy=0), 1.2, 42, 20,
                                order_gc={"fullGCsIn3Seconds": 0,
-                                         "oldGenerationMaxPercent": 40.0})
+                                         "oldGenerationMaxPercent": 40.0},
+                                         enabled_robots=self.healthy())
         self.assertEqual(result["gate"], "BASELINE_READY_ONLY")
         self.assertFalse(result["nextRampAuthorized"])
         self.assertEqual(result["reasons"], [])
@@ -44,11 +74,11 @@ class MultitenantRampGuardTests(unittest.TestCase):
     def test_cpu_threshold_normalizes_docker_percent_by_live_quota(self):
         gc = {"fullGCsIn3Seconds": 0, "oldGenerationMaxPercent": 40}
         ok = gate.evaluate(self.sample(), 1, 10, 100, order_gc=gc,
-                           robot_cpu_quota_cores=1.25)
+                           robot_cpu_quota_cores=1.25, enabled_robots=self.healthy())
         self.assertEqual("BASELINE_READY_ONLY", ok["gate"])
         self.assertEqual(80.0, ok["robotCpuQuotaUtilizationPercent"])
         saturated = gate.evaluate(self.sample(), 1, 10, 125, order_gc=gc,
-                                  robot_cpu_quota_cores=1.25)
+                                  robot_cpu_quota_cores=1.25, enabled_robots=self.healthy())
         self.assertEqual("NOT_READY", saturated["gate"])
         self.assertTrue(any("ROBOT_CPU_QUOTA_UTIL_HIGH:" in x
                             for x in saturated["reasons"]))
@@ -57,7 +87,7 @@ class MultitenantRampGuardTests(unittest.TestCase):
         gc = {"fullGCsIn3Seconds": 0,
               "oldGenerationCommittedPercent": 96.0,
               "oldGenerationMaxPercent": 6.4}
-        result = gate.evaluate(self.sample(), 1, 10, 20, order_gc=gc)
+        result = gate.evaluate(self.sample(), 1, 10, 20, order_gc=gc, enabled_robots=self.healthy())
         self.assertEqual("BASELINE_READY_ONLY", result["gate"])
 
     def test_memory_normalization(self):
@@ -88,11 +118,11 @@ class MultitenantRampGuardTests(unittest.TestCase):
         healthy_gc = {"fullGCsIn3Seconds": 0, "oldGenerationMaxPercent": 20.0}
         for psi, mem, cpu in ((26, 10, 2), (2, 81, 2), (2, 10, 86)):
             self.assertEqual(gate.evaluate(
-                self.sample(), psi, mem, cpu, order_gc=healthy_gc)["gate"], "NOT_READY")
+                self.sample(), psi, mem, cpu, order_gc=healthy_gc, enabled_robots=self.healthy())["gate"], "NOT_READY")
         for gc in (None, {}, {"fullGCsIn3Seconds": -1, "oldGenerationMaxPercent": 40},
                    {"fullGCsIn3Seconds": 1, "oldGenerationMaxPercent": 40},
                    {"fullGCsIn3Seconds": 0, "oldGenerationMaxPercent": 98}):
-            self.assertEqual(gate.evaluate(self.sample(), 1, 10, 20, order_gc=gc)["gate"],
+            self.assertEqual(gate.evaluate(self.sample(), 1, 10, 20, order_gc=gc, enabled_robots=self.healthy())["gate"],
                              "NOT_READY")
         with self.assertRaises(ValueError):
             gate.evaluate(self.sample(), float("nan"), 10, 10)

@@ -88,11 +88,54 @@ def collect_order_gc():
             "oldGenerationMaxMiB": round(old_max[1], 1)}
 
 
+def parse_enabled_robot_rows(raw):
+    """Parse safe, credential-free records from the running MySQL container."""
+    results = []
+    for line in raw.splitlines():
+        fields = line.split("\t")
+        if len(fields) != 5:
+            raise ValueError("invalid enabled Robot status row")
+        location, robot_id, status, count, heartbeat_age = fields
+        if (not re.fullmatch(r"[A-Z0-9]{4,16}", location)
+                or not robot_id or len(robot_id) > 64
+                or not count.isdecimal()):
+            raise ValueError("invalid enabled Robot identity/quote count")
+        try:
+            age = int(heartbeat_age)
+        except ValueError as e:
+            raise ValueError("invalid Robot heartbeat age") from e
+        if age < -1:
+            raise ValueError("invalid Robot heartbeat age")
+        results.append({"location": location, "robotId": robot_id,
+                        "status": status, "openOrders": int(count),
+                        "heartbeatAgeSeconds": age})
+    if not results or len({(r["location"], r["robotId"]) for r in results}) != len(results):
+        raise ValueError("missing or duplicate enabled Robots")
+    return results
+
+
+def collect_enabled_robots():
+    # The sensitive root password stays INSIDE the mysql container, never
+    # expanded into host argv, logs or a shell command on the Mac.
+    sql = (
+        "SELECT location,robot_id,runtime_status,open_order_count,"
+        "COALESCE(TIMESTAMPDIFF(SECOND,"
+        "STR_TO_DATE(LEFT(last_heartbeat_time,19),'%Y-%m-%d %H:%i:%s'),"
+        "NOW()),-1) FROM dc.dc_tenant_robot WHERE enabled=1 ORDER BY location,robot_id"
+    )
+    import shlex
+    statement = ('MYSQL_PWD="$MYSQL_ROOT_PASSWORD" mysql -uroot --batch '
+                 '--raw --skip-column-names -e ' + shlex.quote(sql))
+    result = docker("exec", "dc-saas-mysql", "sh", "-c", statement)
+    return parse_enabled_robot_rows(result)
+
+
 def evaluate(rows, cpu_psi, order_mem_pct, robot_cpu_pct,
              min_tenants=10, min_events=2, max_cpu_psi=25.0,
              max_inactive_pct=20.0, max_order_mem=80.0, max_robot_cpu=85.0,
              order_gc=None, max_old_gen_percent=95.0,
-             robot_cpu_quota_cores=1.0):
+             robot_cpu_quota_cores=1.0, enabled_robots=None,
+             heartbeat_fresh_seconds=45):
     if any(not math.isfinite(float(x)) or float(x) < 0
            for x in (cpu_psi, order_mem_pct, robot_cpu_pct, robot_cpu_quota_cores)):
         raise ValueError("invalid resource metric")
@@ -114,6 +157,27 @@ def evaluate(rows, cpu_psi, order_mem_pct, robot_cpu_pct,
         reasons.append(f"ORDER_B_MEMORY_HIGH:{order_mem_pct:.2f}>{max_order_mem:.2f}")
     if robot_quota_util_pct > max_robot_cpu:
         reasons.append(f"ROBOT_CPU_QUOTA_UTIL_HIGH:{robot_quota_util_pct:.2f}>{max_robot_cpu:.2f}")
+    invalid_robots = []
+    if not isinstance(enabled_robots, list) or not enabled_robots:
+        reasons.append("ENABLED_ROBOT_TELEMETRY_MISSING")
+    else:
+        observed_robot_tenants = {r["location"] for r in enabled_robots}
+        if len(observed_robot_tenants) < min_tenants:
+            reasons.append(f"TOO_FEW_ENABLED_ROBOT_TENANTS:{len(observed_robot_tenants)}<{min_tenants}")
+        for robot in enabled_robots:
+            if (robot["status"] != "RUNNING"
+                    or robot["openOrders"] <= 0
+                    or robot["heartbeatAgeSeconds"] < 0
+                    or robot["heartbeatAgeSeconds"] > heartbeat_fresh_seconds):
+                invalid_robots.append({
+                    "location": robot["location"],
+                    "robotId": robot["robotId"],
+                    "status": robot["status"],
+                    "openOrders": robot["openOrders"],
+                    "heartbeatAgeSeconds": robot["heartbeatAgeSeconds"],
+                })
+        if invalid_robots:
+            reasons.append(f"ENABLED_ROBOTS_UNHEALTHY:{len(invalid_robots)}/{len(enabled_robots)}")
     if not isinstance(order_gc, dict):
         reasons.append("ORDER_B_GC_TELEMETRY_MISSING")
     else:
@@ -143,6 +207,9 @@ def evaluate(rows, cpu_psi, order_mem_pct, robot_cpu_pct,
         "robotCpuDockerPercent": float(robot_cpu_pct),
         "robotCpuQuotaCores": robot_cpu_quota_cores,
         "robotCpuQuotaUtilizationPercent": round(robot_quota_util_pct, 2),
+        "enabledRobotsObserved": len(enabled_robots) if isinstance(enabled_robots, list) else 0,
+        "enabledRobotsUnhealthy": invalid_robots,
+
         "orderBHotSpotGC": order_gc,
         "warning": "Market data rows are not authoritative order TPS or a capacity guarantee.",
     }
@@ -189,7 +256,7 @@ def collect():
     return market_rows(raw), float(match.group(1)), (
         measurements["dc-saas-ordersvr-b"]["memoryPct"],
         measurements["dc-saas-robotsvr"]["cpu"]), collect_order_gc(), (
-            robot_cpu_nanos / 1_000_000_000.0)
+            robot_cpu_nanos / 1_000_000_000.0), collect_enabled_robots()
 
 
 def main():
@@ -197,9 +264,9 @@ def main():
     parser.add_argument("--output", help="Optional JSON artifact location")
     args = parser.parse_args()
     try:
-        rows, psi, (mem, cpu), gc, quota = collect()
+        rows, psi, (mem, cpu), gc, quota, enabled_robots = collect()
         result = evaluate(rows, psi, mem, cpu, order_gc=gc,
-                          robot_cpu_quota_cores=quota)
+                          robot_cpu_quota_cores=quota, enabled_robots=enabled_robots)
     except (OSError, ValueError, subprocess.CalledProcessError,
             subprocess.TimeoutExpired) as error:
         result = {"gate": "NOT_READY", "nextRampAuthorized": False,

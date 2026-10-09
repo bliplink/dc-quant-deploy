@@ -24,7 +24,9 @@ python3 -m unittest discover -s tests -p 'test_tenant_ramp_readiness.py' -v
 
 即使全部达标，返回也只是 `BASELINE_READY_ONLY`、`nextRampAuthorized:false`；任何实际负载测试仍需独立的隔离租户、容量预算、压测脚本审批和回滚方案。不能把 `SELECT market_trade` 计数当作真正订单 TPS。
 
-## 下一轮阻断项
+## 下一轮阻断项> **2026-10-10 实时补充：** 13 个启用 Robot 中 `DUJE16` 仍然是 `DEGRADED/0`，尽管租户行情页显示 10+10 档。准入门禁已加入对所有启用 Robot 实际运行状态/挂单数/心跳年龄的只读检查。详见 [DUJE16 单租户异常调查及尚未完成的恢复事项](ROBOT_DUJE16_DEGRADED_AND_RAMP_GATE_20261010.zh-CN.md)。
+
+
 
 1. **Tape 持续成交：** 采集 Robot Tape 调度队列等待、`openRobotOrders` 耗时、IOC 入队与最终执行 `ExecID`；查出为何每户 Tape 指令间隔数十秒，部分租户 300s 内无市场成交。注意不能把 Tape **指令**直接统计为实际**成交**。
 2. **资源与高可用：** 观测 OrderSvr B CPU/heap/GC、MySQL 配置和 Docker VM 8 核 15 GiB 下 CPU PSI；无中断复测后再考虑调整 worker 并发数/IO。同一台 VM 的三副本不能作为跨物理主机 HA 证明。
