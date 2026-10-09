@@ -6,12 +6,16 @@ on:
     paths:
       - 'tests/run-tenant-lifecycle-e2e-host.sh'
       - 'tests/run-broker-api-e2e-host.sh'
+      - 'tests/gw-partition-route.py'
+      - 'tests/test_gw_partition_route.py'
       - 'tests/public-api-docs-entry-smoke.js'
       - '.github/workflows/validate-api-acceptance.yml'
   pull_request:
     paths:
       - 'tests/run-tenant-lifecycle-e2e-host.sh'
       - 'tests/run-broker-api-e2e-host.sh'
+      - 'tests/gw-partition-route.py'
+      - 'tests/test_gw_partition_route.py'
       - 'tests/public-api-docs-entry-smoke.js'
       - '.github/workflows/validate-api-acceptance.yml'
 
@@ -32,6 +36,9 @@ jobs:
         run: |
           node --check tests/public-api-docs-entry-smoke.js
           python3 -m compileall -q scripts
+          python3 -m py_compile tests/gw-partition-route.py tests/test_gw_partition_route.py
+      - name: Offline gateway partition routing regression
+        run: python3 -m unittest discover -s tests -p 'test_gw_partition_route.py' -v
       - name: Validate key-handling test guardrails
         run: |
           # This job never reads credentials, connects to the Demo gateway,
@@ -39,4 +46,5 @@ jobs:
           grep -Fq 'trap ' tests/run-tenant-lifecycle-e2e-host.sh
           grep -Fq 'expect_order_scope_denied' tests/run-tenant-lifecycle-e2e-host.sh
           grep -Fq 'raw logs suppressed' tests/run-broker-api-e2e-host.sh
+          grep -Fq 'gw-partition-route.py' tests/run-tenant-lifecycle-e2e-host.sh
           echo 'Offline API acceptance harness guardrails PASS'

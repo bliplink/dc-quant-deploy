@@ -58,6 +58,14 @@ trader_password_b="${E2E_TRADER_PASSWORD_B:-$(openssl rand -hex 16)}"
 api_call() {
   local payload="$1" token=""
   if (( $# > 1 )); then token="$2"; fi
+  # Partitioned market/order requests require a top-level GW routing key.
+  # Fail closed on any mismatch instead of reporting a false RBAC result.
+  if [[ "${payload}" == *'"serverName":"OrderSvr"'* ||
+        "${payload}" == *'"serverName":"MDSvr"'* ]]; then
+    payload="$(printf '%s' "${payload}" |
+      python3 "${SCRIPT_DIR}/gw-partition-route.py" "${E2E_LOCATION_A}")" ||
+      die "Could not validate isolated tenant GW partition routing"
+  fi
   if [[ -n "${token}" ]]; then
     curl --noproxy '*' -sS --max-time 30 -H 'Content-Type: application/json' -H "sessionId: ${token}" \
       --data "${payload}" "${E2E_BASE_URL}"
