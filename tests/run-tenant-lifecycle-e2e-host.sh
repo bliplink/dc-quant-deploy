@@ -191,6 +191,87 @@ register_trader() {
 
 # On failed runs, revoke only keys created by these disposable test tenants.
 # Never print API secrets, session tokens or the raw gateway response.
+
+# Reconcile an ambiguous order acknowledgement by the run-unique ClOrdID.
+# A network error after OrderSvr acceptance must not skip cleanup simply
+# because the HTTP caller never received an OrderID. Never resubmit orders.
+cleanup_pending_trader_order() {
+  [[ -n "${trader_new_clordid:-}" && -n "${trader_write_token:-}" ]] || return 0
+  local open_payload open_response found_id cancel_payload cancel_response
+  open_payload='{"serverName":"OrderSvr","method":"queryOpenOrder","content":{"securityid":"BTCUSDT","marketIndicator":"4","maxOrderCount":100}}'
+  open_response="$(api_call "${open_payload}" "${trader_write_token}" 2>/dev/null)" || {
+    log "WARN: could not query potentially accepted test order; manual reconciliation required."
+    return 0
+  }
+  if [[ "$(code_of "${open_response}")" != "0" ]]; then
+    log "WARN: activity query rejected during failure cleanup; manual reconciliation required."
+    return 0
+  fi
+  found_id="$(printf '%s' "${open_response}" | python3 -c '
+import json,sys
+response=json.load(sys.stdin)
+rows=response.get("data")
+if not isinstance(rows,list):
+    raise SystemExit(2)
+matches=[r for r in rows if isinstance(r,dict) and
+         str(r.get("ClOrdID") or r.get("clord_id") or "")==sys.argv[1]]
+if len(matches)>1: raise SystemExit(2)
+if matches:
+    ident=str(matches[0].get("OrderID") or matches[0].get("order_id") or "")
+    if not ident: raise SystemExit(2)
+    print(ident)
+' "${trader_new_clordid}")" || {
+    log "WARN: ambiguous or invalid order snapshot during cleanup; manual reconciliation required."
+    return 0
+  }
+  if [[ -z "${found_id}" ]]; then
+    # May have been filled, rejected, or already cancelled. A read-only
+    # execution/history reconciliation is still required by E2E auditors.
+    log "NOTE: no open test order matched ClOrdID; check executions/history if acknowledgement was ambiguous."
+    return 0
+  fi
+  cancel_payload="$(printf '{"serverName":"OrderSvr","method":"cancelOrder","content":{"SecurityID":"BTCUSDT","MarketIndicator":"4","OrderID":"%s","ClOrdID":"TRADER_FAILURE_CANCEL_%s"}}' "${found_id}" "${E2E_SUFFIX}")"
+  cancel_response="$(api_call "${cancel_payload}" "${trader_write_token}" 2>/dev/null)" || {
+    log "WARN: cancelling matched test order failed; manual reconciliation required."
+    return 0
+  }
+  if [[ "$(code_of "${cancel_response}")" != "0" ]]; then
+    log "WARN: matched test-order cancellation was rejected; manual reconciliation required."
+    return 0
+  fi
+  # Cancellation acknowledgement is not authoritative. Keep polling the
+  # same owner's open orders for at most 3 seconds; never try a second order.
+  local attempt remaining
+  for attempt in {1..10}; do
+    open_response="$(api_call "${open_payload}" "${trader_write_token}" 2>/dev/null)" || {
+      log "WARN: cancellation submitted but follow-up query failed; manual reconciliation required."
+      return 0
+    }
+    if [[ "$(code_of "${open_response}")" != "0" ]]; then
+      log "WARN: cancellation submitted but follow-up was rejected; manual reconciliation required."
+      return 0
+    fi
+    remaining="$(printf '%s' "${open_response}" | python3 -c '
+import json,sys
+d=json.load(sys.stdin)
+rows=d.get("data")
+if not isinstance(rows,list): raise SystemExit(2)
+matches=[r for r in rows if isinstance(r,dict) and
+         str(r.get("ClOrdID") or r.get("clord_id") or "")==sys.argv[1]]
+print(len(matches))
+' "${trader_new_clordid}")" || {
+      log "WARN: cancellation submitted but confirmation was malformed; manual reconciliation required."
+      return 0
+    }
+    if [[ "${remaining}" == "0" ]]; then
+      log "PASS: matched test order no longer appears in owning account open orders."
+      return 0
+    fi
+    sleep 0.3
+  done
+  log "WARN: cancelled test ClOrdID remains open after bounded wait; manual reconciliation required."
+}
+
 cleanup_test_key() {
   local owner="$1" key="$2" token="$3" payload
   [[ -n "${key}" && -n "${token}" ]] || return 0
@@ -208,14 +289,8 @@ cleanup_failed_keys() {
   local previous_code="$1"
   [[ "${previous_code}" -ne 0 ]] || return 0
   set +e
-  # Attempt to cancel an accepted but unfinished test order before revoking its key.
-  if [[ -n "${trader_order_id:-}" && -n "${trader_write_token:-}" ]]; then
-    local cancel_payload
-    cancel_payload="$(printf '{"serverName":"OrderSvr","method":"cancelOrder","content":{"SecurityID":"BTCUSDT","MarketIndicator":"4","OrderID":"%s","ClOrdID":"TRADER_FAILURE_CANCEL_%s"}}' "${trader_order_id}" "${E2E_SUFFIX}")"
-    if ! api_call "${cancel_payload}" "${trader_write_token}" >/dev/null 2>&1; then
-      log "WARN: review possibly open test order in isolated acceptance tenant."
-    fi
-  fi
+  # Query by unique ClOrdID first, even if no OrderID was returned to us.
+  cleanup_pending_trader_order
   cleanup_test_key trader "${trader_readonly_key:-}" "${trader_token_a:-}"
   cleanup_test_key trader "${trader_write_key:-}" "${trader_token_a:-}"
   cleanup_test_key trader "${admin_trader_api_key:-}" "${admin_token_a:-}"
