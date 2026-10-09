@@ -393,6 +393,11 @@ expect_ok "broker read-only signed login" "${broker_readonly_login_response}"
 broker_readonly_token="$(printf '%s' "${broker_readonly_login_response}" | json_eval 'd["data"]["token"]')"
 broker_readonly_admin_response="$(api_call "${users_payload}" "${broker_readonly_token}")"
 expect_rejected "read-only broker cannot administer tenant users" "${broker_readonly_admin_response}"
+# A read-only Broker session must not submit a customer order. Assert the
+# precise permission-denied code, not an unrelated rejection or rate limit.
+broker_readonly_order_payload="$(printf '{"serverName":"OrderSvr","method":"placeOrder","content":{"Location":"%s","UserID":"%s","SecurityID":"BTCUSDT","MarketIndicator":"4","Side":"BUY","OCType":"OPEN","OrdType":"Limit","TimeInForce":"GTC","OrderQty":"0.001","Price":"60000","ClOrdID":"BROKER_READONLY_BLOCK_%s"}}' "${E2E_LOCATION_A}" "${user_id_a}" "${E2E_SUFFIX}")"
+broker_readonly_order_response="$(api_call "${broker_readonly_order_payload}" "${broker_readonly_token}")"
+expect_order_scope_denied "read-only Broker cannot place customer order" "${broker_readonly_order_response}"
 broker_readonly_delete_payload="$(printf '{"serverName":"LoginSvr","method":"tenantApiKeyAdmin","content":{"action":"DELETE","api_key":"%s","cid":"BROKER_READONLY_DELETE_E2E"}}' "${broker_readonly_key}")"
 broker_readonly_delete_response="$(api_call "${broker_readonly_delete_payload}" "${admin_token_a}")"
 expect_ok "broker read-only key cleanup" "${broker_readonly_delete_response}"
@@ -449,12 +454,44 @@ trader_write_qty="${E2E_TRADER_ORDER_QTY:-0.001}"
 trader_order_payload="$(printf '{"serverName":"OrderSvr","method":"placeOrder","content":{"SecurityID":"BTCUSDT","MarketIndicator":"4","Side":"BUY","OCType":"OPEN","OrdType":"Limit","TimeInForce":"GTC","OrderQty":"%s","Price":"%s","ClOrdID":"%s"}}' "${trader_write_qty}" "${trader_write_price}" "${trader_new_clordid}")"
 trader_order_response="$(api_call "${trader_order_payload}" "${trader_write_token}")"
 expect_ok "Trader API places own funded limit order" "${trader_order_response}"
-trader_order_id="$(printf '%s' "${trader_order_response}" | json_eval 'd.get("info1") or (d.get("data") or {}).get("OrderID") or (d.get("data") or {}).get("order_id") or ""')"
-[[ -n "${trader_order_id}" && "${trader_order_id}" != None ]] ||
-  die "Trader placeOrder accepted but no server OrderID was returned; must reconcile before cancellation"
+# code=0 is admission, not proof of an open order. Wait for the matching
+# authoritative OrderSvr open-order row before attempting cancellation.
+trader_open_query='{"serverName":"OrderSvr","method":"queryOpenOrder","content":{"securityid":"BTCUSDT","marketIndicator":"4","maxOrderCount":100}}'
+trader_order_id=""
+for attempt in {1..40}; do
+  trader_open_response="$(api_call "${trader_open_query}" "${trader_write_token}")"
+  [[ "$(code_of "${trader_open_response}")" == "0" ]] || die "Trader queryOpenOrder after place failed"
+  trader_order_id="$(printf '%s' "${trader_open_response}" | python3 -c '
+import json,sys
+doc=json.load(sys.stdin)
+rows=doc.get("data") or []
+target=sys.argv[1]
+match=next((row for row in rows if str(row.get("ClOrdID") or row.get("clord_id") or "")==target),None)
+print(str((match or {}).get("OrderID") or (match or {}).get("order_id") or ""))
+' "${trader_new_clordid}")"
+  [[ -z "${trader_order_id}" ]] || break
+  sleep 0.2
+done
+[[ -n "${trader_order_id}" ]] ||
+  die "Trader order did not become open; reconcile by ClOrdID before retrying (do not resubmit)"
 trader_cancel_payload="$(printf '{"serverName":"OrderSvr","method":"cancelOrder","content":{"SecurityID":"BTCUSDT","MarketIndicator":"4","OrderID":"%s","ClOrdID":"TRADER_CANCEL_%s"}}' "${trader_order_id}" "${E2E_SUFFIX}")"
 trader_cancel_response="$(api_call "${trader_cancel_payload}" "${trader_write_token}")"
 expect_ok "Trader API cancels own limit order" "${trader_cancel_response}"
+trader_order_still_open=1
+for attempt in {1..40}; do
+  trader_open_response="$(api_call "${trader_open_query}" "${trader_write_token}")"
+  [[ "$(code_of "${trader_open_response}")" == "0" ]] || die "Trader queryOpenOrder after cancel failed"
+  trader_order_still_open="$(printf '%s' "${trader_open_response}" | python3 -c '
+import json,sys
+doc=json.load(sys.stdin)
+target=sys.argv[1]
+print(int(any(str(row.get("ClOrdID") or row.get("clord_id") or "")==target for row in (doc.get("data") or []))))
+' "${trader_new_clordid}")"
+  [[ "${trader_order_still_open}" != 0 ]] || break
+  sleep 0.2
+done
+[[ "${trader_order_still_open}" == 0 ]] ||
+  die "Trader cancel accepted but order remains open; test order must be investigated"
 trader_write_revoke_payload="$(printf '{"serverName":"LoginSvr","method":"deleteApiKey","content":{"api_key":"%s","cid":"TRADER_WRITE_REVOKE_E2E"}}' "${trader_write_key}")"
 trader_write_revoke="$(api_call "${trader_write_revoke_payload}" "${trader_token_a}")"
 expect_ok "Trader write key revoked by its owner" "${trader_write_revoke}"
@@ -467,7 +504,9 @@ log "Trader write key acceptance: explicit scope, signed login, own-account orde
 broker_key_delete_payload="$(printf '{"serverName":"LoginSvr","method":"tenantApiKeyAdmin","content":{"action":"DELETE","api_key":"%s","cid":"BROKER_KEY_DELETE_E2E"}}' "${broker_api_key}")"
 broker_key_delete_response="$(api_call "${broker_key_delete_payload}" "${admin_token_a}")"
 expect_ok "broker API key cleanup" "${broker_key_delete_response}"
-log "Broker API boundary verified: management + same-tenant customer trading/cash allowed; foreign tenant rejected."
+broker_revoked_login_response="$(signed_api_call "${broker_login_payload}" "${broker_api_key}" "${broker_api_secret}")"
+expect_rejected "revoked Broker API key cannot authenticate again" "${broker_revoked_login_response}"
+log "Broker API boundary verified: management, customer trading, cash, tenant isolation, revoked login."
 
 overquota_payload="$(printf '{"serverName":"AdminSvr","method":"tenantUserRegistration","content":{"action":"REGISTER","cid":"OVERQUOTA_%s","request_id":"OVERQUOTA_%s","location":"%s","username":"overquotatrader","name":"Over Quota Trader","email":"overquota-%s@example.com","password":"%s"}}' \
   "${E2E_SUFFIX}" "${E2E_SUFFIX}" "${E2E_LOCATION_A}" "${E2E_SUFFIX}" "${trader_password_a}")"
