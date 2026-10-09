@@ -1,0 +1,42 @@
+name: Validate API acceptance harness
+
+on:
+  push:
+    branches: [saas-crypto]
+    paths:
+      - 'tests/run-tenant-lifecycle-e2e-host.sh'
+      - 'tests/run-broker-api-e2e-host.sh'
+      - 'tests/public-api-docs-entry-smoke.js'
+      - '.github/workflows/validate-api-acceptance.yml'
+  pull_request:
+    paths:
+      - 'tests/run-tenant-lifecycle-e2e-host.sh'
+      - 'tests/run-broker-api-e2e-host.sh'
+      - 'tests/public-api-docs-entry-smoke.js'
+      - '.github/workflows/validate-api-acceptance.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  static-acceptance-contract:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v5
+      - name: Bash E2E test harness syntax
+        run: |
+          bash -n tests/run-tenant-lifecycle-e2e-host.sh
+          bash -n tests/run-broker-api-e2e-host.sh
+      - name: Python and JavaScript test harness syntax
+        run: |
+          node --check tests/public-api-docs-entry-smoke.js
+          python3 -m compileall -q scripts
+      - name: Validate key-handling test guardrails
+        run: |
+          # This job never reads credentials, connects to the Demo gateway,
+          # or invokes real issuance, trading or funds operations.
+          grep -Fq 'trap ' tests/run-tenant-lifecycle-e2e-host.sh
+          grep -Fq 'expect_order_scope_denied' tests/run-tenant-lifecycle-e2e-host.sh
+          grep -Fq 'raw logs suppressed' tests/run-broker-api-e2e-host.sh
+          echo 'Offline API acceptance harness guardrails PASS'

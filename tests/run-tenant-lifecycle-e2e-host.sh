@@ -113,7 +113,21 @@ expect_rejected() {
   [[ "${code}" != "0" ]] || die "${name} unexpectedly succeeded"
   # A rate limiter or unrelated internal failure is not evidence of RBAC denial.
   [[ "${code}" != "10003" ]] || die "${name} was throttled, not denied"
+  if [[ "${code}" == "9000" ]]; then
+    local message
+    message="$(printf '%s' "${response}" | json_eval 'd.get("msg", "")')"
+    [[ "${message}" != "INTERNAL_ERROR" ]] ||
+      die "${name} returned INTERNAL_ERROR, not an authorization verdict"
+  fi
   log "PASS: ${name} (rejected; code=${code})"
+}
+
+expect_order_scope_denied() {
+  local name="$1" response="$2" code
+  code="$(code_of "${response}")"
+  [[ "${code}" == "9016" ]] ||
+    die "${name} expected TRADE_PERMISSION_DENIED (9016), got GW code=${code}"
+  log "PASS: ${name} (ORDER_WRITE missing; code=9016)"
 }
 
 mysql_exec() {
@@ -273,7 +287,7 @@ trader_balance="$(api_call '{"serverName":"TradeSvr","method":"queryAccountBalan
 expect_ok "Trader key queries own account balance" "${trader_balance}"
 trader_write_denied_payload="$(printf '{"serverName":"OrderSvr","method":"placeOrder","content":{"SecurityID":"BTCUSDT","MarketIndicator":"4","Side":"BUY","OCType":"OPEN","OrdType":"Limit","TimeInForce":"GTC","OrderQty":"0.001","Price":"60000","ClOrdID":"TRADER_READONLY_BLOCK_%s"}}' "${E2E_SUFFIX}")"
 trader_write_denied="$(api_call "${trader_write_denied_payload}" "${trader_readonly_token}")"
-expect_rejected "Trader key without ORDER_WRITE cannot place an order" "${trader_write_denied}"
+expect_order_scope_denied "Trader key without ORDER_WRITE cannot place an order" "${trader_write_denied}"
 trader_readonly_delete_payload="$(printf '{"serverName":"LoginSvr","method":"deleteApiKey","content":{"api_key":"%s","cid":"TRADER_READONLY_DELETE_E2E"}}' "${trader_readonly_key}")"
 trader_readonly_delete="$(api_call "${trader_readonly_delete_payload}" "${trader_token_a}")"
 expect_ok "Trader self-service key revocation" "${trader_readonly_delete}"
