@@ -18,7 +18,7 @@ for name in ("PLATFORM_ADMIN_USERNAME", "PLATFORM_ADMIN_PASSWORD"):
     if not os.environ.get(name):
         raise SystemExit("missing deployment environment variable: " + name)
 script = os.environ.get('MANAGEMENT_QA_SCRIPT', 'management-mobile-acceptance.js')
-if script not in ('management-mobile-acceptance.js', 'management-platform-approval-acceptance.js', 'management-robot-control-acceptance.js', 'management-robot-edit-acceptance.js', 'management-robot-create-acceptance.js', 'management-platform-default-approval-form.js'):
+if script not in ('management-mobile-acceptance.js', 'management-platform-approval-acceptance.js', 'management-robot-control-acceptance.js', 'management-robot-edit-acceptance.js', 'management-robot-create-acceptance.js', 'management-platform-default-approval-form.js', 'brand-unification-web-qa.js'):
     raise SystemExit('Unsupported management QA script')
 source = Path(__file__).with_name(script)
 runner = os.environ.get("E2E_RUNNER_NAME", "dc-saas-web-e2e-runner")
@@ -36,6 +36,7 @@ mapping = {
     "QA_ONLY_UI": os.environ.get("QA_ONLY_UI", "0"),
     "QA_DETAIL_ONLY": os.environ.get("QA_DETAIL_ONLY", "0"),
     "QA_VERIFY_ONLY": os.environ.get("QA_VERIFY_ONLY", "0"),
+    "BRAND_QA_AREAS": os.environ.get("BRAND_QA_AREAS", ""),
 }
 if script == 'management-robot-create-acceptance.js' and os.environ.get('MANAGEMENT_QA_CREATE_CONFIRM') != 'YES':
     raise SystemExit('Set MANAGEMENT_QA_CREATE_CONFIRM=YES before creating a disabled QA Robot')
