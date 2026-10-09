@@ -457,8 +457,23 @@ expect_ok "Trader ORDER_WRITE signed login" "${trader_write_login}"
   die "Trader write key changed account ownership"
 trader_write_token="$(printf '%s' "${trader_write_login}" | json_eval 'd["data"]["token"]')"
 trader_new_clordid="TRADER_WRITE_${E2E_SUFFIX}"
-trader_write_price="${E2E_TRADER_LIMIT_PRICE:-59000}"
+trader_write_price="${E2E_TRADER_LIMIT_PRICE:-}"
 trader_write_qty="${E2E_TRADER_ORDER_QTY:-0.001}"
+if [[ -z "${trader_write_price}" ]]; then
+  # A fixed buy price can cross the spread when the demo market moves.
+  # Derive a resting price below the current best bid; never submit a
+  # second order if the first request becomes ambiguous.
+  trader_market_payload="$(printf '{"serverName":"MDSvr","method":"queryPublicMarket","content":{"location":"%s","securityID":"BTCUSDT"}}' "${E2E_LOCATION_A}")"
+  trader_market_snapshot="$(api_call "${trader_market_payload}" "${trader_write_token}")"
+  expect_ok "Trader fetches price reference for non-crossing limit" "${trader_market_snapshot}"
+  trader_write_price="$(printf '%s' "${trader_market_snapshot}" |
+    python3 "${SCRIPT_DIR}/trader-resting-price.py")" ||
+    die "Could not calculate a safe resting demo limit; no order submitted"
+fi
+[[ "${trader_write_price}" =~ ^[0-9]+([.][0-9]+)?$ ]] ||
+  die "E2E_TRADER_LIMIT_PRICE must be a positive decimal"
+[[ "${trader_write_qty}" =~ ^[0-9]+([.][0-9]+)?$ ]] ||
+  die "E2E_TRADER_ORDER_QTY must be a positive decimal"
 trader_order_payload="$(printf '{"serverName":"OrderSvr","method":"placeOrder","content":{"SecurityID":"BTCUSDT","MarketIndicator":"4","Side":"BUY","OCType":"OPEN","OrdType":"Limit","TimeInForce":"GTC","OrderQty":"%s","Price":"%s","ClOrdID":"%s"}}' "${trader_write_qty}" "${trader_write_price}" "${trader_new_clordid}")"
 trader_order_response="$(api_call "${trader_order_payload}" "${trader_write_token}")"
 expect_ok "Trader API places own funded limit order" "${trader_order_response}"
