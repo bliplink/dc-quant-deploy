@@ -1,18 +1,21 @@
-# Reviewed *platform-specific Docker image IDs* (sha256:<64 hex>) for
-# the standalone BrokerApiE2ERunner. These are NOT live-E2E pass claims.
+# Reviewed architecture-specific Docker image config IDs.
+# This is code/CI approval for isolated Broker acceptance, NOT a live E2E pass.
 #
-# RobotSvr saas-crypto commit 77a77bec8bea0cb02cdb9276b7a60462fbe1a89b
-# GH Actions 37927294455 SUCCESS: Maven tests, amd64/arm64 GHCR build.
-# macOS arm64 image pulled by immutable commit SHA:
-# ghcr.io/bliplink/robotsvr:sha-77a77bec8bea0cb02cdb9276b7a60462fbe1a89b
-# Java review: record cleanup intent before write, cancel only exact run
-# ClOrdIDs, bounded query/reconciliation, explicit scope-denial classifier,
-# positive same-tenant read after foreign denial. The backend's actual
-# cross-tenant error string has NOT yet been independently verified; the
-# runner must fail closed if it differs from the reviewed allowlist.
-sha256:24bb08e1ac73783f87e8c1ac32391004e5bfe4661b9ecc6b72ef2912c45f81fc
+# RobotSvr saas-crypto 36b80cfca6c70e9c13e1b5f0114b4eb87d0d9872
+# GitHub Actions 37928411662 SUCCESS: Maven tests + dual-arch GHCR publish.
+# Image: ghcr.io/bliplink/robotsvr:sha-36b80cfca6c70e9c13e1b5f0114b4eb87d0d9872
+# GHCR arm64 child manifest:
+# sha256:bb09fc1e98538435a0fe3c4ad7edc8e15a3db3cd64ec2e14342e4343e8ed0038
+# arm64 config image ID below verified via docker manifest inspect.
+# Local download did not finish on first attempt: host docker image inspect
+# must independently resolve this config ID BEFORE any runner can execute.
+# Backend contract checked: OpenApiAccountAuthority.rejectLocationConflict
+# returns "location conflicts with authenticated session"; Runner accepts
+# that exact denial (also absent-customer denial), but not INTERNAL_ERROR,
+# HTTP failures, missing sessions, or unrelated errors.
+sha256:4ccac4846d00051053e9fb89ae1ca4e0f89f9124b6e16a3045ea3f967428f75e
 #
-# NEVER approve prior running sha-abd7efa... image or a mutable tag.
-# Add another architecture's config digest only after its own review.
-# This manifest permits isolated test execution after credentials are
-# authorized; it does NOT authorize live E2E or production Robot restart.
+# Previously reviewed 77a77be config 24bb08e1... was superseded; it does
+# not recognize the exact backend cross-tenant denial text.
+# Do not approve the existing production RobotSvr image or floating tags.
+# This file grants no API-key access and makes no claim of live trade success.

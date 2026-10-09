@@ -6,18 +6,18 @@
 
 ## 当前阻断项
 
-此前 `bliplink/com.app.dc.robotsvr` 的 `src/main/java/com/app/dc/robot/BrokerApiE2ERunner.java` 曾有两项阻断，已在提交 `77a77bec8bea0cb02cdb9276b7a60462fbe1a89b` 修复并通过 GitHub Actions `37927294455`：
+`bliplink/com.app.dc.robotsvr` 的 `BrokerApiE2ERunner.java` 已先后通过提交 `77a77be`、`36b80cf` 修复以下两项阻断，最新 GitHub Actions `37928411662` 已通过 Maven 测试及双架构镜像构建：
 
-1. 目前 `makerResting=true` 在 `brokerPlace(...)` **返回之后**才设置：网关受理订单但响应丢失时可能跳过异常清理。应将清理意图在发送前注册，并在异常后按 `ClOrdID` 查询/撤销。不可在不知道订单是否接受时盲目补单。
-2. 当前 `catch (Exception expected) { rejected=true; }` 将连接失败、超时、内部错误视为“跨租户鉴权正确拒绝”。必须解析明确的服务端身份/客户归属拒绝码，并补测本租户正向请求依旧成功。
+1. **已修复：** 在发送 `brokerPlace(...)` 前设置清理意图，异常时按本次两个精确 `ClOrdID` 查询及撤销，禁止盲目补单和撤销其他订单。
+2. **已修复：** 仅识别明确的后端客户/租户归属拒绝；已对照共享权限模块 `OpenApiAccountAuthority` 确认其实际消息 `location conflicts with authenticated session` 和 `customer account is not available in authenticated tenant`。502、连接超时、Session 失效和内部错误均不算成功，拒绝后还要查询同租户账户证明链路正常。
 
-**门禁方式：** 在读取任何生产/测试凭据和执行 `docker run` **之前**，验收脚本读取镜像的不可变 Docker image ID（`sha256:...`）并与 `tests/broker-runner-approved-images.txt` 匹配。默认检查线上当前运行的 RobotSvr（旧版仍阻断）。可以通过 `BROKER_E2E_RUNNER_IMAGE_REF=ghcr.io/bliplink/robotsvr:sha-77a77bec8bea0cb02cdb9276b7a60462fbe1a89b` 指向已拉取到本机的独立镜像；浮动 `latest`、`saas-crypto` 标签及未经审查的 image ID 一律拒绝。2026-10-09 已审核 ARM64 的 config image ID：`sha256:24bb08e1ac73783f87e8c1ac32391004e5bfe4661b9ecc6b72ef2912c45f81fc`。这只是**允许隔离验收的镜像**，不是已经通过真实交易。
+**门禁方式：** 在读取任何生产/测试凭据和执行 `docker run` **之前**，脚本检查候选镜像的不可变 Docker image ID 是否在 `tests/broker-runner-approved-images.txt`。默认检查线上 RobotSvr（旧版仍阻断）。独立测试指定 `BROKER_E2E_RUNNER_IMAGE_REF=ghcr.io/bliplink/robotsvr:sha-36b80cfca6c70e9c13e1b5f0114b4eb87d0d9872`。浮动 `latest`、`saas-crypto` 标签及上一个不符合实际拒绝文字的 `77a77be` image ID 均拒绝。GHCR ARM64 child manifest `sha256:bb09fc1e98538435a0fe3c4ad7edc8e15a3db3cd64ec2e14342e4343e8ed0038`，远端 config digest `sha256:4ccac4846d00051053e9fb89ae1ca4e0f89f9124b6e16a3045ea3f967428f75e` 已核实。**本地首次 Docker 拉取超时；候选镜像尚未完全落地，真实 Runner 启动仍由本地 `docker image inspect` 阻止。**这不等于真实交易通过。
 
 ## 获准执行的条件
 
-1. 已完成：RobotSvr 的 `saas-crypto` 提交 `77a77be` 修复异常清理与跨租户错误分类，新增 JUnit 测试，CI 成功。
-2. 已完成：GitHub Actions `37927294455` 生成 AMD64/ARM64 GHCR，ARM64 镜像已拉取并核对 SHA。
-3. 已完成：经代码/CI/镜像核对，ARM64 不可变 image ID 已加入审查清单；未批准旧版生产容器。
+1. 已完成：RobotSvr `36b80cf` 修复异常清理、精确跨租户拒绝文字和误报，新增 JUnit 测试。
+2. 已完成：GitHub Actions `37928411662` 生成 AMD64/ARM64 GHCR；远端 ARM64 manifest/config digest 已核对；**本地拉取还未完成**。
+3. 已完成：最新 ARM64 config digest 已加入审查清单，上一版 77a77be 已取消批准；执行前仍须本机镜像完整下载且 image ID 匹配，旧版生产容器未批准。
 4. 仅使用本次新建、隔离且可清理的模拟租户。不得读取或输出正式租户 Secret、Session、密码，不操作既有 Robot 策略/密钥。
 5. 验收 Broker/Trader 签名登录、个人/代客交易权限、客户归属隔离、入出金和成交，按权威数据库与 `ClOrdID` / `ExecID` 核对，最后验证撤销 Key 后不能再登录。
 6. 全程保留可追溯的 Git commit、镜像 digest、时间、租户（脱敏）、业务响应状态与数据库核对结果；**不能以离线 mock 或页面 HTTP 200 替代真实交易证据**。

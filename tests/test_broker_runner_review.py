@@ -13,8 +13,9 @@ spec.loader.exec_module(gate)
 class BrokerRunnerReviewTests(unittest.TestCase):
     def test_reviewed_arm64_image_allowed_but_previous_unsafe_image_rejected(self):
         manifest = SRC.with_name("broker-runner-approved-images.txt")
-        new_id = "sha256:24bb08e1ac73783f87e8c1ac32391004e5bfe4661b9ecc6b72ef2912c45f81fc"
+        new_id = "sha256:4ccac4846d00051053e9fb89ae1ca4e0f89f9124b6e16a3045ea3f967428f75e"
         self.assertTrue(gate.verify(new_id, manifest))
+        self.assertFalse(gate.verify("sha256:24bb08e1ac73783f87e8c1ac32391004e5bfe4661b9ecc6b72ef2912c45f81fc", manifest))
         self.assertFalse(gate.verify("sha256:" + "a" * 64, manifest))
         self.assertEqual(
             [line for line in manifest.read_text().splitlines() if line.startswith("sha256:")],
