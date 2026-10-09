@@ -37,7 +37,7 @@
 - 既有回归：`tenantUserAdmin LIST`、`tenantRobotAdmin LIST`、`tenantSettingsAdmin GET/AUDIT` 与跨租户访问被拒绝均已验证（本次未重复执行全部写操作）。
 - 测试租户实际配额为 2 个可注册用户，首次创建成功后重试创建触发预期配额拒绝；后续改为复用已有 QA 用户，未放宽限制。
 
-**尚未验收通过**：Robot 新增/编辑/启停写操作；平台审批状态写入；租户路由修改、回滚；集群 Placement 发布；手机端真实物理设备手势/键盘/软键盘遮挡；高并发管理后台性能。这些项目需要单独的隔离环境、权限确认或专门的可恢复测试，不能由这次 33/33 页面验收代替。
+**第一轮尚未覆盖（截至页面布局验收时）**：Robot 新增/编辑/启停、平台审批状态写入、租户路由修改/回滚、集群 Placement 发布、物理设备软键盘及高并发管理压力。部分项目已在下方“追加验收”完成，其余仍明确列为待办。
 
 ## 证据与复跑
 
@@ -62,6 +62,50 @@ QA_ONLY_CRUD=1 python3 tests/run-management-mobile-qa.py
 - 平台运营端当前仍使用 `DC` 标志与固定中文文案；租户端使用 OpenTradingCore 标识并支持中英文切换。两者的蓝色/琥珀色角色强调色有意区分，但**品牌标志及平台多语言统一**尚未作为本轮变更，应由产品确认再调整。
 - 手机端导航为横向滚动，能够访问所有栏目，但首次用户不一定注意可滑动；后续可考虑增加轻量的滑动提示。
 - 平台租户页有“已注册/启用用户”统计与“配额”两个数字，其计算口径（是否包含平台/流动性系统账户）需要专项核实；本轮未更改计数逻辑。
+
+## 追加验收：平台审批、Robot 详情及隔离租户启停（2026-10-09）
+
+### 平台审批与租户配置写操作
+
+`tests/management-platform-approval-acceptance.js` 通过真实 Chromium 浏览器及正式接口执行，全部通过：
+
+- 平台管理员真实登录及会话校验。
+- 用 `example.invalid` 虚拟联系邮箱新建两条申请：`NEEDS_INFO`、`REJECTED` 审批分别成功，随后从 `tenantApproval LIST` 确认持久化状态。
+- 仅对隔离租户 `DPGR6B` 修改租户名称并保存，然后重新打开、恢复原名称，两次操作均通过。
+- 集群管理只读拓扑通过；未发布 Placement、未修改任何业务分区或服务路由。
+
+### Robot 详情真实故障修复
+
+- 初次点击详情失败，ManagerSvr 日志报 `Unknown column 'side' in 'field list'`。
+- 根因：`RobotOperationalMetricsService.positions` 旧 SQL 假设 `dc_orders_position` 有 `side,size` 行模型，实际投影表使用 `long_position,short_position` 双列。
+- 修复：`COALESCE(SUM(COALESCE(long_position,0)-COALESCE(short_position,0)),0)`，保持按 `location,security_id,user_id` 过滤；增加 `RobotOperationalMetricsServiceTest` 并在 ManagerSvr GitHub Actions 中显式执行。
+- 代码：`bliplink/com.app.dc.managersvr@1a9011e`。CI 构建和单测通过，正式镜像 `ghcr.io/bliplink/managersvr:sha-1a9011e22201467b59875a53d10fbdc8df7779ff` 已上线。
+- 真实浏览器复测 `robotMonitor DETAIL` 通过：运行 `RUNNING`、40 挂单、库存 `NORMAL`、Maker 与 Tape 仓位相反、净库存 `0`。
+
+### 隔离 QA Robot 停止与恢复
+
+- 单独 QA 租户 `DPGR6B`，不影响其他租户；真实管理 UI 的 `STOP` 成功，配置 `enabled=0` 已确认；恢复前遵守运行 Owner 的撤单与释放栅栏。
+- 真实 UI 的 `START` 返回成功；首次自动验收对配置列表执行 `RUNNING/40` 轮询超时，导致脚本记为 FAIL，但随后的权威数据库查询确认 `enabled=1,runtime_status=RUNNING,open_order_count=40`，心跳新鲜且无错误码。
+- 修订测试脚本改用 `ManagerSvr.robotMonitor LIST` 运行态读接口；**只读独立复验 PASS**：Robot 详情成功，运行监控确认 `RUNNING/40`。为避免无谓的再次撤单，本轮没有为了单次脚本全绿重复停止。
+- 全局复核：**12/12 Robot RUNNING/40**、初始化失败 0、Order HA 快照与分区一致、Projection Trade/Order watermark mismatch 均为 0。
+
+### 留待完成与风险边界
+
+- `Robot UPSERT`（新增、参数修改，需要安全处理敏感凭证）**尚未通过写操作验收**；仅 Robot 详情/停止/启动/恢复已分别验证。
+- 平台 `APPROVE` 批准并开通新租户路径尚未由本轮平台浏览器流程完整执行；此前自动审批的注册交易 E2E 不等同于平台 UI 手工批准。
+- 服务路由真实修改/回滚、Placement 发布、真实设备软键盘/手势、高并发管理后台压力测试，仍需隔离计划，不应在多租户 Demo 正常交易时直接执行。
+
+### 可重复执行
+
+预先导入 Mac mini 私有部署环境，不要将 `.env` 或 QA 凭据写入日志。
+
+```bash
+MANAGEMENT_QA_SCRIPT=management-platform-approval-acceptance.js python3 tests/run-management-mobile-qa.py
+QA_DETAIL_ONLY=1 MANAGEMENT_QA_SCRIPT=management-robot-control-acceptance.js python3 tests/run-management-mobile-qa.py
+QA_VERIFY_ONLY=1 MANAGEMENT_QA_SCRIPT=management-robot-control-acceptance.js python3 tests/run-management-mobile-qa.py
+```
+
+完整 STOP→START 会临时撤销隔离租户 Maker 挂单，应明确选择 QA 租户且只在业务允许时进行；脚本具备启动恢复尝试，但仍需要人工核对 40 单及最新成交恢复。
 
 ## 状态限制
 

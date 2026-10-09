@@ -17,10 +17,13 @@ fixture = json.loads(credentials.read_text(encoding="utf-8"))
 for name in ("PLATFORM_ADMIN_USERNAME", "PLATFORM_ADMIN_PASSWORD"):
     if not os.environ.get(name):
         raise SystemExit("missing deployment environment variable: " + name)
-source = Path(__file__).with_name("management-mobile-acceptance.js")
+script = os.environ.get('MANAGEMENT_QA_SCRIPT', 'management-mobile-acceptance.js')
+if script not in ('management-mobile-acceptance.js', 'management-platform-approval-acceptance.js', 'management-robot-control-acceptance.js'):
+    raise SystemExit('Unsupported management QA script')
+source = Path(__file__).with_name(script)
 runner = os.environ.get("E2E_RUNNER_NAME", "dc-saas-web-e2e-runner")
 subprocess.run(
-    ["docker", "cp", str(source), runner + ":/runner/management-mobile-acceptance.js"],
+    ["docker", "cp", str(source), runner + ":/runner/" + script],
     check=True,
 )
 mapping = {
@@ -31,12 +34,14 @@ mapping = {
     "PLATFORM_ADMIN_PASSWORD": os.environ["PLATFORM_ADMIN_PASSWORD"],
     "QA_ONLY_CRUD": os.environ.get("QA_ONLY_CRUD", "0"),
     "QA_ONLY_UI": os.environ.get("QA_ONLY_UI", "0"),
+    "QA_DETAIL_ONLY": os.environ.get("QA_DETAIL_ONLY", "0"),
+    "QA_VERIFY_ONLY": os.environ.get("QA_VERIFY_ONLY", "0"),
 }
 command = ["docker", "exec", "-i"]
 for key in mapping:
     command.extend(["-e", key])  # Docker inherits the value from the caller environment
 command.extend([runner, "bash", "-lc",
-                "NODE_PATH=/runner/node_modules node /runner/management-mobile-acceptance.js"])
+                "NODE_PATH=/runner/node_modules node /runner/" + script])
 print("[management-mobile-qa] exercising isolated tenant", fixture["location"], flush=True)
 result = subprocess.run(command, env={**os.environ, **mapping}, check=False)
 if result.returncode != 0:
