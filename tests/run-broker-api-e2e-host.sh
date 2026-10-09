@@ -77,7 +77,29 @@ print(json.dumps(found,separators=(",",":")))
 ')" || die "Broker runner did not emit a PASS summary"
 
 maker_clordid="$(python3 -c 'import json,sys; print(json.loads(sys.argv[1])["makerClOrdId"])' "${summary}")"
-taker_clordid="$(python3 -c 'import json,sys; print(json.loads(sys.argv[1])["takerClOrdId"])' "${summary}")"
+taker_clordid="$(python3 -c 'import json,sys; print(json.loads(sys.argv[1])["takerClOrdId"])' "${summary}")"maker_exec_id="$(python3 -c 'import json,sys;print(json.loads(sys.argv[1]).get("makerExecId") or "")' "${summary}")"
+taker_exec_id="$(python3 -c 'import json,sys;print(json.loads(sys.argv[1]).get("takerExecId") or "")' "${summary}")"
+# Assert that this result belongs to the isolated tenant and precise run.
+python3 - "${summary}" "${BROKER_E2E_LOCATION}" "${BROKER_E2E_MAKER_CUSTOMER_ID}" "${BROKER_E2E_TAKER_CUSTOMER_ID}" "${run_id}" <<'PY'
+import json,sys
+d=json.loads(sys.argv[1])
+assert d.get("location")==sys.argv[2], "Broker runner returned another tenant"
+assert d.get("makerCustomerId")==sys.argv[3], "Broker maker identity mismatch"
+assert d.get("takerCustomerId")==sys.argv[4], "Broker taker identity mismatch"
+import re
+run_fragment=re.sub(r"[^A-Za-z0-9]", "", sys.argv[5])[:12]
+assert run_fragment and run_fragment in str(d.get("makerClOrdId","")), "Broker maker order not from this run"
+assert run_fragment in str(d.get("takerClOrdId","")), "Broker taker order not from this run"
+assert d.get("makerExecId") and d.get("takerExecId"), "Missing actual execution IDs"
+PY
+# Values are interpolated into a read-only evidence query, never into writes.
+# Reject quote/backslash/semicolon/newline injection from runner or test env.
+for db_value in "${BROKER_E2E_LOCATION}" "${BROKER_E2E_MAKER_CUSTOMER_ID}" \
+                "${BROKER_E2E_TAKER_CUSTOMER_ID}" "${maker_clordid}" \
+                "${taker_clordid}" "${maker_exec_id}" "${taker_exec_id}"; do
+  [[ "${db_value}" =~ ^[a-zA-Z0-9_./:-]+$ ]] ||
+    die "Invalid Broker identity/order/exec ID for read-only DB verification"
+done
 [[ "$(python3 -c 'import json,sys; print(str(json.loads(sys.argv[1])["foreignCustomerRejected"]).lower())' "${summary}")" == "true" ]] ||
   die "foreign tenant customer isolation was not verified"
 [[ "$(python3 -c 'import json,sys; print(str(json.loads(sys.argv[1])["reconnected"]).lower())' "${summary}")" == "true" ]] ||
@@ -101,20 +123,29 @@ SELECT COUNT(*) FROM dc_orders_execorders e
  JOIN dc_orders o ON o.location=e.location AND o.user_id=e.user_id AND o.order_id=e.order_id
  WHERE e.location='${BROKER_E2E_LOCATION}'
    AND e.user_id='${BROKER_E2E_MAKER_CUSTOMER_ID}'
-   AND o.clord_id='${maker_clordid}' AND e.last_qty > 0;
+   AND o.clord_id='${maker_clordid}'
+   AND e.exec_id='${maker_exec_id}' AND e.last_qty > 0;
 SELECT COUNT(*) FROM dc_orders_execorders e
  JOIN dc_orders o ON o.location=e.location AND o.user_id=e.user_id AND o.order_id=e.order_id
  WHERE e.location='${BROKER_E2E_LOCATION}'
    AND e.user_id='${BROKER_E2E_TAKER_CUSTOMER_ID}'
-   AND o.clord_id='${taker_clordid}' AND e.last_qty > 0;
+   AND o.clord_id='${taker_clordid}'
+   AND e.exec_id='${taker_exec_id}' AND e.last_qty > 0;
 ")"
 rows=()
 while IFS= read -r row || [[ -n "${row}" ]]; do
   rows+=("${row}")
 done <<<"${db_result}"
 [[ "${#rows[@]}" -eq 5 ]] || die "Unexpected Broker DB verification output: ${db_result}"
-for i in 0 1 2 3 4; do
-  (( rows[i] >= 1 )) || die "Broker DB assertion ${i} failed: ${db_result}"
+# These two customers were registered exclusively for this run. A different
+# run's identical cash amounts must never be mistaken for new cash entries.
+for i in 0 1 2; do
+  (( rows[i] == 1 )) ||
+    die "Broker cash ledger assertion ${i} is not an exact once-per-run entry (count=${rows[i]})"
+done
+for i in 3 4; do
+  (( rows[i] == 1 )) ||
+    die "Broker execution ${i} did not exactly match the returned ExecID and ClOrdID (count=${rows[i]})"
 done
 
-log "PASS: Broker API customer management/trading/cash/reconnect/isolation flow succeeded."
+log "PASS: Broker scoped cash rows and exact execution IDs persisted; see separate foreign-denial evidence gate."
