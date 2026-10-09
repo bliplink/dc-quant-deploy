@@ -107,6 +107,32 @@ QA_VERIFY_ONLY=1 MANAGEMENT_QA_SCRIPT=management-robot-control-acceptance.js pyt
 
 完整 STOP→START 会临时撤销隔离租户 Maker 挂单，应明确选择 QA 租户且只在业务允许时进行；脚本具备启动恢复尝试，但仍需要人工核对 40 单及最新成交恢复。
 
+## 2026-10-09 后续管理功能验收：跳过租户路由
+
+**用户明确要求：暂不验证租户路由修改及回滚。** 本轮没有执行任何服务路由变更、回滚或集群 Placement 发布。
+
+### Robot 普通参数编辑 UX 修复
+
+- 原租户 Web 强制输入旧 API Key，原 Tape 用户编辑时也强制输入旧 Tape Key；后端 `TenantRobotService.preserveExistingCredentials/preserveTapeKey` 本身支持在用户身份未改变时安全保留旧密钥。
+- 前端修复：仅新增 Robot 或更换 API 用户时要求输入新 Key；既有 API 用户/Tape API 用户未变时可以留空，敏感密钥始终不回显。仍由后端校验。
+- 代码：`dc-saas-tenant-web@48be030`；正式部署镜像：`ghcr.io/bliplink/dc-saas-tenant-web:sha-48be030bd176b2b4569e6c5b5e49eb9ac6d3a8bd`，部署镜像锁 `dc-quant-deploy@e2d6f2b`。
+- **真实浏览器 390px PASS**：`DPGR6B` 原有 Maker/Tape Robot 在不输入旧 Key 的情况下将刷新间隔 `1000→1200→1000ms`，两次保存及重新读取通过，最终 `RUNNING/40`，密钥未出现在编辑框。
+- **新增与编辑 PASS**：在 QA 租户创建 `QA Disabled Robot 513861081`，使用已有 QA 账户的有效测试交易身份，`enabled=0`；随后将 `Level Step` 设置为 3bps 并保存。新 Robot 没有交易或报价，且密钥没有写入代码、报告或工具输出。
+- 此新增测试为独立的真实写操作，`tests/management-robot-create-acceptance.js` 只允许经 `MANAGEMENT_QA_CREATE_CONFIRM=YES` 显式执行，避免重复生成持久化的测试 Robot。
+
+### 平台手动批准状态
+
+- 平台浏览器手动 `NEEDS_INFO`、`REJECTED` 两种审批状态此前已通过。
+- 本轮计划额外执行 **APPROVE（批准并开通）** 的隔离虚拟申请，生成测试管理员凭据的自动化脚本时遇到执行环境安全检查拦截，**未执行批准操作，不得计为通过**。未绕过该检查。
+- 之前独立公开注册自动审批 + Robot/Tape 的 E2E 已通过，但不能替代“平台管理员手工点击批准”的本轮验收。
+
+### 最新一致性及后续边界
+
+- 总计 13 条 Robot 配置，其中 1 条为本轮新建的禁用 QA Robot，正常应有 **12 条启用 Robot**。
+- 保存参数后曾在瞬时采样中出现 `11/12` 笔数全满，随后单独核对异常行时已恢复，无持续异常行；请持续留意短暂重建与补单延迟。
+- Projection `orphan_mutations=0`，Trade/Order watermark mismatch 均为 `0`；Order HA 快照与分区状态检查 PASS。
+- 后续应在授权运行环境内补平台手工批准开通 UI 验收；租户路由与 Placement 不在当前计划中。
+
 ## 状态限制
 
 以上说明的是 Demo 环境的即时验收快照，不是 200 租户容量测试结果。UI 及管理功能重建过程中，仅替换租户与平台 Web 容器，未重启 Order/Trade 核心节点；仍应继续执行 Projection / Order HA 一致性检查。
