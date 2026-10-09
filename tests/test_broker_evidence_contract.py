@@ -65,8 +65,12 @@ class BrokerEvidenceTests(unittest.TestCase):
         text = self.host_code
         self.assertIn("e.exec_id='${maker_exec_id}'", text)
         self.assertIn("e.exec_id='${taker_exec_id}'", text)
-        self.assertIn("rows[i] == 1", text)
+        self.assertIn("broker-db-evidence-rows.py", text)
+        self.assertIn("projection_deadline", text)
+        self.assertIn("Broker Projection did not catch up", text)
         self.assertNotIn("(( rows[i] >= 1 ))", text)
+        self.assertIn('taker_clordid="$(python3', text)
+        self.assertTrue(any(line.startswith('maker_exec_id="$(python3') for line in text.splitlines()))
 
 
 if __name__ == "__main__":

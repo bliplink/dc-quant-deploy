@@ -31,6 +31,15 @@ safe_location() {
   [[ "$1" =~ ^[A-Z0-9]{6}$ ]]
 }
 
+# This lifecycle script creates tenants/accounts before invoking Broker E2E.
+# Do not create even temporary accounts if the deployed Java Broker runner has
+# not passed the immutable-image safety review.
+command -v docker >/dev/null 2>&1 || die "docker is required"
+reviewed_broker_image="$(docker inspect --format '{{.Image}}' dc-saas-robotsvr 2>/dev/null || true)"
+[[ -n "${reviewed_broker_image}" ]] || die "RobotSvr image unavailable for Broker E2E safety review"
+python3 "${SCRIPT_DIR}/broker-runner-image-review.py" "${reviewed_broker_image}" ||
+  die "Isolated tenant lifecycle blocked before any account registration: Broker runner not approved"
+
 [[ "$(id -u)" -eq 0 ]] || die "Run with sudo so ${ENV_FILE} remains protected"
 [[ -r "${ENV_FILE}" ]] || die "Cannot read ${ENV_FILE}"
 safe_location "${E2E_LOCATION_A}" || die "E2E_LOCATION_A must be exactly 6 uppercase A-Z/0-9 characters"

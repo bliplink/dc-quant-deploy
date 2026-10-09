@@ -19,10 +19,17 @@ required() {
   [[ -n "${!name:-}" ]] || die "${name} is required"
 }
 
-[[ -r "${ENV_FILE}" ]] || die "Cannot read ${ENV_FILE}"
 command -v docker >/dev/null 2>&1 || die "docker is required"
 command -v python3 >/dev/null 2>&1 || die "python3 is required"
 
+# Fail closed *before* reading any credentials or performing side effects.
+# Accept only a specifically audited immutable image, not a floating tag.
+robot_image_id="$(docker inspect --format '{{.Image}}' dc-saas-robotsvr 2>/dev/null || true)"
+[[ -n "${robot_image_id}" ]] || die "dc-saas-robotsvr is not deployed"
+python3 "${SCRIPT_DIR}/broker-runner-image-review.py" "${robot_image_id}" ||
+  die "Broker live E2E blocked: runner cleanup/isolation not approved"
+
+[[ -r "${ENV_FILE}" ]] || die "Cannot read ${ENV_FILE}"
 set -a
 # shellcheck disable=SC1090
 . "${ENV_FILE}"
@@ -40,9 +47,6 @@ done
 mysql_exec() {
   docker exec -i -e MYSQL_PWD="${MYSQL_PASSWORD}" dc-saas-mysql     mysql -u"${MYSQL_USERNAME}" -N "$@"
 }
-
-robot_image_id="$(docker inspect --format '{{.Image}}' dc-saas-robotsvr 2>/dev/null || true)"
-[[ -n "${robot_image_id}" ]] || die "dc-saas-robotsvr is not deployed"
 
 run_id="${BROKER_E2E_RUN_ID:-$(date -u +%Y%m%dT%H%M%SZ)}"
 deposit="${BROKER_E2E_DEPOSIT:-100000}"
@@ -77,7 +81,8 @@ print(json.dumps(found,separators=(",",":")))
 ')" || die "Broker runner did not emit a PASS summary"
 
 maker_clordid="$(python3 -c 'import json,sys; print(json.loads(sys.argv[1])["makerClOrdId"])' "${summary}")"
-taker_clordid="$(python3 -c 'import json,sys; print(json.loads(sys.argv[1])["takerClOrdId"])' "${summary}")"maker_exec_id="$(python3 -c 'import json,sys;print(json.loads(sys.argv[1]).get("makerExecId") or "")' "${summary}")"
+taker_clordid="$(python3 -c 'import json,sys; print(json.loads(sys.argv[1])["takerClOrdId"])' "${summary}")"
+maker_exec_id="$(python3 -c 'import json,sys;print(json.loads(sys.argv[1]).get("makerExecId") or "")' "${summary}")"
 taker_exec_id="$(python3 -c 'import json,sys;print(json.loads(sys.argv[1]).get("takerExecId") or "")' "${summary}")"
 # Assert that this result belongs to the isolated tenant and precise run.
 python3 - "${summary}" "${BROKER_E2E_LOCATION}" "${BROKER_E2E_MAKER_CUSTOMER_ID}" "${BROKER_E2E_TAKER_CUSTOMER_ID}" "${run_id}" <<'PY'
@@ -105,8 +110,10 @@ done
 [[ "$(python3 -c 'import json,sys; print(str(json.loads(sys.argv[1])["reconnected"]).lower())' "${summary}")" == "true" ]] ||
   die "broker reconnect was not verified"
 
-log "Verifying authoritative cash and execution persistence."
-db_result="$(mysql_exec dc -e "
+log "Waiting up to 45s for authoritative Projection persistence."
+projection_deadline=$((SECONDS + 45))
+while true; do
+  db_result="$(mysql_exec dc -e "
 SELECT COUNT(*) FROM dc_users_posting
  WHERE location='${BROKER_E2E_LOCATION}'
    AND user_id='${BROKER_E2E_MAKER_CUSTOMER_ID}'
@@ -132,20 +139,19 @@ SELECT COUNT(*) FROM dc_orders_execorders e
    AND o.clord_id='${taker_clordid}'
    AND e.exec_id='${taker_exec_id}' AND e.last_qty > 0;
 ")"
-rows=()
-while IFS= read -r row || [[ -n "${row}" ]]; do
-  rows+=("${row}")
-done <<<"${db_result}"
-[[ "${#rows[@]}" -eq 5 ]] || die "Unexpected Broker DB verification output: ${db_result}"
-# These two customers were registered exclusively for this run. A different
-# run's identical cash amounts must never be mistaken for new cash entries.
-for i in 0 1 2; do
-  (( rows[i] == 1 )) ||
-    die "Broker cash ledger assertion ${i} is not an exact once-per-run entry (count=${rows[i]})"
-done
-for i in 3 4; do
-  (( rows[i] == 1 )) ||
-    die "Broker execution ${i} did not exactly match the returned ExecID and ClOrdID (count=${rows[i]})"
+  # 0 => all five exact rows arrived; 3 => Projection still catching up;
+  # 2 => invalid or duplicate evidence, which must fail immediately.
+  if printf '%s\n' "${db_result}" | python3 "${SCRIPT_DIR}/broker-db-evidence-rows.py" >/dev/null; then
+    log "PASS: Broker exact cash and execution IDs persisted."
+    break
+  else
+    evidence_code=$?
+    [[ "${evidence_code}" == 3 ]] ||
+      die "Broker DB evidence malformed or duplicated; refusing a false PASS"
+    (( SECONDS < projection_deadline )) ||
+      die "Broker Projection did not catch up within 45 seconds"
+    sleep 1
+  fi
 done
 
-log "PASS: Broker scoped cash rows and exact execution IDs persisted; see separate foreign-denial evidence gate."
+log "Broker scoped cash and execution evidence validated, subject to separate foreign-denial safety gate."

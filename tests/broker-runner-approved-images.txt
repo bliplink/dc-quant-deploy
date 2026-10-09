@@ -1,0 +1,13 @@
+# Reviewed Docker image IDs (sha256:<64 lowercase hex>) of BrokerApiE2ERunner.
+# EMPTY BY DESIGN: as of 2026-10-09 current RobotSvr still has:
+# 1. makerResting set after brokerPlace, so transport timeout can miss cleanup.
+# 2. catch (Exception) for foreign-customer test, so network outages appear
+#    like authorization denials.
+#
+# To approve a new image:
+# - Fix both Java issues and add negative regression tests in RobotSvr.
+# - Publish via GitHub Actions, inspect the immutable image, and review actual
+#   cross-tenant rejection codes.
+# - Record audited sha256 digest here via a reviewed commit.
+# - Never approve a tag, never whitelist the current unsafe image just to
+#   make acceptance green; this gate runs before funds/order side effects.

@@ -12,6 +12,11 @@ on:
       - 'tests/test_trader_resting_price.py'
       - 'tests/test_tenant_shell_io.py'
       - 'tests/test_broker_evidence_contract.py'
+      - 'tests/broker-db-evidence-rows.py'
+      - 'tests/test_broker_db_evidence.py'
+      - 'tests/broker-runner-image-review.py'
+      - 'tests/broker-runner-approved-images.txt'
+      - 'tests/test_broker_runner_review.py'
       - 'tests/public-api-docs-entry-smoke.js'
       - '.github/workflows/validate-api-acceptance.yml'
   pull_request:
@@ -24,6 +29,11 @@ on:
       - 'tests/test_trader_resting_price.py'
       - 'tests/test_tenant_shell_io.py'
       - 'tests/test_broker_evidence_contract.py'
+      - 'tests/broker-db-evidence-rows.py'
+      - 'tests/test_broker_db_evidence.py'
+      - 'tests/broker-runner-image-review.py'
+      - 'tests/broker-runner-approved-images.txt'
+      - 'tests/test_broker_runner_review.py'
       - 'tests/public-api-docs-entry-smoke.js'
       - '.github/workflows/validate-api-acceptance.yml'
 
@@ -54,6 +64,10 @@ jobs:
         run: python3 -m unittest discover -s tests -p 'test_tenant_shell_io.py' -v
       - name: Offline Broker run-specific evidence and negative tests
         run: python3 -m unittest discover -s tests -p 'test_broker_evidence_contract.py' -v
+      - name: Offline Broker reviewed-image gate and Projection catch-up
+        run: |
+          python3 -m unittest discover -s tests -p 'test_broker_runner_review.py' -v
+          python3 -m unittest discover -s tests -p 'test_broker_db_evidence.py' -v
       - name: Validate key-handling test guardrails
         run: |
           # This job never reads credentials, connects to the Demo gateway,
@@ -61,5 +75,7 @@ jobs:
           grep -Fq 'trap ' tests/run-tenant-lifecycle-e2e-host.sh
           grep -Fq 'expect_order_scope_denied' tests/run-tenant-lifecycle-e2e-host.sh
           grep -Fq 'raw logs suppressed' tests/run-broker-api-e2e-host.sh
+          grep -Fq 'broker-runner-image-review.py' tests/run-broker-api-e2e-host.sh
+          grep -Fq 'broker-db-evidence-rows.py' tests/run-broker-api-e2e-host.sh
           grep -Fq 'gw-partition-route.py' tests/run-tenant-lifecycle-e2e-host.sh
           echo 'Offline API acceptance harness guardrails PASS'
