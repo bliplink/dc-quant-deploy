@@ -17,7 +17,9 @@ E2E_SHARED_USER="${E2E_SHARED_USER:-sharedtrader}"
 E2E_ADMIN_USER="${E2E_ADMIN_USER:-tenantadmin}"
 
 log() {
-  printf '[tenant-e2e] %s\n' "$*"
+  # stdout carries machine-readable IDs/JSON from command substitutions.
+  # Keep diagnostics on stderr so approvals and registrations receive clean IDs.
+  printf '[tenant-e2e] %s\n' "$*" >&2
 }
 
 die() {
