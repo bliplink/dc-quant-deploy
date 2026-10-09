@@ -69,7 +69,8 @@ api_call() {
 
 signed_api_call() {
   local payload="$1" api_key="$2" secret_key="$3" expiry signature
-  expiry="$(( $(date +%s%3N) + 60000 ))"
+  # Portable on macOS and Linux (Darwin date does not support %3N).
+  expiry="$(python3 -c 'import time;print(int(time.time()*1000)+60000)')"
   signature="$(python3 - "${secret_key}" "${payload}" "${expiry}" <<'PY'
 import hashlib
 import hmac
@@ -99,7 +100,8 @@ code_of() {
 expect_ok() {
   local name="$1" response="$2" code
   code="$(code_of "${response}")"
-  [[ "${code}" == "0" ]] || die "${name} failed: ${response}"
+  # Never echo entire gateway responses: key-creation responses contain Secret Key.
+  [[ "${code}" == "0" ]] || die "${name} failed (GW code=${code})"
 }
 
 expect_rejected() {
@@ -147,6 +149,43 @@ register_trader() {
   expect_ok "register ${location}" "${response}"
   printf '%s' "${response}" | json_eval 'd["data"]["user_id"]'
 }
+
+# On failed runs, revoke only keys created by these disposable test tenants.
+# Never print API secrets, session tokens or the raw gateway response.
+cleanup_test_key() {
+  local owner="$1" key="$2" token="$3" payload
+  [[ -n "${key}" && -n "${token}" ]] || return 0
+  if [[ "${owner}" == tenant ]]; then
+    payload="$(printf '{"serverName":"LoginSvr","method":"tenantApiKeyAdmin","content":{"action":"DELETE","api_key":"%s","cid":"E2E_FAILURE_CLEANUP"}}' "${key}")"
+  else
+    payload="$(printf '{"serverName":"LoginSvr","method":"deleteApiKey","content":{"api_key":"%s","cid":"E2E_FAILURE_CLEANUP"}}' "${key}")"
+  fi
+  local response
+  if ! response="$(api_call "${payload}" "${token}" 2>/dev/null)" || [[ "$(code_of "${response:-{}}")" != "0" ]]; then
+    log "WARN: could not revoke a disposable test key; review isolated acceptance tenant."
+  fi
+}
+cleanup_failed_keys() {
+  local previous_code="$1"
+  [[ "${previous_code}" -ne 0 ]] || return 0
+  set +e
+  # Attempt to cancel an accepted but unfinished test order before revoking its key.
+  if [[ -n "${trader_order_id:-}" && -n "${trader_write_token:-}" ]]; then
+    local cancel_payload
+    cancel_payload="$(printf '{"serverName":"OrderSvr","method":"cancelOrder","content":{"SecurityID":"BTCUSDT","MarketIndicator":"4","OrderID":"%s","ClOrdID":"TRADER_FAILURE_CANCEL_%s"}}' "${trader_order_id}" "${E2E_SUFFIX}")"
+    if ! api_call "${cancel_payload}" "${trader_write_token}" >/dev/null 2>&1; then
+      log "WARN: review possibly open test order in isolated acceptance tenant."
+    fi
+  fi
+  cleanup_test_key trader "${trader_readonly_key:-}" "${trader_token_a:-}"
+  cleanup_test_key trader "${trader_write_key:-}" "${trader_token_a:-}"
+  cleanup_test_key trader "${admin_trader_api_key:-}" "${admin_token_a:-}"
+  cleanup_test_key tenant "${tenant_api_key:-}" "${admin_token_a:-}"
+  cleanup_test_key tenant "${broker_readonly_key:-}" "${admin_token_a:-}"
+  cleanup_test_key tenant "${broker_api_key:-}" "${admin_token_a:-}"
+  log "Acceptance script exited with code ${previous_code}; key cleanup attempted."
+}
+trap 'cleanup_failed_keys "$?"' EXIT
 
 log "Checking the public tenant page. Real login/application/registration calls below are the service readiness gates."
 curl --noproxy '*' -fsS --max-time 20 "${TENANT_PAGE_BASE_URL%/}/#/apply" >/dev/null
@@ -365,6 +404,45 @@ expect_ok "Broker API retains Tenant management access" "${broker_admin_response
 broker_actor_user_id="$(printf '%s' "${broker_login_response}" | json_eval 'd["data"]["user_id"]')"
 
 ENV_FILE="${ENV_FILE}" BROKER_E2E_RUN_ID="${E2E_SUFFIX}" BROKER_E2E_LOCATION="${E2E_LOCATION_A}" BROKER_E2E_ACTOR_USER_ID="${broker_actor_user_id}" BROKER_E2E_API_KEY="${broker_api_key}" BROKER_E2E_API_SECRET="${broker_api_secret}" BROKER_E2E_MAKER_CUSTOMER_ID="${user_id_a}" BROKER_E2E_TAKER_CUSTOMER_ID="${overflow_user_id}" BROKER_E2E_FOREIGN_LOCATION="${E2E_LOCATION_B}" BROKER_E2E_FOREIGN_CUSTOMER_ID="${user_id_b}"   "${SCRIPT_DIR}/run-broker-api-e2e-host.sh"
+
+# The Broker runner funded the disposable maker account. Verify that an
+# independently issued Trader key with explicit ORDER_WRITE can place and
+# cancel its *own* order, without UserID/Location override fields.
+trader_write_create_payload="$(printf '{"serverName":"LoginSvr","method":"updateApiKey","content":{"cid":"TRADER_WRITE_E2E","type":"trade","label":"trader-write-%s","permissions":"MARKET_READ,ACCOUNT_READ,ORDER_READ,ORDER_WRITE"}}' "${E2E_SUFFIX}")"
+trader_write_created="$(api_call "${trader_write_create_payload}" "${trader_token_a}")"
+expect_ok "Trader explicitly creates ORDER_WRITE key" "${trader_write_created}"
+trader_write_key="$(printf '%s' "${trader_write_created}" | json_eval 'd["data"]["api_key"]')"
+trader_write_secret="$(printf '%s' "${trader_write_created}" | json_eval 'd["data"]["secret_key"]')"
+[[ "$(printf '%s' "${trader_write_created}" | json_eval 'd["data"]["permissions"]')" == "MARKET_READ,ACCOUNT_READ,ORDER_READ,ORDER_WRITE" ]] ||
+  die "Trader write key permissions were not issued as requested"
+trader_write_login_payload="$(printf '{"serverName":"LoginSvr","method":"apiKeyLogin","content":{"api_key":"%s","location":"%s","cid":"TRADER_WRITE_LOGIN_E2E"}}' "${trader_write_key}" "${E2E_LOCATION_A}")"
+trader_write_login="$(signed_api_call "${trader_write_login_payload}" "${trader_write_key}" "${trader_write_secret}")"
+expect_ok "Trader ORDER_WRITE signed login" "${trader_write_login}"
+[[ "$(printf '%s' "${trader_write_login}" | json_eval 'd["data"]["client_type"]')" == "API" ]] ||
+  die "Trader write key created the wrong client type"
+[[ "$(printf '%s' "${trader_write_login}" | json_eval 'd["data"]["user_id"]')" == "${user_id_a}" ]] ||
+  die "Trader write key changed account ownership"
+trader_write_token="$(printf '%s' "${trader_write_login}" | json_eval 'd["data"]["token"]')"
+trader_new_clordid="TRADER_WRITE_${E2E_SUFFIX}"
+trader_write_price="${E2E_TRADER_LIMIT_PRICE:-59000}"
+trader_write_qty="${E2E_TRADER_ORDER_QTY:-0.001}"
+trader_order_payload="$(printf '{"serverName":"OrderSvr","method":"placeOrder","content":{"SecurityID":"BTCUSDT","MarketIndicator":"4","Side":"BUY","OCType":"OPEN","OrdType":"Limit","TimeInForce":"GTC","OrderQty":"%s","Price":"%s","ClOrdID":"%s"}}' "${trader_write_qty}" "${trader_write_price}" "${trader_new_clordid}")"
+trader_order_response="$(api_call "${trader_order_payload}" "${trader_write_token}")"
+expect_ok "Trader API places own funded limit order" "${trader_order_response}"
+trader_order_id="$(printf '%s' "${trader_order_response}" | json_eval 'd.get("info1") or (d.get("data") or {}).get("OrderID") or (d.get("data") or {}).get("order_id") or ""')"
+[[ -n "${trader_order_id}" && "${trader_order_id}" != None ]] ||
+  die "Trader placeOrder accepted but no server OrderID was returned; must reconcile before cancellation"
+trader_cancel_payload="$(printf '{"serverName":"OrderSvr","method":"cancelOrder","content":{"SecurityID":"BTCUSDT","MarketIndicator":"4","OrderID":"%s","ClOrdID":"TRADER_CANCEL_%s"}}' "${trader_order_id}" "${E2E_SUFFIX}")"
+trader_cancel_response="$(api_call "${trader_cancel_payload}" "${trader_write_token}")"
+expect_ok "Trader API cancels own limit order" "${trader_cancel_response}"
+trader_write_revoke_payload="$(printf '{"serverName":"LoginSvr","method":"deleteApiKey","content":{"api_key":"%s","cid":"TRADER_WRITE_REVOKE_E2E"}}' "${trader_write_key}")"
+trader_write_revoke="$(api_call "${trader_write_revoke_payload}" "${trader_token_a}")"
+expect_ok "Trader write key revoked by its owner" "${trader_write_revoke}"
+trader_write_login_after_revoke="$(signed_api_call "${trader_write_login_payload}" "${trader_write_key}" "${trader_write_secret}")"
+expect_rejected "Trader revoked write key cannot re-authenticate" "${trader_write_login_after_revoke}"
+log "Trader write key acceptance: explicit scope, signed login, own-account order, cancel and revoke."
+
+
 
 broker_key_delete_payload="$(printf '{"serverName":"LoginSvr","method":"tenantApiKeyAdmin","content":{"action":"DELETE","api_key":"%s","cid":"BROKER_KEY_DELETE_E2E"}}' "${broker_api_key}")"
 broker_key_delete_response="$(api_call "${broker_key_delete_payload}" "${admin_token_a}")"
