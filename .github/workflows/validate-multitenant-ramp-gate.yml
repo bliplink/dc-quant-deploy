@@ -1,0 +1,31 @@
+name: Validate Multitenant Ramp Gate
+
+on:
+  push:
+    branches: [saas-crypto]
+    paths:
+      - 'tests/check-tenant-ramp-readiness.py'
+      - 'tests/test_tenant_ramp_readiness.py'
+      - '.github/workflows/validate-multitenant-ramp-gate.yml'
+  pull_request:
+    paths:
+      - 'tests/check-tenant-ramp-readiness.py'
+      - 'tests/test_tenant_ramp_readiness.py'
+      - '.github/workflows/validate-multitenant-ramp-gate.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  offline-gate-regression:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Compile readiness gate
+        run: python3 -m py_compile tests/check-tenant-ramp-readiness.py
+      - name: Verify fail-closed pressure and inactivity rules (no Docker/credentials)
+        run: python3 -m unittest discover -s tests -p 'test_tenant_ramp_readiness.py' -v
