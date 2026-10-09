@@ -195,6 +195,50 @@ done
 admin_token_a="$(printf '%s' "${admin_login_a}" | json_eval 'd["data"]["token"]')"
 trader_token_a="$(printf '%s' "${trader_login_a}" | json_eval 'd["data"]["token"]')"
 
+# Trader API key lifecycle on a disposable account in isolated tenant A.
+# The key is read-only; every step must remain scoped to the trader login.
+trader_readonly_payload="$(printf '{"serverName":"LoginSvr","method":"updateApiKey","content":{"cid":"TRADER_READONLY_E2E","type":"trade","label":"trader-readonly-%s","permissions":"MARKET_READ,ACCOUNT_READ,ORDER_READ"}}' "${E2E_SUFFIX}")"
+trader_readonly_created="$(api_call "${trader_readonly_payload}" "${trader_token_a}")"
+expect_ok "Trader creates self-service read-only API key" "${trader_readonly_created}"
+trader_readonly_key="$(printf '%s' "${trader_readonly_created}" | json_eval 'd["data"]["api_key"]')"
+trader_readonly_secret="$(printf '%s' "${trader_readonly_created}" | json_eval 'd["data"]["secret_key"]')"
+[[ "$(printf '%s' "${trader_readonly_created}" | json_eval 'd["data"]["permissions"]')" == "MARKET_READ,ACCOUNT_READ,ORDER_READ" ]] ||
+  die "Trader self-service read-only scope changed unexpectedly"
+trader_readonly_list="$(api_call '{"serverName":"LoginSvr","method":"queryApiKey","content":{"cid":"TRADER_READONLY_LIST_E2E"}}' "${trader_token_a}")"
+expect_ok "Trader lists own keys" "${trader_readonly_list}"
+printf '%s' "${trader_readonly_list}" | python3 -c '
+import json,sys
+d=json.load(sys.stdin)["data"]
+assert isinstance(d,list) and d
+assert all(not key.get("secret_key") for key in d), "API key list leaked a secret"
+'
+trader_readonly_login_payload="$(printf '{"serverName":"LoginSvr","method":"apiKeyLogin","content":{"cid":"TRADER_READONLY_LOGIN_E2E","location":"%s","api_key":"%s"}}' "${E2E_LOCATION_A}" "${trader_readonly_key}")"
+trader_readonly_session="$(signed_api_call "${trader_readonly_login_payload}" "${trader_readonly_key}" "${trader_readonly_secret}")"
+expect_ok "Trader self-service key signed API login" "${trader_readonly_session}"
+[[ "$(printf '%s' "${trader_readonly_session}" | json_eval 'd["data"]["client_type"]')" == "API" ]] ||
+  die "Trader key must create API client_type"
+[[ "$(printf '%s' "${trader_readonly_session}" | json_eval 'd["data"]["permissions"]')" == "MARKET_READ,ACCOUNT_READ,ORDER_READ" ]] ||
+  die "Trader key session broadened permissions"
+[[ "$(printf '%s' "${trader_readonly_session}" | json_eval 'd["data"]["location"]')" == "${E2E_LOCATION_A}" ]] ||
+  die "Trader signed login crossed tenant"
+[[ "$(printf '%s' "${trader_readonly_session}" | json_eval 'd["data"]["user_id"]')" == "${user_id_a}" ]] ||
+  die "Trader signed login changed authoritative user ID"
+trader_readonly_token="$(printf '%s' "${trader_readonly_session}" | json_eval 'd["data"]["token"]')"
+trader_balance="$(api_call '{"serverName":"TradeSvr","method":"queryAccountBalance","content":{}}' "${trader_readonly_token}")"
+expect_ok "Trader key queries own account balance" "${trader_balance}"
+trader_write_denied_payload="$(printf '{"serverName":"OrderSvr","method":"placeOrder","content":{"SecurityID":"BTCUSDT","MarketIndicator":"4","Side":"BUY","OCType":"OPEN","OrdType":"Limit","TimeInForce":"GTC","OrderQty":"0.001","Price":"60000","ClOrdID":"TRADER_READONLY_BLOCK_%s"}}' "${E2E_SUFFIX}")"
+trader_write_denied="$(api_call "${trader_write_denied_payload}" "${trader_readonly_token}")"
+expect_rejected "Trader key without ORDER_WRITE cannot place an order" "${trader_write_denied}"
+trader_readonly_delete_payload="$(printf '{"serverName":"LoginSvr","method":"deleteApiKey","content":{"api_key":"%s","cid":"TRADER_READONLY_DELETE_E2E"}}' "${trader_readonly_key}")"
+trader_readonly_delete="$(api_call "${trader_readonly_delete_payload}" "${trader_token_a}")"
+expect_ok "Trader self-service key revocation" "${trader_readonly_delete}"
+sleep 1
+trader_revoked_login="$(signed_api_call "${trader_readonly_login_payload}" "${trader_readonly_key}" "${trader_readonly_secret}")"
+expect_rejected "Revoked Trader API key cannot sign in again" "${trader_revoked_login}"
+log "Trader key acceptance: create, no-secret list, signed login, own-account read, write denial, revoke."
+
+
+
 cross_password_login="$(login "${E2E_SHARED_USER}" "${trader_password_a}" WEB "${E2E_LOCATION_B}" CROSS_PASSWORD_E2E)"
 expect_rejected "cross-tenant password login" "${cross_password_login}"
 
