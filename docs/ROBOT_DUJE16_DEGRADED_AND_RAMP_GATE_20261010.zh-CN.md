@@ -1,6 +1,8 @@
 # DUJE16 Robot DEGRADED 根因与未完成恢复记录（2026-10-10）
 
 ## 当前状态：仍需单租户安全恢复
+> **重要更新：** 已通过平台合法会话实测 `OrderSvr/queryOpenOrder` 被 `P246 PARTITION_NOT_READY` 拒绝；确认 OrderSvr A 反复发生 `replica catch-up GAP`。在完成 Order HA 权威一致性修复前，**禁止执行以下所述 Robot STOP/START/RESTART**。参见 [P246 HA 恢复事故调查](ORDER_P246_CATCHUP_GAP_DUJE16_INCIDENT_20261010.zh-CN.md)。
+
 
 - Mac mini MySQL `dc.dc_tenant`：**13 租户，均 TRIAL**；`dc.dc_tenant_robot`：**14 个 Robot 配置**（13 个 enabled=1，另有 1 个 `DPGR6B` 禁用的 QA Robot）。
 - 启用的 13 个中 **12 RUNNING，1 DEGRADED**，异常项为 `DUJE16 / trial-liquidity-BTCUSDT`，`open_order_count=0`；原始错误 `RUNTIME_FAILURE`、`gateway TCP response is empty for cancelBatchOrder`，`update_time=2026-10-09 09:40:35.844`。最新 `last_heartbeat_time` 持续刷新至 2026-10-10 06:25（本机 +08），`runtime_owner=colima`、运行租约正常续租。这意味着租约与进程存活**不等于**对该租户已经恢复 40 单。

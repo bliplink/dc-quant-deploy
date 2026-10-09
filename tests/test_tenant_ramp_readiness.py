@@ -40,7 +40,7 @@ class MultitenantRampGuardTests(unittest.TestCase):
                          openOrders=0, heartbeatAgeSeconds=3)
         outcome = gate.evaluate(self.sample(), 1.0, 10.0, 20.0,
             order_gc={"fullGCsIn3Seconds": 0, "oldGenerationMaxPercent": 5.0},
-            enabled_robots=robots)
+            enabled_robots=robots, partition_signals=[])
         self.assertEqual(outcome["gate"], "NOT_READY")
         self.assertIn("ENABLED_ROBOTS_UNHEALTHY:1/13", outcome["reasons"])
         self.assertEqual(outcome["enabledRobotsUnhealthy"][0]["location"], "DUJE16")
@@ -49,7 +49,7 @@ class MultitenantRampGuardTests(unittest.TestCase):
         result = gate.evaluate(self.sample(busy=10), 59.68, 83.8, 77.0,
                                order_gc={"fullGCsIn3Seconds": 3,
                                          "oldGenerationMaxPercent": 99.99},
-                                         enabled_robots=self.healthy())
+                                         enabled_robots=self.healthy(), partition_signals=[])
         self.assertEqual(result["gate"], "NOT_READY")
         self.assertEqual(result["tenantLocations"], 13)
         self.assertEqual(len(result["inactiveTenants"]), 10)
@@ -64,7 +64,7 @@ class MultitenantRampGuardTests(unittest.TestCase):
         result = gate.evaluate(self.sample(busy=0), 1.2, 42, 20,
                                order_gc={"fullGCsIn3Seconds": 0,
                                          "oldGenerationMaxPercent": 40.0},
-                                         enabled_robots=self.healthy())
+                                         enabled_robots=self.healthy(), partition_signals=[])
         self.assertEqual(result["gate"], "BASELINE_READY_ONLY")
         self.assertFalse(result["nextRampAuthorized"])
         self.assertEqual(result["reasons"], [])
@@ -74,11 +74,11 @@ class MultitenantRampGuardTests(unittest.TestCase):
     def test_cpu_threshold_normalizes_docker_percent_by_live_quota(self):
         gc = {"fullGCsIn3Seconds": 0, "oldGenerationMaxPercent": 40}
         ok = gate.evaluate(self.sample(), 1, 10, 100, order_gc=gc,
-                           robot_cpu_quota_cores=1.25, enabled_robots=self.healthy())
+                           robot_cpu_quota_cores=1.25, enabled_robots=self.healthy(), partition_signals=[])
         self.assertEqual("BASELINE_READY_ONLY", ok["gate"])
         self.assertEqual(80.0, ok["robotCpuQuotaUtilizationPercent"])
         saturated = gate.evaluate(self.sample(), 1, 10, 125, order_gc=gc,
-                                  robot_cpu_quota_cores=1.25, enabled_robots=self.healthy())
+                                  robot_cpu_quota_cores=1.25, enabled_robots=self.healthy(), partition_signals=[])
         self.assertEqual("NOT_READY", saturated["gate"])
         self.assertTrue(any("ROBOT_CPU_QUOTA_UTIL_HIGH:" in x
                             for x in saturated["reasons"]))
@@ -87,8 +87,32 @@ class MultitenantRampGuardTests(unittest.TestCase):
         gc = {"fullGCsIn3Seconds": 0,
               "oldGenerationCommittedPercent": 96.0,
               "oldGenerationMaxPercent": 6.4}
-        result = gate.evaluate(self.sample(), 1, 10, 20, order_gc=gc, enabled_robots=self.healthy())
+        result = gate.evaluate(self.sample(), 1, 10, 20, order_gc=gc, enabled_robots=self.healthy(), partition_signals=[])
         self.assertEqual("BASELINE_READY_ONLY", result["gate"])
+
+    def test_order_partition_recovery_errors_block_next_ramp(self):
+        log = ("2026-10-10 WARN ORDER_PARTITION_PROMOTION_BARRIER_RETRY node:OrderSvrA, "
+               "partition:P246, epoch:1\n"
+               "2026-10-10 ERROR ORDER_PARTITION_RECOVERY_FAILED node:OrderSvrA, "
+               "partition:P246, epoch:1\n"
+               "2026-10-10 WARN partition fence rejected request, "
+               "reason:PARTITION_NOT_READY service=OrderSvrA, partition=P246, epoch=1")
+        signals = gate.parse_partition_recovery_signals(log, "dc-saas-ordersvr")
+        self.assertEqual(1, len(signals))
+        self.assertEqual(1, signals[0]["recoveryFailures"])
+        self.assertEqual(1, signals[0]["notReadyRejections"])
+        self.assertEqual("P246", signals[0]["partition"])
+        healthy_gc = {"fullGCsIn3Seconds": 0, "oldGenerationMaxPercent": 5.0}
+        result = gate.evaluate(self.sample(), 1, 10, 20, order_gc=healthy_gc,
+                               enabled_robots=self.healthy(), partition_signals=signals)
+        self.assertEqual("NOT_READY", result["gate"])
+        self.assertIn("ORDER_PARTITIONS_UNREADY:P246", result["reasons"])
+        good = gate.evaluate(self.sample(), 1, 10, 20, order_gc=healthy_gc,
+                             enabled_robots=self.healthy(), partition_signals=[])
+        self.assertEqual("BASELINE_READY_ONLY", good["gate"])
+        unknown = gate.evaluate(self.sample(), 1, 10, 20, order_gc=healthy_gc,
+                                enabled_robots=self.healthy())
+        self.assertIn("ORDER_PARTITION_RECOVERY_TELEMETRY_MISSING", unknown["reasons"])
 
     def test_memory_normalization(self):
         self.assertEqual(gate.memory_percent("1GiB / 2GiB"), 50)
@@ -118,11 +142,11 @@ class MultitenantRampGuardTests(unittest.TestCase):
         healthy_gc = {"fullGCsIn3Seconds": 0, "oldGenerationMaxPercent": 20.0}
         for psi, mem, cpu in ((26, 10, 2), (2, 81, 2), (2, 10, 86)):
             self.assertEqual(gate.evaluate(
-                self.sample(), psi, mem, cpu, order_gc=healthy_gc, enabled_robots=self.healthy())["gate"], "NOT_READY")
+                self.sample(), psi, mem, cpu, order_gc=healthy_gc, enabled_robots=self.healthy(), partition_signals=[])["gate"], "NOT_READY")
         for gc in (None, {}, {"fullGCsIn3Seconds": -1, "oldGenerationMaxPercent": 40},
                    {"fullGCsIn3Seconds": 1, "oldGenerationMaxPercent": 40},
                    {"fullGCsIn3Seconds": 0, "oldGenerationMaxPercent": 98}):
-            self.assertEqual(gate.evaluate(self.sample(), 1, 10, 20, order_gc=gc, enabled_robots=self.healthy())["gate"],
+            self.assertEqual(gate.evaluate(self.sample(), 1, 10, 20, order_gc=gc, enabled_robots=self.healthy(), partition_signals=[])["gate"],
                              "NOT_READY")
         with self.assertRaises(ValueError):
             gate.evaluate(self.sample(), float("nan"), 10, 10)

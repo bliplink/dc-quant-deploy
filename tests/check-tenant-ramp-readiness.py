@@ -130,12 +130,48 @@ def collect_enabled_robots():
     return parse_enabled_robot_rows(result)
 
 
+
+ORDER_RECOVERY_FAILED = re.compile(r"ORDER_PARTITION_RECOVERY_FAILED\s+node:(OrderSvr[A-C]),\s*partition:(P\d{3})")
+ORDER_NOT_READY = re.compile(r"PARTITION_NOT_READY[^\n]*partition=(P\d{3})")
+ORDER_NODES = ("dc-saas-ordersvr", "dc-saas-ordersvr-b", "dc-saas-ordersvr-c")
+
+
+def parse_partition_recovery_signals(raw, node):
+    """Summarize error evidence only; never surface order/session log content."""
+    recovery = {}
+    rejected = {}
+    for line in raw.splitlines():
+        failure = ORDER_RECOVERY_FAILED.search(line)
+        denied = ORDER_NOT_READY.search(line)
+        if failure:
+            partition = failure.group(2)
+            recovery[partition] = recovery.get(partition, 0) + 1
+        if denied:
+            partition = denied.group(1)
+            rejected[partition] = rejected.get(partition, 0) + 1
+    return [{"node": node, "partition": location,
+             "recoveryFailures": recovery.get(location, 0),
+             "notReadyRejections": rejected.get(location, 0)}
+            for location in sorted(set(recovery) | set(rejected))]
+
+
+def collect_partition_recovery_signals():
+    signals = []
+    for node in ORDER_NODES:
+        result = subprocess.run(["docker", "logs", "--since", "180s", node],
+                                text=True, capture_output=True,
+                                timeout=30, check=True)
+        signals.extend(parse_partition_recovery_signals(
+            result.stdout + "\n" + result.stderr, node))
+    return signals
+
+
 def evaluate(rows, cpu_psi, order_mem_pct, robot_cpu_pct,
              min_tenants=10, min_events=2, max_cpu_psi=25.0,
              max_inactive_pct=20.0, max_order_mem=80.0, max_robot_cpu=85.0,
              order_gc=None, max_old_gen_percent=95.0,
              robot_cpu_quota_cores=1.0, enabled_robots=None,
-             heartbeat_fresh_seconds=45):
+             heartbeat_fresh_seconds=45, partition_signals=None):
     if any(not math.isfinite(float(x)) or float(x) < 0
            for x in (cpu_psi, order_mem_pct, robot_cpu_pct, robot_cpu_quota_cores)):
         raise ValueError("invalid resource metric")
@@ -178,6 +214,11 @@ def evaluate(rows, cpu_psi, order_mem_pct, robot_cpu_pct,
                 })
         if invalid_robots:
             reasons.append(f"ENABLED_ROBOTS_UNHEALTHY:{len(invalid_robots)}/{len(enabled_robots)}")
+    if partition_signals is None:
+        reasons.append("ORDER_PARTITION_RECOVERY_TELEMETRY_MISSING")
+    elif partition_signals:
+        affected = sorted({item["partition"] for item in partition_signals})
+        reasons.append("ORDER_PARTITIONS_UNREADY:" + ",".join(affected))
     if not isinstance(order_gc, dict):
         reasons.append("ORDER_B_GC_TELEMETRY_MISSING")
     else:
@@ -208,7 +249,7 @@ def evaluate(rows, cpu_psi, order_mem_pct, robot_cpu_pct,
         "robotCpuQuotaCores": robot_cpu_quota_cores,
         "robotCpuQuotaUtilizationPercent": round(robot_quota_util_pct, 2),
         "enabledRobotsObserved": len(enabled_robots) if isinstance(enabled_robots, list) else 0,
-        "enabledRobotsUnhealthy": invalid_robots,
+        "enabledRobotsUnhealthy": invalid_robots,        "orderPartitionRecoverySignalsLast180s": partition_signals,
 
         "orderBHotSpotGC": order_gc,
         "warning": "Market data rows are not authoritative order TPS or a capacity guarantee.",
@@ -256,7 +297,7 @@ def collect():
     return market_rows(raw), float(match.group(1)), (
         measurements["dc-saas-ordersvr-b"]["memoryPct"],
         measurements["dc-saas-robotsvr"]["cpu"]), collect_order_gc(), (
-            robot_cpu_nanos / 1_000_000_000.0), collect_enabled_robots()
+            robot_cpu_nanos / 1_000_000_000.0), collect_enabled_robots(), collect_partition_recovery_signals()
 
 
 def main():
@@ -264,9 +305,10 @@ def main():
     parser.add_argument("--output", help="Optional JSON artifact location")
     args = parser.parse_args()
     try:
-        rows, psi, (mem, cpu), gc, quota, enabled_robots = collect()
+        rows, psi, (mem, cpu), gc, quota, enabled_robots, partition_signals = collect()
         result = evaluate(rows, psi, mem, cpu, order_gc=gc,
-                          robot_cpu_quota_cores=quota, enabled_robots=enabled_robots)
+                          robot_cpu_quota_cores=quota, enabled_robots=enabled_robots,
+                          partition_signals=partition_signals)
     except (OSError, ValueError, subprocess.CalledProcessError,
             subprocess.TimeoutExpired) as error:
         result = {"gate": "NOT_READY", "nextRampAuthorized": False,
