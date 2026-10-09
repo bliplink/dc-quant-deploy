@@ -27,6 +27,7 @@ COUNTERS = {
 FREQ = "sun.os.hrt.frequency"
 OLD_USED = "sun.gc.generation.1.space.0.used"
 OLD_CAPACITY = "sun.gc.generation.1.space.0.capacity"
+OLD_MAX_CAPACITY = "sun.gc.generation.1.space.0.maxCapacity"
 
 
 
@@ -118,6 +119,18 @@ def old_generation_capacity(values):
             100.0 * used / capacity)
 
 
+def old_generation_max_capacity(values):
+    """Compare usage against JVM maximum rather than recently committed old space."""
+    committed = old_generation_capacity(values)
+    if committed is None or OLD_MAX_CAPACITY not in values:
+        return None
+    max_bytes = values[OLD_MAX_CAPACITY]
+    if max_bytes <= 0 or max_bytes < values[OLD_CAPACITY]:
+        raise ValueError("inconsistent old-generation max capacity")
+    return (committed[0], max_bytes / (1024.0 ** 2),
+            100.0 * values[OLD_USED] / max_bytes)
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--samples", type=int, default=7)
@@ -134,8 +147,14 @@ def main():
                 for name in NODES:
                     delta = interval(previous[name], current[name])
                     old = old_generation_capacity(current[name])
-                    old_text = (" old_used_mib=%.1f old_capacity_mib=%.1f old_pct=%.2f"
-                                % old) if old is not None else " old_occupancy=unknown"
+                    old_max = old_generation_max_capacity(current[name])
+                    old_text = (
+                        (" old_used_mib=%.1f old_committed_mib=%.1f "
+                         "old_committed_pct=%.2f") % old
+                        + (" old_max_mib=%.1f old_max_pct=%.2f"
+                           % (old_max[1], old_max[2]) if old_max is not None
+                           else " old_max=unknown")
+                    ) if old is not None else " old_occupancy=unknown"
                     print(("%s %s young=%d young_ms=%.1f full=%d full_ms=%.1f "
                            "safepoint_ms=%.1f sync_ms=%.1f") %
                           (now, name, delta["young_count"], delta["young_ticks"],

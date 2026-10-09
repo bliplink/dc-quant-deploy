@@ -4,6 +4,8 @@
 
 **当前生产 Demo 仍不能开展 50/200 租户压力测试。** 既有 12 租户浏览器盘口均有数据，但 Tape 仿真成交持续性不足。后续只读性能排查发现：
 
+> **2026-10-10 05:59 +08:00 更新：** OrderSvr A/B 已在本轮前重新启动，当前 B 老年代只使用约 91 MiB/1536 MiB 上限、短采样 Full GC 0 次。早先这份高 GC 报告代表 **重启前的历史证据**，不是当前运行状况。请查看 [Order B 重启后 GC 复核及指标修正](ORDER_B_POST_RESTART_GC_AUDIT_20261010.zh-CN.md)。
+
 1. Docker VM 实际为 **8 CPU / 15.58 GiB**。原 RobotSvr 配额 `0.75 CPU`，原 OrderSvr B `1.50 CPU`；首次 8 秒 CFS delta 显示 Robot **86/86 个周期（100%）被限流**，Order B **52/86（60.5%）被限流**。Docker VM CPU PSI `some avg10` 约 **51–59%**，IO PSI 约 0.15%，不能归因于磁盘写入。
 2. 对 JVM PID 7（Robot）、PID 7（Order B）做 **4 秒、只读线程 CPU 差值**，Robot 主要是 `robot-tape-*` 工作线程；Order B 的两个 HotSpot `GC task thread#` 合计约 **5.07 CPU 秒**。这只是 CPU 消耗证据，不是精确 Stop-the-World 最长暂停值。
 3. 用 `scripts/observe-order-jvm-gc.py` 的 HotSpot PerfData 只读计数器：**约 15 秒内 Order B 4 次 Full GC、累计约 12.28 秒 Full GC / Safepoint 时间**；同窗口 Order A、C 均为 **0 Full GC**。另一次约 8 秒内 B 3 次 Full GC、累计约 **5.06 秒**；GC 高密度现象可复现。

@@ -77,11 +77,15 @@ def collect_order_gc():
     final = module.read_node("dc-saas-ordersvr-b")
     delta = module.interval(initial, final)
     old = module.old_generation_capacity(final)
-    if old is None:
-        raise ValueError("Order B old-generation usage is unavailable")
+    old_max = module.old_generation_max_capacity(final)
+    if old is None or old_max is None:
+        raise ValueError("Order B old-generation usage / max capacity is unavailable")
     return {"fullGCsIn3Seconds": delta["full_count"],
             "fullGCmsIn3Seconds": round(delta["full_ticks"], 1),
-            "oldGenerationPercent": round(old[2], 2)}
+            "oldGenerationCommittedPercent": round(old[2], 2),
+            "oldGenerationMaxPercent": round(old_max[2], 2),
+            "oldGenerationUsedMiB": round(old[0], 1),
+            "oldGenerationMaxMiB": round(old_max[1], 1)}
 
 
 def evaluate(rows, cpu_psi, order_mem_pct, robot_cpu_pct,
@@ -114,7 +118,7 @@ def evaluate(rows, cpu_psi, order_mem_pct, robot_cpu_pct,
         reasons.append("ORDER_B_GC_TELEMETRY_MISSING")
     else:
         full_gc = order_gc.get("fullGCsIn3Seconds")
-        old_pct = order_gc.get("oldGenerationPercent")
+        old_pct = order_gc.get("oldGenerationMaxPercent")
         if (not isinstance(full_gc, int) or full_gc < 0
                 or not isinstance(old_pct, (float, int))
                 or not math.isfinite(old_pct) or not 0 <= old_pct <= 100):
@@ -123,7 +127,7 @@ def evaluate(rows, cpu_psi, order_mem_pct, robot_cpu_pct,
             if full_gc > 0:
                 reasons.append(f"ORDER_B_FULL_GC:{full_gc}/3s")
             if old_pct > max_old_gen_percent:
-                reasons.append(f"ORDER_B_OLD_GEN_HIGH:{old_pct:.2f}>{max_old_gen_percent:.2f}")
+                reasons.append(f"ORDER_B_OLD_GEN_MAX_HIGH:{old_pct:.2f}>{max_old_gen_percent:.2f}")
 
     return {
         "gate": "NOT_READY" if reasons else "BASELINE_READY_ONLY",

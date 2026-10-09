@@ -125,6 +125,23 @@ class OrderGcPerfDataTest(unittest.TestCase):
         with self.assertRaises(ValueError):
             gc.old_generation_capacity(data)
 
+    def test_old_generation_committed_vs_max_capacity_not_conflated(self):
+        data = {
+            gc.OLD_USED: 98 * 1024**2,
+            gc.OLD_CAPACITY: 102 * 1024**2,
+            gc.OLD_MAX_CAPACITY: 1536 * 1024**2,
+        }
+        committed_pct = gc.old_generation_capacity(data)[2]
+        used, max_mib, max_pct = gc.old_generation_max_capacity(data)
+        self.assertGreater(committed_pct, 95)
+        self.assertEqual(1536, max_mib)
+        self.assertLess(max_pct, 7)
+        self.assertEqual(98, used)
+        self.assertIsNone(gc.old_generation_max_capacity({}))
+        data[gc.OLD_MAX_CAPACITY] = data[gc.OLD_CAPACITY] - 1
+        with self.assertRaises(ValueError):
+            gc.old_generation_max_capacity(data)
+
     def test_decreased_counter_fails_closed(self):
         current = gc.parse_perfdata(perfdata())
         previous = gc.parse_perfdata(perfdata({
