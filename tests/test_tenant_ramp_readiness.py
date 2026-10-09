@@ -18,7 +18,9 @@ class MultitenantRampGuardTests(unittest.TestCase):
         ]
 
     def test_current_pressure_and_silent_tenants_block_ramp(self):
-        result = gate.evaluate(self.sample(busy=10), 59.68, 83.8, 77.0)
+        result = gate.evaluate(self.sample(busy=10), 59.68, 83.8, 77.0,
+                               order_gc={"fullGCsIn3Seconds": 3,
+                                         "oldGenerationPercent": 99.99})
         self.assertEqual(result["gate"], "NOT_READY")
         self.assertEqual(result["tenantLocations"], 13)
         self.assertEqual(len(result["inactiveTenants"]), 10)
@@ -26,14 +28,30 @@ class MultitenantRampGuardTests(unittest.TestCase):
         self.assertTrue(any(x.startswith("CPU_PSI_HIGH") for x in result["reasons"]))
         self.assertTrue(any(x.startswith("ORDER_B_MEMORY_HIGH") for x in result["reasons"]))
         self.assertFalse(result["nextRampAuthorized"])
+        self.assertTrue(any(x.startswith("ORDER_B_FULL_GC:") for x in result["reasons"]))
+        self.assertTrue(any(x.startswith("ORDER_B_OLD_GEN_HIGH:") for x in result["reasons"]))
 
     def test_healthy_baseline_is_still_not_200_tenant_authorization(self):
-        result = gate.evaluate(self.sample(busy=0), 1.2, 42, 20)
+        result = gate.evaluate(self.sample(busy=0), 1.2, 42, 20,
+                               order_gc={"fullGCsIn3Seconds": 0,
+                                         "oldGenerationPercent": 40.0})
         self.assertEqual(result["gate"], "BASELINE_READY_ONLY")
         self.assertFalse(result["nextRampAuthorized"])
         self.assertEqual(result["reasons"], [])
         self.assertEqual(result["marketRowsLast300Seconds"], 39)
         self.assertAlmostEqual(result["marketRowsPerSecondNotOrderTPS"], 0.13)
+
+    def test_cpu_threshold_normalizes_docker_percent_by_live_quota(self):
+        gc = {"fullGCsIn3Seconds": 0, "oldGenerationPercent": 40}
+        ok = gate.evaluate(self.sample(), 1, 10, 100, order_gc=gc,
+                           robot_cpu_quota_cores=1.25)
+        self.assertEqual("BASELINE_READY_ONLY", ok["gate"])
+        self.assertEqual(80.0, ok["robotCpuQuotaUtilizationPercent"])
+        saturated = gate.evaluate(self.sample(), 1, 10, 125, order_gc=gc,
+                                  robot_cpu_quota_cores=1.25)
+        self.assertEqual("NOT_READY", saturated["gate"])
+        self.assertTrue(any("ROBOT_CPU_QUOTA_UTIL_HIGH:" in x
+                            for x in saturated["reasons"]))
 
     def test_memory_normalization(self):
         self.assertEqual(gate.memory_percent("1GiB / 2GiB"), 50)
@@ -60,8 +78,15 @@ class MultitenantRampGuardTests(unittest.TestCase):
         self.assertNotIn("tapeApiSecret", content)
 
     def test_abnormal_resources_always_block(self):
+        healthy_gc = {"fullGCsIn3Seconds": 0, "oldGenerationPercent": 20.0}
         for psi, mem, cpu in ((26, 10, 2), (2, 81, 2), (2, 10, 86)):
-            self.assertEqual(gate.evaluate(self.sample(), psi, mem, cpu)["gate"], "NOT_READY")
+            self.assertEqual(gate.evaluate(
+                self.sample(), psi, mem, cpu, order_gc=healthy_gc)["gate"], "NOT_READY")
+        for gc in (None, {}, {"fullGCsIn3Seconds": -1, "oldGenerationPercent": 40},
+                   {"fullGCsIn3Seconds": 1, "oldGenerationPercent": 40},
+                   {"fullGCsIn3Seconds": 0, "oldGenerationPercent": 98}):
+            self.assertEqual(gate.evaluate(self.sample(), 1, 10, 20, order_gc=gc)["gate"],
+                             "NOT_READY")
         with self.assertRaises(ValueError):
             gate.evaluate(self.sample(), float("nan"), 10, 10)
 

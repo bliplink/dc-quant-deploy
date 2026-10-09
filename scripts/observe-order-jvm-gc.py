@@ -2,7 +2,8 @@
 """Sample HotSpot Java 8 GC/safepoint counters inside running Order containers.
 
 No JVM attach, signal, code injection, service restart or data mutation.
-Read /tmp/hsperfdata_root/7 through docker exec, then emit interval deltas.
+Read the running JVM's /tmp/hsperfdata_* file through docker exec,
+without assuming Java has a specific PID, then emit interval deltas.
 Cumulative GC time does not establish the maximum stop-the-world pause.
 Correlate with ZooKeeper Expired timestamps and VM CPU PSI before attribution.
 """
@@ -24,6 +25,9 @@ COUNTERS = {
     "safepoint_sync_ticks": "sun.rt.safepointSyncTime",
 }
 FREQ = "sun.os.hrt.frequency"
+OLD_USED = "sun.gc.generation.1.space.0.used"
+OLD_CAPACITY = "sun.gc.generation.1.space.0.capacity"
+
 
 
 def parse_perfdata(raw):
@@ -63,12 +67,29 @@ def parse_perfdata(raw):
 
 
 def read_node(node):
-    result = subprocess.run(["docker", "exec", node, "base64",
-                             "/tmp/hsperfdata_root/7"],
+    # The JVM PID is not stable across replica images: Order A currently has
+    # pid=6 while B/C have pid=7. Select the one live Java PerfData file,
+    # never assume /tmp/hsperfdata_root/7 or touch the Java process.
+    select_live_perfdata = (
+        'chosen=""; '
+        'for f in /tmp/hsperfdata_*/*; do '
+        '[ -f "$f" ] || continue; '
+        'pid="${f##*/}"; '
+        'case "$pid" in *[!0-9]*|"") continue;; esac; '
+        '[ -r "/proc/$pid/comm" ] || continue; '
+        '[ "$(cat "/proc/$pid/comm" 2>/dev/null)" = "java" ] || continue; '
+        '[ -z "$chosen" ] || exit 4; '
+        'chosen="$f"; '
+        'done; '
+        '[ -n "$chosen" ] || exit 3; '
+        'base64 "$chosen"'
+    )
+    result = subprocess.run(["docker", "exec", node, "sh", "-c",
+                             select_live_perfdata],
                             capture_output=True, text=True, timeout=18)
     if result.returncode != 0:
-        raise RuntimeError("cannot read HotSpot PerfData from %s: %s" %
-                           (node, result.stderr[:160]))
+        raise RuntimeError("cannot select live JVM PerfData from %s (status=%d)" %
+                           (node, result.returncode))
     return parse_perfdata(base64.b64decode(result.stdout, validate=False))
 
 
@@ -86,6 +107,17 @@ def interval(prev, current):
     return result
 
 
+def old_generation_capacity(values):
+    """Report live old-generation occupancy, rather than only GC CPU time."""
+    if OLD_USED not in values or OLD_CAPACITY not in values:
+        return None
+    used, capacity = values[OLD_USED], values[OLD_CAPACITY]
+    if used < 0 or capacity <= 0 or used > capacity:
+        raise ValueError("inconsistent old-generation occupancy")
+    return (used / (1024.0 ** 2), capacity / (1024.0 ** 2),
+            100.0 * used / capacity)
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--samples", type=int, default=7)
@@ -101,12 +133,15 @@ def main():
             if previous is not None:
                 for name in NODES:
                     delta = interval(previous[name], current[name])
-                    print("%s %s young=%d young_ms=%.1f full=%d full_ms=%.1f "
-                          "safepoint_ms=%.1f sync_ms=%.1f" %
+                    old = old_generation_capacity(current[name])
+                    old_text = (" old_used_mib=%.1f old_capacity_mib=%.1f old_pct=%.2f"
+                                % old) if old is not None else " old_occupancy=unknown"
+                    print(("%s %s young=%d young_ms=%.1f full=%d full_ms=%.1f "
+                           "safepoint_ms=%.1f sync_ms=%.1f") %
                           (now, name, delta["young_count"], delta["young_ticks"],
                            delta["full_count"], delta["full_ticks"],
                            delta["safepoint_ticks"],
-                           delta["safepoint_sync_ticks"]), flush=True)
+                           delta["safepoint_sync_ticks"]) + old_text, flush=True)
             else:
                 print("%s JVM counters baseline read from all three Order nodes" % now, flush=True)
         except (ValueError, RuntimeError, OSError, subprocess.TimeoutExpired) as error:

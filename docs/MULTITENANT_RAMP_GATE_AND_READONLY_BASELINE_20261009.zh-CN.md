@@ -31,4 +31,4 @@ python3 -m unittest discover -s tests -p 'test_tenant_ramp_readiness.py' -v
 3. **逐档压测：** 先确保全部现有租户持续报价/成交，再由 10 → 20 → 50 分批增加，每阶段记录 1m/5m TPS、P95/P99、订单/成交差异、CPU PSI、Memory/OOM、Projection watermark、ZK session、Robot active counts。有任一硬故障立即停止扩容。
 4. **不要以此报告替代真实 Trader/Broker 签名交易、Order/Trade 故障注入或完整 Projection 一致性验收**；这些任务尚未通过。
 
-本轮未修改当前服务参数、机器人设置或交易数据，未启动 200 租户压力测试。
+2026-10-09 本次只读巡检当时未调整资源；后续 2026-10-10 针对 RobotSvr CPU 配额做了在线试验（0.75 → 1.25 核，未重启），并确认 OrderSvr B Full GC 是新的硬阻断。详见 [Order B Full GC 与 Robot CPU 配额诊断](ORDER_B_FULL_GC_AND_ROBOT_CPU_DIAGNOSTIC_20261010.zh-CN.md)。仍未修改交易数据、创建租户或启动 200 租户压力测试。

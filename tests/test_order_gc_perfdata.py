@@ -87,6 +87,44 @@ class OrderGcPerfDataTest(unittest.TestCase):
         self.assertAlmostEqual(750., d["safepoint_ticks"])
         self.assertAlmostEqual(60., d["safepoint_sync_ticks"])
 
+    def test_live_perfdata_uses_discovered_java_pid_not_fixed_pid_7(self):
+        from unittest import mock
+        from types import SimpleNamespace
+        import base64
+        raw = base64.b64encode(perfdata()).decode()
+        with mock.patch.object(gc.subprocess, "run",
+                               return_value=SimpleNamespace(returncode=0,
+                                                            stdout=raw,
+                                                            stderr="")) as fake:
+            result = gc.read_node("dc-saas-ordersvr")
+        self.assertEqual(2, result["sun.gc.collector.0.invocations"])
+        args = fake.call_args.args[0]
+        self.assertEqual(["docker", "exec", "dc-saas-ordersvr", "sh", "-c"], args[:5])
+        self.assertIn('/proc/$pid/comm', args[-1])
+        self.assertNotIn('hsperfdata_root/7', args[-1])
+
+    def test_live_perfdata_missing_process_fails_closed(self):
+        from unittest import mock
+        from types import SimpleNamespace
+        with mock.patch.object(gc.subprocess, "run",
+                return_value=SimpleNamespace(returncode=3,stdout="",stderr="")):
+            with self.assertRaises(RuntimeError):
+                gc.read_node("dc-saas-ordersvr")
+
+    def test_old_generation_occupancy_and_inconsistent_counters(self):
+        data = {
+            gc.OLD_USED: 1535 * 1024**2,
+            gc.OLD_CAPACITY: 1536 * 1024**2,
+        }
+        used, capacity, percent = gc.old_generation_capacity(data)
+        self.assertEqual(1535., used)
+        self.assertEqual(1536., capacity)
+        self.assertGreater(percent, 99.9)
+        self.assertIsNone(gc.old_generation_capacity({}))
+        data[gc.OLD_USED] = data[gc.OLD_CAPACITY] + 1
+        with self.assertRaises(ValueError):
+            gc.old_generation_capacity(data)
+
     def test_decreased_counter_fails_closed(self):
         current = gc.parse_perfdata(perfdata())
         previous = gc.parse_perfdata(perfdata({

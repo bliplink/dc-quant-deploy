@@ -61,12 +61,41 @@ def market_rows(raw):
     return rows
 
 
+def collect_order_gc():
+    """Read only live Order B HotSpot counters, no JVM attach or signals."""
+    import importlib.util
+    from pathlib import Path
+    import time
+    script = Path(__file__).resolve().parents[1] / "scripts/observe-order-jvm-gc.py"
+    spec = importlib.util.spec_from_file_location("safe_order_gc_counters", script)
+    if spec is None or spec.loader is None:
+        raise ValueError("Order GC observer not available")
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    initial = module.read_node("dc-saas-ordersvr-b")
+    time.sleep(3)
+    final = module.read_node("dc-saas-ordersvr-b")
+    delta = module.interval(initial, final)
+    old = module.old_generation_capacity(final)
+    if old is None:
+        raise ValueError("Order B old-generation usage is unavailable")
+    return {"fullGCsIn3Seconds": delta["full_count"],
+            "fullGCmsIn3Seconds": round(delta["full_ticks"], 1),
+            "oldGenerationPercent": round(old[2], 2)}
+
+
 def evaluate(rows, cpu_psi, order_mem_pct, robot_cpu_pct,
              min_tenants=10, min_events=2, max_cpu_psi=25.0,
-             max_inactive_pct=20.0, max_order_mem=80.0, max_robot_cpu=85.0):
+             max_inactive_pct=20.0, max_order_mem=80.0, max_robot_cpu=85.0,
+             order_gc=None, max_old_gen_percent=95.0,
+             robot_cpu_quota_cores=1.0):
     if any(not math.isfinite(float(x)) or float(x) < 0
-           for x in (cpu_psi, order_mem_pct, robot_cpu_pct)):
+           for x in (cpu_psi, order_mem_pct, robot_cpu_pct, robot_cpu_quota_cores)):
         raise ValueError("invalid resource metric")
+    if robot_cpu_quota_cores <= 0:
+        raise ValueError("robot CPU quota is invalid")
+    robot_quota_util_pct = float(robot_cpu_pct) / robot_cpu_quota_cores
+
     inactive = [r["location"] for r in rows if r["events5m"] < min_events]
     idle_count = len(inactive)
     inactivity_pct = round(100.0 * idle_count / len(rows), 2)
@@ -79,8 +108,23 @@ def evaluate(rows, cpu_psi, order_mem_pct, robot_cpu_pct,
         reasons.append(f"CPU_PSI_HIGH:{cpu_psi:.2f}>{max_cpu_psi:.2f}")
     if float(order_mem_pct) > max_order_mem:
         reasons.append(f"ORDER_B_MEMORY_HIGH:{order_mem_pct:.2f}>{max_order_mem:.2f}")
-    if float(robot_cpu_pct) > max_robot_cpu:
-        reasons.append(f"ROBOT_CPU_HIGH:{robot_cpu_pct:.2f}>{max_robot_cpu:.2f}")
+    if robot_quota_util_pct > max_robot_cpu:
+        reasons.append(f"ROBOT_CPU_QUOTA_UTIL_HIGH:{robot_quota_util_pct:.2f}>{max_robot_cpu:.2f}")
+    if not isinstance(order_gc, dict):
+        reasons.append("ORDER_B_GC_TELEMETRY_MISSING")
+    else:
+        full_gc = order_gc.get("fullGCsIn3Seconds")
+        old_pct = order_gc.get("oldGenerationPercent")
+        if (not isinstance(full_gc, int) or full_gc < 0
+                or not isinstance(old_pct, (float, int))
+                or not math.isfinite(old_pct) or not 0 <= old_pct <= 100):
+            reasons.append("ORDER_B_GC_TELEMETRY_INVALID")
+        else:
+            if full_gc > 0:
+                reasons.append(f"ORDER_B_FULL_GC:{full_gc}/3s")
+            if old_pct > max_old_gen_percent:
+                reasons.append(f"ORDER_B_OLD_GEN_HIGH:{old_pct:.2f}>{max_old_gen_percent:.2f}")
+
     return {
         "gate": "NOT_READY" if reasons else "BASELINE_READY_ONLY",
         "nextRampAuthorized": False,  # An operator must separately review/authorize load.
@@ -93,6 +137,9 @@ def evaluate(rows, cpu_psi, order_mem_pct, robot_cpu_pct,
         "cpuPsiSomeAvg10Percent": float(cpu_psi),
         "orderBMemoryPercent": float(order_mem_pct),
         "robotCpuDockerPercent": float(robot_cpu_pct),
+        "robotCpuQuotaCores": robot_cpu_quota_cores,
+        "robotCpuQuotaUtilizationPercent": round(robot_quota_util_pct, 2),
+        "orderBHotSpotGC": order_gc,
         "warning": "Market data rows are not authoritative order TPS or a capacity guarantee.",
     }
 
@@ -131,9 +178,14 @@ def collect():
                                   "memoryPct": memory_percent(cols[2])}
     if set(measurements) != {"dc-saas-robotsvr", "dc-saas-ordersvr-b"}:
         raise ValueError("Docker stats missing critical containers")
+    robot_cpu_nanos = int(docker("inspect", "-f", "{{.HostConfig.NanoCpus}}",
+                                  "dc-saas-robotsvr"))
+    if robot_cpu_nanos <= 0:
+        raise ValueError("cannot measure Robot CPU quota utilization")
     return market_rows(raw), float(match.group(1)), (
         measurements["dc-saas-ordersvr-b"]["memoryPct"],
-        measurements["dc-saas-robotsvr"]["cpu"])
+        measurements["dc-saas-robotsvr"]["cpu"]), collect_order_gc(), (
+            robot_cpu_nanos / 1_000_000_000.0)
 
 
 def main():
@@ -141,8 +193,9 @@ def main():
     parser.add_argument("--output", help="Optional JSON artifact location")
     args = parser.parse_args()
     try:
-        rows, psi, (mem, cpu) = collect()
-        result = evaluate(rows, psi, mem, cpu)
+        rows, psi, (mem, cpu), gc, quota = collect()
+        result = evaluate(rows, psi, mem, cpu, order_gc=gc,
+                          robot_cpu_quota_cores=quota)
     except (OSError, ValueError, subprocess.CalledProcessError,
             subprocess.TimeoutExpired) as error:
         result = {"gate": "NOT_READY", "nextRampAuthorized": False,
