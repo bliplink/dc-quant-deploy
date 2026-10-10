@@ -70,6 +70,29 @@ class OrderClusterAssignmentVerifyTest(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "snapshot epoch mismatch P001"):
             MODULE.verify(str(path), 2, str(self.root), verify_learners=False)
 
+    def test_mismatched_snapshots_expose_only_safe_replication_watermarks(self):
+        path = self.write_fixture(self.assignments())
+        target = self.root / "OrderSvrA" / "snapshot" / "P000" / "snapshot.json"
+        example = json.loads(target.read_text(encoding="utf-8"))
+        example.update({
+            "snapshotSeq": 581136,
+            "committedStateSeq": 578109,
+            "commitMarkerSeq": 578110,
+            "books": [{"orders": [{"UserID": "must-never-leak"}]}],
+        })
+        target.write_text(json.dumps(example), encoding="utf-8")
+        with self.assertRaisesRegex(ValueError, "assigned snapshot mismatch: P000") as raised:
+            MODULE.verify(str(path), 2, str(self.root), verify_learners=False)
+        message = str(raised.exception)
+        self.assertIn("OrderSvrA:epoch=70,snapshotSeq=581136", message)
+        self.assertIn("committedStateSeq=578109", message)
+        self.assertIn("commitMarkerSeq=578110", message)
+        self.assertIn("orders=1", message)
+        self.assertIn("OrderSvrB:epoch=70,snapshotSeq=None", message)
+        self.assertIn("sha12=", message)
+        self.assertNotIn("must-never-leak", message)
+        self.assertNotIn("UserID", message)
+
     def test_duplicate_partition_rows_are_rejected(self):
         rows = self.assignments()
         path = self.write_fixture([rows[0], rows[0]])

@@ -2,6 +2,7 @@
 """Validate OrderSvr assignments and their persisted snapshot boundary."""
 
 import collections
+import hashlib
 import json
 import os
 import sys
@@ -92,8 +93,24 @@ def verify(assignment_path, expected, data_root, verify_learners=False):
             )
             values.append(value)
         if any(value != values[0] for value in values[1:]):
+            # Restrict diagnostics to journal watermarks, sizes and a short
+            # snapshot digest. Never dump orders, customer IDs or raw snapshots.
+            comparison = []
+            for node, value in zip(nodes, values):
+                books = value.get("books") or []
+                order_count = sum(len(book.get("orders") or []) for book in books)
+                canonical = json.dumps(value, sort_keys=True, separators=(",", ":"))
+                digest = hashlib.sha256(canonical.encode("utf-8")).hexdigest()[:12]
+                comparison.append(
+                    f"{node}:epoch={value.get('epoch')},"
+                    f"snapshotSeq={value.get('snapshotSeq')},"
+                    f"committedStateSeq={value.get('committedStateSeq')},"
+                    f"commitMarkerSeq={value.get('commitMarkerSeq')},"
+                    f"books={len(books)},orders={order_count},sha12={digest}"
+                )
             raise ValueError(
-                f"assigned snapshot mismatch: {partition_id} nodes={nodes}"
+                f"assigned snapshot mismatch: {partition_id} "
+                + " ".join(comparison)
             )
 
     if uppercase_sn:
