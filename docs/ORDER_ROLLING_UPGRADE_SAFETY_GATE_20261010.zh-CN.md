@@ -40,4 +40,6 @@ ZooKeeper 的 `READY` 代表分配状态，不足以证明业务状态 READY。P
 - [OrderSvr P0 #5 同纪元 GAP](https://github.com/bliplink/com.app.dc.ordersvr/issues/5)、[P1 #6 安全滚动升级](https://github.com/bliplink/com.app.dc.ordersvr/issues/6)。
 - [P246 故障报告](ORDER_HA_P246_RECOVERY_BLOCKER_20261010.md)、[WAL 归档安全回收](ORDER_WAL_SNAPSHOT_ARCHIVE_RETENTION_DESIGN_20261010.zh-CN.md)。
 
+已为实际的 `deploy-saas.sh` 入口增加 **OrderSvr 不可变镜像 ID 保护**：如果已存在运行集群并拟部署不同的 OrderSvr image ID，在执行任何 `compose_up -d` 之前立即 `die`。没有已存在节点的 fresh-install 不受此保护影响，同一镜像 ID 可以继续做其它 SaaS 服务的常规更新；在集群已经存在时，不能借助主站升级顺路切换 OrderSvr 镜像。对应 6 个发布脚本模拟测试覆盖 A/B、无 Primary 的 C、未启用的集群以及首次部署。该限制暂时没有旁路开关。它仅检测**镜像变更**，不能证明同镜像重新加载配置、滚动重启或业务写入排空是安全的；后续还必须实现真正的成员迁移/排空协议。
+
 **注意：本门禁刻意不提供“允许升级”代码路径。只有真实写入排空/安全成员迁移机制及其权威验收完成后，才能额外设计可授权的上线控制器。**

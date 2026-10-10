@@ -8,12 +8,16 @@ on:
       - .github/workflows/validate-order-rolling-upgrade-preflight.yml
       - scripts/check-order-rolling-upgrade-preflight.py
       - tests/test_order_rolling_upgrade_preflight.py
+      - tests/test_order_upgrade_deploy_image_guard.py
+      - deploy-saas.sh
       - docs/ORDER_ROLLING_UPGRADE_SAFETY_GATE_20261010.zh-CN.md
   pull_request:
     paths:
       - .github/workflows/validate-order-rolling-upgrade-preflight.yml
       - scripts/check-order-rolling-upgrade-preflight.py
       - tests/test_order_rolling_upgrade_preflight.py
+      - tests/test_order_upgrade_deploy_image_guard.py
+      - deploy-saas.sh
       - docs/ORDER_ROLLING_UPGRADE_SAFETY_GATE_20261010.zh-CN.md
 
 permissions:
@@ -32,3 +36,7 @@ jobs:
         run: python3 -m py_compile scripts/check-order-rolling-upgrade-preflight.py
       - name: Deny unsafe upgrades, ZK mismatch, missing replica proof and disk pressure
         run: python3 -m unittest discover -s tests -p 'test_order_rolling_upgrade_preflight.py' -v
+      - name: Validate deployment script image-change protection
+        run: |
+          bash -n deploy-saas.sh
+          python3 -m unittest discover -s tests -p 'test_order_upgrade_deploy_image_guard.py' -v

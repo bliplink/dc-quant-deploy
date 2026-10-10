@@ -531,6 +531,34 @@ require_immutable_cluster_image() {
   esac
 }
 
+# Protect 3-node OrderSvr HA from an implicit in-place image swap during
+# the broad Compose up. All assigned replicas ACK synchronously, so restarting
+# even a replica-only node can stall unrelated partitions. This guard is
+# read-only and intentionally has NO unsafe-override switch. Fresh installs
+# without existing Order containers are unaffected.
+guard_running_order_cluster_image_change() {
+  [[ "${ORDER_CLUSTER_ENABLED:-false}" == "true" ]] || return 0
+  local expected_image="${ORDERSVR_IMAGE_REPOSITORY}:${ORDERSVR_TAG}"
+  local expected_id="" current_id="" container=""
+  expected_id="$(docker image inspect "${expected_image}" --format '{{.Id}}' 2>/dev/null)" ||
+    die "Cannot inspect proposed OrderSvr image; refusing HA image replacement."
+  [[ -n "${expected_id}" ]] || die "Proposed OrderSvr image has no immutable image ID."
+  local nodes=(dc-saas-ordersvr dc-saas-ordersvr-b)
+  if [[ "${ORDER_CLUSTER_C_ENABLED:-false}" == "true" ]]; then
+    nodes+=(dc-saas-ordersvr-c)
+  fi
+  for container in "${nodes[@]}"; do
+    if docker inspect "${container}" >/dev/null 2>&1; then
+      current_id="$(docker inspect "${container}" --format '{{.Image}}' 2>/dev/null)" ||
+        die "Cannot verify current ${container} image; refusing HA image replacement."
+      [[ -n "${current_id}" ]] || die "Current ${container} image ID is unknown."
+      if [[ "${current_id}" != "${expected_id}" ]]; then
+        die "Unsafe OrderSvr image change on running HA cluster: ${container} uses ${current_id}; proposed ${expected_id}. Do not roll replicas/primaries while all assigned replicas must ACK. Run the read-only scripts/check-order-rolling-upgrade-preflight.py and implement a proved writer drain or CAS membership transition before changing this image."
+      fi
+    fi
+  done
+}
+
 verify_order_cluster_images() {
   [[ "${ORDER_CLUSTER_ENABLED:-false}" == "true" ]] || return 0
   local expected_hash="" expected_revision="" spec name image hash revision
@@ -1074,6 +1102,8 @@ else
 fi
 verify_order_cluster_images
 verify_md_cluster_images
+# Fail BEFORE Compose mutates any running container or infrastructure.
+guard_running_order_cluster_image_change
 
 if docker inspect dc-saas-loginsvr >/dev/null 2>&1; then
   LOGIN_CONTAINER_EXISTED="true"
