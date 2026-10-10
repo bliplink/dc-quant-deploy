@@ -1,0 +1,40 @@
+name: Validate macOS one-click installer
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [saas-crypto]
+    paths:
+      - deploy-saas-macos.sh
+      - release/saas-crypto-images.env
+      - tests/test_deploy_saas_macos.py
+      - .github/workflows/validate-macos-oneclick.yml
+      - docs/MAC_MINI_ONECLICK_USAGE_20261010.zh-CN.md
+  pull_request:
+    paths:
+      - deploy-saas-macos.sh
+      - release/saas-crypto-images.env
+      - tests/test_deploy_saas_macos.py
+      - .github/workflows/validate-macos-oneclick.yml
+      - docs/MAC_MINI_ONECLICK_USAGE_20261010.zh-CN.md
+
+permissions:
+  contents: read
+
+jobs:
+  mac-wrapper-contract:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Validate Bash syntax
+        run: bash -n deploy-saas-macos.sh
+      - name: Verify no-mutation preflight and atomic directory locking
+        run: python3 -m unittest discover -s tests -p 'test_deploy_saas_macos.py' -v
+      - name: Verify release lock pins OrderSvr immutable GHCR build
+        run: |
+          grep -Eq '^ORDERSVR_TAG=sha-[a-f0-9]{7,40}$' release/saas-crypto-images.env
+          grep -Fqx 'ORDERSVR_TAG=sha-7842df4' release/saas-crypto-images.env

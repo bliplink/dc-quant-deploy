@@ -3,16 +3,54 @@ set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 [[ "$(uname -s)" == "Darwin" ]] || { echo "[saas-macos] ERROR: this entrypoint is for macOS only." >&2; exit 1; }
-command -v docker >/dev/null 2>&1 || { echo "[saas-macos] ERROR: Docker Desktop is required." >&2; exit 1; }
+command -v docker >/dev/null 2>&1 || { echo "[saas-macos] ERROR: Docker CLI with a working Docker Engine (Colima or Docker Desktop) is required." >&2; exit 1; }
 docker compose version >/dev/null 2>&1 || { echo "[saas-macos] ERROR: docker compose is required." >&2; exit 1; }
-docker info >/dev/null 2>&1 || { echo "[saas-macos] ERROR: Docker Desktop is not running." >&2; exit 1; }
+docker info >/dev/null 2>&1 || { echo "[saas-macos] ERROR: Docker daemon is unavailable (start Colima or Docker Desktop)." >&2; exit 1; }
 
 ENV_FILE="${ENV_FILE:-${SCRIPT_DIR}/.env.prod}"
+if [[ "${1:-}" == "--check" ]]; then
+  shift
+  [[ "$#" == 0 || ( "$#" == 1 && "$1" == "--full-cluster" ) ]] || {
+    echo "[saas-macos] ERROR: --check accepts only --full-cluster." >&2; exit 2;
+  }
+  [[ -f "$ENV_FILE" ]] || { echo "[saas-macos] ERROR: missing env file for read-only preflight." >&2; exit 2; }
+  [[ -f "${RELEASE_IMAGE_LOCK:-${SCRIPT_DIR}/release/saas-crypto-images.env}" ]] || {
+    echo "[saas-macos] ERROR: missing immutable release lock file." >&2; exit 2;
+  }
+  if [[ "${1:-}" == "--full-cluster" ]]; then
+    COMPOSE_PROFILES=order-cluster,order-cluster-c,md-cluster,md-cluster-c,trade-cluster \
+      docker compose --env-file "$ENV_FILE" -f "${SCRIPT_DIR}/compose.yaml" config --quiet || exit 2
+    echo "[saas-macos] Verified full-cluster Compose profiles: Order A/B/C, MD A/B/C, Trade A/B."
+  else
+    docker compose --env-file "$ENV_FILE" -f "${SCRIPT_DIR}/compose.yaml" config --quiet || exit 2
+  fi
+  printf '[saas-macos] read-only configuration valid, Docker context=%s\n' "$(docker context show)"
+  if docker ps -a --format '{{.Names}}' | grep -q '^dc-saas-'; then
+    echo "[saas-macos] Existing dc-saas containers detected: do not run a one-click upgrade/reset until image/config drift checks pass."
+  fi
+  echo "[saas-macos] No files, images, containers or runtime data were changed."
+  exit 0
+fi
+# macOS lacks GNU flock. Own an atomic lock before ANY env or runtime mutation.
+# Never erase a foreign/stale lock automatically; that could allow races.
+lock_dir="${SAAS_AUTO_UPDATE_LOCK_FILE:-/tmp/dc-saas-auto-update.lock}.macos"
+if ! mkdir "${lock_dir}" 2>/dev/null; then
+  echo "[saas-macos] ERROR: another Mac SaaS operation holds ${lock_dir}; refusing concurrent deployment." >&2
+  exit 1
+fi
+printf '%s\n' "$$" > "${lock_dir}/pid"
+cleanup_lock() { rm -f -- "${lock_dir}/pid"; rmdir -- "${lock_dir}"; }
+trap cleanup_lock EXIT
+trap 'exit 130' INT
+trap 'exit 143' TERM
+
 if [[ ! -f "$ENV_FILE" ]]; then
   cp "${SCRIPT_DIR}/.env.example" "$ENV_FILE"
   chmod 0600 "$ENV_FILE"
   echo "[saas-macos] created ${ENV_FILE} from .env.example"
 fi
+
+
 
 "${SCRIPT_DIR}/scripts/apply-release-image-lock.sh" "$ENV_FILE" "${RELEASE_IMAGE_LOCK:-${SCRIPT_DIR}/release/saas-crypto-images.env}"
 "${SCRIPT_DIR}/scripts/upsert-env-value.sh" "$ENV_FILE" DEPLOY_ROOT "${MACOS_DEPLOY_ROOT:-${HOME}/.opentradingcore/dc-saas-runtime}"
@@ -48,9 +86,11 @@ if ! docker ps -a --format '{{.Names}}' | grep -q '^dc-saas-'; then
   done
 fi
 
-echo "[saas-macos] preflight passed; using immutable release lock and Docker Desktop."
+echo "[saas-macos] preflight passed; using immutable release lock and Docker $(docker context show)."
+
+
 SAAS_ALLOW_UNPRIVILEGED_HOST=true \
 SAAS_DEPLOY_LOCK_HELD=true \
 SAAS_SKIP_LINUX_HOST_PREFLIGHT=true \
 ENV_FILE="$ENV_FILE" \
-exec "${SCRIPT_DIR}/deploy-saas.sh" "$@"
+"${SCRIPT_DIR}/deploy-saas.sh" "$@"
