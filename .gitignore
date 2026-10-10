@@ -20,7 +20,9 @@ recovery/__pycache__/
 recovery/live-strategy-seed-20*.json
 recovery/local-strategy-queue-*.json
 recovery/qualification-rows-20*.jsonl
-recovery/local-backtest-batches/
+recovery/local-backtest-batches*/
 recovery/local-backtest-work/
 recovery/strategy-repair-runs/
 recovery/prod-gateway-tunnel.*.log
+recovery/deterministic-*.log
+recovery/*.pid

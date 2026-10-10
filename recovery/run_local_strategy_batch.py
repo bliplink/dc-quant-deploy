@@ -69,7 +69,7 @@ def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--queue", type=Path, default=base / "local-strategy-queue-20261009.json")
     parser.add_argument("--seed", type=Path, default=base / "live-strategy-seed-20261009.json")
-    parser.add_argument("--workers", type=int, default=3)
+    parser.add_argument("--workers", type=int, default=1)
     parser.add_argument("--begin-date", default="2025-10-08")
     parser.add_argument("--end-date", default="2026-10-08")
     parser.add_argument("--output-dir", type=Path, default=base / "local-backtest-batches")
