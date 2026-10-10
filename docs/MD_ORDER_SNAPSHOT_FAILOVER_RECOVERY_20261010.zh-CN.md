@@ -66,6 +66,22 @@ MDSvr 是 OrderSvr 权威撮合订单簿的派生行情服务。**不要为 MDSv
 - Mac 隔离 Maven 全量回归：MDSvr **112/112 PASS**；OrderSvr **317 tests、0 failures、0 errors、1 skipped**。GitHub Actions：[MD run 38066179657](https://github.com/bliplink/com.app.dc.mdsvr/actions/runs/38066179657) **SUCCESS**，[Order run 38066242279](https://github.com/bliplink/com.app.dc.ordersvr/actions/runs/38066242279) **SUCCESS**。远端 GHCR 清单均已核验：`ghcr.io/bliplink/mdsvr:sha-c5c8c6d` 和 `ghcr.io/bliplink/ordersvr:sha-6fbeee7` 均包含 `linux/amd64`、`linux/arm64`；这些构建未替换 Mac 现网镜像。
 - 当前仍非“生产级可自动晋升”证明：Order 内存读到的 `lastUpdateId` 与两侧价位快照在撮合并发更新期间尚未具备严格原子性承诺；Gateway TCP 快照与推送没有经认证的单一 stream watermark，所有市场实时库存证明、持久 Order 接收侧 fencing/租约与 Robot 订单重新核对也尚未闭环。故障注入门禁继续 **BLOCKED**，现网 MD/Order 镜像保持原版。
 
+## Order 全盘口初始 Image 的双读取自检（2026-10-10）
+
+- [OrderSvr `2e07691`](https://github.com/bliplink/com.app.dc.ordersvr/commit/2e07691)：`PublishMarketDept.snapshotCurrentOrderBook()` 在 gateway-api 直连订阅时使用**同一版本号下的两次全量买档与卖档读取**；如果两次读取的任一价格档位或聚合数量不同，或者前、中、后三个 source `lastUpdateId` 不一致，则拒绝发送这次初始 Image。最多尝试三次，不能在高频市场稳定重建时保持 fail-closed，不能靠错配的 bid/ask 误开 MD READY。
+- 原因：OrderBook 的部分订单变更发生在 `nextUpdateId()` 递增之前，**只读前后版本号可能碰巧相同**；新增单测模拟订单数量已改变但序号仍未变的竞态，验证不稳定 Image 被拒绝，随后盘口稳定可恢复取值。
+- 性能边界：校验只在 gateway-api 的 `subscribe` / MD 主从恢复后的 `subscribeWithImage` 执行，**没有加入撮合热路径，也没有加锁、写盘、重复复制或周期轮询**。临时高频变更时订阅快照开销约为原来的两倍，稳定期间 Order 常规发布完全不受影响。
+- Mac mini Maven 全量 OrderSvr **319 tests，0 failures，0 errors，1 skipped**；GitHub Actions [run 38067164122](https://github.com/bliplink/com.app.dc.ordersvr/actions/runs/38067164122) **SUCCESS**。GHCR 远端清单已经核验，新镜像 `ghcr.io/bliplink/ordersvr:sha-2e07691` 同时包含 `linux/amd64` 和 `linux/arm64`。
+- **严格证明尚未完成**：双读取一致只能检测部分并发竞态，不能证明 Order 内存盘口与 `lastUpdateId` 具有单一原子提交点（例如写线程恰好停在两次读取之间）。最终自动切主需受认证的来源 commit HEAD、完整分区活跃市场库存和跨 TCP 订阅快照/增量边界对账；不能将本次低开销防御等同于完整 HA 验收通过。
+
+## 默认完整盘口模式的 Source ID 单调保护（2026-10-10）
+
+- [MDSvr `989af50`](https://github.com/bliplink/com.app.dc.mdsvr/commit/989af50)：`MDFacade.cache()` 对已校验的完整 Order Snapshot，使用 `location + marketIndicator + securityId` 维护最新允许接受的 `(MD ownership epoch, Order source lastUpdateId)`。同一个 epoch 内，晚到的较旧完整 Image 不能覆盖当前缓存或再次给旧状态授予 READY；**确认切入新的 assignment epoch 后可从低序号重新建立盘口**。这补齐 `enableDepthDiff=false` 默认完整盘口模式，之前类似逻辑只在 `LocalDepthBook` 的 depth-diff 模式存在。
+- 未增加任何正常撮合事件、数据库或行情分区复制开销；每次完整 Snapshot 缓存处理仅增加一个本机 epoch 校验和常驻市场水位 map 查询（市场规模而不是订单规模）。
+- Maven 隔离全量 **113/113 PASS**；新旧源序号乱序与新 MD epoch 重建测试均通过。[MDSvr GitHub Actions run 38067470230](https://github.com/bliplink/com.app.dc.mdsvr/actions/runs/38067470230) **SUCCESS**；GHCR 镜像 `ghcr.io/bliplink/mdsvr:sha-989af50` 已核验包含 `linux/amd64`、`linux/arm64`，未部署到 Mac Demo。
+- **安全边界**：这是同一 epoch 内的源版本单调规则，不是跨 Order TCP 订阅的来源签名/权限凭证。如果旧源消息在新的 MD epoch 下被错误重放，仍需端到端 source owner/epoch fencing 与 Order commit HEAD 检查；目前不得启用自动主晋升。
+- 2026-10-10 16:25 UTC Mac mini 现网**只读预检查**：256 分区 READY，MDSvrA/B 分别 128 Primary，所有分区至少有 1 个明确指定的恢复候选，三个 MD ZK ephemeral membership 正常，仍运行 `sha-48544e5`。`scripts/check-md-failover-preflight.py` 返回 `decision=BLOCKED`、`canInjectMdPrimaryFault=false`、`canPromote=false`（命令以状态码 2 预期拒绝）。阻断项正是 Order 当前全市场 image source proof、MD CAS/fencing 真实控制器、新 epoch 完整市场证明和 Robot 故障后对账；不包含“必须新增第二个 MD 同步复制副本”。这次没有真实杀节点或更改分区状态。
+
 ## 后续自动切主的正确控制面
 
 1. **故障判断**：只认物理 MD ephemeral membership/session 及租约状态；单次 TCP 断开、健康检查失败和 Docker running 状态不足以认定旧 Primary 已失权。ZooKeeper read-only 状态不授予主身份。
