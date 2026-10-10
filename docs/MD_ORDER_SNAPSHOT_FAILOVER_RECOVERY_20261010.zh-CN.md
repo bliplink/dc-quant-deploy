@@ -39,7 +39,7 @@ MDSvr 是 OrderSvr 权威撮合订单簿的派生行情服务。**不要为 MDSv
 
 - [MDSvr `1d1619f`](https://github.com/bliplink/com.app.dc.mdsvr/commit/1d1619f)：消除一个安全配置绕过：此前 `MdPartitionRuntime.canPublish` 仅在 legacy `EnforceReadiness=true` 时要求当前市场完整 Snapshot，而 Common 默认 `false`。现在只要 MD 集群模式开启，所有行情发布均要求当前 PRIMARY、分区 `READY` 且该市场 `readyMarketEpochs` 与 assignment epoch 完全一致；缺少/过期 Snapshot 必须拒绝发布，不受可选分区 readiness 配置影响。
 - 此修改移除了行情发布热路径一次 `PartitionConfig.isReadinessEnforced` 动态查询，因此不会增加正常运行的查询开销。只读路由门禁仍独立，不能将读取就绪当成行情来源就绪。
-- Mac 隔离 Maven 全量单测 **107/107 PASS**；GitHub Actions [run 38062111619](https://github.com/bliplink/com.app.dc.mdsvr/actions/runs/38062111619) 已由提交触发，镜像构建状态须以后续结果为准。现网 MD A/B/C 仍沿用 `sha-48544e5`，未部署本改动。
+- Mac 隔离 Maven 全量单测 **107/107 PASS**；GitHub Actions [run 38062111619](https://github.com/bliplink/com.app.dc.mdsvr/actions/runs/38062111619) **SUCCESS**。远端 GHCR 镜像 `ghcr.io/bliplink/mdsvr:sha-1d1619f` 清单已确认同时包含 `linux/amd64`、`linux/arm64`。现网 MD A/B/C 仍沿用 `sha-48544e5`，未部署本改动。
 - 核查 Common `BaseApi.subscribeWithImage` → `GwClientWrapper.subscribeWithImage` → `GwClient.subscribeWithImage`：最终调用 Gateway `ClientConnection.subscribe(svrID,topic,callback,...)`，未直接调用 OrderSvr 内存盘口查询。这一链路**不能仅凭成功订阅就视为证明 Snapshot 代表当前 Order HEAD**；必须另有 Order 端的现时完整库存/增量序号证据和接收侧 epoch fencing 才能启用自动晋升。
 
 ## 后续自动切主的正确控制面
