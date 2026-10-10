@@ -14,7 +14,7 @@ The `saas-crypto` isolated tenant lifecycle test reached the same failure twice:
 {"serverName":"TradeSvr","method":"queryAccountBalance","content":{}}
 ```
 
-**Observed:** GW `code=9000`, `msg=INTERNAL_ERROR`, in both runs. The gateway emitted `GW_METHOD_CALL_FAIL` with `serverName=TradeSvr`, `method=queryAccountBalance`, `async=true`, `responseCode=9000`, `replyStage=gateway_reply`, `durationMs=0`, and blank `failureCode`/`failureReason`. This does not establish whether the fault is gateway routing, dispatch, or a downstream call. Investigate before claiming API Key E2E or GA readiness.
+**Observed:** GW `code=9000`, `msg=INTERNAL_ERROR`, in both runs. The gateway emitted `GW_METHOD_CALL_FAIL` with `serverName=TradeSvr`, `method=queryAccountBalance`, `async=true`, `responseCode=9000`, `replyStage=gateway_reply`, `durationMs=0`, and blank `failureCode`/`failureReason`. The gateway `OpenApiResponseSanitizer` deliberately converts unrecognized/non-public upstream errors or malformed responses to `9000 / INTERNAL_ERROR`. Thus the public response **does not reveal the original error code**, and this evidence alone cannot distinguish gateway routing, async dispatch, or downstream handler failure. Keep the sanitizer in place while investigating via trusted server-side diagnostics. Investigate before claiming API Key E2E or GA readiness.
 
 **Expected:** successful account read for the authenticated Trader; or a specific documented rejection, not a generic internal error.
 
