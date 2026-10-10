@@ -14,6 +14,10 @@ if [[ "${1:-}" == "reset" ]]; then
   shift
   exec python3 "${SCRIPT_DIR}/scripts/mac-saas-reset.py" "$@"
 fi
+if [[ "${1:-}" == "purge" ]]; then
+  shift
+  exec python3 "${SCRIPT_DIR}/scripts/mac-saas-purge-quarantine.py" "$@"
+fi
 if [[ "${1:-}" == "--check" ]]; then
   shift
   [[ "$#" == 0 || ( "$#" == 1 && "$1" == "--full-cluster" ) ]] || {

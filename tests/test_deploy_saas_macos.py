@@ -84,6 +84,16 @@ print("COLD_RESET_ROUTED", " ".join(sys.argv[1:]))
         self.assertIn('COLD_RESET_ROUTED --help',result.stdout)
         self.assertFalse(self.deployed.exists())
 
+    def test_purge_routes_to_fenced_mac_cleanup_not_install(self):
+        helper=self.root/'scripts/mac-saas-purge-quarantine.py'
+        helper.write_text("""import sys
+print("QUARANTINE_PURGE_ROUTED", " ".join(sys.argv[1:]))
+""")
+        result=self.run_wrapper('purge','--help')
+        self.assertEqual(0,result.returncode,result.stderr)
+        self.assertIn('QUARANTINE_PURGE_ROUTED --help',result.stdout)
+        self.assertFalse(self.deployed.exists())
+
     def test_check_is_read_only_with_realistic_existing_containers(self):
         before = (self.root / '.env.prod').read_bytes()
         result = self.run_wrapper('--check')

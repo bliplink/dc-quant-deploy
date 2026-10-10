@@ -56,3 +56,20 @@ ENV_FILE="$PWD/.env.prod" ./deploy-saas-macos.sh --full-cluster
 **当前还没有执行 `stage`：**Mac 磁盘约 93% 使用率，旧运行目录约 120 GB。P246 归档及其快照已经独立保存在 `~/.opentradingcore/evidence/p246-reproducer-20261010/`，而正式安装应使用现有 `--full-cluster`。由于需要 22 服务冷启动、云端镜像拉取、密钥初始化和容量保护，必须在后续完成带自动业务验收的重建流程后再执行停机；不能用只读计划冒充成功重装。
 
 相关自动化：`tests/test_mac_saas_reset.py` 与 `tests/test_deploy_saas_macos.py`，由 `.github/workflows/validate-macos-cold-reset.yml` 持续验证。
+
+## 2026-10-10：新集群上线后的隔离数据空间回收
+
+新集群已从空数据启动并经过部署程序验收：**24 个 Compose 容器运行、Order 256/256 READY、Trade 256/256 READY、4 个 Web 端口 HTTP 200**。新运行目录：`~/.opentradingcore/dc-saas-runtime-clean-20261010`；旧约 120 GB 运行目录已通过受控 `reset --mode stage` 迁至 `~/.opentradingcore/.dc-saas-quarantine/dc-saas-runtime-fresh2-20261005-20261010T064806Z`。
+
+现在新增**独立且默认只读**的旧目录回收工具 `scripts/mac-saas-purge-quarantine.py`，也能通过 `deploy-saas-macos.sh purge` 调用。它只有在以下条件全部满足时，才允许显式选择 `--mode execute`：旧目录必须是严格命名的私有 quarantine 子目录；新根目录必须位于 `~/.opentradingcore` 且完全独立；P246 备份 SHA-256 无变化；新 24 个容器运行，Order、Trade 和 Robot 镜像与已验收版本逐一匹配；MySQL/ZK/Order 确实挂载新目录；**全部 Docker 容器（包括已停止的容器）均未引用旧目录**；四个本机 Web 入口均 HTTP 200。任何一项失败都禁止永久删除。
+
+只读计划（不删除任何文件）：
+
+```bash
+./deploy-saas-macos.sh purge --mode plan \
+  --quarantine "$HOME/.opentradingcore/.dc-saas-quarantine/dc-saas-runtime-fresh2-20261005-20261010T064806Z" \
+  --new-runtime "$HOME/.opentradingcore/dc-saas-runtime-clean-20261010" \
+  --evidence "$HOME/.opentradingcore/evidence/p246-reproducer-20261010/P246-primary-archived-commit.tar.gz"
+```
+
+**永久删除必须另外显式提供** `--mode execute --confirm PURGE_ONLY_QUARANTINED_OLD_DC_SAAS`。它会在复查所有条件并获得 Mac 安装互斥锁后才递归删除**这一份旧隔离目录**，不对 API Docs 备份、GitHub 代码、P246 证据或新的 MySQL/Order 数据做任何操作。隔离数据被永久清理后就无法使用它执行旧环境回滚，故只在用户确认 Demo 旧数据没有业务价值且基本健康验收通过后执行。**这项回收不代表自动 WAL 生命周期 GC 已完成**；后者仍需副本提交水位、Projection 持久化和异地可恢复备份证明。
