@@ -50,6 +50,14 @@ MDSvr 是 OrderSvr 权威撮合订单簿的派生行情服务。**不要为 MDSv
 - Mac mini 隔离测试：新增直连订阅 Handler 的 4 项单测（多租户、多个交易对、全价位与数量聚合、空盘口、Primary 过滤和只读无副作用），OrderSvr Maven 全量 **316 项测试，0 失败、0 错误、1 跳过**。本补丁无新增匹配热路径处理、MD 间复制或写盘。
 - GitHub Actions：[OrderSvr run 38063296685](https://github.com/bliplink/com.app.dc.ordersvr/actions/runs/38063296685) **SUCCESS**。远端 GHCR `ghcr.io/bliplink/ordersvr:sha-1ed4777` 已经通过 `docker manifest inspect` 核验，同时具有 `linux/amd64` 和 `linux/arm64`。Mac Demo 的 Order A/B/C 仍为 `ghcr.io/bliplink/ordersvr:sha-7842df4`，MD A/B/C 仍为 `sha-48544e5`，没有操作现网。
 
+## 多租户盘口队列隔离和 READY 栅栏修复（2026-10-10）
+
+- [MDSvr `ae57a5e`](https://github.com/bliplink/com.app.dc.mdsvr/commit/ae57a5e)：修复 `MDFacade.book` 向 `AsyncCacheThreadGroup` 递交任务时**仅以 securityId 为键**导致同一交易对的不同租户快照在队列里相互覆盖。现改用 `PartitionHasher.join(location,marketIndicator,securityId)`，同一市场仍允许合并高频变化，但不同租户/交易市场不能互相覆盖。没有增加消费线程、ZK 请求、写盘或 MD 同步复制。
+- 同时堵住绕过：`TradeFacade.getLatestTrade()` 原先会把一次 mark-price / 最近成交读取误计为“已收到完整 Order 盘口”，可能提前打开 `MdPartitionRuntime.readyMarketEpochs`。现在 trade/index 占位数据不再授权盘口 READY；只在 `MDFacade.cache` 验证完整 Order Snapshot 基本结构（非空 symbol、非负 `lastUpdateId`、非 null entries，合法空簿允许零档位）后才给普通盘口模式授权；depth-diff 模式继续由 `DepthBookFacade` 负责完整校验。
+- 隔离 Maven 单测：新增多租户队列键/异步隔离及损坏快照拒绝测试、更新 `TradeFacadeTenantTest`，MDSvr 全量 **110/110 PASS**。通过这些测试只能说明修复了确定性的代码路径，**并未证明现网十租户不报价必然由这个问题引起**。
+- GitHub Actions：[MDSvr run 38064888450](https://github.com/bliplink/com.app.dc.mdsvr/actions/runs/38064888450) 由新 commit 触发，最终构建/多架构 GHCR 状态需单独核验；现网 MD 仍为 `sha-48544e5`，本轮没有执行线上镜像替换或故障注入。
+- 仍需补全：Order 订阅时完整 Image 与随后连续增量的正确时序（尤其 Order 分区切主/订阅重建）；Controller 的独占租约 + CAS + 双主发布端 fencing；Order 全市场库存清单和恢复后的 Trade/Kline/Robot 一致性。生产自动晋升门禁继续关闭。
+
 ## 后续自动切主的正确控制面
 
 1. **故障判断**：只认物理 MD ephemeral membership/session 及租约状态；单次 TCP 断开、健康检查失败和 Docker running 状态不足以认定旧 Primary 已失权。ZooKeeper read-only 状态不授予主身份。
