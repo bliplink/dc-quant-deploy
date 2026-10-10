@@ -352,11 +352,20 @@ def apply_records(zk, records, operation, batch_size=16, **context):
 
 
 def command_stage(args, zk):
+    # A new learner may request a complete OrderSvr market image for every
+    # assignment. Cap ONLINE staging to avoid an unbounded new load spike.
+    if args.limit < 1 or args.limit > args.partitions:
+        raise ValueError("stage learner --limit must be within 1..partitions")
+    if args.apply and args.limit > 8:
+        raise ValueError("online learner staging limited to eight partitions per invocation")
     snapshots = zk.read_all(args.partitions)
     current = [record["value"] for record in snapshots]
     desired = stage_learner(current, args.partitions, args.learner, DEFAULT_NODES)
     records = plan_records(snapshots, desired, "stage-learner", learner=args.learner)
-    save_plan(args.plan, "stage-learner", records, partitionRoot=args.partition_root, learner=args.learner)
+    remaining = max(0, len(records) - args.limit)
+    records = records[:args.limit]
+    save_plan(args.plan, "stage-learner", records, partitionRoot=args.partition_root,
+              learner=args.learner, limit=args.limit, remainingUnstaged=remaining)
     print(f"plan={args.plan} changes={len(records)} apply={str(args.apply).lower()}")
     if args.apply:
         apply_records(zk, records, "stage-learner", args.batch_size, learner=args.learner)
@@ -468,6 +477,8 @@ def parser():
 
     stage = sub.add_parser("stage-learner")
     stage.add_argument("--learner", default="MDSvrC")
+    stage.add_argument("--limit", type=int, default=8,
+                       help="stage at most 8 partitions per online apply; use --limit 256 for a read-only full plan")
     stage.add_argument("--plan", required=True)
 
     drain = sub.add_parser("drain-recovering")

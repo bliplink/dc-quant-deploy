@@ -1,7 +1,13 @@
 import unittest
+from types import SimpleNamespace
+from unittest.mock import patch
+import tempfile
+import json
+from pathlib import Path
 
 from tests.md_cluster_transition_host import (
     apply_records,
+    command_stage,
     parse_ready_evidence,
     parse_zk_get,
     parse_zk_get_many,
@@ -134,6 +140,34 @@ numChildren = 0
         staged["nodePool"]="foreign"
         with self.assertRaisesRegex(ValueError, "unexpectedly modified"):
             validate_transition(current,staged,"stage-learner",learner="MDSvrC")
+
+    def test_staging_never_sends_unbounded_learner_assignments_to_zk(self):
+        class ReadOnlyZk:
+            calls = 0
+            def read_all(self, count):
+                self.calls += 1
+                result=[]
+                for idx in range(count):
+                    row=assignment().copy()
+                    row["partitionId"]=f"P{idx:03d}"
+                    result.append({"partitionId":row["partitionId"],"value":row,"version":3})
+                return result
+        zk=ReadOnlyZk()
+        with tempfile.TemporaryDirectory() as temp:
+            plan=str(Path(temp)/"plan.json")
+            args=SimpleNamespace(partitions=12,limit=8,apply=False,learner="MDSvrC",
+                                 partition_root="/dc/cluster/mdsvr/partitions",plan=plan,
+                                 batch_size=8)
+            command_stage(args,zk)
+            with open(plan, encoding="utf-8") as stream:
+                data=json.load(stream)
+            self.assertEqual(8,len(data["records"]))
+            self.assertEqual(4,data["remainingUnstaged"])
+            self.assertEqual("P000",data["records"][0]["partitionId"])
+            args.apply=True;args.limit=9
+            with self.assertRaisesRegex(ValueError,"limited to eight"):
+                command_stage(args,zk)
+            self.assertEqual(1,zk.calls)
 
     def test_drain_cli_accepts_exact_partition_option(self):
         args = parser().parse_args(

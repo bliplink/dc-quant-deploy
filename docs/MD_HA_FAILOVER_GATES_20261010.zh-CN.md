@@ -64,3 +64,7 @@ Neither MDSvr commit has been deployed to the existing ten-tenant Demo (live pin
 实机只读生成的 C 节点 Learner 规划：**256/256 个分区可规划**，原 Primary 和 epoch 保持不变，**`apply=false`、无实际 ZK 写操作**。规划文件仅保存在 Mac 本地 `~/.opentradingcore/evidence/ten-tenant-soak-20261010/md-c-learner-stage-readonly-plan.json`，可在未来依次校验活跃租户、MD 已就绪的行情分区和可承受的资源负载后，按批次安全加入。当前现网 MD 节点仍是旧版，尚未把 C 上线为所有分区的 Learner。
 
 **这次不增加任何正常下单、撮合或盘口热路径开销。** 所有人工安全判断只在操作员调用 offline CLI 时发生。后续真正实现认证的 durable HEAD 及同步副本权威证明前，不得删去这道 fail-closed 守卫。
+
+### Learner 分批注册性能保护
+
+`stage-learner` 默认只规划最多 **8 个尚未分配的分区**，生成全量 256 分区只读计划需显式 `--limit 256` 且不能加 `--apply`。在线使用 `--apply` 时 `--limit` 不得超过 8，否则在任何 ZK 写入前报错；之后可以通过新一轮快照检查/资源观察，再单独启动下一批。每批只使用已有版本 CAS，不触发快照扫描或请求加入订单/行情正常热路径。当前已完成的全量只读规划文件保留，尚未把 MDSvrC 注册至现网的 256 个分区。
