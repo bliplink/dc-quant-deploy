@@ -30,7 +30,7 @@ MDSvr 是 OrderSvr 权威撮合订单簿的派生行情服务。**不要为 MDSv
 - `MdDepthGapRecovery`：一个 daemon 任务合并所有处于断档状态的市场重订阅；初次立即请求，失败后退避从 5 秒到最多 60 秒；同一市场故障未修复期间只打一次断档告警。成功安装完整 Image 后解除该市场的恢复请求。正常无断档时不运行定时任务、不新增磁盘 I/O 或 MD 间复制。若 Order/GW 源端长期不返回真正完整新 Image，市场仍会保持不就绪，不能伪造 READY。
 - `LocalDepthBook`：没有 Snapshot 序号或盘口 entries 为 null 时拒绝 Image；没有已安装完整 Image 时拒绝仅靠增量建立盘口；兼容原有正常 applySnapshot 调用。限频和并发竞争测试覆盖同时断档 1000 次、多个市场合并请求与失败重试。
 - Mac mini 隔离 Maven 测试 **106/106 PASS**，代码提交并推送 `saas-crypto`，GitHub Actions [run 38061084918](https://github.com/bliplink/com.app.dc.mdsvr/actions/runs/38061084918) 由 push 触发。此处不以 Actions 启动代替镜像构建成功；需另行核验 GHCR digest/双架构。
-- **依然未完成的关键证明**：Order `PublishMarketDept` 的完整盘口消息由订单簿变化及 `enableFullOrderBookOnChange` / 1 秒节流控制产生。仅调用 Gateway 的 `subscribeWithImage` 并不从代码上证明 Image 一定是订阅时刻的 Order 当前 HEAD。真正自动选主前，必须确认 Gateway 的缓存/重放语义，建立当前完整市场库存、Snapshot 与后续深度增量连续性证明，以及旧主接收侧 fencing。不能仅以重订阅成功替代全部市场的权威新鲜度验证。
+- **依然未完成的关键证明**：Order 定期/按变更发送的完整盘口受 `enableFullOrderBookOnChange` / 1 秒节流控制；但 gateway-api 3.0.6 的 `subscribe` 协议**另有向当前 OrderSvr `ContentHandler.snapshot()` 请求初始 Image 的直连机制**。此前该 `dc.order.orderbook.**` Handler 缺失，无法保证订阅时得到初始图片。本轮新增 Handler 解决此缺口；然而新 Image 的读取版本与后续增量交界、全市场当前来源水位和旧主接收侧 fencing 尚未形成生产级证明。不要把订阅成功等同于完整 HA 晋升通过。
 - Mac Demo 三个 MD 仍保留旧的 `sha-48544e5`，未注入故障或切换现网分区；持续租户验收与受控切主另行进行。
 - [MDSvr `05a90fc`](https://github.com/bliplink/com.app.dc.mdsvr/commit/05a90fc)：修复“旧市场恢复后，下一次新市场断档可能继承旧 60 秒退避计时”的定时任务竞争；上个市场完成后取消旧重试，下一次异常立即重新获取 Image。隔离环境 MDSvr 全量测试 **107/107 PASS**。
 - 最新 [Actions run 38061295185](https://github.com/bliplink/com.app.dc.mdsvr/actions/runs/38061295185) **SUCCESS**；远端 `ghcr.io/bliplink/mdsvr:sha-05a90fc` 镜像清单已核验同时包含 `linux/amd64` 和 `linux/arm64`。该镜像仍未完成真实 MD 自动主故障接管安全证明，且现网容器仍沿用旧版；不要用“镜像可拉取”代替“故障接管通过”。
@@ -40,7 +40,15 @@ MDSvr 是 OrderSvr 权威撮合订单簿的派生行情服务。**不要为 MDSv
 - [MDSvr `1d1619f`](https://github.com/bliplink/com.app.dc.mdsvr/commit/1d1619f)：消除一个安全配置绕过：此前 `MdPartitionRuntime.canPublish` 仅在 legacy `EnforceReadiness=true` 时要求当前市场完整 Snapshot，而 Common 默认 `false`。现在只要 MD 集群模式开启，所有行情发布均要求当前 PRIMARY、分区 `READY` 且该市场 `readyMarketEpochs` 与 assignment epoch 完全一致；缺少/过期 Snapshot 必须拒绝发布，不受可选分区 readiness 配置影响。
 - 此修改移除了行情发布热路径一次 `PartitionConfig.isReadinessEnforced` 动态查询，因此不会增加正常运行的查询开销。只读路由门禁仍独立，不能将读取就绪当成行情来源就绪。
 - Mac 隔离 Maven 全量单测 **107/107 PASS**；GitHub Actions [run 38062111619](https://github.com/bliplink/com.app.dc.mdsvr/actions/runs/38062111619) **SUCCESS**。远端 GHCR 镜像 `ghcr.io/bliplink/mdsvr:sha-1d1619f` 清单已确认同时包含 `linux/amd64`、`linux/arm64`。现网 MD A/B/C 仍沿用 `sha-48544e5`，未部署本改动。
-- 核查 Common `BaseApi.subscribeWithImage` → `GwClientWrapper.subscribeWithImage` → `GwClient.subscribeWithImage`：最终调用 Gateway `ClientConnection.subscribe(svrID,topic,callback,...)`，未直接调用 OrderSvr 内存盘口查询。这一链路**不能仅凭成功订阅就视为证明 Snapshot 代表当前 Order HEAD**；必须另有 Order 端的现时完整库存/增量序号证据和接收侧 epoch fencing 才能启用自动晋升。
+- 源码纠正：MD 的 `OrderSvrClient` → Common `BaseApi.subscribeWithImage` → `GwClientWrapper/GwClient` → `gateway-api` TCP `GateWayApi.subscribe`。后者通过 `requestSync("OrderSvr", "subscribe", topic)` 向 OrderSvr 直连，服务端 `AbstractApiProxy.OnSubscribe` → `GwServerWrapper.OnRequestReply` → 已注册 `ContentHandler.snapshot(topic)` 发回订阅初始 Image。**此前误把此协议仅描述为纯推送订阅，已纠正。** 网关直连获取动态完整盘口仍需进一步证明 Snapshot 与增量的边界水位，以及接收端 epoch fencing。
+
+## OrderSvr 直连订阅初始盘口修复（2026-10-10）
+
+- [OrderSvr `1ed4777`](https://github.com/bliplink/com.app.dc.ordersvr/commit/1ed4777)：新增 Spring `@Service("dc.order.orderbook.**")` 的 `OrderMarketImageHandler.snapshot`，使 MD 通过 gateway-api TCP 直连 OrderSvr 订阅时，**即使盘口没有发生新订单变更**，也能即时取得当前 Order 内存订单簿的全深度初始 Image。
+- 只在订阅时遍历本节点 `OrderManager.snapshotTrackedMarketBooks`；按 `securityId/marketIndicator/location` 生成实际带租户后缀的 Topic，兼容递归通配订阅，一个 Topic 可以返回多个租户 Image；只允许持有该分区的 Order Primary 产生对应市场 Image，防止 warm replica 重复提供非权威数据。
+- 复用 `PublishMarketDept` 原有完整盘口 DTO/条目序列化，保留 `lastUpdateId`，并要求快照前后读到相同的 OrderBook 序号（最多尝试三次，市场并发变化时返回空等待重订阅）。**这属于有限次内存读取一致性检查，不能代替 Order 日志提交水位或严格原子快照证明。**
+- Mac mini 隔离测试：新增直连订阅 Handler 的 4 项单测（多租户、多个交易对、全价位与数量聚合、空盘口、Primary 过滤和只读无副作用），OrderSvr Maven 全量 **316 项测试，0 失败、0 错误、1 跳过**。本补丁无新增匹配热路径处理、MD 间复制或写盘。
+- GitHub Actions：[OrderSvr run 38063296685](https://github.com/bliplink/com.app.dc.ordersvr/actions/runs/38063296685)，最终构建及 GHCR 镜像须单独核实。Mac Demo 的 Order A/B/C 仍为 `ghcr.io/bliplink/ordersvr:sha-7842df4`，MD A/B/C 仍为 `sha-48544e5`，没有操作现网。
 
 ## 后续自动切主的正确控制面
 
