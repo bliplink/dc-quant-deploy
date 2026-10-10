@@ -1268,4 +1268,12 @@ if [[ "${RUN_WEB_TRADING_ACCEPTANCE}" == "true" ]]; then
   "${SCRIPT_DIR}/validate-saas.sh" --env-file "${ENV_FILE}"
 fi
 
-log "DC SaaS is ready at http://$(hostname -I | awk '{print $1}'):${WEB_LISTEN_PORT}/"
+# macOS `hostname` has no `-I`; reporting an empty URL after a successful
+# Colima install is misleading. Localhost is the verified published endpoint.
+if [[ "$(uname -s)" == "Darwin" ]]; then
+  deploy_host=127.0.0.1
+else
+  deploy_host="$(hostname -I 2>/dev/null | awk '{print $1}')"
+  deploy_host="${deploy_host:-127.0.0.1}"
+fi
+log "DC SaaS is ready at http://${deploy_host}:${WEB_LISTEN_PORT}/"
