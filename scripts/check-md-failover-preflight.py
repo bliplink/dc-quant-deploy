@@ -10,6 +10,7 @@ import argparse
 from collections import Counter
 from datetime import datetime,timezone
 import json
+import re
 from pathlib import Path
 import subprocess
 import sys
@@ -36,8 +37,36 @@ def parse_assignments(text):
         raise ValueError('incomplete/duplicate/unknown MD assignments')
     return sorted(rows,key=lambda x:x['partitionId'])
 
-def evaluate(rows,images):
+def parse_ephemeral_membership(zk_output):
+    """Require the exact physical-server ephemeral znode, not a static parent.
+
+    Unknown or unparseable members are absent; never infer node liveness from
+    Docker health or from a stale READY partition assignment.
+    """
+    found={name:False for name in NODES}
+    seen=set()
+    member=None
+    for raw in zk_output.splitlines():
+        line=raw.strip()
+        request=re.search(r'\bget -s /MDTService/(MDSvr[A-C])/\1(?:\s|$)',line)
+        if request:
+            member=request.group(1)
+            seen.add(member)
+            found[member]=False
+            continue
+        if member and line.startswith('ephemeralOwner = '):
+            raw_owner=line.split('=',1)[1].strip()
+            found[member]=bool(re.fullmatch(r'0x[0-9a-fA-F]+',raw_owner)
+                               and int(raw_owner,16)>0)
+            member=None
+        elif member and ('KeeperErrorCode' in line or 'Node does not exist' in line):
+            member=None
+    return {name:found[name] and name in seen for name in NODES}
+
+
+def evaluate(rows,images,members=None):
     reasons=[];primaries=Counter();single=[];wrong=[];unready=[]
+    members=members or {}
     if len(rows)!=COUNT: raise ValueError('incomplete MD topology')
     for row in rows:
         part=row['partitionId'];primary=row.get('primary')
@@ -51,12 +80,14 @@ def evaluate(rows,images):
         if row.get('state')!='READY' or not isinstance(row.get('epoch'),int) or row.get('epoch',0)<1:
             unready.append(part)
     if wrong:reasons.append('INVALID_MD_NODE_PLACEMENT:'+','.join(wrong[:5]))
-    if single:reasons.append('INSUFFICIENT_LIVE_SYNCHRONIZED_REPLICA_SLOTS:'+str(len(single))+'/'+str(COUNT))
+    if single:reasons.append('INSUFFICIENT_CONFIGURED_REPLICA_SLOTS:'+str(len(single))+'/'+str(COUNT))
     if unready:reasons.append('MD_ASSIGNMENTS_NOT_READY:'+','.join(unready[:5]))
     for node,container in NODES.items():
         detail=images.get(node,{})
         if detail.get('image')!=REQUIRED_IMAGE or not detail.get('running'):
             reasons.append('MD_NODE_UNHEALTHY_OR_UNREVIEWED:'+node)
+        if members.get(node) is not True:
+            reasons.append('MD_EPHEMERAL_MEMBER_NOT_ATTESTED:'+node)
     # These cannot be asserted by ZooKeeper READY or a live snapshot count.
     reasons.extend(['MD_DURABLE_SOURCE_WATERMARK_PROOFS_MISSING',
                     'MD_PROMOTION_FENCING_AND_CAS_CONTROLLER_NOT_CONFIGURED',
@@ -67,15 +98,18 @@ def evaluate(rows,images):
             'decision':'BLOCKED','blockers':reasons,
             'partitionCount':len(rows),'primaryCounts':dict(sorted(primaries.items())),
             'singleReplicaPartitionCount':len(single),'unreadyPartitions':len(unready),
-            'images':images,
+            'images':images,'ephemeralMembers':members,
             'notice':'A READY ZK assignment and a visible replica do not attest a durable complete market image or fencing.'}
 
 def main(argv=None):
     parser=argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--output',help='create JSON report, outside live data; never overwrite')
     options=parser.parse_args(argv)
-    instructions=''.join('get /dc/cluster/mdsvr/partitions/P%03d\n'%p for p in range(COUNT))+'quit\n'
-    rows=parse_assignments(command(['docker','exec','-i','dc-saas-zookeeper','zkCli.sh','-server','127.0.0.1:32181'],instructions,timeout=65))
+    instructions=''.join('get /dc/cluster/mdsvr/partitions/P%03d\n'%p for p in range(COUNT))
+    instructions+=''.join('get -s /MDTService/{0}/{0}\n'.format(n) for n in NODES)+'quit\n'
+    zk_read=command(['docker','exec','-i','dc-saas-zookeeper','zkCli.sh','-server','127.0.0.1:32181'],instructions,timeout=65)
+    rows=parse_assignments(zk_read)
+    members=parse_ephemeral_membership(zk_read)
     states=json.loads(command(['docker','inspect']+list(NODES.values()),timeout=25))
     by_name={x['Name'].lstrip('/'):x for x in states}
     images={}
@@ -84,7 +118,7 @@ def main(argv=None):
         if not item:raise ValueError('missing node metadata: '+node)
         images[node]={'running':item.get('State',{}).get('Running') is True,
                       'image':item.get('Config',{}).get('Image')}
-    report=evaluate(rows,images)
+    report=evaluate(rows,images,members)
     report['checkedAtUtc']=datetime.now(timezone.utc).isoformat()
     if options.output:
         dest=Path(options.output).expanduser()

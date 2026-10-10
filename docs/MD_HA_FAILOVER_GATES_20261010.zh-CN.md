@@ -34,3 +34,7 @@ MDSvr `1b2ed12` 增加只读路由随角色和 epoch 变更的后台对账：旧
 ## Incremental depth gap fencing
 
 MDSvr commit `5928ee5` invalidates the market-specific publish-ready epoch whenever a depth delta is missing or out of sequence. A fresh authoritative snapshot is needed to reopen publishing; other tenant markets remain unaffected. All 50 Maven tests passed. This is not automatic leader election and has not been deployed to the running ten-tenant cluster.
+
+## ZooKeeper membership verification
+
+Read-only preflight now requests the physical node path `get -s /MDTService/MDSvrX/MDSvrX` and validates its `ephemeralOwner` is nonzero. A live Docker container or a persistent parent folder is insufficient to attest membership. Live scan confirms all A/B/C ephemeral children currently exist. The preflight remains `BLOCKED` because 256 partitions still have only one configured replica each, and signed/durable market watermarks and promotion fences are missing.
