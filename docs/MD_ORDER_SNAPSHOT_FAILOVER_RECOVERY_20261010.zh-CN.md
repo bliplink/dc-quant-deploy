@@ -32,6 +32,8 @@ MDSvr 是 OrderSvr 权威撮合订单簿的派生行情服务。**不要为 MDSv
 - Mac mini 隔离 Maven 测试 **106/106 PASS**，代码提交并推送 `saas-crypto`，GitHub Actions [run 38061084918](https://github.com/bliplink/com.app.dc.mdsvr/actions/runs/38061084918) 由 push 触发。此处不以 Actions 启动代替镜像构建成功；需另行核验 GHCR digest/双架构。
 - **依然未完成的关键证明**：Order `PublishMarketDept` 的完整盘口消息由订单簿变化及 `enableFullOrderBookOnChange` / 1 秒节流控制产生。仅调用 Gateway 的 `subscribeWithImage` 并不从代码上证明 Image 一定是订阅时刻的 Order 当前 HEAD。真正自动选主前，必须确认 Gateway 的缓存/重放语义，建立当前完整市场库存、Snapshot 与后续深度增量连续性证明，以及旧主接收侧 fencing。不能仅以重订阅成功替代全部市场的权威新鲜度验证。
 - Mac Demo 三个 MD 仍保留旧的 `sha-48544e5`，未注入故障或切换现网分区；持续租户验收与受控切主另行进行。
+- [MDSvr `05a90fc`](https://github.com/bliplink/com.app.dc.mdsvr/commit/05a90fc)：修复“旧市场恢复后，下一次新市场断档可能继承旧 60 秒退避计时”的定时任务竞争；上个市场完成后取消旧重试，下一次异常立即重新获取 Image。隔离环境 MDSvr 全量测试 **107/107 PASS**。
+- 最新 [Actions run 38061295185](https://github.com/bliplink/com.app.dc.mdsvr/actions/runs/38061295185) **SUCCESS**；远端 `ghcr.io/bliplink/mdsvr:sha-05a90fc` 镜像清单已核验同时包含 `linux/amd64` 和 `linux/arm64`。该镜像仍未完成真实 MD 自动主故障接管安全证明，且现网容器仍沿用旧版；不要用“镜像可拉取”代替“故障接管通过”。
 
 ## 后续自动切主的正确控制面
 
