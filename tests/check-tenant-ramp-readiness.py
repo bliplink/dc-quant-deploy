@@ -56,8 +56,10 @@ def market_rows(raw):
         if not num.isdecimal() or not idle.isdecimal():
             raise ValueError("invalid event count / idle age")
         rows.append({"location": location, "events5m": int(num), "idleSeconds": int(idle)})
-    if not rows or len({x["location"] for x in rows}) != len(rows):
-        raise ValueError("no tenant activity or duplicate locations")
+    if not rows:
+        raise ValueError("empty market-trade baseline")
+    if len({x["location"] for x in rows}) != len(rows):
+        raise ValueError("duplicate tenant locations")
     return rows
 
 
@@ -311,9 +313,14 @@ def main():
                           partition_signals=partition_signals)
     except (OSError, ValueError, subprocess.CalledProcessError,
             subprocess.TimeoutExpired) as error:
+        # Distinguish a genuinely fresh database with zero market events from
+        # broken telemetry, without ever granting capacity authorization.
+        reason = ("MARKET_ACTIVITY_BASELINE_EMPTY"
+                  if isinstance(error, ValueError)
+                  and str(error) == "empty market-trade baseline"
+                  else "TELEMETRY_UNAVAILABLE")
         result = {"gate": "NOT_READY", "nextRampAuthorized": False,
-                  "reasons": ["TELEMETRY_UNAVAILABLE"],
-                  "errorType": type(error).__name__}
+                  "reasons": [reason], "errorType": type(error).__name__}
     result["checkedAtUtc"] = datetime.now(timezone.utc).isoformat()
     rendered = json.dumps(result, ensure_ascii=False, indent=2)
     if args.output:

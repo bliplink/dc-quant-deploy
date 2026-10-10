@@ -128,6 +128,33 @@ class MultitenantRampGuardTests(unittest.TestCase):
             with self.assertRaises(ValueError):
                 gate.market_rows(sample)
 
+    def test_fresh_empty_market_is_named_without_authorizing_ramp(self):
+        import contextlib
+        import io
+        import json
+        from unittest.mock import patch
+        output = io.StringIO()
+        with patch.object(gate, "collect", side_effect=ValueError("empty market-trade baseline")), \
+             patch("sys.argv", ["check-tenant-ramp-readiness.py"]), \
+             contextlib.redirect_stdout(output):
+            self.assertEqual(2, gate.main())
+        result = json.loads(output.getvalue())
+        self.assertEqual(result["gate"], "NOT_READY")
+        self.assertFalse(result["nextRampAuthorized"])
+        self.assertEqual(result["reasons"], ["MARKET_ACTIVITY_BASELINE_EMPTY"])
+
+    def test_invalid_market_rows_still_fail_as_unavailable(self):
+        import contextlib
+        import io
+        import json
+        from unittest.mock import patch
+        output = io.StringIO()
+        with patch.object(gate, "collect", side_effect=ValueError("duplicate tenant locations")), \
+             patch("sys.argv", ["check-tenant-ramp-readiness.py"]), \
+             contextlib.redirect_stdout(output):
+            self.assertEqual(2, gate.main())
+        self.assertEqual(json.loads(output.getvalue())["reasons"], ["TELEMETRY_UNAVAILABLE"])
+
     def test_read_only_surface_and_zero_write_paths(self):
         content = SCRIPT.read_text()
         self.assertIn('READ_ONLY_METHODS = (', content)
