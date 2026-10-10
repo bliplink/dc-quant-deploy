@@ -33,3 +33,11 @@ In `OrderReplicationManager.catchUp`, a lagging replica asks for the journal rec
 ## Test harness improvement
 
 `tests/verify_order_cluster_assignments.py` now reports only safe fields (snapshot/committed/marker sequences, order count, short digest) when assigned snapshots differ; it never dumps orders, user IDs or payloads. The regression test asserts that sensitive order fields do not appear in diagnostics.
+
+## 2026-10-10：受控修复进展（未部署）
+
+- OrderSvr 源码修复 [2b9bb47](https://github.com/bliplink/com.app.dc.ordersvr/commit/2b9bb475c817ef061e2d85a376e1649e0eaa5066)：仅在 Replica 需要恰好缺失的 rollback `STATE_COMMIT` 时，按序号/epoch/commit proof/对应前序状态事件从不可变 archive 补发；不跳过 GAP，也不允许同纪元强制覆盖快照。设置 `order.cluster.replication.archivedCommitRepairEnabled=false` **默认关闭**。
+- 大序号回归测试 [46afba5](https://github.com/bliplink/com.app.dc.ordersvr/commit/46afba5ce372ca3e9a666fb3b6d0d8431beee036)：用真实 P246 附近的 578109/578110/578111 序号模拟跨快照恢复，定向测试 13/13 通过；扩大 HA/Journaling/快照覆盖 70/70 通过。
+- 最新 [Actions #38020361516](https://github.com/bliplink/com.app.dc.ordersvr/actions/runs/38020361516) **SUCCESS**，已发布 GHCR 双架构镜像 `ghcr.io/bliplink/ordersvr:sha-46afba5`（linux/amd64、linux/arm64）；Mac mini 已成功拉取 ARM64 镜像，但**没有替换或重启 dc-saas-ordersvr A/B/C**（仍为 `sha-26b01eb`）。
+- 对现网 P246 原始 archive 进行了只读检查：seq=578110 `STATE_COMMIT` 引用 seq=578109 `STATE_REMOVE`，epoch、eventType、eventId、version 均匹配；这不能替代三副本完整 state hash、Projection watermark 和崩溃恢复一致性验收。
+- 归档回收机制见 [WAL 生命周期设计](ORDER_WAL_SNAPSHOT_ARCHIVE_RETENTION_DESIGN_20261010.zh-CN.md)。只读盘点的 518 个归档目录目前全部保持 HOLD；禁止直接按年龄删除。下一步是隔离集群与受控分区验收、权威数据对账，随后再决定是否启用修复开关。
