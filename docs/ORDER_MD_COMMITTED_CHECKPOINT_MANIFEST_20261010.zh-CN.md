@@ -28,3 +28,7 @@
 4. 隔离三节点测试覆盖 10 租户持续交易、主节点 SIGKILL、旧主重新归队、角色反转、无双主、无丢单/重复成交及 Robot 订单状态对账；然后才可考虑再次在 Mac Demo 注入故障。
 
 因此现网 MD 仍保留 `sha-48544e5` 镜像，10 租户继续正常运行；**MD 故障注入 P0 仍是 FAIL / OPEN，不授权再杀主节点或扩大 25/200 租户**。
+
+## 按需观察本地 WAL HEAD（性能默认关闭）
+
+[OrderSvr 5287923](https://github.com/bliplink/com.app.dc.ordersvr/commit/5287923d6ad128bbdff109acbb0c0c853c08d9dc) 新增禁用默认、每分区分钟级限频、全局一个 I/O 任务的只读 `OrderMdCheckpointHeadGate`。只有在需要审计快照是否追到**本地 WAL HEAD** 时才执行，WAL marker 验证最多 64 条，分区屏障内仅做 O(1) 序号/epoch/主身份复查。禁用情况下不进入下单/行情热路径，也不产生后台定时任务；无论结果均 `isPromotionAuthorized=false`。详见 [性能和安全门禁](ORDER_MD_ON_DEMAND_HEAD_REVIEW_PERFORMANCE_20261010.zh-CN.md)。
