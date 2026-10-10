@@ -21,6 +21,8 @@ MDSvr 是 OrderSvr 权威撮合订单簿的派生行情服务。**不要为 MDSv
 - 部署只读门禁现在认可单个已分配候选，无需 MD 复制日志；但仍返回 `BLOCKED`，直到可信旧主隔离、Order source/freshness、Robot 对账和隔离故障注入全部通过。
 - [Common f4febef](https://github.com/bliplink/com.app.common/commit/f4febef) 加强 ZooKeeper 新会话回调和首次连接返回路径，不会把 `ConnectedReadOnly` 误作为有写授权；Common 的 ZK/分区控制器测试 **23/23 PASS**。仍需正常 Maven Central 版本递增和多服务依赖更新后才能计入生产镜像。
 - 部署只读安全脚本 + CAS/learner 回归 **30/30 PASS**。此次没有对运行中的十租户分区 ZK 写入，没有重新启动 MD-A/B/C 或中断 Order/Trade。
+- [MDSvr GitHub Actions run 38060064795](https://github.com/bliplink/com.app.dc.mdsvr/actions/runs/38060064795) **PASS**；远端 `ghcr.io/bliplink/mdsvr:sha-3366041` 清单确认包含 `linux/amd64` 与 `linux/arm64`。该镜像没有集成未发版的 Common `f4febef`，控制器仍未接到真实证明通道，因此不得替换现网 MD。
+- 2026-10-10 14:35 UTC Mac 实机只读 preflight：256/256 READY，A/B Primary 各 128，`withoutRecoveryCandidateCount=0`，三 MD ephemeral membership 均有效。**decision=BLOCKED**，尚缺 Order 当前完整市场 image proof、已配置/认证的 CAS fencing 控制器、新 epoch 的市场就绪证明，以及 Robot 对账。运行镜像仍是 `sha-48544e5`。
 
 ## 后续自动切主的正确控制面
 
