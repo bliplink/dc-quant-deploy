@@ -35,6 +35,13 @@ MDSvr 是 OrderSvr 权威撮合订单簿的派生行情服务。**不要为 MDSv
 - [MDSvr `05a90fc`](https://github.com/bliplink/com.app.dc.mdsvr/commit/05a90fc)：修复“旧市场恢复后，下一次新市场断档可能继承旧 60 秒退避计时”的定时任务竞争；上个市场完成后取消旧重试，下一次异常立即重新获取 Image。隔离环境 MDSvr 全量测试 **107/107 PASS**。
 - 最新 [Actions run 38061295185](https://github.com/bliplink/com.app.dc.mdsvr/actions/runs/38061295185) **SUCCESS**；远端 `ghcr.io/bliplink/mdsvr:sha-05a90fc` 镜像清单已核验同时包含 `linux/amd64` 和 `linux/arm64`。该镜像仍未完成真实 MD 自动主故障接管安全证明，且现网容器仍沿用旧版；不要用“镜像可拉取”代替“故障接管通过”。
 
+## MD 行情发布 READY 强制防护（2026-10-10）
+
+- [MDSvr `1d1619f`](https://github.com/bliplink/com.app.dc.mdsvr/commit/1d1619f)：消除一个安全配置绕过：此前 `MdPartitionRuntime.canPublish` 仅在 legacy `EnforceReadiness=true` 时要求当前市场完整 Snapshot，而 Common 默认 `false`。现在只要 MD 集群模式开启，所有行情发布均要求当前 PRIMARY、分区 `READY` 且该市场 `readyMarketEpochs` 与 assignment epoch 完全一致；缺少/过期 Snapshot 必须拒绝发布，不受可选分区 readiness 配置影响。
+- 此修改移除了行情发布热路径一次 `PartitionConfig.isReadinessEnforced` 动态查询，因此不会增加正常运行的查询开销。只读路由门禁仍独立，不能将读取就绪当成行情来源就绪。
+- Mac 隔离 Maven 全量单测 **107/107 PASS**；GitHub Actions [run 38062111619](https://github.com/bliplink/com.app.dc.mdsvr/actions/runs/38062111619) 已由提交触发，镜像构建状态须以后续结果为准。现网 MD A/B/C 仍沿用 `sha-48544e5`，未部署本改动。
+- 核查 Common `BaseApi.subscribeWithImage` → `GwClientWrapper.subscribeWithImage` → `GwClient.subscribeWithImage`：最终调用 Gateway `ClientConnection.subscribe(svrID,topic,callback,...)`，未直接调用 OrderSvr 内存盘口查询。这一链路**不能仅凭成功订阅就视为证明 Snapshot 代表当前 Order HEAD**；必须另有 Order 端的现时完整库存/增量序号证据和接收侧 epoch fencing 才能启用自动晋升。
+
 ## 后续自动切主的正确控制面
 
 1. **故障判断**：只认物理 MD ephemeral membership/session 及租约状态；单次 TCP 断开、健康检查失败和 Docker running 状态不足以认定旧 Primary 已失权。ZooKeeper read-only 状态不授予主身份。
