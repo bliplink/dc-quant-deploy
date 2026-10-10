@@ -92,6 +92,13 @@ MDSvr 是 OrderSvr 权威撮合订单簿的派生行情服务。**不要为 MDSv
 - **仍缺**：生产可信 source/fencing attestation provider 实现、全市场 Order HEAD 清单和接收侧旧主 epoch 拒绝机制；控制器虽接上真实 ZK API，但**自动晋升目前没有可用的安全证明，仍未具备开关上线条件**。不要在现网直接设置 enabled=true 验证。
 - 2026-10-10 21:56 UTC Mac 只读预检查仍为 `decision=BLOCKED`，`canInjectMdPrimaryFault=false`。256/256 READY，A/B 128/128 Primary，0 个缺少已分配恢复候选的分区，A/B/C ephemeral membership 均在，旧 MD `sha-48544e5` 未变；新增代码没有让静态拓扑“自动变绿”，门禁仍正确拒绝故障注入。
 
+## MD 异步发布队列 epoch 栅栏（2026-10-11）
+
+- [MDSvr `f7f07b0`](https://github.com/bliplink/com.app.dc.mdsvr/commit/f7f07b0)：修复 `MDPublish` 的异步队列跨 epoch 重放风险。旧实现在出队前只根据当前主节点/市场 READY 判断，节点被撤主后若重新当选为新 epoch Primary，旧盘口、Depth Diff、成交与 K 线消息有机会借用新的发布权限。现在行情入队时固定记录**入队时已发布就绪的 MD assignment epoch**；真正向 gateway-api TCP 订阅者发送之前，要求其等于当前受 ZK 连接与市场 Snapshot 就绪保护的 publish epoch。旧 epoch、失联入队、恢复期未 READY 入队的消息均丢弃。
+- 同一机制覆盖 OrderBook/DepthSnapshot/DepthDiff/BookTicker/PartialDepth/Trade/MarketTrade 和独立异步 Kline（OHLC）队列。无额外 MD→MD 复制、持久化日志、线程或远端 ZooKeeper 网络查询；仅对已缓存的本地 assignment 和 market READY 做有限内存检查。非集群旧路径兼容。
+- MAC 隔离 Maven 全量 **122/122 PASS**，覆盖原主退出后又重新当选、新 epoch 正常发布、控制面失联、恢复期消息后到、深度增量、Kline 独立队列和非集群兼容。提交在 `saas-crypto`，GitHub Actions [run 38096303971](https://github.com/bliplink/com.app.dc.mdsvr/actions/runs/38096303971) 由 push 触发，镜像发布及 ARM64/AMD64 清单仍需单独核验。
+- **重要边界**：此保护只能阻止 MD 本地异步队列中的旧消息，不能代替接收端针对 publisher identity/epoch 的协议级防双主检查；也不能确认来自 OrderSvr 的所有市场当前 HEAD、连续增量或 Robot 挂单恢复。真正自动晋升的可信 `Safety` 实现仍未完成，现网故障注入门禁继续 `BLOCKED`，运行容器不变。
+
 ## 后续自动切主的正确控制面
 
 1. **故障判断**：只认物理 MD ephemeral membership/session 及租约状态；单次 TCP 断开、健康检查失败和 Docker running 状态不足以认定旧 Primary 已失权。ZooKeeper read-only 状态不授予主身份。
