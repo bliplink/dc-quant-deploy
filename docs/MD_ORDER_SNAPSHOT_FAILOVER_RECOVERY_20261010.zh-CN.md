@@ -88,7 +88,7 @@ MDSvr 是 OrderSvr 权威撮合订单簿的派生行情服务。**不要为 MDSv
 - 显式启动参数：`md.cluster.failover.enabled`（**默认 false**）、`md.cluster.failover.nodes`（明确列出 `MDSvrA,MDSvrB,MDSvrC` 等物理节点，不能为单节点）、`md.cluster.failover.pollMillis`（默认 10000ms，允许 1000–60000ms）。轮询 + ZK 成员 watcher 合并触发，在单后台线程运行；正常盘口/撮合线程没有控制器开销，未启用时**不获得租约、不会写入 ZooKeeper**。同一分区的租约不进行双重轮询，CAS 时仍核对当前拥有的租约。
 - **安全证明强制 fail-closed**：运行包中不注入任何默认“全部通过”的 `MdImageRecoveryFailoverController.Safety`。若显式设置 `enabled=true` 但没有独立实现且注入能认证旧主下游发布隔离、Order 当前全部活跃市场 Image/增量连续性的真实 Safety bean，启动立即抛异常，**申请 ZK 租约之前就停止**；不会悄悄启用不安全的自动接管。
 - Maven 全量 MDSvr **117/117 PASS**，新增专项测试验证默认关闭、误开启却无证明时拒绝启动、非法巡检间隔拒绝、物理节点列表规范化和去重；现有 CAS 竞态/双故障/旧主恢复测试继续通过。
-- [GitHub Actions run 38089442724](https://github.com/bliplink/com.app.dc.mdsvr/actions/runs/38089442724) 已触发，最终多架构镜像确认另行记录。现网三 MD 仍为 `sha-48544e5`、三 Order 仍为 `sha-7842df4`，本轮没有拉取替换镜像或杀掉 MD-A。
+- [GitHub Actions run 38089442724](https://github.com/bliplink/com.app.dc.mdsvr/actions/runs/38089442724) **SUCCESS**；通过 GHCR 远端 manifest 校验 `ghcr.io/bliplink/mdsvr:sha-e80edc7` 同时包含 `linux/amd64`、`linux/arm64`。现网三 MD 仍为 `sha-48544e5`、三 Order 仍为 `sha-7842df4`，本轮没有拉取替换镜像或杀掉 MD-A。
 - **仍缺**：生产可信 source/fencing attestation provider 实现、全市场 Order HEAD 清单和接收侧旧主 epoch 拒绝机制；控制器虽接上真实 ZK API，但**自动晋升目前没有可用的安全证明，仍未具备开关上线条件**。不要在现网直接设置 enabled=true 验证。
 - 2026-10-10 21:56 UTC Mac 只读预检查仍为 `decision=BLOCKED`，`canInjectMdPrimaryFault=false`。256/256 READY，A/B 128/128 Primary，0 个缺少已分配恢复候选的分区，A/B/C ephemeral membership 均在，旧 MD `sha-48544e5` 未变；新增代码没有让静态拓扑“自动变绿”，门禁仍正确拒绝故障注入。
 
