@@ -9,6 +9,7 @@ on:
       - scripts/check-order-rolling-upgrade-preflight.py
       - tests/test_order_rolling_upgrade_preflight.py
       - tests/test_order_upgrade_deploy_image_guard.py
+      - tests/test_order_upgrade_compose_drift_guard.py
       - deploy-saas.sh
       - docs/ORDER_ROLLING_UPGRADE_SAFETY_GATE_20261010.zh-CN.md
   pull_request:
@@ -17,6 +18,7 @@ on:
       - scripts/check-order-rolling-upgrade-preflight.py
       - tests/test_order_rolling_upgrade_preflight.py
       - tests/test_order_upgrade_deploy_image_guard.py
+      - tests/test_order_upgrade_compose_drift_guard.py
       - deploy-saas.sh
       - docs/ORDER_ROLLING_UPGRADE_SAFETY_GATE_20261010.zh-CN.md
 
@@ -40,3 +42,4 @@ jobs:
         run: |
           bash -n deploy-saas.sh
           python3 -m unittest discover -s tests -p 'test_order_upgrade_deploy_image_guard.py' -v
+          python3 -m unittest discover -s tests -p 'test_order_upgrade_compose_drift_guard.py' -v

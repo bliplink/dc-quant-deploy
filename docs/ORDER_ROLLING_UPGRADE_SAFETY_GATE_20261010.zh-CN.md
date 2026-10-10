@@ -42,4 +42,8 @@ ZooKeeper 的 `READY` 代表分配状态，不足以证明业务状态 READY。P
 
 已为实际的 `deploy-saas.sh` 入口增加 **OrderSvr 不可变镜像 ID 保护**：如果已存在运行集群并拟部署不同的 OrderSvr image ID，在执行任何 `compose_up -d` 之前立即 `die`。没有已存在节点的 fresh-install 不受此保护影响，同一镜像 ID 可以继续做其它 SaaS 服务的常规更新；在集群已经存在时，不能借助主站升级顺路切换 OrderSvr 镜像。对应 6 个发布脚本模拟测试覆盖 A/B、无 Primary 的 C、未启用的集群以及首次部署。该限制暂时没有旁路开关。它仅检测**镜像变更**，不能证明同镜像重新加载配置、滚动重启或业务写入排空是安全的；后续还必须实现真正的成员迁移/排空协议。
 
+新增 **Compose 配置哈希与拓扑保护**：对实际运行的 OrderSvr 节点，将拟应用的 `compose config --hash SERVICE` 与容器 `com.docker.compose.config-hash` 标签逐一比较；两者不同、标签缺失、服务不在 Profile、缺少部分同步副本，或现网 C 存在但 `ORDER_CLUSTER_C_ENABLED=false`，全部在 Compose Up 之前拒绝。这避免**同镜像**因为环境变量、mounts 或资源限制变化意外重建。9 项 Docker/Compose 模拟测试通过。fresh-install 没有现存 Order 节点时不阻挡。
+
+本轮还发现，宿主机 `.env.prod` 内 `ORDER_CLUSTER_C_ENABLED=false`，但现网 OrderSvrC 容器运行中；`ORDERSVR_TAG` 也与当前已启动容器不同。必须先修正环境模板和已部署配置漂移，不得直接用普通 `docker compose up -d` 更新交易集群。
+
 **注意：本门禁刻意不提供“允许升级”代码路径。只有真实写入排空/安全成员迁移机制及其权威验收完成后，才能额外设计可授权的上线控制器。**

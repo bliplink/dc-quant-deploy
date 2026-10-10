@@ -559,6 +559,57 @@ guard_running_order_cluster_image_change() {
   done
 }
 
+# Compose may recreate a live OrderSvr even when the immutable image ID
+# has not changed (bind mounts, command, environment, profile or limits).
+# Compare each running node's Compose config digest and reject topology drift.
+# This is conservative until a real Order HA write-drain is implemented.
+guard_running_order_cluster_compose_change() {
+  if [[ "${ORDER_CLUSTER_ENABLED:-false}" != "true" ]]; then
+    if docker inspect dc-saas-ordersvr-b >/dev/null 2>&1 ||
+       docker inspect dc-saas-ordersvr-c >/dev/null 2>&1; then
+      die "Order HA node(s) exist but ORDER_CLUSTER_ENABLED is false; refuse topology downgrade."
+    fi
+    return 0
+  fi
+  if [[ "${ORDER_CLUSTER_C_ENABLED:-false}" != "true" ]] &&
+     docker inspect dc-saas-ordersvr-c >/dev/null 2>&1; then
+    die "Live OrderSvrC exists but ORDER_CLUSTER_C_ENABLED is false; refusing implicit replica removal."
+  fi
+  local service container current line requested existing_count=0 required_count=2
+  [[ "${ORDER_CLUSTER_C_ENABLED:-false}" == true ]] && required_count=3
+  for container in dc-saas-ordersvr dc-saas-ordersvr-b; do
+    if docker inspect "${container}" >/dev/null 2>&1; then
+      existing_count=$((existing_count + 1))
+    fi
+  done
+  if [[ "${ORDER_CLUSTER_C_ENABLED:-false}" == true ]] &&
+     docker inspect dc-saas-ordersvr-c >/dev/null 2>&1; then
+    existing_count=$((existing_count + 1))
+  fi
+  [[ "${existing_count}" == 0 || "${existing_count}" == "${required_count}" ]] ||
+    die "Incomplete running Order HA topology (${existing_count}/${required_count}); ordinary Compose up cannot safely bootstrap missing replicas."
+  for service in ordersvr ordersvr-b ordersvr-c; do
+    [[ "${service}" != ordersvr-c || "${ORDER_CLUSTER_C_ENABLED:-false}" == true ]] || continue
+    case "${service}" in
+      ordersvr) container=dc-saas-ordersvr ;;
+      ordersvr-b) container=dc-saas-ordersvr-b ;;
+      ordersvr-c) container=dc-saas-ordersvr-c ;;
+    esac
+    docker inspect "${container}" >/dev/null 2>&1 || continue
+    current="$(docker inspect "${container}" --format '{{index .Config.Labels "com.docker.compose.config-hash"}}' 2>/dev/null)" ||
+      die "Cannot read running ${container} Compose hash."
+    [[ "${current}" =~ ^[[:xdigit:]]{64}$ ]] ||
+      die "Running ${container} has no valid Compose configuration hash."
+    line="$(compose config --hash "${service}" 2>/dev/null)" ||
+      die "Unable to calculate Compose hash for ${service}; refusing implicit recreate."
+    requested="${line##* }"
+    [[ "${requested}" =~ ^[[:xdigit:]]{64}$ ]] ||
+      die "Requested ${service} Compose configuration hash is unavailable."
+    [[ "${requested}" == "${current}" ]] ||
+      die "Unsafe running Order HA Compose configuration drift detected for ${container}. Preserve existing replica and Primary state; use a proven drain or CAS membership transition before recreating Order nodes."
+  done
+}
+
 verify_order_cluster_images() {
   [[ "${ORDER_CLUSTER_ENABLED:-false}" == "true" ]] || return 0
   local expected_hash="" expected_revision="" spec name image hash revision
@@ -1104,6 +1155,7 @@ verify_order_cluster_images
 verify_md_cluster_images
 # Fail BEFORE Compose mutates any running container or infrastructure.
 guard_running_order_cluster_image_change
+guard_running_order_cluster_compose_change
 
 if docker inspect dc-saas-loginsvr >/dev/null 2>&1; then
   LOGIN_CONTAINER_EXISTED="true"
