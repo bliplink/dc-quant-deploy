@@ -7,13 +7,17 @@ on:
     paths:
       - .github/workflows/validate-order-archive-retention.yml
       - scripts/audit-order-archive-retention.py
+      - scripts/manifest-order-archive-segment.py
       - tests/test_order_archive_retention.py
+      - tests/test_order_archive_manifest.py
       - docs/ORDER_WAL_SNAPSHOT_ARCHIVE_RETENTION_DESIGN_20261010.zh-CN.md
   pull_request:
     paths:
       - .github/workflows/validate-order-archive-retention.yml
       - scripts/audit-order-archive-retention.py
+      - scripts/manifest-order-archive-segment.py
       - tests/test_order_archive_retention.py
+      - tests/test_order_archive_manifest.py
       - docs/ORDER_WAL_SNAPSHOT_ARCHIVE_RETENTION_DESIGN_20261010.zh-CN.md
 
 permissions:
@@ -29,6 +33,8 @@ jobs:
         with:
           python-version: '3.11'
       - name: Ensure scanner is syntax valid
-        run: python3 -m py_compile scripts/audit-order-archive-retention.py
+        run: python3 -m py_compile scripts/audit-order-archive-retention.py scripts/manifest-order-archive-segment.py
       - name: Assert read-only retention fail-closed behavior
         run: python3 -m unittest discover -s tests -p 'test_order_archive_retention.py' -v
+      - name: Assert segment manifest hashes, isolation and HOLD behavior
+        run: python3 -m unittest discover -s tests -p 'test_order_archive_manifest.py' -v

@@ -62,7 +62,9 @@
 
 只读实盘验证：共发现 **518 个 archive 目录**（A 132、B 130、C 256），全部标记 `HOLD`，删除授权为 `false`；盘点报告保存为 `/tmp/otc-order-archive-audit-20261010.json`，不包含订单数据或凭据。
 
-下一轮在 OrderSvr 增加持久化 segment manifest、snapshot 安装确认和真实副本/Projection/对象存储的删除证明；先做只读候选列表 + 恢复演练，再以 feature flag 默认关闭的 tombstone/GC 控制器在一次性测试集群验证。P246 恢复完成并全量对账之前，不准对其日志执行归档回收；**本轮不清理任何现网订单数据**。
+已补充第二个只读工具 `scripts/manifest-order-archive-segment.py`：为**单个已归档 Chronicle segment 目录**生成 SHA-256 文件清单、分区/epoch/序号名称提示与逻辑长度；每次只读源目录，报告输出必须位于 journal 之外、独占创建且不能覆盖。文件哈希的存在**不等于**远端备份可靠、提交水位正确或允许 GC，故 `retentionDecision=HOLD`、`deletionAuthorized=false`。对应 5 项隔离安全测试 `tests/test_order_archive_manifest.py` 已通过，并加入同一个 Actions Workflow。由于现网 WAL 占用和同步 IO 压力，默认不会批量对 518 个目录重复哈希，需离峰按单个归档执行。
+
+下一轮在 OrderSvr 增加持久化 segment manifest 的认证签名、snapshot 安装确认和真实副本/Projection/对象存储的删除证明；先做只读候选列表 + 恢复演练，再以 feature flag 默认关闭的 tombstone/GC 控制器在一次性测试集群验证。P246 恢复完成并全量对账之前，不准对其日志执行归档回收；**本轮不清理任何现网订单数据**。
 
 ### 操作示例（只读）
 
