@@ -30,3 +30,7 @@ MDSvr `1b2ed12` 增加只读路由随角色和 epoch 变更的后台对账：旧
 `deploy-saas.sh` 现在针对 **全新分区创建**且 `MD_CLUSTER_C_ENABLED=true` 的环境，将 C 节点标记为 `learners:["MDSvrC"]`，A/B 仍为原有 Primary/唯一指定同步 Replica。这样 C 才会按 `MdPartitionRuntime.shouldProcess` 接收 OrderSvr 行情流和完整市场快照；C 仍**不被计算为同步复制 quorum**，只有拿到可验证的事件连续性与新鲜度水位后，才能经独立审批转为真正同步 Replica。旧两节点部署保持原样。
 
 对于已经存在的 256 个 ZK 分区，安装器保持原有幂等行为，不会直接覆盖已有主从分配，也不会在当前十租户系统中自动添加 learner。需要设计经过版本 CAS 的分区级在线迁移流程，验证 C 的同步进度之后才可晋升。这只是后续机制的**安全准备**，并非已经修复主节点故障期间 4/10 市场中断。
+
+## Incremental depth gap fencing
+
+MDSvr commit `5928ee5` invalidates the market-specific publish-ready epoch whenever a depth delta is missing or out of sequence. A fresh authoritative snapshot is needed to reopen publishing; other tenant markets remain unaffected. All 50 Maven tests passed. This is not automatic leader election and has not been deployed to the running ten-tenant cluster.
