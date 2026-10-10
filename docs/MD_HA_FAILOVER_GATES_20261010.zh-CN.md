@@ -50,3 +50,7 @@ Neither MDSvr commit has been deployed to the existing ten-tenant Demo (live pin
 ## 分区级全市场副本覆盖检查（2026-10-10）
 
 [MDSvr 7f9cd83](https://github.com/bliplink/com.app.dc.mdsvr/commit/7f9cd830737e464669210a162ddc0a16b936d89a) 新增完整市场清单的本地连续前缀检查和 DepthBookFacade 只读入口，79 项 Maven 全量测试通过。它会拒绝分区内任意单个市场缺失、断档、epoch/序号/新鲜度不符、清单空缺及跨分区错配。但源清单仍没有 OrderSvr 持久化证明；无论单项检查匹配与否，`canPromote=false`。权威证明和 CAS 晋升协议仍待实现。详见 [分区级全市场追平阶段报告](MD_PARTITION_MARKET_COVERAGE_20261010.zh-CN.md)。
+
+## OrderSvr committed-checkpoint market manifest → MD read-only comparer
+
+[OrderSvr f2df4a9](https://github.com/bliplink/com.app.dc.ordersvr/commit/f2df4a97eb696cd85526bc6253eea41399302b47) adds a persisted-snapshot read-only market version manifest, with a canonical SHA-256 data-integrity checksum and structural commit boundary validation. [MDSvr 196ad18](https://github.com/bliplink/com.app.dc.mdsvr/commit/196ad18300e82888523add2eaf49c1c2bc96d402) parses the same JSON contract and compares the version map to locally contiguous per-market depth replay evidence. Order/MDSvr full local test runs: 305 and 84; CI builds pending at time of code commit. These are checkpoint-compatible code interfaces **without a running authenticated source→replica transport** and **cannot prove current durable HEAD or promote an MD primary**. See [full contract and missing guarantees](ORDER_MD_COMMITTED_CHECKPOINT_MANIFEST_20261010.zh-CN.md).
