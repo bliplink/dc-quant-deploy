@@ -74,6 +74,16 @@ exit "${FAKE_CHILD_EXIT:-0}"
         return subprocess.run([str(self.root / 'deploy-saas-macos.sh'), *args],
                               env=env, text=True, capture_output=True, timeout=15)
 
+    def test_reset_routes_to_fenced_mac_script_not_install(self):
+        helper=self.root/'scripts/mac-saas-reset.py'
+        helper.write_text("""import sys
+print("COLD_RESET_ROUTED", " ".join(sys.argv[1:]))
+""")
+        result=self.run_wrapper('reset','--help')
+        self.assertEqual(0,result.returncode,result.stderr)
+        self.assertIn('COLD_RESET_ROUTED --help',result.stdout)
+        self.assertFalse(self.deployed.exists())
+
     def test_check_is_read_only_with_realistic_existing_containers(self):
         before = (self.root / '.env.prod').read_bytes()
         result = self.run_wrapper('--check')

@@ -1,0 +1,42 @@
+name: Validate Mac cold reset safety
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [saas-crypto]
+    paths:
+      - .github/workflows/validate-macos-cold-reset.yml
+      - scripts/mac-saas-reset.py
+      - tests/test_mac_saas_reset.py
+      - deploy-saas-macos.sh
+      - tests/test_deploy_saas_macos.py
+      - docs/MAC_MINI_ONECLICK_USAGE_20261010.zh-CN.md
+  pull_request:
+    paths:
+      - .github/workflows/validate-macos-cold-reset.yml
+      - scripts/mac-saas-reset.py
+      - tests/test_mac_saas_reset.py
+      - deploy-saas-macos.sh
+      - tests/test_deploy_saas_macos.py
+      - docs/MAC_MINI_ONECLICK_USAGE_20261010.zh-CN.md
+
+permissions:
+  contents: read
+
+jobs:
+  reset-invariants:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Compile cold-reset planner
+        run: python3 -m py_compile scripts/mac-saas-reset.py
+      - name: Check macOS entrypoint Bash syntax
+        run: bash -n deploy-saas-macos.sh
+      - name: Prove no unrelated container or source path is purged
+        run: python3 -m unittest discover -s tests -p 'test_mac_saas_reset.py' -v
+      - name: Verify installer and reset command dispatch
+        run: python3 -m unittest discover -s tests -p 'test_deploy_saas_macos.py' -v

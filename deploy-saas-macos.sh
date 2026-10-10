@@ -8,6 +8,12 @@ docker compose version >/dev/null 2>&1 || { echo "[saas-macos] ERROR: docker com
 docker info >/dev/null 2>&1 || { echo "[saas-macos] ERROR: Docker daemon is unavailable (start Colima or Docker Desktop)." >&2; exit 1; }
 
 ENV_FILE="${ENV_FILE:-${SCRIPT_DIR}/.env.prod}"
+# Dedicated cold-reset entrypoint. Read-only planning is the default; any
+# destructive stage requires a specific explicit token and owns its own lock.
+if [[ "${1:-}" == "reset" ]]; then
+  shift
+  exec python3 "${SCRIPT_DIR}/scripts/mac-saas-reset.py" "$@"
+fi
 if [[ "${1:-}" == "--check" ]]; then
   shift
   [[ "$#" == 0 || ( "$#" == 1 && "$1" == "--full-cluster" ) ]] || {

@@ -37,3 +37,22 @@ ENV_FILE="$PWD/.env.prod" ./deploy-saas-macos.sh --full-cluster
 - 必须完成 Order HA 故障恢复、三副本提交水位与 Projection 对账，才可以解除面向 200 个租户的自动扩容限制。
 
 详见 [Mac clean redeploy plan](MAC_MINI_CLEAN_REDEPLOY_PLAN_20261010.zh-CN.md) 与 [P246 recovery issue](ORDER_HA_P246_RECOVERY_BLOCKER_20261010.md)。
+
+## 2026-10-10：只读重置计划与受控旧数据隔离
+
+已增加 `scripts/mac-saas-reset.py`，由 `deploy-saas-macos.sh reset` 统一调用：
+
+```bash
+./deploy-saas-macos.sh reset \
+  --mode plan \
+  --runtime-root "$HOME/.opentradingcore/dc-saas-runtime-fresh2-20261005" \
+  --evidence "$HOME/.opentradingcore/evidence/p246-reproducer-20261010/P246-primary-archived-commit.tar.gz"
+```
+
+**`plan` 是默认且只读的模式**，验证 P246 文件 SHA-256、运行目录限定在 `~/.opentradingcore/dc-saas-runtime-*`、全部订单服务的 Compose 项目归属与根目录 bind mount，并检查是否有独立的容器借用了 SaaS 根目录。当前现网 `plan` 已检测到 **24 个 `dc-saas` Compose 成员**，以及唯一一台 Playwright 浏览器测试 Runner。只有镜像为 `mcr.microsoft.com/playwright:v1.55.0-noble`、名称严格等于 `dc-saas-web-e2e-runner`、且唯一运行目录挂载为 `e2e-artifacts:/artifacts` 时，才会将其作为可停止的测试进程。**独立 API Docs 不属于重置范围。**
+
+真正的受控冷重置（会造成业务中断）要求显式选择 `--mode stage --confirm STAGE_DISPOSABLE_DC_SAAS`。该动作在 Mac 原子目录锁内重新核对 Docker 容器归属，只停止和移除确认归属的旧 `dc-saas` Compose 成员及上述验明身份的临时 Runner，然后将旧数据目录**原子迁移到 `~/.opentradingcore/.dc-saas-quarantine/`**；不运行递归删除、不清空镜像、不触碰独立文档、不开启新集群。如果期间校验不通过，则中止并保留故障现场。旧目录在新集群通过验收后，才考虑另行回收，不能把 `stage` 误认为已释放约 120 GB 空间。
+
+**当前还没有执行 `stage`：**Mac 磁盘约 93% 使用率，旧运行目录约 120 GB。P246 归档及其快照已经独立保存在 `~/.opentradingcore/evidence/p246-reproducer-20261010/`，而正式安装应使用现有 `--full-cluster`。由于需要 22 服务冷启动、云端镜像拉取、密钥初始化和容量保护，必须在后续完成带自动业务验收的重建流程后再执行停机；不能用只读计划冒充成功重装。
+
+相关自动化：`tests/test_mac_saas_reset.py` 与 `tests/test_deploy_saas_macos.py`，由 `.github/workflows/validate-macos-cold-reset.yml` 持续验证。
