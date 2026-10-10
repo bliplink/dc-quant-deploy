@@ -1,0 +1,34 @@
+name: Validate OrderSvr rolling upgrade safety gate
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [saas-crypto]
+    paths:
+      - .github/workflows/validate-order-rolling-upgrade-preflight.yml
+      - scripts/check-order-rolling-upgrade-preflight.py
+      - tests/test_order_rolling_upgrade_preflight.py
+      - docs/ORDER_ROLLING_UPGRADE_SAFETY_GATE_20261010.zh-CN.md
+  pull_request:
+    paths:
+      - .github/workflows/validate-order-rolling-upgrade-preflight.yml
+      - scripts/check-order-rolling-upgrade-preflight.py
+      - tests/test_order_rolling_upgrade_preflight.py
+      - docs/ORDER_ROLLING_UPGRADE_SAFETY_GATE_20261010.zh-CN.md
+
+permissions:
+  contents: read
+
+jobs:
+  fail-closed-preflight-contract:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Parse and compile the read-only checker
+        run: python3 -m py_compile scripts/check-order-rolling-upgrade-preflight.py
+      - name: Deny unsafe upgrades, ZK mismatch, missing replica proof and disk pressure
+        run: python3 -m unittest discover -s tests -p 'test_order_rolling_upgrade_preflight.py' -v
