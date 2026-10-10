@@ -46,3 +46,7 @@ Read-only preflight now requests the physical node path `get -s /MDTService/MDSv
 - [Deployment 0e2554e](https://github.com/bliplink/dc-quant-deploy/commit/0e2554e4664ad2bc8b61d157c2d27c297280725d): ZK failover gate now also checks nonzero `ephemeralOwner` for all three membership children under `/MDTService/MDSvrX/MDSvrX`. Live read-only scan confirms A/B/C ephemeral registration. Eight gate tests and CI passed; still `BLOCKED` on 256/256 insufficient configured replica slots and missing source commit/fence proofs.
 
 Neither MDSvr commit has been deployed to the existing ten-tenant Demo (live pinned image remains `sha-48544e5`), and neither grants or enables automatic failover.
+
+## 分区级全市场副本覆盖检查（2026-10-10）
+
+[MDSvr 7f9cd83](https://github.com/bliplink/com.app.dc.mdsvr/commit/7f9cd830737e464669210a162ddc0a16b936d89a) 新增完整市场清单的本地连续前缀检查和 DepthBookFacade 只读入口，79 项 Maven 全量测试通过。它会拒绝分区内任意单个市场缺失、断档、epoch/序号/新鲜度不符、清单空缺及跨分区错配。但源清单仍没有 OrderSvr 持久化证明；无论单项检查匹配与否，`canPromote=false`。权威证明和 CAS 晋升协议仍待实现。详见 [分区级全市场追平阶段报告](MD_PARTITION_MARKET_COVERAGE_20261010.zh-CN.md)。
