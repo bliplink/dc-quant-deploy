@@ -55,7 +55,7 @@ MDSvr 是 OrderSvr 权威撮合订单簿的派生行情服务。**不要为 MDSv
 - [MDSvr `ae57a5e`](https://github.com/bliplink/com.app.dc.mdsvr/commit/ae57a5e)：修复 `MDFacade.book` 向 `AsyncCacheThreadGroup` 递交任务时**仅以 securityId 为键**导致同一交易对的不同租户快照在队列里相互覆盖。现改用 `PartitionHasher.join(location,marketIndicator,securityId)`，同一市场仍允许合并高频变化，但不同租户/交易市场不能互相覆盖。没有增加消费线程、ZK 请求、写盘或 MD 同步复制。
 - 同时堵住绕过：`TradeFacade.getLatestTrade()` 原先会把一次 mark-price / 最近成交读取误计为“已收到完整 Order 盘口”，可能提前打开 `MdPartitionRuntime.readyMarketEpochs`。现在 trade/index 占位数据不再授权盘口 READY；只在 `MDFacade.cache` 验证完整 Order Snapshot 基本结构（非空 symbol、非负 `lastUpdateId`、非 null entries，合法空簿允许零档位）后才给普通盘口模式授权；depth-diff 模式继续由 `DepthBookFacade` 负责完整校验。
 - 隔离 Maven 单测：新增多租户队列键/异步隔离及损坏快照拒绝测试、更新 `TradeFacadeTenantTest`，MDSvr 全量 **110/110 PASS**。通过这些测试只能说明修复了确定性的代码路径，**并未证明现网十租户不报价必然由这个问题引起**。
-- GitHub Actions：[MDSvr run 38064888450](https://github.com/bliplink/com.app.dc.mdsvr/actions/runs/38064888450) 由新 commit 触发，最终构建/多架构 GHCR 状态需单独核验；现网 MD 仍为 `sha-48544e5`，本轮没有执行线上镜像替换或故障注入。
+- GitHub Actions：[MDSvr run 38064888450](https://github.com/bliplink/com.app.dc.mdsvr/actions/runs/38064888450) **SUCCESS**；GHCR 镜像 `ghcr.io/bliplink/mdsvr:sha-ae57a5e` 已通过远端 manifest 核验，包含 `linux/amd64` 和 `linux/arm64`。现网 MD 仍为 `sha-48544e5`，本轮没有执行线上镜像替换或故障注入。
 - 仍需补全：Order 订阅时完整 Image 与随后连续增量的正确时序（尤其 Order 分区切主/订阅重建）；Controller 的独占租约 + CAS + 双主发布端 fencing；Order 全市场库存清单和恢复后的 Trade/Kline/Robot 一致性。生产自动晋升门禁继续关闭。
 
 ## 后续自动切主的正确控制面
