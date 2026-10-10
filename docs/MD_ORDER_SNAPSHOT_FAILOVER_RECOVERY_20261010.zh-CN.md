@@ -82,6 +82,16 @@ MDSvr 是 OrderSvr 权威撮合订单簿的派生行情服务。**不要为 MDSv
 - **安全边界**：这是同一 epoch 内的源版本单调规则，不是跨 Order TCP 订阅的来源签名/权限凭证。如果旧源消息在新的 MD epoch 下被错误重放，仍需端到端 source owner/epoch fencing 与 Order commit HEAD 检查；目前不得启用自动主晋升。
 - 2026-10-10 16:25 UTC Mac mini 现网**只读预检查**：256 分区 READY，MDSvrA/B 分别 128 Primary，所有分区至少有 1 个明确指定的恢复候选，三个 MD ZK ephemeral membership 正常，仍运行 `sha-48544e5`。`scripts/check-md-failover-preflight.py` 返回 `decision=BLOCKED`、`canInjectMdPrimaryFault=false`、`canPromote=false`（命令以状态码 2 预期拒绝）。阻断项正是 Order 当前全市场 image source proof、MD CAS/fencing 真实控制器、新 epoch 完整市场证明和 Robot 故障后对账；不包含“必须新增第二个 MD 同步复制副本”。这次没有真实杀节点或更改分区状态。
 
+## MD ZooKeeper 自动 CAS 控制器实际接入（2026-10-11）
+
+- [MDSvr `e80edc7`](https://github.com/bliplink/com.app.dc.mdsvr/commit/e80edc7) 新增 `MdAutomaticFailoverService`：在 `MDStart` 的初始直连 Order 订阅建立后，按配置选择性启动独占 ZK controller。复用既有 `ZkCluster.zk` 会话（关闭控制器不会关闭整个业务 ZK 会话），`ZkPartitionFailoverControlPlane` 提供物理成员 ephemeral 判断、独占 lease、带 `dataVersion` 的版本 CAS。专用 `MdImageRecoveryFailoverController` 负责 `READY → RECOVERING(new epoch) → READY` 两阶段恢复，不能拿 Order 的两个同步持久化副本要求套用到 MD 派生行情。
+- 显式启动参数：`md.cluster.failover.enabled`（**默认 false**）、`md.cluster.failover.nodes`（明确列出 `MDSvrA,MDSvrB,MDSvrC` 等物理节点，不能为单节点）、`md.cluster.failover.pollMillis`（默认 10000ms，允许 1000–60000ms）。轮询 + ZK 成员 watcher 合并触发，在单后台线程运行；正常盘口/撮合线程没有控制器开销，未启用时**不获得租约、不会写入 ZooKeeper**。同一分区的租约不进行双重轮询，CAS 时仍核对当前拥有的租约。
+- **安全证明强制 fail-closed**：运行包中不注入任何默认“全部通过”的 `MdImageRecoveryFailoverController.Safety`。若显式设置 `enabled=true` 但没有独立实现且注入能认证旧主下游发布隔离、Order 当前全部活跃市场 Image/增量连续性的真实 Safety bean，启动立即抛异常，**申请 ZK 租约之前就停止**；不会悄悄启用不安全的自动接管。
+- Maven 全量 MDSvr **117/117 PASS**，新增专项测试验证默认关闭、误开启却无证明时拒绝启动、非法巡检间隔拒绝、物理节点列表规范化和去重；现有 CAS 竞态/双故障/旧主恢复测试继续通过。
+- [GitHub Actions run 38089442724](https://github.com/bliplink/com.app.dc.mdsvr/actions/runs/38089442724) 已触发，最终多架构镜像确认另行记录。现网三 MD 仍为 `sha-48544e5`、三 Order 仍为 `sha-7842df4`，本轮没有拉取替换镜像或杀掉 MD-A。
+- **仍缺**：生产可信 source/fencing attestation provider 实现、全市场 Order HEAD 清单和接收侧旧主 epoch 拒绝机制；控制器虽接上真实 ZK API，但**自动晋升目前没有可用的安全证明，仍未具备开关上线条件**。不要在现网直接设置 enabled=true 验证。
+- 2026-10-10 21:56 UTC Mac 只读预检查仍为 `decision=BLOCKED`，`canInjectMdPrimaryFault=false`。256/256 READY，A/B 128/128 Primary，0 个缺少已分配恢复候选的分区，A/B/C ephemeral membership 均在，旧 MD `sha-48544e5` 未变；新增代码没有让静态拓扑“自动变绿”，门禁仍正确拒绝故障注入。
+
 ## 后续自动切主的正确控制面
 
 1. **故障判断**：只认物理 MD ephemeral membership/session 及租约状态；单次 TCP 断开、健康检查失败和 Docker running 状态不足以认定旧 Primary 已失权。ZooKeeper read-only 状态不授予主身份。
