@@ -240,7 +240,7 @@ ensure_env_defaults() {
     printf 'TRIAL_LIQUIDITY_MARGIN_BUDGET=1000\n' >> "${ENV_FILE}"
   fi
   if ! grep -q '^TRIAL_LIQUIDITY_TAPE_ENABLED=' "${ENV_FILE}"; then
-    printf 'TRIAL_LIQUIDITY_TAPE_ENABLED=false\n' >> "${ENV_FILE}"
+    printf 'TRIAL_LIQUIDITY_TAPE_ENABLED=true\n' >> "${ENV_FILE}"
   fi
   if ! grep -q '^TRIAL_LIQUIDITY_TAPE_CANARY_LOCATION=' "${ENV_FILE}"; then
     printf 'TRIAL_LIQUIDITY_TAPE_CANARY_LOCATION=\n' >> "${ENV_FILE}"

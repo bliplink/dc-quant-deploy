@@ -1,0 +1,37 @@
+name: Validate trial liquidity tape defaults
+on:
+  push:
+    branches: [saas-crypto]
+    paths:
+      - deploy-saas.sh
+      - .env.example
+      - compose.yaml
+      - tests/test_trial_tape_defaults.py
+      - tests/test-trial-liquidity-tape-migration.sh
+      - .github/workflows/validate-trial-tape-defaults.yml
+  pull_request:
+    paths:
+      - deploy-saas.sh
+      - .env.example
+      - compose.yaml
+      - tests/test_trial_tape_defaults.py
+      - tests/test-trial-liquidity-tape-migration.sh
+      - .github/workflows/validate-trial-tape-defaults.yml
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  default-switch-contract:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Shell syntax
+        run: bash -n deploy-saas.sh
+      - name: Fresh install must default to tape enabled
+        run: python3 -m unittest discover -s tests -p test_trial_tape_defaults.py -v
+      - name: Tape database migration contract
+        run: bash tests/test-trial-liquidity-tape-migration.sh
