@@ -13,8 +13,8 @@
       "zh": "cd4b37f29d7a63c7802546d16bb58e0efc2bf9e36a519fd7faa00825157a4dcf"
     },
     "changelog.md": {
-      "en": "2bc93c046fb0f147ef72edd310c517059e3d145f2e16eab9bb0643cb4e10de09",
-      "zh": "5eec260d1016e41832669985959ca7056c7f1c8a203794d1385fc89701e6debf"
+      "en": "2a5dc223142d5d2b6297dc491b3f31c27e6cad8f2529575a70eef85fbce28824",
+      "zh": "512b40e65857ce9f95aaca6108c3769a286eae822db01b5988ab147c6d522233"
     },
     "index.md": {
       "en": "49994f56d34cd2be19393adc3950953bec1ed8dc2bd3fee6d446c1a870a2b389",
@@ -41,6 +41,6 @@
       "zh": "f652393c05138963ce91d4f1dc384fb57ed66be4915a4ec86a002801acee0563"
     }
   },
-  "published_source_sha256": "3138a307360d9c857859945009e29af2a04865acf1bfa06b94b3a8c30cd1a1ca",
+  "published_source_sha256": "b64fd61ed087a159dacd6737a48fde8e14bc673b32a16b3a0c08726d685ba88a",
   "version": 1
 }
