@@ -41,3 +41,21 @@ In `OrderReplicationManager.catchUp`, a lagging replica asks for the journal rec
 - 最新 [Actions #38020361516](https://github.com/bliplink/com.app.dc.ordersvr/actions/runs/38020361516) **SUCCESS**，已发布 GHCR 双架构镜像 `ghcr.io/bliplink/ordersvr:sha-46afba5`（linux/amd64、linux/arm64）；Mac mini 已成功拉取 ARM64 镜像，但**没有替换或重启 dc-saas-ordersvr A/B/C**（仍为 `sha-26b01eb`）。
 - 对现网 P246 原始 archive 进行了只读检查：seq=578110 `STATE_COMMIT` 引用 seq=578109 `STATE_REMOVE`，epoch、eventType、eventId、version 均匹配；这不能替代三副本完整 state hash、Projection watermark 和崩溃恢复一致性验收。
 - 归档回收机制见 [WAL 生命周期设计](ORDER_WAL_SNAPSHOT_ARCHIVE_RETENTION_DESIGN_20261010.zh-CN.md)。只读盘点的 518 个归档目录目前全部保持 HOLD；禁止直接按年龄删除。下一步是隔离集群与受控分区验收、权威数据对账，随后再决定是否启用修复开关。
+
+## 2026-10-10 follow-up: A/B/C raw WAL cross-check (read-only)
+
+- Inspected all three nodes' **256** snapshot partitions: **255** were identical by content; only **P246** differed. This is snapshot comparison only, not live committed-state attestation.
+- Independently compared raw Chronicle CQ journal record encodings by exact `(partition, epoch, seq)` and SHA-256 fingerprints without exposing order IDs, payload, or account secrets.
+- `578109 STATE_REMOVE` matches in primary `OrderSvrA` immutable rollback archive and both `OrderSvrB`/`OrderSvrC` active journals.
+- `578110 STATE_COMMIT` in primary archive matches `OrderSvrB` active journal **byte-for-byte**; it is **absent** in `OrderSvrC` active journal.
+- `578111 SNAPSHOT_BEGIN` on primary `OrderSvrA` active journal matches `OrderSvrB` active journal. `OrderSvrC` lacks this continuation. The old archived seq=578111 is a different historical branch and **must not be replayed** in place of the new active seq=578111.
+- Added `scripts/check-order-rollback-archive-witness.py`, a read-only witness and CI regression. It verifies the archived `STATE_COMMIT` proof, rejects a conflicting replica prefix and duplicate/ambiguous archive, and reports only event types and abbreviated SHA-256 fingerprints. Output always includes `canAutoApplyRepair=false` and `deletionAuthorized=false`.
+- The above narrows the immediate observed missing marker to **Replica C**. It does not justify a live restart: runtime accepted committed watermark, state hash, Projection durability and stable assignment leases must be verified separately, along with a documented rollback path.
+
+Read-only invocation:
+
+```bash
+python3 scripts/check-order-rollback-archive-witness.py \
+  --data-root "$RUNTIME/data" \
+  --partition P246 --epoch 1 --committed-state-seq 578109
+```
