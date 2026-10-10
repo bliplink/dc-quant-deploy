@@ -109,6 +109,32 @@ numChildren = 0
         apply_records(zk, records, "stage-learner", 2, learner="MDSvrC")
         self.assertEqual([2, 2, 1], zk.sizes)
 
+    def test_manual_md_drain_and_promote_never_write_without_durable_source_proof(self):
+        class PoisonZk:
+            def cas_many(self, *args):
+                raise AssertionError("unsafe primary transition reached ZooKeeper")
+        current = assignment()
+        current["learners"] = ["MDSvrC"]
+        draining = {**current, "epoch": 8, "assignmentVersion": 11,
+                    "primary": "MDSvrC", "replica": "MDSvrB",
+                    "replicas": ["MDSvrB", "MDSvrA"], "learners": [],
+                    "state": "RECOVERING"}
+        records = [{"partitionId": current["partitionId"],
+                    "value": current, "desired": draining}]
+        with self.assertRaisesRegex(RuntimeError, "MD_PROMOTION_UNSAFE"):
+            apply_records(PoisonZk(),records,"drain-recovering",source="MDSvrA",target="MDSvrC")
+        promoted={**draining,"state":"READY","assignmentVersion":12}
+        with self.assertRaisesRegex(RuntimeError, "MD_PROMOTION_UNSAFE"):
+            apply_records(PoisonZk(),[{"partitionId": current["partitionId"],
+                        "value":draining,"desired":promoted}],"promote-ready")
+
+    def test_learner_staging_cannot_mutate_other_placement_fields(self):
+        current=assignment()
+        staged={**current,"assignmentVersion":11,"learners":["MDSvrC"]}
+        staged["nodePool"]="foreign"
+        with self.assertRaisesRegex(ValueError, "unexpectedly modified"):
+            validate_transition(current,staged,"stage-learner",learner="MDSvrC")
+
     def test_drain_cli_accepts_exact_partition_option(self):
         args = parser().parse_args(
             [

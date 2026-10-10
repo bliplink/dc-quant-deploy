@@ -54,3 +54,13 @@ Neither MDSvr commit has been deployed to the existing ten-tenant Demo (live pin
 ## OrderSvr committed-checkpoint market manifest → MD read-only comparer
 
 [OrderSvr f2df4a9](https://github.com/bliplink/com.app.dc.ordersvr/commit/f2df4a97eb696cd85526bc6253eea41399302b47) adds a persisted-snapshot read-only market version manifest, with a canonical SHA-256 data-integrity checksum and structural commit boundary validation. [MDSvr 196ad18](https://github.com/bliplink/com.app.dc.mdsvr/commit/196ad18300e82888523add2eaf49c1c2bc96d402) parses the same JSON contract and compares the version map to locally contiguous per-market depth replay evidence. Order/MDSvr full local test runs: 305 and 84; CI builds pending at time of code commit. These are checkpoint-compatible code interfaces **without a running authenticated source→replica transport** and **cannot prove current durable HEAD or promote an MD primary**. See [full contract and missing guarantees](ORDER_MD_COMMITTED_CHECKPOINT_MANIFEST_20261010.zh-CN.md).
+
+## 人工 MD 主节点迁移安全锁（2026-10-10）
+
+现有 `tests/md_cluster_transition_host.py` 和 `tests/md_cluster_roll_drain_host.py` 曾允许仅凭 `MD_MARKET_READY` 日志和 ZK versioned CAS 就把 LEARNER/REPLICA 推进 `RECOVERING → READY`。**日志有市场数据不能证明源提交已经持久化、所有活跃市场完整、另一个同步副本存在或旧主隔离成功。**
+
+现已通过共享 `apply_records` / `require_authenticated_md_promotion_proof` 对人工 `drain-recovering`、`promote-ready` **写操作一律 fail-closed**；`--apply`、`--confirm-root` 也不能绕过。两种操作依然支持仅生成离线计划（默认 dry-run），但在可信证明链完成之前不允许实际写 ZK 切主。现有 `stage-learner` 非投票增加流程继续支持带 ZK dataVersion 的 CAS，并严格校验仅修改 `learners` 和 `assignmentVersion`，绝不能顺带改 epoch、Primary、Replica、NodePool、Placement。
+
+实机只读生成的 C 节点 Learner 规划：**256/256 个分区可规划**，原 Primary 和 epoch 保持不变，**`apply=false`、无实际 ZK 写操作**。规划文件仅保存在 Mac 本地 `~/.opentradingcore/evidence/ten-tenant-soak-20261010/md-c-learner-stage-readonly-plan.json`，可在未来依次校验活跃租户、MD 已就绪的行情分区和可承受的资源负载后，按批次安全加入。当前现网 MD 节点仍是旧版，尚未把 C 上线为所有分区的 Learner。
+
+**这次不增加任何正常下单、撮合或盘口热路径开销。** 所有人工安全判断只在操作员调用 offline CLI 时发生。后续真正实现认证的 durable HEAD 及同步副本权威证明前，不得删去这道 fail-closed 守卫。

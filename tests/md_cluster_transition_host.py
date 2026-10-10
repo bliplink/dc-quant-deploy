@@ -1,10 +1,11 @@
 #!/usr/bin/env python3
-"""Safely stage and promote MDSvr assignments with ZooKeeper version CAS.
+"""Stage non-voting MDSvr learners using version CAS; plan primary changes ONLY.
 
-The command is dry-run by default.  Production writes require both ``--apply``
-and an exact ``--confirm-root`` value.  Each write re-reads the znode, compares
-its payload and dataVersion with the captured plan, performs a versioned set,
-and reads the value back before continuing.
+A stage-learner write requires ``--apply`` and exact ``--confirm-root``;
+manual primary drain/promotion writes remain blocked until trusted durable
+source watermark, synchronized full-market replicas, leader fencing, and
+versioned CAS evidence can be verified. MD_MARKET_READY log lines alone are
+NOT enough to promote a learner or a replica.
 """
 
 import argparse
@@ -157,8 +158,11 @@ def validate_transition(current, desired, operation, learner=None, source=None, 
                 raise ValueError(f"learner staging changed {field}")
         before = set(current.get("learners") or [])
         after = set(desired.get("learners") or [])
-        if after != before | {learner}:
+        if after != before | {learner} or learner in before:
             raise ValueError("learner staging changed an unexpected learner")
+        for key in set(current) | set(desired):
+            if key not in ("learners", "assignmentVersion") and current.get(key) != desired.get(key):
+                raise ValueError(f"learner staging unexpectedly modified {key}")
         return
 
     if operation == "drain-recovering":
@@ -311,7 +315,28 @@ def plan_records(snapshots, desired_rows, operation, **context):
     return records
 
 
+def require_authenticated_md_promotion_proof(operation):
+    """Enforce fail-closed while the trusted Order durable-HEAD certificate,
+    MD C catch-up proof and fenced controller lease are not implemented.
+
+    MD_MARKET_READY logs and ZooKeeper READY metadata are not authoritative.
+    A manual --apply flag MUST NOT bypass the missing replication protocol.
+    Learner staging is not promotion and is still allowed (with version CAS).
+    """
+    if operation not in ("stage-learner", "drain-recovering", "promote-ready"):
+        raise ValueError("unsupported MD transition")
+    if operation != "stage-learner":
+        raise RuntimeError(
+            "MD_PROMOTION_UNSAFE: no authenticated current OrderSvr durable HEAD, "
+            "partition-wide synchronized replica proofs or writable lease/CAS "
+            "fencing controller; only a dry-run plan may be generated"
+        )
+
+
 def apply_records(zk, records, operation, batch_size=16, **context):
+    # Safety before ANY ZooKeeper lookup/mutation: never partially write a
+    # recovering primary assignment that cannot be safely promoted later.
+    require_authenticated_md_promotion_proof(operation)
     if batch_size <= 0:
         raise ValueError("batch size must be positive")
     for record in records:
