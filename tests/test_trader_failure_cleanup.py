@@ -23,6 +23,9 @@ class TraderCleanupTests(unittest.TestCase):
         )
         assert match, "Failure cleanup helper is missing"
         cls.source = match.group(0)
+        key_match = re.search(r"(?ms)^cleanup_test_key\(\) \{\n.*?^\}", text)
+        assert key_match, "API key cleanup helper is missing"
+        cls.key_source = key_match.group(0)
 
     def run_cleanup(self, payload, token="test-only-token", clord="TRADER_WRITE_DEMO01"):
         with tempfile.TemporaryDirectory() as directory:
@@ -64,6 +67,35 @@ cleanup_pending_trader_order
                 json.loads(row) for row in capture.read_text().splitlines()
             ] if capture.exists() else []
             return result, calls
+
+    def test_valid_key_revocation_response_is_not_treated_as_malformed(self):
+        # A Bash parameter default containing an unescaped closing brace
+        # previously appended an extra '}' to otherwise valid JSON.
+        program = self.key_source + r"""
+set -u
+log() { printf '%s\n' "$*" >&2; }
+api_call() { printf '{"code":0}'; }
+code_of() { python3 -c 'import json,sys;print(json.loads(sys.argv[1])["code"])' "$1"; }
+cleanup_test_key trader DUMMY_KEY DUMMY_SESSION
+"""
+        result = subprocess.run(["bash", "-c", program], text=True,
+                                capture_output=True, timeout=6)
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertNotIn("WARN", result.stderr)
+
+    def test_invalid_revocation_response_fails_closed_without_secret_logs(self):
+        program = self.key_source + r"""
+set -u
+log() { printf '%s\n' "$*" >&2; }
+api_call() { printf '{"code":0}}'; }
+code_of() { python3 -c 'import json,sys;print(json.loads(sys.argv[1])["code"])' "$1"; }
+cleanup_test_key trader DUMMY_KEY DUMMY_SESSION
+"""
+        result = subprocess.run(["bash", "-c", program], text=True,
+                                capture_output=True, timeout=6)
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertIn("WARN", result.stderr)
+        self.assertNotIn("DUMMY_KEY", result.stderr)
 
     def test_matching_open_order_is_cancelled_using_server_order_id(self):
         result, calls = self.run_cleanup(fixture())

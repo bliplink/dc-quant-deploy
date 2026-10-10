@@ -48,7 +48,7 @@ class BrokerRunnerReviewTests(unittest.TestCase):
         parent = SRC.with_name("run-tenant-lifecycle-e2e-host.sh").read_text()
         child = SRC.with_name("run-broker-api-e2e-host.sh").read_text()
         self.assertLess(parent.index('broker-runner-image-review.py'),
-                        parent.index('[[ "$(id -u)" -eq 0 ]]'))
+                        parent.index('[[ -O "${ENV_FILE}" ]]'))
         self.assertLess(parent.index('broker-runner-image-review.py'),
                         parent.index('application_a="$(submit_application'))
         self.assertLess(child.index('broker-runner-image-review.py'),

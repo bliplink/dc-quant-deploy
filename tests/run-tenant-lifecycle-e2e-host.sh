@@ -49,7 +49,13 @@ fi
 python3 "${SCRIPT_DIR}/broker-runner-image-review.py" "${reviewed_broker_image}" ||
   die "Isolated tenant lifecycle blocked before any account registration: Broker runner not approved"
 
-[[ "$(id -u)" -eq 0 ]] || die "Run with sudo so ${ENV_FILE} remains protected"
+# Root is not needed when the invoking user owns the protected env file.
+# Never accept a group/world-readable credentials file for a live E2E run.
+if [[ "$(id -u)" -ne 0 ]]; then
+  [[ -O "${ENV_FILE}" ]] || die "Only root or the credentials-file owner may run E2E"
+  env_mode="$(stat -f '%Lp' "${ENV_FILE}" 2>/dev/null || stat -c '%a' "${ENV_FILE}")"
+  [[ "${env_mode}" == "600" ]] || die "Credentials file must be owner-only (0600)"
+fi
 [[ -r "${ENV_FILE}" ]] || die "Cannot read ${ENV_FILE}"
 safe_location "${E2E_LOCATION_A}" || die "E2E_LOCATION_A must be exactly 6 uppercase A-Z/0-9 characters"
 safe_location "${E2E_LOCATION_B}" || die "E2E_LOCATION_B must be exactly 6 uppercase A-Z/0-9 characters"
@@ -289,9 +295,13 @@ cleanup_test_key() {
   else
     payload="$(printf '{"serverName":"LoginSvr","method":"deleteApiKey","content":{"api_key":"%s","cid":"E2E_FAILURE_CLEANUP"}}' "${key}")"
   fi
-  local response
-  if ! response="$(api_call "${payload}" "${token}" 2>/dev/null)" || [[ "$(code_of "${response:-{}}")" != "0" ]]; then
+  local response code
+  if ! response="$(api_call "${payload}" "${token}" 2>/dev/null)"; then
     log "WARN: could not revoke a disposable test key; review isolated acceptance tenant."
+    return 0
+  fi
+  if ! code="$(code_of "${response}" 2>/dev/null)" || [[ "${code}" != "0" ]]; then
+    log "WARN: key revocation rejected or malformed; review isolated acceptance tenant."
   fi
 }
 cleanup_failed_keys() {
