@@ -59,3 +59,14 @@ python3 scripts/check-order-rollback-archive-witness.py \
   --data-root "$RUNTIME/data" \
   --partition P246 --epoch 1 --committed-state-seq 578109
 ```
+
+
+## 2026-10-10 live rollout hazard: 128 primaries per node and strict two-replica ACK
+
+Read-only ZooKeeper scan retrieved all **256** partition assignments and reported **128 Primary partitions on OrderSvrA, 128 on OrderSvrB, and 0 on OrderSvrC**. All 256 ZooKeeper assignments claim `READY`, even though P246's runtime fence repeatedly returns `PARTITION_NOT_READY`; the administrative assignment state therefore **must not** be treated as runtime health.
+
+The deployed A/B/C configuration has `order.cluster.replication.consistencyMode=SYNC_PER_RECORD`, `order.cluster.replication.required=true`, and `order.cluster.failover.minimumLiveSynchronizedReplicas=2`. In current `OrderReplicationManager.replicateToAssignedReplicas`, **every assigned replica** is contacted and its ACK validated; a single unavailable or non-progressing replica can block a synchronous commit. For P246, A has B and C as assigned replicas. Thus simply restarting C (although it has no Primary assignments) could block unrelated partitions while it is unavailable, and restarting A can disturb 128 Primary partitions. Rolling a new Docker image onto these nodes without a controlled maintenance/drain/reconfiguration protocol is **not safe**.
+
+The read-only witness [`scripts/check-order-rollback-archive-witness.py`](../scripts/check-order-rollback-archive-witness.py) (commit [`6946a30`](https://github.com/bliplink/dc-quant-deploy/commit/6946a30f06604448856949b96b0c44f9838b4ada)) confirmed identical archived/replica state at 578109; A archive and B journal matching the `STATE_COMMIT` at 578110; only C missing that marker; A/B both have matching **new branch** `SNAPSHOT_BEGIN` at 578111. Six synthetic positive/negative cases and GH Actions 38024052581 passed. Additionally, an offline Java/Chronicle test mounted the actual A archive **read-only** in a network-isolated Maven container and successfully returned that exact 578110 marker (0 errors, 0 skips); this test is [committed in OrderSvr](https://github.com/bliplink/com.app.dc.ordersvr/commit/769e01b942113b306aae54951e37ca21046f32bf).
+
+**Next live rollout prerequisites**: record a specific write-quiescence or safe CAS membership/drain plan for the 128 Primary assignments per active node; produce a rollback plan including previous GHCR images, unchanged WAL and control-plane epochs; verify no conflicting higher committed state and matching state hash/Projection watermark; then opt in **only P246** with both `archivedCommitRepairEnabled=true` and `archivedCommitRepairPartitions=P246`. Do not disable synchronous ACKs, relax `minimumLiveSynchronizedReplicas`, force ZK `READY`, or delete archived journal files to simplify the rollout. No live OrderSvr nodes were restarted by this investigation.
