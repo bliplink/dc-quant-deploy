@@ -63,6 +63,34 @@ class GwPartitionRouteTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "invalid GW partition location"):
             route.apply_route(envelope(), "../FOREIGN")
 
+    def test_trade_account_balance_routes_by_tenant(self):
+        req = {"serverName": "TradeSvr", "method": "queryAccountBalance", "content": {}}
+        result = route.apply_route(req, "ABC123")
+        self.assertEqual(result["key"], "ABC123")
+        self.assertEqual(result["content"], {})
+
+    def test_trade_position_preserves_customer_identity_for_server_checks(self):
+        req = {"serverName": "TradeSvr", "method": "queryTradePosition",
+               "content": {"location": "ABC123", "userid": "customer-a",
+                           "securityid": "BTCUSDT"}}
+        result = route.apply_route(req, "FALLBACK")
+        self.assertEqual(result["key"], "ABC123")
+        self.assertEqual(result["content"]["userid"], "customer-a")
+
+    def test_trade_rejects_mismatched_or_invalid_routing(self):
+        req = {"serverName": "TradeSvr", "method": "queryAccountBalance",
+               "key": "FOREIGN", "content": {}}
+        with self.assertRaisesRegex(ValueError, "disagrees"):
+            route.apply_route(req, "ABC123")
+        req = {"serverName": "TradeSvr", "method": "queryAccountBalance",
+               "content": {"location": "../../other"}}
+        with self.assertRaisesRegex(ValueError, "invalid GW partition location"):
+            route.apply_route(req, "ABC123")
+        req = {"serverName": "TradeSvr", "method": "queryAccountBalance",
+               "content": None}
+        with self.assertRaisesRegex(ValueError, "content object"):
+            route.apply_route(req, "ABC123")
+
     def test_non_partitioned_services_remain_unmodified(self):
         req = envelope("LoginSvr", {"api_key":"placeholder"})
         self.assertIs(route.apply_route(req, "ABC123"), req)

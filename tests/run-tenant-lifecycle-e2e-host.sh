@@ -84,10 +84,12 @@ trader_password_b="${E2E_TRADER_PASSWORD_B:-$(openssl rand -hex 16)}"
 api_call() {
   local payload="$1" token=""
   if (( $# > 1 )); then token="$2"; fi
-  # Partitioned market/order requests require a top-level GW routing key.
-  # Fail closed on any mismatch instead of reporting a false RBAC result.
+  # Market/order partitions use location, market and symbol. TradeSvr uses
+  # the tenant location itself; in both cases the signed Session determines
+  # authorization, not the untrusted routing key. Reject mismatched keys.
   if [[ "${payload}" == *'"serverName":"OrderSvr"'* ||
-        "${payload}" == *'"serverName":"MDSvr"'* ]]; then
+        "${payload}" == *'"serverName":"MDSvr"'* ||
+        "${payload}" == *'"serverName":"TradeSvr"'* ]]; then
     payload="$(printf '%s' "${payload}" |
       python3 "${SCRIPT_DIR}/gw-partition-route.py" "${E2E_LOCATION_A}")" ||
       die "Could not validate isolated tenant GW partition routing"

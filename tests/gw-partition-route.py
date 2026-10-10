@@ -8,7 +8,8 @@ import json
 import re
 import sys
 
-PARTITIONED_SERVICES = frozenset(("OrderSvr", "MDSvr"))
+MARKET_PARTITIONED_SERVICES = frozenset(("OrderSvr", "MDSvr"))
+TENANT_ROUTED_SERVICES = frozenset(("TradeSvr",))
 LOCATION = re.compile(r"^[A-Z0-9_-]{1,64}$")
 SYMBOL = re.compile(r"^[A-Z0-9_-]{1,40}$")
 MARKET = re.compile(r"^[A-Za-z0-9_-]{1,20}$")
@@ -17,19 +18,30 @@ MARKET = re.compile(r"^[A-Za-z0-9_-]{1,20}$")
 def apply_route(envelope, default_location):
     if not isinstance(envelope, dict):
         raise ValueError("GW request must be a JSON object")
-    if envelope.get("serverName") not in PARTITIONED_SERVICES:
+    service = envelope.get("serverName")
+    if service not in MARKET_PARTITIONED_SERVICES | TENANT_ROUTED_SERVICES:
         return envelope
 
     content = envelope.get("content")
     if not isinstance(content, dict):
         raise ValueError("partitioned GW request requires content object")
     location = content.get("Location") or content.get("location") or default_location
+    if not isinstance(location, str) or not LOCATION.fullmatch(location):
+        raise ValueError("invalid GW partition location")
+
+    # TradeSvr uses one tenant partition, rather than a market/symbol partition.
+    # The key is a routing hint and never an authorization credential.
+    if service in TENANT_ROUTED_SERVICES:
+        supplied = envelope.get("key")
+        if supplied is not None and supplied != location:
+            raise ValueError("GW tenant routing key disagrees with request target")
+        envelope["key"] = location
+        return envelope
+
     symbol = (
         content.get("SecurityID") or content.get("securityID") or content.get("securityid")
     )
     market = content.get("MarketIndicator") or content.get("marketIndicator") or "4"
-    if not isinstance(location, str) or not LOCATION.fullmatch(location):
-        raise ValueError("invalid GW partition location")
     if not isinstance(symbol, str) or not SYMBOL.fullmatch(symbol):
         raise ValueError("partitioned GW request requires SecurityID")
     market = str(market)
