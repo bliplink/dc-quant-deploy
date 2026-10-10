@@ -1,0 +1,21 @@
+name: Validate MD failover promotion gate
+on:
+  push:
+    branches: [saas-crypto]
+    paths: [scripts/check-md-failover-preflight.py, tests/test_md_failover_preflight.py, .github/workflows/validate-md-failover-preflight.yml]
+  pull_request:
+    paths: [scripts/check-md-failover-preflight.py, tests/test_md_failover_preflight.py, .github/workflows/validate-md-failover-preflight.yml]
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  require-proven-failover:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - run: python3 -m py_compile scripts/check-md-failover-preflight.py
+      - run: python3 -m unittest discover -s tests -p 'test_md_failover_preflight.py' -v
