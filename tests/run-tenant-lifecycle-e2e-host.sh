@@ -409,7 +409,10 @@ expect_ok "Trader self-service key signed API login" "${trader_readonly_session}
 [[ "$(printf '%s' "${trader_readonly_session}" | json_eval 'd["data"]["user_id"]')" == "${user_id_a}" ]] ||
   die "Trader signed login changed authoritative user ID"
 trader_readonly_token="$(printf '%s' "${trader_readonly_session}" | json_eval 'd["data"]["token"]')"
-trader_balance="$(api_call '{"serverName":"TradeSvr","method":"queryAccountBalance","content":{}}' "${trader_readonly_token}")"
+# TradeSvr is partitioned by tenant. GW `key` is routing-only; the
+# authenticated API session remains the sole account authorization authority.
+trader_balance_payload="$(printf '{"serverName":"TradeSvr","method":"queryAccountBalance","key":"%s","content":{}}' "${E2E_LOCATION_A}")"
+trader_balance="$(api_call "${trader_balance_payload}" "${trader_readonly_token}")"
 expect_ok "Trader key queries own account balance" "${trader_balance}"
 trader_write_denied_payload="$(printf '{"serverName":"OrderSvr","method":"placeOrder","content":{"SecurityID":"BTCUSDT","MarketIndicator":"4","Side":"BUY","OCType":"OPEN","OrdType":"Limit","TimeInForce":"GTC","OrderQty":"0.001","Price":"60000","ClOrdID":"TRADER_READONLY_BLOCK_%s"}}' "${E2E_SUFFIX}")"
 trader_write_denied="$(api_call "${trader_write_denied_payload}" "${trader_readonly_token}")"
@@ -487,7 +490,7 @@ tenant_api_order_payload='{"serverName":"OrderSvr","method":"queryOpenOrder","co
 tenant_api_order_response="$(api_call "${tenant_api_order_payload}" "${tenant_api_token}")"
 expect_rejected "TenantAPI OrderSvr access" "${tenant_api_order_response}"
 
-tenant_api_balance_payload='{"serverName":"TradeSvr","method":"queryAccountBalance","content":{}}'
+tenant_api_balance_payload="$(printf '{"serverName":"TradeSvr","method":"queryAccountBalance","key":"%s","content":{}}' "${E2E_LOCATION_A}")"
 tenant_api_balance_response="$(api_call "${tenant_api_balance_payload}" "${tenant_api_token}")"
 expect_rejected "TenantAPI TradeSvr access" "${tenant_api_balance_response}"
 

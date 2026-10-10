@@ -419,11 +419,12 @@ ProjectionSvr 已完成 Session authoritative identity 绑定：API 查询要求
 {
   "serverName": "TradeSvr",
   "method": "queryAccountBalance",
+  "key": "YOUR_TENANT_LOCATION",
   "content": {}
 }
 ```
 
-TradeSvr 从 Session 取得 authoritative location/user，不允许 body 切换账户。
+`key` 仅用于将请求路由到租户对应的 TradeSvr 分区；实际账户身份与权限始终来自 `sessionId`。不能通过修改 `key` 或 `content` 切换账户。
 
 ### HTTP 查询持仓
 
@@ -431,6 +432,7 @@ TradeSvr 从 Session 取得 authoritative location/user，不允许 body 切换�
 {
   "serverName": "TradeSvr",
   "method": "queryTradePosition",
+  "key": "YOUR_TENANT_LOCATION",
   "content": {
     "securityid": "BTCUSDT"
   }
