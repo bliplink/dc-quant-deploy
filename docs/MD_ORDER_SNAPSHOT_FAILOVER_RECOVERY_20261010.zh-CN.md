@@ -48,7 +48,7 @@ MDSvr 是 OrderSvr 权威撮合订单簿的派生行情服务。**不要为 MDSv
 - 只在订阅时遍历本节点 `OrderManager.snapshotTrackedMarketBooks`；按 `securityId/marketIndicator/location` 生成实际带租户后缀的 Topic，兼容递归通配订阅，一个 Topic 可以返回多个租户 Image；只允许持有该分区的 Order Primary 产生对应市场 Image，防止 warm replica 重复提供非权威数据。
 - 复用 `PublishMarketDept` 原有完整盘口 DTO/条目序列化，保留 `lastUpdateId`，并要求快照前后读到相同的 OrderBook 序号（最多尝试三次，市场并发变化时返回空等待重订阅）。**这属于有限次内存读取一致性检查，不能代替 Order 日志提交水位或严格原子快照证明。**
 - Mac mini 隔离测试：新增直连订阅 Handler 的 4 项单测（多租户、多个交易对、全价位与数量聚合、空盘口、Primary 过滤和只读无副作用），OrderSvr Maven 全量 **316 项测试，0 失败、0 错误、1 跳过**。本补丁无新增匹配热路径处理、MD 间复制或写盘。
-- GitHub Actions：[OrderSvr run 38063296685](https://github.com/bliplink/com.app.dc.ordersvr/actions/runs/38063296685)，最终构建及 GHCR 镜像须单独核实。Mac Demo 的 Order A/B/C 仍为 `ghcr.io/bliplink/ordersvr:sha-7842df4`，MD A/B/C 仍为 `sha-48544e5`，没有操作现网。
+- GitHub Actions：[OrderSvr run 38063296685](https://github.com/bliplink/com.app.dc.ordersvr/actions/runs/38063296685) **SUCCESS**。远端 GHCR `ghcr.io/bliplink/ordersvr:sha-1ed4777` 已经通过 `docker manifest inspect` 核验，同时具有 `linux/amd64` 和 `linux/arm64`。Mac Demo 的 Order A/B/C 仍为 `ghcr.io/bliplink/ordersvr:sha-7842df4`，MD A/B/C 仍为 `sha-48544e5`，没有操作现网。
 
 ## 后续自动切主的正确控制面
 
