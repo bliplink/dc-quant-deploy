@@ -1,5 +1,7 @@
 # MD 高可用故障验收门禁（2026-10-10）
 
+> 后续调整方向：MD 不复制 Order 风格的持久化行情日志，改为由 Order `subscribeWithImage` 恢复盘口；选主/防双主仍须 ZK CAS 和端到端 fencing。详见 [基于 Order Snapshot 的接管设计与状态](MD_ORDER_SNAPSHOT_FAILOVER_RECOVERY_20261010.zh-CN.md)。当前运行环境的自动接管仍未通过。
+
 ## 实盘结果
 
 十租户稳定观察 601 秒、11/11 样本通过；MDSvrB 负责 128 个主分区，进程中断期间 4/10 租户盘口不可用且 Robot 异常。恢复 B 后约 52 秒恢复十租户，之后连续 301 秒、11/11 样本通过。这证明恢复能力，不证明主节点故障下业务持续可用。详见 `TEN_TENANT_MD_PRIMARY_FAULT_OBSERVATION_20261010.zh-CN.md`。
