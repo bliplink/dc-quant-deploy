@@ -826,8 +826,15 @@ ensure_md_cluster_assignments() {
         node=MDSvrB
         replica=MDSvrA
       fi
-      printf 'create /dc/cluster/mdsvr/partitions/P%03d {"partitionId":"P%03d","epoch":1,"primary":"%s","replica":"%s","state":"READY"}\n' \
-        "${partition}" "${partition}" "${node}" "${replica}"
+      if [[ "${MD_CLUSTER_C_ENABLED:-false}" == "true" ]]; then
+        # C starts as a non-voting LEARNER. Merely being alive does NOT make
+        # its market-image replica eligible for a safe primary promotion.
+        printf 'create /dc/cluster/mdsvr/partitions/P%03d {"partitionId":"P%03d","epoch":1,"primary":"%s","replica":"%s","learners":["MDSvrC"],"state":"READY"}\n' \
+          "${partition}" "${partition}" "${node}" "${replica}"
+      else
+        printf 'create /dc/cluster/mdsvr/partitions/P%03d {"partitionId":"P%03d","epoch":1,"primary":"%s","replica":"%s","state":"READY"}\n' \
+          "${partition}" "${partition}" "${node}" "${replica}"
+      fi
     done
     printf 'quit\n'
   } > "${commands}"
@@ -851,7 +858,7 @@ ensure_md_cluster_assignments() {
     dc-saas-zookeeper zkCli.sh -server "127.0.0.1:${ZOOKEEPER_PORT}" 2>&1)"
   count="$(grep -oE 'P[0-9]{3}' <<<"${output}" | sort -u | wc -l | tr -d ' ')"
   [[ "${count}" == "256" ]] || die "Expected 256 MDSvr assignments, found ${count}."
-  log "ZooKeeper MDSvr assignments are ready: 256 partitions, alternating A/B primaries."
+  log "ZooKeeper MDSvr assignments initialized: 256 A/B primaries; C is non-voting learner when enabled."
 }
 
 wait_for_port() {
