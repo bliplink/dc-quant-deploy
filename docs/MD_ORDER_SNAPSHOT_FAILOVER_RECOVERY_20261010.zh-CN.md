@@ -10,7 +10,7 @@ MDSvr 是 OrderSvr 权威撮合订单簿的派生行情服务。**不要为 MDSv
 
 - `com.app.dc.mdsvr` `15d3af2`：本机在 watched assignment 中获得新的 Primary/epoch 时，合并一次 Order 盘口 `subscribeWithImage` 订阅刷新；对同一 listener 先 unsubscribe 后 subscribe；刷新失败会由已有的 2 秒路由对账任务重试。相同 assignment 不增加额外订阅，也不持久化行情日志。每个市场仍需收到完整 Order Snapshot 才可获得本地发布资格；仅 read-route READY 不代表行情 READY。本地 Maven 全量 **88/88 PASS**。
 - `com.app.common` `46fe54c`：当 ZooKeeper 状态为 `ConnectedReadOnly` 时将其视为不可写控制面，通知断联并禁止基于 `isConnected()` 的 MD 旧主发布授权。相关 ZK/Failover 单测 **22/22 PASS**，GitHub Actions Java Maven PASS、publish SKIPPED。此提交尚未发布到 Maven Central，也尚未被运行镜像引用。
-- MD GitHub Actions 自动构建 `linux/amd64,linux/arm64` 已由 push 触发。**CI 完成与镜像最终 tag/digest、Mac 部署均需单独核验。** 运行中 A/B/C 镜像仍为 `ghcr.io/bliplink/mdsvr:sha-48544e5`。
+- MD GitHub Actions [run 38058127280](https://github.com/bliplink/com.app.dc.mdsvr/actions/runs/38058127280) **PASS**，GHCR 已生成 `ghcr.io/bliplink/mdsvr:sha-15d3af2`；用 `docker manifest inspect` 读取远端清单，确认同时包含 `linux/amd64` 和 `linux/arm64`。本镜像尚未包含待发版的 Common ZooKeeper 修复；运行中 A/B/C 仍为 `ghcr.io/bliplink/mdsvr:sha-48544e5`，未部署新镜像。
 
 ## 后续自动切主的正确控制面
 
