@@ -1,10 +1,10 @@
 #!/usr/bin/env python3
 """Read-only MD promotion preflight; never promotes/changes ZK or restarts nodes.
 
-Two assigned replicas are required for the current generic common
-PartitionFailoverController to promote while keeping a live replica. Even that
-replica topology cannot prove a synchronized market-data state; require
-independent freshness and fencing proof before implementing a writer.
+MD is a derived-state service: one live assigned replica/learner may rebuild
+from the authoritative Order subscribeWithImage snapshot, without MD-to-MD
+WAL replication or two synchronized copies. Fail closed until old-publisher
+fencing and a complete fresh Order image can independently be proven.
 """
 import argparse
 from collections import Counter
@@ -65,7 +65,7 @@ def parse_ephemeral_membership(zk_output):
 
 
 def evaluate(rows,images,members=None):
-    reasons=[];primaries=Counter();single=[];wrong=[];unready=[]
+    reasons=[];primaries=Counter();single=[];without_candidate=[];wrong=[];unready=[]
     members=members or {}
     if len(rows)!=COUNT: raise ValueError('incomplete MD topology')
     for row in rows:
@@ -73,14 +73,18 @@ def evaluate(rows,images,members=None):
         replicas=row.get('replicas')
         if replicas is None or len(replicas)==0: replicas=[row.get('replica')] if row.get('replica') else []
         if not isinstance(replicas,list):replicas=[]
+        learners=row.get('learners') or []
+        if not isinstance(learners,list):learners=[]
         if primary in NODES:primaries[primary]+=1
-        if primary not in NODES or any(n not in NODES for n in replicas) or primary in replicas or len(set(replicas))!=len(replicas):
+        if (primary not in NODES or any(n not in NODES for n in replicas+learners)
+            or primary in replicas+learners or len(set(replicas+learners))!=len(replicas+learners)):
             wrong.append(part)
         if len(replicas)<2:single.append(part)
+        if not (replicas or learners): without_candidate.append(part)
         if row.get('state')!='READY' or not isinstance(row.get('epoch'),int) or row.get('epoch',0)<1:
             unready.append(part)
     if wrong:reasons.append('INVALID_MD_NODE_PLACEMENT:'+','.join(wrong[:5]))
-    if single:reasons.append('INSUFFICIENT_CONFIGURED_REPLICA_SLOTS:'+str(len(single))+'/'+str(COUNT))
+    if without_candidate:reasons.append('MD_NO_ASSIGNED_RECOVERY_CANDIDATE:'+str(len(without_candidate))+'/'+str(COUNT))
     if unready:reasons.append('MD_ASSIGNMENTS_NOT_READY:'+','.join(unready[:5]))
     for node,container in NODES.items():
         detail=images.get(node,{})
@@ -89,7 +93,7 @@ def evaluate(rows,images,members=None):
         if members.get(node) is not True:
             reasons.append('MD_EPHEMERAL_MEMBER_NOT_ATTESTED:'+node)
     # These cannot be asserted by ZooKeeper READY or a live snapshot count.
-    reasons.extend(['MD_DURABLE_SOURCE_WATERMARK_PROOFS_MISSING',
+    reasons.extend(['ORDER_CURRENT_FULL_MARKET_IMAGE_PROOF_MISSING',
                     'MD_PROMOTION_FENCING_AND_CAS_CONTROLLER_NOT_CONFIGURED',
                     'MD_PROMOTED_EPOCH_FULL_MARKET_IMAGE_NOT_ATTESTED',
                     'ROBOT_POST_FAILOVER_ORDER_RECONCILIATION_NOT_ATTESTED'])
@@ -97,9 +101,10 @@ def evaluate(rows,images,members=None):
             'canInjectMdPrimaryFault':False,'canPromote':False,
             'decision':'BLOCKED','blockers':reasons,
             'partitionCount':len(rows),'primaryCounts':dict(sorted(primaries.items())),
-            'singleReplicaPartitionCount':len(single),'unreadyPartitions':len(unready),
+            'singleReplicaPartitionCount':len(single),'withoutRecoveryCandidateCount':len(without_candidate),
+            'unreadyPartitions':len(unready),
             'images':images,'ephemeralMembers':members,
-            'notice':'A READY ZK assignment and a visible replica do not attest a durable complete market image or fencing.'}
+            'notice':'MD need not replicate its own WAL; a live assigned standby alone cannot prove old-owner fencing or a fresh full Order image.'}
 
 def main(argv=None):
     parser=argparse.ArgumentParser(description=__doc__)

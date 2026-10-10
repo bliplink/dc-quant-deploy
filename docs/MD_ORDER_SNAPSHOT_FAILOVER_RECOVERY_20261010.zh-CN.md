@@ -12,6 +12,16 @@ MDSvr 是 OrderSvr 权威撮合订单簿的派生行情服务。**不要为 MDSv
 - `com.app.common` `46fe54c`：当 ZooKeeper 状态为 `ConnectedReadOnly` 时将其视为不可写控制面，通知断联并禁止基于 `isConnected()` 的 MD 旧主发布授权。相关 ZK/Failover 单测 **22/22 PASS**，GitHub Actions Java Maven PASS、publish SKIPPED。此提交尚未发布到 Maven Central，也尚未被运行镜像引用。
 - MD GitHub Actions [run 38058127280](https://github.com/bliplink/com.app.dc.mdsvr/actions/runs/38058127280) **PASS**，GHCR 已生成 `ghcr.io/bliplink/mdsvr:sha-15d3af2`；用 `docker manifest inspect` 读取远端清单，确认同时包含 `linux/amd64` 和 `linux/arm64`。本镜像尚未包含待发版的 Common ZooKeeper 修复；运行中 A/B/C 仍为 `ghcr.io/bliplink/mdsvr:sha-48544e5`，未部署新镜像。
 
+## 新一轮代码验证与实际边界（2026-10-10）
+
+- [MDSvr 3366041](https://github.com/bliplink/com.app.dc.mdsvr/commit/3366041) 新增 `MdImageRecoveryFailoverController`（隔离开发阶段）：一个合法健康 Replica/Learner 可以接管；必须持有控制器租约、旧主发布隔离证明和分区版本 CAS，先进入新 epoch 的 `RECOVERING`，只有拿到 Order 所有活跃市场完整 image 和连续增量证明才能变更为 `READY`。恢复中的候选再次故障时，可更换其他已分配节点并重新增加 epoch。
+- 修改 `MdPartitionRuntime`：在 `RECOVERING` 阶段触发一次合并的 Order Snapshot 重新订阅，不等待 READY；此阶段不开启 read-route 或行情发布权限，并保持正确的重建 epoch。
+- 本地 MDSvr 全量 Maven 单测 **100/100 PASS**，覆盖旧主仍存活、缺少租约、CAS 冲突、完整快照未到、双重故障等。
+- **现状限制**：状态机尚未接入可信的旧主隔离证明、Order 实时全市场库存以及现网控制器线程；不可宣称已完成自动接管。Common 的 ZooKeeper 只读安全修复亦未进入运行镜像。禁止使用永远成功的测试 callback 绕过证据。
+- 部署只读门禁现在认可单个已分配候选，无需 MD 复制日志；但仍返回 `BLOCKED`，直到可信旧主隔离、Order source/freshness、Robot 对账和隔离故障注入全部通过。
+- [Common f4febef](https://github.com/bliplink/com.app.common/commit/f4febef) 加强 ZooKeeper 新会话回调和首次连接返回路径，不会把 `ConnectedReadOnly` 误作为有写授权；Common 的 ZK/分区控制器测试 **23/23 PASS**。仍需正常 Maven Central 版本递增和多服务依赖更新后才能计入生产镜像。
+- 部署只读安全脚本 + CAS/learner 回归 **30/30 PASS**。此次没有对运行中的十租户分区 ZK 写入，没有重新启动 MD-A/B/C 或中断 Order/Trade。
+
 ## 后续自动切主的正确控制面
 
 1. **故障判断**：只认物理 MD ephemeral membership/session 及租约状态；单次 TCP 断开、健康检查失败和 Docker running 状态不足以认定旧 Primary 已失权。ZooKeeper read-only 状态不授予主身份。

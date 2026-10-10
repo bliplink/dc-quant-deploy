@@ -8,9 +8,9 @@
 
 ## 自动晋升为何被禁止
 
-ZooKeeper 实机扫描 256 个 MD 分区：A、B 各持 128 个 Primary；全部分区仅有一个指定 Replica，C 并非合法同步副本。通用 PartitionFailoverController 需要晋升后保留同步副本，还需要控制面租约、CAS fencing、候选同步进度证明。现有 MD 业务尚未实现独立的 durable market watermark、promotion safety proof 及完整 epoch 快照晋升协议。因此 ZK 的 READY 不足以授权自动晋升。
+ZooKeeper 实机扫描 256 个 MD 分区：A、B 各持 128 个 Primary；每分区一个 Replica。**MD 通过 Order 权威 Snapshot 重建，不再要求两份同步持久化副本**；一个合法健康 Replica 或 Learner 可以是接管候选，但存活并不能证明旧主被隔离、或候选拥有 Order 最新全市场快照。独占控制器租约、版本 CAS、旧主 publish fencing、完整行情 image proof 尚未在现网闭环。因此 ZK READY 不足以授权自动晋升。历史通用 PartitionFailoverController 的两个同步副本要求不适用于新 MD 派生状态协议。
 
-只读脚本 `scripts/check-md-failover-preflight.py` 将这些事实转换为机器可读的 BLOCKED 结果。无论分配是否已有两个 replica，它都禁止将静态信息当作安全晋升证明。所有操作仅查询 ZooKeeper 分配与 Docker 镜像，不修改现网。6 项测试覆盖真实拓扑、即使具备多个副本仍不能伪造证明、错误状态和异常节点。
+只读脚本 `scripts/check-md-failover-preflight.py` 接受至少一个已分配的 Replica/Learner 作为可重建候选，仍然对未证明的旧主隔离、完整 Order image、ZK CAS 和 Robot 对账返回 `BLOCKED`。所有操作仅查询 ZooKeeper 分配与 Docker，不修改现网；不再因缺少第二个 MD 同步副本本身阻止派生状态恢复。
 
 ## 已提交的基础机制
 
@@ -18,8 +18,8 @@ MDSvr `1b2ed12` 增加只读路由随角色和 epoch 变更的后台对账：旧
 
 ## 真正解决 P0 的顺序
 
-1. 扩展为三节点真实同步复制；每分区需要两个经过完整 OrderSvr 行情快照、连续事件和 freshness watermark 验证的合法 Replica。不可把 C 的进程存活等同于同步完成。
-2. 构建唯一领导者 ZK 控制器、主节点失联检测、基于已同步状态的 candidate proof、带版本 CAS epoch 晋升和过期主节点发布栅栏。控制面断开必须拒绝写入和过期行情发布。
+1. 为每个分区保留至少一个明确分配、健康的 Replica/Learner；通过 Order Snapshot + 连续增量重建行情，不额外进行 MD→MD WAL 复制。不可把 C 的进程存活等同于已拿到权威 Snapshot。
+2. 构建独占 ZK 控制器租约、旧主失联与接收端 fencing 证明、版本 CAS `READY → RECOVERING(new epoch) → READY`；断联必须拒绝写控制面及过期行情发布。
 3. 晋升时基于权威完整市场快照重新开放 publish；Robot 只有在 OrderSvr 挂单与账户/持仓核对后才能恢复，严禁重复单。
 4. 隔离环境运行持续十租户流量下的故障注入、旧主归队、角色反转、双主检测与持久化成交/账户对账；通过后再进行 Mac 受控故障注入。当前不扩大到 25 租户，不继续触碰 Order/Trade 主节点。
 

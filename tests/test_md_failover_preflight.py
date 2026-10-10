@@ -18,13 +18,15 @@ def images():
     return {n:{'image':gate.REQUIRED_IMAGE,'running':True} for n in gate.NODES}
 
 class MdFailoverPreflightTests(unittest.TestCase):
-    def test_current_primary_128_128_no_legal_quorum_and_remains_blocked(self):
+    def test_current_primary_128_128_one_candidate_per_partition_remains_blocked(self):
         outcome=gate.evaluate(assignments(),images())
         self.assertEqual(outcome['primaryCounts'],{'MDSvrA':128,'MDSvrB':128})
         self.assertEqual(outcome['singleReplicaPartitionCount'],256)
         self.assertFalse(outcome['canPromote'])
         self.assertFalse(outcome['canInjectMdPrimaryFault'])
-        self.assertTrue(any('INSUFFICIENT' in b for b in outcome['blockers']))
+        self.assertEqual(outcome['withoutRecoveryCandidateCount'],0)
+        self.assertFalse(any('INSUFFICIENT_CONFIGURED_REPLICA_SLOTS' in b for b in outcome['blockers']))
+        self.assertIn('ORDER_CURRENT_FULL_MARKET_IMAGE_PROOF_MISSING',outcome['blockers'])
     def test_even_full_three_node_placement_cannot_fake_watermark(self):
         rows=assignments()
         for row in rows:
@@ -32,7 +34,23 @@ class MdFailoverPreflightTests(unittest.TestCase):
         outcome=gate.evaluate(rows,images())
         self.assertEqual(outcome['singleReplicaPartitionCount'],0)
         self.assertEqual(outcome['decision'],'BLOCKED')
-        self.assertIn('MD_DURABLE_SOURCE_WATERMARK_PROOFS_MISSING',outcome['blockers'])
+        self.assertIn('ORDER_CURRENT_FULL_MARKET_IMAGE_PROOF_MISSING',outcome['blockers'])
+    def test_no_assigned_replica_or_learner_blocks_recovery(self):
+        rows=assignments()
+        rows[0]['replicas']=[];rows[0]['replica']=None
+        outcome=gate.evaluate(rows,images())
+        self.assertEqual(outcome['withoutRecoveryCandidateCount'],1)
+        self.assertTrue(any('MD_NO_ASSIGNED_RECOVERY_CANDIDATE:1/256' in b
+                            for b in outcome['blockers']))
+
+    def test_valid_learner_counts_as_rebuild_candidate_without_extra_md_replica(self):
+        rows=assignments()
+        rows[0]['replicas']=[];rows[0]['replica']=None
+        rows[0]['learners']=['MDSvrC']
+        outcome=gate.evaluate(rows,images())
+        self.assertEqual(outcome['withoutRecoveryCandidateCount'],0)
+        self.assertIn('ORDER_CURRENT_FULL_MARKET_IMAGE_PROOF_MISSING',outcome['blockers'])
+
     def test_detects_stale_epoch_or_unroutable_state(self):
         rows=assignments();rows[19]['state']='RECOVERING';rows[2]['epoch']=0
         self.assertEqual(gate.evaluate(rows,images())['unreadyPartitions'],2)
