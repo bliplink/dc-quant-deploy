@@ -511,6 +511,8 @@ write_md_config() {
 serverKey=SERVER.${node}
 orderServerKey=SERVER.OrderSvr
 md.cluster.defaultMarketIndicator=4
+# Keep diagnostic replay bookkeeping OFF every hot market update by default.
+md.cluster.replayWitness.enabled=false
 log4j.file=./config/log4j.ini
 log4j.thread=1
 log4j.writeTime=true
@@ -669,6 +671,9 @@ order.cluster.snapshotDir=../../data/${node}/snapshot
 order.cluster.snapshot.barrier.enabled=true
 order.cluster.snapshot.barrier.required=true
 order.cluster.snapshot.barrier.acquireTimeoutMillis=10000
+# Explicit operator-only HEAD review; never poll per quote/order.
+order.cluster.mdCheckpointHeadReview.enabled=false
+order.cluster.mdCheckpointHeadReview.minIntervalMillis=60000
 order.cluster.snapshot.promotionBarrier.required=true
 order.cluster.snapshot.periodic.enabled=${ORDER_CLUSTER_PERIODIC_SNAPSHOT_ENABLED}
 order.cluster.snapshot.periodic.pollMillis=${ORDER_CLUSTER_PERIODIC_SNAPSHOT_POLL_MILLIS}

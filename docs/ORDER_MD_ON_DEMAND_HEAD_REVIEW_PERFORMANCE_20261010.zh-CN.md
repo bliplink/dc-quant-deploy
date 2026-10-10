@@ -28,3 +28,11 @@ order.cluster.mdCheckpointHeadReview.minIntervalMillis=60000
 该 `HEAD` 只是某一观测瞬间该**本地副本**的 WAL 头与已持久化检查点吻合，既没有独立确认远端的 durable 两副本 ACK、Projection watermark 和另一交易节点，也没有证明所有市场已同步到 MD 的持久化状态。**绝不能单凭这个结果触发 ZooKeeper 主节点 CAS 晋升。** 真正 MD HA 仍需要可信当前源 manifest 签名/鉴权、C learner 追平、两个同步副本、源租约 fencing、旧主归队与隔离故障测试。
 
 当前 10 租户 Demo 不启用该开关、不升级 OrderSvr/MD 节点、不扩大到 25/200 租户或额外故障注入，等待完整 HA 协议通过隔离环境的回归。
+
+## MDSvr 高频增量负担治理
+
+[MDSvr 6795e4e](https://github.com/bliplink/com.app.dc.mdsvr/commit/6795e4eab8c7b706a153bb1f1dabb386a9dd4316) 把 `DepthBookFacade` 的额外 `MdDepthReplayWitness` 从**无条件逐笔更新**调整为 `md.cluster.replayWitness.enabled=false`（缺省），只在专门进行副本追平诊断/隔离验收时显式启用。关闭状态下，不会为每条 depth diff 构造 `location\u001fmarket\u001fsecurity` 追踪键，不更新 replayMap、不进入 replay 观测锁、不计算 replay 时戳。新增回归直接注入完整快照与增量，检查 witness marketKeys 仍然是空集合；开启状态下的真实集成测试保持通过。MDSvr 全量 **85 项 PASS、0 failures、0 errors**。
+
+注意：该功能仅关闭**新增的诊断观测**，不会关闭主交易系统必需的盘口增量连续性校验、过期主身份拒绝或其他行情发布安全栅栏。关闭时使用快照匹配审核接口会显式失败，不能返回伪造的“已追平”。
+
+`generate-saas-configs.sh` 已显式写入 `order.cluster.mdCheckpointHeadReview.enabled=false`、`order.cluster.mdCheckpointHeadReview.minIntervalMillis=60000` 与 `md.cluster.replayWitness.enabled=false`；新增 3 项配置校验，避免未来一键重部署错误开启。正常 SaaS 环境保持交易热路径不被诊断工作持续占用。
