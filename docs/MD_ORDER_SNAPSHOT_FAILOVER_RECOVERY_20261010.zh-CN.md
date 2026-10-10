@@ -24,6 +24,15 @@ MDSvr 是 OrderSvr 权威撮合订单簿的派生行情服务。**不要为 MDSv
 - [MDSvr GitHub Actions run 38060064795](https://github.com/bliplink/com.app.dc.mdsvr/actions/runs/38060064795) **PASS**；远端 `ghcr.io/bliplink/mdsvr:sha-3366041` 清单确认包含 `linux/amd64` 与 `linux/arm64`。该镜像没有集成未发版的 Common `f4febef`，控制器仍未接到真实证明通道，因此不得替换现网 MD。
 - 2026-10-10 14:35 UTC Mac 实机只读 preflight：256/256 READY，A/B Primary 各 128，`withoutRecoveryCandidateCount=0`，三 MD ephemeral membership 均有效。**decision=BLOCKED**，尚缺 Order 当前完整市场 image proof、已配置/认证的 CAS fencing 控制器、新 epoch 的市场就绪证明，以及 Robot 对账。运行镜像仍是 `sha-48544e5`。
 
+## MD 盘口断档自动恢复补丁（2026-10-10）
+
+- [MDSvr `1745b42`](https://github.com/bliplink/com.app.dc.mdsvr/commit/1745b42)：当 Order depth diff 发现缺失前驱序号或尚未建立完整盘口时，先撤销该市场发布 READY，再异步触发一次 `subscribeWithImage`，主动申请新的 Order 完整 Image，不再只被动等待新行情。
+- `MdDepthGapRecovery`：一个 daemon 任务合并所有处于断档状态的市场重订阅；初次立即请求，失败后退避从 5 秒到最多 60 秒；同一市场故障未修复期间只打一次断档告警。成功安装完整 Image 后解除该市场的恢复请求。正常无断档时不运行定时任务、不新增磁盘 I/O 或 MD 间复制。若 Order/GW 源端长期不返回真正完整新 Image，市场仍会保持不就绪，不能伪造 READY。
+- `LocalDepthBook`：没有 Snapshot 序号或盘口 entries 为 null 时拒绝 Image；没有已安装完整 Image 时拒绝仅靠增量建立盘口；兼容原有正常 applySnapshot 调用。限频和并发竞争测试覆盖同时断档 1000 次、多个市场合并请求与失败重试。
+- Mac mini 隔离 Maven 测试 **106/106 PASS**，代码提交并推送 `saas-crypto`，GitHub Actions [run 38061084918](https://github.com/bliplink/com.app.dc.mdsvr/actions/runs/38061084918) 由 push 触发。此处不以 Actions 启动代替镜像构建成功；需另行核验 GHCR digest/双架构。
+- **依然未完成的关键证明**：Order `PublishMarketDept` 的完整盘口消息由订单簿变化及 `enableFullOrderBookOnChange` / 1 秒节流控制产生。仅调用 Gateway 的 `subscribeWithImage` 并不从代码上证明 Image 一定是订阅时刻的 Order 当前 HEAD。真正自动选主前，必须确认 Gateway 的缓存/重放语义，建立当前完整市场库存、Snapshot 与后续深度增量连续性证明，以及旧主接收侧 fencing。不能仅以重订阅成功替代全部市场的权威新鲜度验证。
+- Mac Demo 三个 MD 仍保留旧的 `sha-48544e5`，未注入故障或切换现网分区；持续租户验收与受控切主另行进行。
+
 ## 后续自动切主的正确控制面
 
 1. **故障判断**：只认物理 MD ephemeral membership/session 及租约状态；单次 TCP 断开、健康检查失败和 Docker running 状态不足以认定旧 Primary 已失权。ZooKeeper read-only 状态不授予主身份。
