@@ -137,7 +137,20 @@ expect_ok() {
   local name="$1" response="$2" code
   code="$(code_of "${response}")"
   # Never echo entire gateway responses: key-creation responses contain Secret Key.
-  [[ "${code}" == "0" ]] || die "${name} failed (GW code=${code})"
+  if [[ "${code}" != "0" ]]; then
+    # Emit only a small fixed allowlist of public error classes, never raw
+    # responses (which may contain API secrets or session credentials).
+    local reason
+    reason="$(printf '%s' "${response}" | python3 -c '
+import json,sys
+try: message=str(json.load(sys.stdin).get("msg", ""))
+except (ValueError, TypeError): message="MALFORMED_RESPONSE"
+allowed={"INTERNAL_ERROR", "USER_SESSION_NOTEXIST", "AUTHENTICATION_FAILED",
+         "authenticated tenant identity is required", "customer account validation failed"}
+print(message if message in allowed else "UNCLASSIFIED")
+' 2>/dev/null)" || reason="MALFORMED_RESPONSE"
+    die "${name} failed (GW code=${code}, public_error=${reason})"
+  fi
   log "PASS: ${name}"
 }
 
