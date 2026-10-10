@@ -58,6 +58,14 @@ MDSvr 是 OrderSvr 权威撮合订单簿的派生行情服务。**不要为 MDSv
 - GitHub Actions：[MDSvr run 38064888450](https://github.com/bliplink/com.app.dc.mdsvr/actions/runs/38064888450) **SUCCESS**；GHCR 镜像 `ghcr.io/bliplink/mdsvr:sha-ae57a5e` 已通过远端 manifest 核验，包含 `linux/amd64` 和 `linux/arm64`。现网 MD 仍为 `sha-48544e5`，本轮没有执行线上镜像替换或故障注入。
 - 仍需补全：Order 订阅时完整 Image 与随后连续增量的正确时序（尤其 Order 分区切主/订阅重建）；Controller 的独占租约 + CAS + 双主发布端 fencing；Order 全市场库存清单和恢复后的 Trade/Kline/Robot 一致性。生产自动晋升门禁继续关闭。
 
+## gateway-api 初始 Snapshot 与实时消息竞态修复（2026-10-10）
+
+- 核对 gateway-api 3.0.6 TCP 源码 `AbstractApiProxy.OnSubscribe`：先 `topicManager.add(sessionid,topic)` 建立实时订阅，再通过 `OnRequestReply(...snapshot...)` 返回 OrderSvr 的初始 Image。故障重连时旧 Snapshot 和较新实时增量可能交错；MD 必须由 epoch/序号拒绝错误的前缀，**不需要 MD 之间复制盘口日志**。
+- [MDSvr `c5c8c6d`](https://github.com/bliplink/com.app.dc.mdsvr/commit/c5c8c6d)：新增 `LocalDepthBook.applyDeltaForEpoch()`，必须先取得同 epoch 的完整 Order Image 才允许使用后续增量；旧 epoch 的连续序号也不能绕过。对延迟送达的同 epoch **过旧初始 Image**，如果当前已经持有更新的完整盘口 + 连续增量，予以忽略且不撤销该市场 READY，不再错误地停盘。测试覆盖跨 epoch、延迟快照与实际 `DepthBookFacade` 的 publish fence。
+- [OrderSvr `6fbeee7`](https://github.com/bliplink/com.app.dc.ordersvr/commit/6fbeee7)：`OrderMarketImageHandler` 在生成初始完整盘口前后均检查当前物理分区 PRIMARY 身份，且要求 ZK **可写**连接；中途角色被撤销或失去 ZK，绝不发送原 Primary 的陈旧快照。仅在 gateway-api 发起订阅时进行检查，不进入下单/撮合/常规行情发布热路径。
+- Mac 隔离 Maven 全量回归：MDSvr **112/112 PASS**；OrderSvr **317 tests、0 failures、0 errors、1 skipped**。GitHub Actions：[MD run 38066179657](https://github.com/bliplink/com.app.dc.mdsvr/actions/runs/38066179657)，[Order run 38066242279](https://github.com/bliplink/com.app.dc.ordersvr/actions/runs/38066242279)。**最终镜像构建和 GHCR 多架构清单须另外核验，不把本地测试通过误报为已部署。**
+- 当前仍非“生产级可自动晋升”证明：Order 内存读到的 `lastUpdateId` 与两侧价位快照在撮合并发更新期间尚未具备严格原子性承诺；Gateway TCP 快照与推送没有经认证的单一 stream watermark，所有市场实时库存证明、持久 Order 接收侧 fencing/租约与 Robot 订单重新核对也尚未闭环。故障注入门禁继续 **BLOCKED**，现网 MD/Order 镜像保持原版。
+
 ## 后续自动切主的正确控制面
 
 1. **故障判断**：只认物理 MD ephemeral membership/session 及租约状态；单次 TCP 断开、健康检查失败和 Docker running 状态不足以认定旧 Primary 已失权。ZooKeeper read-only 状态不授予主身份。
