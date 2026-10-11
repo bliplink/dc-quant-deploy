@@ -16,6 +16,12 @@
 - 正式版本锁 release/saas-crypto-images.env 仍指向旧版 Order sha-7842df4、Trade sha-e5cebdd2aa191e98a3128886634cd3b5eca6d3e6、MD sha-48544e5。Mac 安装程序会强制应用这个锁。现在直接清空再执行原一键安装，只会装回旧版，不符合从新程序开始验证的目标。
 - **目前没有冷重置，也没有替换线上镜像。** 不通过其他发布脚本或替代路径规避现有发布安全检查。
 
+## 新增自动版本对账门禁
+
+运行 `python3 scripts/check-demo-release-source-lock.py --release-lock release/saas-crypto-images.env --order-source <Order源码目录> --trade-source <Trade源码目录> --md-source <MD源码目录>`，只读核对目标源码**已提交的完整 commit SHA**与不可变 GHCR 镜像标签。遇到浮动标签、Git 未提交源码、仓库名称或版本不一致均 BLOCKED；这一步不触碰 Docker 及运行目录。配套 `tests/test_demo_release_source_lock.py` 六项通过。它只是**来源版本证明**，不替代 GHCR 镜像真实存在/amd64+arm64 manifest、依赖版本、Compose 和业务回归。
+
+2026-10-11 当前正式镜像锁的 Order、Trade、MD 与待发布的三个源码 commit **均不匹配（3 项阻断）**。在官方流程完成最新版镜像发布和原锁更新之前，不要执行冷清空操作。
+
 ## 后续唯一发布路径
 
 1. 精确锁定 Common、com.app.dc、Order、Trade、MD 五个提交，编译并跑全量自动测试。
