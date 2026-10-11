@@ -791,8 +791,8 @@ ensure_trade_cluster_assignments() {
     printf 'create /dc/cluster/tradesvr/partitions x\n'
     for ((partition=0; partition<256; partition++)); do
       if (( partition % 2 == 0 )); then node=TradeSvrA; replica=TradeSvrB; else node=TradeSvrB; replica=TradeSvrA; fi
-      printf 'create /dc/cluster/tradesvr/partitions/P%03d {"partitionId":"P%03d","epoch":1,"primary":"%s","replica":"%s","state":"READY"}\n' \
-        "${partition}" "${partition}" "${node}" "${replica}"
+      printf 'create /dc/cluster/tradesvr/partitions/P%03d {"partitionId":"P%03d","epoch":1,"assignmentVersion":1,"protocolVersion":3,"primary":"%s","replica":"%s","replicas":["%s"],"learners":[],"nodePool":"trade-ab","state":"READY"}\n' \
+        "${partition}" "${partition}" "${node}" "${replica}" "${replica}"
     done
     printf 'quit\n'
   } > "${commands}"

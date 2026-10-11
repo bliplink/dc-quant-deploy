@@ -24,6 +24,7 @@ ZK_SERVER="${TRADE_CLUSTER_ZK_SERVER:-127.0.0.1:${ZOOKEEPER_PORT:-32181}}"
 [[ "${TRADE_CLUSTER_ENABLED:-false}" == "true" ]] ||
   die "TRADE_CLUSTER_ENABLED=true is required"
 [[ "${PARTITION_ID}" =~ ^P[0-9]{3}$ ]] || die "Invalid partition id: ${PARTITION_ID}"
+[[ "${TRADE_CLUSTER_UPGRADE_LEGACY:-false}" == true || "${TRADE_CLUSTER_UPGRADE_LEGACY:-false}" == false ]] || die "Invalid TRADE_CLUSTER_UPGRADE_LEGACY flag"
 
 for container in dc-saas-zookeeper dc-saas-mysql dc-saas-tradesvr dc-saas-tradesvr-b dc-saas-projectionsvr; do
   [[ "$(docker inspect --format '{{.State.Running}}' "${container}" 2>/dev/null || true)" == "true" ]] ||
@@ -61,7 +62,9 @@ PY
 switch_and_verify() {
   local source="$1" target="$2" target_container="$3" plan="$4"
   log "Switching ${PARTITION_ID}: ${source} -> ${target}"
-  python3 "${SCRIPT_DIR}/trade_cluster_transition_host.py"     --zk-container "${ZK_CONTAINER}"     --zk-server "${ZK_SERVER}"     --partition-root "${PARTITION_ROOT}"     switch-primary     --from-node "${source}"     --to-node "${target}"     --partition "${PARTITION_ID}"     --limit 1     --batch-size 1     --plan "${plan}"     --apply     --confirm-root "${PARTITION_ROOT}"
+  local legacy_args=()
+  [[ "${TRADE_CLUSTER_UPGRADE_LEGACY:-false}" == true ]] && legacy_args=(--upgrade-legacy)
+  python3 "${SCRIPT_DIR}/trade_cluster_transition_host.py"     --zk-container "${ZK_CONTAINER}"     --zk-server "${ZK_SERVER}"     --partition-root "${PARTITION_ROOT}"     switch-primary     --from-node "${source}"     --to-node "${target}"     --partition "${PARTITION_ID}"     --limit 1     --batch-size 1     --plan "${plan}"     --apply     --confirm-root "${PARTITION_ROOT}" "${legacy_args[@]}"
 
   python3 "${SCRIPT_DIR}/trade_cluster_transition_host.py"     --zk-container "${ZK_CONTAINER}"     --zk-server "${ZK_SERVER}"     --partition-root "${PARTITION_ROOT}"     verify-ready     --plan "${plan}"     --target-node "${target}"     --target-container "${target_container}"
 }

@@ -62,8 +62,24 @@ def validate_current(row: dict) -> None:
         raise ValueError(f"primary/replica overlap: {row}")
 
 
-def switch_assignment(current: dict, source: str, target: str) -> dict:
-    validate_current(current)
+def is_legacy_assignment(row: dict) -> bool:
+    """Only the exact initial deploy shape may be upgraded by an explicit CAS."""
+    return (set(row) == {"partitionId", "epoch", "primary", "replica", "state"}
+            and int(row.get("epoch", 0)) == 1)
+
+
+def switch_assignment(current: dict, source: str, target: str, allow_legacy: bool = False) -> dict:
+    legacy = allow_legacy and is_legacy_assignment(current)
+    if legacy:
+        if current.get("state") != "READY":
+            raise ValueError("legacy migration requires an initially READY partition")
+        current = {**current, "assignmentVersion": 0, "protocolVersion": 3,
+                   "replicas": [current["replica"]], "learners": [],
+                   "placementGroup": "", "nodePool": "trade-ab"}
+        # The first CAS transitions epoch and upgrades the metadata atomically.
+        validate_current({**current, "assignmentVersion": 1})
+    else:
+        validate_current(current)
     if source == target or source not in DEFAULT_NODES or target not in DEFAULT_NODES:
         raise ValueError("source and target must be distinct TradeSvrA/TradeSvrB nodes")
     if current.get("primary") != source:
@@ -151,7 +167,8 @@ def command_switch(args, zk: DockerZk) -> None:
     records = []
     for partition_id in selected:
         snapshot = by_id[partition_id]
-        desired = switch_assignment(snapshot["value"], args.from_node, args.to_node)
+        desired = switch_assignment(snapshot["value"], args.from_node, args.to_node,
+                                    allow_legacy=args.upgrade_legacy)
         records.append({**snapshot, "desired": desired})
 
     save_plan(args.plan, records, args.from_node, args.to_node, args.partition_root)
@@ -248,6 +265,8 @@ def parser() -> argparse.ArgumentParser:
     switch.add_argument("--plan", required=True)
     switch.add_argument("--apply", action="store_true")
     switch.add_argument("--confirm-root")
+    switch.add_argument("--upgrade-legacy", action="store_true",
+                        help="opt-in CAS upgrade of exact initial epoch-1 legacy assignment")
 
     verify = sub.add_parser("verify-ready")
     verify.add_argument("--plan", required=True)

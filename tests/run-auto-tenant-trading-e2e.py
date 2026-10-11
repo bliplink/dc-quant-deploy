@@ -12,6 +12,7 @@ import subprocess
 import sys
 import time
 import urllib.request
+import zlib
 from decimal import Decimal
 
 
@@ -245,6 +246,45 @@ def main():
     if Decimal(executions[0][1]) != Decimal("0.0001"):
         raise RuntimeError("Opening execution projection mismatch: %s" % executions)
     log("Opening order %s filled 0.0001 BTC; execution and long position agree." % opening_id)
+
+    if os.environ.get("AUTO_TENANT_HELD_TRADE_REVERSAL") == "true":
+        # Deliberately keep the real user position open through two Trade
+        # promotions. Normal auto-tenant E2E behavior remains unchanged.
+        partition = "P%03d" % (zlib.crc32(LOCATION.encode()) % 256)
+        other_locations = [row[0] for row in sql(
+            "SELECT location FROM dc_tenant WHERE location<>'%s' AND status IN ('ACTIVE','TRIAL')" % LOCATION)]
+        if any(zlib.crc32(name.encode()) % 256 == int(partition[1:]) for name in other_locations):
+            raise RuntimeError("Refusing Trade CAS on a partition shared with other active tenants")
+        if "cluster-dev-local-" not in os.environ.get("TRADESVR_TAG", ""):
+            raise RuntimeError("Held-position reversal requires the local Demo image lock")
+        evidence_root = os.environ["TRADE_CLUSTER_EVIDENCE_ROOT"]
+        os.makedirs(evidence_root, mode=0o700, exist_ok=True)
+        # A failed HA gate can leave the test position held. Preserve recovery
+        # credentials locally with 0600 permissions, never emit them to logs.
+        recovery_path = os.path.join(evidence_root, "trade-held-" + RUN + ".recovery.json")
+        fd = os.open(recovery_path, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
+        with os.fdopen(fd, "w") as stream:
+            json.dump({"location": LOCATION, "username": TRADER,
+                       "traderPassword": TRADER_PASSWORD, "userId": USER_ID}, stream)
+        before_trade = call("TradeSvr", "queryTradePosition",
+                            {"userid": USER_ID, "location": LOCATION, "securityid": "BTCUSDT"},
+                            token, key=LOCATION)
+        if not before_trade:
+            raise RuntimeError("Held position absent from Trade API before switch")
+        command_env = os.environ.copy()
+        command_env["TRADE_CLUSTER_ROLE_REVERSAL_PARTITION"] = partition
+        command_env["TRADE_CLUSTER_UPGRADE_LEGACY"] = "true"
+        log("Holding 0.0001 BTC during Trade role reversal on " + partition)
+        subprocess.run(["bash", os.path.join(os.path.dirname(__file__),
+                         "run-trade-cluster-role-reversal-host.sh")],
+                       env=command_env, check=True, timeout=750)
+        after_trade = call("TradeSvr", "queryTradePosition",
+                           {"userid": USER_ID, "location": LOCATION, "securityid": "BTCUSDT"},
+                           token, key=LOCATION)
+        if not after_trade or trader_position() != (Decimal("0.0001"), Decimal(0)):
+            raise RuntimeError("Trade state/DB position differs after role reversal")
+        log("PASS held 0.0001 BTC throughout Trade A/B/A recovery on " + partition)
+        os.unlink(recovery_path)
 
     closing_id = "TRIAL-CLOSE-" + RUN
     for attempt in range(5):

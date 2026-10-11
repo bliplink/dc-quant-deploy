@@ -31,6 +31,23 @@ class TradeClusterTransitionHostTest(unittest.TestCase):
         self.assertEqual(["TradeSvrA"], desired["replicas"])
         self.assertEqual("READY", desired["state"])
 
+    def test_initial_legacy_requires_explicit_opt_in(self):
+        legacy = {"partitionId": "P027", "epoch": 1, "primary": "TradeSvrA",
+                  "replica": "TradeSvrB", "state": "READY"}
+        with self.assertRaisesRegex(ValueError, "assignmentVersion"):
+            switch_assignment(legacy, "TradeSvrA", "TradeSvrB")
+        updated = switch_assignment(legacy, "TradeSvrA", "TradeSvrB", allow_legacy=True)
+        self.assertEqual(2, updated["epoch"])
+        self.assertEqual(1, updated["assignmentVersion"])
+        self.assertEqual(3, updated["protocolVersion"])
+        self.assertEqual("TradeSvrB", updated["primary"])
+
+    def test_migration_rejects_noninitial_legacy(self):
+        legacy = {"partitionId": "P027", "epoch": 2, "primary": "TradeSvrA",
+                  "replica": "TradeSvrB", "state": "READY"}
+        with self.assertRaisesRegex(ValueError, "assignmentVersion"):
+            switch_assignment(legacy, "TradeSvrA", "TradeSvrB", allow_legacy=True)
+
     def test_switch_rejects_non_replica_target(self):
         row = self.current()
         row["replica"] = "TradeSvrA"
