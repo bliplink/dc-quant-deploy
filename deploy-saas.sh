@@ -256,21 +256,26 @@ ensure_env_defaults() {
   fi
   ensure_generated_env_secret ROBOT_RUNTIME_API_KEY
   ensure_generated_env_secret ROBOT_RUNTIME_API_SECRET
-  migrate_env_value GW_IMAGE_REPOSITORY dc-saas/gw ghcr.io/bliplink/gw
-  migrate_env_value LOGINSVR_IMAGE_REPOSITORY dc-saas/loginsvr ghcr.io/bliplink/loginsvr
-  migrate_env_value MDSVR_IMAGE_REPOSITORY dc-saas/mdsvr ghcr.io/bliplink/mdsvr
-  migrate_env_value APSSVR_IMAGE_REPOSITORY dc-saas/apssvr ghcr.io/bliplink/apssvr
-  migrate_env_value ORDERSVR_IMAGE_REPOSITORY dc-saas/ordersvr ghcr.io/bliplink/ordersvr
-  migrate_env_value TRADESVR_IMAGE_REPOSITORY dc-saas/tradesvr ghcr.io/bliplink/tradesvr
-  migrate_env_value LIQSVR_IMAGE_REPOSITORY dc-saas/liqsvr ghcr.io/bliplink/liqsvr
-  migrate_env_value MANAGERSVR_IMAGE_REPOSITORY dc-saas/managersvr ghcr.io/bliplink/managersvr
-  migrate_env_value ADMINSVR_IMAGE_REPOSITORY dc-saas/adminsvr ghcr.io/bliplink/adminsvr
-  migrate_env_value ROBOTSVR_IMAGE_REPOSITORY dc-saas/robotsvr ghcr.io/bliplink/robotsvr
-  migrate_env_value PROJECTIONSVR_IMAGE_REPOSITORY dc-saas/projectionsvr ghcr.io/bliplink/projectionsvr
-  migrate_env_value PROJECTIONSVR_IMAGE_REPOSITORY ghcr.io/bliplink/com-app-dc-projectionsvr ghcr.io/bliplink/projectionsvr
-  migrate_env_value TRADE_WEB_IMAGE_REPOSITORY dc-saas/dc-trade-web ghcr.io/bliplink/dc-saas-trade-web
-  migrate_env_value TRADE_WEB_IMAGE_REPOSITORY ghcr.io/bliplink/dc-trade-web ghcr.io/bliplink/dc-saas-trade-web
-  migrate_env_value TRADE_WEB_IMAGE_REPOSITORY ghcr.io/skt-walter/dc-trade-web ghcr.io/bliplink/dc-saas-trade-web
+  # Never rewrite an explicitly verified Mac local-dev image lock into
+  # a nonexistent GHCR/local-tag hybrid. Legacy-name normalization only
+  # applies to registry deployments.
+  if grep -Fqx 'IMAGE_SOURCE=registry' "${ENV_FILE}"; then
+    migrate_env_value GW_IMAGE_REPOSITORY dc-saas/gw ghcr.io/bliplink/gw
+    migrate_env_value LOGINSVR_IMAGE_REPOSITORY dc-saas/loginsvr ghcr.io/bliplink/loginsvr
+    migrate_env_value MDSVR_IMAGE_REPOSITORY dc-saas/mdsvr ghcr.io/bliplink/mdsvr
+    migrate_env_value APSSVR_IMAGE_REPOSITORY dc-saas/apssvr ghcr.io/bliplink/apssvr
+    migrate_env_value ORDERSVR_IMAGE_REPOSITORY dc-saas/ordersvr ghcr.io/bliplink/ordersvr
+    migrate_env_value TRADESVR_IMAGE_REPOSITORY dc-saas/tradesvr ghcr.io/bliplink/tradesvr
+    migrate_env_value LIQSVR_IMAGE_REPOSITORY dc-saas/liqsvr ghcr.io/bliplink/liqsvr
+    migrate_env_value MANAGERSVR_IMAGE_REPOSITORY dc-saas/managersvr ghcr.io/bliplink/managersvr
+    migrate_env_value ADMINSVR_IMAGE_REPOSITORY dc-saas/adminsvr ghcr.io/bliplink/adminsvr
+    migrate_env_value ROBOTSVR_IMAGE_REPOSITORY dc-saas/robotsvr ghcr.io/bliplink/robotsvr
+    migrate_env_value PROJECTIONSVR_IMAGE_REPOSITORY dc-saas/projectionsvr ghcr.io/bliplink/projectionsvr
+    migrate_env_value PROJECTIONSVR_IMAGE_REPOSITORY ghcr.io/bliplink/com-app-dc-projectionsvr ghcr.io/bliplink/projectionsvr
+    migrate_env_value TRADE_WEB_IMAGE_REPOSITORY dc-saas/dc-trade-web ghcr.io/bliplink/dc-saas-trade-web
+    migrate_env_value TRADE_WEB_IMAGE_REPOSITORY ghcr.io/bliplink/dc-trade-web ghcr.io/bliplink/dc-saas-trade-web
+    migrate_env_value TRADE_WEB_IMAGE_REPOSITORY ghcr.io/skt-walter/dc-trade-web ghcr.io/bliplink/dc-saas-trade-web
+  fi
   if ! grep -q '^TENANT_WEB_IMAGE_REPOSITORY=' "${ENV_FILE}"; then
     printf 'TENANT_WEB_IMAGE_REPOSITORY=ghcr.io/bliplink/dc-saas-tenant-web\n' >> "${ENV_FILE}"
   fi
