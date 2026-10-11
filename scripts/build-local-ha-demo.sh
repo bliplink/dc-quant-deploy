@@ -12,6 +12,7 @@ DC_SOURCE="${OTC_DC_SOURCE:?Set OTC_DC_SOURCE to the com.app.dc checkout}"
 ORDER_SOURCE="${OTC_ORDER_SOURCE:?Set OTC_ORDER_SOURCE to the OrderSvr worktree}"
 TRADE_SOURCE="${OTC_TRADE_SOURCE:?Set OTC_TRADE_SOURCE to the TradeSvr worktree}"
 MD_SOURCE="${OTC_MD_SOURCE:?Set OTC_MD_SOURCE to the MDSvr worktree}"
+GW_SOURCE="${OTC_GW_SOURCE:-}"
 MAVEN_IMAGE="${OTC_MAVEN_IMAGE:-maven:3.8.8-eclipse-temurin-8}"
 
 log() { printf '[local-ha-build] %s\n' "$*"; }
@@ -22,6 +23,9 @@ command -v git >/dev/null || fail "Git is required"
 for p in "$COMMON_SOURCE" "$DC_SOURCE" "$ORDER_SOURCE" "$TRADE_SOURCE" "$MD_SOURCE"; do
   [[ -f "$p/pom.xml" ]] || fail "missing Maven project: $p"
 done
+if [[ -n "$GW_SOURCE" ]]; then
+  [[ -f "$GW_SOURCE/pom.xml" ]] || fail "missing Maven Gateway project: $GW_SOURCE"
+fi
 [[ "$BUILD_ROOT" == /* && "$BUILD_ROOT" != "/" ]] || fail "build root must be an absolute non-root path"
 if [[ -e "$BUILD_ROOT/source" && "${OTC_RESUME_BUILD:-false}" != "true" ]]; then
   fail "build root source already exists; set OTC_RESUME_BUILD=true to resume the immutable source snapshot"
@@ -45,7 +49,11 @@ require_committed_source() {
 if [[ "${OTC_RESUME_BUILD:-false}" != "true" ]]; then
 names=(common dc ordersvr tradesvr mdsvr)
 sources=("$COMMON_SOURCE" "$DC_SOURCE" "$ORDER_SOURCE" "$TRADE_SOURCE" "$MD_SOURCE")
-for i in 0 1 2 3 4; do
+if [[ -n "$GW_SOURCE" ]]; then
+  names+=(gw)
+  sources+=("$GW_SOURCE")
+fi
+for i in "${!names[@]}"; do
   name="${names[$i]}"
   src="${sources[$i]}"
   require_committed_source "$src"
@@ -108,9 +116,13 @@ maven dc install -DskipTests
 common_jar="$HOME/.m2/repository/io/github/bliplink/com.app.common/$local_version/com.app.common-$local_version.jar"
 [[ -s "$common_jar" ]] || fail "local Common JAR not installed: $common_jar"
 common_digest="$(shasum -a 256 "$common_jar" | awk '{print $1}')"
-tag="local-c${common_sha}-${build_utc}"
+# Compatible with deploy-saas.sh's immutable 3-node cluster image guard.
+tag="cluster-dev-local-c${common_sha}-${build_utc}"
+common_revision="dev-${common_sha}-${build_utc}"
 declare -a images=()
-for name in ordersvr tradesvr mdsvr; do
+modules=(ordersvr tradesvr mdsvr)
+if [[ -e "$BUILD_ROOT/source/gw/pom.xml" ]]; then modules+=(gw); fi
+for name in "${modules[@]}"; do
   log "Compiling $name against local Common $local_version"
   maven "$name" package dependency:copy-dependencies -DskipTests -DoutputDirectory=target/dependency
   dep="$BUILD_ROOT/source/$name/target/dependency"
@@ -129,8 +141,14 @@ for name in ordersvr tradesvr mdsvr; do
   sed '1s|^FROM eclipse-temurin:8-jre$|FROM maven:3.8.8-eclipse-temurin-8|' \
     "$BUILD_ROOT/source/$name/Dockerfile" > "$BUILD_ROOT/source/$name/Dockerfile.local"
   docker build --pull=false -f "$BUILD_ROOT/source/$name/Dockerfile.local" \
+    --build-arg "SERVICE_REVISION=$(head -c 40 "$BUILD_ROOT/artifacts/$name.sha")" \
+    --build-arg "GATEWAY_REVISION=$(head -c 40 "$BUILD_ROOT/artifacts/$name.sha")" \
+    --build-arg "COMMON_REVISION=$common_revision" \
+    --build-arg "COMMON_GAV=io.github.bliplink:com.app.common:$local_version" \
+    --build-arg "COMMON_JAR_SHA256=$common_digest" \
     --label "dc.build.kind=mac-local-ha-demo" \
-    --label "dc.common.sha256=$common_digest" \
+    --label "dc.common.revision=$common_revision" \
+    --label "dc.common.jar.sha256=$common_digest" \
     --label "dc.common.gav=io.github.bliplink:com.app.common:$local_version" \
     --label "dc.source.revision=$(head -c 40 "$BUILD_ROOT/artifacts/$name.sha")" \
     -t "$image" "$BUILD_ROOT/source/$name"
@@ -144,6 +162,8 @@ manifest="$BUILD_ROOT/artifacts/local-ha-images.env"
   echo "COMMON_JAR_SHA256=$common_digest"
   printf '%s\n' "${images[@]}"
 } > "$manifest"
-log "PASS: all three local images contain identical Common JAR: $common_digest"
+log "PASS: all ${#images[@]} locally built images contain identical Common JAR: $common_digest"
 log "Manifest: $manifest"
 log "These images have NOT been deployed to the live dc-saas containers."
+log "Release preflight also requires the Gateway image to embed the SAME Common revision."
+log "An older Gateway (for example com-app-common-v3.0.15) is not compatible."

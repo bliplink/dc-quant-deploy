@@ -1147,9 +1147,11 @@ if [[ "${IMAGE_SOURCE:-local}" == "local" ]]; then
   if [[ "${SKIP_PULL}" == "false" ]]; then
     log "Building SaaS application images from the dedicated source branches."
     "${SCRIPT_DIR}/build-saas-images.sh" "${ENV_FILE}"
+    log "Pulling public infrastructure images."
+    compose_pull mysql clickhouse zookeeper
+  else
+    log "--skip-pull: using prevalidated local application and cached infrastructure images."
   fi
-  log "Pulling public infrastructure images."
-  compose_pull mysql clickhouse zookeeper
 elif [[ "${IMAGE_SOURCE}" == "registry" ]]; then
   if [[ "${SKIP_PULL}" == "false" ]]; then
     log "Pulling SaaS application and infrastructure images."

@@ -54,3 +54,11 @@ Mac 本地隔离源码：`~/.opentradingcore/local-ha-fresh-20261011-1438/source
 
 - **已完成**：本地提交源码构建三镜像，同版 Common SHA，三服务 Maven 回归，真实 MD-C 金丝雀，新镜像 running/no restarts，现有十租户/Robot 只读健康验证及 MD HA fail-closed。
 - **尚未完成**：24 容器全新冷部署、正式新 Order/Trade/MD 全集群上线、从空数据注册十租户、HA 真实故障注入与 200 租户压测。
+
+## 四服务一致镜像与显式 Mac 开发锁（后续追加）
+
+已进一步重新构建 **Gateway、Order、Trade、MD**，修复旧 Gateway Common 3.0.15 与新版服务 Common 冲突。本地镜像标签 `cluster-dev-local-cffd928cc-20261011070118`，四镜像 Common GAV 相同，**Common JAR SHA-256** 全部为 `809ac23dfdc76a6143fce6567195fc2a629c34214cb3306aeccc8a283dcee4e9`。
+
+修复了 Mac 镜像构建原先 `dc.common.revision / dc.common.jar.sha256 = unknown` 以及标签不符合 `cluster-dev-*` 安全锁的问题，增加 `OTC_GW_SOURCE` 同步编译 Gateway。使用 `scripts/prepare-mac-local-ha-lock.py` 校验四镜像、Gateway、源码 commit 及 JAR SHA，并生成仅在隔离 build root 中的**Mac 本地测试锁**，没有改动正式 `release/saas-crypto-images.env`。此方式使用正式 Mac 入口已经支持的 `RELEASE_IMAGE_LOCK` 变量，不允许隐式在线滚动改动 HA Primary。
+
+基于独立私有 `local-ha-runtime.env` 和 local dev lock，官方 `deploy-saas-macos.sh --check --full-cluster` 通过；Gateway **16/16** 全量测试通过。其他服务各自的独立全量测试同样通过。新增 `--skip-pull` 修复，避免在 Mac 本地模式下依旧拉取公共依赖镜像。**前述三镜像 MD-C 金丝雀的结果仍然有效；四镜像组是否整体冷部署以随后实际运行的验收日志为准。**
