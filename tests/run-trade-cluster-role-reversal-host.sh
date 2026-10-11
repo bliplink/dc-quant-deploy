@@ -62,9 +62,18 @@ PY
 switch_and_verify() {
   local source="$1" target="$2" target_container="$3" plan="$4"
   log "Switching ${PARTITION_ID}: ${source} -> ${target}"
-  local legacy_args=()
-  [[ "${TRADE_CLUSTER_UPGRADE_LEGACY:-false}" == true ]] && legacy_args=(--upgrade-legacy)
-  python3 "${SCRIPT_DIR}/trade_cluster_transition_host.py"     --zk-container "${ZK_CONTAINER}"     --zk-server "${ZK_SERVER}"     --partition-root "${PARTITION_ROOT}"     switch-primary     --from-node "${source}"     --to-node "${target}"     --partition "${PARTITION_ID}"     --limit 1     --batch-size 1     --plan "${plan}"     --apply     --confirm-root "${PARTITION_ROOT}" "${legacy_args[@]}"
+  # On macOS Bash 3.2, an empty array with set -u is unbound. Build a
+  # nonempty argv and append the optional migration flag explicitly.
+  local -a switch_command=(python3 "${SCRIPT_DIR}/trade_cluster_transition_host.py"
+    --zk-container "${ZK_CONTAINER}" --zk-server "${ZK_SERVER}"
+    --partition-root "${PARTITION_ROOT}" switch-primary
+    --from-node "${source}" --to-node "${target}" --partition "${PARTITION_ID}"
+    --limit 1 --batch-size 1 --plan "${plan}" --apply
+    --confirm-root "${PARTITION_ROOT}")
+  if [[ "${TRADE_CLUSTER_UPGRADE_LEGACY:-false}" == true ]]; then
+    switch_command+=(--upgrade-legacy)
+  fi
+  "${switch_command[@]}"
 
   python3 "${SCRIPT_DIR}/trade_cluster_transition_host.py"     --zk-container "${ZK_CONTAINER}"     --zk-server "${ZK_SERVER}"     --partition-root "${PARTITION_ROOT}"     verify-ready     --plan "${plan}"     --target-node "${target}"     --target-container "${target_container}"
 }

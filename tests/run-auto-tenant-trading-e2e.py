@@ -284,7 +284,22 @@ def main():
         if not after_trade or trader_position() != (Decimal("0.0001"), Decimal(0)):
             raise RuntimeError("Trade state/DB position differs after role reversal")
         log("PASS held 0.0001 BTC throughout Trade A/B/A recovery on " + partition)
-        os.unlink(recovery_path)
+        if os.environ.get("AUTO_TENANT_HELD_TRADE_SIGKILL") == "true":
+            command_env["TRADE_FAULT_LOCATION"] = LOCATION
+            command_env["TRADE_FAULT_USER"] = USER_ID
+            command_env["TRADE_FAULT_CONFIRM"] = "DEMO_TRADE_HELD_" + LOCATION
+            log("Executing isolated Trade primary SIGKILL with held position on " + partition)
+            subprocess.run(["python3", os.path.join(os.path.dirname(__file__),
+                            "run-mac-demo-trade-sigkill.py")],
+                           env=command_env, check=True, timeout=850)
+            if trader_position() != (Decimal("0.0001"), Decimal(0)):
+                raise RuntimeError("Held position changed across Trade SIGKILL")
+            recovered_trade = call("TradeSvr", "queryTradePosition",
+                                   {"userid": USER_ID, "location": LOCATION,
+                                    "securityid": "BTCUSDT"}, token, key=LOCATION)
+            if not recovered_trade:
+                raise RuntimeError("Trade API cannot read held position after SIGKILL")
+            log("PASS held position survived Trade automatic failover")
 
     closing_id = "TRIAL-CLOSE-" + RUN
     for attempt in range(5):
@@ -321,6 +336,8 @@ def main():
             and len(asks) == 10 else None
 
     wait("Robot replenishment after trader round trip", robot_replenished, seconds=90)
+    if os.environ.get("AUTO_TENANT_HELD_TRADE_REVERSAL") == "true":
+        os.unlink(recovery_path)
     log("PASS close=%s, position=0, trader active orders=0; Robot RUNNING with 20+20 orders, visible top10+top10." %
         closing_id)
 
