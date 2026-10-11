@@ -53,6 +53,10 @@ grep -Fqx 'orderStorePath=../../data/OrderSvrC/store' "${c_config}" || fail 'Ord
 grep -Fqx 'order.cluster.replication.port=19123' "${c_config}" || fail 'OrderSvrC replication port is missing'
 grep -Fqx 'order.cluster.snapshot.periodic.enabled=false' "${c_config}" || fail 'periodic snapshots must stay disabled by default'
 for config in "${a_config}" "${b_config}" "${c_config}"; do
+  grep -Fqx 'order.cluster.replication.sameEpochSnapshotRebase.enabled=false' "${config}" ||
+    fail 'same-epoch snapshot rebase must remain disabled by default'
+done
+for config in "${a_config}" "${b_config}" "${c_config}"; do
   grep -Fqx "${peers}" "${config}" || fail "three-node peer map is missing from ${config}"
 done
 for config in "${a_config}" "${b_config}" "${c_config}"; do
@@ -79,5 +83,13 @@ PY2
 grep -Fqx '  ordersvr-c:' "${DEPLOY_DIR}/compose.yaml" || fail 'ordersvr-c compose service is missing'
 grep -Fq 'profiles: ["order-cluster-c"]' "${DEPLOY_DIR}/compose.yaml" ||
   fail 'ordersvr-c compose profile is missing'
+
+sed 's/^ORDER_CLUSTER_SAME_EPOCH_SNAPSHOT_REBASE_ENABLED=.*/ORDER_CLUSTER_SAME_EPOCH_SNAPSHOT_REBASE_ENABLED=true/' \
+  "${TEST_ROOT}/cluster.env" > "${TEST_ROOT}/snapshot-rebase.env"
+"${DEPLOY_DIR}/generate-saas-configs.sh" "${TEST_ROOT}/snapshot-rebase.env" >/dev/null
+for config in "${a_config}" "${b_config}" "${c_config}"; do
+  grep -Fqx 'order.cluster.replication.sameEpochSnapshotRebase.enabled=true' "${config}" ||
+    fail 'explicit snapshot-rebase opt-in must apply to all three Order nodes'
+done
 
 printf '[order-cluster-c-config-test] PASS\n'

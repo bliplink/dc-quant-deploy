@@ -81,6 +81,7 @@ ORDER_CLUSTER_REPLICATION_ASYNC_MAX_PENDING_RECORDS="${ORDER_CLUSTER_REPLICATION
 # opt-in until snapshot transfer has its own bounded transport/retention path;
 # otherwise a large idempotency snapshot amplifies every partition journal.
 ORDER_CLUSTER_PERIODIC_SNAPSHOT_ENABLED="${ORDER_CLUSTER_PERIODIC_SNAPSHOT_ENABLED:-false}"
+ORDER_CLUSTER_SAME_EPOCH_SNAPSHOT_REBASE_ENABLED="${ORDER_CLUSTER_SAME_EPOCH_SNAPSHOT_REBASE_ENABLED:-false}"
 ORDER_CLUSTER_PERIODIC_SNAPSHOT_POLL_MILLIS="${ORDER_CLUSTER_PERIODIC_SNAPSHOT_POLL_MILLIS:-5000}"
 ORDER_CLUSTER_PERIODIC_SNAPSHOT_MAX_AGE_MILLIS="${ORDER_CLUSTER_PERIODIC_SNAPSHOT_MAX_AGE_MILLIS:-300000}"
 ORDER_CLUSTER_PERIODIC_SNAPSHOT_MIN_COMMITTED_MUTATIONS="${ORDER_CLUSTER_PERIODIC_SNAPSHOT_MIN_COMMITTED_MUTATIONS:-10000}"
@@ -118,6 +119,8 @@ if [[ "${ORDER_CLUSTER_ENABLED}" == "true" ]]; then
     die "ORDER_CLUSTER_REPLICATION_ASYNC_MAX_PENDING_RECORDS must be a positive integer"
   [[ "${ORDER_CLUSTER_PERIODIC_SNAPSHOT_ENABLED}" == "true" || "${ORDER_CLUSTER_PERIODIC_SNAPSHOT_ENABLED}" == "false" ]] ||
     die "ORDER_CLUSTER_PERIODIC_SNAPSHOT_ENABLED must be true or false"
+  [[ "${ORDER_CLUSTER_SAME_EPOCH_SNAPSHOT_REBASE_ENABLED}" == "true" || "${ORDER_CLUSTER_SAME_EPOCH_SNAPSHOT_REBASE_ENABLED}" == "false" ]] ||
+    die "ORDER_CLUSTER_SAME_EPOCH_SNAPSHOT_REBASE_ENABLED must be true or false"
   for name in ORDER_CLUSTER_PERIODIC_SNAPSHOT_POLL_MILLIS ORDER_CLUSTER_PERIODIC_SNAPSHOT_MAX_AGE_MILLIS \
       ORDER_CLUSTER_PERIODIC_SNAPSHOT_MIN_COMMITTED_MUTATIONS ORDER_CLUSTER_PERIODIC_SNAPSHOT_MAX_PARTITIONS_PER_RUN; do
     [[ "${!name}" =~ ^[1-9][0-9]*$ ]] || die "${name} must be a positive integer"
@@ -705,6 +708,7 @@ order.cluster.replication.async.retryMillis=${ORDER_CLUSTER_REPLICATION_ASYNC_RE
 order.cluster.replication.async.maxPendingRecords=${ORDER_CLUSTER_REPLICATION_ASYNC_MAX_PENDING_RECORDS}
 order.cluster.replication.catchupBatchRecords=256
 order.cluster.replication.crossEpochSnapshotRebase.enabled=true
+order.cluster.replication.sameEpochSnapshotRebase.enabled=${ORDER_CLUSTER_SAME_EPOCH_SNAPSHOT_REBASE_ENABLED}
 order.cluster.replication.peers=${peers}
 order.cluster.defaultMarketIndicator=4
 order.projection.enabled=false
