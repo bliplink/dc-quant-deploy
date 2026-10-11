@@ -8,7 +8,7 @@
 |---|---|---|---|
 | Common | `7bdd352`（上轮） | `saas-crypto` | Snapshot 基线/最终 Committed HEAD 分离，网络验证→Staging→recover()→REPLAY_COMPLETE |
 | Order | `13dd0eb` | `codex/order-durable-primary-common-source-20261011` | `OrderCommonRecoveryStateMachine` / `OrderStateRecovery.applyRecoveredMutation` |
-| Trade | `ff2cd05` | `codex/trade-durable-primary-common-source-20261011` | `TradeCommonRecoveryStateMachine` / `TradeRecoveryApplier.restoreCommonSnapshot/applyCommonCommittedBatch` |
+| Trade | `b76a0e1`（业务适配 `ff2cd05`） | `codex/trade-durable-primary-common-source-20261011` | `TradeCommonRecoveryStateMachine` / `TradeRecoveryApplier.restoreCommonSnapshot/applyCommonCommittedBatch` + 真实资金持仓 Common 恢复事务集成测试 |
 
 ### Order 业务适配
 
@@ -33,8 +33,9 @@
 - Order 专项 `OrderCommonRecoveryStateMachineTest` **2/2**。
 - Trade 专项 `TradeCommonRecoveryStateMachineTest` **2/2**，真实 `TradeRecoveryApplierTest` **4/4**（含一条本轮新增 balance/position 保全）。
 - Order Java 8 `mvn clean test` **338 项，0 failures、0 errors、1 skipped**。
-- Trade Java 8 `mvn clean test` **243/243，0 failures、0 errors、0 skipped**。特别包含额外边界保护：SnapshotSeq=10、已提交状态 Seq=8 的副本拒绝旧 WAL Seq=9。
-- Common 之前已证明 **199/199**，本轮只改变 Order/Trade 业务仓库，没有额外 Common 源码修改。合计 199+338+243=**780** 个已执行测试项，0 失败、1 skipped。
+- Trade Java 8 最终 `mvn clean test` **244/244，0 failures、0 errors、0 skipped**。特别包含额外边界保护：SnapshotSeq=10、已提交状态 Seq=8 的副本拒绝旧 WAL Seq=9。
+- 新增 `TradeCommonRecoveryTransactionTest`：使用**真实** TradeStateCoordinator、TradeRecoveryApplier、AccountBalanceFacade、PositionFacade 和 Common 的 `StateMachineRecoveryCoordinator.recover`、`DurableRecoveryTransactionControl`、快照密封器、Ledger，测试 Snapshot restore 后应用已提交余额变更。**1000→950，BTC 持仓 1 保留，Ledger=REPLAY_COMPLETE、外部 READY=false**。ZooKeeper 权威与 Journal rebase 的独立真实 fsync 是受控夹具，不是运行中 Primary SIGKILL 验证。
+- Common 之前已证明 **199/199**，本轮只改变 Order/Trade 业务仓库，没有额外 Common 源码修改。合计 199+338+244=**781** 个已执行测试项，0 失败、1 skipped。
 
 ### 上线安全门禁（尚未完成）
 
