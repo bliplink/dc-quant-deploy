@@ -28,6 +28,20 @@ Common `saas-crypto` 在既有 `ReplicatedStateMachine`、`PartitionStateMachine
 - `decision=BLOCKED`、`canInjectMdPrimaryFault=false`：当前缺少权威 Order 最新完整市场数据镜像证明、旧 MD Publisher Fencing 和原子 CAS 切主、提升后完整市场镜像 Epoch 校验、Robot 对单恢复证明。**没有**进行 MD SIGKILL，也没有绕过这些检查。
 - MD 应以 Order 全量最新完整市场镜像重建派生盘口，不额外引入 MD-to-MD 全量日志复制。
 
+## 只读归档容量基线（同日）
+
+滚动部署及真实故障恢复之后对 Mac 演示集群现有归档文件只读采样，采用文件系统实际分配容量（`du -sm`），而不是 Chronicle Queue 的稀疏预分配文件标称大小：
+
+| 节点 | CQ4 归档段 | 实际占用 |
+|---|---:|---:|
+| OrderSvrA | 256 | 169 MiB |
+| OrderSvrB | 257 | 195 MiB |
+| OrderSvrC | 257 | 112 MiB |
+| TradeSvrA | 12 | 84 MiB |
+| TradeSvrB | 0 | 尚无归档目录 |
+
+总计约 560 MiB 实际已分配归档空间，宿主机数据卷剩余约 206 GiB。**禁止据此推定归档可删**：文件安全清理仍缺 Snapshot 封存与副本追平水位等权威证明；本轮未修改/删除归档文件。
+
 ## 后续仍必须完成
 
 1. **统一公共框架真正接管运行恢复**：Order、Trade 的 StateMachine 的 Apply/Snapshot/Restore 已实现，但 `*.cluster.stateMachine.commonBinding.enabled` 默认关闭，仍缺通用 Primary 认证来源传输、完整提交水位来源、独占恢复屏障与 READY 外部门禁的线上联合验收。不能把纯 Common 协议辅助类完成，误说成所有恢复路径已被 Common 接管。
