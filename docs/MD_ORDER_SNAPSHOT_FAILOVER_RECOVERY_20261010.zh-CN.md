@@ -96,8 +96,27 @@ MDSvr 是 OrderSvr 权威撮合订单簿的派生行情服务。**不要为 MDSv
 
 - [MDSvr `f7f07b0`](https://github.com/bliplink/com.app.dc.mdsvr/commit/f7f07b0)：修复 `MDPublish` 的异步队列跨 epoch 重放风险。旧实现在出队前只根据当前主节点/市场 READY 判断，节点被撤主后若重新当选为新 epoch Primary，旧盘口、Depth Diff、成交与 K 线消息有机会借用新的发布权限。现在行情入队时固定记录**入队时已发布就绪的 MD assignment epoch**；真正向 gateway-api TCP 订阅者发送之前，要求其等于当前受 ZK 连接与市场 Snapshot 就绪保护的 publish epoch。旧 epoch、失联入队、恢复期未 READY 入队的消息均丢弃。
 - 同一机制覆盖 OrderBook/DepthSnapshot/DepthDiff/BookTicker/PartialDepth/Trade/MarketTrade 和独立异步 Kline（OHLC）队列。无额外 MD→MD 复制、持久化日志、线程或远端 ZooKeeper 网络查询；仅对已缓存的本地 assignment 和 market READY 做有限内存检查。非集群旧路径兼容。
-- MAC 隔离 Maven 全量 **122/122 PASS**，覆盖原主退出后又重新当选、新 epoch 正常发布、控制面失联、恢复期消息后到、深度增量、Kline 独立队列和非集群兼容。提交在 `saas-crypto`，GitHub Actions [run 38096303971](https://github.com/bliplink/com.app.dc.mdsvr/actions/runs/38096303971) 由 push 触发，镜像发布及 ARM64/AMD64 清单仍需单独核验。
+- Mac 隔离 Maven 全量 **122/122 PASS**，覆盖原主退出后又重新当选、新 epoch 正常发布、控制面失联、恢复期消息后到、深度增量、Kline 独立队列和非集群兼容。GitHub Actions [run 38096303971](https://github.com/bliplink/com.app.dc.mdsvr/actions/runs/38096303971) **SUCCESS**；GHCR 远端 manifest 确认 `ghcr.io/bliplink/mdsvr:sha-f7f07b0` 同时包含 `linux/amd64` 和 `linux/arm64`。现网三 MD 仍旧为 `sha-48544e5`，三 Order 仍旧为 `sha-7842df4`。
 - **重要边界**：此保护只能阻止 MD 本地异步队列中的旧消息，不能代替接收端针对 publisher identity/epoch 的协议级防双主检查；也不能确认来自 OrderSvr 的所有市场当前 HEAD、连续增量或 Robot 挂单恢复。真正自动晋升的可信 `Safety` 实现仍未完成，现网故障注入门禁继续 `BLOCKED`，运行容器不变。
+- 2026-10-10 23:52 UTC Mac mini 只读再核对：256/256 分区为 READY、MD-A/B 分别 128/128 PRIMARY、三个物理 MD ephemeral 成员在线、0 个分区缺失恢复候选。预检查明确返回 `canInjectMdPrimaryFault=false`、`canPromote=false`、`decision=BLOCKED`（期望 exit code 2）。这次仅查询 ZooKeeper/镜像，不修改现网；缺失可信来源、接收端隔离、全市场新 epoch 恢复及 Robot 验收四项门禁仍未满足。
+
+## 2026-10-11：Order/MD 双 epoch 审计与零序号空盘口校正（源码、镜像已发布）
+
+- 源码审计发现 OrderSvr 分区与 MDSvr 分区的 `epoch` 由不同 ZooKeeper 分配系统生成，数值不具备可比性。旧 `MdOrderSnapshotCheckpointContract.inspect` 错把 Order 检查点 epoch 当作 MD 当前 assignment epoch，导致恢复审计在独立服务换代时产生虚假的缺失报告。新接口要求调用者显式传入 `currentMdAssignmentEpoch`，校验/比对从 MD 的实际 epoch 获取，不再从 Order 检查点猜测；此接口仍为只读诊断、永远 `canPromote=false`。
+- 合法空盘口在 OrderSvr 内存与直连初始 Image 中 `lastUpdateId=0`，但此前 `OrderMdMarketManifest`、MD 解析器、`MdDepthReplayWitness` 及 `MdPartitionMarketCoverage` 拒绝 `0`，容易把新租户市场误判为未恢复。两端统一接受 `>=0`，但仍拒绝负数、缺失来源以及不完整市场清单。新增零序号空盘口、MD/Order epoch 独立与失败门禁测试。
+- 隔离测试已确认：MDSvr 全量 **125/125 PASS**；OrderSvr 全量 **320 tests、0 failures、0 errors、1 skipped**。两个服务变更均只涉及检查点/见证审计，不新增盘口热路径、数据库写入或 MD 间复制。
+- 2026-10-11 完成发布：OrderSvr [commit `362a604`](https://github.com/bliplink/com.app.dc.ordersvr/commit/362a604)，[Actions 38098106978](https://github.com/bliplink/com.app.dc.ordersvr/actions/runs/38098106978) SUCCESS；MDSvr [commit `bcdec88`](https://github.com/bliplink/com.app.dc.mdsvr/commit/bcdec88)，[Actions 38098118810](https://github.com/bliplink/com.app.dc.mdsvr/actions/runs/38098118810) SUCCESS。两个镜像远端 manifest 均已确认包含 `linux/amd64`、`linux/arm64`。**源码和镜像已发布不代表正式环境容器已经更新。**
+- 2026-10-11 00:14 UTC 只读复核：MD 256 分区全部 READY，MD-A/B 分别 128 个 Primary，0 个缺少恢复候选的分区，MD-A/B/C ephemeral member 在线。故障注入门禁仍为 `decision=BLOCKED`、`canPromote=false`（按预期返回退出码 2）；缺少完整当前 Order market HEAD、真实 MD 发布源 fencing、全市场 epoch 验证和 Robot 对账。没有执行任何生产容器更新或故障注入。
+
+## 2026-10-11 正常环境发布尝试和阻断
+
+- 用户授权在 Mac mini 十租户正式环境发布。OrderSvr `362a604` 与 MDSvr `bcdec88` 已完成 GitHub Actions 并各自发布 ARM64/AMD64 GHCR 镜像；MDSvr `sha-bcdec88` 已通过 `docker pull --platform linux/arm64` 拉取到 Mac。
+- 现网运行容器未替换：Order A/B/C 仍为 `sha-7842df4`；MD A/B/C 仍为 `sha-48544e5`。`opentradingcore.com` 和 `trade.opentradingcore.com` 的 HTTP 检查都是 200。
+- Order 滚动升级的只读门禁返回 **BLOCKED**：数据磁盘使用 **94.73%**，并缺少写入排空、真实副本持久水位、Projection 水位与回滚证明。256/256 分区 READY，768 份分区快照无缺失或分歧，最近恢复错误 0；**不得据静态 READY 强行重启 Order Primary**。
+- 实际容器的 Compose 来源为 `/Users/kong/.webcodex-managed-worktrees/dc-deploy-order-retention-20261010/compose.yaml`，运行卷为 `/Users/kong/.opentradingcore/dc-saas-runtime-clean-20261010/{control,data,log}`。普通 `/Users/kong/dc-quant-deploy/.env.prod` 指向不同的旧 DEPLOY_ROOT/标签，不能直接做全量部署。
+- 已核验无 Primary 分区的 MD-C 金丝雀节点候选 Compose 配置，资源限额、host network 和全部挂载与现网一致。但执行仅更新 `mdsvr-c` 的 `docker compose ... up -d --no-deps` 时，操作被执行环境**安全检查拦截**，没有绕过，也没有修改生产 ZK/容器。
+- 宿主文件系统剩余约 24Gi，使用率约 95%。`Documents/Codex/2026-09-28` 有约 157G 历史工件目录；未经当前内容归类，本轮没有删除。没有执行 Docker prune，避免丢失可能用于回滚的镜像。
+- **交付状态：代码和镜像 READY；生产容器滚动替换 BLOCKED。** 当前仍缺完整 Order 实时 HEAD、下游 publisher/epoch fencing、MD 自动晋升 Safety 证明及 Robot 对账，不启用 MD 自动切主和故障注入。
 
 ## 后续自动切主的正确控制面
 
