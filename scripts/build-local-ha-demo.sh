@@ -31,14 +31,24 @@ mkdir -p "$BUILD_ROOT/source" "$BUILD_ROOT/artifacts"
 mkdir "$BUILD_ROOT/.lock"
 trap 'rmdir "$BUILD_ROOT/.lock" 2>/dev/null || true' EXIT
 
-# Snapshot the exact working copies, including uncommitted edits. Do not build
-# against an old origin branch or modify the actual developer worktree.
+# Fail closed on SOURCE files not represented by their recorded Git commit.
+# 'target/' can contain untracked Maven output; it is excluded from tar.
+# Never label an image with commit X while silently building dirty source Y.
+require_committed_source() {
+  local src="$1" dirty
+  git -C "$src" rev-parse --verify HEAD >/dev/null 2>&1 || fail "no Git HEAD: $src"
+  git -C "$src" diff --quiet --ignore-submodules=all -- || fail "uncommitted tracked source: $src"
+  git -C "$src" diff --cached --quiet --ignore-submodules=all -- || fail "staged but uncommitted source: $src"
+  dirty="$(git -C "$src" ls-files --others --exclude-standard | grep -Ev '(^|/)target/|(^|/)\.DS_Store$|^Dockerfile\.local$' || true)"
+  [[ -z "$dirty" ]] || fail "untracked source must be committed before build: $src ($(printf '%s' "$dirty" | head -1))"
+}
 if [[ "${OTC_RESUME_BUILD:-false}" != "true" ]]; then
 names=(common dc ordersvr tradesvr mdsvr)
 sources=("$COMMON_SOURCE" "$DC_SOURCE" "$ORDER_SOURCE" "$TRADE_SOURCE" "$MD_SOURCE")
 for i in 0 1 2 3 4; do
   name="${names[$i]}"
   src="${sources[$i]}"
+  require_committed_source "$src"
   mkdir -p "$BUILD_ROOT/source/$name"
   tar -C "$src" --exclude=.git --exclude=target --exclude=.idea \
     --exclude=.env --exclude='.env.*' --exclude=.secrets --exclude=node_modules \
@@ -46,7 +56,7 @@ for i in 0 1 2 3 4; do
     | tar -C "$BUILD_ROOT/source/$name" -xf -
   git -C "$src" rev-parse HEAD > "$BUILD_ROOT/artifacts/$name.sha"
   git -C "$src" status --porcelain > "$BUILD_ROOT/artifacts/$name.worktree-changes.txt"
-  log "$name source: $(head -c 12 "$BUILD_ROOT/artifacts/$name.sha") (copy preserves uncommitted edits)"
+  log "$name committed source: $(head -c 12 "$BUILD_ROOT/artifacts/$name.sha")"
 done
 # Every new Mac build receives a distinct Maven coordinate, even if Common
 # HEAD is unchanged. Maven JAR timestamps are not guaranteed reproducible.
