@@ -2,9 +2,9 @@ name: Validate MD failover promotion gate
 on:
   push:
     branches: [saas-crypto]
-    paths: [deploy-saas.sh, scripts/check-md-failover-preflight.py, tests/test_md_failover_preflight.py, tests/test_md_learner_bootstrap.py, .github/workflows/validate-md-failover-preflight.yml]
+    paths: [deploy-saas.sh, scripts/check-md-failover-preflight.py, tests/test_md_failover_preflight.py, tests/test_md_learner_bootstrap.py, scripts/check-md-recovery-shadow.py, tests/test_md_recovery_shadow.py, .github/workflows/validate-md-failover-preflight.yml]
   pull_request:
-    paths: [deploy-saas.sh, scripts/check-md-failover-preflight.py, tests/test_md_failover_preflight.py, tests/test_md_learner_bootstrap.py, .github/workflows/validate-md-failover-preflight.yml]
+    paths: [deploy-saas.sh, scripts/check-md-failover-preflight.py, tests/test_md_failover_preflight.py, tests/test_md_learner_bootstrap.py, scripts/check-md-recovery-shadow.py, tests/test_md_recovery_shadow.py, .github/workflows/validate-md-failover-preflight.yml]
   workflow_dispatch:
 permissions:
   contents: read
@@ -18,6 +18,7 @@ jobs:
         with:
           python-version: '3.11'
       - run: bash -n deploy-saas.sh
-      - run: python3 -m py_compile scripts/check-md-failover-preflight.py
+      - run: python3 -m py_compile scripts/check-md-failover-preflight.py scripts/check-md-recovery-shadow.py
       - run: python3 -m unittest discover -s tests -p 'test_md_failover_preflight.py' -v
+      - run: python3 -m unittest discover -s tests -p 'test_md_recovery_shadow.py' -v
       - run: python3 -m unittest discover -s tests -p 'test_md_learner_bootstrap.py' -v
