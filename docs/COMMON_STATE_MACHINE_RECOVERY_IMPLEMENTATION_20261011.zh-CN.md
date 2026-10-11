@@ -30,9 +30,9 @@ MD：仍独立按 Order 权威**当前全市场镜像**恢复，不需要 MD ↔
 - 依赖路径：本地 Common 开发 Maven GAV，不发布 Maven Central。所有 Order/Trade/MD 镜像必须使用同一 Common JAR SHA-256；正式 GHCR 镜像不受本地开发镜像覆盖。
 - Common `b5adf82` 全量测试 **143/143 PASS**，包括 `finishReplay` 和 `CommittedRecord.protocolControl(epoch,seq)`；协议控制日志也占序号，不调用业务 `apply`，控制日志若制造 GAP 继续 fail-closed。只要后续有变更需复跑。
 - Mac 构建根目录：`~/.opentradingcore/local-ha-sm2-20261011`；三个 linux/arm64 开发镜像均由同一 Common `3.0.17-deve28f0c00-SNAPSHOT` 构建成功，JAR SHA256 `e6f2ff29a3b394115d84fb21729a885b54e4062ee212e7e439e66fe94128d333`。
-- 最新公共层测试：**Common 143/143；Trade `7c70e44` 的全量业务测试 237/237（0 fail / 0 errors）**。Order 上轮 326 tests / 0 fail / 1 skip，MD 上轮 125/125。对 `Common b5adf82` 本地镜像完成一致性构建，最终联合回归正在继续；不能把先前测试算作最终镜像的新验收。现网仍是原来的 Order/Trade Primary + 已验证 MD-C 本地金丝雀，未做故障注入，也未自动清理业务 WAL。
+- 本轮联合全量回归已完成：**Common 143/143，Order 326（0 fail / 1 skip），Trade 237/237（0 fail），MD 125/125（0 fail）**。`~/.opentradingcore/local-ha-final-20261011` 的隔离镜像组均使用 Common `3.0.17-devb5adf82220261011034224-SNAPSHOT`，JAR SHA-256=`5a9ad18efdc087200ffd349fd0ed4e600710e8814d9b6fd09a840234036813ef`。这组镜像中的 Trade 源码 commit 为 `7c70e44`；最新追加的优化 commit `7d3e5c1`（预扫描放锁外）在 Mac 工作树单独重跑 Trade 全量 237/237 通过，**尚未纳入此镜像组**。现网仍是原来的 Order/Trade Primary + MD-C 本地金丝雀，未做故障注入，也未自动清理业务 WAL。
 - Order 业务适配器保存在 Mac 本地 Git commit `e8b77a3`，**未推送 saas-crypto**，因为正式 CI 使用的 Common 3.0.17 尚无新接口，直接推送会使正式 GitHub Actions 构建失败。开发环境继续使用唯一 SHA 命名的 Common -dev-SNAPSHOT，符合稳定后再统一发布 Maven Central 的策略。
-- Trade 业务适配器 Mac 本地 commit `32a4257`，业务集成及文件句柄测试 commit `7c70e44`，仍未推送正式服务分支。开发脚本 `scripts/build-local-ha-demo.sh` 从本轮开始对每个隔离镜像组使用 `3.0.17-dev<common-git-sha><UTC-build-id>-SNAPSHOT`，**同一次构建 3 个服务的 Common SHA 完全一致**，不同批次不会因为 Maven 打包时间戳而覆盖同一开发 GAV。稳定后再发布正式 Maven Central 与 GHCR。
+- Trade 业务适配器 commit `32a4257`、业务集成及固定文件句柄测试 commit `7c70e44`、锁范围优化 commit `7d3e5c1`。Order `e8b77a3` 和 Trade `7d3e5c1` 均**已推送 GitHub 的独立验证分支 `ha-common-state-machine-validation-20261011`，尚未合并到 `saas-crypto`**；正式 CI 的 Common 3.0.17 缺少新状态机接口，因此不提前触发正式镜像发布。开发脚本 `scripts/build-local-ha-demo.sh` 从本轮开始对每个隔离镜像组使用 `3.0.17-dev<common-git-sha><UTC-build-id>-SNAPSHOT`，**同一次构建 3 个服务的 Common SHA 完全一致**，不同批次不会因为 Maven 打包时间戳而覆盖同一开发 GAV。稳定后再发布正式 Maven Central 与 GHCR。
 
 
 ## MD HA 现网预检查（只读）
