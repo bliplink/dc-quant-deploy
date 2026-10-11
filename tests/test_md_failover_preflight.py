@@ -27,6 +27,7 @@ class MdFailoverPreflightTests(unittest.TestCase):
         self.assertEqual(outcome['withoutRecoveryCandidateCount'],0)
         self.assertFalse(any('INSUFFICIENT_CONFIGURED_REPLICA_SLOTS' in b for b in outcome['blockers']))
         self.assertIn('ORDER_CURRENT_FULL_MARKET_IMAGE_PROOF_MISSING',outcome['blockers'])
+        self.assertIn('MD_RECOVERING_TO_READY_EPOCH_PUBLICATION_FENCE_UNATTESTED',outcome['blockers'])
     def test_even_full_three_node_placement_cannot_fake_watermark(self):
         rows=assignments()
         for row in rows:

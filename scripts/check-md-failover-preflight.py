@@ -100,6 +100,7 @@ def evaluate(rows,images,members=None,required_image=REQUIRED_IMAGE):
     # These cannot be asserted by ZooKeeper READY or a live snapshot count.
     reasons.extend(['ORDER_CURRENT_FULL_MARKET_IMAGE_PROOF_MISSING',
                     'MD_PROMOTION_FENCING_AND_CAS_CONTROLLER_NOT_CONFIGURED',
+                    'MD_RECOVERING_TO_READY_EPOCH_PUBLICATION_FENCE_UNATTESTED',
                     'MD_PROMOTED_EPOCH_FULL_MARKET_IMAGE_NOT_ATTESTED',
                     'ROBOT_POST_FAILOVER_ORDER_RECONCILIATION_NOT_ATTESTED'])
     return {'schema':'otc-md-failover-preflight-v1','readOnly':True,
