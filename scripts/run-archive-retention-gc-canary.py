@@ -53,9 +53,12 @@ def require_gc_safe(archive: Path, proof: RetentionWitness, minimum_age: int = M
         raise ValueError("current replicas, projection or snapshot still need archive")
     if not proof.backup_verified or not proof.source_recoverable or proof.readers_active:
         raise ValueError("backup restore, source recovery, or open reader gate failed")
-    for item in archive.iterdir():
-        if item.is_symlink() or not item.is_file() or item.name != "data-0000.cq4":
-            raise ValueError("canary archive has an unrecognized or linked member")
+    members=list(archive.iterdir())
+    if len(members)!=1 or members[0].name != "data-0000.cq4":
+        raise ValueError("disposable canary requires exactly one known CQ file")
+    for item in members:
+        if item.is_symlink() or not item.is_file() or item.stat().st_size<=0:
+            raise ValueError("canary archive has no valid durable data")
         if proof.now - item.stat().st_mtime < minimum_age:
             raise ValueError("archive retained until safe age")
     return True

@@ -100,6 +100,25 @@ class MdFailoverPreflightTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError,'expected image'):
             gate.evaluate(assignments(),images_local,required_image='dc-saas/mdsvr:latest')
 
+    def test_mixed_locked_MD_C_canary_image_reports_real_blockers_not_false_image_alert(self):
+        old='dc-saas/mdsvr:cluster-dev-local-c3e1d45c6-20261011075101'
+        canary='dc-saas/mdsvr:cluster-dev-local-md-ha-a5f6063-20261011'
+        details={node:{'image':old,'running':True} for node in gate.NODES}
+        details['MDSvrC']['image']=canary
+        members={node:True for node in gate.NODES}
+        rejected=gate.evaluate(assignments(),details,members,old)
+        self.assertIn('MD_NODE_UNHEALTHY_OR_UNREVIEWED:MDSvrC',rejected['blockers'])
+        verified=gate.evaluate(assignments(),details,members,old,{'MDSvrC':canary})
+        self.assertEqual(verified['expectedImagesByNode']['MDSvrC'],canary)
+        self.assertFalse(any('UNREVIEWED' in blocker for blocker in verified['blockers']))
+        self.assertEqual('BLOCKED',verified['decision'])
+        self.assertFalse(verified['canInjectMdPrimaryFault'])
+        self.assertIn('ORDER_CURRENT_FULL_MARKET_IMAGE_PROOF_MISSING',verified['blockers'])
+        with self.assertRaisesRegex(ValueError,'reviewed'):
+            gate.evaluate(assignments(),details,members,old,{'MDSvrC':'dc-saas/mdsvr:latest'})
+        with self.assertRaisesRegex(ValueError,'reviewed'):
+            gate.evaluate(assignments(),details,members,old,{'MDSvrX':canary})
+
     def test_output_is_read_only_by_design(self):
         self.assertTrue(gate.evaluate(assignments(),images())['readOnly'])
         self.assertNotIn('docker kill',SCRIPT.read_text())

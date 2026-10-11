@@ -66,6 +66,18 @@ class ArchiveGcCanaryTests(unittest.TestCase):
         with self.assertRaises(ValueError):
             canary.require_gc_safe(alias,self.proof)
 
+    def test_missing_or_unexpected_archive_file_is_never_deletion_authority(self):
+        self.payload.unlink()
+        with self.assertRaises(ValueError):
+            canary.require_gc_safe(self.archive,self.proof)
+        (self.archive/"other.cq4").write_bytes(b"bad")
+        with self.assertRaises(ValueError):
+            canary.require_gc_safe(self.archive,self.proof)
+        (self.archive/"other.cq4").unlink()
+        self.payload.write_bytes(b"")
+        with self.assertRaises(ValueError):
+            canary.require_gc_safe(self.archive,self.proof)
+
     def test_actual_canary_deletes_one_and_checks_backup_restore(self):
         report=self.root/"result.json"
         result=canary.execute_canary(report)

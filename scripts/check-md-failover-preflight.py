@@ -64,12 +64,19 @@ def parse_ephemeral_membership(zk_output):
     return {name:found[name] and name in seen for name in NODES}
 
 
-def evaluate(rows,images,members=None,required_image=REQUIRED_IMAGE):
+def evaluate(rows,images,members=None,required_image=REQUIRED_IMAGE,per_node_images=None):
     # Explicitly locked local Mac images may be reviewed without pretending
     # they are the old GHCR image. This NEVER grants failover authority.
-    if not (required_image==REQUIRED_IMAGE or
-            re.fullmatch(r'dc-saas/mdsvr:cluster-dev-local-[a-zA-Z0-9_.-]+',required_image)):
+    def valid_lock(value):
+        return value==REQUIRED_IMAGE or bool(re.fullmatch(
+            r'dc-saas/mdsvr:cluster-dev-local-[a-zA-Z0-9_.-]+',value or ''))
+    if not valid_lock(required_image):
         raise ValueError('MD expected image must be an explicitly locked, reviewed image')
+    per_node_images = {} if per_node_images is None else per_node_images
+    if not isinstance(per_node_images,dict) or any(
+            node not in NODES or not valid_lock(value)
+            for node,value in per_node_images.items()):
+        raise ValueError('MD per-node image locks must be reviewed, immutable and known')
     reasons=[];primaries=Counter();single=[];without_candidate=[];wrong=[];unready=[]
     members=members or {}
     if len(rows)!=COUNT: raise ValueError('incomplete MD topology')
@@ -93,7 +100,7 @@ def evaluate(rows,images,members=None,required_image=REQUIRED_IMAGE):
     if unready:reasons.append('MD_ASSIGNMENTS_NOT_READY:'+','.join(unready[:5]))
     for node,container in NODES.items():
         detail=images.get(node,{})
-        if detail.get('image')!=required_image or not detail.get('running'):
+        if detail.get('image')!=per_node_images.get(node,required_image) or not detail.get('running'):
             reasons.append('MD_NODE_UNHEALTHY_OR_UNREVIEWED:'+node)
         if members.get(node) is not True:
             reasons.append('MD_EPHEMERAL_MEMBER_NOT_ATTESTED:'+node)
@@ -104,7 +111,8 @@ def evaluate(rows,images,members=None,required_image=REQUIRED_IMAGE):
                     'MD_PROMOTED_EPOCH_FULL_MARKET_IMAGE_NOT_ATTESTED',
                     'ROBOT_POST_FAILOVER_ORDER_RECONCILIATION_NOT_ATTESTED'])
     return {'schema':'otc-md-failover-preflight-v1','readOnly':True,
-            'expectedImage':required_image,
+            'expectedImage':required_image,'expectedImagesByNode':{
+                node:per_node_images.get(node,required_image) for node in NODES},
             'canInjectMdPrimaryFault':False,'canPromote':False,
             'decision':'BLOCKED','blockers':reasons,
             'partitionCount':len(rows),'primaryCounts':dict(sorted(primaries.items())),
@@ -118,6 +126,8 @@ def main(argv=None):
     parser.add_argument('--output',help='create JSON report, outside live data; never overwrite')
     parser.add_argument('--expected-image',default=REQUIRED_IMAGE,
                         help='explicitly reviewed GHCR/local immutable image tag; does NOT enable failover')
+    parser.add_argument('--expected-md-c-image',
+                        help='explicitly locked MD-C canary image; other MD nodes retain --expected-image')
     options=parser.parse_args(argv)
     instructions=''.join('get /dc/cluster/mdsvr/partitions/P%03d\n'%p for p in range(COUNT))
     instructions+=''.join('get -s /MDTService/{0}/{0}\n'.format(n) for n in NODES)+'quit\n'
@@ -132,7 +142,8 @@ def main(argv=None):
         if not item:raise ValueError('missing node metadata: '+node)
         images[node]={'running':item.get('State',{}).get('Running') is True,
                       'image':item.get('Config',{}).get('Image')}
-    report=evaluate(rows,images,members,options.expected_image)
+    locks={'MDSvrC':options.expected_md_c_image} if options.expected_md_c_image else None
+    report=evaluate(rows,images,members,options.expected_image,locks)
     report['checkedAtUtc']=datetime.now(timezone.utc).isoformat()
     if options.output:
         dest=Path(options.output).expanduser()
