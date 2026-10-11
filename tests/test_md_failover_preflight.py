@@ -86,6 +86,19 @@ class MdFailoverPreflightTests(unittest.TestCase):
         self.assertEqual(len([b for b in gate.evaluate(assignments(),images(),members)['blockers']
                               if 'MD_EPHEMERAL_MEMBER_NOT_ATTESTED' in b]),3)
 
+    def test_explicit_local_immutable_image_lock_avoids_false_image_blocker_but_never_promotes(self):
+        image='dc-saas/mdsvr:cluster-dev-local-c3e1d45c6-20261011075101'
+        images_local={node:{'image':image,'running':True} for node in gate.NODES}
+        report=gate.evaluate(assignments(),images_local,
+                             {node:True for node in gate.NODES},image)
+        self.assertEqual(report['expectedImage'],image)
+        self.assertEqual(report['decision'],'BLOCKED')
+        self.assertFalse(report['canInjectMdPrimaryFault'])
+        self.assertFalse(any('UNREVIEWED' in b for b in report['blockers']))
+        self.assertIn('ORDER_CURRENT_FULL_MARKET_IMAGE_PROOF_MISSING',report['blockers'])
+        with self.assertRaisesRegex(ValueError,'expected image'):
+            gate.evaluate(assignments(),images_local,required_image='dc-saas/mdsvr:latest')
+
     def test_output_is_read_only_by_design(self):
         self.assertTrue(gate.evaluate(assignments(),images())['readOnly'])
         self.assertNotIn('docker kill',SCRIPT.read_text())
