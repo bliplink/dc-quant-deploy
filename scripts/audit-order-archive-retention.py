@@ -31,6 +31,7 @@ def inventory(journal_path):
         if not match:
             raise ValueError("unexpected archive directory naming; retention audit aborted")
         logical = physical = files = 0
+        recorded = []
         for base, dirs, names in os.walk(candidate, followlinks=False):
             for name in dirs + names:
                 p = Path(base) / name
@@ -44,14 +45,27 @@ def inventory(journal_path):
                 logical += stat.st_size
                 physical += stat.st_blocks * 512 if hasattr(stat, "st_blocks") else stat.st_size
                 files += 1
+                recorded.append((str(file.relative_to(candidate)), stat.st_size))
+        # Epoch0/seq0 archives containing ONLY the preallocated CQ metadata
+        # have no persisted CQ event segments, unlike true archived WAL.
+        # This is a classification, NEVER a deletion authorization: live
+        # Virtualization/Chronicle can still keep metadata mapped/open.
+        empty_bootstrap = (int(match.group(2)) == 0
+                           and int(match.group(3)) == 0
+                           and recorded == [("metadata.cq4t", 131072)])
         details.append({
             "archive": candidate.name, "partition": match.group(1),
             "epochNameHint": int(match.group(2)),
             "lastSequenceNameHint": int(match.group(3)),
             "fileCount": files, "logicalBytes": logical,
             "allocatedBytes": physical,
+            "hasDataSegments": any(path.endswith(".cq4") for path, _ in recorded),
+            "metadataOnlyBootstrap": empty_bootstrap,
+            "retentionClass": "EMPTY_BOOTSTRAP_METADATA_ONLY" if empty_bootstrap
+                              else "MAY_CONTAIN_RECOVERY_HISTORY",
             "retentionDecision": "HOLD", "deletionAuthorized": False,
-            "blockedBy": ["NO_AUTHORITATIVE_WATERMARK_ATTESTATION",
+            "blockedBy": ["LIVE_VIRTUAL_MACHINE_OPEN_HANDLES_NOT_CLEARED",
+                          "NO_AUTHORITATIVE_WATERMARK_ATTESTATION",
                           "REPLICA_RECOVERY_NOT_ATTESTED",
                           "PROJECTION_CONSUMER_NOT_ATTESTED",
                           "OFFSITE_BACKUP_RESTORE_NOT_ATTESTED"],
@@ -59,6 +73,8 @@ def inventory(journal_path):
     return {
         "node": root.parent.name, "journalDir": str(root),
         "archives": len(details),
+        "metadataOnlyBootstrapArchives": sum(1 for a in details if a["metadataOnlyBootstrap"]),
+        "archivesWithDataSegments": sum(1 for a in details if a["hasDataSegments"]),
         "logicalBytes": sum(x["logicalBytes"] for x in details),
         "allocatedBytes": sum(x["allocatedBytes"] for x in details),
         "archiveDetails": details,
@@ -83,6 +99,10 @@ def main(argv=None):
         "checkedAtUtc": datetime.now(timezone.utc).isoformat(),
         "mode": "READ_ONLY_NO_DELETE", "deletionAuthorized": False,
         "totalArchives": sum(v["archives"] for v in results),
+        "metadataOnlyBootstrapArchives": sum(
+            sum(1 for a in v["archiveDetails"] if a["metadataOnlyBootstrap"]) for v in results),
+        "archivesWithDataSegments": sum(
+            sum(1 for a in v["archiveDetails"] if a["hasDataSegments"]) for v in results),
         "totalAllocatedBytes": sum(v["allocatedBytes"] for v in results),
         "totalLogicalBytes": sum(v["logicalBytes"] for v in results),
         "blockedArchives": sum(v["archives"] for v in results),

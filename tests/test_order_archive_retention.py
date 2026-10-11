@@ -43,6 +43,34 @@ class ReadOnlyRetentionTests(unittest.TestCase):
         reports = audit.inventory(self.root)["archiveDetails"]
         self.assertTrue(all(x["retentionDecision"] == "HOLD" for x in reports))
 
+    def test_epoch0_metadata_only_is_observed_but_never_deleted(self):
+        bootstrap = self.root / '.archive' / 'P001-epoch0-seq0-1791615602895'
+        bootstrap.mkdir()
+        (bootstrap / 'metadata.cq4t').write_bytes(bytes(131072))
+        result = audit.inventory(self.root)
+        self.assertEqual(1, result['metadataOnlyBootstrapArchives'])
+        self.assertEqual(1, result['archivesWithDataSegments'])
+        row = next(x for x in result['archiveDetails'] if x['partition'] == 'P001')
+        self.assertTrue(row['metadataOnlyBootstrap'])
+        self.assertFalse(row['hasDataSegments'])
+        self.assertEqual('EMPTY_BOOTSTRAP_METADATA_ONLY', row['retentionClass'])
+        self.assertIn('LIVE_VIRTUAL_MACHINE_OPEN_HANDLES_NOT_CLEARED', row['blockedBy'])
+        self.assertFalse(row['deletionAuthorized'])
+        self.assertTrue((bootstrap / 'metadata.cq4t').exists())
+
+    def test_lookalike_bootstrap_with_cq_data_must_remain_history(self):
+        name = self.root / '.archive' / 'P002-epoch0-seq0-1791615602895'
+        name.mkdir()
+        (name / 'metadata.cq4t').write_bytes(bytes(131072))
+        (name / '20261011F.cq4').write_bytes(b'actual transaction')
+        result = audit.inventory(self.root)
+        row = next(x for x in result['archiveDetails'] if x['partition'] == 'P002')
+        self.assertFalse(row['metadataOnlyBootstrap'])
+        self.assertTrue(row['hasDataSegments'])
+        self.assertEqual('MAY_CONTAIN_RECOVERY_HISTORY', row['retentionClass'])
+        self.assertFalse(row['deletionAuthorized'])
+        self.assertEqual(b'actual transaction', (name / '20261011F.cq4').read_bytes())
+
     def test_unsafe_symlink_is_rejected(self):
         alias = self.root / ".archive" / "P003-epoch1-seq3-100"
         alias.symlink_to(self.archived, target_is_directory=True)
