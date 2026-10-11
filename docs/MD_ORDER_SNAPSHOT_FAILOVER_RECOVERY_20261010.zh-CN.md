@@ -118,6 +118,13 @@ MDSvr 是 OrderSvr 权威撮合订单簿的派生行情服务。**不要为 MDSv
 - 宿主文件系统剩余约 24Gi，使用率约 95%。`Documents/Codex/2026-09-28` 有约 157G 历史工件目录；未经当前内容归类，本轮没有删除。没有执行 Docker prune，避免丢失可能用于回滚的镜像。
 - **交付状态：代码和镜像 READY；生产容器滚动替换 BLOCKED。** 当前仍缺完整 Order 实时 HEAD、下游 publisher/epoch fencing、MD 自动晋升 Safety 证明及 Robot 对账，不启用 MD 自动切主和故障注入。
 
+## 2026-10-11 旧 Colima 备份清理与升级预检查复核
+
+- 用户明确授权删除上一次备份、不得影响当前十租户。核对所有运行容器挂载、当前 Colima 根目录、进程打开文件和旧文件 inode 后，删除了唯一确认不被使用的历史原始虚拟磁盘：`Documents/Codex/2026-09-28/chatgpt-conversation-6ab8c255-e7ac-83e9-a99c/work/colima-recovery-20260929/datadisk-before-fsck.raw`（历史 fsck 前备份，逻辑大小 150GiB；**实际释放约 139GiB**）。现网唯一使用的 `~/.opentradingcore/dc-saas-runtime-clean-20261010/{data,log,control}` **未修改**，Docker 镜像/卷、Order 归档与复制日志也未清理。
+- 宿主数据卷磁盘从约 **412GiB 已用、24GiB 可用、95%** 改为 **273GiB 已用、163GiB 可用、63%**。保留剩余约 9GiB 的历史 Codex 工件（混有代码/图像）和约 1GiB 旧 runtime，以免破坏可能用到的旧成果；未执行 `docker system prune`。
+- 删除后所有当前 Order/MD/MySQL/ClickHouse/ZooKeeper/Robot 容器仍在运行，主站与 Trade Web 均返回 HTTP 200。
+- 再次运行只读 `scripts/check-order-rolling-upgrade-preflight.py`：**磁盘压力阻断已消除**（脚本计磁盘使用 64.60%）；256/256 ZK Order assignments READY、768 个快照无缺失/分歧、最近恢复错误 0。不过 `canRestartOrderNodes=false` / `decision=BLOCKED`，剩余 `WRITE_DRAIN_NOT_ATTESTED`、`LIVE_DURABLE_REPLICA_WATERMARKS_NOT_ATTESTED`、`PROJECTION_WATERMARKS_NOT_ATTESTED`、`RESTART_ROLLBACK_PLAN_NOT_ATTESTED`。本轮仅清理历史备份，**没有滚动重启 Order 或绕过其升级门禁**。
+
 ## 后续自动切主的正确控制面
 
 1. **故障判断**：只认物理 MD ephemeral membership/session 及租约状态；单次 TCP 断开、健康检查失败和 Docker running 状态不足以认定旧 Primary 已失权。ZooKeeper read-only 状态不授予主身份。
