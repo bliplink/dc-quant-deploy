@@ -1,0 +1,10 @@
+{
+  "enabled": false,
+  "environment": "production",
+  "rotatedLogRetentionDays": 7,
+  "emptyBootstrapRetentionDays": 14,
+  "maxDeletedBytesPerRun": 1073741824,
+  "maxDeletedFilesPerRun": 100,
+  "maxCandidatesPerRun": 150,
+  "dryRun": true
+}

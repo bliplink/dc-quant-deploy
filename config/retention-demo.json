@@ -1,0 +1,10 @@
+{
+  "enabled": true,
+  "environment": "demo",
+  "rotatedLogRetentionDays": 2,
+  "emptyBootstrapRetentionDays": 2,
+  "maxDeletedBytesPerRun": 1073741824,
+  "maxDeletedFilesPerRun": 100,
+  "maxCandidatesPerRun": 150,
+  "dryRun": false
+}
