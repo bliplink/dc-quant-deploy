@@ -48,8 +48,12 @@ for i in 0 1 2 3 4; do
   git -C "$src" status --porcelain > "$BUILD_ROOT/artifacts/$name.worktree-changes.txt"
   log "$name source: $(head -c 12 "$BUILD_ROOT/artifacts/$name.sha") (copy preserves uncommitted edits)"
 done
+# Every new Mac build receives a distinct Maven coordinate, even if Common
+# HEAD is unchanged. Maven JAR timestamps are not guaranteed reproducible.
+date -u '+%Y%m%d%H%M%S' > "$BUILD_ROOT/artifacts/build-utc"
 common_sha="$(cut -c1-8 "$BUILD_ROOT/artifacts/common.sha")"
-local_version="3.0.17-dev${common_sha}-SNAPSHOT"
+build_utc="$(cat "$BUILD_ROOT/artifacts/build-utc")"
+local_version="3.0.17-dev${common_sha}${build_utc}-SNAPSHOT"
 
 python3 - "$BUILD_ROOT/source/common/pom.xml" "$BUILD_ROOT/source/dc/pom.xml" "$local_version" <<'PY'
 from pathlib import Path
@@ -72,7 +76,9 @@ PY
 fi
 
 common_sha="$(cut -c1-8 "$BUILD_ROOT/artifacts/common.sha")"
-local_version="3.0.17-dev${common_sha}-SNAPSHOT"
+build_utc="$(cat "$BUILD_ROOT/artifacts/build-utc")"
+[[ "$build_utc" =~ ^[0-9]{14}$ ]] || fail "invalid immutable build ID"
+local_version="3.0.17-dev${common_sha}${build_utc}-SNAPSHOT"
 
 # Reuse existing Maven dependency cache for speed, but the development Common
 # GAV is UNIQUE and cannot be mistaken for the official 3.0.17 release.
@@ -92,7 +98,7 @@ maven dc install -DskipTests
 common_jar="$HOME/.m2/repository/io/github/bliplink/com.app.common/$local_version/com.app.common-$local_version.jar"
 [[ -s "$common_jar" ]] || fail "local Common JAR not installed: $common_jar"
 common_digest="$(shasum -a 256 "$common_jar" | awk '{print $1}')"
-tag="local-c${common_sha}-$(date -u '+%Y%m%d%H%M%S')"
+tag="local-c${common_sha}-${build_utc}"
 declare -a images=()
 for name in ordersvr tradesvr mdsvr; do
   log "Compiling $name against local Common $local_version"
