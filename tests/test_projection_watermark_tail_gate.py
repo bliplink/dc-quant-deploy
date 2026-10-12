@@ -2,6 +2,7 @@
 import importlib.util
 from pathlib import Path
 import unittest
+from unittest import mock
 
 SCRIPT = Path(__file__).resolve().parent / "projection_watermark_tail_gate.py"
 spec = importlib.util.spec_from_file_location("projection_watermark_tail_gate", str(SCRIPT))
@@ -50,6 +51,41 @@ class ProjectionWatermarkTailGateTest(unittest.TestCase):
         snapshot = {"order": [None, ["P001", "not-number", "1", "1", "1"]],
                     "trade": "not-rows"}
         self.assertEqual(3, len(gate.issues_for_snapshot(snapshot)))
+
+    def test_tail_sql_uses_constant_partition_index_seeks(self):
+        order = gate.tail_sql("order", ["P023", "P054"])
+        trade = gate.tail_sql("trade", ["P023"])
+        self.assertIn("FORCE INDEX(uk_dc_order_projection_partition_seq)", order)
+        self.assertIn("FORCE INDEX(PRIMARY)", trade)
+        self.assertIn("MAX_EXECUTION_TIME=1500", order)
+        self.assertIn("e.partition_id='P023'", trade)
+        self.assertNotIn("w.partition_id", order)
+        with self.assertRaises(ValueError):
+            gate.tail_sql("trade", ["P023'; DROP TABLE x"])
+        with self.assertRaises(ValueError):
+            gate.tail_sql("trade", ["P%03d" % x for x in range(257)])
+
+    def test_db_snapshot_preserves_missing_tail_as_block(self):
+        probes = [
+            [["P001", "2", "50"]],
+            [],  # no indexed event tail; must never become a PASS
+            [["P002", "1", "20"]],
+            [["P002", "1", "20"]],
+        ]
+        with mock.patch.object(gate, "read_db_rows", side_effect=probes):
+            evidence = gate.db_snapshot()
+        self.assertEqual(["P001", "2", "50", "NULL", "NULL"],
+                         evidence["order"][0])
+        self.assertEqual(1, len(gate.issues_for_snapshot(evidence)))
+
+    def test_db_snapshot_refuses_duplicate_event_tail(self):
+        probes = [
+            [["P001", "2", "50"]],
+            [["P001", "2", "50"], ["P001", "2", "50"]],
+        ]
+        with mock.patch.object(gate, "read_db_rows", side_effect=probes):
+            with self.assertRaisesRegex(ValueError, "duplicate event tail"):
+                gate.db_snapshot()
 
 
 if __name__ == "__main__":
