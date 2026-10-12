@@ -1,0 +1,7 @@
+# MD-C canary only. Use WITH compose.yaml and the local runtime env file.
+# Do not use as an HA promotion flag; A/B current Primaries remain untouched.
+services:
+  mdsvr-c:
+    image: dc-saas/mdsvr:cluster-dev-local-md-epoch-fence-dff97ba-20261012
+    environment:
+      JAVA_TOOL_OPTIONS: "-Dmd.cluster.replayWitness.enabled=true -Dmd.cluster.replayWitness.auditMillis=30000"
