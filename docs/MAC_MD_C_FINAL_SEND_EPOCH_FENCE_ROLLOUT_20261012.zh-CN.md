@@ -45,6 +45,14 @@ docker compose --env-file "$ENV" -f compose.yaml \
 - `scripts/check-md-recovery-shadow.py` 最新两轮均为 **10/10 Fresh + Contiguous、0 Stale、0 Gap**，返回 `PASS_LOCAL_OBSERVATION_ONLY`，不授权晋升。证据 `~/.opentradingcore/local-md-release-candidate-20261011/artifacts/md-c-dff97ba-shadow-audit.json`。
 - 混合镜像的真实 ZooKeeper `scripts/check-md-failover-preflight.py`：`partitionCount=256`、`unreadyPartitions=0`、`primaryCounts={MDSvrA:128,MDSvrB:128}`，决策仍 **BLOCKED**，`canInjectMdPrimaryFault=false`，硬阻断项仍为 Order 全市场实时 committed HEAD、MD CAS/Safety、Ready_epoch publisher fence、promoted image 和 Robot post failover reconciliation。证据 `~/.opentradingcore/local-md-release-candidate-20261011/artifacts/md-c-dff97ba-real-preflight.json`。
 
+### Gateway 真实源码已确认：为什么发送端二次检查尚不构成端到端 Fencing
+
+本轮从 `bliplink/gw` 的 `saas-crypto` 克隆得到版本 `6a84739`，其 `GW.java` 只是委托 `GateWay.main(args)` 的薄启动包装；实际 Gateway 接收/分发逻辑需在 `bliplink/gateway` 仓库内修改。在隔离只读检出 `bliplink/gateway` 的 `master` 版本 `6bddc9c` 中，`gateway/src/main/java/com/gateway/invoke/gw/GWProxy.java` 的 `onMessage(topic,content)` / `NotifyProxy.notify(topic,content)` 路径仅保留 `topic,content`。MD 当前 `GwServerResource.publishMessage(topic, content)` 也没有传递可验证的**物理 Publisher 节点、ZK assignmentVersion、源 Epoch、单消息签名**。因此 Gateway 的原始分发队列无法判断已在网络中延迟的旧 Primary 消息是否合法。
+
+生产端到端隔离必须先共同实施 **MD→Gateway 签名 envelope 和接收端 Fencing**（保留原始 client JSON 兼容），由可验证的发布节点密钥签发，Gateway 验证身份、当前真实 Assignment 的 Primary/Epoch/version/READY、消息 Replay/TTL，只有通过才剥离 envelope 转发给已有订阅者；在迁移期间以版本/分区白名单双协议互通，未经认证的老消息不能绕过新受保护分区。在 Gateway 和 MD 的上述兼容方案未同时通过测试并滚动发布前，不能在混合版本集群中强开故障主切。仅仅重复查询 MD 的缓存 Epoch 不能证明已经送到 Gateway 的旧包不会发出。
+
+上述两处 Gateway 仓库只做了隔离读代码，**本轮没有修改或部署 Gateway**，不存在接收端 Fencing 验收记录。
+
 ### 回滚与后续上线门禁
 
 立即回退至此前可用 MD-C Shadow 版本（仅 C，不动 A/B）：
