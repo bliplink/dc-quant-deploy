@@ -66,6 +66,8 @@ grep -Fqx 'trade.cluster.snapshot.periodic.enabled=true' "${a_config}" || fail '
 grep -Fqx 'trade.cluster.snapshot.periodic.pollMillis=5000' "${a_config}" || fail 'Trade periodic snapshot poll interval mismatch'
 grep -Fqx 'trade.cluster.snapshot.periodic.maxAgeMillis=300000' "${a_config}" || fail 'Trade periodic snapshot max age mismatch'
 grep -Fqx 'trade.cluster.snapshot.periodic.minCommittedMutations=10000' "${a_config}" || fail 'Trade periodic snapshot mutation threshold mismatch'
+grep -Fqx 'trade.cluster.snapshot.periodic.recoveryTransferAware.enabled=false' "${a_config}" || fail 'Transfer-aware snapshots must remain opt-in'
+grep -Fqx 'trade.cluster.snapshot.periodic.recoveryTransferAware.maxWalSlots=2048' "${a_config}" || fail 'Trade WAL transfer snapshot threshold missing'
 grep -Fqx 'trade.cluster.lifecycle.enabled=true' "${a_config}" || fail 'Trade recovery lifecycle must be enabled'
 grep -Fqx 'trade.cluster.recovery.authoritative=true' "${a_config}" || fail 'Trade authoritative recovery must be enabled'
 grep -Fqx 'trade.cluster.recovery.rollbackUncommittedTail.enabled=false' "${a_config}" || fail 'Trade rollback must remain opt-in outside full-cluster profile'
@@ -146,6 +148,21 @@ sed 's/^TRADE_CLUSTER_PERIODIC_SNAPSHOT_POLL_MILLIS=.*/TRADE_CLUSTER_PERIODIC_SN
 if "${DEPLOY_DIR}/generate-saas-configs.sh" "${TEST_ROOT}/invalid-snapshot-poll.env" >/dev/null 2>&1; then
   fail 'Trade periodic snapshot poll interval must be positive'
 fi
+
+cp "${TEST_ROOT}/cluster.env" "${TEST_ROOT}/transfer-aware.env"
+cat >> "${TEST_ROOT}/transfer-aware.env" <<'EOF'
+TRADE_CLUSTER_SNAPSHOT_TRANSFER_AWARE_ENABLED=true
+TRADE_CLUSTER_SNAPSHOT_TRANSFER_MAX_WAL_SLOTS=2048
+EOF
+"${DEPLOY_DIR}/generate-saas-configs.sh" "${TEST_ROOT}/transfer-aware.env" >/dev/null
+grep -Fqx 'trade.cluster.snapshot.periodic.recoveryTransferAware.enabled=true' "${a_config}" || fail 'Trade transfer-aware snapshot opt-in did not reach A'
+grep -Fqx 'trade.cluster.snapshot.periodic.recoveryTransferAware.enabled=true' "${b_config}" || fail 'Trade transfer-aware snapshot opt-in did not reach B'
+for invalid_slots in 0 4096 garbage; do
+  sed -e "s/^TRADE_CLUSTER_SNAPSHOT_TRANSFER_MAX_WAL_SLOTS=.*/TRADE_CLUSTER_SNAPSHOT_TRANSFER_MAX_WAL_SLOTS=${invalid_slots}/" "${TEST_ROOT}/transfer-aware.env" > "${TEST_ROOT}/transfer-invalid.env"
+  if "${DEPLOY_DIR}/generate-saas-configs.sh" "${TEST_ROOT}/transfer-invalid.env" >"${TEST_ROOT}/transfer-invalid.log" 2>&1; then
+    fail "Invalid transfer-aware WAL trigger ${invalid_slots} must be rejected"
+  fi
+done
 
 grep -Fq -- '--full-cluster)' "${DEPLOY_DIR}/deploy-saas.sh" ||
   fail 'one-command full cluster option is missing'
