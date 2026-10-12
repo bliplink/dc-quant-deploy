@@ -42,12 +42,24 @@ Order 快照还会复制到副本；默认 5s 轮询 + 一轮 4 个分区的参�
   返回 **PASS_10_TENANT_SNAPSHOT**：10/10 RUNNING、各 40 活动委托、
   双边各 10 档。证据位于私有 artifacts 的
   `tenants-after-p023-ready-20261012-1019.json`。
+- **10:21:00 实际快照落盘证据**：Trade-B `P054/latest.json` 更新为
+  epoch=2、snapshotSeq=201206、committedStateSeq=201205，现场日志对应
+  `TRADE_SNAPSHOT_SAVED partition:P054, locations:1, epoch:2`。
+  在调度已启用、未手工调用捕获的条件下，说明 Trade 的低频定时任务已
+  产生一次真实业务快照；这不是 P023 的 `TRADE_RECOVERY_CHECKPOINT_SAVED`。
+  Order 的周期性 `ORDER_PERIODIC_SNAPSHOT_OK` 仍待在满足提交变更阈值后观察，
+  不应将之前随重启/复制更新的快照文件混作 Order 定时任务成功证据。
+- **最终复核**：重新以退出码严格检查 Order 全 256 分区 PASS，
+  `snapshot_sets_equal=256`、无 Learner；随后再次运行 10 租户只读审计 PASS，
+  10/10 Robot RUNNING、每户 40 笔活动委托、双边各 10 档。
+  最终证据：`artifacts/tenants-periodic-final-20261012-1023.json`（Mac 私有目录）。
 - 现场曾触发多租户恢复期间的短暂失败，因此本轮不宣称长时间稳定性、
   Trade 主切全覆盖或稳定 TPS/P99 验收通过。
-- 由于 Trade-B 和 Robot 原始容器内存接近上限，本轮分别将
-  `TRADESVR_B_MEMORY_LIMIT` 由 896m 升为 1536m、
-  `ROBOTSVR_MEMORY_LIMIT` 由 384m 升为 640m；
-  `docker update` 与私有运行环境配置同时更新，JVM Xmx 未扩大。
+- 由于 Trade-B 和 Robot 原始容器内存接近上限，本轮将
+  `TRADESVR_B_MEMORY_LIMIT` 先由 896m 升为 1536m，后在业务恢复后
+  观察到 1.406 GiB / 1.5 GiB，故继续增加至 **2048m**；
+  `ROBOTSVR_MEMORY_LIMIT` 由 384m 升为 640m。
+  `docker update` 与私有运行环境配置同时更新，**JVM Xmx 未扩大，也未再次重启**。
   后续必须观察内存峰值和 CPU，不能据此推断内存问题完全修复。
 
 ## 归档 / GC 的三种不同含义
