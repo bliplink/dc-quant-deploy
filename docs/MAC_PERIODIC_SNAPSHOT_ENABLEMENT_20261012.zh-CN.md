@@ -90,3 +90,31 @@ Order 快照还会复制到副本；默认 5s 轮询 + 一轮 4 个分区的参�
 - 数据面的 `ORDER_PERIODIC_SNAPSHOT_OK` / Trade 新 snapshot 时间戳、周期
   持久水位与跨节点 checkpoint 对账，是下一轮完整功能验收的必要证据。
   单有 `started` 日志不代表磁盘快照成功生成。
+
+## 2026-10-12 Common 归档轮转公共门禁开发进展
+
+已在 Common 最新 `saas-crypto` 源码基础上新增
+`com.app.common.replication.JournalArchiveRotationPolicy`，复用已有
+`SnapshotRetentionFence`（用于**删除**）、`ReplicatedStateMachine`
+（用于业务状态）、`StateMachineRecoveryCoordinator`（用于恢复），
+不重复发明协议、不修改 Gateway。
+
+- Common 验证分支：`codex/common-wal-rotation-policy-20261012`。
+- Git 提交：`bf6415bf9d7a42a0a4da4e4d77141e07e7c4bd92`。
+- Common Docker Maven Java 8 离线全量测试 **214/214 PASS**，其中 9 个
+  新测试覆盖权威身份、epoch、提交 HEAD、未提交尾部、旧归档边界、
+  副本持久水位、快照恢复证明、独占写入屏障、最短时间和物理大小阈值。
+- 该策略仅供**后台**取固定大小证明并 O(1) 判定
+  `HOLD` / `SNAPSHOT_REQUIRED` / `SEAL_ALLOWED`；
+  没有任何文件删除、磁盘全表扫描或交易热路径同步操作。
+- **不能误认为真实业务 WAL 自动轮转已上线**：Order 原来的
+  `OrderPartitionJournal.rebase` 强制 epoch 前进，尚不能安全用于
+  same-epoch 定时封段；Trade 的现有 `rebase` 同样属于恢复链路。
+  下一步是在同一代码框架下完成 Order/Trade 物理封段适配器、
+  旧日志仍可追平/Projection 可读取证明，再进行独立故障注入。
+- 本轮**仅独立验证分支**推送，未触发 Common Maven Central 发布、正式
+  GHCR 镜像替换或改变已运行的 Order/Trade 配置；
+  `saas-crypto` 公共包正式发布应等同 epoch 恢复/副本读取验收稳定后进行。
+- 代码阶段完成后复核 Demo，10/10 Robot RUNNING，每租户 40 活动委托，
+  买/卖各 10 档；现场私有只读证据
+  `tenants-common-wal-policy-20261012-1040.json`。
