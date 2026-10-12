@@ -111,6 +111,46 @@ MySQL 原始水位上，从最新归档 + baseline 重建后返回 `OK`，
   后续以`tenant-recover-after-a-v12-rollback-poll-*.json`
   实测为准。
 
+
+## 最终恢复验收补充（19:04 以后，替代上文临时 3/10 状态）
+
+- 19:04:13（北京时间），监控输出 PASS_ALL_10_TENANTS_AFTER_ROLLBACK，
+  十个活跃分区 BReady=10/10。随后独立审计再次
+  PASS_10_TENANT_SNAPSHOT：10/10 租户 Robot RUNNING，
+  每户 40 笔活动委托、买卖盘口各 10 档。
+  证据：
+  ~/.opentradingcore/local-ha-wal-seal-20261012-v1/artifacts/tenants-stable-final-after-A-canary-rollback-20261012.json。
+- 使用只读卷上的真实 Chronicle Queue 检查 B 最新 STATE_COMMIT，
+  并在 A WAL 找到完全相同 seq、epoch、原始编码数据：
+  P023=297034(epoch7)、P054=305416(epoch2)、
+  P060=294088(epoch2)、P077=290668(epoch1)、
+  P158=292204(epoch2)、P160=298910(epoch4)、
+  P177=295588(epoch1)、P201=287418(epoch3)、
+  P244=293598(epoch2)、P246=291490(epoch2)。
+  共 10/10 通过；这是最新提交标记检查，不等于全历史对账。
+- 10 个租户再次审计 PASS，Order A/B/C、Trade A/B、
+  MD A/B/C、Robot、Projection、Gateway 均 Running，
+  RestartCount=0、OOM=false。Trade-A 仍用旧镜像 c361e3e3d，
+  Trade-B 仍用旧镜像 a8fc334；新候选 2ed6095
+  **没有替换任何运行中的 Trade 节点**。第一次失败的
+  canary 容器保留为 dc-saas-tradesvr-failed-2ed6095
+  （已停止），未经新门禁不再启动。
+- 最终 MySQL 的 Trade Projection 仍有六个旧水位
+  P023=219475、P054=223429、P060=215797、
+  P077=213139、P244=214965、P246=212879；
+  另外四个分区 P158/P160/P177/P201 继续前进。
+  **不能把十租户 Robot 恢复解读为 Projection GAP 已恢复**，
+  WAL 自动删除仍关闭。
+- 这次中断和后续约十余分钟逐分区恢复证实：
+  目前 TradeReplicationManager 对每个配置 Replica
+  都要求持久 ACK；在仅配置一个 Replica 的二节点集群中，
+  直接停止 Replica A 就会导致 Primary B
+  写入被安全阻挡并遗留 dirty WAL，需要昂贵的恢复。
+  不能仅靠修补发布脚本宣称滚动升级零停机。
+- 本地发布脚本已经修复 Docker RestartCount 字段错误，
+  并在没有显式维护期确认时 fail-closed 禁止重复停
+  唯一同步 Replica。它不是正式 CI 发布机制。
+
 ## 严格剩余门禁
 
 1. **先恢复所有 10 租户**（机器人 RUNNING +40 open
