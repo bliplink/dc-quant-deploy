@@ -84,10 +84,19 @@ Common JAR sha256 仍为
    `SnapshotTransferIntegrity`、`ReplicatedStateMachine` 等抽象，
    Trade 已有 `TradeSnapshotInboundProof` 内容校验，但**没有实际
    分块传输并持久化安装 Replica 完整 Snapshot 的闭环**。
-3. 需要在 Common 设计快照流式传输，Trade 负责业务快照；
-   Replica 只有在校验字节哈希、partition/epoch、已提交水位、
-   旧 reader 生命周期、原子持久化和本地 WAL 覆盖后才发布新快照，
-   不能直接复制文件冒充经校验的副本持久化。
+3. **复用 Common 已开发的流式恢复协议**，不重复实现传输：
+   `RecoverySourceHeadControlHandler`、`RecoverySourceDataControlHandler`、
+   `RecoveryTransferFrame`、`VerifiedRecoveryStagingClient`、
+   `StateMachineSnapshotStreams`、`DurableRecoverySnapshotSeal`。
+   这些组件已经支持认证 HEAD、逐块读取、校验、暂存和 seal，
+   但 **TradeReplicationManager 当前只注册 WAL 复制 handler**，
+   尚未装配 source HEAD/DATA control handler、Replica staging/install、
+   业务状态机 snapshot/restore 和 READY 门禁；因此还没有形成 Trade 完整闭环。
+   服务侧需要严格提供当前物理 Primary、ZK 版本、提交水位和独立密钥来源，
+   Replica 只有在身份哈希、partition/epoch、持久提交水位、
+   reader 生命周期、原子安装和本地 WAL 覆盖都校验后才可以发布新快照。
+   Common 提醒数据控制端口还需要私有网络 ACL 和 TLS/mTLS；
+   不得在未配置安全源身份时直接打开明文公网恢复接口。
 4. 做单业务分区 B→A 的 CAS+READY 实测，并对照
    Projection/资金/持仓/委托/成交权威结果；
    **通过前禁止直接重启当前承载 10 个活跃租户的 Trade-B**。
