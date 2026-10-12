@@ -54,8 +54,13 @@ def evaluate(log_text, expected_markets, now=None, max_age_seconds=180,
                 blockers.append("MISSING_FRESH_AUDIT_SAMPLE_%d" % i)
             if row["tracked"] != expected_markets or row["fresh"] != expected_markets:
                 blockers.append("INCOMPLETE_MARKET_OBSERVATION_%d" % i)
-            if row["stale"] or row["gap"] or row["events"]:
+            # gapEvents is a cumulative diagnostic counter. One recovered
+            # historical gap MUST NOT permanently prevent future recovery.
+            # Require zero CURRENT gap markets and no NEW gap in the window.
+            if row["stale"] or row["gap"]:
                 blockers.append("STALE_OR_GAPPED_MARKETS_%d" % i)
+        if latest[1]["events"] != latest[0]["events"]:
+            blockers.append("GAP_EVENTS_CHANGED_DURING_OBSERVATION")
     return {
         "schema": "md-shadow-local-observation-v1",
         "decision": "PASS_LOCAL_OBSERVATION_ONLY" if not blockers else "BLOCKED",
@@ -69,6 +74,9 @@ def evaluate(log_text, expected_markets, now=None, max_age_seconds=180,
              "fresh": item["fresh"], "stale": item["stale"],
              "gapMarkets": item["gap"], "gapEvents": item["events"]}
             for item in latest],
+        "historicalGapEvents": latest[-1]["events"] if latest else None,
+        "newGapEventsInWindow": (latest[1]["events"] - latest[0]["events"])
+            if len(latest) == 2 else None,
         "blockers": blockers
     }
 

@@ -42,6 +42,25 @@ class ShadowGateTests(unittest.TestCase):
         self.assertEqual(2,len(result["samples"]))
         self.assertIn("STALE_OR_GAPPED_MARKETS_2",result["blockers"])
 
+    def test_previously_recovered_historical_gap_does_not_permanently_block(self):
+        result=self.check([sample(55,events=1),sample(25,events=1)])
+        self.assertEqual("PASS_LOCAL_OBSERVATION_ONLY",result["decision"])
+        self.assertEqual(1,result["historicalGapEvents"])
+        self.assertEqual(0,result["newGapEventsInWindow"])
+        self.assertFalse(result["promotionAuthorized"])
+        self.assertFalse(result["canInjectMdPrimaryFault"])
+
+    def test_new_gap_event_even_if_already_healed_requires_fresh_stable_window(self):
+        result=self.check([sample(55,events=1),sample(25,events=2)])
+        self.assertEqual("BLOCKED",result["decision"])
+        self.assertIn("GAP_EVENTS_CHANGED_DURING_OBSERVATION",result["blockers"])
+        self.assertEqual(1,result["newGapEventsInWindow"])
+
+    def test_counter_reset_across_restart_does_not_count_as_stable_window(self):
+        result=self.check([sample(55,events=5),sample(25,events=0)])
+        self.assertEqual("BLOCKED",result["decision"])
+        self.assertIn("GAP_EVENTS_CHANGED_DURING_OBSERVATION",result["blockers"])
+
     def test_explicit_source_gap_is_blocked(self):
         result=self.check([sample(55),sample(25,fresh=9,gaps=1,events=1)])
         self.assertEqual("BLOCKED",result["decision"])
