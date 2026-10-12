@@ -154,6 +154,35 @@ B 曾对 dirty tail 采取 checkpoint 与
   演练环境优化**保守的会话再核验与快速 READY 恢复**，
   不能绕开 fencing 或强制提升。
 
+
+## Trade-B 历史 Archive GAP 证据（18:10）
+
+Projection 的 GAP 仍然不能宣称恢复完成。为区分
+**历史 WAL 物理丢失**与**在线旧版 Trade-B 无法补读历史 Archive**，
+用 `SingleChronicleQueueBuilder.single(dir).readOnly(true)`
+且 Docker 卷为 `:ro`，只扫描 P023/P054 历史目录首尾：
+
+- P023 `P023-epoch7-seq196557-...`：first=1, last=196557；
+  `P023-epoch7-seq219477-...`：first=196557, last=219477；
+  `P023-epoch7-seq286691-...`：first=219477, last=286691。
+- P054 第一段 first=1,last=223431，
+  第二段 first=223431,last=295303。
+
+当前 MySQL `dc_trade_projection_watermark` 对 P023
+在检查时约 `seq=219475`，对 P054 约 `seq=223429`。
+这两处待补的历史区间在 Archive 中**仍有物理记录范围覆盖**，
+但只有首尾检查，未核对每个业务事件都已被正确重放。
+`TradeProjectionBinaryConsumer` 日志反复显示
+`Projection realtime buffer reset ... GAP fetch remains authoritative`。
+**不是证据证明 MySQL 已追平**。
+
+待验证：把已开发的 Archive 区间补读支持
+（Trade 代码 `TradePartitionJournal.readTailRangeConcurrentReadOnly`
+和 `TradeProjectionCommittedReader`）放入受控候选部署，
+真实验证旧水位跨多个 Archive、Epoch、dirty-tail 修复后的
+有序累计补读，并检查 MySQL watermark 持续前进。
+原始 Archive 必须全部保留；不要以日志累计量触发删除。
+
 ## 后续准入
 
 - 先确认再次 10/10 Robot RUNNING、活动委托完整，
