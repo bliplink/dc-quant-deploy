@@ -5,6 +5,7 @@ Run after exporting the local deploy env file. This uses only public/service API
 for mutations; MySQL queries are read-only convergence checks.
 """
 
+import hashlib
 import json
 import os
 import secrets
@@ -75,6 +76,61 @@ def wait(label, probe, seconds=150, interval=2):
         time.sleep(interval)
     raise RuntimeError("%s did not converge within %ss (last=%s)" %
                        (label, seconds, last))
+
+
+def wait_for_trade_warm_replica(partition, seconds=540):
+    """Fail closed before a held-position HA fault.
+
+    Full-image equality is a necessary prerequisite, NOT independent proof
+    of committed WAL tail ACK or business READY. The real promotion controller
+    still must enforce those authority/fencing checks.
+    """
+    from pathlib import Path
+    from md_cluster_transition_host import DockerZk
+
+    if not partition.startswith("P") or len(partition) != 4 or not partition[1:].isdigit():
+        raise ValueError("invalid isolated Trade partition")
+    data_root = Path(os.environ["DEPLOY_ROOT"]) / "data"
+    control = DockerZk("dc-saas-zookeeper", "127.0.0.1:32181",
+                       "/dc/cluster/tradesvr/partitions", "docker")
+
+    def probe():
+        first = control.read(partition)
+        assignment = first["value"]
+        replicas = assignment.get("replicas") or [assignment.get("replica")]
+        if (assignment.get("state") != "READY"
+                or {assignment.get("primary"), *replicas} != {"TradeSvrA", "TradeSvrB"}
+                or len(replicas) != 1):
+            return None
+        epoch = int(assignment.get("epoch", 0))
+        images = []
+        for node in ("TradeSvrA", "TradeSvrB"):
+            image = data_root / node / "snapshot" / partition / "latest.json"
+            if image.is_symlink() or not image.is_file():
+                return None
+            try:
+                body = image.read_bytes()
+                metadata = json.loads(body)
+            except (OSError, ValueError):
+                return None
+            if (metadata.get("partitionId") != partition
+                    or int(metadata.get("epoch", 0)) != epoch
+                    or int(metadata.get("snapshotSeq", 0)) <= 0
+                    or int(metadata.get("committedStateSeq", 0)) <= 0):
+                return None
+            images.append((metadata["snapshotSeq"], metadata["committedStateSeq"],
+                           hashlib.sha256(body).hexdigest()))
+        if images[0] != images[1]:
+            return None
+        second = control.read(partition)
+        if second["version"] != first["version"] or second["value"] != assignment:
+            return None
+        return epoch, images[0][0]
+
+    epoch, seq = wait("signed warm Replica full-image preflight " + partition,
+                      probe, seconds=seconds, interval=6)
+    log("READY Replica full snapshots match partition=%s epoch=%s seq=%s "
+        "(full WAL tail and promotion gate still authoritative)." % (partition, epoch, seq))
 
 
 def market_book():
@@ -274,6 +330,7 @@ def main():
         command_env = os.environ.copy()
         command_env["TRADE_CLUSTER_ROLE_REVERSAL_PARTITION"] = partition
         command_env["TRADE_CLUSTER_UPGRADE_LEGACY"] = "true"
+        wait_for_trade_warm_replica(partition)
         log("Holding 0.0001 BTC during Trade role reversal on " + partition)
         subprocess.run(["bash", os.path.join(os.path.dirname(__file__),
                          "run-trade-cluster-role-reversal-host.sh")],
@@ -285,6 +342,7 @@ def main():
             raise RuntimeError("Trade state/DB position differs after role reversal")
         log("PASS held 0.0001 BTC throughout Trade A/B/A recovery on " + partition)
         if os.environ.get("AUTO_TENANT_HELD_TRADE_SIGKILL") == "true":
+            wait_for_trade_warm_replica(partition)
             command_env["TRADE_FAULT_LOCATION"] = LOCATION
             command_env["TRADE_FAULT_USER"] = USER_ID
             command_env["TRADE_FAULT_CONFIRM"] = "DEMO_TRADE_HELD_" + LOCATION
