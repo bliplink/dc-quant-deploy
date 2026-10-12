@@ -1,0 +1,6 @@
+# Mac Demo non-primary MD-C only: Common 361e3e3, source MD dff97ba.
+# Must NOT be treated as promotion authorization or as an MD A/B image override.
+services:
+  mdsvr-c:
+    image: dc-saas/mdsvr:cluster-dev-local-md-epoch-fence-dff97ba-c361e3e3-20261012
+    pull_policy: never

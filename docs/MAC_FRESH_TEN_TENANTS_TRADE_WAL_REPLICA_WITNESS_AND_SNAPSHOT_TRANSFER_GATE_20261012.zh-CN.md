@@ -31,6 +31,23 @@ Mac 的 Cloudflare Tunnel 进程仍存活。
 **此项只证明没有租户业务的分区切换成功；
 尚未进行活跃账户、持仓和故障注入验收。**
 
+### 真实活跃 Robot 租户分区双向角色反转
+
+进一步选择已有租户 `RSE3WJ` 的真实 Trade 分区 `P159`，
+在所有服务保持运行期间执行 ZooKeeper CAS：
+`TradeSvrB(epoch1) → TradeSvrA(epoch2) → TradeSvrB(epoch3)`。
+两次目标节点均实际输出匹配 epoch 的
+`TRADE_PARTITION_READY`，全体 20 条 Projection
+水位均没有倒退，原始 Primary 归属已恢复。
+随后独立十租户 Robot/盘口审计 **10/10 PASS**，
+零重启和 OOM。证据：
+`~/.opentradingcore/local-ha-clean-20261012-v1/trade-P159-active-role-reversal.log`
+及 `tenant-after-P159-active-role-reversal.json`。
+这是真实活跃 Robot 业务分区反转，但未使用 SIGKILL
+也未在反转期间新增测试交易员的非零持仓。
+之后尝试创建带持仓自动测试时被执行环境安全检查阻断，
+**没有产生新注册账户或持仓订单**，不能称作完成。
+
 ### 10/10 活跃分区最新已提交 WAL 双端一致
 
 使用 Java8 Maven 和 Chronicle Queue `readOnly(true)`，
@@ -65,6 +82,18 @@ Trade A/B 十个活跃分区的 `snapshot/Pnnn/latest.json`
 但运行配置没有打开。即使物理 Replica WAL 尾部一致，
 **也不得因此认为在线 SIGKILL 后、全新 Replica 追平或
 Snapshot 回退机制已经验证通过**。
+
+### 当前周期 Snapshot 实际完成情况
+
+北京时间 21:27 的独立文件检查显示，十个活跃
+Primary 分区 **10/10** 均已把 `latest.json` 从
+初始 334 字节零基线更新为约 0.9–1.25 MB 的带有非零
+`committedStateSeq` 的完整 Snapshot；
+其 `TRADE_SNAPSHOT_IO_PHASE` 写入、fsync 和
+atomic-install 日志无失败。注意它们是各自主节点的
+完整快照，**不代表唯一 Replica 的完整快照已同步安装**。
+若未来发起进程级故障注入，还需独立确认 Replica 的
+WAL 尾部、完整 Snapshot 源和按 epoch 权威接管的交集。
 
 ## 机制改进：可选恢复传输窗口 Snapshot 触发
 

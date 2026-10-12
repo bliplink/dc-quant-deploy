@@ -25,6 +25,9 @@ ZK_SERVER="${TRADE_CLUSTER_ZK_SERVER:-127.0.0.1:${ZOOKEEPER_PORT:-32181}}"
   die "TRADE_CLUSTER_ENABLED=true is required"
 [[ "${PARTITION_ID}" =~ ^P[0-9]{3}$ ]] || die "Invalid partition id: ${PARTITION_ID}"
 [[ "${TRADE_CLUSTER_UPGRADE_LEGACY:-false}" == true || "${TRADE_CLUSTER_UPGRADE_LEGACY:-false}" == false ]] || die "Invalid TRADE_CLUSTER_UPGRADE_LEGACY flag"
+ROLE_READY_TIMEOUT="${TRADE_CLUSTER_ROLE_READY_TIMEOUT_SECONDS:-30}"
+[[ "${ROLE_READY_TIMEOUT}" =~ ^[1-9][0-9]*$ ]] && (( ROLE_READY_TIMEOUT <= 300 )) ||
+  die "TRADE_CLUSTER_ROLE_READY_TIMEOUT_SECONDS must be between 1 and 300"
 
 for container in dc-saas-zookeeper dc-saas-mysql dc-saas-tradesvr dc-saas-tradesvr-b dc-saas-projectionsvr; do
   [[ "$(docker inspect --format '{{.State.Running}}' "${container}" 2>/dev/null || true)" == "true" ]] ||
@@ -75,7 +78,12 @@ switch_and_verify() {
   fi
   "${switch_command[@]}"
 
-  python3 "${SCRIPT_DIR}/trade_cluster_transition_host.py"     --zk-container "${ZK_CONTAINER}"     --zk-server "${ZK_SERVER}"     --partition-root "${PARTITION_ROOT}"     verify-ready     --plan "${plan}"     --target-node "${target}"     --target-container "${target_container}"
+  python3 "${SCRIPT_DIR}/trade_cluster_transition_host.py" \
+    --zk-container "${ZK_CONTAINER}" --zk-server "${ZK_SERVER}" \
+    --partition-root "${PARTITION_ROOT}" verify-ready \
+    --plan "${plan}" --target-node "${target}" \
+    --target-container "${target_container}" \
+    --timeout-seconds "${ROLE_READY_TIMEOUT}"
 }
 
 read -r original_primary original_replica < <(read_current_primary)
