@@ -63,6 +63,13 @@ TRADE_CLUSTER_PERIODIC_SNAPSHOT_MIN_COMMITTED_MUTATIONS="${TRADE_CLUSTER_PERIODI
 # Avoid silently turning this on across high-cardinality production deployments.
 TRADE_CLUSTER_SNAPSHOT_TRANSFER_AWARE_ENABLED="${TRADE_CLUSTER_SNAPSHOT_TRANSFER_AWARE_ENABLED:-false}"
 TRADE_CLUSTER_SNAPSHOT_TRANSFER_MAX_WAL_SLOTS="${TRADE_CLUSTER_SNAPSHOT_TRANSFER_MAX_WAL_SLOTS:-2048}"
+# Explicit opt-in for authenticated/attested in-Docker Trade Replica recovery.
+# This does NOT relax the signed source-HEAD, ZK CAS or required synchronous ACK.
+TRADE_CLUSTER_RECOVERY_PRIVATE_DOCKER_ENABLED="${TRADE_CLUSTER_RECOVERY_PRIVATE_DOCKER_ENABLED:-false}"
+# Signed Snapshot/WAL warm restore over local Host-mode loopback. No TLS needed.
+# All receiver/source components are enabled as one fail-closed switch.
+TRADE_CLUSTER_RECOVERY_WARM_ENABLED="${TRADE_CLUSTER_RECOVERY_WARM_ENABLED:-false}"
+TRADE_CLUSTER_RECOVERY_NODE_KEY_HEX="${TRADE_CLUSTER_RECOVERY_NODE_KEY_HEX:-}"
 MDSVR_E2E_MARK_PRICE_OVERRIDE_ENABLED="${MDSVR_E2E_MARK_PRICE_OVERRIDE_ENABLED:-false}"
 MDSVR_E2E_MARK_PRICE_OVERRIDE_TOKEN="${MDSVR_E2E_MARK_PRICE_OVERRIDE_TOKEN:-}"
 MDSVR_E2E_MARK_PRICE_OVERRIDE_MAX_TTL_MS="${MDSVR_E2E_MARK_PRICE_OVERRIDE_MAX_TTL_MS:-60000}"
@@ -181,6 +188,18 @@ if [[ "${TRADE_CLUSTER_ENABLED}" == "true" ]]; then
     die "TRADE_CLUSTER_PERIODIC_SNAPSHOT_ENABLED must be true or false"
   [[ "${TRADE_CLUSTER_SNAPSHOT_TRANSFER_AWARE_ENABLED}" == "true" || "${TRADE_CLUSTER_SNAPSHOT_TRANSFER_AWARE_ENABLED}" == "false" ]] ||
     die "TRADE_CLUSTER_SNAPSHOT_TRANSFER_AWARE_ENABLED must be true or false"
+  [[ "${TRADE_CLUSTER_RECOVERY_PRIVATE_DOCKER_ENABLED}" == "true" || "${TRADE_CLUSTER_RECOVERY_PRIVATE_DOCKER_ENABLED}" == "false" ]] ||
+    die "TRADE_CLUSTER_RECOVERY_PRIVATE_DOCKER_ENABLED must be true or false"
+  [[ "${TRADE_CLUSTER_RECOVERY_WARM_ENABLED}" == "true" || "${TRADE_CLUSTER_RECOVERY_WARM_ENABLED}" == "false" ]] ||
+    die "TRADE_CLUSTER_RECOVERY_WARM_ENABLED must be true or false"
+  if [[ "${TRADE_CLUSTER_RECOVERY_WARM_ENABLED}" == "true" ]]; then
+    [[ "${TRADE_CLUSTER_ENABLED}" == "true" && "${TRADE_CLUSTER_REPLICATION_REQUIRED}" == "true" && "${TRADE_CLUSTER_PERIODIC_SNAPSHOT_ENABLED}" == "true" && "${TRADE_CLUSTER_SNAPSHOT_TRANSFER_AWARE_ENABLED}" == "true" ]] ||
+      die "Trade warm recovery needs synced HA and transfer-aware periodic snapshots"
+    [[ "${TRADE_CLUSTER_RECOVERY_NODE_KEY_HEX}" =~ ^[0-9A-Fa-f]{64}([0-9A-Fa-f]{64})?$ ]] ||
+      die "TRADE_CLUSTER_RECOVERY_NODE_KEY_HEX must have 64 or 128 hex digits"
+    install -d -m 0700 "${DEPLOY_ROOT}/data/TradeSvrA/recovery-staging" "${DEPLOY_ROOT}/data/TradeSvrB/recovery-staging" \
+      "${DEPLOY_ROOT}/data/TradeSvrA/recovery-sealed" "${DEPLOY_ROOT}/data/TradeSvrB/recovery-sealed"
+  fi
   if [[ "${TRADE_CLUSTER_SNAPSHOT_TRANSFER_AWARE_ENABLED}" == "true" ]]; then
     [[ "${TRADE_CLUSTER_PERIODIC_SNAPSHOT_ENABLED}" == "true" ]] ||
       die "Trade transfer-aware snapshot requires periodic snapshots enabled"
@@ -821,6 +840,16 @@ trade.cluster.snapshot.periodic.recoveryTransferAware.maxWalSlots=${TRADE_CLUSTE
 trade.cluster.lifecycle.enabled=${TRADE_CLUSTER_ENABLED}
 trade.cluster.recovery.authoritative=${TRADE_CLUSTER_ENABLED}
 trade.cluster.recovery.rollbackUncommittedTail.enabled=${TRADE_CLUSTER_ROLLBACK_UNCOMMITTED_TAIL_ENABLED}
+trade.cluster.recovery.replica.privateDocker.enabled=${TRADE_CLUSTER_RECOVERY_PRIVATE_DOCKER_ENABLED}
+trade.cluster.recovery.source.enabled=${TRADE_CLUSTER_RECOVERY_WARM_ENABLED}
+trade.cluster.recovery.source.nodeKeyHex=${TRADE_CLUSTER_RECOVERY_NODE_KEY_HEX}
+trade.cluster.recovery.replica.headDiscovery.enabled=${TRADE_CLUSTER_RECOVERY_WARM_ENABLED}
+trade.cluster.recovery.replica.nodeKeyHex=${TRADE_CLUSTER_RECOVERY_NODE_KEY_HEX}
+trade.cluster.recovery.replica.stage.enabled=${TRADE_CLUSTER_RECOVERY_WARM_ENABLED}
+trade.cluster.recovery.replica.staging.path=../../data/${node}/recovery-staging
+trade.cluster.recovery.replica.install.enabled=${TRADE_CLUSTER_RECOVERY_WARM_ENABLED}
+trade.cluster.recovery.replica.seal.path=../../data/${node}/recovery-sealed
+trade.cluster.recovery.replica.autoWarm.enabled=${TRADE_CLUSTER_RECOVERY_WARM_ENABLED}
 trade.cluster.lifecycle.pollMillis=1000
 trade.cluster.lifecycle.retryMillis=5000
 trade.cluster.replication.enabled=${TRADE_CLUSTER_ENABLED}
