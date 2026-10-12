@@ -16,11 +16,15 @@ import tempfile
 p=argparse.ArgumentParser()
 p.add_argument('--apply',action='store_true')
 p.add_argument('--rollback',action='store_true')
+p.add_argument('--stage',default=None,help='pre-sealed Snapshot and rollback directory')
 args=p.parse_args()
 assert not (args.apply and args.rollback)
 home=pathlib.Path.home()
 base=home/'.opentradingcore/dc-saas-runtime-zkfix-20261011/data'
-stage=home/'.opentradingcore/local-ha-wal-seal-20261012-v1/artifacts/trade-a-offline-warm-20261012'
+artifacts=home/'.opentradingcore/local-ha-wal-seal-20261012-v1/artifacts'
+stage=pathlib.Path(args.stage) if args.stage else artifacts/'trade-a-offline-warm-20261012'
+if stage.parent != artifacts or stage.is_symlink() or not stage.is_dir():
+    raise RuntimeError('unsafe offline Trade-A Snapshot staging directory')
 rows=json.loads((stage/'manifest.json').read_text())['partitions']
 assert len(rows)==10
 def sha(path):
