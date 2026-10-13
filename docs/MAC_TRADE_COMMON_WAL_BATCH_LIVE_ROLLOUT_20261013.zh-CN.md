@@ -160,3 +160,44 @@
    未通过则物理删除保持禁用。
 5. 做 10/11 租户 Soak，随后 50→100→200 租户阶梯压测，
    真实交易 TPS 不等同于行情点价事件速率。
+
+
+## 7. 最终复核补录（2026-10-13 09:45 Asia/Shanghai）
+
+- 在 Trade B `SIGKILL` → Trade A 自动接管 Epoch5 后，严格只读再查
+  **Trade 256/256 partitions READY**，两节点容器
+  `Running=true`、`OOMKilled=false`、`restart=unless-stopped`。
+- 所有 `dc-saas` 容器 **24/24 运行**，
+  Trade A/B、Robot、MySQL、ZooKeeper 无 OOM。
+- P012 A/B Epoch5 Seq21802 完整 Snapshot SHA256 一致；
+  P222 A/B Epoch3 Seq28922 完整 Snapshot SHA256 一致。
+- 测试交易员 QGM88N 的权威 MySQL 只读核查：
+  `long_position=0.000100000`、
+  `short_position=0.000000000`；
+  `dc_orders_execorders count=1, DISTINCT exec_id=1,
+  SUM(last_qty)=0.000100000`；
+  `dc_orders count=1, DISTINCT order_id=1`。
+  这是该测试交易员范围内的不重复成交证明，不是全租户
+  资金持仓总账跨系统一致性证书。
+- 只读容量门禁 `check-tenant-ramp-readiness.py`：
+  `tenantLocations=11`、所有 Robot 健康、
+  CPU PSI some avg10=8.48%、Robot CPU quota 10.4%、
+  Order B memory 33.24%，但
+  `nextRampAuthorized=false`、`gate=BASELINE_READY_ONLY`。
+  未执行 50/100/200 租户压力测试；
+  2.07667 market rows/s **不是订单 TPS**。
+- MD 只读预检使用现有本地三节点镜像精确锁：
+  `decision=BLOCKED`，仍缺
+  Order 当前完整市场 Image 证明、
+  MD CAS/Fencing 主切控制器、
+  READY Epoch Publication Fence、
+  promoted full image 和 Robot 重订阅一致性证明。
+  **未执行 MD 故障注入，也未打开未经验证的 MD 自动主切。**
+- Maven Central 3.0.18 的 GitHub Actions
+  `38333032827` Java8 build 成功、
+  publish job 为 `in_progress`；
+  截至本条补录 Maven Central maven-metadata.xml
+  尚未出现 3.0.18。
+  `com.app.dc` PR5 / Trade PR5 暂不合并，
+  避免错误引用未发布的包或产生不完整 GHCR 正式镜像。
+  Sonatype 的异步处理本身不影响正在运行的本地 Demo。
