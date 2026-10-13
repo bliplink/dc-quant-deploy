@@ -46,7 +46,7 @@ class OrderMdMarketSnapshotAuditTest(unittest.TestCase):
 
     def test_old_or_mismatching_snapshot_fails_closed(self):
         file = self.root/"OrderSvrB"/"snapshot"/self.partition/"snapshot.json"
-        altered = dict(self.body, epoch=1)
+        altered = dict(self.body, epoch=1, committedStateEpoch=1)
         file.write_text(json.dumps(altered))
         self.assertIn(self.partition+":ORDER_REPLICA_SNAPSHOT_MISMATCH", self.check()["snapshotIssues"])
 
@@ -56,6 +56,17 @@ class OrderMdMarketSnapshotAuditTest(unittest.TestCase):
         self.assertTrue(self.check()["snapshotIssues"])
         self.body["books"][0]["location"] = self.market
         self.body["commitMarkerSeq"] = 0
+        self.write_all()
+        self.assertTrue(self.check()["snapshotIssues"])
+
+    def test_other_market_from_wrong_partition_is_rejected(self):
+        self.body["books"].append(dict(location="ELSE99", marketIndicator="4",
+                                       securityId="ETHUSDT", lastUpdateId=8))
+        self.write_all()
+        self.assertTrue(self.check()["snapshotIssues"])
+
+    def test_cross_epoch_commit_watermark_regression_is_rejected(self):
+        self.body["committedStateEpoch"] = 3
         self.write_all()
         self.assertTrue(self.check()["snapshotIssues"])
 
