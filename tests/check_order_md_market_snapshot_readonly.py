@@ -64,7 +64,7 @@ def audit(root, tenants):
                 epoch = int(snapshot.get("epoch", 0))
                 committed_epoch = int(snapshot.get("committedStateEpoch", 0))
                 if (snapshot.get("partitionId") != part or epoch < 1 or seq < 1
-                        or marker != seq or committed < 0 or committed >= marker
+                        or marker <= 0 or marker > seq or committed < 0 or committed >= marker
                         or committed_epoch < 1 or committed_epoch > epoch):
                     raise ValueError("invalid Order commit marker")
                 if int(matches[0].get("lastUpdateId", -1)) < 0:

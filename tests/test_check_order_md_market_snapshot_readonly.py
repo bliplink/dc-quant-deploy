@@ -40,6 +40,23 @@ class OrderMdMarketSnapshotAuditTest(unittest.TestCase):
         self.assertFalse(result["promotionAuthorized"])
         self.assertEqual("BLOCKED", result["decision"])
 
+    def test_valid_noncommit_tail_snapshot_remains_replicated_but_not_promotable(self):
+        # A persisted snapshot may include journal events after the last
+        # committed business-state marker. This is a consistency observation,
+        # not authorization to replay uncommitted tail or promote MD.
+        self.body["snapshotSeq"] = 105
+        self.write_all()
+        result = self.check()
+        self.assertEqual(1, result["verifiedTriplicateSnapshots"])
+        self.assertEqual([], result["snapshotIssues"])
+        self.assertFalse(result["promotionAuthorized"])
+        self.assertEqual("BLOCKED", result["decision"])
+
+    def test_commit_marker_beyond_snapshot_tail_is_invalid(self):
+        self.body["commitMarkerSeq"] = 101
+        self.write_all()
+        self.assertTrue(self.check()["snapshotIssues"])
+
     def test_missing_replica_fails_closed(self):
         (self.root/"OrderSvrC"/"snapshot"/self.partition/"snapshot.json").unlink()
         self.assertTrue(self.check()["snapshotIssues"])
