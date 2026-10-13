@@ -529,3 +529,65 @@ WAL 周期物理 Seal/48h 删除、Order/Trade 全量资金持仓对账仍按前
   进入运行的 MD 镜像，`Safety` Spring 生产 Bean、盘口真实内容
   重建、旧发布者隔离及 `RECOVERING→READY` 原子发布仍不具备
   正式上线证据。**MD 自动主切仍 BLOCKED；绝不视为已完成或实机通过**。
+
+## 2026-10-13 第八轮：真实 Order 挂单簿影子恢复与 MD 原生逐档验证
+
+**本轮是纯本地离线/只读验收；不是 MD 自动晋升上线。**
+
+- MD [草稿 PR #6](https://github.com/bliplink/com.app.dc.mdsvr/pull/6)，
+  最新验证分支提交 `00895fed0af8f79b1a70f18f99358ad12e8e02a6`。
+  新增 `MdOrderShadowDepthRecovery`：严格在已认证完整 Order Snapshot 和
+  **全部通过 Common 累计 STATE_COMMIT 的 WAL 前缀**后，才创建**私有不可变候选订单簿**。
+  复用真实 Snapshot 的 `maker`、`side`、`price`、
+  `unOpenQty`、`orderId` 和已提交 `OrderStateMutation`；
+  处理 UPSERT/REMOVE、原价 FIFO、新价重排、正剩余数量过滤，
+  输出完整双边价格档位、数量、订单身份顺序及校验摘要。
+  严格拒绝孤儿撤单、WAL 提交缺失、订单身份不一致、
+  负数量、跨市场订单、版本倒退等。
+- 新增 `MdOrderDepthParityVerifier`，对**完整盘口而不是前 10 档**执行
+  市场 identity/lastUpdateId、双边全部价格档位和剩余数量 BigDecimal 精确比较，
+  版本一致但价格/数量有差异也返回拒绝。
+- 新增 `MdOrderShadowDepthRecovery.detachedMdImage()`：
+  将已提交 Order 全盘口构造为 MD 原生
+  `MarketDataSnapshotFullRefresh`；可在隔离的
+  `LocalDepthBook.applySnapshotForEpoch` 上恢复，
+  再使用 `LocalDepthBook.toSnapshot(depth=0)` 精确比对，
+  **不会调用** `DepthBookFacade.onSnapshot()`、`markMarketReady()`
+  或 `IPublishListener`。
+- `MdOrderSignedRecoveryEvidence.inspect()` 在原来
+  **HMAC HEAD→完整 Snapshot 帧→每个 WAL 帧→累计业务提交→全市场版本 Witness**
+  验证之后增加 `Result.shadowBooks`，从**同一个经过认证的内容**
+  重建实际 maker 盘口；`Result.canPromote()` 仍固定 `false`。
+  `DepthBookFacade.requireLocalDepthParity()` 提供只读恢复专用钩子，
+  直接对已有 MD 内存 `LocalDepthBook` 的完整深度做校验，
+  没有 ZK 写或行情发布。
+- Java8 离线专项：`MdOrderShadowDepthRecoveryTest` 与
+  `MdOrderSignedRecoveryEvidenceTest` **11/11 PASS**，
+  包含真正 `DepthBookFacade`、同版本错误数量、旧 Epoch 和 FIFO；
+  **MD 全量 158 tests, 0 failures, 0 errors, 1 skipped**（退出码0）。
+- 用 Mac mini **真实** 11 租户分区 `P027,P104,P116,P124,P156,P182,P189,
+  P197,P199,P206,P248` 的 Order A 持久 Snapshot，
+  Docker `--network none`、Snapshot 目录 `:ro`，
+  从 Snapshot maker 挂单真实重建所有价格档位、剩余数量，
+  导入**MD 原生 `LocalDepthBook`**再逐档比对：
+  **11/11 分区 PASS**；`MdRealOrderSnapshotCompatibilityTest`
+  明确这一验收用的是**离线 Snapshot 合成基线 HEAD**，
+  **不是在线 HMAC/Replica ACK 或带真实 WAL 的持续交易恢复证明**。
+- 现网只读预检 `scripts/check-md-failover-preflight.py` 仍
+  `decision=BLOCKED`、`canPromote=false`；
+  256/256 MD READY、A/B/C 成员齐全，核心9个容器 Running/no OOM。
+  现网 Order 和 MD 均还是 `dc-saas/*:cluster-dev-local-c361e3e3d-20261012034946`；
+  新 MD 代码仅在草稿 PR 和隔离测试中，**没有更换现网镜像、
+  没有在线 MD SIGKILL/真实主切**。
+  证据路径：
+  `~/.opentradingcore/epochwarm-walbatch-cold-cutover-20261013/evidence/md-shadow-book-preflight-20261013.json`。
+
+**下一项必须完成的正式接入**：隔离集群中启用源端精确物理节点密钥，
+MD 从真实 Order private Netty 请求挑战签名 HEAD、完整 Snapshot 和连续增量；
+把经过 HMAC+业务提交验证的影子盘口**原子安装到恢复 Epoch 的私有 MD 缓存**，
+与当前所有市场持续流追平；取得旧发布者在共享发送边界不可再发布的证明，
+实现经 CAS 校验的 `RECOVERING→READY`，验收 Robot 重新订阅。
+这些仍属于**未完成**状态，不能因为 11 租户静态重建通过就启用自动主切。
+
+性能要求：恢复过程才有 O(挂单数 + 有界 WAL + 全盘口档位数) 成本，
+不可放入撮合/日常行情热路径；不改 Gateway，不建 MD→MD WAL，不启用 TLS。
