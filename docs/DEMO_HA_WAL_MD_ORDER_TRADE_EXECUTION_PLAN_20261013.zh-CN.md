@@ -447,3 +447,62 @@ WAL 周期物理 Seal/48h 删除、Order/Trade 全量资金持仓对账仍按前
   `decision=BLOCKED, canInjectMdPrimaryFault=false`，
   不进行在线 SIGKILL；其结果是**正确的安全阻断**，
   不是主切可靠性 PASS。
+
+## 2026-10-13 第七轮：MD 完整签名 Image + WAL 提交前缀 + 全市场版本验收
+
+**真实开发结果，尚不代表已具备上线自动切主条件：**
+
+- MD 源码草稿 [PR #6](https://github.com/bliplink/com.app.dc.mdsvr/pull/6)
+  分支 `codex/md-order-signed-image-verification-20261013`
+  最新 commit `c8fbe819fc16296bfa8788a500d7c515c558f660`。
+- 新增 `MdOrderCommittedWalDecoder`：按真实 `OrderJournalRecord.encode()`
+  Base64/UTF8 七字段格式解析 `STATE_UPSERT`、`STATE_REMOVE`、
+  `STATE_COMMIT`，抽取 `stateSeq/stateEpoch/stateEventType/stateEventId`
+  映射 Common 的 `CommittedWalPrefixVerifier.WireRecord`；错误 Epoch/提交身份、
+  假 STATE 类型、超大/损坏 Payload 均 fail closed。
+- 新增 `MdOrderCommittedMarketVersionAudit`：不混淆 Order WAL seq 与
+  行情 `lastUpdateId`。**完整 WAL 前缀必须累计提交验证成功后**，才对
+  Snapshot 基线的所有市场逐项推导最终版本。对缺提交、业务身份错配、
+  版本回退、变更跨分区拒绝；不进行盘口内容 apply、不允许 READY。
+- 升级 `MdOrderSnapshotCheckpointContract` 与
+  `MdAuthenticatedOrderSnapshotVerifier`：
+  **完整 Snapshot 本体经 Order Primary HMAC 与 SHA 验证后**，MD 直接从
+  Snapshot bytes 构造 canonical 全市场清单，不再需要另一个尚未部署的
+  unsigned Manifest RPC。重复/空市场、伪造信息/源序列均拒绝。
+- 新增 `MdOrderSignedRecoveryEvidence`：
+  实现单次隔离验收的
+  **签名 Order HEAD → 完整签名 Snapshot Chunk → 每个 WAL_SLOT HMAC →
+  完整累计 STATE_COMMIT → 每个市场最终版本 → MD 当前 Epoch 的本地
+  完整/连续盘口版本 witness**；任一环节不满足拒绝。
+  **`Result.canPromote()` 永远是 false**，原因是版本吻合还
+  **不能证明本地盘口价格/数量/挂单字节等于 Order**，也不能替代
+  旧发布者共享栅栏、MD `RECOVERING→READY` CAS、Robot 重新订阅。
+- 使用完全隔离 Maven Common 候选 JAR（未修改宿主 `~/.m2`）：
+  Java8 签名恢复组合专项 **12/12 PASS**，旧 Manifest + business WAL
+  单测 **13/13 PASS**，MD Java8 **全量 150/150 PASS**，
+  failures=0, errors=0, skipped=0。当前 PR 仍为 Draft、不合并、
+  不编译/替换在线正式镜像。
+- 本轮末再次跑真实 Demo `scripts/check-md-failover-preflight.py`：
+  **256/256 READY**，A/B 各 128 Primary，C 成员在线，
+  `decision=BLOCKED`、`canPromote=false`、
+  `canInjectMdPrimaryFault=false`；
+  原五项准入阻塞保持（Order 在线完整市场证据、MD Safety/旧主栅栏、
+  当前 Epoch READY 证明、晋升后的全市场 Image、Robot 重新订阅对账）。
+  证据：
+  `~/.opentradingcore/epochwarm-walbatch-cold-cutover-20261013/evidence/md-preflight-after-signed-market-evidence-20261013.json`。
+  Order A/B/C、MD A/B/C、Trade A/B、Robot 检查均 RUNNING，未 OOM。
+
+**下一步真正的产品闭环工作（仍未通过）：**
+1. 将 MD 新验证器与 Order PR #8 的真实 exact-node RPC 联机接线并部署
+   **隔离测试集群**，严格保持 per-node 密钥、固定 HEAD、全部 sync
+   Replica durable ACK、真实完整 Snapshot bytes/WAL frames；
+   验证持续 Robot 下可在 20s session TTL 内 Stage 完成。
+2. 将签名状态机恢复得到的 market books **按 Order 原业务规则真实重建并校验
+   价格/数量/订单 FIFO**（仅版本一致不够）；新 MD 局内 shadow 不得提前
+   publish。
+3. 编写生产级独立 `MdImageRecoveryFailoverController.Safety` 源证明，
+   包含旧 MD Publisher 的隔离凭据以及新 Epoch READY 前最终再检查，
+   做单分区隔离故障、恢复节点追平，然后在全证据满足后才授权真实
+   在线 MD SIGKILL。
+4. 用户已暂缓 Common 3.0.18 Central 与 GHCR 正式镜像链；此轮没有绕过
+   版本门禁，没有 Gateway/TLS 修改，没有启用真实 WAL GC。
