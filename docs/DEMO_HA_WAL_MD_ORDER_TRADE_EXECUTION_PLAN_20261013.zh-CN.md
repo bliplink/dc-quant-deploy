@@ -209,3 +209,21 @@ Adapter 与可崩溃恢复持久 Seal 流程；**现网自动删除未完成且�
   **(3) 稳定时点的 11 租户订单/成交/资金/持仓 + Projection
   + WAL durable ACK 权威一致性。**
   在这三类门禁都满足前不得把对应任务标记成 PASS。
+
+### 本轮最后一次现网只读核验
+
+- Order A/B/C、MD A/B/C、Trade A/B、Robot 运行均 `Running=true`，
+  `OOMKilled=false`；没有为验证新代码重启服务。
+- Order `P156` 三端 Snapshot Epoch2、Seq44902，SHA256 完全一致；
+  Trade `P012` 双端 Snapshot Epoch5、Seq43434，SHA256 完全一致。
+  上述为**持久快照内容等价**，不可替代权威最新 WAL HEAD/ACK 对账。
+- 11 租户严格 Order 完整 Snapshot 审计仍通过
+  `checkedTenants=11 verifiedTriplicateSnapshots=11 snapshotIssues=[]`，
+  MD promotion 依然 `BLOCKED`。
+- 最新只读 WAL 审计 `tests/audit_saas_wal_archives_readonly.py`：
+  **782** 个历史 archive 目录，活跃 WAL 实分配
+  **3,570,253,824 bytes**，archive 实分配
+  **1,095,634,944 bytes**，48h 到期 0、授权删除 0、
+  未知目录 0。与先前 526 个目录的盘点相比数量增加，
+  但包含故障后的 Snapshot/rebase 归档；**不代表生产
+  自动 Seal/GC 已运行**，需观察增长趋势与磁盘空间。
