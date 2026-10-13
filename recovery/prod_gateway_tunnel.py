@@ -9,6 +9,7 @@ import argparse
 import os
 import select
 import socketserver
+import time
 from pathlib import Path
 
 import paramiko
@@ -61,26 +62,49 @@ def main():
     parser.add_argument("--local-port", type=int, default=13002)
     parser.add_argument("--remote-host", default="127.0.0.1")
     parser.add_argument("--remote-port", type=int, default=31002)
+    parser.add_argument("--connect-attempts", type=int, default=6)
     args = parser.parse_args()
 
     passphrase = os.environ.get("STC_PROD_KEY_PASSPHRASE")
     if not passphrase:
         raise SystemExit("STC_PROD_KEY_PASSPHRASE is required")
 
-    client = paramiko.SSHClient()
-    client.load_host_keys(str(Path.home() / ".ssh" / "known_hosts"))
-    client.set_missing_host_key_policy(paramiko.RejectPolicy())
-    client.connect(
-        args.host,
-        username=args.user,
-        key_filename=str(args.key.resolve()),
-        passphrase=passphrase,
-        timeout=30,
-        banner_timeout=30,
-        auth_timeout=30,
-    )
+    client = None
+    for attempt in range(1, args.connect_attempts + 1):
+        candidate = paramiko.SSHClient()
+        candidate.load_host_keys(str(Path.home() / ".ssh" / "known_hosts"))
+        candidate.set_missing_host_key_policy(paramiko.RejectPolicy())
+        try:
+            candidate.connect(
+                args.host,
+                username=args.user,
+                key_filename=str(args.key.resolve()),
+                passphrase=passphrase,
+                timeout=30,
+                banner_timeout=30,
+                auth_timeout=30,
+            )
+            client = candidate
+            break
+        except Exception as error:
+            candidate.close()
+            if attempt >= args.connect_attempts:
+                raise
+            delay = min(30 * (2 ** (attempt - 1)), 120)
+            print(
+                "GW_TUNNEL_CONNECT_RETRY attempt=%d delay=%d error=%s"
+                % (attempt, delay, error),
+                flush=True,
+            )
+            time.sleep(delay)
+    if client is None:
+        raise RuntimeError("SSH client was not initialized")
+    transport = client.get_transport()
+    if transport is None or not transport.is_active():
+        raise RuntimeError("SSH transport is not active after connect")
+    transport.set_keepalive(30)
 
-    ForwardHandler.transport = client.get_transport()
+    ForwardHandler.transport = transport
     ForwardHandler.remote_host = args.remote_host
     ForwardHandler.remote_port = args.remote_port
     server = ForwardServer((args.local_host, args.local_port), ForwardHandler)

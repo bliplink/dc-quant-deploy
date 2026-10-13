@@ -2,6 +2,7 @@
 """Submit explicitly selected, locally qualified repairs for server revalidation."""
 
 import argparse
+import copy
 import json
 import os
 from pathlib import Path
@@ -50,6 +51,27 @@ def selected_repairs(seed, rows, names):
     return selected
 
 
+def revalidation_request(item, row):
+    """Build a same-logic revalidation request from a locally qualified result."""
+    request = copy.deepcopy(item.get("request") or {})
+    metrics = row.get("metrics") or {}
+    source_version = str(item.get("sourceStrategyVersion") or "").strip()
+    begin_date = str(metrics.get("beginDate") or "").strip()
+    end_date = str(metrics.get("endDate") or "").strip()
+    if not source_version:
+        raise ValueError("sourceStrategyVersion is required for REVALIDATE")
+    if not begin_date or not end_date:
+        raise ValueError("qualified metrics must include beginDate and endDate")
+    request["developmentMode"] = "REVALIDATE"
+    request["parentVersion"] = source_version
+    request.pop("validationOnly", None)
+    profile = copy.deepcopy(request.get("optimizationProfile") or {})
+    profile["backtestBeginDate"] = begin_date
+    profile["backtestEndDate"] = end_date
+    request["optimizationProfile"] = profile
+    return request
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--seed", type=Path, required=True)
@@ -81,9 +103,10 @@ def main():
     failed = 0
     for item in repairs:
         name = item["strategyName"]
+        request = revalidation_request(item, rows[name])
         response = call_gateway(
             gateway_url, args.api_key, CANDIDATE_IMPORT_TOPIC,
-            item["request"], timeout=180)
+            request, timeout=180)
         version = str(response.get("strategyVersion") or "v1")
         print("SUBMITTED %s@%s" % (name, version), flush=True)
         terminal, status = wait_for_terminal(

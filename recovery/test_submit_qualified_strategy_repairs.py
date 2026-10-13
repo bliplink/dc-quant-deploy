@@ -3,7 +3,11 @@ import tempfile
 import unittest
 from pathlib import Path
 
-from submit_qualified_strategy_repairs import qualified_rows, selected_repairs
+from submit_qualified_strategy_repairs import (
+    qualified_rows,
+    revalidation_request,
+    selected_repairs,
+)
 
 
 class SubmitQualifiedStrategyRepairsTest(unittest.TestCase):
@@ -19,6 +23,8 @@ class SubmitQualifiedStrategyRepairsTest(unittest.TestCase):
             "feeAdjustedValidatePnl": 300,
             "feeAdjustedForwardPnl": 150,
             "minForwardContribution": 0.2,
+            "beginDate": "2025-10-08",
+            "endDate": "2026-10-08",
         }
 
     def test_only_strictly_qualified_rows_are_selected(self):
@@ -41,6 +47,37 @@ class SubmitQualifiedStrategyRepairsTest(unittest.TestCase):
             selected_repairs(seed, rows, ["good"])
         with self.assertRaisesRegex(ValueError, "not locally qualified"):
             selected_repairs(seed, rows, ["missing"])
+
+    def test_builds_same_logic_revalidation_request_with_local_window(self):
+        item = {
+            "sourceStrategyVersion": "v2",
+            "request": {
+                "developmentMode": "IMPORT",
+                "parentVersion": "",
+                "validationOnly": True,
+                "optimizationProfile": {
+                    "backtestBeginDate": "2025-01-01",
+                    "backtestEndDate": "2026-01-01",
+                    "randomSeed": 7,
+                },
+            },
+        }
+        request = revalidation_request(item, {"metrics": self.qualified_metrics()})
+        self.assertEqual("REVALIDATE", request["developmentMode"])
+        self.assertEqual("v2", request["parentVersion"])
+        self.assertNotIn("validationOnly", request)
+        self.assertEqual("2025-10-08", request["optimizationProfile"]["backtestBeginDate"])
+        self.assertEqual("2026-10-08", request["optimizationProfile"]["backtestEndDate"])
+        self.assertEqual(7, request["optimizationProfile"]["randomSeed"])
+
+    def test_revalidation_requires_parent_version_and_window(self):
+        with self.assertRaisesRegex(ValueError, "sourceStrategyVersion"):
+            revalidation_request({"request": {}}, {"metrics": self.qualified_metrics()})
+        with self.assertRaisesRegex(ValueError, "beginDate and endDate"):
+            revalidation_request(
+                {"sourceStrategyVersion": "v2", "request": {}},
+                {"metrics": {"beginDate": "2025-10-08"}},
+            )
 
 
 if __name__ == "__main__":
