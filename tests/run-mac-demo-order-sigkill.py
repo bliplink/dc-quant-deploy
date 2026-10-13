@@ -71,7 +71,7 @@ def main():
     if (before.get("primary") != "OrderSvrA" or
         before.get("state") != "READY" or
         set(before.get("replicas") or []) != {"OrderSvrB", "OrderSvrC"}):
-        raise RuntimeError("P238 is not the expected A/B/C READY assignment")
+        raise RuntimeError("%s is not the expected A/B/C READY assignment" % PARTITION)
     for name in (NODE, "dc-saas-ordersvr-b", "dc-saas-ordersvr-c",
                  "dc-saas-gateway", "dc-saas-zookeeper", "dc-saas-robotsvr"):
         inspect = container(name)
@@ -100,7 +100,7 @@ def main():
         run("docker", "kill", "--signal=KILL", NODE)
         killed = True
         record["killedAtUtc"] = dt.datetime.now(dt.timezone.utc).isoformat()
-        print("[order-fault] SIGKILL Order A, monitoring P238", flush=True)
+        print("[order-fault] SIGKILL Order A, monitoring %s" % PARTITION, flush=True)
         deadline = time.monotonic() + TIMEOUT
         takeover = None
         while time.monotonic() < deadline:
