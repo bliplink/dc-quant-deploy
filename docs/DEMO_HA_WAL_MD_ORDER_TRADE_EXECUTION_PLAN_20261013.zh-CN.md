@@ -93,3 +93,71 @@
 2. **WAL**：为 Order/Trade 实现生产 adapter，采集 durable Seal + Replica ACK + 全消费组 Projection + 备份恢复 + Reader generation，先完成有界后台自动 Seal，再授权每段回收；没证明不删活 WAL/Archive。
 3. **HA**：现在不再对 Order A/B/C 连续 SIGKILL，先建立 committed WAL HEAD/ACK、账户资金/成交完整逐笔权威审计与 Projection 低开销全部覆盖；以后带持续业务写入的故障验收须有显式准入。
 4. 继续**暂缓 Common 3.0.18 Central 和正式 GHCR 双架构发布链**，目前 Demo 维持已锁定本地镜像。
+
+## 2026-10-13 第二轮继续执行记录（MD/归档/权威对账）
+
+**不得把本轮的辅助审计当作用户要求的 3 个功能已全部完成。**
+
+### MD 完整 Order 市场清单三节点交叉验证（已开发、实机 PASS；promotion 仍 BLOCKED）
+
+- 新增 `tests/check_order_md_market_snapshot_readonly.py` 及
+  `tests/test_check_order_md_market_snapshot_readonly.py`（源码
+  `810e15e` / `91c1447`，负例测试提交 `cc554f4` / `63fb8ef`）。
+- 严格校验 11 租户的 `location␟4␟BTCUSDT` Order 路由，
+  在 A/B/C 的 `snapshot/Pxxx/snapshot.json` 中寻找**完整且无重复/越分区的市场清单**，
+  检查 committed Epoch/marker、marketUpdateId 和三份完整文件 SHA256，
+  不需要交易员账号或更新在线分区。
+- 实机命令：
+  `python3 tests/check_order_md_market_snapshot_readonly.py --data-root ~/.opentradingcore/dc-saas-runtime-epochwarm20261013/data --tenant-audit ~/.opentradingcore/local-ha-clean-20261012-v1/tenants-after-walbatch-sigkill-20261013.json --output ~/.opentradingcore/epochwarm-walbatch-cold-cutover-20261013/evidence/order-md-snapshot-crosscheck-strict-20261013.json`
+- 结果：`checkedTenants=11`、`verifiedTriplicateSnapshots=11`、`snapshotIssues=[]`，Python 负例 **7/7 PASS**。
+- 显式 `promotionAuthorized=false`、`decision=BLOCKED`、
+  `orderDurableSignedHeadAndAckProof=NOT_CHECKED`、
+  `mdOldPublisherFenceProof=NOT_CHECKED`、
+  `mdFullMarketImageAndDeltaProof=NOT_CHECKED`。
+  **这是盘上三副本 Snapshot 内容一致性，不是新鲜认证 HEAD/持续增量/旧主发布隔离。**
+- 源码还有 `OrderMdCheckpointHeadGate`、`OrderMdMarketManifest`、
+  `MdDepthReplayWitness`、`MdImageRecoveryFailoverController`，
+  但没有把独立可信的 `Safety` Bean 接入线上两阶段晋升。
+  因此 **MD 自动主切未开放，不执行 MD SIGKILL**。
+
+### WAL 生命周期（安全上限仍阻塞自动删除）
+
+- 已确认 `JournalArchiveSealCoordinator` 明确要求业务 Adapter 在独占
+  Writer/Recovery Barrier 内检查 **durable committed HEAD、所有必需 Replica ACK、
+  当前物理 Primary 租约、Reader generation、完整 Snapshot 和重新打开的 Archive**。
+  而 `DurableJournalArchiveSealLedger` 明确对未完成的 PREPARED/WRITER_SWITCHED
+  要求重启后外部对账，不可将它当成可直接安全删除证明。
+- 现有 Order/Trade rebase 产出旧 CQ Archive，不具备上述独立周期可恢复封段
+  + 全消费组 Projection/外部备份证明，**不能为了完成任务而直接启用真实 WAL 删除**。
+- 本轮仅复核 Common API 及既有 GC canary 验收；未修改现网归档目录、Reader、ZooKeeper 或 WAL。
+
+### Order/Trade 权威数据对账（仅部分证明；全量仍缺）
+
+- 上轮真实 Order P156 SIGKILL 与 Trade P012 带仓位 SIGKILL、
+  Epoch 接管、归队与 11 租户业务已通过；本轮未重做危险故障注入。
+- Projection 既有审计曾在带时间上限的 92 秒内扫描约 448k
+  Mutation，返回 0 孤儿，但**`PARTIAL_NOT_ATTESTED`**。
+  尚无 WAL committed HEAD/所有 Replica durable ACK 的跨业务分区权威对账证明。
+- 定向 MySQL schema 调查确认 scoped 订单、成交可按 `location,user_id,create_time`
+  索引有界读取，`orders` PK=(order_id,user_id)，`execorders`
+  PK=(exec_id,user_id)，持仓 PK=(location,user_id,security_id)；
+  其中 EPO2RU 定向只读检查订单=2、成交=2、持仓记录=3，
+  成交对订单引用或位置不匹配=0、负持仓=0。
+  **这些只是局部抽样，不是全部 11 租户在同一提交时点的资金总账审计。**
+- 更深的数据库查询请求被执行环境安全检查拦截；
+  没有绕过限制访问凭据、没有直接修改 SQL 数据、没有伪造完整对账 PASS。
+
+### 本轮结论和下个工程门禁
+
+任务①需要实现可独立认证的 Order 完整 Image + committed HEAD、
+真实多市场连续 Delta 和 MD 共享发布隔离，以 `Safety`
+集成测试和线上 SIGKILL 为最终条件；尚未完成。
+
+任务②需要真正可靠的 Writer/Reader/Replica/Projection/Backup
+Adapter 与可崩溃恢复持久 Seal 流程；**现网自动删除未完成且维持禁止**。
+
+任务③继续实行已跑通的 Order/Trade 故障接管，但还缺有界完整
+按主键/事务快照的订单、成交、资金、持仓和 WAL ACK 联合证明；
+**最终权威对账未完成**。
+
+用户暂缓 Common 3.0.18/GHCR 正式发布的要求维持不变。
