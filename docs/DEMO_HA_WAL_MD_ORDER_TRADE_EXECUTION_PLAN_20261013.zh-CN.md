@@ -506,3 +506,26 @@ WAL 周期物理 Seal/48h 删除、Order/Trade 全量资金持仓对账仍按前
    在线 MD SIGKILL。
 4. 用户已暂缓 Common 3.0.18 Central 与 GHCR 正式镜像链；此轮没有绕过
    版本门禁，没有 Gateway/TLS 修改，没有启用真实 WAL GC。
+
+### 第七轮追加：真实 Order Snapshot 兼容与 Java8 全量收口
+
+- MD 验证分支草稿 [PR #6](https://github.com/bliplink/com.app.dc.mdsvr/pull/6)
+  新增可选 `MdRealOrderSnapshotCompatibilityTest`（提交
+  `b55143650105509ba0069354f2b65cb6a2b1f585`）。
+- 离线 Docker `--network none`，把 Demo **真实**
+  `data/OrderSvrA/snapshot` 以只读 `:ro` 挂载，实际选择当前
+  11 租户市场路由对应的 11 个物理分区：
+  `P027,P104,P116,P124,P156,P182,P189,P197,P199,P206,P248`。
+  `MdOrderSnapshotCheckpointContract.fromAuthenticatedFullSnapshot`
+  对 **11/11** 真实 `snapshot.json` 成功解析，打印
+  `MD_REAL_ORDER_SNAPSHOT_SCHEMA_READONLY_PASS partitions=11`，
+  **1/1 JUnit PASS**。这项只是**源文件格式兼容**，实际签名
+  HMAC、实时 ACK、盘口字节一致与 MD 发布门禁仍未验收。
+- 最后 MD Java8 `mvn -o -Dmaven.repo.local=/qa/repository test -q`
+  全量 **151 tests, failures=0, errors=0, skipped=1**；唯一 skip
+  即未给本地真实数据挂载时的可选烟测。使用独立隔离 Common
+  候选 Jar，未改宿主 Maven 依赖。
+- 新签名 Image/WAL/full-market 验证代码已提交 GitHub，但依旧没有
+  进入运行的 MD 镜像，`Safety` Spring 生产 Bean、盘口真实内容
+  重建、旧发布者隔离及 `RECOVERING→READY` 原子发布仍不具备
+  正式上线证据。**MD 自动主切仍 BLOCKED；绝不视为已完成或实机通过**。
