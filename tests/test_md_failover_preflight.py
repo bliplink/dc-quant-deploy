@@ -138,6 +138,19 @@ class MdFailoverPreflightTests(unittest.TestCase):
             gate.evaluate(assignments(),details,members,old,
                           {'MDSvrC':'ghcr.io/bliplink/mdsvr:saas-crypto'})
 
+    def test_low_host_disk_space_blocks_fault_injection_before_vm_crash(self):
+        low=gate.MIN_HOST_FREE_BYTES-1
+        high=gate.MIN_HOST_FREE_BYTES+1
+        unsafe=gate.evaluate(assignments(),images(),host_free_bytes=low)
+        assert 'HOST_DISK_RESERVE_BELOW_5G' in unsafe['blockers']
+        self.assertFalse(unsafe['canInjectMdPrimaryFault'])
+        self.assertFalse(unsafe['canPromote'])
+        self.assertEqual(unsafe['hostDiskFreeBytes'],low)
+        healthy=gate.evaluate(assignments(),images(),host_free_bytes=high)
+        self.assertNotIn('HOST_DISK_RESERVE_BELOW_5G',healthy['blockers'])
+        with self.assertRaisesRegex(ValueError,'disk'):
+            gate.evaluate(assignments(),images(),host_free_bytes=-1)
+
     def test_output_is_read_only_by_design(self):
         self.assertTrue(gate.evaluate(assignments(),images())['readOnly'])
         self.assertNotIn('docker kill',SCRIPT.read_text())

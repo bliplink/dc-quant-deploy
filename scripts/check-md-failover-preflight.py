@@ -11,6 +11,7 @@ from collections import Counter
 from datetime import datetime,timezone
 import json
 import re
+import shutil
 from pathlib import Path
 import subprocess
 import sys
@@ -18,6 +19,9 @@ import sys
 NODES={'MDSvrA':'dc-saas-mdsvr','MDSvrB':'dc-saas-mdsvr-b','MDSvrC':'dc-saas-mdsvr-c'}
 COUNT=256
 REQUIRED_IMAGE='ghcr.io/bliplink/mdsvr:sha-48544e5'
+# Host VM and snapshot/archive storage must have a free-space reserve.
+# This check runs ONLY during explicit read-only HA preflight.
+MIN_HOST_FREE_BYTES=5*1024*1024*1024
 # Reviewed ARM64 MD-C canary, from successful MD CI #38419947005.
 # ARM64 manifest: sha256:3f02b5359dbc17e9123ac0cec49f2f98225bff5ce87d295548dac5cd0452abf3
 # A known tag is never sufficient: also pin the Docker config ID and source
@@ -75,7 +79,7 @@ def parse_ephemeral_membership(zk_output):
     return {name:found[name] and name in seen for name in NODES}
 
 
-def evaluate(rows,images,members=None,required_image=REQUIRED_IMAGE,per_node_images=None):
+def evaluate(rows,images,members=None,required_image=REQUIRED_IMAGE,per_node_images=None,host_free_bytes=None):
     # Explicitly locked local Mac images may be reviewed without pretending
     # they are the old GHCR image. This NEVER grants failover authority.
     def valid_lock(value):
@@ -88,7 +92,11 @@ def evaluate(rows,images,members=None,required_image=REQUIRED_IMAGE,per_node_ima
             node not in NODES or not valid_lock(value)
             for node,value in per_node_images.items()):
         raise ValueError('MD per-node image locks must be reviewed, immutable and known')
+    if host_free_bytes is not None and (not isinstance(host_free_bytes,int) or host_free_bytes<0):
+        raise ValueError('invalid host disk free-space reading')
     reasons=[];primaries=Counter();single=[];without_candidate=[];wrong=[];unready=[]
+    if host_free_bytes is not None and host_free_bytes<MIN_HOST_FREE_BYTES:
+        reasons.append('HOST_DISK_RESERVE_BELOW_5G')
     members=members or {}
     if len(rows)!=COUNT: raise ValueError('incomplete MD topology')
     for row in rows:
@@ -126,6 +134,7 @@ def evaluate(rows,images,members=None,required_image=REQUIRED_IMAGE,per_node_ima
                     'MD_PROMOTED_EPOCH_FULL_MARKET_IMAGE_NOT_ATTESTED',
                     'ROBOT_POST_FAILOVER_ORDER_RECONCILIATION_NOT_ATTESTED'])
     return {'schema':'otc-md-failover-preflight-v1','readOnly':True,
+            'hostDiskFreeBytes':host_free_bytes,'hostDiskRequiredFreeBytes':MIN_HOST_FREE_BYTES,
             'expectedImage':required_image,'expectedImagesByNode':{
                 node:per_node_images.get(node,required_image) for node in NODES},
             'canInjectMdPrimaryFault':False,'canPromote':False,
@@ -163,7 +172,11 @@ def main(argv=None):
                       'imageRevision':labels.get('org.opencontainers.image.revision'),
                       'commonGav':labels.get('dc.common.gav')}
     locks={'MDSvrC':options.expected_md_c_image} if options.expected_md_c_image else None
-    report=evaluate(rows,images,members,options.expected_image,locks)
+    # The host path is mounted from the same APFS Data volume backing Colima.
+    # No writes, network calls or Docker changes occur during this check.
+    free_bytes=shutil.disk_usage(str(Path.home())).free
+    report=evaluate(rows,images,members,options.expected_image,locks,
+                    host_free_bytes=free_bytes)
     report['checkedAtUtc']=datetime.now(timezone.utc).isoformat()
     if options.output:
         dest=Path(options.output).expanduser()
