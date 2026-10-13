@@ -79,6 +79,7 @@
   - 超过 48h 保留阈值的候选目录 = 0；
     `deletionAuthorized=0`，未知/异常目录 0。
 - 真实归档文件存在，但**仅凭文件数量不能证明自动归档调度持续正常**。
+- 复查 Trade 源码 `TradePartitionJournal.rebaseInternal()` 可见 `.archive` 目录是在 **认证快照重基线/rebase 时关闭旧 Chronicle Queue 并搬移目录**后生成。`TradeSnapshotScheduler` 是独立定时**生成 Snapshot**，不是 WAL 定期归档任务。因此 Trade B 的 4 个 archive 目录是归档文件存在的证据，**不能说 Trade 定时自动 WAL 归档已经开启或正在周期运行**。
   WAL GC 未通过归档 Seal ledger、快照边界、Replica/Projection 水位
   和 Chronicle Reader generation 等安全门禁，**必须继续关闭自动物理删除**。
 - 归档与 GC fail-closed 单元测试：`test_archive_retention_gc_canary.py` 6/6
