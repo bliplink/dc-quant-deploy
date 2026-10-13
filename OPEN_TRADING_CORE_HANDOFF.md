@@ -5,6 +5,7 @@
 > 开始任何修改前，请先完整阅读本文，并重新 fetch 对应仓库最新分支。文中的 commit 仅是快照，不是永久锁定版本。
 >
 > 当前问题清单：[`docs/CURRENT_ISSUES_20261001.zh-CN.md`](docs/CURRENT_ISSUES_20261001.zh-CN.md)
+> **2026-10-13 当前执行目标（优先于本文历史快照）**：[`MD 自动主切 → WAL 安全归档/删除 → Order/Trade 全链路 HA`](docs/DEMO_HA_WAL_MD_ORDER_TRADE_EXECUTION_PLAN_20261013.zh-CN.md)。按用户要求暂缓 Common 3.0.18 正式发布和 GHCR 正式镜像链，继续 Mac mini 本地镜像机制完善与验收。每次通过后更新任务状态和证据；Gateway 保持透传，不启用 TLS，不放松 ACK/epoch/GC 安全门禁。
 
 ---
 
