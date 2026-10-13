@@ -227,3 +227,43 @@ Adapter 与可崩溃恢复持久 Seal 流程；**现网自动删除未完成且�
   未知目录 0。与先前 526 个目录的盘点相比数量增加，
   但包含故障后的 Snapshot/rebase 归档；**不代表生产
   自动 Seal/GC 已运行**，需观察增长趋势与磁盘空间。
+
+## 2026-10-13 第四轮：Trade WAL 启动 Seal 保护与双服务测试
+
+**完成代码和测试、没有部署镜像、没有开启生产 GC：**
+
+- Order `saas-crypto` 已合并
+  [Order PR #7](https://github.com/bliplink/com.app.dc.ordersvr/pull/7)，
+  merge `1c818972bda18033f1ded139abd2f00c98e4fe25`。
+  新增 Order MD committed-prefix 内部源校验及 WAL Seal
+  Crash Startup Fence，Order 全量 Java8 **330 测试，
+  failures=0, errors=0, skipped=1**。
+- Trade 同样新增 `TradeWalArchiveStartupFence`，
+  `TradeJournalStore.init()` 在打开 Chronicle Journal 前支持显式
+  `trade.cluster.wal.archive.startupFence.enabled=false`
+  （默认关闭），Ledger dir 未配置/不可信，或任何 partition
+  的 `PREPARED / WRITER_SWITCHED` 未完成持久事务会阻断启动。
+  只有 `ARCHIVE_SEALED` 持久阶段通过；
+  不删除/移动/重写 WAL，不动交易热路径。
+- Trade 变更已提交到已有的
+  [验证分支/PR #5](https://github.com/bliplink/com.app.dc.tradesvr/pull/5)，
+  末尾提交 `f8655fcde16ec1f9507d9c538aee3027400d6250`；
+  Java8 专项 **8/8 PASS**，使用隔离 Maven Common 依赖的全量
+  **299/299 PASS**（0 skips/errors/failures）。
+  **按用户要求暂不合并/发布依赖 Common 3.0.18 的正式 Trade PR，
+  也未替换现网运行的 Trade A/B 镜像。**
+- 最新实机只读状态：Order A/B/C、MD A/B/C、Trade A/B、
+  Robot `Running=true, OOMKilled=false`；
+  Order P156 3 副本 Epoch2 Seq44902 SHA 相同，
+  Trade P012 双副本 Epoch5 Seq43434 SHA 相同。
+- WAL 全盘只读审计：**782** 个 archived directories，
+  `activeAllocatedBytes=3570253824`、
+  `archiveAllocatedBytes=1095634944`，
+  48h 已到期 0、`deletionAuthorized=0`；
+  Reader、Replica/Projection durable watermark、Seal ledger、备份
+  等仍不齐全，因此不能启用自动 GC。
+- 当前任务目标状态仍为：MD 自动主切 **BLOCKED**（未有签名 Order
+  HEAD + 全市场实时 Delta + 旧发布隔离）；WAL **PARTIAL**
+  （已加启动防崩溃门禁，真实周期 Seal/GC 仍未接线）；
+  Order/Trade 权威总账对账 **PARTIAL_NOT_ATTESTED**，
+  不以 Snapshot 匹配替代完整 WAL ACK/账本证明。
