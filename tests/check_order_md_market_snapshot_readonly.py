@@ -40,6 +40,20 @@ def audit(root, tenants):
                 books = snapshot.get("books")
                 if not isinstance(books, list) or not books:
                     raise ValueError("empty Order market inventory")
+                # Full-partition inventory: every book must route back to the
+                # requested partition; matching only the selected market can
+                # hide missing or misplaced books during a promotion.
+                book_keys = set()
+                for book in books:
+                    identity = (book.get("location"), str(book.get("marketIndicator")),
+                                book.get("securityId"))
+                    if any(not isinstance(part, str) or not part for part in identity):
+                        raise ValueError("invalid full market identity")
+                    if identity in book_keys or partition(*identity) != part:
+                        raise ValueError("duplicate or misplaced full-market entry")
+                    if int(book.get("lastUpdateId", -1)) < 0:
+                        raise ValueError("invalid source depth prefix")
+                    book_keys.add(identity)
                 matches = [b for b in books if (b.get("location"), str(b.get("marketIndicator")),
                              b.get("securityId")) == (location, "4", "BTCUSDT")]
                 if len(matches) != 1:
@@ -48,7 +62,10 @@ def audit(root, tenants):
                 seq = int(snapshot.get("snapshotSeq", 0))
                 committed = int(snapshot.get("committedStateSeq", -1))
                 epoch = int(snapshot.get("epoch", 0))
-                if snapshot.get("partitionId") != part or epoch < 1 or seq < 1 or marker != seq or committed < 0 or committed >= marker:
+                committed_epoch = int(snapshot.get("committedStateEpoch", 0))
+                if (snapshot.get("partitionId") != part or epoch < 1 or seq < 1
+                        or marker != seq or committed < 0 or committed >= marker
+                        or committed_epoch < 1 or committed_epoch > epoch):
                     raise ValueError("invalid Order commit marker")
                 if int(matches[0].get("lastUpdateId", -1)) < 0:
                     raise ValueError("invalid source market version")
