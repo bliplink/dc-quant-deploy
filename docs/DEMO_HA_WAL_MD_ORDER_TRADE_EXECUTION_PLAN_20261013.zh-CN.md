@@ -427,3 +427,23 @@ WAL 周期物理 Seal/48h 删除、Order/Trade 全量资金持仓对账仍按前
 4. Order/Trade WAL 独立周期 Seal+GC 与最终资金持仓 Projection 全范围审计
    仍按本目标表原计划推进，尚未完成；Common 中央正式发布和 GHCR
    正式镜像链仍按用户要求暂缓。
+
+### 第六轮完整回归收口（隔离 Java8）
+
+- Order 最终 `mvn -o -Dmaven.repo.local=/qa/repository test -q`
+  退出码 **0**，**346 tests、failures=0、errors=0、skipped=1**；
+  用 Mac 本地候选 Common 隔离 Maven 仓库，不覆盖系统 Maven 版本、
+  不替换在线 Order Docker 镜像。
+- 真实 Common `RECOVERY_SOURCE_HEAD_V2` / `RECOVERY_READ_DATA_V2`
+  Handler 收取客户端 MAC + 挑战绑定 WAL_BATCH 的隔离测试 **PASS**，
+  4 条连续 WAL 框架通过，模拟缺号被拒绝；固定 HEAD 会话 +
+  Netty Router 专项 **9/9 PASS**。
+- GitHub Order 草稿 [PR #8](https://github.com/bliplink/com.app.dc.ordersvr/pull/8)
+  更新了现有 Order Netty 监听器的 opt-in `mdRecovery.enabled=false`
+  路由以及签名 Session Pin；
+  最新提交 SHA `7569e4f9da812ab7eeb9056edaf0e4b086e3f62e`。
+  此分支**未合并、未部署、未开启自动主切**。
+- 在线 MD `check-md-failover-preflight.py` 仍
+  `decision=BLOCKED, canInjectMdPrimaryFault=false`，
+  不进行在线 SIGKILL；其结果是**正确的安全阻断**，
+  不是主切可靠性 PASS。
