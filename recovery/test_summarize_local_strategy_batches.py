@@ -56,6 +56,35 @@ class LocalStrategyBatchSummaryTest(unittest.TestCase):
         self.assertEqual("fee_adjusted_forward_not_positive",
                          summary["results"][0]["qualificationReason"])
 
+    def test_multiple_corrections_ignore_execution_errors(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            baseline = root / "baseline.json"
+            failed = root / "failed.json"
+            corrected = root / "corrected.json"
+            baseline.write_text(json.dumps({"results": [{
+                "strategyName": "one", "symbol": "BTCUSDT", "scene": "range",
+                "metrics": {"executionModelVersion": "old"},
+            }]}), encoding="utf-8")
+            failed.write_text(json.dumps({"results": [{
+                "strategyName": "one", "executionError": True, "metrics": {},
+            }]}), encoding="utf-8")
+            corrected.write_text(json.dumps({"results": [{
+                "strategyName": "one", "symbol": "BTCUSDT", "scene": "range",
+                "metrics": {
+                    "executionModelVersion": "v4_non_overlapping_walk_forward",
+                    "oosPass": 1, "tradeCount": 25, "profitFactor": 1.5,
+                    "maxDrawdownPct": 0.05, "validatePnl": 100,
+                    "feeAdjustedValidatePnl": 80,
+                    "feeAdjustedForwardPnl": 25,
+                },
+            }]}), encoding="utf-8")
+
+            summary = build_summary(baseline, [failed, corrected])
+
+        self.assertEqual(1, summary["summary"]["qualifiedCount"])
+        self.assertEqual("corrected.json", summary["results"][0]["sourceBatch"])
+
 
 if __name__ == "__main__":
     unittest.main()

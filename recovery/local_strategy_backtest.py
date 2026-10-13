@@ -349,6 +349,7 @@ def main():
                 banner_timeout=30,
                 auth_timeout=30,
             )
+            client.get_transport().set_keepalive(30)
             remote_env = read_remote_env(client)
             ForwardHandler.ssh_transport = client.get_transport()
             ForwardHandler.remote_port = int(remote_env.get("CLICKHOUSE_HTTP_PORT") or 8123)

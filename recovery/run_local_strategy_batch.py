@@ -17,7 +17,8 @@ import paramiko
 import local_strategy_backtest as local_runner
 
 
-def run_one(script, queue_path, seed_path, output_dir, item, begin_date, end_date, db_config):
+def run_one(script, queue_path, seed_path, output_dir, item, begin_date, end_date,
+            db_config, host, user, key):
     name = item["strategyName"]
     command = [
         sys.executable,
@@ -27,8 +28,11 @@ def run_one(script, queue_path, seed_path, output_dir, item, begin_date, end_dat
         "--output-dir", str(output_dir / "work"),
         "--begin-date", begin_date,
         "--end-date", end_date,
-        "--db-config", str(db_config),
     ]
+    if db_config is not None:
+        command.extend(["--db-config", str(db_config)])
+    else:
+        command.extend(["--host", host, "--user", user, "--key", str(key)])
     attempts = []
     process = None
     result_path = ""
@@ -74,13 +78,29 @@ def main():
     parser.add_argument("--end-date", default="2026-10-08")
     parser.add_argument("--output-dir", type=Path, default=base / "local-backtest-batches")
     parser.add_argument("--limit", type=int, default=0)
+    parser.add_argument("--offset", type=int, default=0)
     parser.add_argument("--host", default=local_runner.DEFAULT_HOST)
     parser.add_argument("--user", default=local_runner.DEFAULT_USER)
     parser.add_argument("--key", type=Path, default=Path(local_runner.DEFAULT_KEY))
+    parser.add_argument(
+        "--tunnel-scope",
+        choices=("strategy", "batch"),
+        default="batch",
+        help=("Use one shared tunnel for a short batch (default) or an isolated "
+              "tunnel per strategy. Use the chunked runner for long queues."),
+    )
+    parser.add_argument(
+        "--max-execution-errors",
+        type=int,
+        default=1,
+        help="Stop dispatching new strategies after this many infrastructure errors (0 disables).",
+    )
     args = parser.parse_args()
     workers = max(1, min(args.workers, 4))
     queue = json.loads(args.queue.read_text(encoding="utf-8"))
     items = queue.get("items") or []
+    if args.offset > 0:
+        items = items[args.offset:]
     if args.limit > 0:
         items = items[:args.limit]
     batch_id = datetime.now().strftime("%Y%m%d_%H%M%S")
@@ -90,36 +110,36 @@ def main():
     passphrase = os.environ.get("STC_PROD_KEY_PASSPHRASE")
     if not passphrase:
         raise SystemExit("STC_PROD_KEY_PASSPHRASE is required")
-    client = paramiko.SSHClient()
-    client.load_host_keys(str(Path.home() / ".ssh" / "known_hosts"))
-    client.set_missing_host_key_policy(paramiko.RejectPolicy())
-    client.connect(args.host, username=args.user, key_filename=str(args.key),
-                   passphrase=passphrase, timeout=30, banner_timeout=30, auth_timeout=30)
+    client = None
     server = None
     db_config = None
     results = []
     try:
-        remote_env = local_runner.read_remote_env(client)
-        local_runner.ForwardHandler.ssh_transport = client.get_transport()
-        local_runner.ForwardHandler.remote_port = int(
-            remote_env.get("CLICKHOUSE_HTTP_PORT") or 8123)
-        server = local_runner.ForwardServer(("127.0.0.1", 0), local_runner.ForwardHandler)
-        threading.Thread(target=server.serve_forever, daemon=True).start()
-        with tempfile.NamedTemporaryFile(prefix="dc-local-batch-", suffix=".ini", delete=False) as handle:
-            db_config = Path(handle.name)
-        local_runner.write_db_config(db_config, server.server_address[1], remote_env)
-        with ThreadPoolExecutor(max_workers=workers) as executor:
-            futures = {
-                executor.submit(run_one, script, args.queue.resolve(), args.seed.resolve(),
-                                output_dir, item, args.begin_date, args.end_date, db_config): item
-                for item in items
-            }
-            completed = 0
-            for future in as_completed(futures):
-                completed += 1
-                item = futures[future]
+        if args.tunnel_scope == "batch":
+            client = paramiko.SSHClient()
+            client.load_host_keys(str(Path.home() / ".ssh" / "known_hosts"))
+            client.set_missing_host_key_policy(paramiko.RejectPolicy())
+            client.connect(args.host, username=args.user, key_filename=str(args.key),
+                           passphrase=passphrase, timeout=30, banner_timeout=30, auth_timeout=30)
+            transport = client.get_transport()
+            transport.set_keepalive(30)
+            remote_env = local_runner.read_remote_env(client)
+            local_runner.ForwardHandler.ssh_transport = transport
+            local_runner.ForwardHandler.remote_port = int(
+                remote_env.get("CLICKHOUSE_HTTP_PORT") or 8123)
+            server = local_runner.ForwardServer(("127.0.0.1", 0), local_runner.ForwardHandler)
+            threading.Thread(target=server.serve_forever, daemon=True).start()
+            with tempfile.NamedTemporaryFile(
+                    prefix="dc-local-batch-", suffix=".ini", delete=False) as handle:
+                db_config = Path(handle.name)
+            local_runner.write_db_config(db_config, server.server_address[1], remote_env)
+        if workers == 1:
+            for completed, item in enumerate(items, 1):
                 try:
-                    result = future.result()
+                    result = run_one(
+                        script, args.queue.resolve(), args.seed.resolve(), output_dir,
+                        item, args.begin_date, args.end_date, db_config,
+                        args.host, args.user, args.key)
                 except Exception as error:
                     result = {
                         "strategyName": item.get("strategyName"),
@@ -133,16 +153,50 @@ def main():
                     }
                 results.append(result)
                 print("[%d/%d] %s %s" % (
-                    completed, len(items), result["strategyName"], result["qualificationReason"]),
-                    flush=True,
-                )
+                    completed, len(items), result["strategyName"],
+                    result["qualificationReason"]), flush=True)
+                error_count = sum(1 for row in results if row.get("executionError"))
+                if args.max_execution_errors > 0 and error_count >= args.max_execution_errors:
+                    print("Stopping batch after %d execution error(s)." % error_count,
+                          flush=True)
+                    break
+        else:
+            with ThreadPoolExecutor(max_workers=workers) as executor:
+                futures = {
+                    executor.submit(run_one, script, args.queue.resolve(), args.seed.resolve(),
+                                    output_dir, item, args.begin_date, args.end_date, db_config,
+                                    args.host, args.user, args.key): item
+                    for item in items
+                }
+                completed = 0
+                for future in as_completed(futures):
+                    completed += 1
+                    item = futures[future]
+                    try:
+                        result = future.result()
+                    except Exception as error:
+                        result = {
+                            "strategyName": item.get("strategyName"),
+                            "symbol": item.get("symbol"),
+                            "scene": item.get("scene"),
+                            "baselineReason": item.get("baselineReason"),
+                            "executionError": True,
+                            "qualified": False,
+                            "qualificationReason": "execution_error",
+                            "error": str(error),
+                        }
+                    results.append(result)
+                    print("[%d/%d] %s %s" % (
+                        completed, len(items), result["strategyName"],
+                        result["qualificationReason"]), flush=True)
     finally:
         if db_config and db_config.exists():
             db_config.unlink()
         if server is not None:
             server.shutdown()
             server.server_close()
-        client.close()
+        if client is not None:
+            client.close()
     results.sort(key=lambda row: (str(row.get("symbol")), str(row.get("scene")),
                                   str(row.get("strategyName"))))
     summary = {
@@ -152,11 +206,13 @@ def main():
         "beginDate": args.begin_date,
         "endDate": args.end_date,
         "workers": workers,
+        "tunnelScope": args.tunnel_scope,
         "requestedCount": len(items),
         "completedCount": len(results),
         "qualifiedCount": sum(1 for row in results if row.get("qualified")),
         "executionErrorCount": sum(1 for row in results if row.get("executionError")),
         "productionWrite": False,
+        "stoppedEarly": len(results) < len(items),
         "results": results,
     }
     summary_path = output_dir / "batch-summary.json"

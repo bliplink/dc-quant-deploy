@@ -77,12 +77,19 @@ def load_results(path):
     return package.get("results") or []
 
 
-def build_summary(baseline_path, corrected_path):
+def build_summary(baseline_path, corrected_paths):
     selected = {}
     for row in load_results(baseline_path):
+        if row.get("executionError"):
+            continue
         selected[row["strategyName"]] = compact(row, baseline_path.name)
-    for row in load_results(corrected_path):
-        selected[row["strategyName"]] = compact(row, corrected_path.name)
+    if isinstance(corrected_paths, Path):
+        corrected_paths = [corrected_paths]
+    for corrected_path in corrected_paths:
+        for row in load_results(corrected_path):
+            if row.get("executionError"):
+                continue
+            selected[row["strategyName"]] = compact(row, corrected_path.name)
     rows = sorted(selected.values(), key=lambda row: (
         str(row.get("symbol")), str(row.get("scene")), str(row.get("strategyName"))))
     reasons = Counter(row["qualificationReason"] for row in rows)
@@ -123,10 +130,14 @@ def build_summary(baseline_path, corrected_path):
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--baseline-summary", type=Path, required=True)
-    parser.add_argument("--corrected-summary", type=Path, required=True)
+    parser.add_argument(
+        "--corrected-summary", type=Path, required=True, action="append",
+        help="Corrected batch summary; repeat the option to merge multiple batches.")
     parser.add_argument("--output", type=Path, required=True)
     args = parser.parse_args()
-    summary = build_summary(args.baseline_summary.resolve(), args.corrected_summary.resolve())
+    summary = build_summary(
+        args.baseline_summary.resolve(),
+        [path.resolve() for path in args.corrected_summary])
     args.output.parent.mkdir(parents=True, exist_ok=True)
     args.output.write_text(json.dumps(summary, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
     print(json.dumps(summary["summary"], ensure_ascii=False, indent=2))

@@ -1,0 +1,124 @@
+{
+  "packageVersion": "strategy_logic_repair_manifest_v1",
+  "repairs": [
+    {
+      "repairId": "wb15_reversal_v009_u37600_v2_correct_sweep_depth",
+      "status": "REJECTED_LOCAL_BACKTEST",
+      "strategyName": "wb15_reversal_v009_u37600",
+      "source": "wb15_reversal_v009_u37600/GeneratedStrategy.java",
+      "description": "Correct sweep penetration measurement and admit wick-only liquidity sweeps with reclaim-candle confirmation.",
+      "logicSummary": "range boundary liquidity sweep plus directional reclaim confirmation; corrected boundary-to-extreme penetration depth",
+      "rationale": "v1 measured current-close-to-extreme distance and required an outside close, suppressing canonical wick reclaims and leaving only three OOS trades.",
+      "optimizationProfile": {
+        "mode": "RANDOM_LOCAL",
+        "objective": "FEE_ADJUSTED_PROFIT_FIRST",
+        "minFitTradesPerSlice": 20,
+        "maxCoarseCandidates": 32,
+        "maxFineCandidates": 8,
+        "repairProfileVersion": "logic_repair_v1"
+      }
+    },
+    {
+      "repairId": "lcr1_link_rev_99b035a4_v3_exhaustion_context",
+      "status": "REJECTED_LOCAL_BACKTEST",
+      "strategyName": "lcr1_link_rev_99b035a4",
+      "source": "lcr1_link_rev_99b035a4/GeneratedStrategy.java",
+      "description": "Expand bearish exhaustion samples while requiring a local high, directional impulse, and strong bearish confirmation.",
+      "logicSummary": "local-high bullish exhaustion followed by bearish midpoint rejection and low-close confirmation",
+      "rationale": "v2 used an overly rare 0.8 ATR single-candle threshold, ignored momentumPeriod, and produced only two OOS trades.",
+      "optimizationProfile": {
+        "mode": "RANDOM_LOCAL",
+        "objective": "FEE_ADJUSTED_PROFIT_FIRST",
+        "minFitTradesPerSlice": 20,
+        "maxCoarseCandidates": 32,
+        "maxFineCandidates": 8,
+        "repairProfileVersion": "logic_repair_v1"
+      }
+    },
+    {
+      "repairId": "research_r20_ada_regression_channel_reversal_short_v3_wick_event",
+      "status": "REJECTED_LOCAL_BACKTEST",
+      "strategyName": "research_r20_ada_regression_channel_reversal_short",
+      "source": "research_r20_ada_regression_channel_reversal_short/GeneratedStrategy.java",
+      "description": "Accept upper-channel wick events while requiring a meaningful body extension and a bearish reclaim candle.",
+      "logicSummary": "flat regression upper-channel wick rejection with bearish candle confirmation",
+      "rationale": "v2 had positive validation and forward economics but only ten trades; brute-force threshold relaxation produced 47 unprofitable trades, so v3 broadens the event shape instead of lowering all filters.",
+      "optimizationProfile": {
+        "mode": "RANDOM_LOCAL",
+        "objective": "FEE_ADJUSTED_PROFIT_FIRST",
+        "minFitTradesPerSlice": 20,
+        "maxCoarseCandidates": 32,
+        "maxFineCandidates": 8,
+        "repairProfileVersion": "logic_repair_v1"
+      }
+    },
+    {
+      "repairId": "research_r19_link_flat_channel_wick_reentry_short_v3_confirmation",
+      "status": "REJECTED_LOCAL_BACKTEST",
+      "strategyName": "research_r19_link_flat_channel_wick_reentry_short",
+      "source": "research_r19_link_flat_channel_wick_reentry_short/GeneratedStrategy.java",
+      "description": "Replace the full previous-low breakdown requirement with a bearish low-close confirmation candle after an upper-channel wick rejection.",
+      "logicSummary": "flat regression upper-channel wick rejection followed by bearish low-close confirmation",
+      "rationale": "v2 had profitable validation and forward windows but only nine trades; parameter-only broadening destroyed economics, so v3 broadens confirmation geometry while retaining the original wick and flat-channel filters.",
+      "optimizationProfile": {
+        "mode": "RANDOM_LOCAL",
+        "objective": "FEE_ADJUSTED_PROFIT_FIRST",
+        "minFitTradesPerSlice": 20,
+        "maxCoarseCandidates": 32,
+        "maxFineCandidates": 8,
+        "repairProfileVersion": "logic_repair_v1"
+      }
+    },
+    {
+      "repairId": "lcr1_btc_bre_e1e9f19e_v2_exhaustion_context",
+      "status": "REJECTED_LOCAL_BACKTEST",
+      "strategyName": "lcr1_btc_bre_e1e9f19e",
+      "source": "lcr1_btc_bre_e1e9f19e/GeneratedStrategy.java",
+      "description": "Use the existing momentum period as local-low context and require a strong bullish reclaim after downside exhaustion.",
+      "logicSummary": "local-low downside exhaustion followed by bullish midpoint reclaim and high-close confirmation",
+      "rationale": "v1 ignored momentumPeriod and relied on a rare 0.55 ATR bearish body plus weak close-up confirmation, producing only seven OOS trades.",
+      "optimizationProfile": {
+        "mode": "RANDOM_LOCAL",
+        "objective": "FEE_ADJUSTED_PROFIT_FIRST",
+        "minFitTradesPerSlice": 20,
+        "maxCoarseCandidates": 32,
+        "maxFineCandidates": 8,
+        "repairProfileVersion": "logic_repair_v1"
+      }
+    },
+    {
+      "repairId": "lcr1_trx_ran_ec9dd240_v3_lower_band_sweep",
+      "status": "REJECTED_LOCAL_BACKTEST",
+      "strategyName": "lcr1_trx_ran_ec9dd240",
+      "source": "lcr1_trx_ran_ec9dd240/GeneratedStrategy.java",
+      "description": "Accept a lower-band wick sweep in a compressed volatility regime and require a bullish close above the sweep bar high.",
+      "logicSummary": "low-volatility lower Bollinger-band sweep followed by bullish full-range reentry",
+      "rationale": "v2 had positive validation and forward economics but only eight trades; v3 expands event geometry without relaxing the volatility regime or bullish confirmation.",
+      "optimizationProfile": {
+        "mode": "RANDOM_LOCAL",
+        "objective": "FEE_ADJUSTED_PROFIT_FIRST",
+        "minFitTradesPerSlice": 10,
+        "maxCoarseCandidates": 32,
+        "maxFineCandidates": 8,
+        "repairProfileVersion": "logic_repair_v1"
+      }
+    },
+    {
+      "repairId": "lcr1_xrp_tre_8b8eb3e3_v3_three_bar_retest",
+      "status": "REJECTED_LOCAL_BACKTEST",
+      "strategyName": "lcr1_xrp_tre_8b8eb3e3",
+      "source": "lcr1_xrp_tre_8b8eb3e3/GeneratedStrategy.java",
+      "description": "Allow a volume-confirmed breakout to retest within three bars and apply the volume condition to the breakout bar.",
+      "logicSummary": "rising slow trend plus volume breakout and bullish retest within three bars",
+      "rationale": "v2 won all observed OOS trades but only allowed a next-bar retest and incorrectly required elevated volume on the retest bar, leaving eight trades.",
+      "optimizationProfile": {
+        "mode": "RANDOM_LOCAL",
+        "objective": "FEE_ADJUSTED_PROFIT_FIRST",
+        "minFitTradesPerSlice": 16,
+        "maxCoarseCandidates": 32,
+        "maxFineCandidates": 8,
+        "repairProfileVersion": "logic_repair_v1"
+      }
+    }
+  ]
+}
