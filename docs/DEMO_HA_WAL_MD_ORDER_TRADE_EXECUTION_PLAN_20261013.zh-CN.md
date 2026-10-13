@@ -319,3 +319,24 @@ Adapter 与可崩溃恢复持久 Seal 流程；**现网自动删除未完成且�
 
 WAL 周期物理 Seal/48h 删除、Order/Trade 全量资金持仓对账仍按前章任务执行；
 本轮没有误改在线服务或声明通过。
+
+### 第五轮收口校验（Java 8 全量）
+
+- Order `OrderMdAttestedSnapshotSourceTest` 真 Common 控制处理器单测
+  **3/3 PASS**，与累计 HEAD 边界合计 **8/8 PASS**；
+  `mvn -o test -q` Java8 全量结果 **333 tests, 0 failures,
+  0 errors, 1 skipped**（退出码 0）。
+- MD `MdAuthenticatedOrderSnapshotVerifierTest` **5/5 PASS**，
+  与 Order snapshot manifest 合计 **11/11 PASS**；
+  隔离新版 Common 候选依赖下
+  `mvn -o -Dmaven.repo.local=/qa/repository test -q` Java8 全量
+  **135/135 PASS**（退出码 0）。该隔离依赖与现网默认旧版本
+  **不一致**，不能未经依赖锁定合并、直接部署或开主切。
+- Order 草稿 [PR #8](https://github.com/bliplink/com.app.dc.ordersvr/pull/8)、
+  MD 草稿 [PR #6](https://github.com/bliplink/com.app.dc.mdsvr/pull/6)
+  均已创建；它们只是源码+可复现实验的中间交付，不是完成的在线
+  `md.cluster.failover.enabled=true` 配置。
+- 在线 A/B/C Order 和 MD 不因本轮研发重启；Gateway/TLS/同步 ACK/
+  WAL GC 门禁无修改。Order 源端的 `LeaseAndAck` 需要注入真实
+  ZK stat 版本及全部副本 durable ACK 证明，`readWal()`
+  依然 fail closed，且 MD Safety 发布隔离未接通。
