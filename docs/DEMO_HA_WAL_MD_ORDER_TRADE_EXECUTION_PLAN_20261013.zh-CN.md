@@ -340,3 +340,90 @@ WAL 周期物理 Seal/48h 删除、Order/Trade 全量资金持仓对账仍按前
   WAL GC 门禁无修改。Order 源端的 `LeaseAndAck` 需要注入真实
   ZK stat 版本及全部副本 durable ACK 证明，`readWal()`
   依然 fail closed，且 MD Safety 发布隔离未接通。
+
+## 2026-10-13 第六轮：Order→MD 认证 WAL 批量恢复与真实 Replica 水位接线
+
+> **结论：Order 源端代码与单元/协议验收推进，真实 MD 主切仍 BLOCKED。本节不宣称已部署、更不宣称已经完成整个 MD 自动 HA。**
+
+### 完成的源端代码（已提交 Order 草稿 PR #8）
+
+- 代码：[Order PR #8](https://github.com/bliplink/com.app.dc.ordersvr/pull/8)，分支
+  `codex/order-md-signed-snapshot-source-20261013`，
+  包含 `OrderMdLivePrimaryProof`、
+  `OrderMdAttestedSnapshotSource`、
+  `OrderMdRecoveryControlRouter`、
+  `OrderReplicationManager` 的可选控制端口接线与相应 JUnit。
+- **真实 ZK/Replica 证明：**通过现有 `ZkCluster.zk.readData(...,Stat)`
+  取得 Order 当前分区的精确 ZooKeeper Stat version，要求可写会话、READY、
+  当前物理 Primary、同 Epoch、至少一个同步 Replica。
+  通过原 `OrderReplicationManager.queryFailoverProof()` 向**每个同步 Replica**
+  发起现有 exact-node RPC，核查角色/节点/主从/Epoch/完整累计提交、
+  Reader 扫描尾部，取所有必需副本的最小 durable Commit Marker。
+  捕获前后 ZK Stat version/主从列表变化时拒绝签发。
+  不允许将异步 Learner 的水位当同步持久 ACK。
+- **有界 WAL 源：**从 Order 现有 `OrderPartitionJournal.readBatch`
+  获取真实 Chronicle 记录，单个 Common `WAL_BATCH` 最多 8 条，
+  拒绝跨越 Source HEAD、缺号、重复、越分区、旧 Epoch/超前 Epoch、
+  Replica ACK 落后。复用 Common 的挑战 HMAC / 数据读取客户端 MAC / WAL frame HMAC。
+- **不可变会话提交边界：**对每分区有界保留 20s 源端已签名 HEAD，
+  新交易推进不会在每块读取时修改此会话的已提交上界；
+  ZK version/Epoch 变化、Replica 最低水位回退立即失效。
+  Snapshot 完整 SHA256 不同则拒绝分块读取；
+  超过 TTL 需重新申请新签名 HEAD。全源最多 16 组候选，
+  超额仅使会话失败关闭；**尚需在真实持续交易与大 WAL 后缀下压测 20s
+  会话窗口的实际可完成性**。
+- **默认 OFF：**`order.cluster.mdRecovery.enabled=false`；
+  启用时必须提供每物理节点不同的 256-bit+ 
+  `order.cluster.mdRecovery.sourceKeyBase64`，
+  必须有同步 Order HA/本地快照/Replica Control Proof。
+  与原 FAILOVER_PROOF / LEARNER_PROOF 复用现有 Order Netty 端口，
+  Gateway、Order 撮合热路径、TLS 保持用户原配置不变。
+  **未启用线上开关、未替换在线容器、未对 MD SIGKILL**。
+- **MD 验证端**依旧是
+  [MD 草稿 PR #6](https://github.com/bliplink/com.app.dc.mdsvr/pull/6)：
+  Challenge HMAC、Order 物理身份和 ZK version、Snapshot SHA256、
+  完整库存市场身份/版本等 Java8 **135/135 PASS**；
+  该验证器目前不代表全市场 Delta 与 READY 关联证明已闭环。
+
+### 实际验收（开始执行）
+
+- Java8 候选 Common **隔离 Maven 仓库**环境中：
+  `OrderMdLivePrimaryProofTest`、`OrderMdAttestedWalBatchSourceTest`
+  **8/8 PASS**；新增 Order Netty control router + 固定 HEAD pin + 
+  Common 原样 HMAC WAL_BATCH wire 帧合计 **9/9 PASS**。
+  先前新增功能下的 Order 全量 **341 tests / failures=0 / errors=0 /
+  skipped=1**，新增 pin/router/batch 后的最终全量另行收口记录。
+- **现网 MD 只读准入门禁：**
+  `scripts/check-md-failover-preflight.py` 执行 exit=2，
+  `decision=BLOCKED`、`canPromote=false`、
+  `canInjectMdPrimaryFault=false`；
+  256/256 分区 READY、MDSvrA/B/C ephemeral 成员齐全、
+  A/B 各 128 Primary。
+  私有实测证据：
+  `~/.opentradingcore/epochwarm-walbatch-cold-cutover-20261013/evidence/md-acceptance-preflight-20261013-round2.json`。
+  具体阻塞：`ORDER_CURRENT_FULL_MARKET_IMAGE_PROOF_MISSING`、
+  `MD_PROMOTION_FENCING_AND_CAS_CONTROLLER_NOT_CONFIGURED`、
+  `MD_RECOVERING_TO_READY_EPOCH_PUBLICATION_FENCE_UNATTESTED`、
+  `MD_PROMOTED_EPOCH_FULL_MARKET_IMAGE_NOT_ATTESTED`、
+  `ROBOT_POST_FAILOVER_ORDER_RECONCILIATION_NOT_ATTESTED`。
+- 11 租户盘上 Order Snapshot 三节点深度检查
+  `checkedTenants=11`、`verifiedTriplicateSnapshots=11`、
+  `snapshotIssues=[]`，但这不代表在线 MD 配置已升级。
+  在线 24 个 `dc-saas` 容器运行，
+  Order/MD/Trade/Robot 关键节点均 Running=true、OOMKilled=false。
+
+### 未完成且禁止绕过的发布/故障门禁
+
+1. 将当前 Order 草稿 PR 的本地 Common 批量读取协议依赖
+   **按源码+镜像唯一 SHA 锁定重编译**，并通过灰度部署，
+   再从 MD 真正联机调用认证 HEAD/Snapshot/WAL；签名传输和
+   **市场业务事件应用 Delta** 的 end-to-end 证据尚缺。
+2. MD `Safety` 需要消费最新可信 Order HEAD 以及**分区内所有市场的 Image +
+   无缺口增量**并验证实际版本与持久水位一致，且保证旧 MD 发布者不能
+   通过队列再发送；独立验证 `RECOVERING→READY` 当前 Epoch CAS。
+3. 在私有测试分区和持续 Robot 报价下完成可重复 MD 主切、
+   旧主隔离、重新订阅、全市场完整度、回滚，之后才允许在线
+   MD Primary SIGKILL 和角色反转。**本轮安全门禁仍 BLOCKED。**
+4. Order/Trade WAL 独立周期 Seal+GC 与最终资金持仓 Projection 全范围审计
+   仍按本目标表原计划推进，尚未完成；Common 中央正式发布和 GHCR
+   正式镜像链仍按用户要求暂缓。
