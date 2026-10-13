@@ -63,6 +63,9 @@ PF 不足 3、前瞻贡献不足 3、验证期扣费后收益非正 1。
 4. 长批使用 `run_local_strategy_batch_chunks.py --chunk-size 3`。
 5. 用 `summarize_local_strategy_batches.py` 重复传入 `--corrected-summary`，合并所有真实批次；执行错误不会覆盖已有有效结果。
 6. 只有权威汇总中 `qualified=true` 的新版本才允许进入服务器 REVALIDATE。
+7. 正式提交使用 `submit_qualified_strategy_repairs.py`，必须显式给出
+   `--strategy` 和 `--submit`；脚本会再次计算本地门槛并校验源码版本，
+   不允许执行错误、未达标结果或错版本进入 `candidate.import`。
 
 运行文件位于忽略目录 `recovery/strategy-repair-runs/`，仓库只保存可复跑工具、
 策略修复源代码、manifest、测试和本记录，不提交大体积临时产物。
