@@ -591,3 +591,56 @@ MD 从真实 Order private Netty 请求挑战签名 HEAD、完整 Snapshot 和�
 
 性能要求：恢复过程才有 O(挂单数 + 有界 WAL + 全盘口档位数) 成本，
 不可放入撮合/日常行情热路径；不改 Gateway，不建 MD→MD WAL，不启用 TLS。
+
+## 2026-10-13 第九轮：私有 Netty 认证恢复联调与性能任务暂停
+
+**用户新优先级：MD 自动主切安全接线继续完成到可复现实测的检查点；之后暂停性能优化和压力测试，转向产品问题修复。当前性能工作已暂停。**
+
+### 已实现并已推送 MD Draft PR #6 的实际新增内容
+
+- `MdOrderPrivateNettyRecovery`：第一次把 MD 和 Order 源端的已实现接口真正组合成**私有 TCP Netty RPC 客户端**。MD 仅向可信的物理 Order Primary 端点请求 Common
+  `RECOVERY_SOURCE_HEAD_V2`，按事先可信的 ZK Stat version 和该物理节点的独立 256-bit+ HMAC 密钥验证挑战响应，再通过
+  `RECOVERY_READ_DATA_V2` 逐块请求 64KiB Snapshot 和最多8槽 WAL_BATCH；
+  HMAC 校验、整个 Snapshot SHA、完整 STATE_COMMIT 和市场盘口均由
+  `MdOrderSignedRecoveryEvidence` 复验。
+  20秒本地恢复期限、最多32MiB镜像及4096槽WAL，超界直接拒绝，绝不允许部分盘口提前 READY。
+- `MdOrderRecoveryShadowInstall`：只有在已签名完整源恢复 `Result` 通过之后，才以当前 MD Epoch 在**独立私有缓存**原子安装所有原生
+  `MarketDataSnapshotFullRefresh` 深度镜像；每一市场先用真正的
+  `LocalDepthBook.applySnapshotForEpoch` 恢复并执行全部价格档位/数量对账。MD Epoch 改变即令旧候选缓存失效。
+  **没有调用**对外 `DepthBookFacade.onSnapshot`、
+  `MdPartitionRuntime.markMarketReady`，没有修改 Gateway、ZK CAS、发送队列或任何在线 Docker；`canPromote=false`。
+- `MdOrderPrivateNettyRecoveryTest`：通过**真正启动的独立本地 Netty Server + Netty Client**，走完整物理节点签名 HEAD、真实网络 Snapshot chunk、2槽 HMAC WAL_BATCH、累计提交及深度簿私有安装流程；
+  错误物理 HMAC 密钥、错误 ZK Stat version、篡改源快照、旧 MD Epoch 均被拒绝。
+  **3/3 Java8 真实 loopback TCP PASS**，此处服务端是隔离模拟源，不是 Mac 在线 OrderSvr 容器；不可混淆成生产切主。
+- 完整 MD Maven Java8 离线候选 Common 仓库回归：
+  **161 tests, failures=0, errors=0, skipped=1**（可选真实数据烟测默认跳过），退出码0。
+  前轮 11 租户真实持久 Order Snapshot 的只读 MD 原生盘口重建、价格/数量和 FIFO 检查已通过。
+
+### 本轮最新在线准入
+
+- `scripts/check-md-failover-preflight.py` 重新执行：
+  **`decision=BLOCKED`、`canPromote=false`、
+  `canInjectMdPrimaryFault=false`**。MD 256/256 READY，A/B 每节点128 Primary，
+  C 成员在线；三个在线 MD 仍为
+  `dc-saas/mdsvr:cluster-dev-local-c361e3e3d-20261012034946`。
+- 仍欠**生产**源码依赖锁定、与在线真实 Order 的独立私有密钥和 ACL、
+  单恢复会话完整源快照尺寸证明/持续交易下20秒追平，
+  新 MD 恢复时业务事件持续订阅和完全追平、旧 MD 发送端共享栅栏、
+  `RECOVERING→READY` CAS 与 Robot 重新订阅对账，随后才可正式
+  SIGKILL/故障恢复和角色反转。任何一项欠缺都禁止将 Java8 PASS
+  误标为 MD 自动 HA 通过。
+- **特殊协议边界：**Common v2 签名 HEAD 当前不包含快照**字节长度**，
+  隔离客户端用最后一块短于64KiB来判定结束；
+  如果 Snapshot 正好是64KiB整数倍则故意拒绝，不得猜长度或回退到不认证传输。
+  正式启用前需签名长度扩展或独立可信长度/Manifest。
+- 在线预检只读证据：
+  `~/.opentradingcore/epochwarm-walbatch-cold-cutover-20261013/evidence/md-private-netty-shadow-staging-preflight-20261013.json`。
+
+### 用户指定：暂停性能，优先处理产品问题
+
+**即刻暂停**：200租户扩容、50/100/200 批量压力曲线、下单 TPS/延迟基准、
+CPU/IO 性能专项、主动性能重构以及长期负载 soak。
+**继续允许**：产品缺陷修复必要的回归、数据一致性校验与关键 HA 安全门禁，
+不允许以性能为由降低同步复制、日志归档/删除安全证据或故障隔离门槛。
+Common 3.0.18 正式中央仓库/GHCR 统一发布链继续按此前暂缓决定，不私自发布。
+产品修复应以已有稳定在线 Demo 为基线，Order/MD Draft 不作自动上线。
