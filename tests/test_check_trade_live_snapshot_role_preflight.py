@@ -35,7 +35,18 @@ class TradeLiveSnapshotRolePreflightTests(unittest.TestCase):
             self.assertEqual(1,result["snapshotBlocked"])
             self.assertIn("PRIMARY_SNAPSHOT_STALE_EPOCH_OR_EMPTY",
                           result["snapshotIssues"][0]["issues"])
-            self.assertIn("REPLICA_FULL_SNAPSHOT_BEHIND",
+            self.assertIn("REPLICA_SNAPSHOT_EPOCH_MISMATCH",
+                          result["snapshotIssues"][0]["issues"])
+            self.assertFalse(result["authorizesPrimarySigkill"])
+
+    def test_old_epoch_with_higher_sequence_fails_closed(self):
+        with tempfile.TemporaryDirectory() as t:
+            root=Path(t);rows,p=rowset("TENANT1",4)
+            snapshot(root,"TradeSvrB",p,"TENANT1",4,120)
+            snapshot(root,"TradeSvrA",p,"TENANT1",3,9999)
+            result=gate.evaluate(rows,root,["TENANT1"])
+            self.assertEqual(1,result["snapshotBlocked"])
+            self.assertIn("REPLICA_SNAPSHOT_EPOCH_MISMATCH",
                           result["snapshotIssues"][0]["issues"])
             self.assertFalse(result["authorizesPrimarySigkill"])
 

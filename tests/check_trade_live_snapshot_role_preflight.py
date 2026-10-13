@@ -65,11 +65,11 @@ def evaluate(assignments, data_root, tenants):
             source,target=snaps.get("primary"),snaps.get("replica")
             if source and (source["epoch"]!=epoch or source["stateSeq"]<=0):
                 issues.append("PRIMARY_SNAPSHOT_STALE_EPOCH_OR_EMPTY")
-            if source and target and (target["seq"]<source["seq"]
-                                       or target["stateSeq"]<source["stateSeq"]):
+            if target and target["epoch"]!=epoch:
+                issues.append("REPLICA_SNAPSHOT_EPOCH_MISMATCH")
+            if source and target and source["epoch"]==target["epoch"] and (
+                    target["seq"]<source["seq"] or target["stateSeq"]<source["stateSeq"]):
                 issues.append("REPLICA_FULL_SNAPSHOT_BEHIND")
-            if target and target["epoch"]>epoch:
-                issues.append("REPLICA_SNAPSHOT_FUTURE_EPOCH")
         results.append({"tenant":tenant,"partition":part,"currentEpoch":epoch,
                         "primary":primary,"replica":replicas[0] if not issues or replicas else None,
                         "snapshots":snaps,"issues":issues})

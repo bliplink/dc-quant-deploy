@@ -30,6 +30,24 @@ class TradeSnapshotHeadroomTest(unittest.TestCase):
             self.assertEqual("target_full_snapshot_behind", result["blocked"][0]["reason"])
             self.assertFalse(result["authorizesPrimaryRestart"])
 
+    def test_old_epoch_with_higher_sequence_must_block_rollout(self):
+        with tempfile.TemporaryDirectory() as d:
+            root = Path(d)
+            snap(root / "A", "P023", ["TENANT_X"], 200, epoch=4)
+            snap(root / "B", "P023", ["TENANT_X"], 2000, epoch=3)
+            result = inspect(root / "A", root / "B", 1)
+            self.assertEqual("BLOCK", result["fastSnapshotPreflight"])
+            self.assertEqual("target_snapshot_epoch_mismatch", result["blocked"][0]["reason"])
+            self.assertFalse(result["authorizesPrimaryRestart"])
+
+    def test_future_epoch_with_higher_sequence_must_block_rollout(self):
+        with tempfile.TemporaryDirectory() as d:
+            root = Path(d)
+            snap(root / "A", "P023", ["TENANT_X"], 200, epoch=4)
+            snap(root / "B", "P023", ["TENANT_X"], 2000, epoch=5)
+            result = inspect(root / "A", root / "B", 1)
+            self.assertEqual("BLOCK", result["fastSnapshotPreflight"])
+
     def test_equal_full_snapshots_are_still_not_wal_durability_proof(self):
         with tempfile.TemporaryDirectory() as d:
             root = Path(d)

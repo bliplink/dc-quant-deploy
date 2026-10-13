@@ -75,14 +75,19 @@ def inspect(source: Path, target: Path, min_active: int) -> dict:
         if dst["partitionId"] != partition:
             blocking.append({"partition": partition, "reason": "target_snapshot_identity_mismatch"})
             continue
+        # Snapshot sequence numbers are not comparable across epochs.
+        if (dst["epoch"] != src["epoch"]
+                or dst["committedStateEpoch"] != src["committedStateEpoch"]
+                or src["committedStateEpoch"] != src["epoch"]):
+            blocking.append({"partition": partition, "reason": "target_snapshot_epoch_mismatch",
+                             "sourceEpoch": src["epoch"], "targetEpoch": dst["epoch"]})
+            continue
         if (dst["committedStateSeq"] < src["committedStateSeq"]
                 or dst["snapshotSeq"] < src["snapshotSeq"]):
             blocking.append({"partition": partition, "reason": "target_full_snapshot_behind",
                              "targetSnapshotSeq": dst["snapshotSeq"],
                              "sourceSnapshotSeq": src["snapshotSeq"]})
             continue
-        if dst["committedStateEpoch"] > src["epoch"]:
-            blocking.append({"partition": partition, "reason": "target_future_commit_epoch"})
     if len(active) < min_active:
         raise SnapshotEvidenceError(
             f"not enough active snapshot partitions to prove scope: {len(active)} < {min_active}")
