@@ -1,0 +1,40 @@
+{
+  "packageVersion": "strategy_logic_repair_manifest_v1",
+  "repairs": [
+    {
+      "repairId": "lcr1_link_rev_abda03d2_v3_true_bullish_exhaustion_reversal",
+      "status": "REJECTED_LOCAL_BACKTEST",
+      "strategyName": "lcr1_link_rev_abda03d2",
+      "source": "lcr1_link_rev_abda03d2/GeneratedStrategy.java",
+      "description": "Correct the short reversal context from bearish continuation to bullish exhaustion followed by a bearish close.",
+      "logicSummary": "positive multi-bar momentum and bullish fast trend followed by a low-close bearish reversal candle",
+      "rationale": "v2 required negative momentum and a bearish fast trend before opening another short, contradicting its reversal scene; v3 corrects the signs and requires an actual bearish reversal candle.",
+      "parameterSchema": {"parameters": [
+        {"name": "takeMultiplier", "type": "double", "default": 4.0, "candidates": [2.8, 3.4, 4.0, 4.6, 5.2]},
+        {"name": "atrPeriod", "type": "int", "default": 14, "candidates": [9, 12, 14, 16, 19]},
+        {"name": "stopMultiplier", "type": "double", "default": 2.0, "candidates": [1.4, 1.7, 2.0, 2.3, 2.6]},
+        {"name": "momentumPeriod", "type": "int", "default": 4, "candidates": [3, 4, 5, 6, 8]},
+        {"name": "minMomentumAtr", "type": "double", "default": 0.55, "candidates": [0.35, 0.45, 0.55, 0.70, 0.85]}
+      ]},
+      "optimizationProfile": {"mode": "RANDOM_LOCAL", "objective": "FEE_ADJUSTED_PROFIT_FIRST", "minFitTradesPerSlice": 10, "maxCoarseCandidates": 32, "maxFineCandidates": 8, "repairProfileVersion": "logic_repair_round3"}
+    },
+    {
+      "repairId": "lcr1_xrp_bre_8842e444_v2_downside_exhaustion_context",
+      "status": "REJECTED_LOCAL_BACKTEST",
+      "strategyName": "lcr1_xrp_bre_8842e444",
+      "source": "lcr1_xrp_bre_8842e444/GeneratedStrategy.java",
+      "description": "Use momentumPeriod to require a local-low cumulative downside exhaustion before the bullish reclaim.",
+      "logicSummary": "multi-bar downside exhaustion at a local low followed by a bullish midpoint reclaim",
+      "rationale": "v1 declared momentumPeriod but ignored it and classified any isolated large bearish candle as an exhaustion event; v2 requires both cumulative downside movement and local-low context.",
+      "parameterSchema": {"parameters": [
+        {"name": "takeMultiplier", "type": "double", "default": 1.8, "candidates": [1.26, 1.53, 1.8, 2.07, 2.34]},
+        {"name": "atrPeriod", "type": "int", "default": 14, "candidates": [9, 12, 14, 16, 19]},
+        {"name": "stopMultiplier", "type": "double", "default": 0.9, "candidates": [0.63, 0.765, 0.9, 1.035, 1.17]},
+        {"name": "momentumPeriod", "type": "int", "default": 8, "candidates": [5, 7, 8, 9, 11]},
+        {"name": "minBodyAtr", "type": "double", "default": 0.35, "candidates": [0.25, 0.30, 0.35, 0.40, 0.50]},
+        {"name": "minMomentumAtr", "type": "double", "default": 1.0, "candidates": [0.70, 0.85, 1.0, 1.20, 1.40]}
+      ]},
+      "optimizationProfile": {"mode": "RANDOM_LOCAL", "objective": "FEE_ADJUSTED_PROFIT_FIRST", "minFitTradesPerSlice": 10, "maxCoarseCandidates": 32, "maxFineCandidates": 8, "repairProfileVersion": "logic_repair_round3"}
+    }
+  ]
+}

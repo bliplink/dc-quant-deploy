@@ -1,0 +1,75 @@
+{
+  "packageVersion": "strategy_logic_repair_manifest_v1",
+  "repairs": [
+    {
+      "repairId": "lcr1_xrp_ran_33d9206a_v2_minimum_sweep_depth",
+      "status": "REJECTED_LOCAL_BACKTEST",
+      "strategyName": "lcr1_xrp_ran_33d9206a",
+      "source": "lcr1_xrp_ran_33d9206a/GeneratedStrategy.java",
+      "description": "Require an ATR-normalized minimum upper-boundary sweep before bearish range reentry confirmation.",
+      "logicSummary": "flat range upper-boundary liquidity sweep with minimum ATR penetration and next-bar breakdown confirmation",
+      "rationale": "v1 accepted any microscopic boundary exceedance as a liquidity sweep; v2 rejects price-tick noise while preserving the original flat-mean and bearish confirmation structure.",
+      "parameterSchema": {
+        "parameters": [
+          {"name": "takeMultiplier", "type": "double", "default": 4.0, "candidates": [2.8, 3.4, 4.0, 4.6, 5.2]},
+          {"name": "boundaryLookback", "type": "int", "default": 48, "candidates": [32, 40, 48, 56, 64]},
+          {"name": "atrPeriod", "type": "int", "default": 14, "candidates": [9, 12, 14, 16, 19]},
+          {"name": "meanOffset", "type": "int", "default": 32, "candidates": [21, 27, 32, 37, 43]},
+          {"name": "maxMeanDrift", "type": "double", "default": 0.012, "candidates": [0.0084, 0.0102, 0.012, 0.0138, 0.0156]},
+          {"name": "meanPeriod", "type": "int", "default": 96, "candidates": [64, 80, 96, 112, 128]},
+          {"name": "stopMultiplier", "type": "double", "default": 2.0, "candidates": [1.4, 1.7, 2.0, 2.3, 2.6]},
+          {"name": "minSweepAtr", "type": "double", "default": 0.10, "candidates": [0.05, 0.10, 0.15, 0.20]}
+        ]
+      },
+      "optimizationProfile": {"mode": "RANDOM_LOCAL", "objective": "FEE_ADJUSTED_PROFIT_FIRST", "minFitTradesPerSlice": 10, "maxCoarseCandidates": 32, "maxFineCandidates": 8, "repairProfileVersion": "logic_repair_round2"}
+    },
+    {
+      "repairId": "wb15_trend_t015_u81312_v2_directional_trend_reclaim",
+      "status": "REJECTED_LOCAL_BACKTEST",
+      "strategyName": "wb15_trend_t015_u81312",
+      "source": "wb15_trend_t015_u81312/GeneratedStrategy.java",
+      "description": "Align entries with slow-SMA slope and directional bars while accepting wick touches of the pullback SMA.",
+      "logicSummary": "ATR-significant directional slow-SMA trend plus wick pullback and close reclaim continuation",
+      "rationale": "v1 used one directionless strongTrend flag for both sides and treated large ranges as trends; v2 requires slope and bar direction to agree with the order while using wick touch rather than a mandatory close-through pullback.",
+      "parameterSchema": {
+        "parameters": [
+          {"name": "pullbackSmaPeriod", "type": "int", "default": 10, "candidates": [5, 7, 8, 10, 12, 13, 15]},
+          {"name": "trendSmaPeriod", "type": "int", "default": 20, "candidates": [13, 15, 17, 20, 23, 25, 27, 30]},
+          {"name": "atrStopMult", "type": "double", "default": 2.0, "candidates": [1.4, 1.7, 2.0, 2.3, 2.6, 3.0]},
+          {"name": "atrPeriod", "type": "int", "default": 14, "candidates": [7, 9, 12, 14, 16, 19, 21]},
+          {"name": "atrTargetMult", "type": "double", "default": 3.0, "candidates": [2.0, 2.5, 3.0, 3.45, 3.9, 4.0]},
+          {"name": "trendWindow", "type": "int", "default": 8, "candidates": [5, 6, 7, 8, 9, 10, 11, 12]},
+          {"name": "maxDirectionalBars", "type": "int", "default": 6, "candidates": [4, 5, 6, 7, 8]},
+          {"name": "maxRangeRatio", "type": "double", "default": 0.025, "candidates": [0.015, 0.02, 0.025, 0.03, 0.0325]},
+          {"name": "minSlopeAtr", "type": "double", "default": 0.25, "candidates": [0.10, 0.20, 0.25, 0.35, 0.50]}
+        ]
+      },
+      "optimizationProfile": {"mode": "RANDOM_LOCAL", "objective": "FEE_ADJUSTED_PROFIT_FIRST", "minFitTradesPerSlice": 16, "maxCoarseCandidates": 32, "maxFineCandidates": 8, "repairProfileVersion": "logic_repair_round2"}
+    },
+    {
+      "repairId": "research_r27_btc_low_volatility_bollinger_range_reentry_short_v3_flat_mean",
+      "status": "REJECTED_LOCAL_BACKTEST",
+      "strategyName": "research_r27_btc_low_volatility_bollinger_range_reentry_short",
+      "source": "research_r27_btc_low_volatility_bollinger_range_reentry_short/GeneratedStrategy.java",
+      "description": "Require the Bollinger center line to remain flat relative to long ATR before fading the upper band.",
+      "logicSummary": "ATR-compressed flat Bollinger range plus upper-band excursion and bearish reentry confirmation",
+      "rationale": "v2 filtered volatility compression but could still fade a directional low-volatility drift; v3 adds an ATR-normalized mean-slope regime test without changing the event or confirmation geometry.",
+      "parameterSchema": {
+        "parameters": [
+          {"name": "eventDeviation", "type": "int", "default": 2, "candidates": [1, 2, 3]},
+          {"name": "bollingerPeriod", "type": "int", "default": 32, "candidates": [21, 27, 32, 37, 43]},
+          {"name": "riskAtrPeriod", "type": "int", "default": 14, "candidates": [9, 12, 14, 16, 19]},
+          {"name": "stopMultiplier", "type": "int", "default": 2, "candidates": [1, 2, 3]},
+          {"name": "takeMultiplier", "type": "int", "default": 5, "candidates": [3, 4, 5, 6, 7]},
+          {"name": "maxAtrRatio", "type": "double", "default": 0.85, "candidates": [0.595, 0.7225, 0.85, 0.9775, 1.105]},
+          {"name": "longAtrPeriod", "type": "int", "default": 80, "candidates": [54, 66, 80, 94, 106]},
+          {"name": "confirmationDeviation", "type": "double", "default": 1.6, "candidates": [1.12, 1.36, 1.6, 1.84, 2.08]},
+          {"name": "shortAtrPeriod", "type": "int", "default": 14, "candidates": [9, 12, 14, 16, 19]},
+          {"name": "meanOffset", "type": "int", "default": 16, "candidates": [8, 12, 16, 20, 24]},
+          {"name": "maxMeanSlopeAtr", "type": "double", "default": 0.75, "candidates": [0.35, 0.50, 0.75, 1.00, 1.25]}
+        ]
+      },
+      "optimizationProfile": {"mode": "RANDOM_LOCAL", "objective": "FEE_ADJUSTED_PROFIT_FIRST", "minFitTradesPerSlice": 10, "maxCoarseCandidates": 32, "maxFineCandidates": 8, "repairProfileVersion": "logic_repair_round2"}
+    }
+  ]
+}
