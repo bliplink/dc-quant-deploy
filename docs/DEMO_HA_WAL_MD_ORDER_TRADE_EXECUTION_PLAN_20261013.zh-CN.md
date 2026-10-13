@@ -267,3 +267,55 @@ Adapter 与可崩溃恢复持久 Seal 流程；**现网自动删除未完成且�
   （已加启动防崩溃门禁，真实周期 Seal/GC 仍未接线）；
   Order/Trade 权威总账对账 **PARTIAL_NOT_ATTESTED**，
   不以 Snapshot 匹配替代完整 WAL ACK/账本证明。
+
+## 2026-10-13 第五轮：Order→MD 双端认证恢复组件（开发/隔离测试）
+
+**本轮补齐了生产协议前置组件，但没有改变在线 MD 发布权：**
+
+1. **Order 源端（草稿 PR [#8](https://github.com/bliplink/com.app.dc.ordersvr/pull/8)，分支 `codex/order-md-signed-snapshot-source-20261013`）：**
+   - 新增 `OrderMdAttestedSnapshotSource`，复用 Common
+     `RecoverySourceHeadControlHandler` / `RecoverySourceDataControlHandler`
+     原有 challenge、物理节点独立 HMAC、客户端请求 MAC 和签名 Snapshot Chunk。
+   - 由注入的 `LeaseAndAck` 读到**真实物理 Order Primary、ZooKeeper 精确版本、Epoch、所有必需 Replica 持久 ACK 水位**；
+     由 `DurableJournal` 读取本机累计 STATE_COMMIT、WAL HEAD，
+     由 `SnapshotBytes` 读取完整市场分区镜像，
+     并复用已合入 `saas-crypto` 的 `OrderMdCommittedPrefixBoundary`。
+     只在 Primary/精确 Epoch/version 不变且 Replica ACK 覆盖 HEAD 时签发。
+   - 强制 Snapshot `sha256` 锁定每次读取的真实 bytes，单个镜像上限 32MiB，
+     单块最多 64KiB；轮换导致字节变化时拒绝读，不能重复利用老 HEAD。
+     `readWal()` 当前**显式 fail closed**，
+     必须先补独立 Reader generation + bounded STATE/COMMIT 传输。
+   - 完全**未接入在线 Order Netty 路由**，不修改 Gateway、不改订单热路径，
+     不自动签发真实业务证明；缺可信 ZK+ACK 提供者时不能运行。
+   - 真实 Common 控制协议隔离单测 **3/3**，
+     配合 Source HEAD 边界检查 **8/8 PASS**，
+     覆盖错误物理 Primary/跨 Epoch/Replica ACK 不足、Snapshot 篡改与 WAL 未授权拒绝。
+
+2. **MD 接收端（草稿 PR [#6](https://github.com/bliplink/com.app.dc.mdsvr/pull/6)，分支 `codex/md-order-signed-image-verification-20261013`）：**
+   - 新增 `MdAuthenticatedOrderSnapshotVerifier`：
+     验证原始 Nonce/发出时间、per-physical-Primary HMAC、
+     期望 Order Primary 和独立 ZK version、完整 Snapshot SHA256，
+     核对 Snapshot 中所有市场身份/行情源版本与
+     `MdOrderSnapshotCheckpointContract` 完整清单及提交标记。
+   - 明确结果 `canPromote=false`，
+     **签名 Snapshot ≠ 已提交连续增量、Replica 持久 ACK、旧 MD 发布栅栏/READY**。
+   - Java8 专项 **11/11 PASS**；使用完全隔离 Maven 仓库中的新版 Common
+     候选 JAR `sha256:2215a7dc...` 的 MD 全量 **135/135 PASS**。
+   - 注意：当前 `com.app.dc.mdsvr` 仍通过 `com.app.dc`
+     引用老版 `3.0.17-dev361e3e3d...` Common
+     （缺新版 `VerifiedHead`），故正式依赖尚未可复现编译，
+     草稿 **绝不可合并/部署**。未触碰系统 `~/.m2` 及现网镜像。
+
+3. **剩余 MD HA 生产门禁**：
+   - 在 Order 接入真实 ZK version / all-required-Replica durable ACK
+     和**带固定 Reader generation 的有界连续 WAL 增量源**，
+     同时给签名会话 immutable Snapshot/HEAD Pin；
+   - MD Receiver 从 Common 签名块中暂存完整 Image + Delta，
+     验证具体分区的所有市场事件无 gap、与最新 Order durable HEAD 一致；
+   - 实现和实测共享对外 publish epoch fence，
+     控制器两阶段 CAS 后仅在 `Safety` 完整证据通过才 READY，
+     最后在真实 Robot 环境下 SIGKILL/role reversal。
+   **上述未全部完成前，MD 自动主切保持 BLOCKED。**
+
+WAL 周期物理 Seal/48h 删除、Order/Trade 全量资金持仓对账仍按前章任务执行；
+本轮没有误改在线服务或声明通过。
