@@ -119,6 +119,25 @@ class MdFailoverPreflightTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError,'reviewed'):
             gate.evaluate(assignments(),details,members,old,{'MDSvrX':canary})
 
+    def test_reviewed_ghcr_arm64_canary_requires_exact_config_and_common_version(self):
+        canary='ghcr.io/bliplink/mdsvr:sha-026306b'
+        old='dc-saas/mdsvr:cluster-dev-local-c3e1d45c6-20261011075101'
+        details={node:{'image':old,'running':True} for node in gate.NODES}
+        details['MDSvrC']={'image':canary,'running':True,
+                            **gate.REVIEWED_GHCR_IMAGES[canary]}
+        members={node:True for node in gate.NODES}
+        report=gate.evaluate(assignments(),details,members,old,{'MDSvrC':canary})
+        self.assertFalse(any('UNREVIEWED' in b for b in report['blockers']))
+        self.assertFalse(report['canPromote'])
+        for field in ('configImageId','imageRevision','commonGav'):
+            tampered={node:dict(value) for node,value in details.items()}
+            tampered['MDSvrC'][field]='invalid'
+            blocked=gate.evaluate(assignments(),tampered,members,old,{'MDSvrC':canary})
+            self.assertIn('MD_NODE_UNHEALTHY_OR_UNREVIEWED:MDSvrC',blocked['blockers'])
+        with self.assertRaisesRegex(ValueError,'reviewed'):
+            gate.evaluate(assignments(),details,members,old,
+                          {'MDSvrC':'ghcr.io/bliplink/mdsvr:saas-crypto'})
+
     def test_output_is_read_only_by_design(self):
         self.assertTrue(gate.evaluate(assignments(),images())['readOnly'])
         self.assertNotIn('docker kill',SCRIPT.read_text())

@@ -18,6 +18,17 @@ import sys
 NODES={'MDSvrA':'dc-saas-mdsvr','MDSvrB':'dc-saas-mdsvr-b','MDSvrC':'dc-saas-mdsvr-c'}
 COUNT=256
 REQUIRED_IMAGE='ghcr.io/bliplink/mdsvr:sha-48544e5'
+# Reviewed ARM64 MD-C canary, from successful MD CI #38419947005.
+# ARM64 manifest: sha256:3f02b5359dbc17e9123ac0cec49f2f98225bff5ce87d295548dac5cd0452abf3
+# A known tag is never sufficient: also pin the Docker config ID and source
+# revision verified from the fetched GHCR image.
+REVIEWED_GHCR_IMAGES = {
+    'ghcr.io/bliplink/mdsvr:sha-026306b': {
+        'configImageId':'sha256:5ae7d0479d6cb335dc24dfc3f65947b13733fe99b9e28587835dff87a07c4c3a',
+        'imageRevision':'026306b1b311c41bff12c9296cef667e681a7688',
+        'commonGav':'io.github.bliplink:com.app.common:3.0.19',
+    }
+}
 
 def command(args,input=None,timeout=45):
     result=subprocess.run(args,input=input,text=True,capture_output=True,timeout=timeout)
@@ -68,7 +79,7 @@ def evaluate(rows,images,members=None,required_image=REQUIRED_IMAGE,per_node_ima
     # Explicitly locked local Mac images may be reviewed without pretending
     # they are the old GHCR image. This NEVER grants failover authority.
     def valid_lock(value):
-        return value==REQUIRED_IMAGE or bool(re.fullmatch(
+        return value==REQUIRED_IMAGE or value in REVIEWED_GHCR_IMAGES or bool(re.fullmatch(
             r'dc-saas/mdsvr:cluster-dev-local-[a-zA-Z0-9_.-]+',value or ''))
     if not valid_lock(required_image):
         raise ValueError('MD expected image must be an explicitly locked, reviewed image')
@@ -100,7 +111,11 @@ def evaluate(rows,images,members=None,required_image=REQUIRED_IMAGE,per_node_ima
     if unready:reasons.append('MD_ASSIGNMENTS_NOT_READY:'+','.join(unready[:5]))
     for node,container in NODES.items():
         detail=images.get(node,{})
-        if detail.get('image')!=per_node_images.get(node,required_image) or not detail.get('running'):
+        expected=per_node_images.get(node,required_image)
+        trusted=REVIEWED_GHCR_IMAGES.get(expected)
+        if (detail.get('image')!=expected or not detail.get('running')
+                or (trusted is not None and any(
+                    detail.get(field)!=value for field,value in trusted.items()))):
             reasons.append('MD_NODE_UNHEALTHY_OR_UNREVIEWED:'+node)
         if members.get(node) is not True:
             reasons.append('MD_EPHEMERAL_MEMBER_NOT_ATTESTED:'+node)
@@ -140,8 +155,13 @@ def main(argv=None):
     for node,container in NODES.items():
         item=by_name.get(container)
         if not item:raise ValueError('missing node metadata: '+node)
+        config=item.get('Config',{})
+        labels=config.get('Labels') or {}
         images[node]={'running':item.get('State',{}).get('Running') is True,
-                      'image':item.get('Config',{}).get('Image')}
+                      'image':config.get('Image'),
+                      'configImageId':item.get('Image'),
+                      'imageRevision':labels.get('org.opencontainers.image.revision'),
+                      'commonGav':labels.get('dc.common.gav')}
     locks={'MDSvrC':options.expected_md_c_image} if options.expected_md_c_image else None
     report=evaluate(rows,images,members,options.expected_image,locks)
     report['checkedAtUtc']=datetime.now(timezone.utc).isoformat()

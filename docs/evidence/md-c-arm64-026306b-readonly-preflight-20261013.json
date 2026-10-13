@@ -1,0 +1,58 @@
+{
+  "schema": "otc-md-failover-preflight-v1",
+  "readOnly": true,
+  "expectedImage": "dc-saas/mdsvr:cluster-dev-local-c361e3e3d-20261012034946",
+  "expectedImagesByNode": {
+    "MDSvrA": "dc-saas/mdsvr:cluster-dev-local-c361e3e3d-20261012034946",
+    "MDSvrB": "dc-saas/mdsvr:cluster-dev-local-c361e3e3d-20261012034946",
+    "MDSvrC": "ghcr.io/bliplink/mdsvr:sha-026306b"
+  },
+  "canInjectMdPrimaryFault": false,
+  "canPromote": false,
+  "decision": "BLOCKED",
+  "blockers": [
+    "ORDER_CURRENT_FULL_MARKET_IMAGE_PROOF_MISSING",
+    "MD_PROMOTION_FENCING_AND_CAS_CONTROLLER_NOT_CONFIGURED",
+    "MD_RECOVERING_TO_READY_EPOCH_PUBLICATION_FENCE_UNATTESTED",
+    "MD_PROMOTED_EPOCH_FULL_MARKET_IMAGE_NOT_ATTESTED",
+    "ROBOT_POST_FAILOVER_ORDER_RECONCILIATION_NOT_ATTESTED"
+  ],
+  "partitionCount": 256,
+  "primaryCounts": {
+    "MDSvrA": 128,
+    "MDSvrB": 128
+  },
+  "singleReplicaPartitionCount": 256,
+  "withoutRecoveryCandidateCount": 0,
+  "unreadyPartitions": 0,
+  "images": {
+    "MDSvrA": {
+      "running": true,
+      "image": "dc-saas/mdsvr:cluster-dev-local-c361e3e3d-20261012034946",
+      "configImageId": "sha256:c493723c53f1204969a804f698701af8597fe9195c909918aa0fa91aa7dd8bdd",
+      "imageRevision": "bcdec888a847462c6bd74da1014523bdc27c03d3",
+      "commonGav": "io.github.bliplink:com.app.common:3.0.17-dev361e3e3d20261012034946-SNAPSHOT"
+    },
+    "MDSvrB": {
+      "running": true,
+      "image": "dc-saas/mdsvr:cluster-dev-local-c361e3e3d-20261012034946",
+      "configImageId": "sha256:c493723c53f1204969a804f698701af8597fe9195c909918aa0fa91aa7dd8bdd",
+      "imageRevision": "bcdec888a847462c6bd74da1014523bdc27c03d3",
+      "commonGav": "io.github.bliplink:com.app.common:3.0.17-dev361e3e3d20261012034946-SNAPSHOT"
+    },
+    "MDSvrC": {
+      "running": true,
+      "image": "ghcr.io/bliplink/mdsvr:sha-026306b",
+      "configImageId": "sha256:5ae7d0479d6cb335dc24dfc3f65947b13733fe99b9e28587835dff87a07c4c3a",
+      "imageRevision": "026306b1b311c41bff12c9296cef667e681a7688",
+      "commonGav": "io.github.bliplink:com.app.common:3.0.19"
+    }
+  },
+  "ephemeralMembers": {
+    "MDSvrA": true,
+    "MDSvrB": true,
+    "MDSvrC": true
+  },
+  "notice": "MD need not replicate its own WAL; a live assigned standby alone cannot prove old-owner fencing or a fresh full Order image.",
+  "checkedAtUtc": "2026-10-13T15:22:44.994576+00:00"
+}
