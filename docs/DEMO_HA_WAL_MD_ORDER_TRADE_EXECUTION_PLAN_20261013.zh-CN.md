@@ -161,3 +161,51 @@ Adapter 与可崩溃恢复持久 Seal 流程；**现网自动删除未完成且�
 **最终权威对账未完成**。
 
 用户暂缓 Common 3.0.18/GHCR 正式发布的要求维持不变。
+
+## 2026-10-13 第三轮：Order MD 源端提交门禁与 WAL 崩溃恢复启动隔离
+
+本轮实际代码和测试（**并非三大项已完成的声明**）：
+
+- Order 项目 [PR #7](https://github.com/bliplink/com.app.dc.ordersvr/pull/7)
+  已合并至 `saas-crypto`，merge SHA
+  `1c818972bda18033f1ded139abd2f00c98e4fe25`。
+- 新增 `OrderMdCommittedPrefixBoundary`：
+  从**相同分区**的完整 Snapshot 基线、累计 `STATE_COMMIT`
+  水位、当前 writer Epoch 和 WAL HEAD 生成 Common `RecoverySourceAttestation.SourceHead`
+  所需的内部源事实。
+  严格拒绝未提交 STATE 尾部、Snapshot 越过 committed HEAD、
+  错配 Epoch、回退提交水位、缺市场 Image、虚假 SHA 等。
+  **它不是 HMAC 签名，不包含独立验证的 Replica durable ACK，
+  也不授予 MD 晋升许可**；
+  后续需以 Order source authority + challenge/physical-node HMAC
+  及 MD verifier 串接生产路径。
+- 新增 `OrderWalArchiveStartupFence`，并在
+  `OrderPartitionRuntime.init()` 打开 Chronicle Journal 前接入
+  可选配置：`order.cluster.wal.archive.startupFence.enabled=false`
+  （默认关闭）、`order.cluster.wal.archive.sealLedgerDir`。
+  显式打开时要求可信已存在目录，对全部分区读取
+  Common `DurableJournalArchiveSealLedger`，
+  `PREPARED`、`WRITER_SWITCHED` 的未完成归档会**拒绝启动**；
+  仅 `ARCHIVE_SEALED` 通过，目录丢失/符号链接均拒绝。
+  只在启动时执行，没有委托匹配/复制热路径和在线 WAL 文件改写。
+  **不等于已实现物理归档/删除，不允许独立打开此开关替代 GC 证明。**
+- 本地 Java 8 专项：Order MD Manifest/HEAD **22/22 PASS**，
+  Order Prefix+Archive 重启安全 **7/7 PASS**。
+  生产适配代码进入独立分支后，全量 Order Java 8
+  **330 项测试、0 failures、0 errors、1 skipped**，
+  `mvn -o test -q` exit code 0；唯一 skip 为仓库既有的测试跳过。
+  现网 Order A/B/C 仍运行原先的本地镜像，
+  **没有将这个新源码私自替换现网**。
+- MD 基线额外已在 `dc-quant-deploy/saas-crypto` 提交完整市场
+  三节点 Snapshot 交叉审计和 7 项反例测试：
+  `checkedTenants=11`、`verifiedTriplicateSnapshots=11`、
+  `snapshotIssues=[]`；这个检查仍
+  `promotionAuthorized=false`，`decision=BLOCKED`。
+- 下一阶段仍缺：
+  **(1) Order 经物理 Primary 身份和精确 ZK version 的当前已提交 HEAD 签名，
+  全市场 Image + 连续 Delta 的真实 MD 验证以及旧发布者隔离**；
+  **(2) Order/Trade Writer-Reader-Projection-Replica-Backup 独立有效证明，
+  可恢复封段和真实定时 Archive/GC Adapter**；
+  **(3) 稳定时点的 11 租户订单/成交/资金/持仓 + Projection
+  + WAL durable ACK 权威一致性。**
+  在这三类门禁都满足前不得把对应任务标记成 PASS。
