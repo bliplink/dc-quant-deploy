@@ -57,3 +57,39 @@
 ## 每轮进度记录规范
 
 新增小节需含：时间、分支和提交 SHA、所用镜像完整 digest、实测命令/证据私有路径、PASS/BLOCKED/FAIL、复现范围与风险、下一步门禁。**未经测试的不标记完成。** 若测试安全机制阻断写操作，保留 BLO​CKED 和失败详情，严禁绕过 Gateway、Replica ACK、Epoch fencing 或高危文件安全策略。
+
+## 2026-10-13 第一轮实机推进与证据（UTC 02:09–02:21）
+
+以下为**这轮确实执行过的结果**，不替代上面的未完成清单。
+
+### 任务 1：MD（只读安全基线 + 隔离单测）
+
+- 通过 `scripts/check-md-failover-preflight.py` 锁定当前 3 个真实本地 MD 镜像，只读结果：`256/256 READY`，MDSvrA/B 各 128 Primary，3/3 物理 ZooKeeper ephemeral 结点存在，`canPromote=false`、`decision=BLOCKED`，仍缺 Order 当前认证全市场 Image、旧主 fencing、两阶段晋升 READY 证明、Robot reconciliation。
+- 进一步完整扫描全部 256 个 ZK 分区：**MDSvrC 已被分配为 256/256 非投票 Learner**，此前旧文档“还未加入 C learner”是过时快照。无需再改写 ZK 注册。
+- 用真实租户 Route→Partition→ZK Epoch/Role 对照完整容器日志：**MD A 11/11、MD B 11/11、MD C 11/11 `MD_MARKET_READY` 匹配**。这只是本地接收完整市场并启用内存 ready 的证据，**不是 Order durable committed HEAD 签名证明**。
+- 本地 MD Java8 `MdImageRecoveryFailoverControllerTest`、`MdAutomaticFailoverServiceTest`、`MdZkDisconnectPublicationFenceTest`、`MdOrderSnapshotCheckpointContractTest`：**27/27 PASS**。独占租约和 CAS 两阶段控制器源代码已存在，但缺可独立认证的 `MdImageRecoveryFailoverController.Safety` 生产 Bean。**没有执行 MD SIGKILL、没有启用自动主切**。
+
+### 任务 2：Snapshot 与 WAL 生命周期（安全 canary）
+
+- 当前在线 `OrderSvrA/B/C` 和 `TradeSvrA/B` 实际配置 `*.snapshot.periodic.enabled=true`，**pollMillis=60000**；Order 每轮最多处理一个分区。实际 `ORDER_PERIODIC_SNAPSHOT_OK` 日志：Order A 2 条，Trade A `TRADE_SNAPSHOT_SAVED` 29 条、Trade B 6 条（窗口内；没有错误不代表永久无错误）。
+- Order/Trade 源码下未发现直接接线 `JournalArchiveSealCoordinator`、`JournalArchiveRotationPolicy`、`JournalArchiveRetirementCoordinator` 的后台执行任务。观察到的 `.archive` 主要在 Snapshot Journal rebase/rollback 时由旧队列迁移生成；这**不是独立周期 WAL 归档机制已运行**的证明。
+- 在线只读 `audit_saas_wal_archives_readonly.py`：总 **526 个 archive 目录**、活跃 WAL 实分配 `2,767,011,840 bytes`、归档实分配 `491,261,952 bytes`、超过 48h 的目录 **0**、`deletionAuthorized=0`、未知目录 0。
+- 真实 disposable canary 再执行一次：**1 个安全 fixture WAL 真正 unlink、1 个不安全归档保留、8 类边界拒绝、备份恢复摘要吻合；没有碰在线 WAL**；Python `test_archive_retention_gc_canary.py` **6/6**、`test_audit_saas_wal_archives_readonly.py` **3/3** PASS。由于生产缺独立 Seal ledger/备份与 Reader/消费者 durable watermarks，**live physical GC 继续关闭**。
+
+### 任务 3：Order / Trade HA（真实故障）
+
+- Trade 的 P012 持模拟仓位 Primary SIGKILL Epoch5 与被杀节点恢复，以及 P222 A→B→A / Epoch3 双端 Snapshot 一致，证据详见链接的上轮报告。本轮**没有重复 SIGKILL Trade**，不重复开仓或访问私人恢复凭据。
+- 本轮新的受控 Order 验收：先核对 `EPO2RU` BTCUSDT 路由为 **P156**，原 `OrderSvrA Primary, OrderSvrB+OrderSvrC Replica`，三份 Snapshot `Epoch1 seq30500` SHA256 相等。然后执行现有 fail-closed 脚本 `tests/run-mac-demo-order-sigkill.py` **真实 SIGKILL Order A**。
+- 实际 `OrderSvrB` 自动接管 P156 `Epoch 1→2`、新 Primary READY 且盘口恢复；被杀 Order A 自动重启、`unless-stopped` 策略恢复，脚本 `PASS_AUTO_TAKEOVER_AND_MARKET_READS`。**故障证据（Mac 私有目录）**：
+  `~/.opentradingcore/epochwarm-walbatch-cold-cutover-20261013/evidence/order-p156-sigkill-20261013T021153Z.json`。
+- 恢复过程最初出现 Order A **74 Learner**，随后全部自动追平恢复为 Replica。再查 **256/256 READY、0 Learner、256 组 Snapshot 相等**，全部 Primary 转至 Order B，Order A/C 均有 256 个副本；11/11 Robot 40 活动委托/双边盘口继续 PASS，Order 容器无 OOM。
+- 纠正故障工具写死 `P238` 的误导性错误及日志提示，改为显示真实选择的 `PARTITION`，部署仓库提交 [`1838b98`](https://github.com/bliplink/dc-quant-deploy/commit/1838b9819f61dbc280615be2a426b2e4c9eecbcb)；**仅修日志，没有修改故障注入/恢复机制**。
+- Java8 Order 周期快照、自动故障接管、跨 Epoch rebase、安全晋升专项测试 **27/27 PASS**。
+- **Projection 一致性验收的限制**：短查询窗口曾触发 MySQL `MAX_EXECUTION_TIME`；随后有界孤儿审计 **约 448,000 Mutation、孤儿 0、92s**，但是**未扫描完整上界**，状态 `PARTIAL_NOT_ATTESTED`；`check-projection-consistency-host.sh` 正确返回非零，**不能报告全量跨 WAL/Projection 事务一致性 PASS**。应采用低 IO 的只读主键范围审计/离线快照审计，避免在线反复扫数十万行。
+
+### 下一轮阻塞与安全规定
+
+1. **MD**：实现真实 Order persisted full-market Image 签名 Source HEAD + source epoch、精确市场 Inventory/Delta 连续性证明、旧 publish 源隔离 proof 及控制器 READY 原子发布，先 1 分区隔离测试再实机灰度；仅有 11 租户 `MD_MARKET_READY` 不够。
+2. **WAL**：为 Order/Trade 实现生产 adapter，采集 durable Seal + Replica ACK + 全消费组 Projection + 备份恢复 + Reader generation，先完成有界后台自动 Seal，再授权每段回收；没证明不删活 WAL/Archive。
+3. **HA**：现在不再对 Order A/B/C 连续 SIGKILL，先建立 committed WAL HEAD/ACK、账户资金/成交完整逐笔权威审计与 Projection 低开销全部覆盖；以后带持续业务写入的故障验收须有显式准入。
+4. 继续**暂缓 Common 3.0.18 Central 和正式 GHCR 双架构发布链**，目前 Demo 维持已锁定本地镜像。
