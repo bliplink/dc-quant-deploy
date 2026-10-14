@@ -83,3 +83,16 @@
 **尚未得到生产授权：** 真实物理副本 ZooKeeper 独立投票成员发现和带有效期的接收端 recovery authority 还没有真正挂到 Trade 生产状态机/启动流程；不同副本若使用不同 Snapshot 版本，则当前严格拒绝，未来需要可信统一快照版本或可验证归档前缀。还缺旧 Primary fencing、跨 Epoch role reversal、完整金额/持仓/委托/执行/Projection 数据权威一致性对账、MD 旧发布者隔离以及 50 Robot/2000 挂单与 200 租户负载和真实 SIGKILL。**CI 全绿仅能说明隔离候选代码正确，不能推断线上 HA 已安全。**
 
 发布顺序仍是 Common/Trade 各层叠 PR 按依赖验证、发布统一版本、冷部署候选隔离验证、负载门禁后才执行主切；Demo 当前不可据此放开故障注入。
+
+## 恢复 Quorum 凭据的请求认证加固（2026-10-14 晚）
+
+**遵守 Common 统一协议的架构约束**：此前 [Common PR #16](https://github.com/bliplink/com.app.common/pull/16) 与 [Trade PR #17](https://github.com/bliplink/com.app.dc.tradesvr/pull/17) 已完成比只签末尾 commit 更强的、**完整 Snapshot SHA 锚定 + 全部原始 WAL diff 字节**的签名 Quorum；不要额外部署或合并重复实现。已关闭误生成的重复 Draft Common #18、Trade #19，保留原正确的统一机制。
+
+额外发现源端副本凭据的内部 Netty Control 查询原来只携带 unsigned challenge + committed seq，任何能访问私有复制端口的网络客户端都可能频繁触发 Chronicle `syncJournalThrough` + 最多 4096 WAL slots/64 MiB 的 SHA 扫描，造成恢复接口放大负载。为保障系统**性能优先**，新增一个只针对现有协议的增量保护：
+
+- [Common Draft PR #19](https://github.com/bliplink/com.app.common/pull/19) `fix/common-recovery-quorum-query-auth-20261014`：换成不兼容旧 unsigned 请求的内部 `RECOVERY_DURABLE_PREFIX_SIGNED_QUERY_V2`，要求先计算并验证目标物理节点 256-bit 独立密钥的 HMAC，覆盖 challenge、序号、标准化服务名、分区及物理目的节点。**HMAC 比对发生在读取任何业务文件、执行 fsync 或窗口哈希之前**；错误节点密钥、篡改请求均 fail closed。保留已经完成的 Common full Snapshot/WAL signed quorum，无新业务协议、无 Gateway 修改。
+- Common 真 Netty 及单元测试新增：伪造 HMAC 或使用别的物理节点密钥访问端口时，源端读盘回调**0 次**；合法查询可以继续。Common Java8 CI [Actions 38587400503](https://github.com/bliplink/com.app.common/actions/runs/38587400503) SUCCESS。
+- Trade 不新增业务代码。仅从已经通过 265/265 的 canonical Trade PR #17 创建私有 CI 分支 `ci/trade-quorum-auth-integration-20261014`，在构建期使用上述 Common Candidate 运行全部 Java8 测试、依赖解析和候选 Docker 镜像构建。[Actions 38587566054](https://github.com/bliplink/com.app.dc.tradesvr/actions/runs/38587566054) 已确认 **SUCCESS：265/265 项 Java8 Trade 测试通过、Trade package 与候选 Docker build 成功**；不会发布 Maven Central/GHCR 或替换 Demo。
+- **线上继续禁止 HA SIGKILL**：实际 ZooKeeper voting members 与恢复服务独立授权、完整源端提交 ACK 的生产绑定、外部财务/委托/持仓/成交/Projection READY 对账、MD 旧发布者 fencing、50/200 租户压测和主备反转还未验收；不能把测试中可签名的 Quorum 直接视为生产合法促主。
+
+本次只读观察：2026-10-14 23:08 CST，Mac Demo 为 **24 容器运行、11/11 Robot RUNNING、440 活动挂单**，在线 MySQL 的 Order 和 Trade Projection 各 11 个分区返回 `PROJECTION_DB_TAIL_MATCH` / exit 0，macOS 磁盘约 71%。新增第 11 租户不是本次开发操作创建。本轮没有重启服务、删除 WAL、清理证据或替换任何现网镜像。
