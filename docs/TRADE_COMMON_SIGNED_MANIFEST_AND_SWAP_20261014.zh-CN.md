@@ -43,3 +43,20 @@
 另一个在线审计修复已完成：[dc-quant-deploy PR #27](https://github.com/bliplink/dc-quant-deploy/pull/27)。在 10 租户持续交易下，Projection 旧水位检查因 MySQL 相关子查询 `Using filesort` 超过 1500ms，报错误 3024；并**非已证明数据不一致**。新版先只读发现 bounded partition catalog，再在**同一个 REPEATABLE READ、READ ONLY consistent snapshot 事务**里重新读取 watermark catalog，并对每个源分区使用常量分区键的复合索引倒序 `LIMIT 1` 检查事件尾部；catalog 变化、缺尾或超时仍 NO-GO。**13/13 单测和当前 10 Order+10 Trade 分区的真实 MySQL `PROJECTION_DB_TAIL_MATCH` 通过**；PR GitHub CI 通过，已合并，不授权 HA。
 
 **剩余不可绕过的 P0：** 通用 Common 源端 committed HEAD 需要真实副本 durable ACK 认证；Trade 还要完成带 WAL 后缀的持久导入、崩溃恢复闭环、接收端受控启动，并完成 Order/Trade/Projection 的权威资金、持仓、成交、挂单对账和旧主隔离。MD 的 Snapshot/Diff 与旧发布者 fence 也未完成。Order HA 注入仍受 50/50 Robot 和 2,000 单真实负载门禁阻塞。Swap 当前在线但尚未经过 Colima 重启持久化实测。
+
+## 继续推进：Common/Trade 原始 WAL 持久化 + 中断安全续传（20:15 CST 后）
+
+依赖关系：**Common 已有完整 Manifest/Durable ACK [PR #11](https://github.com/bliplink/com.app.common/pull/11) → Common Canonical Manifest staging [PR #13](https://github.com/bliplink/com.app.common/pull/13) → [Common PR #14](https://github.com/bliplink/com.app.common/pull/14)**；Trade 对应 **recovery base PR #11 → Manifest PR #13 → Role/CQ PR #14 → [Trade PR #15](https://github.com/bliplink/com.app.dc.tradesvr/pull/15)**。均为未合并的 Draft 层叠候选；不可只拿最后一层 commit 冒充现网部署。
+
+本轮新增机制：
+
+1. **Common 保存原始认证 WAL 字节**：原来的 `CommittedRecord.protocolControl` 严格不允许 `STATE_COMMIT` 进入业务状态机，这一点不变。新增独立 `originalJournalWire()` 用于恢复时物理保存完整控制帧。由 `VerifiedRecoveryStagingClient.committedLogSource` 在 HMAC/Source HEAD/Manifest + 累积 committed prefix 通过后构造；普通无认证记录不能作为磁盘导入证据。
+2. **Trade 真实 Chronicle WAL 导入**：接收端先完整检验所有 WAL 帧的序号、epoch、分区、真实业务事件类型、累积 `STATE_COMMIT` 和签名 HEAD 的最终提交水位；所有证据全部通过后，才持久化同 epoch 完整 Snapshot、原子重建 CQ baseline，并原样写入每一条 `STATE_BATCH` 和 `STATE_COMMIT`。需要最后一个 WAL 页完成 `msync`，再校验持久化 Chronicle 的实际最后提交标记与源端 HEAD。严格限制每次最多 4096 个 WAL slot、总 64 MiB。普通业务 `apply()` 永远跳过控制帧。
+3. **Common durable ledger v2**：原先只持久化镜像/HEAD 边界；现在额外固定 Snapshot 基线与最终提交 StateSeq/Epoch/Marker，防止出现相同 HEAD 序号、同一快照 SHA，但不同最终提交证据的跨事务续传。旧版 v1 ledger 不作为 v2 完整恢复证明，会 fail closed。
+4. **崩溃后安全续传**：Trade `appendRecoveredVerified` 遇到重放的已有 CQ 序号，必须从物理 Chronicle 读回并与可信源的**原始字节逐字节比对**，不能采用普通 `appendReplicated` 的“seq≤lastSeq 直接跳过”优化。仅在 Common `requireAuthenticatedIncompleteRetry` 证明同一未完成的持久安装事务、存储基线和完整 Snapshot SHA 再次匹配时，才允许补齐缺失的 WAL suffix；否则保持 NOT_READY。恢复成功也只是 `REPLAY_COMPLETE`，仍不授予 READY。
+5. **测试用例**：在写入第一条 WAL（STATE_BATCH）后注入 `IOException`，确认 Common ledger `INSTALLING` 保留，冷启动仍拒绝 READY；重新使用**逐字节相同**的认证 WAL 事务补全 `STATE_COMMIT`，在重开的真实 Chronicle 校验末尾 102、Snapshot 基线 100。单独测试同序号而物理字节不同必须拒绝。另有完整 **真实 loopback Netty 认证 Source HEAD + Manifest → Snapshot 分块 → WAL prefix → Trade recipient Chronicle 恢复 + 关闭后重新打开** 的集成测试，隔离使用模拟 ZK/外部 Authority。
+6. CI 证据：Common [Actions 38561322780](https://github.com/bliplink/com.app.common/actions/runs/38561322780) **通过**；最新 Trade [Actions 38562227580](https://github.com/bliplink/com.app.dc.tradesvr/actions/runs/38562227580) **263/263 Java8 测试、候选 Docker image build 通过**，不发布 Maven Central / GHCR，也未替换现网容器。
+
+**本轮明确没有验收成功的能力**：源端 quorum commit HEAD 与多副本 durable ACK 的强一致绑定；生产真实 ZooKeeper Receiver 受控启动/重试自动调度、源端 HEAD 在接收期间继续写入时的协议快照一致性、跨 epoch/主备反转、多副本丢失/网络分裂的双主隔离、Order/Trade/Projection 权威资金/持仓/成交/挂单对账、MD 全行情 Snapshot/Diff + 旧发布者 fencing、50/100/200 租户和真实 SIGKILL HA 故障注入。**CI 263/263 不是故障切换 PASS**。
+
+维护约束：本轮未删除现网 WAL、未重启 Mac Docker 或更改 Gateway 业务逻辑；变更保持候选 Draft、默认禁用。
