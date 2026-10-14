@@ -28,3 +28,18 @@
 5. 容量及真故障注入按门禁执行：50/50 Robot、2000 活动挂单、资源、持续下单、SIGKILL 当前 Primary、权威提交水位、无丢单/重成交/双主、恢复节点追平与主备反转，后续 200 户。
 
 **当前许可结论：GO 10 户功能与独立 read-only 验证；NO-GO 主节点 SIGKILL、归档不可证明段删除、GHCR 新镜像替换。** 
+
+## 追加进展：接收端真实持久化恢复最小安全子集（19:30 CST 后）
+
+在原 [Trade PR #13](https://github.com/bliplink/com.app.dc.tradesvr/pull/13) 的完整签名 Manifest + Netty NOT_READY staging 上，继续形成 [Trade Draft PR #14](https://github.com/bliplink/com.app.dc.tradesvr/pull/14)：
+
+- `TradeRecoveryReplicaFence`：持有真实 ZooKeeper assignment 的物理源 Primary、目标 Replica/Learner、ZK version 与 epoch；先证明接收者不是 Primary 才撤销其 READY；进入和业务写入共用的 Trade 分区锁后再次检查相同证据。版本/源节点/epoch/成员关系改变或断线时拒绝。
+- `TradeSnapshotStore.installVerifiedRecoveryImage`：仅在上述排他锁内、已有 Common `INSTALLING` 保护的情形下使用；检查完整 business Snapshot 的字段、SHA 和 bounded length，按原始字节写入 temp + fsync，要求 `ATOMIC_MOVE`，再 fsync 父目录并核对原始文件 SHA。
+- `TradePartitionJournal.saveBaseline`：从旧的“temp 文件 fsync + 普通 rename”升级为 **temp fsync + 强制原子替换 + 父目录 fsync + 落盘全字段回读验证**，不能在重启后丢失已宣布持久的基线。
+- `TradeRecoveryReplicaJournalBaseline`：注入到 Common 已有 `DurableRecoveryTransactionControl.JournalBaseline` 的真正业务适配器，执行同 epoch 前向快照重建，确认真实 Chronicle 基线 cold-reopen 后的 snapshotId/epoch/snapshotSeq/committedStateEpoch/Seq/commitMarkerSeq 全部匹配；若失败则由 Common durable ledger 阻止普通 READY。
+- **重要限制：目前仅支持源端 committed HEAD 恰好等于完整 Snapshot commit marker 的情况**。如果 Snapshot 后存在任何 WAL 后缀，安装器明确失败；不能用“只内存 apply 后缀”替代真实 Chronicle 持久化写入。更不能把该分支当作可做主切的完整恢复。
+- 最新 [Trade Actions 38556910459](https://github.com/bliplink/com.app.dc.tradesvr/actions/runs/38556910459)：**260/260 Java8 测试通过，真实 Chronicle 文件和 cold-reopen 验收通过，候选 Docker image 构建通过**。没有合并到 `saas-crypto`、没有发布 GHCR、没有替换演示集群。
+
+另一个在线审计修复已完成：[dc-quant-deploy PR #27](https://github.com/bliplink/dc-quant-deploy/pull/27)。在 10 租户持续交易下，Projection 旧水位检查因 MySQL 相关子查询 `Using filesort` 超过 1500ms，报错误 3024；并**非已证明数据不一致**。新版先只读发现 bounded partition catalog，再在**同一个 REPEATABLE READ、READ ONLY consistent snapshot 事务**里重新读取 watermark catalog，并对每个源分区使用常量分区键的复合索引倒序 `LIMIT 1` 检查事件尾部；catalog 变化、缺尾或超时仍 NO-GO。**13/13 单测和当前 10 Order+10 Trade 分区的真实 MySQL `PROJECTION_DB_TAIL_MATCH` 通过**；PR GitHub CI 通过，已合并，不授权 HA。
+
+**剩余不可绕过的 P0：** 通用 Common 源端 committed HEAD 需要真实副本 durable ACK 认证；Trade 还要完成带 WAL 后缀的持久导入、崩溃恢复闭环、接收端受控启动，并完成 Order/Trade/Projection 的权威资金、持仓、成交、挂单对账和旧主隔离。MD 的 Snapshot/Diff 与旧发布者 fence 也未完成。Order HA 注入仍受 50/50 Robot 和 2,000 单真实负载门禁阻塞。Swap 当前在线但尚未经过 Colima 重启持久化实测。
