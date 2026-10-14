@@ -60,3 +60,11 @@
 **本轮明确没有验收成功的能力**：源端 quorum commit HEAD 与多副本 durable ACK 的强一致绑定；生产真实 ZooKeeper Receiver 受控启动/重试自动调度、源端 HEAD 在接收期间继续写入时的协议快照一致性、跨 epoch/主备反转、多副本丢失/网络分裂的双主隔离、Order/Trade/Projection 权威资金/持仓/成交/挂单对账、MD 全行情 Snapshot/Diff + 旧发布者 fencing、50/100/200 租户和真实 SIGKILL HA 故障注入。**CI 263/263 不是故障切换 PASS**。
 
 维护约束：本轮未删除现网 WAL、未重启 Mac Docker 或更改 Gateway 业务逻辑；变更保持候选 Draft、默认禁用。
+
+## 继续推进：独立物理副本的持久化提交签名凭据（2026-10-14 晚）
+
+- [Common Draft PR #15](https://github.com/bliplink/com.app.common/pull/15) 增加只读 `RecoveryQuorumCommitAttestation`、`RecoveryDurablePrefixControlHandler` 和 `VerifiedRecoveryQuorumClient`。签名受独立 HMAC domain、原始 32-byte challenge、真实物理节点 ID、ZooKeeper 版本、分区、epoch、提交头序号、累计状态 seq/epoch 和本地 **原始 STATE_COMMIT 标记 SHA256** 约束。客户端在独立物理 Netty endpoint 逐台拉取凭据，前后重新验证完整 ZK 投票成员/版本；Primary 单节点汇总的普通 `ReplicationAck` 不再被当作独立法定人数证据。必须有 Primary 证明 + 过半数真正投票成员；Learner、过期/重放挑战、签名伪造、密钥混用、异常角色、分区/epoch/版本不同全部失败关闭。所有投票节点必须使用**不同的 256bit+ 密钥**，集群共享 HMAC 密钥不能认证独立副本。
+- [Trade Draft PR #16](https://github.com/bliplink/com.app.dc.tradesvr/pull/16) 只实现业务侧源证据适配器：利用实际 Trade 业务分区锁、独立读取的 ZooKeeper assignment、源/投票 Replica（排除 Learner）角色验证，`syncJournalThrough()` 保证本地 Chronicle WAL 已持久化，`TradeCommitWatermark.scan` 核对目标水位为完整累计 `STATE_COMMIT`，读取本地 CQ 的**原始物理标记**并计算 SHA256，fsync 前后两次检查 ZK role/version/epoch。Common 完全不解析 Trade 业务事件。仍通过原来内部复制 Netty Control port，可单独配置 `trade.cluster.recovery.quorumReceipt.enabled:false`（**默认关闭**），不增 Gateway 逻辑，不授权 READY。
+- 测试：Common 真实双独立本地 TCP endpoint 的签名凭据获取和双边 ZK membership recheck、原始 challenge/MAC/epoch/物理 identity 重放与篡改、孤立主节点、非投票 Learner、全局共享密钥拒绝；Trade 自身提交标记/非投票源业务校验 + Java8 候选 Docker build。**只当最新的 Common/Trade 分支 CI 明确成功时计入完成**，此前旧版本 CI 不可代替。
+- **特别强调：当前证明只认证同一个完整提交标记与状态水位，不验证该提交标记之前所有 WAL 字节逐一相同。** 这不是完整 committed WAL prefix hash；更不是跨故障源端绝对权威提交。真实 HA 仍必须逐字节核对 Common 已认证的 Snapshot + 累积 Diff，交叉认证投票成员，重放后执行资金/持仓/成交/挂单/Projection 权威一致性与旧主 fencing。
+- 独立投票凭据属于 Common 状态机通用读协议，Order/Trade/MD 可以各自提供业务侧 WAL 持久水位，并通过公共验证器复用，禁止再增加 Trade 私有法定人数算法。当前仍**不合并到正式 saas-crypto、不发布 Maven Central 或 GHCR、不替换现网、不进行 SIGKILL**。
