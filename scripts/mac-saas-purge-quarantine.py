@@ -25,6 +25,17 @@ EXPECTED={'ordersvr':'ghcr.io/bliplink/ordersvr:sha-7842df4',
           'tradesvr':'ghcr.io/bliplink/tradesvr:sha-e5cebdd2aa191e98a3128886634cd3b5eca6d3e6',
           'tradesvr-b':'ghcr.io/bliplink/tradesvr:sha-e5cebdd2aa191e98a3128886634cd3b5eca6d3e6',
           'robotsvr':'ghcr.io/bliplink/robotsvr:sha-5941ee6032f607a6bccc2b8da305e57f91198ad0'}
+# Audited 2026-10-14 Demo cold install uses exact prevalidated local images.
+# Reject unknown tags and mixed sets; original GHCR pins remain approved.
+AUDITED_LOCAL_20261014={
+    'ordersvr':'dc-saas/ordersvr:cluster-dev-local-c361e3e3d-20261012034946',
+    'ordersvr-b':'dc-saas/ordersvr:cluster-dev-local-c361e3e3d-20261012034946',
+    'ordersvr-c':'dc-saas/ordersvr:cluster-dev-local-c361e3e3d-20261012034946',
+    'tradesvr':'dc-saas/tradesvr:cluster-dev-local-c6b8fe7d-20261013-walbatch-08cc695',
+    'tradesvr-b':'dc-saas/tradesvr:cluster-dev-local-c6b8fe7d-20261013-walbatch-08cc695',
+    'robotsvr':'dc-saas/robotsvr:cluster-dev-local-robot-tape-precision-1a4aaae-20261012',
+}
+APPROVED_IMAGE_PIN_SETS=(EXPECTED,AUDITED_LOCAL_20261014)
 REQUIRED={'ordersvr','ordersvr-b','ordersvr-c','mysql','zookeeper','robotsvr','tradesvr','tradesvr-b','gateway','projectionsvr'}
 CONFIRM='PURGE_ONLY_QUARANTINED_OLD_DC_SAAS'
 
@@ -94,9 +105,11 @@ def validate_running_stack(old,new):
             raise ValueError('fresh Compose member is not running')
         names[service]=item
     if len(names)!=24 or not REQUIRED.issubset(names):raise ValueError('fresh required service topology is incomplete')
-    for service,tag in EXPECTED.items():
-        if names[service].get('Config',{}).get('Image')!=tag:
-            raise ValueError('unreviewed image on new '+service)
+    image_pin_set=next((index for index,pins in enumerate(APPROVED_IMAGE_PIN_SETS)
+        if all(names[service].get('Config',{}).get('Image')==tag
+               for service,tag in pins.items())),None)
+    if image_pin_set is None:
+        raise ValueError('unreviewed image on new ordersvr/Trade/Robot (mixed or unknown release)')
     for service in ('mysql','zookeeper','ordersvr','ordersvr-c'):
         mounts=names[service].get('Mounts',[])
         if not any(m.get('Source','').startswith(str(new)+'/') for m in mounts):
@@ -116,7 +129,8 @@ def validate_running_stack(old,new):
                 if response.status != 200:raise ValueError('fresh Web endpoint not healthy')
         except (OSError,ValueError) as exc:
             raise ValueError('fresh Web endpoint unavailable: '+str(port)) from exc
-    return {'newComposeServices':len(names),'validatedImagePins':len(EXPECTED),
+    return {'newComposeServices':len(names),'validatedImagePins':len(APPROVED_IMAGE_PIN_SETS[image_pin_set]),
+            'auditedImagePinSet':'20261014_LOCAL' if image_pin_set==1 else 'LEGACY_GHCR',
             'freshHttpHealthyPorts':[18088,18090,18092,18094],
             'independentContainersUntouched':True}
 
