@@ -71,6 +71,19 @@ class PurgeGateTests(unittest.TestCase):
         self.assertEqual([18088,18090,18092,18094],report['freshHttpHealthyPorts'])
         self.assertTrue(self.old.exists())
 
+    def test_exact_audited_20261014_local_images_allowed(self):
+        for item in self.items:
+            svc=item['Config']['Labels']['com.docker.compose.service']
+            if svc in mod.AUDITED_LOCAL_20261014:
+                item['Config']['Image']=mod.AUDITED_LOCAL_20261014[svc]
+        report=self.validate()
+        self.assertEqual('20261014_LOCAL',report['auditedImagePinSet'])
+
+    def test_mixed_image_pin_sets_refused(self):
+        self.items[0]['Config']['Image']=mod.AUDITED_LOCAL_20261014['ordersvr']
+        with self.assertRaisesRegex(ValueError,'mixed or unknown release'):
+            self.validate()
+
     def test_unexpected_root_or_symlink_cannot_purge(self):
         wrong=self.home/'dc-saas-runtime-outside';wrong.mkdir()
         with self.assertRaisesRegex(ValueError,'exact staged'):
