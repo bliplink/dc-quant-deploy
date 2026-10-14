@@ -24,7 +24,15 @@
 
 1. 生产接收端必须实际调用 Common quorum verifier，从独立且可信的 ZK 投票成员和**每节点独立密钥**获取同一 Snapshot+WAL 窗口认证，而不是测试里构造的凭据；要求在镜像安装、日志导入与 READY 前后重新校验 assignment / source HEAD。
 2. 这次窗口上限 4096/64MiB，若快照基线较老，必须先走安全的 Snapshot 刷新或多段链式校验，不能默默截断窗口；未留存完整 WAL 归档时坚决拒绝签字。
-3. 长窗口扫描目前可能在 Trade 分区业务屏障内产生可感知 I/O 和延迟，**启用前必须压测并收紧锁占用/扫描预算**；正常下单性能优先。所有恢复接口默认关闭。
+3. **已有保护，仍需实测**：Trade 的真实 ZK / committed HEAD 预检与末尾身份认证仍在短暂业务分区锁下执行；原始 WAL 长区间哈希已移至锁外，Chronicle 活跃/归档文件只在内部短锁中抓取引用。Archive 并发轮换或日志缺页时拒绝签名。并发回归证实 WAL 原始扫描期间仍可正常追加 Chronicle，不持续占用 appender 互斥锁。仍须在 50/200 租户压测 IO 和尾延迟；全部恢复接口默认关闭。
 4. 真正的 HA 还需财务/持仓/委托/成交/Projection 的权威一致性检查、MD Snapshot/Diff 及旧发布者隔离，50/200 租户性能、真实 SIGKILL、主备反转和跨物理节点验证。所有候选代码的 Java/Docker CI 成功都不代表 HA failover PASS。
 
 **许可结论：继续开发与只读审计；NO-GO 上线新版镜像、直接主节点 SIGKILL、提前清除不可证明的 WAL 数据。**
+
+## 2026-10-15 06:14 CST：长区间证明扫描不阻塞交易写入
+
+Trade [Draft PR #22](https://github.com/bliplink/com.app.dc.tradesvr/pull/22) 追加：真实 ZK/物理 voter/提交标记在业务锁内固定，释放锁后读取原始 Chronicle WAL 并计算 SHA，随后再进入短锁核实 ZK version/epoch/Primary 与目标水位未改变才签名；`TradePartitionJournal.replayRawRecoveryWindow` 的真正 CQ/归档扫描也已移出 writer mutex。归档被并发清除导致缺页，严格拒绝签名。
+
+最终 [Trade Actions 38645951962](https://github.com/bliplink/com.app.dc.tradesvr/actions/runs/38645951962) **267/267 Java8 单元与回环测试、候选 Docker 构建成功**。新增真实 Chronicle 并发用例：在原始 WAL 扫描回调中阻塞，另一条线程仍能写入新的日志槽。该测试不代表全量 50/200 租户性能和真实物理主切已通过。
+
+资源复核：06:09 CST **24 个现役容器、11/11 RUNNING Robot、440 笔活动委托**；Projection **11 个 Order + 11 个 Trade 分区一致性门禁匹配**；Colima ≈3GiB Swap、约 1.8GiB 可用。Order HA 官方门禁仅因尚无 50/50 Robot、2000 活动单继续 `NO-GO`。没有发布 GHCR、没有替换容器、没有 SIGKILL。
