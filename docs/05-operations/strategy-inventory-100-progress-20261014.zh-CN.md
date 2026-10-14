@@ -30,6 +30,8 @@
 
 本机正式结果保存在 `E:\sourcecode\codex\_work\strategy-local-formal-20261014`；预筛结果及每次输入 K 线 SHA-256 保存在 `E:\sourcecode\codex\_work\strategy-local-validation-20261014`。它们是本机生成物，不在 Git 跟踪。脚本在本仓库 `recovery/` 下，可跨会话复用，私钥口令仅从进程环境变量读取。
 
+INDSvr 的研究 CLI 场景窗口与前瞻隔离修正位于远端独立分支 `codex/strategy-inventory-100-20261014`，提交 `bb79e8f`；未合并到 `latest`，因此不会因本轮研究触发生产 INDSvr 升级。继续开发时先拉取该分支，再决定是否将测试工具改动并入主线。
+
 ## 后续执行顺序
 
 1. 先以 `strategy_inventory_snapshot.py` 刷新 91 条和 50 格缺口，锁定本次研究窗口与行情 SHA-256；不要把旧快照的合格数当实时值。
