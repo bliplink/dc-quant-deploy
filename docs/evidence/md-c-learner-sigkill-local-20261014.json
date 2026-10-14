@@ -1,0 +1,48 @@
+{
+  "schema": "otc-md-learner-local-sigkill-qa-v1",
+  "date": "2026-10-14",
+  "test_scope": "MDSvrC learner only. MD primaries and Order untouched.",
+  "image": "dc-saas/mdsvr:cluster-dev-local-mdqa-026306b-20261014",
+  "action": "SIGKILL dc-saas-mdsvr-c then recreate same local image with Compose",
+  "fault_started_utc": "2026-10-14T00:18:50Z",
+  "container_recreated_utc": "2026-10-14T00:18:51Z",
+  "first_fresh_market_ready": "2026-10-14T08:19:37.351000+08:00",
+  "last_fresh_market_ready": "2026-10-14T08:19:37.507000+08:00",
+  "kill_to_first_market_ready_seconds": 47.351,
+  "fresh_market_ready_count": 11,
+  "tenants_fresh_ready": {
+    "C881CV": true,
+    "CT1YR5": true,
+    "EPO2RU": true,
+    "FG7FGF": true,
+    "HJZ1GE": true,
+    "HKIR1I": true,
+    "INURNI": true,
+    "O2G2J5": true,
+    "QGM88N": true,
+    "W5E3W9": true,
+    "ZNBCDR": true
+  },
+  "post_fault_partition_count": 256,
+  "post_fault_unready_partitions": 0,
+  "post_fault_md_primary_counts": {
+    "MDSvrA": 128,
+    "MDSvrB": 128
+  },
+  "post_fault_zk_membership": {
+    "MDSvrA": true,
+    "MDSvrB": true,
+    "MDSvrC": true
+  },
+  "automatic_promotion_authorized": false,
+  "md_primary_failover_test_passed": false,
+  "post_fault_preflight_decision": "BLOCKED",
+  "unresolved_safety_blockers": [
+    "ORDER_CURRENT_FULL_MARKET_IMAGE_PROOF_MISSING",
+    "MD_PROMOTION_FENCING_AND_CAS_CONTROLLER_NOT_CONFIGURED",
+    "MD_RECOVERING_TO_READY_EPOCH_PUBLICATION_FENCE_UNATTESTED",
+    "MD_PROMOTED_EPOCH_FULL_MARKET_IMAGE_NOT_ATTESTED",
+    "ROBOT_POST_FAILOVER_ORDER_RECONCILIATION_NOT_ATTESTED"
+  ],
+  "caveat": "Fresh MD READY logs do not independently attest durable source HEAD or old-publisher fencing."
+}
