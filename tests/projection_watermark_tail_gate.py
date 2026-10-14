@@ -143,7 +143,7 @@ def consistent_read_sql(catalog):
                 "ORDER BY e.source_epoch DESC,e.journal_seq DESC LIMIT 1" %
                 (stream, part, event, idx, part))
     statements.append("COMMIT")
-    return ";\\n".join(statements) + ";\\n"
+    return ";\n".join(statements) + ";\n"
 
 
 def read_consistent_db_snapshot_rows(sql):
@@ -154,7 +154,7 @@ def read_consistent_db_snapshot_rows(sql):
     if result.returncode:
         # Never expose Docker MySQL passwords or SQL client stderr.
         raise RuntimeError("read-only consistent Projection snapshot failed")
-    return [line.split("\\t") for line in result.stdout.splitlines() if line.strip()]
+    return [line.split("\t") for line in result.stdout.splitlines() if line.strip()]
 
 
 def db_snapshot():
