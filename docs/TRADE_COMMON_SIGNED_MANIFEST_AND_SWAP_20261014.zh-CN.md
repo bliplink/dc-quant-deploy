@@ -113,3 +113,18 @@
 2. 50 个 Robot/2000 挂单条件、MD full Snapshot/Diff 与旧发布者 fencing，及恢复后资金/持仓/委托/成交/Projection authoritative 对账，均未验收。
 3. V2 单次认证被**4096 帧/64MiB**严格约束。旧归档删除或快照未及时更新造成无法证明的区间必须被报告为阻塞，不可放宽到跳过校验。可能需要按性能情况进一步设计滚动持久 prefix digest/checkpoint，不应把全量重复扫描放进交易热路径。
 4. 本轮未合并 Draft Common/Trade、未发布 Maven Central 或 GHCR、未更换现网镜像、未执行 SIGKILL/删除 WAL。**CI 成功不代表生产 HA 通过。**
+
+## 2026-10-15：从“同一提交标记”收口为“完整原始 WAL 区间一致”
+
+上轮 [Common Draft PR #15](https://github.com/bliplink/com.app.common/pull/15) 和 [Trade Draft PR #16](https://github.com/bliplink/com.app.dc.tradesvr/pull/16) 已具备分节点 HMAC 投票凭据，但只比较最后一条 STATE_COMMIT 标记。不同的前置 STATE_BATCH 物理内容可能出现相同的累计提交标记，故不能认定整段 WAL 复制一致。
+
+本轮新增**统一 Common v2** 协议（仅候选，不兼容上一版的 v1 凭据）：
+
+1. [Common Draft PR #22](https://github.com/bliplink/com.app.common/pull/22)：新增 `RecoveryWalWindowDigest`，摘要包含认证完整 Snapshot 的 SHA、epoch/seq、提交 HEAD，以及恢复范围每一条**原始物理 WAL 帧的序号、epoch、长度、内容**，含业务 STATE_BATCH 与协议 STATE_COMMIT。最多 4096 slots、总 64MiB；缺口、跨 epoch、篡改、超限、缺少真实原始帧立即 FAIL CLOSED。独立 Quorum HMAC 签名域/格式升级 v2，把完整窗口 SHA 也签入，不接受旧版 marker-only receipt。签名校验继续要求独立节点密钥、准确的 ZK 版本、当前投票成员多数且包含 Primary。
+2. Common 内部 `VerifiedRecoveryStagingClient.requireStagedQuorumWindow`：从完整认证的 HEAD/Manifest + Snapshot + committed WAL staging **重新校验**镜像 SHA、源提交前缀并计算“要求副本一致的预期窗口 SHA”，**不信任人工/Primary 单独填写的窗口摘要**。新的 `VerifiedRecoveryQuorumClient.requireStageAndPhysicalQuorum` 再向每个准确物理节点 Netty Control endpoint 索取独立凭据。如果 HEAD 恰好等于 Snapshot marker、原始 marker 已被压缩归档，当前实现会拒绝认证，而不是凭空推断它的 hash；需要后续显式可信归档证明。
+3. [Trade Draft PR #23](https://github.com/bliplink/com.app.dc.tradesvr/pull/23)：Trade 业务适配器在原有写入分区锁中读取本机磁盘 Snapshot 的确切 SHA 和 Chronicle Queue 每条**未经反序列化/重编码**的原始 WAL 字节，确保区间连续后独立产生窗口摘要。无窗口数据、快照不相同、已归档而不可读、物理编码不规范都拒绝。真正 Chronicle 双副本测试覆盖**最终 STATE_COMMIT 相同但前一条 STATE_BATCH 不同必须判为不一致**。
+4. `TradeRecoveryQuorumMembershipFence`：单独提供从真实 ZooKeeper assignment 读取 Primary、epoch、ZK version、完整 voting replica set（排除 Learner）的服务业务适配器。Common 在查询任何物理凭据前、返回后和最后授权前反复检查相同 assignment；成员变化、主备反转、Learner 冒充 Replica、ZK 断开均失败，不使用 Gateway 做额外认证。
+5. 验证记录：Common Java8 [CI #38651973519](https://github.com/bliplink/com.app.common/actions/runs/38651973519) **SUCCESS**（含源 Netty staged WAL 生成准确 quorum digest）；Trade [首轮 CI #38651523178](https://github.com/bliplink/com.app.dc.tradesvr/actions/runs/38651523178) **267/267 tests PASS + candidate Docker build PASS**。后续增加了真实 ZK MembershipFence 及单元测试，**最终必须以最新 Trade branch HEAD 的 CI 为准**，不能用前一轮测试替代。
+6. 发布门槛：Common v2 收据与旧 v1 **不兼容**；如果将新协议与旧节点混合启动，必须拒绝 Quorum 而不是降低签名要求。没有 Maven Central / GHCR 发布，无 Demo 运行容器替换，没有真实 SIGKILL / WAL 删除。
+
+**仍阻塞真实 HA：** 自动接收节点接入真正的 source HEAD + ZK/voter manifest + v2 多数签名复合授权，并将 NOT_READY → READY 的外部资金、持仓、成交、挂单、Projection 权威核验挂钩；独立密钥安全配置和请求限速；跨 epoch/多物理机器恢复；MD 全市场 Snapshot/Diff 和旧发行者 fence；50/200 租户加压及真实 Order/Trade SIGKILL。任何只读凭据都不是金融一致性证明，不可当成已完成主切。
