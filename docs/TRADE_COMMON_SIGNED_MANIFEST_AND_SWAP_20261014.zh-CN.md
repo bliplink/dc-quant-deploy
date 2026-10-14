@@ -68,3 +68,18 @@
 - 测试：Common 真实双独立本地 TCP endpoint 的签名凭据获取和双边 ZK membership recheck、原始 challenge/MAC/epoch/物理 identity 重放与篡改、孤立主节点、非投票 Learner、全局共享密钥拒绝；Trade 自身提交标记/非投票源业务校验 + Java8 候选 Docker build。**只当最新的 Common/Trade 分支 CI 明确成功时计入完成**，此前旧版本 CI 不可代替。
 - **特别强调：当前证明只认证同一个完整提交标记与状态水位，不验证该提交标记之前所有 WAL 字节逐一相同。** 这不是完整 committed WAL prefix hash；更不是跨故障源端绝对权威提交。真实 HA 仍必须逐字节核对 Common 已认证的 Snapshot + 累积 Diff，交叉认证投票成员，重放后执行资金/持仓/成交/挂单/Projection 权威一致性与旧主 fencing。
 - 独立投票凭据属于 Common 状态机通用读协议，Order/Trade/MD 可以各自提供业务侧 WAL 持久水位，并通过公共验证器复用，禁止再增加 Trade 私有法定人数算法。当前仍**不合并到正式 saas-crypto、不发布 Maven Central 或 GHCR、不替换现网、不进行 SIGKILL**。
+
+## 继续推进：完整 Snapshot 锚定 WAL 前缀的独立副本多数签名（2026-10-14 夜间）
+
+已在 [Common Draft PR #16](https://github.com/bliplink/com.app.common/pull/16) 和 [Trade Draft PR #17](https://github.com/bliplink/com.app.dc.tradesvr/pull/17) 完成独立候选实现，**仍未合并发布**。
+
+1. **原协议缺口与版本替换**：上一版多数节点签署相同 `STATE_COMMIT` 原始标记及累计 state/epoch，这仍不能证明**中间 WAL 字节完全相同**。Common 因此将物理副本凭据改成互不兼容的 **`OTC-RECOVERY-COMMIT-QUORUM-v2`**，拒绝 v1 协议。签名额外绑定完整 Snapshot 的序号与 SHA256，以及从该 Snapshot 到提交 HEAD 的**全部物理 STATE / STATE_COMMIT WAL 帧摘要**；snapshotEpoch 必须和 commitEpoch 一致，当前不允许跨 epoch 推断。
+2. **Common RecoveryWalWindowDigest**：SHA-256 按固定 domain、分区、epoch、Snapshot seq+sha、签名 HEAD、每条 WAL 的物理序号、原始字节长度和原始数据计算；任何缺口、重复、乱序、错 epoch、截断或长度超限立刻 NO-GO。恢复挑战最多 **4096 个原始 WAL 槽/64 MiB**，无法审计更老历史时明确拒绝，绝不凭最后一次 `ReplicationAck` 或只比较末尾 marker 放行。
+3. **Common 认证期望来源**：新增 `RecoveryQuorumWindowFromStaging.requireFullWindow`，必须先从经过真实 Netty HMAC、源端 HEAD + Manifest、完整 Snapshot SHA、累积已提交 WAL grammar 和 immutable staging receipt 验证的**接收端数据**，独立重新计算期望的完整区间摘要。 `VerifiedRecoveryQuorumClient` 再用独立可信的 Source HEAD 绑定 Snapshot/HEAD，向由 ZooKeeper 完整指定的物理投票副本各自获取签名凭据。不能让源 Primary 随意提供“预期 WAL 哈希”。
+4. **Trade 只提供状态机业务适配**：源端按 Trade 业务分区锁、真实 ZooKeeper 角色、持久化 Snapshot 和 Chronicle Journal 物理内容导出；读取区间通过恢复专用 `readRecoveryBatch` 在解码后与原始 CQ 文本逐字节核对，**普通复制/catch-up `readBatch` 不承担额外重编码开销**。每个已提交 STATE/STATE_COMMIT 包括控制帧都参与摘要；快照错配、归档段未覆盖或超过上限时禁止签名。
+5. **集成测试**：Common 负向测试涵盖篡改中间 STATE 而保持最后 STATE_COMMIT 不变、Snapshot SHA 改动、缺口、乱序、epoch/version、前缀超限、错误 HMAC、错误投票者或共享密钥。Trade 真实 Netty 源端认证、Manifest+WAL staging、真实 Chronicle CQ 安装及关闭重开的**完整区间摘要一致**测试通过。
+6. **CI**：[Common 38570204457](https://github.com/bliplink/com.app.common/actions/runs/38570204457) 成功；最终 [Trade 38570596966](https://github.com/bliplink/com.app.dc.tradesvr/actions/runs/38570596966) Java8 **265/265** 测试、程序打包及候选 Docker 构建均成功（CI 只在工作目录本地安装 Common 3.0.21-SNAPSHOT 和 com.app.dc，不发布中央仓库/GHCR）。
+
+**尚未得到生产授权：** 真实物理副本 ZooKeeper 独立投票成员发现和带有效期的接收端 recovery authority 还没有真正挂到 Trade 生产状态机/启动流程；不同副本若使用不同 Snapshot 版本，则当前严格拒绝，未来需要可信统一快照版本或可验证归档前缀。还缺旧 Primary fencing、跨 Epoch role reversal、完整金额/持仓/委托/执行/Projection 数据权威一致性对账、MD 旧发布者隔离以及 50 Robot/2000 挂单与 200 租户负载和真实 SIGKILL。**CI 全绿仅能说明隔离候选代码正确，不能推断线上 HA 已安全。**
+
+发布顺序仍是 Common/Trade 各层叠 PR 按依赖验证、发布统一版本、冷部署候选隔离验证、负载门禁后才执行主切；Demo 当前不可据此放开故障注入。
