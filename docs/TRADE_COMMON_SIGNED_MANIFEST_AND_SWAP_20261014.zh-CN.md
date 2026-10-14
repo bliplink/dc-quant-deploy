@@ -96,3 +96,20 @@
 - **线上继续禁止 HA SIGKILL**：实际 ZooKeeper voting members 与恢复服务独立授权、完整源端提交 ACK 的生产绑定、外部财务/委托/持仓/成交/Projection READY 对账、MD 旧发布者 fencing、50/200 租户压测和主备反转还未验收；不能把测试中可签名的 Quorum 直接视为生产合法促主。
 
 本次只读观察：2026-10-14 23:08 CST，Mac Demo 为 **24 容器运行、11/11 Robot RUNNING、440 活动挂单**，在线 MySQL 的 Order 和 Trade Projection 各 11 个分区返回 `PROJECTION_DB_TAIL_MATCH` / exit 0，macOS 磁盘约 71%。新增第 11 租户不是本次开发操作创建。本轮没有重启服务、删除 WAL、清理证据或替换任何现网镜像。
+
+## 追加验收：投票凭据必须覆盖完整 Snapshot/WAL 原始区间（2026-10-14 23:47 CST）
+
+之前 Common [PR #15](https://github.com/bliplink/com.app.common/pull/15) 的物理副本 HMAC 凭据只包含最终 `STATE_COMMIT` 的原始 SHA 和累计提交状态，**无法单独证明最后提交标记之前的所有 WAL 字节相同**。这个安全缺口现在在两个层叠 Draft PR 中作出了代码级修复：
+
+- [Common Draft PR #20](https://github.com/bliplink/com.app.common/pull/20)：新通用 `RecoveryWalRangeDigest` 对同一分区、epoch、`snapshotSeq`、完整 Snapshot SHA、`committedHeadSeq` 及区间内**每条原始物理 WAL 的完整字节（含所有 STATE、STATE_COMMIT 控制帧）、序号、epoch 与帧长度**做确定性流式 SHA-256。限制单次 ≤4096 帧/64MiB，任何中间缺帧、乱序、跨 epoch、Snapshot 锚点不一致、只匹配最终 COMMIT 都不能认证。独立物理投票 HMAC 凭据线格式升级至**尚未发布的 V2**，签名绑定 Snapshot 和整个 WAL 区间 SHA；缺少完整 V2 内容即拒绝，不接受旧 V1 提交标记签名作为 Quorum。新增 `VerifiedRecoveryQuorumClient.requireHeadBoundPhysicalQuorum` 将完整 WAL 区间与另一条**已通过签名验证的源端 HEAD**的 Snapshot 序号/hash、提交 head、state、epoch 和最终 commitMarker 显式绑定。各节点独立密钥、可信 ZooKeeper voters、角色/版本/nonce 二次检查仍保持。
+- [Trade Draft PR #20](https://github.com/bliplink/com.app.dc.tradesvr/pull/20)：`TradePartitionJournal.digestDurableRawRange` 在业务读 barrier 下，从真实 Chronicle *raw* 文本字节读取受限 WAL 区间，要求物理最后索引、连续 seq/epoch、包含完整区间，并同时使用 Common `CommittedWalPrefixVerifier` 检查 **STATE/STATE_COMMIT 累计提交语义**，不得只凭文件中的最后一条 marker。Trade 的恢复投票凭据只能从本地 fsync 过的 Journal、当前同 epoch 完整 Snapshot hash 和签名物理标记构造；如果源端 Archive 已删除该 WAL 或 Snapshot 太旧（>4096 帧），**明确 NO-GO**，不得省略历史帧来签名。
+- Common [Actions 38591856028](https://github.com/bliplink/com.app.common/actions/runs/38591856028) **SUCCESS**；Trade 最新 [Actions 38592198601](https://github.com/bliplink/com.app.dc.tradesvr/actions/runs/38592198601) **SUCCESS，266/266 Trade Java8 测试通过，候选 Docker 编译成功**。加入真实 Chronicle 冷重开 SHA 不变、相同最终 COMMIT 但早期 STATE 字节被修改必须产生不同 digest 的回归。
+- CI 初始发现测试模拟 SHA 写成 60 位而非 64 位，正确被协议拒绝。修正测试夹具后 Common/Trade 最新 CI 均绿。记录初次失败并不意味着生产数据损坏。
+- 2026-10-14 23:47 CST 现网最新**只读**状态：24 个 SaaS 容器、**11/11 Robot RUNNING**、440 活动挂单、Order/Trade 各 11 个 Projection 水位均 `PROJECTION_DB_TAIL_MATCH`；Mac 约 72% 磁盘使用率/124 GiB 可用，Colima Swap 可用。与之前 10 户不同，新增第 11 户不是本次 Quorum 开发操作创建的，不能据此声明压测达到 50 户。
+
+### 尚未完成的生产授权闭环
+
+1. 在真实被动接收者启动流程中串起 `Source HEAD → source Manifest → 完整 WalRange quorum V2 → 真实 ZooKeeper voters → Chronicle 安装/中断续传 → 外部 READY`，中途源端/epoch/voter 成员变化即撤销凭据。
+2. 50 个 Robot/2000 挂单条件、MD full Snapshot/Diff 与旧发布者 fencing，及恢复后资金/持仓/委托/成交/Projection authoritative 对账，均未验收。
+3. V2 单次认证被**4096 帧/64MiB**严格约束。旧归档删除或快照未及时更新造成无法证明的区间必须被报告为阻塞，不可放宽到跳过校验。可能需要按性能情况进一步设计滚动持久 prefix digest/checkpoint，不应把全量重复扫描放进交易热路径。
+4. 本轮未合并 Draft Common/Trade、未发布 Maven Central 或 GHCR、未更换现网镜像、未执行 SIGKILL/删除 WAL。**CI 成功不代表生产 HA 通过。**
