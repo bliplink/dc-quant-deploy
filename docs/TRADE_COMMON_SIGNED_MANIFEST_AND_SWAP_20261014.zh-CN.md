@@ -92,7 +92,7 @@
 
 - [Common Draft PR #19](https://github.com/bliplink/com.app.common/pull/19) `fix/common-recovery-quorum-query-auth-20261014`：换成不兼容旧 unsigned 请求的内部 `RECOVERY_DURABLE_PREFIX_SIGNED_QUERY_V2`，要求先计算并验证目标物理节点 256-bit 独立密钥的 HMAC，覆盖 challenge、序号、标准化服务名、分区及物理目的节点。**HMAC 比对发生在读取任何业务文件、执行 fsync 或窗口哈希之前**；错误节点密钥、篡改请求均 fail closed。保留已经完成的 Common full Snapshot/WAL signed quorum，无新业务协议、无 Gateway 修改。
 - Common 真 Netty 及单元测试新增：伪造 HMAC 或使用别的物理节点密钥访问端口时，源端读盘回调**0 次**；合法查询可以继续。Common Java8 CI [Actions 38587400503](https://github.com/bliplink/com.app.common/actions/runs/38587400503) SUCCESS。
-- Trade 不新增业务代码。仅从已经通过 265/265 的 canonical Trade PR #17 创建私有 CI 分支 `ci/trade-quorum-auth-integration-20261014`，在构建期使用上述 Common Candidate 运行全部 Java8 测试、依赖解析和候选 Docker 镜像构建。[Actions 38587566054](https://github.com/bliplink/com.app.dc.tradesvr/actions/runs/38587566054) 需要最终确认为 SUCCESS 才可算集成通过；不会发布 Maven Central/GHCR 或替换 Demo。
+- Trade 不新增业务代码。仅从已经通过 265/265 的 canonical Trade PR #17 创建私有 CI 分支 `ci/trade-quorum-auth-integration-20261014`，在构建期使用上述 Common Candidate 运行全部 Java8 测试、依赖解析和候选 Docker 镜像构建。[Actions 38587566054](https://github.com/bliplink/com.app.dc.tradesvr/actions/runs/38587566054) 已确认 **SUCCESS：265/265 项 Java8 Trade 测试通过、Trade package 与候选 Docker build 成功**；不会发布 Maven Central/GHCR 或替换 Demo。
 - **线上继续禁止 HA SIGKILL**：实际 ZooKeeper voting members 与恢复服务独立授权、完整源端提交 ACK 的生产绑定、外部财务/委托/持仓/成交/Projection READY 对账、MD 旧发布者 fencing、50/200 租户压测和主备反转还未验收；不能把测试中可签名的 Quorum 直接视为生产合法促主。
 
 本次只读观察：2026-10-14 23:08 CST，Mac Demo 为 **24 容器运行、11/11 Robot RUNNING、440 活动挂单**，在线 MySQL 的 Order 和 Trade Projection 各 11 个分区返回 `PROJECTION_DB_TAIL_MATCH` / exit 0，macOS 磁盘约 71%。新增第 11 租户不是本次开发操作创建。本轮没有重启服务、删除 WAL、清理证据或替换任何现网镜像。
