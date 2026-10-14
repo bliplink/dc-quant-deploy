@@ -1,0 +1,31 @@
+{
+  "strategies": [
+    {
+      "strategyName": "research_r41_eth_volume_weighted_channel_failure_long",
+      "sourceStrategyVersion": "v1",
+      "symbol": "ETHUSDT",
+      "scene": "channel",
+      "text": "15m",
+      "request": {
+        "sourceRef": "local_codex:2026-10-14:volume_weighted_channel_failure_long_s20_t40:ETHUSDT",
+        "logicSummary": "Flat VWMA80 channel, prior lower-envelope failure and next-bar upside confirmation; fixed ATR14 stop 2.0 and take 4.0.",
+        "javaSourceBase64": "",
+        "parameterSchema": {},
+        "defaultParameters": {
+          "stopMultiplier": 2.0,
+          "takeMultiplier": 4.0,
+          "firstStepPct": 0.5,
+          "stepPct": 0.2,
+          "fallbackTriggerPct": 0.8,
+          "fallbackTakePct": 0.5
+        },
+        "optimizationProfile": {
+          "fitWindowDays": 120,
+          "validateWindowDays": 30,
+          "forwardWindowDays": 14,
+          "objective": "FEE_ADJUSTED_PROFIT_FIRST"
+        }
+      }
+    }
+  ]
+}

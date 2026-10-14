@@ -1,0 +1,31 @@
+{
+  "strategies": [
+    {
+      "strategyName": "research_r41_sol_higher_timeframe_pullback_short",
+      "sourceStrategyVersion": "v1",
+      "symbol": "SOLUSDT",
+      "scene": "trend",
+      "text": "15m",
+      "request": {
+        "sourceRef": "local_codex:2026-10-14:higher_timeframe_pullback_short_s20_t40:SOLUSDT",
+        "logicSummary": "SMA48 below falling SMA160; previous bar pulls back to SMA48 then current close breaks previous low. Fixed ATR14 stop 2.0 and take 4.0.",
+        "javaSourceBase64": "",
+        "parameterSchema": {},
+        "defaultParameters": {
+          "stopMultiplier": 2.0,
+          "takeMultiplier": 4.0,
+          "firstStepPct": 0.5,
+          "stepPct": 0.2,
+          "fallbackTriggerPct": 0.8,
+          "fallbackTakePct": 0.5
+        },
+        "optimizationProfile": {
+          "fitWindowDays": 120,
+          "validateWindowDays": 30,
+          "forwardWindowDays": 14,
+          "objective": "FEE_ADJUSTED_PROFIT_FIRST"
+        }
+      }
+    }
+  ]
+}

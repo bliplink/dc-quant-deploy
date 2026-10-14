@@ -1,0 +1,31 @@
+{
+  "strategies": [
+    {
+      "strategyName": "research_r41_ada_volume_weighted_channel_failure_short",
+      "sourceStrategyVersion": "v1",
+      "symbol": "ADAUSDT",
+      "scene": "channel",
+      "text": "15m",
+      "request": {
+        "sourceRef": "local_codex:2026-10-14:volume_weighted_channel_failure_short_s25_t60:ADAUSDT",
+        "logicSummary": "Flat VWMA80 channel, prior upper-envelope failure and next-bar downside confirmation; fixed ATR14 stop 2.5 and take 6.0.",
+        "javaSourceBase64": "",
+        "parameterSchema": {},
+        "defaultParameters": {
+          "stopMultiplier": 2.5,
+          "takeMultiplier": 6.0,
+          "firstStepPct": 0.5,
+          "stepPct": 0.2,
+          "fallbackTriggerPct": 0.8,
+          "fallbackTakePct": 0.5
+        },
+        "optimizationProfile": {
+          "fitWindowDays": 120,
+          "validateWindowDays": 30,
+          "forwardWindowDays": 14,
+          "objective": "FEE_ADJUSTED_PROFIT_FIRST"
+        }
+      }
+    }
+  ]
+}
