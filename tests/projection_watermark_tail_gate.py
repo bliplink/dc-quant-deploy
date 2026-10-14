@@ -80,33 +80,63 @@ def tail_sql(stream, partitions):
     return ";\n".join(statements) + ";\n"
 
 
-def db_snapshot():
-    snapshot = {}
+def consistent_read_sql():
+    """Fetch both streams in ONE read-only REPEATABLE READ snapshot.
+
+    Two independent MySQL sessions can falsely report a watermark/tail drift
+    while Robot writes continue. Index seeks are bounded to 257 watermarks
+    per stream; no table scan, mutation, ZK action or external side effect.
+    """
+    statements = [
+        "SET SESSION MAX_EXECUTION_TIME=1500",
+        "SET SESSION TRANSACTION ISOLATION LEVEL REPEATABLE READ",
+        "START TRANSACTION WITH CONSISTENT SNAPSHOT, READ ONLY",
+    ]
     for stream in STREAMS:
         prefix = "dc_%s_projection" % stream
-        # In a live system, a cross-query race may produce a conservative
-        # BLOCK; it must never be interpreted as permission to restart.
-        rows = read_db_rows(
-            "SET SESSION MAX_EXECUTION_TIME=1500; "
-            "SELECT partition_id,source_epoch,journal_seq "
-            "FROM %s_watermark ORDER BY partition_id LIMIT 257;" % prefix,
-            stream)
-        if len(rows) > 256 or any(len(row) != 3 for row in rows):
+        event = prefix + "_event"
+        idx = ("uk_dc_order_projection_partition_seq" if stream == "order"
+               else "PRIMARY")
+        tail_epoch = ("(SELECT e.source_epoch FROM %s e FORCE INDEX (%s) "
+                      "WHERE e.partition_id=w.partition_id ORDER BY "
+                      "e.source_epoch DESC,e.journal_seq DESC LIMIT 1)" % (event, idx))
+        tail_seq = ("(SELECT e.journal_seq FROM %s e FORCE INDEX (%s) "
+                    "WHERE e.partition_id=w.partition_id ORDER BY "
+                    "e.source_epoch DESC,e.journal_seq DESC LIMIT 1)" % (event, idx))
+        statements.append(
+            "SELECT '%s',w.partition_id,w.source_epoch,w.journal_seq,%s,%s "
+            "FROM %s_watermark w ORDER BY w.partition_id LIMIT 257" %
+            (stream, tail_epoch, tail_seq, prefix))
+    statements.append("COMMIT")
+    return ";\n".join(statements) + ";\n"
+
+
+def read_consistent_db_snapshot_rows(sql):
+    command = ["docker", "exec", "-i", "dc-saas-mysql", "sh", "-lc",
+               'MYSQL_PWD="$MYSQL_ROOT_PASSWORD" mysql -uroot -N dc']
+    result = subprocess.run(command, input=sql, stdout=subprocess.PIPE,
+                            stderr=subprocess.PIPE, text=True, timeout=30)
+    if result.returncode:
+        # Never expose Docker MySQL passwords or SQL client stderr.
+        raise RuntimeError("read-only consistent Projection snapshot failed")
+    return [line.split("\t") for line in result.stdout.splitlines() if line.strip()]
+
+
+def db_snapshot():
+    snapshot = {stream: [] for stream in STREAMS}
+    rows = read_consistent_db_snapshot_rows(consistent_read_sql())
+    for row in rows:
+        if len(row) != 6 or row[0] not in STREAMS:
+            raise ValueError("unexpected read-only Projection snapshot row")
+        stream, *values = row
+        snapshot[stream].append(values)
+    for stream, records in snapshot.items():
+        if len(records) > 256 or any(len(row) != 5 for row in records):
             raise ValueError("%s invalid watermark catalog" % stream)
-        parts = [row[0] for row in rows]
-        if len(parts) != len(set(parts)) or any(
-                not re.fullmatch(r"P[0-9]{3}", part) for part in parts):
+        partitions = [row[0] for row in records]
+        if len(partitions) != len(set(partitions)) or any(
+                not re.fullmatch(r"P[0-9]{3}", part) for part in partitions):
             raise ValueError("%s unsafe/duplicate watermark partition" % stream)
-        tails = read_db_rows(tail_sql(stream, parts), stream)
-        if any(len(row) != 3 or row[0] not in parts for row in tails):
-            raise ValueError("%s unexpected event tail" % stream)
-        by_partition = {row[0]: row[1:] for row in tails}
-        if len(by_partition) != len(tails):
-            raise ValueError("%s duplicate event tail" % stream)
-        snapshot[stream] = [
-            [partition, epoch, seq] +
-            by_partition.get(partition, ["NULL", "NULL"])
-            for partition, epoch, seq in rows]
     return snapshot
 
 

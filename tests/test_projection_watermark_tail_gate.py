@@ -66,25 +66,40 @@ class ProjectionWatermarkTailGateTest(unittest.TestCase):
             gate.tail_sql("trade", ["P%03d" % x for x in range(257)])
 
     def test_db_snapshot_preserves_missing_tail_as_block(self):
-        probes = [
-            [["P001", "2", "50"]],
-            [],  # no indexed event tail; must never become a PASS
-            [["P002", "1", "20"]],
-            [["P002", "1", "20"]],
-        ]
-        with mock.patch.object(gate, "read_db_rows", side_effect=probes):
+        rows = [["order", "P001", "2", "50", "NULL", "NULL"],
+                ["trade", "P002", "1", "20", "1", "20"]]
+        with mock.patch.object(gate, "read_consistent_db_snapshot_rows", return_value=rows):
             evidence = gate.db_snapshot()
         self.assertEqual(["P001", "2", "50", "NULL", "NULL"],
                          evidence["order"][0])
         self.assertEqual(1, len(gate.issues_for_snapshot(evidence)))
 
     def test_db_snapshot_refuses_duplicate_event_tail(self):
-        probes = [
-            [["P001", "2", "50"]],
-            [["P001", "2", "50"], ["P001", "2", "50"]],
-        ]
-        with mock.patch.object(gate, "read_db_rows", side_effect=probes):
-            with self.assertRaisesRegex(ValueError, "duplicate event tail"):
+        rows = [["order", "P001", "2", "50", "2", "50"],
+                ["order", "P001", "2", "50", "2", "50"]]
+        with mock.patch.object(gate, "read_consistent_db_snapshot_rows", return_value=rows):
+            with self.assertRaisesRegex(ValueError, "duplicate watermark"):
+                gate.db_snapshot()
+
+    def test_db_snapshot_uses_one_readonly_consistent_mysql_session(self):
+        sql = gate.consistent_read_sql()
+        self.assertIn("WITH CONSISTENT SNAPSHOT, READ ONLY", sql)
+        self.assertEqual(1, sql.count("START TRANSACTION"))
+        self.assertIn("FORCE INDEX (uk_dc_order_projection_partition_seq)", sql)
+        self.assertIn("FORCE INDEX (PRIMARY)", sql)
+        self.assertIn("MAX_EXECUTION_TIME=1500", sql)
+        self.assertEqual(1, sql.count("COMMIT"))
+        rows = [["order", "P001", "1", "50", "1", "50"],
+                ["trade", "P002", "1", "20", "1", "20"]]
+        with mock.patch.object(gate, "read_consistent_db_snapshot_rows", return_value=rows) as read:
+            self.assertEqual([], gate.issues_for_snapshot(gate.db_snapshot()))
+            self.assertEqual(1, read.call_count)
+
+    def test_db_snapshot_rejects_extra_or_unknown_rows(self):
+        rows = [["order", "P001", "1", "1", "1", "1"],
+                ["evil", "P002", "1", "1", "1", "1"]]
+        with mock.patch.object(gate, "read_consistent_db_snapshot_rows", return_value=rows):
+            with self.assertRaisesRegex(ValueError, "unexpected"):
                 gate.db_snapshot()
 
 
