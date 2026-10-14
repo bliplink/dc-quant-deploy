@@ -28,6 +28,9 @@ CREATE TABLE IF NOT EXISTS dc_tenant_application (
 
 CREATE TABLE IF NOT EXISTS dc_tenant (
   location varchar(64) COLLATE utf8mb4_bin NOT NULL,
+  tenant_id SMALLINT UNSIGNED NOT NULL AUTO_INCREMENT,
+  next_user_no BIGINT UNSIGNED NOT NULL DEFAULT 1,
+  UNIQUE KEY uq_tenant_numeric_id (tenant_id),
   tenant_id smallint unsigned NOT NULL AUTO_INCREMENT COMMENT 'four-digit technical tenant id (1..9999); not tenant_code or location',
   next_user_no int unsigned NOT NULL DEFAULT 1 COMMENT 'next eight-digit user sequence within tenant',
   tenant_code varchar(64) COLLATE utf8mb4_bin NOT NULL,
