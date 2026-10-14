@@ -17,8 +17,10 @@ class StrategyInventorySnapshotTest(unittest.TestCase):
         }
         self.assertEqual('qualified', snapshot.reason(row))
         self.assertFalse(snapshot.passes_forward_contribution(row))
+        self.assertAlmostEqual(0.1, snapshot.forward_contribution_ratio(row))
         row['fee_adjusted_forward_pnl'] = 100.0
         self.assertTrue(snapshot.passes_forward_contribution(row))
+        self.assertIsNone(snapshot.forward_contribution_ratio({'total_pnl': 0}))
 
     def test_missing_and_oos_failure_are_not_qualified(self):
         self.assertEqual('realistic_backtest_missing', snapshot.reason(None))

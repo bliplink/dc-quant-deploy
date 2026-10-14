@@ -96,9 +96,15 @@ def reason(row):
 def passes_forward_contribution(row):
     if reason(row) != 'qualified':
         return False
-    total_pnl = row.get('total_pnl') or 0
+    ratio = forward_contribution_ratio(row)
     required = row.get('min_forward_contribution') or 0.20
-    return total_pnl > 0 and row['fee_adjusted_forward_pnl'] / total_pnl >= required
+    return ratio is not None and ratio >= required
+
+
+def forward_contribution_ratio(row):
+    if row is None or (row.get('total_pnl') or 0) <= 0:
+        return None
+    return row['fee_adjusted_forward_pnl'] / row['total_pnl']
 
 
 def main():
@@ -170,6 +176,8 @@ def main():
             'strategy_name': result_key[0], 'strategy_version': result_key[1],
             'symbol': result_key[2], 'text': result_key[3],
             **metrics,
+            'forward_contribution_ratio': forward_contribution_ratio(metrics),
+            'passes_forward_contribution': passes_forward_contribution(metrics),
             'candidate_scene': candidate.get('scene', ''),
             'candidate_status': candidate.get('status', ''),
             'compile_status': candidate.get('compile_status', ''),
@@ -180,6 +188,8 @@ def main():
                         'candidate_scene', 'candidate_status', 'compile_status',
                         'run_time', 'trade_count', 'profit_factor',
                         'fee_adjusted_validate_pnl', 'fee_adjusted_forward_pnl',
+                        'total_pnl', 'min_forward_contribution',
+                        'forward_contribution_ratio', 'passes_forward_contribution',
                         'source_ref', 'artifact_uri']
     with (output / 'qualified_unregistered_candidates.tsv').open('w', encoding='utf-8', newline='') as stream:
         writer = csv.DictWriter(stream, fieldnames=candidate_fields, delimiter='\t', extrasaction='ignore')
@@ -193,6 +203,8 @@ def main():
             row['passes_forward_contribution'] for row in rows),
         'inactive_qualified_registry_count': len(inactive_qualified),
         'qualified_unregistered_candidate_count': len(qualified_unregistered),
+        'qualified_unregistered_passing_forward_contribution_count': sum(
+            row['passes_forward_contribution'] for row in qualified_unregistered),
         'reason_counts': dict(Counter(row['reason'] for row in rows)),
         'unqualified_by_symbol_scene': dict(Counter(
             row['symbol_scope'] + '/' + row['scene'] for row in rows if row['reason'] != 'qualified')),
