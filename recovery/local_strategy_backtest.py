@@ -239,7 +239,7 @@ def run_local_backtest(args, item, artifact, entry_class, work_dir, local_port, 
     java = [
         "java",
         "-Xms128m",
-        "-Xmx768m",
+        "-Xmx%dm" % args.java_heap_mb,
         "-Dtrainer.backtest.strategyName=" + item["strategyName"],
         "-Dtrainer.backtest.strategyVersion=" + item["sourceStrategyVersion"],
         "-Dtrainer.backtest.symbol=" + item["symbol"],
@@ -300,6 +300,8 @@ def main():
     parser.add_argument("--fit-window-days", type=int)
     parser.add_argument("--validate-window-days", type=int)
     parser.add_argument("--forward-window-days", type=int)
+    parser.add_argument("--java-heap-mb", type=int, default=768,
+                        help="Local SIMSvr JVM heap (default: 768 MiB)")
     parser.add_argument(
         "--locked-params-json",
         default="{}",
@@ -310,6 +312,8 @@ def main():
     args.sim_repo = args.sim_repo.resolve()
     args.output_dir = args.output_dir.resolve()
     args.locked_params = json.loads(args.locked_params_json)
+    if not 256 <= args.java_heap_mb <= 4096:
+        raise SystemExit("--java-heap-mb must be between 256 and 4096")
     if not isinstance(args.locked_params, dict):
         raise SystemExit("--locked-params-json must decode to an object")
 

@@ -18,6 +18,7 @@
 - [报告与排障](05-operations/reports-and-troubleshooting.zh-CN.md)
 - [场景、策略选择、信号与下单链路运维](05-operations/strategy-chain-health-and-gap-fill.zh-CN.md)
 - [实盘策略 v4 资格门槛与持续复核](05-operations/live-strategy-v4-qualification.zh-CN.md)
+- [100 条实盘策略补齐进度与研究交接](05-operations/strategy-inventory-100-progress-20261014.zh-CN.md)
 - [未达标策略修复记录（2026-10-13）](05-operations/strategy-repair-20261013.zh-CN.md)
 - [APSSvr 每日定时重启](05-operations/apssvr-daily-restart.zh-CN.md)
 - [安全说明](05-operations/security.zh-CN.md)
