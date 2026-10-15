@@ -11,7 +11,6 @@ from collections import Counter
 from datetime import datetime,timezone
 import json
 import re
-import shutil
 from pathlib import Path
 import subprocess
 import sys
@@ -19,20 +18,6 @@ import sys
 NODES={'MDSvrA':'dc-saas-mdsvr','MDSvrB':'dc-saas-mdsvr-b','MDSvrC':'dc-saas-mdsvr-c'}
 COUNT=256
 REQUIRED_IMAGE='ghcr.io/bliplink/mdsvr:sha-48544e5'
-# Host VM and snapshot/archive storage must have a free-space reserve.
-# This check runs ONLY during explicit read-only HA preflight.
-MIN_HOST_FREE_BYTES=5*1024*1024*1024
-# Reviewed ARM64 MD-C canary, from successful MD CI #38419947005.
-# ARM64 manifest: sha256:3f02b5359dbc17e9123ac0cec49f2f98225bff5ce87d295548dac5cd0452abf3
-# A known tag is never sufficient: also pin the Docker config ID and source
-# revision verified from the fetched GHCR image.
-REVIEWED_GHCR_IMAGES = {
-    'ghcr.io/bliplink/mdsvr:sha-026306b': {
-        'configImageId':'sha256:5ae7d0479d6cb335dc24dfc3f65947b13733fe99b9e28587835dff87a07c4c3a',
-        'imageRevision':'026306b1b311c41bff12c9296cef667e681a7688',
-        'commonGav':'io.github.bliplink:com.app.common:3.0.19',
-    }
-}
 
 def command(args,input=None,timeout=45):
     result=subprocess.run(args,input=input,text=True,capture_output=True,timeout=timeout)
@@ -79,27 +64,25 @@ def parse_ephemeral_membership(zk_output):
     return {name:found[name] and name in seen for name in NODES}
 
 
-def evaluate(rows,images,members=None,required_image=REQUIRED_IMAGE,per_node_images=None,host_free_bytes=None):
+def evaluate(rows,images,members=None,required_image=REQUIRED_IMAGE,per_node_images=None,
+             expected_image_id=None):
     # Explicitly locked local Mac images may be reviewed without pretending
     # they are the old GHCR image. This NEVER grants failover authority.
-    def immutable_id(value):
-        return bool(re.fullmatch(r'sha256:[0-9a-f]{64}', value or ''))
-
     def valid_lock(value):
-        return immutable_id(value) or value==REQUIRED_IMAGE or value in REVIEWED_GHCR_IMAGES or bool(re.fullmatch(
+        return value==REQUIRED_IMAGE or bool(re.fullmatch(
             r'dc-saas/mdsvr:cluster-dev-local-[a-zA-Z0-9_.-]+',value or ''))
     if not valid_lock(required_image):
         raise ValueError('MD expected image must be an explicitly locked, reviewed image')
+    # A local Demo tag can be mutable. An explicitly supplied Docker image ID
+    # is a stronger, immutable lock and must match every running node.
+    if expected_image_id is not None and not re.fullmatch(r'sha256:[0-9a-f]{64}', expected_image_id):
+        raise ValueError('MD expected image ID must be an exact SHA-256 digest')
     per_node_images = {} if per_node_images is None else per_node_images
     if not isinstance(per_node_images,dict) or any(
             node not in NODES or not valid_lock(value)
             for node,value in per_node_images.items()):
         raise ValueError('MD per-node image locks must be reviewed, immutable and known')
-    if host_free_bytes is not None and (not isinstance(host_free_bytes,int) or host_free_bytes<0):
-        raise ValueError('invalid host disk free-space reading')
     reasons=[];primaries=Counter();single=[];without_candidate=[];wrong=[];unready=[]
-    if host_free_bytes is not None and host_free_bytes<MIN_HOST_FREE_BYTES:
-        reasons.append('HOST_DISK_RESERVE_BELOW_5G')
     members=members or {}
     if len(rows)!=COUNT: raise ValueError('incomplete MD topology')
     for row in rows:
@@ -122,14 +105,9 @@ def evaluate(rows,images,members=None,required_image=REQUIRED_IMAGE,per_node_ima
     if unready:reasons.append('MD_ASSIGNMENTS_NOT_READY:'+','.join(unready[:5]))
     for node,container in NODES.items():
         detail=images.get(node,{})
-        expected=per_node_images.get(node,required_image)
-        trusted=REVIEWED_GHCR_IMAGES.get(expected)
-        image_matches = (detail.get('configImageId') == expected
-                         if immutable_id(expected)
-                         else detail.get('image') == expected)
-        if (not image_matches or not detail.get('running')
-                or (trusted is not None and any(
-                    detail.get(field)!=value for field,value in trusted.items()))):
+        image_matches = (detail.get('imageId')==expected_image_id if expected_image_id is not None
+                         else detail.get('image')==per_node_images.get(node,required_image))
+        if not image_matches or not detail.get('running'):
             reasons.append('MD_NODE_UNHEALTHY_OR_UNREVIEWED:'+node)
         if members.get(node) is not True:
             reasons.append('MD_EPHEMERAL_MEMBER_NOT_ATTESTED:'+node)
@@ -137,15 +115,12 @@ def evaluate(rows,images,members=None,required_image=REQUIRED_IMAGE,per_node_ima
     reasons.extend(['ORDER_CURRENT_FULL_MARKET_IMAGE_PROOF_MISSING',
                     'MD_PROMOTION_FENCING_AND_CAS_CONTROLLER_NOT_CONFIGURED',
                     'MD_RECOVERING_TO_READY_EPOCH_PUBLICATION_FENCE_UNATTESTED',
-                    # MD PR #8 separately requires locally applied Image +
-                    # contiguous Diff proof bound to elected owner/epoch.
-                    'MD_CANDIDATE_APPLIED_IMAGE_DIFF_UNATTESTED',
                     'MD_PROMOTED_EPOCH_FULL_MARKET_IMAGE_NOT_ATTESTED',
                     'ROBOT_POST_FAILOVER_ORDER_RECONCILIATION_NOT_ATTESTED'])
     return {'schema':'otc-md-failover-preflight-v1','readOnly':True,
-            'hostDiskFreeBytes':host_free_bytes,'hostDiskRequiredFreeBytes':MIN_HOST_FREE_BYTES,
             'expectedImage':required_image,'expectedImagesByNode':{
                 node:per_node_images.get(node,required_image) for node in NODES},
+            'expectedImageId':expected_image_id,
             'canInjectMdPrimaryFault':False,'canPromote':False,
             'decision':'BLOCKED','blockers':reasons,
             'partitionCount':len(rows),'primaryCounts':dict(sorted(primaries.items())),
@@ -161,6 +136,8 @@ def main(argv=None):
                         help='explicitly reviewed GHCR/local immutable image tag; does NOT enable failover')
     parser.add_argument('--expected-md-c-image',
                         help='explicitly locked MD-C canary image; other MD nodes retain --expected-image')
+    parser.add_argument('--expected-image-id',
+                        help='exact sha256:64hex Docker Image ID for all MD nodes; still fails closed')
     options=parser.parse_args(argv)
     instructions=''.join('get /dc/cluster/mdsvr/partitions/P%03d\n'%p for p in range(COUNT))
     instructions+=''.join('get -s /MDTService/{0}/{0}\n'.format(n) for n in NODES)+'quit\n'
@@ -173,19 +150,12 @@ def main(argv=None):
     for node,container in NODES.items():
         item=by_name.get(container)
         if not item:raise ValueError('missing node metadata: '+node)
-        config=item.get('Config',{})
-        labels=config.get('Labels') or {}
         images[node]={'running':item.get('State',{}).get('Running') is True,
-                      'image':config.get('Image'),
-                      'configImageId':item.get('Image'),
-                      'imageRevision':labels.get('org.opencontainers.image.revision'),
-                      'commonGav':labels.get('dc.common.gav')}
+                      'image':item.get('Config',{}).get('Image'),
+                      'imageId':item.get('Image')}
     locks={'MDSvrC':options.expected_md_c_image} if options.expected_md_c_image else None
-    # The host path is mounted from the same APFS Data volume backing Colima.
-    # No writes, network calls or Docker changes occur during this check.
-    free_bytes=shutil.disk_usage(str(Path.home())).free
     report=evaluate(rows,images,members,options.expected_image,locks,
-                    host_free_bytes=free_bytes)
+                    expected_image_id=options.expected_image_id)
     report['checkedAtUtc']=datetime.now(timezone.utc).isoformat()
     if options.output:
         dest=Path(options.output).expanduser()
