@@ -53,7 +53,7 @@ services:
       - ./mysql/migrations:/opt/saas-migrations:ro
     healthcheck:
       # Do not treat a partial failed mysql/init install as healthy.
-      test: ["CMD-SHELL", "MYSQL_PWD=\"$${MYSQL_ROOT_PASSWORD}\" mysql --protocol=TCP -h127.0.0.1 -P\"$${MYSQL_TCP_PORT}\" -uroot -N -e \"SELECT COUNT(*) FROM information_schema.tables WHERE table_schema='dc' AND table_name IN ('dc_tenant','dc_bankruptcy_transfer','dc_adl_execution_v2','dc_tenant_liquidity_bootstrap')\" | grep -qx '4'"]
+      test: ["CMD-SHELL", "sh /docker-entrypoint-initdb.d/check-schema-ready.sh"]
       interval: 10s
       timeout: 5s
       retries: 30
