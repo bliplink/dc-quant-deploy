@@ -24,6 +24,23 @@
 
 证据为本机受保护 Demo 文件，不是已上传公开仓库的日志/密钥副本。**角色切换操作采用在线版本 CAS；没有中断整个容器、触发自动选主或模拟物理节点故障。**
 
+## 2026-10-16 00:26–00:28 Mac 新增真实业务回归：PASS
+
+在以上 Order P000/P228、Trade P000/P020 在线角色切换全部完成后，执行：
+
+```bash
+set -a; . /Users/kong/dc-quant-deploy/.env.prod; set +a
+python3 tests/run-auto-tenant-trading-e2e.py
+```
+
+- 新租户 **T1MPT1** 公开申请自动批准，流动性初始化完成，Robot `NOTIONAL_ZONES / RUNNING / 40`，公开盘口买/卖各 10 档。
+- 新交易员正常注册登录、`Demo=1` 入金 1,000；真实 IOC 成交 0.0001 BTC，MySQL 订单/成交/Long 持仓吻合。
+- Reduce-Only IOC 平仓完成；**测试交易员**最终持仓=0、活动订单=0，业务测试退出码 0。租户内的 Robot 做市账户仍可能有正常持仓，不能把“测试交易员归零”误写成“全租户全部头寸归零”。
+- T1MPT1 测试后留在 `TRIAL`，Robot `RUNNING/40`；全 Demo 此时七个 Robot 运行，总目标挂单 **280**，七个租约仍有效。没有擅自删除测试租户。
+- 后验 `tests/check-projection-consistency-host.sh` **PASS**：Order+Trade 水位分别 **8/8**，orphan mutation=0，watermark tail mismatch=0，cross-partition duplicated event ID=0。
+
+**另外发现一个必须修复的验收工具问题：** `tests/run-order-live-role-reversal-e2e.py` 硬编码早期 `EX2ENF/P110` 隔离租户（当前 Demo 已不存在），并在 A↔B 变更时只更新 `replica` 单值、未正确更新同步副本列表 `replicas=[另一节点,OrderSvrC]`。因此**不能直接用于当前三副本集群**。下一轮须按当前 Demo 自动创建隔离交易员，保留 `OrderSvrC` 同步副本并使用 CAS 及 fail-closed 旧主隔离，验证挂单穿越 A→B→A 并最后撤单。修复验收脚本属于本轮必需的验收修复，不是业务新功能。
+
 ## 尚未通过的关键项目与明确下一动作
 
 1. **Order Primary SIGKILL 自动接管：BLOCKED。** 本轮尝试发起真实 Order-A SIGKILL 验收，但外部执行环境安全检查拦截了命令，**未终止节点、未修改 ZK**。不要谎称已做。后续通过合规可执行的故障注入途径，保留旧主隔离与已提交 WAL 验证，再做全链路自动接管和恢复节点追平。
