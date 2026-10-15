@@ -2,6 +2,19 @@
 
 > 本文遵循 [集群最终统一验收任务书](CLUSTER_HA_FINAL_ACCEPTANCE_MISSION_20261015.zh-CN.md)；只记录真实已执行的操作。日期采用 Mac 所在时区 Asia/Shanghai。全程未新增产品功能，也未依赖 GitHub Actions。
 
+## 2026-10-16 07:10–07:19 MD PR13 签名空市场分区恢复修复与三节点替换（最新状态）
+
+**仅解决现有 256 分区 HA 恢复校验的缺陷；未启用自动 MD Primary 主切。**
+
+- **实际发现：** `MdAuthenticatedOrderImageReview.inspect` 直接拒绝 `books=[]`；`MdPartitionMarketCoverage.inspect` 又拒绝任何空 source census。MD 256 个分区中大量无交易市场，即使拥有新挑战、Order Primary 身份及 ZooKeeper version、签名 HEAD、逐字节 Snapshot SHA-256 和完整提交边界，也不能进行合法空市场 Image 校验。这会阻断无活跃市场分区的恢复核验。
+- **先失败复现再修复：** 新增 `signedEmptyMarketPartitionIsValidOnlyWithNoLocalCandidateMarkets` 测试，旧实现真实失败 `signed Order market image missing full inventory`。最小改动仅允许**非 null、确实从签名快照提取的空市场清单**；如果候选本地 Witness 有任何该分区中未声明的市场，仍产生 `UNDECLARED_CANDIDATE_MARKET` 阻断。缺失/null 清单仍拒绝，签名挑战、来源身份、Image SHA、HEAD commit marker 等旧严格校验不变。`Review.isPromotionAuthorized()` 始终为 **false**，没有绕过 MD `Safety` / Quorum / 发布者隔离。
+- 本机离线 Java 8 / Maven 完整 **33 suites / 145 tests / 0 failures / 0 errors**，新增缺失 census 拒绝测试也通过；修改已经合并 MD [PR #13](https://github.com/bliplink/com.app.dc.mdsvr/pull/13)，merge commit `3382331782c90c1afe48012507b604444a58670b`。编译用三个源文件 Git blob SHA 与合并 PR 一致。
+- 离线构建镜像 `dc-saas/mdsvr:pr13-empty-image-20261016`，Docker **完整 image ID `sha256:61dfa45f4001478479a6bca134efab4db8382b115c42d273cd74759652d990a1`**。以已通过回归的 PR12 本地镜像作为基础，覆盖这次通过测试的 classes，不拉 Docker Hub；Common/`com.app.dc` 依赖保持前一轮统一锁定版本。
+- Mac Demo 使用实际 `DEPLOY_ROOT`，严格 **MD-C → MD-B → MD-A** 单节点滚动替换，每一步必须等到该节点原有活跃市场 `MD_MARKET_READY` 才继续：C **8/8 Learner**、B **3/3 Primary**、A **5/5 Primary** 均 PASS。
+- 上线后实时校验：MD A/B/C **相同 image ID**、running=true、OOM=false、restartCount=0；**MD/Order/Trade 各 256/256 READY**，Primary A/B 均 128/128，未修改 Order/Trade/Gateway 容器；公开 API 八个 Robot 租户均 **10 bids/10 asks**，Robot **8/8 RUNNING、320 挂单、8/8 租约有效**；`tests/run-saas-acceptance.sh --quick --running` 完整 **PASS**。
+- **仍然 BLOCKED：** 上述签名快照校验只是只读核验，不等同于独立完整 durable Quorum ACK、候选落地 Image+Diff 证明和旧 Epoch MD 发行者隔离证明。真实 `MdImageRecoveryFailoverController.Safety` 尚无生产提供者，`md.cluster.failover.enabled` 默认关闭，**不能记作 MD Primary SIGKILL 自动主切通过**。Order/Trade Primary SIGKILL 和持仓权威对账亦未通过。
+- **本轮没有重复执行**以前 PASS 的 GTC 人工双向主切、1,486,020 条 Projection Mutation 全范围在线扫描；必要时后续故障验收须重新建立各账本真实权威断点，不得用旧审计报告代表新故障注入的对账。
+
 ## 2026-10-16 06:49–06:58 MD PR12 旧主隔离重新校验与三节点部署（最新状态）
 
 **任务边界：仅修复 Common/MD 主切现有状态机的 fail-closed 安全缺口，不新增功能、不引入虚假的可信证明提供者、不打开自动主切开关。**
