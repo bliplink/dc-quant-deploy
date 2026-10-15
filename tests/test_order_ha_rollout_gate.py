@@ -15,7 +15,6 @@ def healthy():
             name: {"running": True, "oom": False, "restarts": 0}
             for name in ("OrderSvrA", "OrderSvrB", "OrderSvrC")
         },
-        "robots": {"running": 50, "other": 0, "open_order_count": 2000},
         # Target A is a learner only; the durable B->C replication remains.
         "partitions": [
             {"partitionId": "P%03d" % i, "state": "READY", "epoch": 1,
@@ -44,12 +43,17 @@ class OrderHaRolloutGateTest(unittest.TestCase):
         self.assertTrue(any("MemAvailable" in s for s in problems))
         self.assertTrue(any("SwapFree" in s for s in problems))
 
-    def test_robot_degraded_blocks(self):
+    def test_robot_counts_and_degraded_quotes_do_not_gate_order_ha(self):
         state = healthy()
-        state["robots"]["running"] = 49
-        state["robots"]["other"] = 1
-        self.assertTrue(any("Robot not stable" in s for s in
-                            issues_for_snapshot(state, "OrderSvrA")))
+        state["robots"] = {"running": 10, "other": 1, "open_order_count": 400}
+        self.assertEqual([], issues_for_snapshot(state, "OrderSvrA"))
+        del state["robots"]
+        self.assertEqual([], issues_for_snapshot(state, "OrderSvrA"))
+
+    def test_no_fixed_robot_or_order_volume_is_required(self):
+        state = healthy()
+        state["robots"] = {"running": 0, "other": 0, "open_order_count": 0}
+        self.assertEqual([], issues_for_snapshot(state, "OrderSvrA"))
 
     def test_primary_owner_must_be_drained(self):
         state = healthy()
