@@ -57,6 +57,12 @@ for config in "${a_config}" "${b_config}" "${c_config}"; do
     fail 'same-epoch snapshot rebase must remain disabled by default'
 done
 for config in "${a_config}" "${b_config}" "${c_config}"; do
+  grep -Fqx 'order.cluster.recovery.rollbackUncommittedTail.enabled=false' "${config}" ||
+    fail 'Order sync cluster must not perform unverified local WAL rebase'
+done
+grep -Fq 'order.cluster.recovery.rollbackUncommittedTail.enabled=false' "${DEPLOY_DIR}/deploy-order-cluster-dev.sh" ||
+  fail 'Order dev HA deployment must also forbid unverified physical WAL rebase'
+for config in "${a_config}" "${b_config}" "${c_config}"; do
   grep -Fqx "${peers}" "${config}" || fail "three-node peer map is missing from ${config}"
 done
 for config in "${a_config}" "${b_config}" "${c_config}"; do

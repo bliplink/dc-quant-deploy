@@ -280,7 +280,9 @@ order.cluster.lifecycle.sameEpochRestart.enabled=true
 order.cluster.lifecycle.pollMillis=1000
 order.cluster.lifecycle.retryMillis=5000
 order.cluster.perfProbe.enabled=true
-order.cluster.recovery.rollbackUncommittedTail.enabled=true
+# Synchronous Order replicas may already contain the original physical WAL.
+# Preserve dirty tails and require Common-certified recovery; never local rebase.
+order.cluster.recovery.rollbackUncommittedTail.enabled=false
 order.cluster.replication.enabled=true
 order.cluster.replication.required=true
 order.cluster.replication.bindHost=127.0.0.1

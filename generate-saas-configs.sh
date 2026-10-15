@@ -730,7 +730,9 @@ order.cluster.failover.safetyPollMillis=${ORDER_CLUSTER_FAILOVER_SAFETY_POLL_MIL
 order.cluster.failover.minimumLiveSynchronizedReplicas=${ORDER_CLUSTER_FAILOVER_MINIMUM_LIVE_SYNCHRONIZED_REPLICAS}
 order.cluster.failover.replicaRepairPollMillis=${ORDER_CLUSTER_FAILOVER_REPLICA_REPAIR_POLL_MILLIS}
 order.cluster.perfProbe.enabled=false
-order.cluster.recovery.rollbackUncommittedTail.enabled=true
+# Synchronous Order replicas may already contain the original physical WAL.
+# Preserve dirty tails and require Common-certified recovery; never local rebase.
+order.cluster.recovery.rollbackUncommittedTail.enabled=false
 order.cluster.replication.enabled=true
 order.cluster.replication.required=true
 order.cluster.replication.bindHost=127.0.0.1
