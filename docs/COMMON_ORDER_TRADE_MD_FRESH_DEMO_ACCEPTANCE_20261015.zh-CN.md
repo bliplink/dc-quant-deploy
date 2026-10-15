@@ -77,3 +77,17 @@
 随后新注册租户 **H4676T**，自动审批、Robot 40 委托、买卖盘口 10+10、模拟资金、成交 0.0001 BTC、持仓核对、平仓归零 **全部 PASS**；其 `P228` 三副本 Snapshot 一致（`snapshotSeq=412, commitMarkerSeq=412, books=1, orders=39`）。最终 **6 个业务成功租户的 Order 全市场持久 Image 三副本核查 `6/6 PASS`、无问题**；Order 256 分区一致性 `PASS`，Projection 数据库尾部 `6/6 MATCH`。仍有早期启动失败的 `W4UB6K` 为 `NEEDS_RECONCILIATION`，未绕过财务门禁。
 
 **重要边界：** 上述只证明恢复**源端持久 Image 的存在与三副本一致性**，并非 MD-C 自动接收并应用的 E2E 故障切换证明；Common 独立物理 quorum、源端已提交 WAL ACK、接收端 Ledger/READY、MD snapshot+diff、旧发布者隔离和 Order/Trade SIGKILL 仍明确 NO-GO。任何中间的 snapshotSeq 暂时偏差需最终达到三副本一致后才能通过。现有 Mac 单机 ZK 不可用来冒充跨物理节点 Quorum。
+
+## 续验：MD 接收端 Image/Diff 应用证明与真实部署门禁（仍不授权 HA 主切）
+
+**代码风险与修复**：原 `MdImageRecoveryFailoverController` 的两阶段 `RECOVERING → READY` 只调用 `Safety.requireAuthoritativeOrderImage` 与 `requireRecoveryEpochPublicationFence`。前者证明**源端** Order Image 的有效性，不能证明新当选 MD 已经实际应用全部市场 Snapshot 并连续回放 Diff。当前 MD 仍缺真实 `MdImageRecoveryFailoverController.Safety` 生产实现，自动 failover 关闭；但必须先消除接口层面“证明源端即允许 READY”的安全漏洞。
+
+[MD PR #8](https://github.com/bliplink/com.app.dc.mdsvr/pull/8) 已合入 `saas-crypto`：在 READY 前增加独立的 `requireCandidateAppliedImageAndDiff(recovering)` 门禁，其默认实现 fail-closed；缺证明时返回 `RECOVERY_NOT_APPLIED`，保持当前分区 `RECOVERING`，不创建 READY ZK CAS、不授权 MD 行情读路由和发布。接收端收据未来必须绑定物理候选节点、partition、Epoch、源端已提交序列与完整市场库存，禁止跨 Epoch 或重放旧收据。源端 Order HEAD 认证、候选已应用数据及 Gateway/旧发布者隔离三项仍需分别验证，不能合成一个布尔值。
+
+**本地 Java 8 回归**：`MdImageRecoveryFailoverControllerTest` 新增独立测试，证明仅有 signed source + publisher fence，而没有候选接收应用证明时仍不可 READY；补充应用证明后，仅在隔离 fake ZK 状态机测试中允许成功。MD 全量 **140 tests / 0 failures / 0 errors / 0 skipped**。
+
+**Demo 同步验证**：基于前次 `dc-saas/mdsvr:unified-freshboot-20261015` 同一 Common Jar 构建 ARM64 本地镜像 `dc-saas/mdsvr:applied-image-ready-gate-20261015`，源码修订 `953af5cc7690b4650e8652c4bc14ee6ae18d3762`，`dc.release.authorized=false`（仅 Mac 候选，不是 GHCR 正式发布）。协调暂停 Robot/LiqSvr，重启 MD A/B/C，按顺序恢复 LiqSvr、RobotSvr，原始 Order/Trade、MySQL、Snapshot/WAL、ZK 分区均未修改。新 MD A/B 仍分别 128 个读分区，C 仍 0，未擅自提升为 Primary。重连期间 Robot 短暂 `WAITING_MARKET_DATA`，随后自动恢复 **6 RUNNING / 240 resting orders**，LiqSvr 六个租户的 mark 订阅均重新 READY。Order 256 分区快照/路由检查 PASS；6/6 Order 持久市场 Image 三副本齐全；Projection 数据库 tail 6/6 MATCH。新 MD 的 Common Jar SHA-256 `8898812068751cc3ab3916bb7b55fe535c10a413ffef7e9be20436d6ac8ff154`。
+
+**操作型 HA 门禁改进**：[部署 PR #59](https://github.com/bliplink/dc-quant-deploy/pull/59) 允许对**完整 SHA-256 本地 Docker Image ID**进行严格匹配；拒绝不完整 SHA、不合法格式及可变的 `:latest`，仍保持所有 HA NO-GO 和只读接口不变，同时显式加上 `MD_CANDIDATE_APPLIED_IMAGE_DIFF_UNATTESTED` 阻塞。Python 隔离单测 **15/15 PASS**。对当前新版镜像执行 256 分区只读真实预检，确认 MD A/B 各 128 Primary；输出 **BLOCKED / canInjectMdPrimaryFault=false**。此前的持久快照存在与普通实时盘口通过并不能替代独立签名 Order Source HEAD、旧发布者/新 Epoch fence、候选节点应用 Snapshot/Diff 事务 Ledger、故障后的 Robot/Order 对账。Mac 单机 ZooKeeper 也不能证明物理独立 Quorum。**本轮未 SIGKILL、未做带故障压力、未向外宣称 HA 已验收**。
+
+**后续唯一主线**：MD 接入可审计、不可跨 Epoch 复用的接收端恢复事务与真实应用回执，在 Common 的源端签名 HEAD/原始 WAL 范围/Replica ACK 和 Gateway 旧发布者隔离证明均就绪后，才尝试在受控故障注入中执行 `RECOVERING → READY`。Order/Trade 同样必须完成带资金、持仓、委托、成交、Projection 的权威一致性证明。GitHub Actions 费用限制不影响此轮 Mac 本地构建与单测。
