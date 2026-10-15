@@ -63,3 +63,17 @@
 3. Mac 当前 ZooKeeper 仍在一个 Docker VM 中运行；缺乏独立物理 Quorum，未进行真实主切、持仓 failover／rejoin／角色反转、50/200 租户稳态或 burst 压测。以上须在恢复授权和在线证据充足后再测。
 
 **结论：**本轮完成了 Order/Trade **共性不安全物理 WAL rebase** 的代码、测试和 Demo 统一部署修复；正常交易仍 PASS；**HA 认证恢复和 MD 自动主切仍明确 NO-GO**。不要清盘绕过不可用的证明链，也不需要再维护历史 P190/P220。
+
+## 21:49 更新：Order → MD 新市场持久 Image 三副本恢复前置条件闭环
+
+**发现：** 对已通过交易 E2E 的新租户 `FHJ2E4`，所在 `P064` 仍只有三份 `snapshotSeq=6, committedStateSeq=0, books=[]` 的旧快照，但实时盘口正常。Order Demo 定时快照每 60 秒扫描、20,000 已提交变更或 1 小时才更新、每轮最多 1 分区，因此一个低成交量新市场可能长期缺失恢复 Image。
+
+**修复一：[Order PR #14](https://github.com/bliplink/com.app.dc.ordersvr/pull/14)**：当某分区原快照未包含任何已提交业务状态、首次出现真实已提交 mutation 时优先进行一次 `captureAndReplicateQuiescent`；后续保持原有节流。真正冷启动重建时还发现另一个边界：Robot 暂停期间，Order 会先持久化一份**有提交水位但 `books=[]`** 的快照（如 `P064 snapshotSeq=3205 committedStateSeq=3204`）；Robot 恢复后该新市场仍不满足首次提交判断，故不能靠 PR #14 单独解决。
+
+**修复二：[Order PR #15](https://github.com/bliplink/com.app.dc.ordersvr/pull/15)**：`OrderSnapshotManager` 提供只读 O(1) 已登记市场 identity 数量；`OrderPeriodicSnapshotService` 对比当前 trackedBookCount 与上次**持久化 Snapshot 已覆盖的 Book 数量**。若出现新交易市场，且本分区已提交状态前进，优先捕获一次市场 Image，通过原有 Writer 隔离、commitMarker、Projection 水位、同步副本 snapshot transfer 和 `maxPartitionsPerRun=1` 预算；后续继续 20,000 mutation/1h 节流，不会按单笔委托反复截图。增加单测覆盖空业务、首次 commit、已有空快照的重启、Epoch 变化、新增第二市场和重复变更限流。
+
+**真实零清盘 Demo 验收：** 两次补丁均合入 `saas-crypto`，Java 8 最终 Order 全量 **376 项测试，0 failures、0 errors、3 skipped**。Mac 本地 ARM64 镜像 `dc-saas/ordersvr:merged-market-identity-image-20261015` 已部署到 Order A/B/C，保持 `order.cluster.recovery.rollbackUncommittedTail.enabled=false`、Common 统一 SHA 和旧 WAL 完整保留。对最初问题租户 `FHJ2E4/P064`：三副本同步获得 `snapshotSeq=7762, committedStateSeq=7761, books=1`，不再是空 Image。
+
+随后新注册租户 **H4676T**，自动审批、Robot 40 委托、买卖盘口 10+10、模拟资金、成交 0.0001 BTC、持仓核对、平仓归零 **全部 PASS**；其 `P228` 三副本 Snapshot 一致（`snapshotSeq=412, commitMarkerSeq=412, books=1, orders=39`）。最终 **6 个业务成功租户的 Order 全市场持久 Image 三副本核查 `6/6 PASS`、无问题**；Order 256 分区一致性 `PASS`，Projection 数据库尾部 `6/6 MATCH`。仍有早期启动失败的 `W4UB6K` 为 `NEEDS_RECONCILIATION`，未绕过财务门禁。
+
+**重要边界：** 上述只证明恢复**源端持久 Image 的存在与三副本一致性**，并非 MD-C 自动接收并应用的 E2E 故障切换证明；Common 独立物理 quorum、源端已提交 WAL ACK、接收端 Ledger/READY、MD snapshot+diff、旧发布者隔离和 Order/Trade SIGKILL 仍明确 NO-GO。任何中间的 snapshotSeq 暂时偏差需最终达到三副本一致后才能通过。现有 Mac 单机 ZK 不可用来冒充跨物理节点 Quorum。
