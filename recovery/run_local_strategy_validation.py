@@ -43,7 +43,12 @@ def main():
                    '-Ddc.research.validationOnly=true', '-Ddc.research.years=2026',
                    '-cp', args.classes,
                    'com.app.dc.service.strategy.research.StrategyResearchBatchCli']
-        completed = subprocess.run(command, capture_output=True, text=True, encoding='utf-8', check=True)
+        completed = subprocess.run(command, capture_output=True, text=True, encoding='utf-8')
+        if completed.returncode:
+            raise RuntimeError(
+                f'{symbol} validation failed (exit {completed.returncode}): '
+                f'{completed.stderr.strip() or completed.stdout.strip()}'
+            )
         reader = csv.DictReader(completed.stdout.splitlines(), delimiter='\t')
         fieldnames = reader.fieldnames
         rows = list(reader)

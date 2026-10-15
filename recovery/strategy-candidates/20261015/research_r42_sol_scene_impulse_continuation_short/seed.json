@@ -1,0 +1,31 @@
+{
+  "strategies": [
+    {
+      "strategyName": "research_r42_sol_scene_impulse_continuation_short",
+      "sourceStrategyVersion": "v1",
+      "symbol": "SOLUSDT",
+      "scene": "trend",
+      "text": "15m",
+      "request": {
+        "sourceRef": "local_codex:2026-10-15:scene_impulse_continuation_short_w8_s20_t40:SOLUSDT",
+        "logicSummary": "Eight-bar bearish momentum <= -0.55 ATR14; SMA8 below SMA32; close in lower 40% of bar. Frozen ATR14 stop 2.0 and take 4.0.",
+        "javaSourceBase64": "",
+        "parameterSchema": {},
+        "defaultParameters": {
+          "stopMultiplier": 2.0,
+          "takeMultiplier": 4.0,
+          "firstStepPct": 0.5,
+          "stepPct": 0.2,
+          "fallbackTriggerPct": 0.8,
+          "fallbackTakePct": 0.5
+        },
+        "optimizationProfile": {
+          "fitWindowDays": 120,
+          "validateWindowDays": 30,
+          "forwardWindowDays": 14,
+          "objective": "FEE_ADJUSTED_PROFIT_FIRST"
+        }
+      }
+    }
+  ]
+}
