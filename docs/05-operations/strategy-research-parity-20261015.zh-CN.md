@@ -42,3 +42,9 @@
 本机只读快照试跑已完成：126 的 ClickHouse `timezone()` 为 `UTC`，因此 `recovery/convert_research_bars_for_scene_snapshot.py` 按 UTC 将规范 TSV 转为 `HistoricalSceneLocalCodexTool` 输入，并在 Java 侧显式使用 `-Duser.timezone=UTC`。BTC 2024-12-15 和 2025-01-15 各取 00:00、12:00 两点，均成功导出快照，1d/1h/15m 的 `completeRatio` 全部为 1.0；本机证据在 `strategy-scene-snapshot-pilot-20261015`。工具 `completedTail` 只取 `endTs<=asOf` 的 K 线。本试跑使用 `--export-snapshots-only`，**没有调用模型、生成标签或写生产库**；仅证明旧历史可构造特征，不证明标签质量或策略可上线。
 
 随后仅对 BTC `2024-12-15` 的 00:00、12:00 两个快照做了一次 `HistoricalSceneLocalCodexTool --export-rows-only --max-points 2` 本机 Codex 试跑：生成两行 `SUCCESS` 的 `historical_kline_scene`，标签分别为 `channel`、`trend`，并通过现有结果校验器；证据在本机 `strategy-scene-label-pilot-20261015/run_20261015_061016/scene-rows.jsonl`。`persisted=false`，**没有写生产库**。两行只是流程可行性证明，不能作为标签一致性、整段样本覆盖率或策略收益证据。扩大到多品种数千点前，需明确模型预算、批次断点续跑、标签质量抽检及是否允许写回正式场景表。
+
+### 用户批准后的本机批量标签任务
+
+用户已批准**仅在本机批量生成并抽检**，未批准将标签写入 126。批次范围固定为 10 品种、UTC `2024-12-01`～`2025-08-11`（254 天，每天 00:00/12:00，目标 5080 行）；选择 12 月 1 日作为起点，是因为 BTC 当天两个快照的 1d 完整率均为 0.925、1h/15m 为 1.0，已经通过现有输入质量门槛。脚本 `recovery/run_local_historical_scene_campaign.py` 以 10 天 × 单品种为一个分块，总计 260 块，每块最多 20 行；使用 `--export-rows-only` 和本机 K 线目录，ClickHouse 地址固定为不可用的 `127.0.0.1:9`、密码为无效占位值，因此不可能通过该任务写生产库。仅接受模型 `gpt-5.6-sol`、provider=`local_codex`、状态 `SUCCESS`、精确完整的 12 小时时点；每块写 SHA-256 检查点，重复启动时跳过已核验结果，失败即停且保留日志。
+
+首块 ADA `2024-12-01`～`2024-12-10` 已完成 **20/20** 行，场景计数 trend 6、range 4、channel 9、breakout 1，检查点通过。剩余 259 块已作为本机隐藏后台进程启动（启动 PID `22488`，不可把 PID 当作永久身份）。查看 `E:\sourcecode\codex\_work\strategy-scene-campaign-20261015\status.json` 和 `campaign.stdout.log`；如果后台进程退出，检查 `campaign.stderr.log` 及失败分块的 `runner.log`。用相同参数重新执行 `python -m recovery.run_local_historical_scene_campaign` 即可从检查点续跑；失败分块必须先检查原因，只有确认适合重试才加 `--retry-failed`。本轮 Python 测试增至 10 项通过。批量标签完成及抽检之前，不开展旧区间策略资格结论，也不进行生产回填。
