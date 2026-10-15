@@ -18,8 +18,6 @@ CONTAINERS = {
     "OrderSvrC": "dc-saas-ordersvr-c",
 }
 EXPECTED_PARTITIONS = 256
-EXPECTED_ROBOTS = 50
-EXPECTED_ORDERS = 2000
 MIN_AVAILABLE_KIB = 2 * 1024 * 1024
 MIN_SWAP_FREE_KIB = 256 * 1024
 MAX_CPU_PSI_AVG60 = 30.0
@@ -54,14 +52,9 @@ def issues_for_snapshot(snapshot, target, require_topology=True):
                 problems.append("%s is not running" % name)
             elif item.get("oom", False) or int(item.get("restarts", -1)) < 0:
                 problems.append("%s has unsafe/unknown container state" % name)
-    robots = snapshot.get("robots")
-    if not isinstance(robots, dict):
-        problems.append("Robot evidence unavailable")
-    else:
-        if robots.get("running") != EXPECTED_ROBOTS or robots.get("other") != 0:
-            problems.append("Robot not stable at 50/50 RUNNING")
-        if robots.get("open_order_count") != EXPECTED_ORDERS:
-            problems.append("Robot open order count is not 2000")
+    # Robot count and quote depth are business workload observations, not HA
+    # safety prerequisites. They are independently checked by tenant acceptance.
+    # Keep rolling safety tied to resources, Order ownership and durable replicas.
     if not require_topology:
         return problems
     items = snapshot.get("partitions")
@@ -137,22 +130,6 @@ def live_snapshot():
         snapshot["nodes"][name] = {
             "running": state[0] == "true", "restarts": int(state[1]), "oom": state[2] == "true"
         }
-    sql = ("SELECT runtime_status,COUNT(*),COALESCE(SUM(open_order_count),0) "
-           "FROM dc_tenant_robot WHERE enabled=1 GROUP BY runtime_status;")
-    rows = command(["docker", "exec", "dc-saas-mysql", "sh", "-lc",
-                    'MYSQL_PWD="$MYSQL_ROOT_PASSWORD" mysql -uroot -N dc -e ' +
-                    json.dumps(sql)])
-    running = other = count = 0
-    for row in rows.splitlines():
-        status, quantity, open_orders = row.split("\t")
-        if status == "RUNNING":
-            running += int(quantity)
-        else:
-            other += int(quantity)
-        count += int(open_orders)
-    snapshot["robots"] = {
-        "running": running, "other": other, "open_order_count": count
-    }
     return snapshot
 
 
