@@ -2,6 +2,21 @@
 
 > 本文遵循 [集群最终统一验收任务书](CLUSTER_HA_FINAL_ACCEPTANCE_MISSION_20261015.zh-CN.md)；只记录真实已执行的操作。日期采用 Mac 所在时区 Asia/Shanghai。全程未新增产品功能，也未依赖 GitHub Actions。
 
+## 2026-10-16 06:49–06:58 MD PR12 旧主隔离重新校验与三节点部署（最新状态）
+
+**任务边界：仅修复 Common/MD 主切现有状态机的 fail-closed 安全缺口，不新增功能、不引入虚假的可信证明提供者、不打开自动主切开关。**
+
+- 源码检查发现 `MdImageRecoveryFailoverController.finishRecovering()` 在候选节点已取得 Order Image、已应用 Image+Diff、恢复 Epoch 出版隔离成立后，仅在原 READY→RECOVERING 转换阶段确认过**旧发布者隔离**，却未在最终 RECOVERING→READY CAS 前再次核验。旧发布者在重建期间重新出现、旧 Epoch 隔离证明丧失时可能被错误放行。
+- 在 **真实正在部署的 PR10 源码**中先加回归测试 `recoveringReadyMustRevalidateOldPublisherFenceAfterImageArrives`：模拟 A 已被隔离、B 进入 RECOVERING、完整 Image 已应用、恢复 Epoch 发布屏障为真，但**旧发布者独立隔离证明在恢复期间被撤销**。原代码测试明确 **FAIL：`expected FENCING_UNPROVEN but was READY`**。
+- 最小修复：在 READY CAS 前再次调用真实注入的 `Safety.requireOldPublisherFenced(current)`，没有有效旧主隔离证明则 **`FENCING_UNPROVEN`、保持 RECOVERING、不写 READY**；复位证明后才能继续。修复后本地 Java 8 + Maven 全量 **33 个套件、143 项，0 failure、0 error**。
+- 已合并 MD 仓库 [PR #12](https://github.com/bliplink/com.app.dc.mdsvr/pull/12)，提交 `180de47c2a994f5a0e7a6fbaf6e9ad5f4b4b16c8`。本地关键源码 Git blob SHA 与提交后一致，MD `com.app.dc` 依赖按 [PR #11](https://github.com/bliplink/com.app.dc.mdsvr/pull/11) 显式锁定到 Demo 的 `0.0.5-devcombined-20261015-SNAPSHOT`，Common 仍为全服务统一 SHA。
+- Docker Hub DNS 不通，故以本机已经验证的 PR10 镜像为基础，离线 COPY 已通过测试的全部 MD `target/classes`，构建新镜像：
+  - **tag**：`dc-saas/mdsvr:pr12-old-publisher-fence-20261016`
+  - **完整 image ID**：`sha256:047445e87edd302d57769dd06852873d1dfab695ea34ae977c01f9d815c50c3b`
+- 按 **MD-C→MD-B→MD-A** 顺序滚动 `docker compose up -d --no-deps`，每次使用 Mac 的 `DEPLOY_ROOT="$HOME/.opentradingcore/dc-saas-runtime-ordered-20261015"`，保留源 `.env.prod`、全部数据、Order/Trade/Gateway 不变；必须等前一节点本分区 `MD_MARKET_READY` 才进入下一节点。
+- **真实部署与恢复验收 PASS**：C 的 8/8 `LEARNER` 市场、B 的 3/3 `PRIMARY` 市场、A 的 5/5 `PRIMARY` 市场全部 Image READY；MD ZooKeeper **256/256 READY**。三台 MD 容器 Image ID 完全一致、running=true、OOM=false、restartCount=0。Order/Trade 五节点全部运行，Robot **8/8 RUNNING、320 单、8/8 有效租约**；本次未执行危险 SIGKILL。
+- **未完成项：** 已部署的 `MdAutomaticFailoverService` 仍默认关闭，**生产缺少独立可信的 `MdImageRecoveryFailoverController.Safety` 证明提供者**，尤其旧主独立隔离、Order 当前完整 Image 签名/水位、候选 Image+Diff 应用、Epoch 发刊闭锁，以及 Robot 故障后对账。新 PR #12 只是修复已有门禁的 TOCTOU 缺口，**不能把新版镜像+READY 当成真正的 MD 自动 Primary SIGKILL 主切通过**。下一轮应直攻这些尚缺的授权证据，避免重复运行已 PASS 的 Learner 冷启动、普通盘口和旧角色切换。
+
 ## 2026-10-16 06:17–06:39 Mac MD PR10 真实滚动部署验收（最新状态）
 
 > **真实实施完成，不是计划。** 本次仅修复现有集群恢复相关代码、验收脚本与 Maven 构建依赖；不新增产品或 Broker API 功能。Mac 的 DNS 无法访问 Docker Hub，且 `git fetch` 连接 GitHub 失败，因此所有 Java 编译、Docker 镜像均在 Mac 本地完成；代码通过 GitHub 连接器提交 PR。
