@@ -36,7 +36,8 @@ def read_existing_scenes(path, begin, end):
     return result
 
 
-def verified_generated_scenes(campaign_dir, symbol, begin, end, chunk_days, model):
+def verified_generated_scenes(campaign_dir, symbol, begin, end, chunk_days, model,
+                              usable_begin=None):
     result = {}
     sources = []
     for first, last in date_chunks(begin, end, chunk_days):
@@ -61,12 +62,21 @@ def verified_generated_scenes(campaign_dir, symbol, begin, end, chunk_days, mode
                 stamp = row['run_time']
                 if stamp in result:
                     raise ValueError('duplicate generated scene time %s' % stamp)
-                result[stamp] = [stamp, row['scene'], row['status'],
-                                 row['analysis_type'], row['prompt_version']]
+                result[stamp] = row
         sources.append({'chunk': str(chunk), 'rows_sha256': stats['sha256']})
     if set(result) != expected_times(begin, end):
         raise ValueError('generated scene range incomplete for ' + symbol)
-    return result, sources
+    if usable_begin is not None:
+        cutoff = usable_begin.isoformat() + ' 00:00:00'
+        result = {stamp: row for stamp, row in result.items() if stamp >= cutoff}
+        for stamp, row in result.items():
+            quality = json.loads(row.get('data_quality_json') or '{}')
+            if any(quality.get(interval, {}).get('quality') != 'GOOD'
+                   for interval in ('1d', '1h', '15m')):
+                raise ValueError('low-quality generated scene after usable_begin: %s %s' %
+                                 (symbol, stamp))
+    return {stamp: [stamp, row['scene'], row['status'], row['analysis_type'],
+                    row['prompt_version']] for stamp, row in result.items()}, sources
 
 
 def assemble(input_dir, campaign_dir, output_dir, existing_end):
@@ -78,6 +88,9 @@ def assemble(input_dir, campaign_dir, output_dir, existing_end):
             or existing_end < end + timedelta(days=1)):
         raise ValueError('unexpected campaign contract or canonical scene range')
     existing_begin = end + timedelta(days=1)
+    usable_begin = date(2024, 12, 15)
+    if not begin < usable_begin <= end:
+        raise ValueError('research quality cutoff is outside the campaign')
     model = campaign['model']
     stage = output_dir.with_name(output_dir.name + '.assembling')
     if output_dir.exists() or stage.exists():
@@ -92,7 +105,8 @@ def assemble(input_dir, campaign_dir, output_dir, existing_end):
             raise ValueError('research bars changed for ' + symbol)
         assert_unique_bar_times(bars)
         generated, sources = verified_generated_scenes(
-            campaign_dir, symbol, begin, end, campaign['chunk_days'], model)
+            campaign_dir, symbol, begin, end, campaign['chunk_days'], model,
+            usable_begin)
         canonical = read_existing_scenes(
             input_dir / (symbol + '-scenes.tsv'), existing_begin, existing_end)
         overlap = set(generated) & set(canonical)
@@ -101,9 +115,10 @@ def assemble(input_dir, campaign_dir, output_dir, existing_end):
         verified[symbol] = (bars, generated, canonical, sources)
 
     stage.mkdir(parents=True)
-    metadata = {'begin': begin.isoformat(), 'end': existing_end.isoformat(),
+    metadata = {'begin': usable_begin.isoformat(), 'end': existing_end.isoformat(),
                 'model': model, 'symbols': list(SYMBOLS), 'clock': 'UTC',
-                'source_campaign': str(campaign_dir.resolve()), 'files': {}}
+                'source_campaign': str(campaign_dir.resolve()),
+                'pre_usable_labels': 'verified_but_excluded', 'files': {}}
     for symbol, (bars, generated, canonical, sources) in verified.items():
         output_bars = stage / bars.name
         output_scenes = stage / (symbol + '-scenes.tsv')

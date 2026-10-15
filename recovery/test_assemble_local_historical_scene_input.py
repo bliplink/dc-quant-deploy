@@ -51,6 +51,10 @@ class AssembleLocalSceneInputTest(unittest.TestCase):
                 'gpt-5.6-sol')
             self.assertEqual(len(result), 2)
             self.assertEqual(len(sources), 1)
+            with self.assertRaisesRegex(ValueError, 'low-quality'):
+                verified_generated_scenes(
+                    root, 'BTCUSDT', date(2024, 12, 1), date(2024, 12, 1),
+                    1, 'gpt-5.6-sol', date(2024, 12, 1))
             body[1]['validator_result_json'] = json.dumps({
                 'provider': 'local_codex', 'status': 'SUCCESS', 'model': 'wrong-model'})
             rows.write_text(''.join(json.dumps(row) + '\n' for row in body), encoding='utf-8')

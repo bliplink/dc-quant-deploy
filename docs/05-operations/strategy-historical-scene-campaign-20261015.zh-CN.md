@@ -16,7 +16,9 @@ python -u -m recovery.run_local_historical_scene_campaign `
   --begin 2024-12-01 --end 2025-08-11 --chunk-days 10 --timeout-minutes 15
 ```
 
-`recovery/assemble_local_historical_scene_input.py` 只在全部 260 块的检查点、文件哈希和时间点校验通过，并且现有场景 12 小时点位完整时，才把规范 K 线与两段标签写入 `strategy-research-input-20261015-extended`。它先在 `.assembling` 目录生成，最后才原子重命名，并写 `READY.json`；任何未齐全批次都会拒绝生成。因此下游研究只可读取带 `READY.json` 的最终目录：
+首批已抽检 5 个品种、共 100 条：场景标签均为成功的直接模型输出，但每个品种 2024-12-01 至 12-07 的 14 条标签因日线预热不足而标记 `LOW_QUALITY`，合计 70 条；1h、15m 均为 `GOOD`。这些低质量标签保留在原始任务中供审计，**不得进入回测输入**。拼接器固定以 2024-12-15 为最早可用标签日，并强制此后每条生成标签的 1d/1h/15m 均为 `GOOD`；其他品种及后续日期还需等整批完成后验证。
+
+`recovery/assemble_local_historical_scene_input.py` 只在全部 260 块的检查点、文件哈希和时间点校验通过，并且现有场景 12 小时点位完整时，才把规范 K 线与从 2024-12-15 起的两段标签写入 `strategy-research-input-20261015-extended`。它先在 `.assembling` 目录生成，最后才原子重命名，并写 `READY.json`；任何未齐全批次或可用期低质量标签都会拒绝生成。因此下游研究只可读取带 `READY.json` 的最终目录：
 
 ```powershell
 python -m recovery.assemble_local_historical_scene_input `
