@@ -1,0 +1,58 @@
+{
+  "strategies": [
+    {
+      "strategyName": "research_r43_ada_williams_range_failure_long",
+      "sourceStrategyVersion": "v1",
+      "symbol": "ADAUSDT",
+      "scene": "range",
+      "text": "15m",
+      "request": {
+        "sourceRef": "local_codex:2026-10-15:williams_range_failure_long_s20_t40:ADAUSDT",
+        "logicSummary": "Range scene; 96-bar SMA flat within 1.2% over 32 bars; Williams %R20 recovers from <=-95 by >8; current close above previous high; ATR14 stop 2.0 and take 4.0.",
+        "javaSourceBase64": "",
+        "parameterSchema": {},
+        "defaultParameters": {
+          "stopMultiplier": 2.0,
+          "takeMultiplier": 4.0,
+          "firstStepPct": 0.5,
+          "stepPct": 0.2,
+          "fallbackTriggerPct": 0.8,
+          "fallbackTakePct": 0.5
+        },
+        "optimizationProfile": {
+          "fitWindowDays": 90,
+          "validateWindowDays": 30,
+          "forwardWindowDays": 14,
+          "objective": "FEE_ADJUSTED_PROFIT_FIRST"
+        }
+      }
+    },
+    {
+      "strategyName": "research_r43_xrp_williams_range_failure_short",
+      "sourceStrategyVersion": "v1",
+      "symbol": "XRPUSDT",
+      "scene": "range",
+      "text": "15m",
+      "request": {
+        "sourceRef": "local_codex:2026-10-15:williams_range_failure_short_s20_t40:XRPUSDT",
+        "logicSummary": "Range scene; 96-bar SMA flat within 1.2% over 32 bars; Williams %R20 falls from >=-5 by >8; current close below previous low; ATR14 stop 2.0 and take 4.0.",
+        "javaSourceBase64": "",
+        "parameterSchema": {},
+        "defaultParameters": {
+          "stopMultiplier": 2.0,
+          "takeMultiplier": 4.0,
+          "firstStepPct": 0.5,
+          "stepPct": 0.2,
+          "fallbackTriggerPct": 0.8,
+          "fallbackTakePct": 0.5
+        },
+        "optimizationProfile": {
+          "fitWindowDays": 90,
+          "validateWindowDays": 30,
+          "forwardWindowDays": 14,
+          "objective": "FEE_ADJUSTED_PROFIT_FIRST"
+        }
+      }
+    }
+  ]
+}

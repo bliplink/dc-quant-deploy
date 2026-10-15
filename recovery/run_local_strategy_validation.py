@@ -13,6 +13,19 @@ SYMBOLS = ('ADAUSDT', 'BNBUSDT', 'BTCUSDT', 'DOGEUSDT', 'ETHUSDT',
            'LINKUSDT', 'SOLUSDT', 'TRXUSDT', 'UNIUSDT', 'XRPUSDT')
 
 
+def assert_unique_bar_times(path):
+    previous = None
+    with path.open('rb') as stream:
+        for line_number, line in enumerate(stream, 1):
+            timestamp = line.split(b'\t', 1)[0]
+            if not timestamp or (previous is not None and timestamp <= previous):
+                raise ValueError(
+                    '%s has a duplicate or unordered startTime at line %d' %
+                    (path.name, line_number)
+                )
+            previous = timestamp
+
+
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument('--java', required=True)
@@ -25,14 +38,19 @@ def main():
     parser.add_argument('--begin', required=True)
     parser.add_argument('--end', required=True)
     parser.add_argument('--symbols', default=','.join(SYMBOLS))
+    parser.add_argument('--java-heap-mb', type=int, default=256)
     args = parser.parse_args()
+    if not 64 <= args.java_heap_mb <= 1024:
+        parser.error('--java-heap-mb must be between 64 and 1024')
     output = Path(args.output_dir)
     output.mkdir(parents=True, exist_ok=True)
     symbols = [item.strip().upper() for item in args.symbols.split(',') if item.strip()]
     all_rows = []
     fieldnames = None
     for symbol in symbols:
-        command = [args.java, '-Xms32m', '-Xmx384m',
+        assert_unique_bar_times(Path(args.input_dir) / (symbol + '-15m.tsv'))
+        command = [args.java, '-Xms16m', '-Xmx%dm' % args.java_heap_mb,
+                   '-XX:+UseSerialGC',
                    '-Ddc.research.inputDir=' + args.input_dir,
                    '-Ddc.research.symbols=' + symbol,
                    '-Ddc.research.scene=' + args.scene,
@@ -71,7 +89,9 @@ def main():
                 'begin': args.begin, 'end': args.end, 'symbols': symbols,
                 'tested': len(all_rows), 'validation_pass': len(passing),
                 'input_sha256': {name: hashlib.sha256((Path(args.input_dir) / name).read_bytes()).hexdigest()
-                                 for name in (symbol + '-15m.tsv' for symbol in symbols)}}
+                                 for symbol in symbols
+                                 for name in (symbol + '-15m.tsv', symbol + '-scenes.tsv')},
+                'bar_time_contract': 'one canonical kline_view row per startTime; scene cursor uses startTime'}
     (output / 'metadata.json').write_text(json.dumps(metadata, indent=2), encoding='utf-8')
     print(json.dumps({'tested': len(all_rows), 'validation_pass': len(passing)}, indent=2))
 

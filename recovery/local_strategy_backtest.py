@@ -257,6 +257,7 @@ def run_local_backtest(args, item, artifact, entry_class, work_dir, local_port, 
         "-Dtrainer.backtest.candidateParametersJson=" + parameters,
         "-Dtrainer.backtest.candidatePayload=" + payload,
         "-Dtrainer.backtest.resultFile=" + str(result_file),
+        "-Dtrainer.backtest.includeValidateTrades=" + str(args.include_validate_trades).lower(),
         "-cp",
         java_classpath(args.sim_repo),
         "com.app.dc.service.simulation.LocalBacktestCli",
@@ -302,6 +303,8 @@ def main():
     parser.add_argument("--forward-window-days", type=int)
     parser.add_argument("--java-heap-mb", type=int, default=768,
                         help="Local SIMSvr JVM heap (default: 768 MiB)")
+    parser.add_argument("--include-validate-trades", action="store_true",
+                        help="Write per-trade validation diagnostics to the local result file")
     parser.add_argument(
         "--locked-params-json",
         default="{}",
@@ -353,7 +356,6 @@ def main():
                 banner_timeout=30,
                 auth_timeout=30,
             )
-            client.get_transport().set_keepalive(30)
             remote_env = read_remote_env(client)
             ForwardHandler.ssh_transport = client.get_transport()
             ForwardHandler.remote_port = int(remote_env.get("CLICKHOUSE_HTTP_PORT") or 8123)
@@ -389,7 +391,17 @@ def main():
     summary_file = work_dir / "local-pre-admission.json"
     summary_file.write_text(
         json.dumps(envelope, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
-    print(json.dumps(envelope, ensure_ascii=False, indent=2))
+    print(json.dumps({
+        "mode": envelope["mode"],
+        "productionWrite": envelope["productionWrite"],
+        "strategyName": envelope["strategyName"],
+        "symbol": envelope["symbol"],
+        "scene": envelope["scene"],
+        "result": {key: result.get(key) for key in (
+            "tradeCount", "profitFactor", "feeAdjustedValidatePnl",
+            "feeAdjustedForwardPnl", "forwardContribution", "oosPass",
+            "qualified", "qualificationReason")},
+    }, ensure_ascii=False, indent=2))
     print("LOCAL_PRE_ADMISSION_RESULT=" + str(summary_file))
     return 0 if result.get("qualified") else 2
 

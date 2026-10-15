@@ -32,6 +32,20 @@ def export_query(client, sql, path):
     print(path.name, path.stat().st_size, 'bytes', flush=True)
 
 
+def assert_unique_bar_times(path):
+    """Fail closed if a research bar export diverges from SIMSvr's one-bar-per-time replay."""
+    previous = None
+    with path.open('rb') as stream:
+        for line_number, line in enumerate(stream, 1):
+            timestamp = line.split(b'\t', 1)[0]
+            if not timestamp or (previous is not None and timestamp <= previous):
+                raise ValueError(
+                    '%s has a duplicate or unordered startTime at line %d' %
+                    (path.name, line_number)
+                )
+            previous = timestamp
+
+
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument('--host', default='18.140.45.126')
@@ -54,14 +68,20 @@ def main():
     output = Path(args.output_dir)
     try:
         for symbol in SYMBOLS:
+            bar_path = output / (symbol + '-15m.tsv')
             export_query(client,
                          "SELECT startTime, toFloat64(open), toFloat64(high), toFloat64(low), "
-                         "toFloat64(close), toFloat64(volume) FROM dc.kline FINAL "
-                         "WHERE upper(text)='15M' AND securityID='%s' AND close IS NOT NULL "
+                         "toFloat64(close), toFloat64(volume) FROM dc.kline_view "
+                         "WHERE lowerUTF8(text)='15m' AND securityID='%s' "
+                         "AND open IS NOT NULL AND high IS NOT NULL AND low IS NOT NULL "
+                         "AND close IS NOT NULL "
                          "AND startTime>=toDateTime('%s 00:00:00') "
                          "AND startTime<toDateTime('%s 00:00:00')+INTERVAL 1 DAY "
-                         "ORDER BY startTime" % (symbol, args.start_date, args.end_date),
-                         output / (symbol + '-15m.tsv'))
+                         "AND endTime<now64(6) "
+                         "ORDER BY startTime ASC,(length(fmtTime)>=10) DESC,endTime DESC,fmtTime ASC "
+                         "LIMIT 1 BY startTime" % (symbol, args.start_date, args.end_date),
+                         bar_path)
+            assert_unique_bar_times(bar_path)
             export_query(client,
                          "SELECT run_time, scene, status, analysis_type, prompt_version "
                          "FROM dc.deepseek_market_scene_analysis "
