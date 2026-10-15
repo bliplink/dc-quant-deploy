@@ -222,10 +222,17 @@ def main():
         "requested_trial_days": 30, "admin_password": ADMIN_PASSWORD,
     })
     application_id = submission["application_id"]
-    status = call("ManagerSvr", "tenantApplication", {
-        "action": "STATUS", "application_id": application_id, "contact_email": EMAIL})
-    if status.get("status") != "APPROVED":
-        raise RuntimeError("Application not auto-approved: %s" % status.get("status"))
+    # ManagerSvr may complete auto-approval on a separate transaction after
+    # SUBMIT responds. A single immediate STATUS is not a valid cold-boot gate.
+    # A pending application must never be treated as authorized to trade.
+    def approved_application():
+        response = call("ManagerSvr", "tenantApplication", {
+            "action": "STATUS", "application_id": application_id, "contact_email": EMAIL})
+        state = response.get("status")
+        if state in ("REJECTED", "EXPIRED", "CANCELLED", "FAILED"):
+            raise RuntimeError("Application not auto-approved: %s" % state)
+        return response if state == "APPROVED" and response.get("approved_location") else None
+    status = wait("automatic tenant approval", approved_application, seconds=90, interval=3)
     LOCATION = status["approved_location"]
     log("Auto-approved location=%s application=%s." % (LOCATION, application_id))
 
