@@ -91,3 +91,17 @@
 **操作型 HA 门禁改进**：[部署 PR #59](https://github.com/bliplink/dc-quant-deploy/pull/59) 允许对**完整 SHA-256 本地 Docker Image ID**进行严格匹配；拒绝不完整 SHA、不合法格式及可变的 `:latest`，仍保持所有 HA NO-GO 和只读接口不变，同时显式加上 `MD_CANDIDATE_APPLIED_IMAGE_DIFF_UNATTESTED` 阻塞。Python 隔离单测 **15/15 PASS**。对当前新版镜像执行 256 分区只读真实预检，确认 MD A/B 各 128 Primary；输出 **BLOCKED / canInjectMdPrimaryFault=false**。此前的持久快照存在与普通实时盘口通过并不能替代独立签名 Order Source HEAD、旧发布者/新 Epoch fence、候选节点应用 Snapshot/Diff 事务 Ledger、故障后的 Robot/Order 对账。Mac 单机 ZooKeeper 也不能证明物理独立 Quorum。**本轮未 SIGKILL、未做带故障压力、未向外宣称 HA 已验收**。
 
 **后续唯一主线**：MD 接入可审计、不可跨 Epoch 复用的接收端恢复事务与真实应用回执，在 Common 的源端签名 HEAD/原始 WAL 范围/Replica ACK 和 Gateway 旧发布者隔离证明均就绪后，才尝试在受控故障注入中执行 `RECOVERING → READY`。Order/Trade 同样必须完成带资金、持仓、委托、成交、Projection 的权威一致性证明。GitHub Actions 费用限制不影响此轮 Mac 本地构建与单测。
+
+## 22:29 CST 更新：修复 MD 新 Primary 首次 Order Image 订阅竞态，单节点 Learner 实际恢复 PASS
+
+**具体问题**：`MDStart` 的 `MdUpstreamSubscriptionRetry` 使用后台线程异步建立 `subscribeWithImage`，而 `MdPartitionRuntime.reconcileReadOnlyRoutes()` 可在订阅初始化前检测到新的本地 Primary/Epoch 并请求刷新。原 `MarketDeptInput.refreshSnapshotAfterPrimaryChange()` 在 `snapshotListener` 或 `snapshotTopics` 尚未初始化时直接返回 `void`，调用方因此清除 `primaryImageRefreshPending`，后续不再主动请求当前 Epoch 的 Order 完整市场 Image。MD 可以在缺完整 Image 状态下长期无法发布（READ/READY 安全门禁仍保护数据）。
+
+**已合并修复**：[MD PR #9](https://github.com/bliplink/com.app.dc.mdsvr/pull/9)，`6cfb99486d24af92d47288e3565f186e553e1fc9`。尚未建立首次 `subscribeWithImage` 时，refresh 抛出明确且可重试的 `IllegalStateException`；`MdPartitionRuntime` 已有的 2 秒左右的异步 read-route reconciler 保留 pending，后续自动重试；深度 Diff 缺口的现有后台重试执行器同样可重试。订阅已建立后仍用同一 callback identity 退订、重订，避免重复 MD 消息监听。**不修改 Gateway、Common 复制协议、Order、交易 hot path，亦不授权任何 MD 晋升。** Java 8 ARM64 本地全量 MD **140 tests PASS、0 failures、0 errors**，包括未安装首次订阅时拒绝 silent success 的新增断言。
+
+**实际 Demo 镜像**：本地 ARM64 `dc-saas/mdsvr:epoch-refresh-after-subscribe-20261015`，SHA-256 Image ID `a927d6d62e508caf67c7b6c2911978ab5d3ca765761ce49999b76414f950c51a`；复用上一版严格 `MdImageRecoveryFailoverController` candidate-applied guard，Common Jar SHA `8898812068751cc3ab3916bb7b55fe535c10a413ffef7e9be20436d6ac8ff154`。协调暂停 LiqSvr/Robot 后重启 MD A/B/C，再恢复 LiqSvr/Robot。六个租户自动恢复 `RUNNING`、共 240 resting orders；MD A/B 各 128 读路由、C 0，六租户的 `MD_MARKET_READY` 和 `LIQ_MD_SUBSCRIBE_READY` 均见日志。Order 全分区快照/路由 PASS，Projection DB tail 6/6 MATCH。期间未清除 WAL、修改 ZK assignment 或做 SIGKILL。
+
+**更接近真实恢复的独立验收**：2026-10-15 **22:28 CST** 只运行 `docker restart dc-saas-mdsvr-c`，**不停止 Order/Trade/MD-A/B/Gateway/LiqSvr/Robot**。22:28:52 日志记录 MD-C `MD_READ_ROUTES_READY partitions:0`；22:28:54 日志分别记录 `Z541W7/P223`、`H4676T/P228`、`HKRIJ1/P220`、`BS5GUJ/P091`、`FHJ2E4/P064`、`QXFUMM/P071` 的 `MD_MARKET_READY role:LEARNER epoch:1`。六租户 Robot 在单节点重启前后均 **RUNNING / 240 resting orders**，MD A/B 容器无重启，说明实际通过现网 Order 全量 Image 订阅重建 MD-C 的六个市场。本轮 **MD Learner 单节点有序重启+市场 Image 应用 PASS**，并不是 MD Primary 故障切换证明。
+
+**真实 MD HA 预检**：针对当前不可变镜像 ID 对全 256 分区只读检查，仍为 `BLOCKED`；A/B Primary 数 128/128，`canInjectMdPrimaryFault=false`。独立 source signed HEAD / physical ACK、同 Epoch 全市场候选应用收据、旧发布者 publication fence、故障后机器人委托一致性等生产证明仍未接通；Mac 单机 ZK 也不具备独立物理投票证明。**不能将 Learner 重启称作 HA failover 成功**。
+
+下一步：使用 Common 已有认证源端 Image/原始 WAL 接口，完成 MD candidate 的持续市场库存水位与实际应用回执，提供受信源端与 Gateway Epoch 发布隔离证明后再执行受控 Primary 故障切换。继续保持 `saas-crypto` 统一分支和本地 ARM64 编译验收；GitHub Actions 费用问题不在本轮处理。
