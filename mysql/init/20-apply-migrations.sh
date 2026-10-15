@@ -21,4 +21,16 @@ if [[ "$actual" != '4' ]]; then
   echo "[fresh-mysql] missing mandatory business tables: found ${actual}/4" >&2
   exit 1
 fi
+# Stamp completion ONLY after every versioned migration succeeded. Readers can
+# distinguish completed initialization from a server restarted after SQL error.
+MYSQL_PWD="${MYSQL_ROOT_PASSWORD:?}" mysql --protocol=socket -uroot dc <<'SQL'
+CREATE TABLE IF NOT EXISTS dc_fresh_schema_install_status (
+  marker varchar(24) NOT NULL PRIMARY KEY,
+  ready tinyint(1) NOT NULL,
+  updated_at timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP
+) ENGINE=InnoDB;
+INSERT INTO dc_fresh_schema_install_status(marker,ready)
+VALUES ('all-migrations-done',1)
+ON DUPLICATE KEY UPDATE ready=VALUES(ready),updated_at=CURRENT_TIMESTAMP;
+SQL
 echo '[fresh-mysql] schema bootstrap complete, all mandatory tables present'
