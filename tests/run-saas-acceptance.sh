@@ -50,14 +50,50 @@ if docker logs --since 5m dc-saas-tradesvr-b 2>&1 | grep -Eq 'TRADE_PARTITION_RE
 if docker logs --since 2m dc-saas-projectionsvr 2>&1 | grep -Eq 'PARTITION_NOT_READY|is not Online'; then log 'FAIL ProjectionSvr sees unroutable partitions'; exit 1; fi
 log 'PASS  Trade/Projection recovery log gate'
 
-log 'Checking Trade 256-partition READY evidence'
+log 'Checking Trade 256-partition READY evidence at the CURRENT assigned epoch'
 a_ready="$(mktemp)"; b_ready="$(mktemp)"; trap 'rm -f "$a_ready" "$b_ready"' EXIT
-docker logs dc-saas-tradesvr 2>&1 | sed -n 's/.*TRADE_PARTITION_READY node:TradeSvrA, partition:\(P[0-9][0-9][0-9]\).*/\1/p' | sort -u > "$a_ready"
-docker logs dc-saas-tradesvr-b 2>&1 | sed -n 's/.*TRADE_PARTITION_READY node:TradeSvrB, partition:\(P[0-9][0-9][0-9]\).*/\1/p' | sort -u > "$b_ready"
-a_count="$(wc -l < "$a_ready" | tr -d ' ')"; b_count="$(wc -l < "$b_ready" | tr -d ' ')"
-total="$(cat "$a_ready" "$b_ready" | sort -u | wc -l | tr -d ' ')"; overlap="$(comm -12 "$a_ready" "$b_ready" | wc -l | tr -d ' ')"
-[[ "$a_count" -gt 0 && "$b_count" -gt 0 && "$total" -eq 256 && "$overlap" -eq 0 ]] || { log "FAIL Trade READY coverage A=$a_count B=$b_count total=$total overlap=$overlap"; exit 1; }
-log "PASS  Trade READY coverage 256/256 A=$a_count B=$b_count"
+# A previous A->B->A promotion deliberately leaves historical READY events
+# on both nodes. Only current (partition, epoch, primary) is authoritative.
+docker logs dc-saas-tradesvr 2>&1 | sed -n 's/.*TRADE_PARTITION_READY node:TradeSvrA, partition:\(P[0-9][0-9][0-9]\), epoch:\([0-9][0-9]*\).*/\1 \2/p' | sort -u > "$a_ready"
+docker logs dc-saas-tradesvr-b 2>&1 | sed -n 's/.*TRADE_PARTITION_READY node:TradeSvrB, partition:\(P[0-9][0-9][0-9]\), epoch:\([0-9][0-9]*\).*/\1 \2/p' | sort -u > "$b_ready"
+PYTHONPATH="$DEPLOY_DIR" python3 - "$a_ready" "$b_ready" <<'PY'
+import collections
+import sys
+from tests.md_cluster_transition_host import DockerZk
+
+def read_ready(path):
+    found = collections.defaultdict(set)
+    with open(path, encoding="utf-8") as source:
+        for line in source:
+            partition, epoch = line.strip().split()
+            found[partition].add(int(epoch))
+    return found
+
+evidence = {"TradeSvrA": read_ready(sys.argv[1]), "TradeSvrB": read_ready(sys.argv[2])}
+control = DockerZk("dc-saas-zookeeper", "127.0.0.1:32181",
+                   "/dc/cluster/tradesvr/partitions", "docker")
+current = [record["value"] for record in control.read_all(256)]
+missing = []
+double_ready = []
+counts = collections.Counter()
+for row in current:
+    part, epoch, primary = row["partitionId"], row["epoch"], row["primary"]
+    if row.get("state") != "READY" or primary not in evidence:
+        missing.append(part + ":invalid-current-assignment")
+        continue
+    counts[primary] += 1
+    if epoch not in evidence[primary].get(part, set()):
+        missing.append(part + ":" + primary + ":epoch" + str(epoch))
+    other = "TradeSvrB" if primary == "TradeSvrA" else "TradeSvrA"
+    if epoch in evidence[other].get(part, set()):
+        double_ready.append(part + ":epoch" + str(epoch))
+if len(current) != 256 or missing or double_ready:
+    raise SystemExit("FAIL Trade current READY evidence: total=%s missing=%s same_epoch_double=%s" %
+                     (len(current), missing[:8], double_ready[:8]))
+print("[saas-acceptance] PASS  Trade READY coverage 256/256 A=%d B=%d "
+      "(current ZK primary and epoch; historical logs ignored)" %
+      (counts["TradeSvrA"], counts["TradeSvrB"]))
+PY
 
 if [[ "$MODE" == full ]]; then
   [[ -n "${E2E_PASSWORD:-}" ]] || { log 'FAIL E2E_PASSWORD is required for --full'; exit 1; }
