@@ -52,7 +52,8 @@ services:
       # Cold boot must apply the exact production migrations, not just init SQL.
       - ./mysql/migrations:/opt/saas-migrations:ro
     healthcheck:
-      test: ["CMD-SHELL", "mysqladmin ping -h 127.0.0.1 -P\"$${MYSQL_TCP_PORT}\" -uroot -p\"$${MYSQL_ROOT_PASSWORD}\" --silent"]
+      # Do not treat a partial failed mysql/init install as healthy.
+      test: ["CMD-SHELL", "MYSQL_PWD=\"$${MYSQL_ROOT_PASSWORD}\" mysql --protocol=TCP -h127.0.0.1 -P\"$${MYSQL_TCP_PORT}\" -uroot -N -e \"SELECT COUNT(*) FROM information_schema.tables WHERE table_schema='dc' AND table_name IN ('dc_tenant','dc_bankruptcy_transfer','dc_adl_execution_v2','dc_tenant_liquidity_bootstrap')\" | grep -qx '4'"]
       interval: 10s
       timeout: 5s
       retries: 30
