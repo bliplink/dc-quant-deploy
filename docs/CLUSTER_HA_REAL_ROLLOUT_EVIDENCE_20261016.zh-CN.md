@@ -39,7 +39,27 @@ python3 tests/run-auto-tenant-trading-e2e.py
 - T1MPT1 测试后留在 `TRIAL`，Robot `RUNNING/40`；全 Demo 此时七个 Robot 运行，总目标挂单 **280**，七个租约仍有效。没有擅自删除测试租户。
 - 后验 `tests/check-projection-consistency-host.sh` **PASS**：Order+Trade 水位分别 **8/8**，orphan mutation=0，watermark tail mismatch=0，cross-partition duplicated event ID=0。
 
-**另外发现一个必须修复的验收工具问题：** `tests/run-order-live-role-reversal-e2e.py` 硬编码早期 `EX2ENF/P110` 隔离租户（当前 Demo 已不存在），并在 A↔B 变更时只更新 `replica` 单值、未正确更新同步副本列表 `replicas=[另一节点,OrderSvrC]`。因此**不能直接用于当前三副本集群**。下一轮须按当前 Demo 自动创建隔离交易员，保留 `OrderSvrC` 同步副本并使用 CAS 及 fail-closed 旧主隔离，验证挂单穿越 A→B→A 并最后撤单。修复验收脚本属于本轮必需的验收修复，不是业务新功能。
+**另外发现一个必须修复的验收工具问题：** `tests/run-order-live-role-reversal-e2e.py` 硬编码早期 `EX2ENF/P110` 隔离租户（当前 Demo 已不存在），并在 A↔B 变更时只更新 `replica` 单值、未正确更新同步副本列表 `replicas=[另一节点,OrderSvrC]`。因此**不能直接用于当前三副本集群**。现已用新脚本 `tests/run-order-three-replica-real-order-e2e.py` 替代该旧脚本并完成真实挂单穿越 A→B→A、正常撤单验收（详见新增 PASS 证据），旧脚本仍只适用其历史隔离拓扑，不应在三副本执行。
+
+## 2026-10-16 00:34 Mac Order 真实 GTC 挂单存续验收：PASS
+
+旧 `run-order-live-role-reversal-e2e.py` 仍绑定已经删除的 EX2ENF，并漏维护 Order-C，不能直接在三副本中用。**已编写、真实执行并通过的替代工具：** `tests/run-order-three-replica-real-order-e2e.py`（本 PR 同步提交源码）。
+
+执行命令（需要 Mac Demo 合法的本地 env；不在日志显示任何密码）：
+
+```bash
+set -a; . /Users/kong/dc-quant-deploy/.env.prod; set +a
+python3 tests/run-order-three-replica-real-order-e2e.py
+```
+
+- 通过 Manager 公开租户申请注册 **QE0L6W**，其 `BTCUSDT/4` Order 分区为 **P112**；等待自动审批、Robot RUNNING/40、三副本已提交市场快照 SHA 一致。
+- 注册正常交易员、登录并 Demo 入金，真实提交一笔 **GTC 限价挂单**，`OrderSvr.queryOpenOrder` 可查。
+- ZK 对 **单分区** 做带版本 CAS：**OrderSvrA→OrderSvrB，Epoch 1→2**，保留 A/C 两同步副本；B 经过 `ORDER_PARTITION_PROMOTION_READY` 后，以实际交易员 Token 再次查到同一个已确认订单。
+- 再做 **OrderSvrB→OrderSvrA，Epoch 2→3**，保留 B/C 两同步副本；A 新 Epoch READY 后仍可查到同一订单。
+- 真实 `cancelAllOrder` 后，该 GTC 不再在活动订单中；脚本退出码 0，输出 **PASS**，ZK 最终 **P112 READY / Primary A / Replica B,C / Epoch 3**。
+- 实际本机证据：`/Users/kong/.opentradingcore/cluster-evidence/order-3rep-live-gtc-20261015T163433Zc30a.json`。测试租户留在 Demo TRIAL 持续 Robot 报价，为后续多租户压测提供样本；没有执行容器 SIGKILL。
+
+**验收语义：PASS 是客户订单在双向主备角色切换中的存续与正常撤单，尚不是节点 SIGKILL 自动接管或带 Trade 持仓的资金权威对账。** 不要因本项通过误把全部 HA 目标完成。
 
 ## 尚未通过的关键项目与明确下一动作
 
