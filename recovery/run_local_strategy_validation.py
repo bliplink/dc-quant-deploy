@@ -26,6 +26,26 @@ def assert_unique_bar_times(path):
             previous = timestamp
 
 
+def assert_scene_coverage(path, begin, end):
+    first = None
+    last = None
+    with path.open('r', encoding='utf-8') as stream:
+        for line in stream:
+            if not line.strip():
+                continue
+            stamp = datetime.fromisoformat(line.split('\t', 1)[0])
+            if last is not None and stamp < last:
+                raise ValueError('%s has unordered scene times' % path.name)
+            if first is None:
+                first = stamp
+            last = stamp
+    if first is None or first > datetime.fromisoformat(begin) or last < datetime.fromisoformat(end):
+        raise ValueError(
+            '%s does not cover the requested research window %s~%s' %
+            (path.name, begin, end)
+        )
+
+
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument('--java', required=True)
@@ -49,6 +69,8 @@ def main():
     fieldnames = None
     for symbol in symbols:
         assert_unique_bar_times(Path(args.input_dir) / (symbol + '-15m.tsv'))
+        assert_scene_coverage(Path(args.input_dir) / (symbol + '-scenes.tsv'),
+                              args.begin, args.end)
         command = [args.java, '-Xms16m', '-Xmx%dm' % args.java_heap_mb,
                    '-XX:+UseSerialGC',
                    '-Ddc.research.inputDir=' + args.input_dir,
