@@ -4,7 +4,7 @@
 # Never let healthy MySQL (or any upstream service) start with a partial schema.
 set -Eeuo pipefail
 shopt -s nullglob
-files=(/docker-entrypoint-initdb.d/migrations/*.sql)
+files=(/opt/saas-migrations/*.sql)
 if (( ${#files[@]} < 20 )); then
   echo '[fresh-mysql] missing bundled versioned migrations; fail closed' >&2
   exit 1
