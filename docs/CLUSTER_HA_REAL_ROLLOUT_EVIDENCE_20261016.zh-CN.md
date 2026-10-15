@@ -2,6 +2,28 @@
 
 > 本文遵循 [集群最终统一验收任务书](CLUSTER_HA_FINAL_ACCEPTANCE_MISSION_20261015.zh-CN.md)；只记录真实已执行的操作。日期采用 Mac 所在时区 Asia/Shanghai。全程未新增产品功能，也未依赖 GitHub Actions。
 
+## 2026-10-16 07:38–07:53 Order 自动晋升 Quorum 身份安全修复（最新进度）
+
+### 生产安全逻辑修复并合并：Order [PR #17](https://github.com/bliplink/com.app.dc.ordersvr/pull/17)
+
+直接审查并真实红/绿测试 `OrderFailoverPromotionSafety` 的两项 HA 故障晋升漏洞，不是增加验收脚本：
+
+1. **同 Snapshot 基线序号、不同 Image 身份被误当同一持久化前缀。** 原代码只比同步副本的 `committedStateSeq / commitMarkerSeq / journalLastSeq / baselineEpoch` 等，没比具有相同 `baselineSeq>0` 的 `baselineSnapshotId`。因此具有相同或不同提交 Marker 的两份同步副本 proof 均可能在持有不同 Image 身份时被接受。已在所有同步副本参与比较前独立验证“**相同基线 offset ⇒ 相同 Snapshot ID**”；确实不同的合法压缩点继续允许，不能因为此项阻止正常继续从 WAL 追平。声称已有 `baselineSeq>0` 却缺少 Snapshot ID 的证明被拒绝。
+2. **重复节点可以伪造第二票逻辑 quorum。** 原 `liveSynchronizedReplicas.size()>=2` 没去重；同一个 `OrderSvrB` 重复两次，`queryFailoverProof` 两次返回相同本地证据，竟可以晋升。现对经过 `PartitionConfig.normalizeServerName` 的节点集合去重，并逐一要求 `current.isReplica(node)`，确保至少两个**不同的、当前实际分配的同步 Replica**。这不等于不同物理主机或独立密钥的密码学证明，后者仍需单独实现。
+3. 真实 TDD：旧代码两次出现 `Expected exception: java.lang.IllegalStateException`，分别覆盖同 offset 不同 Image ID、及重复节点伪 quorum；修复后这些用例通过，且不同压缩点/提交 Marker 中断的现有正向测试不回退。完整 Mac Java8/Maven **Order 80 suites / 342 tests / 0 failures / 0 errors / 1 skipped**。
+4. GitHub [Order PR #17](https://github.com/bliplink/com.app.dc.ordersvr/pull/17) **已合并**，merge SHA `ee677414e9e60e78f528da1f8f217f9b02fdcafe`。本地两份实际编译源码 Git blob SHA 与 PR 分别为 `2c294839dfa213ffc852c4c4da1baf632103b578`（`OrderFailoverPromotionSafety.java`）和 `c94843270389f9d40afce20c42ec7cddd577d46b`（PR16 已合并的 `OrderMdMarketManifest.java`）。
+5. **准确对齐运行镜像基线：** 现网 `dc-saas/ordersvr:merged-market-identity-image-20261015` 源 commit `c9aba21273072ec2615a88488abef1717223bf62` 确实可由 GitHub API 验证，且为 `saas-crypto` 的祖先。补丁涉及的两个 Java 类在该源 commit 的 Git Blob 均与测试前原始类完全相同。不能仅因为浅克隆 `git show` 找不到历史 commit 就认定镜像基线不明。
+6. **仅构建未部署的本地安全补丁镜像**：以运行镜像 `sha256:035525d7f24ce96942285e58889fb0b0e917986be81dbf9eec17c434a5fdf8b6` 为基础层，`COPY` **严格两个类文件**，其他业务/复制/WAL classes、所有基础 JAR 不变：
+   - Tag：`dc-saas/ordersvr:pr16-pr17-two-class-safety-20261016`
+   - 新 Image ID：`sha256:ca76b17dea1b461ecac3ab186b63f24fc2f69902e5a40b619ed1465393a25de1`
+   - `OrderFailoverPromotionSafety.class` SHA-256 = `9abafb8fe384c7821d7b40972d7c5ab07d8d3182722e53d87091eab3a0a6a929`
+   - `OrderMdMarketManifest.class` SHA-256 = `c0e70b465efe4a2b1d72029a20d032e31ffafa518a246d9e3e418c3534a30029`
+   - Common JAR `8898812068751cc3ab3916bb7b55fe535c10a413ffef7e9be20436d6ac8ff154`，`com.app.dc` `ca9017749ed1a2a218a300ca92f7f1b2b16c273d0adbbc58a37d59f639c625ae`，JDBC `mysql-connector-j 8.0.33`。
+   - 镜像标记 `dc.release.authorized=false`；**构建并不等于正式运行验收**。
+7. **实查生产分区拓扑阻止不安全滚动：** Order C **并不是 Learner**！实时 ZooKeeper 为 Order A/B 各 Primary128；A/B 各承担对方 Primary 的 sync Replica128；**Order C 是全部256分区的同步 Replica**，Order 没有 Learner 分配。先前“Order-C 可像 MD-C 一样安全替换”的假设被准确拓扑证伪，故本轮**没有重启或替换任何 Order A/B/C**；Demo 的三个运行 Order 仍是旧镜像。MD-C 则确实是 256 Learner，二者拓扑不同。
+8. Demo 最后校验：Order/Trade/MD 皆 256/256 READY；Order/Trade 五业务节点运行正常；8 个 Robot RUNNING、320 挂单、8/8 有效租约；本轮没有清除数据、SIGKILL 或故障注入。
+9. **仍 BLOCKED 的主线：** 不同 Order Replica 的逻辑节点证明尚非真实独立物理节点密钥/HMAC 签名；Common 已有 `RecoverySourceHeadControlHandler` 提供主节点挑战+MAC 接口，但 Order 当前未接源端真实耐久 HEAD authority，MD 尚无真实 `MdImageRecoveryFailoverController.Safety` 实现，故不得启动 MD Primary SIGKILL。下一步必须完成物理密钥 Quorum / MD Receiver 已应用 Image+Diff / Epoch 旧主隔离，并设计受控 Order 2 主+1 同步副本镜像灰度切换，不能直接停 C。
+
 ## 2026-10-16 07:22–07:30 Order→MD 空市场提交快照跨服务协议修复（最新代码进展）
 
 **本轮已修两端并合并源码，但没有更换现网 Order/MD 镜像或执行危险 Primary SIGKILL。** 不应与前一轮 MD PR13 的已部署状态混淆。
