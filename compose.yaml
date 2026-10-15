@@ -49,6 +49,8 @@ services:
     volumes:
       - ${DEPLOY_ROOT}/data/mysql:/var/lib/mysql
       - ./mysql/init:/docker-entrypoint-initdb.d:ro
+      # Cold boot must apply the exact production migrations, not just init SQL.
+      - ./mysql/migrations:/docker-entrypoint-initdb.d/migrations:ro
     healthcheck:
       test: ["CMD-SHELL", "mysqladmin ping -h 127.0.0.1 -P\"$${MYSQL_TCP_PORT}\" -uroot -p\"$${MYSQL_ROOT_PASSWORD}\" --silent"]
       interval: 10s
