@@ -1,5 +1,7 @@
 # OpenTradingCore 项目总览与跨账号交接
 
+> **2026-10-15 最新最高优先级：本轮只做 Common/Order/Trade/MD 全面集群验收，失败即最小修复、本地编译、直接替换 Demo；必要时按授权清理 Demo 数据重新部署。禁止扩大功能/反复预检。执行、验收矩阵及最近阻断详见 [集群最终统一验收任务书](docs/CLUSTER_HA_FINAL_ACCEPTANCE_MISSION_20261015.zh-CN.md)。此文件中的任何早期计划如有冲突，以该任务书及实时证据为准。**
+
 > 更新时间：2026-10-01
 > 目标读者：新的 ChatGPT/Codex 会话、另一 GitHub/ChatGPT 账号、接手研发/部署人员。
 > 开始任何修改前，请先完整阅读本文，并重新 fetch 对应仓库最新分支。文中的 commit 仅是快照，不是永久锁定版本。
