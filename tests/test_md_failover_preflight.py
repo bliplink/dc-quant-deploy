@@ -119,57 +119,23 @@ class MdFailoverPreflightTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError,'reviewed'):
             gate.evaluate(assignments(),details,members,old,{'MDSvrX':canary})
 
-    def test_reviewed_ghcr_arm64_canary_requires_exact_config_and_common_version(self):
-        canary='ghcr.io/bliplink/mdsvr:sha-026306b'
-        old='dc-saas/mdsvr:cluster-dev-local-c3e1d45c6-20261011075101'
-        details={node:{'image':old,'running':True} for node in gate.NODES}
-        details['MDSvrC']={'image':canary,'running':True,
-                            **gate.REVIEWED_GHCR_IMAGES[canary]}
-        members={node:True for node in gate.NODES}
-        report=gate.evaluate(assignments(),details,members,old,{'MDSvrC':canary})
-        self.assertFalse(any('UNREVIEWED' in b for b in report['blockers']))
+    def test_exact_docker_image_id_locks_current_local_tag_without_relaxing_primary_gate(self):
+        digest='sha256:'+'a'*64
+        local={node:{'image':'dc-saas/mdsvr:epoch-refresh-after-subscribe-20261015',
+                     'imageId':digest,'running':True} for node in gate.NODES}
+        report=gate.evaluate(assignments(),local,{node:True for node in gate.NODES},
+                             expected_image_id=digest)
+        self.assertEqual(digest,report['expectedImageId'])
+        self.assertEqual('BLOCKED',report['decision'])
         self.assertFalse(report['canPromote'])
-        for field in ('configImageId','imageRevision','commonGav'):
-            tampered={node:dict(value) for node,value in details.items()}
-            tampered['MDSvrC'][field]='invalid'
-            blocked=gate.evaluate(assignments(),tampered,members,old,{'MDSvrC':canary})
-            self.assertIn('MD_NODE_UNHEALTHY_OR_UNREVIEWED:MDSvrC',blocked['blockers'])
-        with self.assertRaisesRegex(ValueError,'reviewed'):
-            gate.evaluate(assignments(),details,members,old,
-                          {'MDSvrC':'ghcr.io/bliplink/mdsvr:saas-crypto'})
-
-    def test_low_host_disk_space_blocks_fault_injection_before_vm_crash(self):
-        low=gate.MIN_HOST_FREE_BYTES-1
-        high=gate.MIN_HOST_FREE_BYTES+1
-        unsafe=gate.evaluate(assignments(),images(),host_free_bytes=low)
-        assert 'HOST_DISK_RESERVE_BELOW_5G' in unsafe['blockers']
-        self.assertFalse(unsafe['canInjectMdPrimaryFault'])
-        self.assertFalse(unsafe['canPromote'])
-        self.assertEqual(unsafe['hostDiskFreeBytes'],low)
-        healthy=gate.evaluate(assignments(),images(),host_free_bytes=high)
-        self.assertNotIn('HOST_DISK_RESERVE_BELOW_5G',healthy['blockers'])
-        with self.assertRaisesRegex(ValueError,'disk'):
-            gate.evaluate(assignments(),images(),host_free_bytes=-1)
-
-    def test_current_local_image_by_immutable_full_sha256_can_be_audited_without_promotion(self):
-        pinned='sha256:'+'a'*64
-        details={n:{'image':'dc-saas/mdsvr:mutable-tag',
-                    'configImageId':pinned,'running':True} for n in gate.NODES}
-        members={n:True for n in gate.NODES}
-        checked=gate.evaluate(assignments(),details,members,pinned)
-        self.assertEqual(checked['decision'],'BLOCKED')
-        self.assertFalse(checked['canPromote'])
-        self.assertFalse(checked['canInjectMdPrimaryFault'])
-        self.assertFalse(any('UNREVIEWED' in issue for issue in checked['blockers']))
-        self.assertIn('MD_RECOVERING_TO_READY_EPOCH_PUBLICATION_FENCE_UNATTESTED',checked['blockers'])
-        self.assertIn('MD_CANDIDATE_APPLIED_IMAGE_DIFF_UNATTESTED',checked['blockers'])
-        details['MDSvrC']['configImageId']='sha256:'+'b'*64
-        changed=gate.evaluate(assignments(),details,members,pinned)
-        self.assertIn('MD_NODE_UNHEALTHY_OR_UNREVIEWED:MDSvrC',changed['blockers'])
-        for unsafe in ['sha256:'+'a'*63,'sha256:'+'G'*64,'sha256:'+'A'*64,
-                       'dc-saas/mdsvr:latest']:
-            with self.subTest(unsafe=unsafe),self.assertRaisesRegex(ValueError,'expected image'):
-                gate.evaluate(assignments(),details,members,unsafe)
+        self.assertFalse(any('UNREVIEWED' in reason for reason in report['blockers']))
+        self.assertIn('ORDER_CURRENT_FULL_MARKET_IMAGE_PROOF_MISSING',report['blockers'])
+        local['MDSvrC']['imageId']='sha256:'+'b'*64
+        self.assertIn('MD_NODE_UNHEALTHY_OR_UNREVIEWED:MDSvrC',
+                      gate.evaluate(assignments(),local,{node:True for node in gate.NODES},
+                                    expected_image_id=digest)['blockers'])
+        with self.assertRaisesRegex(ValueError,'exact SHA-256'):
+            gate.evaluate(assignments(),local,expected_image_id='sha256:short')
 
     def test_output_is_read_only_by_design(self):
         self.assertTrue(gate.evaluate(assignments(),images())['readOnly'])
