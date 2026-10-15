@@ -151,6 +151,26 @@ class MdFailoverPreflightTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError,'disk'):
             gate.evaluate(assignments(),images(),host_free_bytes=-1)
 
+    def test_current_local_image_by_immutable_full_sha256_can_be_audited_without_promotion(self):
+        pinned='sha256:'+'a'*64
+        details={n:{'image':'dc-saas/mdsvr:mutable-tag',
+                    'configImageId':pinned,'running':True} for n in gate.NODES}
+        members={n:True for n in gate.NODES}
+        checked=gate.evaluate(assignments(),details,members,pinned)
+        self.assertEqual(checked['decision'],'BLOCKED')
+        self.assertFalse(checked['canPromote'])
+        self.assertFalse(checked['canInjectMdPrimaryFault'])
+        self.assertFalse(any('UNREVIEWED' in issue for issue in checked['blockers']))
+        self.assertIn('MD_RECOVERING_TO_READY_EPOCH_PUBLICATION_FENCE_UNATTESTED',checked['blockers'])
+        self.assertIn('MD_CANDIDATE_APPLIED_IMAGE_DIFF_UNATTESTED',checked['blockers'])
+        details['MDSvrC']['configImageId']='sha256:'+'b'*64
+        changed=gate.evaluate(assignments(),details,members,pinned)
+        self.assertIn('MD_NODE_UNHEALTHY_OR_UNREVIEWED:MDSvrC',changed['blockers'])
+        for unsafe in ['sha256:'+'a'*63,'sha256:'+'G'*64,'sha256:'+'A'*64,
+                       'dc-saas/mdsvr:latest']:
+            with self.subTest(unsafe=unsafe),self.assertRaisesRegex(ValueError,'expected image'):
+                gate.evaluate(assignments(),details,members,unsafe)
+
     def test_output_is_read_only_by_design(self):
         self.assertTrue(gate.evaluate(assignments(),images())['readOnly'])
         self.assertNotIn('docker kill',SCRIPT.read_text())

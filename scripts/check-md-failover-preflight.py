@@ -82,8 +82,11 @@ def parse_ephemeral_membership(zk_output):
 def evaluate(rows,images,members=None,required_image=REQUIRED_IMAGE,per_node_images=None,host_free_bytes=None):
     # Explicitly locked local Mac images may be reviewed without pretending
     # they are the old GHCR image. This NEVER grants failover authority.
+    def immutable_id(value):
+        return bool(re.fullmatch(r'sha256:[0-9a-f]{64}', value or ''))
+
     def valid_lock(value):
-        return value==REQUIRED_IMAGE or value in REVIEWED_GHCR_IMAGES or bool(re.fullmatch(
+        return immutable_id(value) or value==REQUIRED_IMAGE or value in REVIEWED_GHCR_IMAGES or bool(re.fullmatch(
             r'dc-saas/mdsvr:cluster-dev-local-[a-zA-Z0-9_.-]+',value or ''))
     if not valid_lock(required_image):
         raise ValueError('MD expected image must be an explicitly locked, reviewed image')
@@ -121,7 +124,10 @@ def evaluate(rows,images,members=None,required_image=REQUIRED_IMAGE,per_node_ima
         detail=images.get(node,{})
         expected=per_node_images.get(node,required_image)
         trusted=REVIEWED_GHCR_IMAGES.get(expected)
-        if (detail.get('image')!=expected or not detail.get('running')
+        image_matches = (detail.get('configImageId') == expected
+                         if immutable_id(expected)
+                         else detail.get('image') == expected)
+        if (not image_matches or not detail.get('running')
                 or (trusted is not None and any(
                     detail.get(field)!=value for field,value in trusted.items()))):
             reasons.append('MD_NODE_UNHEALTHY_OR_UNREVIEWED:'+node)
@@ -131,6 +137,9 @@ def evaluate(rows,images,members=None,required_image=REQUIRED_IMAGE,per_node_ima
     reasons.extend(['ORDER_CURRENT_FULL_MARKET_IMAGE_PROOF_MISSING',
                     'MD_PROMOTION_FENCING_AND_CAS_CONTROLLER_NOT_CONFIGURED',
                     'MD_RECOVERING_TO_READY_EPOCH_PUBLICATION_FENCE_UNATTESTED',
+                    # MD PR #8 separately requires locally applied Image +
+                    # contiguous Diff proof bound to elected owner/epoch.
+                    'MD_CANDIDATE_APPLIED_IMAGE_DIFF_UNATTESTED',
                     'MD_PROMOTED_EPOCH_FULL_MARKET_IMAGE_NOT_ATTESTED',
                     'ROBOT_POST_FAILOVER_ORDER_RECONCILIATION_NOT_ATTESTED'])
     return {'schema':'otc-md-failover-preflight-v1','readOnly':True,
