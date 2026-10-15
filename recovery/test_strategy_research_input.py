@@ -4,6 +4,7 @@ import tempfile
 import unittest
 from pathlib import Path
 
+from recovery.convert_research_bars_for_scene_snapshot import convert
 from recovery.export_strategy_research_data import assert_unique_bar_times as check_export
 from recovery.run_local_strategy_validation import (
     assert_scene_coverage,
@@ -46,6 +47,17 @@ class UniqueBarTimesTest(unittest.TestCase):
                             encoding='utf-8')
             with self.assertRaisesRegex(ValueError, 'does not cover'):
                 assert_scene_coverage(path, '2024-08-12', '2025-10-12')
+
+    def test_scene_snapshot_converter_uses_utc_bar_end(self):
+        with tempfile.TemporaryDirectory() as directory:
+            source = Path(directory) / 'BTCUSDT-15m.tsv'
+            target = Path(directory) / 'BTCUSDT_15M.jsonl'
+            source.write_text('2025-01-15 00:00:00\t1\t2\t0.5\t1.5\t100\n', encoding='utf-8')
+            self.assertEqual(convert(source, target), 1)
+            import json
+            row = json.loads(target.read_text(encoding='utf-8'))
+            self.assertEqual(row['starttimems'], 1736899200000)
+            self.assertEqual(row['endtimems'] - row['starttimems'], 15 * 60 * 1000)
 
 
 if __name__ == '__main__':

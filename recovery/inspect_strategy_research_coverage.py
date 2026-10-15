@@ -45,6 +45,7 @@ def main():
                    passphrase=os.environ['STC_PROD_KEY_PASSPHRASE'],
                    look_for_keys=False, allow_agent=False, timeout=20)
     try:
+        print('clickhouse_timezone\t' + query(client, 'SELECT timezone()').strip())
         print('securityID\tfirst_15m\tlast_15m\trows')
         print(query(client, QUERY), end='')
         print('symbol\tfirst_scene\tlast_scene\trows')
