@@ -28,6 +28,8 @@
 
 **顺序原则：先证明恢复正确且能真实主切，再做 50/200 压测；不要为性能优化牺牲 WAL 提交、Quorum 或接收端门禁。** Demo 是 Mac mini 同一物理宿主的 Docker 节点，单机实验可验证进程故障恢复，但**不能冒充不同物理机的生产容灾/quorum 证明**。
 
+> **最新实际角色切换证据（2026-10-16 Mac Demo）：** [Trade P000/P020、Order P000/P228 在线双向切换与对账记录](CLUSTER_HA_REAL_ROLLOUT_EVIDENCE_20261016.zh-CN.md)。切换项目已有 PASS；真实 Primary SIGKILL 自动接管、Trade 客户资金持仓 API 对账、MD Primary 故障切换及 200 租户压测仍未通过，禁止重复将已完成的角色切换当作全部 HA 验收。
+
 ## 三、2026-10-15 当时可核实的运行状态（历史快照，接续前复查）
 
 - 当前 Mac Demo 23 个容器在运行；Order A/B/C、Trade A/B、MD A/B/C 运行，Docker OOM=false。
