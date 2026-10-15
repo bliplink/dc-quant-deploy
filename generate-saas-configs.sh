@@ -184,6 +184,10 @@ if [[ "${TRADE_CLUSTER_ENABLED}" == "true" ]]; then
     die "TRADE_CLUSTER_FAILOVER_REQUIRE_HEALTHY_REPLICATION must be true or false"
   [[ "${TRADE_CLUSTER_ROLLBACK_UNCOMMITTED_TAIL_ENABLED}" == "true" || "${TRADE_CLUSTER_ROLLBACK_UNCOMMITTED_TAIL_ENABLED}" == "false" ]] ||
     die "TRADE_CLUSTER_ROLLBACK_UNCOMMITTED_TAIL_ENABLED must be true or false"
+  if [[ "${TRADE_CLUSTER_REPLICATION_REQUIRED}" == "true" &&
+        "${TRADE_CLUSTER_ROLLBACK_UNCOMMITTED_TAIL_ENABLED}" == "true" ]]; then
+    die "Synchronous Trade replication forbids unverified local WAL tail rollback; set TRADE_CLUSTER_ROLLBACK_UNCOMMITTED_TAIL_ENABLED=false"
+  fi
   [[ "${TRADE_CLUSTER_PERIODIC_SNAPSHOT_ENABLED}" == "true" || "${TRADE_CLUSTER_PERIODIC_SNAPSHOT_ENABLED}" == "false" ]] ||
     die "TRADE_CLUSTER_PERIODIC_SNAPSHOT_ENABLED must be true or false"
   [[ "${TRADE_CLUSTER_SNAPSHOT_TRANSFER_AWARE_ENABLED}" == "true" || "${TRADE_CLUSTER_SNAPSHOT_TRANSFER_AWARE_ENABLED}" == "false" ]] ||
