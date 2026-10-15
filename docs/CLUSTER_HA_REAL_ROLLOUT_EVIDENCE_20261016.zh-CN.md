@@ -2,6 +2,47 @@
 
 > 本文遵循 [集群最终统一验收任务书](CLUSTER_HA_FINAL_ACCEPTANCE_MISSION_20261015.zh-CN.md)；只记录真实已执行的操作。日期采用 Mac 所在时区 Asia/Shanghai。全程未新增产品功能，也未依赖 GitHub Actions。
 
+## 2026-10-16 06:17–06:39 Mac MD PR10 真实滚动部署验收（最新状态）
+
+> **真实实施完成，不是计划。** 本次仅修复现有集群恢复相关代码、验收脚本与 Maven 构建依赖；不新增产品或 Broker API 功能。Mac 的 DNS 无法访问 Docker Hub，且 `git fetch` 连接 GitHub 失败，因此所有 Java 编译、Docker 镜像均在 Mac 本地完成；代码通过 GitHub 连接器提交 PR。
+
+### 1. MD 已合并修复的构建与镜像
+
+- MD 的 PR [#10](https://github.com/bliplink/com.app.dc.mdsvr/pull/10) 包含 **Order Image 必须实际应用到当前 MD Epoch 后才可 READY** 修复。Mac 采用本地干净 worktree `f68eeee`（从现网基线 `6cfb994` cherry-pick 同一修复），并核对 `MdPartitionRuntime.java`、`MDFacade.java`、`DepthBookFacade.java` 的 **Git blob SHA 均与 GitHub `saas-crypto` 完全一致**。
+- Java 8 / 离线 Maven 3.9.11：**33 套测试、142 项，0 failure、0 error、0 skipped**。本地依赖指向 `com.app.dc 0.0.5-devcombined-20261015-SNAPSHOT` 和 `Common 3.0.21-devcombined-20261015-SNAPSHOT`。新镜像 Common JAR SHA=`8898812068751cc3ab3916bb7b55fe535c10a413ffef7e9be20436d6ac8ff154`，`com.app.dc` JAR SHA=`ca9017749ed1a2a218a300ca92f7f1b2b16c273d0adbbc58a37d59f639c625ae`，均与当前 Order/Trade/MD 的运行 JAR 一致；MySQL 驱动为 **8.0.33**。
+- Maven POM 上游默认仍为 `com.app.dc 0.0.4-SNAPSHOT`；现已通过 MD PR [#11](https://github.com/bliplink/com.app.dc.mdsvr/pull/11) 添加可覆写 `-Dcom.app.dc.version=...`，不改变默认线上依赖，也不使临时版本硬编码进仓库。
+- `eclipse-temurin:8-jre` 在 Mac Docker 里未缓存，Docker Hub DNS 不可用；使用**运行中 MD 镜像作为缓存的 Java8 基础层**，用已通过测试的 `target/classes` 和 `target/dependency` 全量替换相同目录后生成新镜像。这不是业务逻辑替换之外的新增代码：
+  - 新镜像 tag：`dc-saas/mdsvr:pr10-applied-epoch-20261016`
+  - **完整 Docker image ID：`sha256:20d655e57548f8f5315d172e6476c28268ed377bddf4cf17c55d89ff1726a7e1`**
+  - 原 MD 全部三个节点为 `dc-saas/mdsvr:epoch-refresh-after-subscribe-20261015`、源修订 `6cfb994`；现 A/B/C 全部使用相同新镜像 ID。
+
+### 2. 真实 Demo 三节点替换与业务验收
+
+- 滚动顺序：**MD-C（256 Learner、0 Primary）→ MD-B（128 Primary）→ MD-A（128 Primary）**，每次只重建一个节点，Order/Trade 未替换，也未人为改动 ZK 分区。
+- 第一次重建 MD-C 遇到部署配置缺陷：旧 `.env.prod` 的 `DEPLOY_ROOT=/data/dc-saas-runtime` 是 Linux 路径，Mac 上 bind mount 不存在，因此容器创建后启动失败。**已立即修复并恢复节点**：只为 Mac 这次 Compose 命令覆写 `DEPLOY_ROOT=\"$HOME/.opentradingcore/dc-saas-runtime-ordered-20261015\"`；不覆盖含密钥的源 env 文件、不清除数据。以后 Mac 重新部署必须显式带上此路径。MD-C 后续完整启动，先前的安装失败不能被伪记为零故障。
+- MD-C 重订阅 Order 后 8 个活跃 Robot 市场 Image **8/8 `MD_MARKET_READY role:LEARNER`**；MD-B 负责的 3 个活跃市场 **3/3 `role:PRIMARY`**；MD-A 负责的 5 个活跃市场 **5/5 `role:PRIMARY`**。
+- 三个 MD 容器均运行、OOM=false、restartCount=0；ZooKeeper MD **256/256 READY**，Primary A=128 / B=128，C 仍为 Learner。
+- 用真实 `MDSvr.queryPublicMarket` 查询 **8/8** 活跃 Robot 租户，全部买盘/卖盘分别 **10/10 档**。Robot **8/8 RUNNING，320 挂单，8/8 有效租约**；其他服务仍然正常运行。
+- SaaS Quick Smoke 最初检测到历史 READY 双重计数：Trade P000/P020 曾 A→B→A，旧脚本只按分区收集全历史日志，虚报 A=128/B=130 overlap=2。已修复为**当前 ZooKeeper 分区 Primary+Epoch 与实际 READY 日志配对**，同 Epoch 双主仍阻断；修复已合并到 deploy PR [#68](https://github.com/bliplink/dc-quant-deploy/pull/68)。真实全量 `--quick --running` **PASS**，包括 23 个容器、256/256 Trade READY A/B 各 128、全部配置和服务健康。
+- MD 只读 failover 门禁的旧 GHCR 镜像标签误报已修复，新增当前容器镜像完整 SHA-256 锁定并测试，deploy PR [#67](https://github.com/bliplink/dc-quant-deploy/pull/67) 已合并。
+
+### 3. Projection 全范围一致性核对
+
+本机执行 `tests/check-projection-consistency-host.sh`。最初使用 75 秒上限只扫描 800,000 条并返回 `PARTIAL_NOT_ATTESTED`，**未将此错误伪称 PASS**。之后维护窗口内以 `PROJECTION_ORPHAN_MAX_SECONDS=360`、`PROJECTION_ORPHAN_CHUNK_SIZE=20000` 完成固定上界全范围扫描：
+
+- `scanned=1486020` Mutation，`pages=75`，`elapsedSeconds=206.667`
+- `orphanMutations=0`、`decision=PASS_LIVE_RANGE_OBSERVATION_ONLY`
+- Order watermark **9/9**、Trade watermark **9/9**，tail mismatch 0；跨分区 event_id 冲突未发现。
+- 本机报告：`$HOME/.opentradingcore/cluster-evidence/projection-orphan-post-mdpr10-20261016.json`。**注意：`consistentTransaction=false`、`authoritativeAttestation=false`，此 PASS 是固定上界在线范围扫描，不等同于故障后的完整强一致快照。**
+
+### 4. 仍未完成，下一轮必须接续的真实阻断
+
+1. **MD Primary 自动 SIGKILL：BLOCKED。** 在新版镜像实际 Image ID 上再次运行 `scripts/check-md-failover-preflight.py --expected-image-id sha256:20d655e5...`，没有任何“未审查镜像”误报；但以下五项仍为真正 blocker：`ORDER_CURRENT_FULL_MARKET_IMAGE_PROOF_MISSING`、`MD_PROMOTION_FENCING_AND_CAS_CONTROLLER_NOT_CONFIGURED`、`MD_RECOVERING_TO_READY_EPOCH_PUBLICATION_FENCE_UNATTESTED`、`MD_PROMOTED_EPOCH_FULL_MARKET_IMAGE_NOT_ATTESTED`、`ROBOT_POST_FAILOVER_ORDER_RECONCILIATION_NOT_ATTESTED`。**新 Image-READY 修复已部署，但自动主切机制尚未完成**；不要绕过安全门禁停止 Primary。
+2. **Trade 带真实持仓的自动故障接管：BLOCKED。** 已合并 deploy PR [#66](https://github.com/bliplink/dc-quant-deploy/pull/66) 的受控 A→B→A 合法交易员资金/持仓查询验收候选脚本，已同步到 Mac 独立测试文件并通过语法编译；本轮发起真实持仓业务运行请求被执行环境安全检查拦截，**没有实际新建测试租户、入金或切换 Trade Primary**，不能把源码合并当作测试通过。
+3. **Order Primary SIGKILL 自动接管仍未做，**前序执行请求曾被环境安全检查拦截；已通过的仅是三副本在线受控主备切换/真实 GTC 订单存续。
+4. **WAL 自动归档、安全删除、10→50→200 租户稳态与 burst 未验收通过。** 磁盘此时约 82% 使用率（约 81 GiB 可用），未删除 WAL/旧 Demo 数据。不要重复已通过的 Image 与挂单切换检查；修复上述 Primary 安全授权后继续故障注入、资金/持仓/委托/成交与 Projection 权威对账。
+
+
 ## 本轮真实执行且 PASS 的项目
 
 | 项目 | 动作和证据 | 结论 |
