@@ -2,6 +2,18 @@
 
 > 本文遵循 [集群最终统一验收任务书](CLUSTER_HA_FINAL_ACCEPTANCE_MISSION_20261015.zh-CN.md)；只记录真实已执行的操作。日期采用 Mac 所在时区 Asia/Shanghai。全程未新增产品功能，也未依赖 GitHub Actions。
 
+## 2026-10-16 07:22–07:30 Order→MD 空市场提交快照跨服务协议修复（最新代码进展）
+
+**本轮已修两端并合并源码，但没有更换现网 Order/MD 镜像或执行危险 Primary SIGKILL。** 不应与前一轮 MD PR13 的已部署状态混淆。
+
+- **真实缺陷：** MD 的 PR13 接受通过独立签名、HEAD 和哈希验证的零市场 `books=[]`，但 Order 源端 `OrderMdMarketManifest.fromCommittedSnapshot` 仍对 `snapshot.getBooks().isEmpty()` 抛错；旧 MD `MdOrderSnapshotCheckpointContract.parseCheckpoint` 又拒绝空 `marketVersions`。这使大多数合法空分区在 Order→MD 的另一种 checkpoint 数据格式下无法被校验。
+- Order 源端最小修复：`books==null` 仍拒绝，但完整且已提交的零市场清单可以编码；commitMarker、source epoch、seq、快照 ID、重复市场检查未放宽，`promotionAuthorized=false` 不变。新增合法空清单与被反射注入真正 null 库存的损坏快照测试。
+- MD 消费端最小修复：允许**明确存在的**空 `marketVersions`，仍严格校验 canonical SHA、元数据与 `promotionAuthorized=false`；缺失库存、额外候选市场仍拒绝。两个模块以独立 fixture 交叉核对空快照摘要：`f408607be32606a8aa32404c2a52c3f5e2c0e27ab1c2a679c65732c33c25b81e`。
+- 先 TDD 红灯：Order 原代码 `MD manifest refuses missing/empty partition market inventory`；改动后源端+接收端目标测试均 PASS，离线 Maven Java 8 全量回归 **Order 80 suites / 338 tests / 0 failure / 0 error / 1 skipped；MD 33 suites / 146 tests / 0 failure / 0 error**。
+- 代码均已合并：**[Order PR #16](https://github.com/bliplink/com.app.dc.ordersvr/pull/16)**（`c8f93814785d8d45cbc36e378a8d10c5264e5794`）；**[MD PR #14](https://github.com/bliplink/com.app.dc.mdsvr/pull/14)**（`455aa2da39b684cccff9260e3aaf8fc96a0ed1ea`）。两端仅处理 checkpoint 兼容，不是增强主切自动化。
+- **部署审慎保留：** Order 当前运行镜像 `dc-saas/ordersvr:merged-market-identity-image-20261015` 带有 `dc.source.revision=c9aba212...` 标签，但该修订在本地测试源仓库无法解析；测试来源 `239f765` 与现网 Docker classes 数量有差异（测试代码 227 vs 现网 225），无法证明“整套编译类”直接覆盖不会回退正在运行的复制/WAL 逻辑。为避免影响业务，没有做无证明的整镜像替换。需要统一现网精确源码基线/仅经验证的单类补丁后再替换。
+- **关键主切仍未完成：** 源端仍只有 `OrderMdCheckpointHeadGate` 的本地 checkpoint 观察，不是 Order 独立物理节点签名的多副本 HEAD commit ACK；MD `MdImageRecoveryFailoverController.Safety` 没有完整真实旧主隔离+接收侧已应用 Image/Diff+Epoch 凭据。新格式并不为任何 Primary 颁发授权，故 MD 自动选主、Order/Trade SIGKILL、资金权威一致性、200 租户稳态仍记 **BLOCKED/未验收**。
+
 ## 2026-10-16 07:10–07:19 MD PR13 签名空市场分区恢复修复与三节点替换（最新状态）
 
 **仅解决现有 256 分区 HA 恢复校验的缺陷；未启用自动 MD Primary 主切。**
