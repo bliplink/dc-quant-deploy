@@ -133,6 +133,124 @@ def wait_for_trade_warm_replica(partition, seconds=540):
         "(full WAL tail and promotion gate still authoritative)." % (partition, epoch, seq))
 
 
+
+def verify_held_position_during_trade_reversal(partition, token):
+    """Check the ACTUAL new primary using the original authorized trader session.
+
+    Only for controlled, single-partition A/B role reversal. A later SIGKILL
+    still has a separate, stricter durable-head/snapshot preflight.
+    """
+    from datetime import datetime, timezone
+    from md_cluster_transition_host import DockerZk
+    from trade_cluster_transition_host import switch_assignment
+
+    control = DockerZk("dc-saas-zookeeper", "127.0.0.1:32181",
+                       "/dc/cluster/tradesvr/partitions", "docker")
+    record = control.read(partition)
+    current = record["value"]
+    original = current.get("primary")
+    if (current.get("state") != "READY" or original not in ("TradeSvrA", "TradeSvrB")
+            or len(current.get("replicas", [])) != 1
+            or set((original, current["replicas"][0])) != {"TradeSvrA", "TradeSvrB"}):
+        raise RuntimeError("Trade held-position test requires a distinct live A/B hot replica")
+
+    # Check the running containers, not obsolete or possibly stale .env image tags.
+    images = []
+    for container in ("dc-saas-tradesvr", "dc-saas-tradesvr-b"):
+        raw = subprocess.check_output(["docker", "inspect", container],
+                                      text=True, timeout=20)
+        config = json.loads(raw)[0]
+        image = config["Config"]["Image"]
+        if not config["State"]["Running"] or not image.startswith("dc-saas/tradesvr:"):
+            raise RuntimeError("Held-position role test requires running local Demo Trade images")
+        images.append(image)
+    if images[0] != images[1]:
+        raise RuntimeError("Trade A/B image mismatch before held-position promotion")
+
+    desired_position = (Decimal("0.0001"), Decimal(0))
+    expected_watermarks = {
+        row[0]: (int(row[1]), int(row[2]))
+        for row in sql("SELECT partition_id,source_epoch,journal_seq "
+                       "FROM dc_trade_projection_watermark")
+    }
+    evidence = {"partition": partition, "beforeEpoch": current["epoch"],
+                "originalPrimary": original, "transitions": [], "result": "FAIL"}
+    other = "TradeSvrB" if original == "TradeSvrA" else "TradeSvrA"
+    output = os.path.join(os.environ["TRADE_CLUSTER_EVIDENCE_ROOT"],
+                          "trade-held-position-verified-" + RUN + ".json")
+
+    def account_api_ready():
+        try:
+            position = call("TradeSvr", "queryTradePosition",
+                            {"userid": USER_ID, "location": LOCATION,
+                             "securityid": "BTCUSDT"}, token, key=LOCATION)
+            balance = call("TradeSvr", "queryAccountBalance",
+                           {"userid": USER_ID, "location": LOCATION},
+                           token, key=LOCATION)
+            return bool(position) and bool(balance) and trader_position() == desired_position
+        except (RuntimeError, OSError, TimeoutError, urllib.error.URLError):
+            return False
+
+    def promote(source, target):
+        row = control.read(partition)
+        desired = switch_assignment(row["value"], source, target)
+        started = datetime.now(timezone.utc).isoformat(timespec="seconds")
+        updated = control.cas(row, desired)
+        epoch = updated["value"]["epoch"]
+        evidence["transitions"].append({"source": source, "target": target,
+                                        "epoch": epoch, "cas": "PASS"})
+        container = "dc-saas-tradesvr" if target == "TradeSvrA" else "dc-saas-tradesvr-b"
+        marker = "TRADE_PARTITION_READY node:%s, partition:%s, epoch:%d" % (
+            target, partition, epoch)
+
+        def ready():
+            logs = subprocess.run(
+                ["docker", "logs", "--since", started, container],
+                text=True, capture_output=True, timeout=20, check=True)
+            return marker in logs.stdout + logs.stderr
+
+        wait("held Trade promotion READY " + target, ready, seconds=150, interval=2)
+        evidence["transitions"][-1]["ready"] = "PASS"
+        wait("authorized account and held position on Trade " + target,
+             account_api_ready, seconds=90, interval=2)
+        evidence["transitions"][-1]["authorizedTraderPositionAndBalance"] = "PASS"
+        log("Trade " + target + " holds trader position and balance after epoch=" + str(epoch))
+
+    try:
+        if not account_api_ready():
+            raise RuntimeError("Trade held position/account unavailable before switch")
+        promote(original, other)
+        promote(other, original)
+        after = {
+            row[0]: (int(row[1]), int(row[2]))
+            for row in sql("SELECT partition_id,source_epoch,journal_seq "
+                           "FROM dc_trade_projection_watermark")
+        }
+        if any(key not in after or after[key] < value
+               for key, value in expected_watermarks.items()):
+            raise RuntimeError("Trade Projection watermark regressed after held reversal")
+        evidence["projectionWatermarksNotRegressed"] = True
+        evidence["result"] = "PASS"
+    finally:
+        try:
+            now = control.read(partition)["value"]
+            if now["primary"] != original:
+                if now["primary"] == other and now["state"] == "READY":
+                    promote(other, original)
+                else:
+                    evidence["restoreError"] = "unexpected assignment; manual recovery required"
+        except Exception as exc:
+            evidence["restoreError"] = type(exc).__name__ + ": " + str(exc)[:200]
+        evidence["finalAssignment"] = control.read(partition)["value"]
+        with open(output, "w", encoding="utf-8") as stream:
+            json.dump(evidence, stream, indent=2, ensure_ascii=False)
+            stream.write("\n")
+        log("Trade held-position role result=" + evidence["result"] + " evidence=" + output)
+
+    if evidence["result"] != "PASS" or evidence.get("restoreError"):
+        raise RuntimeError("Trade held-position role test requires recovery review")
+
+
 def market_book():
     entries = market_entries()
     bids = [Decimal(str(x["MDEntryPx"])) for x in entries if str(x.get("MDEntryType")) == "0"]
@@ -318,8 +436,6 @@ def main():
             "SELECT location FROM dc_tenant WHERE location<>'%s' AND status IN ('ACTIVE','TRIAL')" % LOCATION)]
         if any(zlib.crc32(name.encode()) % 256 == int(partition[1:]) for name in other_locations):
             raise RuntimeError("Refusing Trade CAS on a partition shared with other active tenants")
-        if "cluster-dev-local-" not in os.environ.get("TRADESVR_TAG", ""):
-            raise RuntimeError("Held-position reversal requires the local Demo image lock")
         evidence_root = os.environ["TRADE_CLUSTER_EVIDENCE_ROOT"]
         os.makedirs(evidence_root, mode=0o700, exist_ok=True)
         # A failed HA gate can leave the test position held. Preserve recovery
@@ -336,12 +452,10 @@ def main():
             raise RuntimeError("Held position absent from Trade API before switch")
         command_env = os.environ.copy()
         command_env["TRADE_CLUSTER_ROLE_REVERSAL_PARTITION"] = partition
-        command_env["TRADE_CLUSTER_UPGRADE_LEGACY"] = "true"
-        wait_for_trade_warm_replica(partition)
+        # Controlled CAS uses the existing business READY gate + live trader API;
+        # equal periodic snapshots are NOT required when the Replica recovers WAL.
         log("Holding 0.0001 BTC during Trade role reversal on " + partition)
-        subprocess.run(["bash", os.path.join(os.path.dirname(__file__),
-                         "run-trade-cluster-role-reversal-host.sh")],
-                       env=command_env, check=True, timeout=750)
+        verify_held_position_during_trade_reversal(partition, token)
         after_trade = call("TradeSvr", "queryTradePosition",
                            {"userid": USER_ID, "location": LOCATION, "securityid": "BTCUSDT"},
                            token, key=LOCATION)
