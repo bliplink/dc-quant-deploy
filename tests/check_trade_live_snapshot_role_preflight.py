@@ -69,7 +69,12 @@ def evaluate(assignments, data_root, tenants):
                 issues.append("REPLICA_SNAPSHOT_EPOCH_MISMATCH")
             if source and target and source["epoch"]==target["epoch"] and (
                     target["seq"]<source["seq"] or target["stateSeq"]<source["stateSeq"]):
-                issues.append("REPLICA_FULL_SNAPSHOT_BEHIND")
+                # TradeSnapshotScheduler runs ONLY on READY Primaries. A
+                # replica's cold/old latest.json is expected without an
+                # authenticated snapshot-install path. It says nothing about
+                # that Replica's live Chronicle WAL ACK or in-memory position.
+                # Never claim Replica WAL divergence from this file alone.
+                issues.append("REPLICA_SNAPSHOT_STALE_WAL_HEAD_NOT_CHECKED")
         results.append({"tenant":tenant,"partition":part,"currentEpoch":epoch,
                         "primary":primary,"replica":replicas[0] if not issues or replicas else None,
                         "snapshots":snaps,"issues":issues})
@@ -81,6 +86,9 @@ def evaluate(assignments, data_root, tenants):
             "snapshotIssues":blocked,"partitions":results,
             "snapshotPreflight":"BLOCK" if blocked else "UNPROVEN",
             "walCommittedHeadAndAckProof":"NOT_CHECKED",
+            "replicaWalBehindOrDivergent":"UNPROVEN_FROM_SNAPSHOT_FILES",
+            "replicaSnapshotPolicy":"PRIMARY_ONLY_PERIODIC_SCHEDULER",
+            "requiredReplicaEvidence":"ORIGINAL_CHRONICLE_WAL_EXACT_COMMITTED_PREFIX_AND_SIGNED_SYNC_ACK",
             "authorizesPrimarySigkill":False,"authorizesReplicaRestart":False,
             "decision":"BLOCKED"}
 

@@ -60,6 +60,24 @@ class TradeLiveSnapshotRolePreflightTests(unittest.TestCase):
             self.assertEqual("UNPROVEN",result["snapshotPreflight"])
             self.assertFalse(result["authorizesReplicaRestart"])
 
+    def test_replica_primary_only_snapshot_policy_does_not_infer_wal_data_loss(self):
+        with tempfile.TemporaryDirectory() as t:
+            root=Path(t);rows,p=rowset("TENANT1")
+            snapshot(root,"TradeSvrB",p,"TENANT1",1,120)
+            # This matches the live Mac configuration: only the Primary
+            # runs TradeSnapshotScheduler, while Replica retains cold image.
+            snapshot(root,"TradeSvrA",p,"TENANT1",1,0)
+            result=gate.evaluate(rows,root,["TENANT1"])
+            issues=result["snapshotIssues"][0]["issues"]
+            self.assertIn("REPLICA_SNAPSHOT_STALE_WAL_HEAD_NOT_CHECKED",issues)
+            self.assertEqual("UNPROVEN_FROM_SNAPSHOT_FILES",
+                             result["replicaWalBehindOrDivergent"])
+            self.assertEqual("PRIMARY_ONLY_PERIODIC_SCHEDULER",
+                             result["replicaSnapshotPolicy"])
+            self.assertEqual("NOT_CHECKED",result["walCommittedHeadAndAckProof"])
+            self.assertFalse(result["authorizesPrimarySigkill"])
+            self.assertFalse(result["authorizesReplicaRestart"])
+
     def test_missing_snap_and_bad_catalog_fail_closed(self):
         with tempfile.TemporaryDirectory() as t:
             root=Path(t);rows,p=rowset("TENANT1")
