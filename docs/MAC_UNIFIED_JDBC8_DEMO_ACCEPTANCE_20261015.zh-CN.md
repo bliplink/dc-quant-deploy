@@ -35,3 +35,17 @@
 3. 在上述前提及独立 Quorum 成立后才执行 Order/Trade/MD SIGKILL 主切与 50→200 负载验收。正式发布须采用一致 Maven Central/Common 版本与 GitHub 构建的真实发布镜像，不能把 `-devcombined-...-SNAPSHOT` 的 Mac 本地验证镜像称为正式发布。
 
 **备注：本次仅是已合并源码的 Mac Demo 联合验收，不在此报告中引入或合并新的恢复机制代码。**
+
+## 10 月 15 日 18:07 更新｜Trade 定时快照分区级解耦已部署验收
+
+此前统一验收过程中，进一步核实 Trade 的快照调度器 `TradeSnapshotScheduler.runOnce()` 先调用 `allLocalPrimariesReady()`，要求 **TradeSvrA 本地所有 128 个 Primary 都 READY**，随后才逐分区检查。现网 `P190`、`P220` 恰好属于 TradeSvrA Primary，受原始 WAL 冲突隔离，因此造成了**整个节点其他健康 Primary 定时快照停顿**。这个问题不是所有健康 Replica 的 WAL 都丢失；`TradeSnapshotScheduler` 原本只在 Primary 上定时产出快照，旧只读审计误将 Replica 初始零序号快照解释为 WAL 滞后，已在 [dc-quant-deploy PR #46](https://github.com/bliplink/dc-quant-deploy/pull/46) 校正分类，HA 主切门禁仍拒绝未验证的 WAL。
+
+实际代码修复已合入 **[Trade PR #32](https://github.com/bliplink/com.app.dc.tradesvr/pull/32)**，`saas-crypto` 合并 SHA `96ef1fdfc80acd89211c1e38d5afbda67956e5de`。仅移除调度器的**跨分区全局 READY 否决**；仍使用每个分区的 `PartitionReadinessGuard` 与 Epoch 检查，且 `TradeSnapshotManager.captureLocked()` 再验证恢复隔离、WAL 提交边界和 writer lock。Trade Java 8 全量 **286/286 PASS**，新增回归覆盖有一个 Primary 隔离、另一个可正常参与快照候选；无 Common、Order、MD 或 Gateway 逻辑变更。
+
+本机 ARM64 Trade 修复镜像 `dc-saas/tradesvr:merged-snapshot-scope-20261015` 基于此前已合并的 `merged-jdbc8-20261015` 候选，仅覆盖已测试的 `TradeSnapshotScheduler.class`；仍使用完全相同 Common Jar SHA-256 `8898812068751cc3ab3916bb7b55fe535c10a413ffef7e9be20436d6ac8ff154`。按 Demo 策略暂停 Robot、**同时重启 Trade A/B**、恢复 Robot，保留全部真实 WAL、Snapshot、MySQL 和旧版 env 回滚配置，无数据清理。
+
+**真实本机复核**：TradeSvrA 的健康 `P026` Snapshot 从旧 13:27:36 更新到 **18:01:53**，健康 `P130` 从旧 13:20:37 更新到 **18:03:00**，日志 `TRADE_SNAPSHOT_SAVED` 带对应已提交序号；`P190/P220` Snapshot 保留 13:27 原状，原始冲突 `.fenced` 文件保留。Trade A/B 容器无重启/宿主 OOM；Robot 行情安全重订阅后再次达到 **11 个租户中 9 个 RUNNING，360 笔挂单**，其中健康九租户公开盘口均为 10 bid + 10 ask。订单 256 分区核查 PASS，Projection DB 尾部 Order/Trade **11/11 匹配**。本机证据包括 `acceptance-evidence/eleven-tenant-trade-scoped-snapshot-audit-20261015.json`；整体 11 租户审计依然 `FAIL`，因为两个租户 P190/P220 仍隔离，不存在虚假 11/11 全通过结论。
+
+同时，使用最新已合并 `saas-crypto` 的 `check_order_md_market_snapshot_readonly.py` 重新检查旧 10 租户 Order 全市场 Snapshot，**10/10 三副本快照有效且一致，0 项格式错误**，脚本 9 项测试通过。之前使用旧工作树脚本得到 30 项 `ValueError` 的结论已被更正。**但 MD Promotion 仍未授权**：签名 WAL HEAD、完整 MD Snapshot/Diff、旧发布者隔离及独立 Quorum 未通过。本轮没有执行 SIGKILL 或 50/200 租户压测，ZooKeeper 仍为单机 `standalone`。
+
+**余下 HA NO-GO**：Trade `P190/P220` 需经认证的分叉 WAL 尾部处置、外部资金/持仓/委托/成交/Projection 一致性认证和可信恢复事务；活动 Replica 的 WAL 真正提交头及重放一致性尚无有效独立物理 Quorum 证明。上述条件不足时，不能授权 Primary SIGKILL 或宣称 HA 验收通过。没有改动任何恢复门禁以强行开放 READY。
