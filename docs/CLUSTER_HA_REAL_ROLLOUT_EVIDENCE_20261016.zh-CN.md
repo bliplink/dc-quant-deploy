@@ -19,7 +19,7 @@
 ### 2. 真实 Demo 三节点替换与业务验收
 
 - 滚动顺序：**MD-C（256 Learner、0 Primary）→ MD-B（128 Primary）→ MD-A（128 Primary）**，每次只重建一个节点，Order/Trade 未替换，也未人为改动 ZK 分区。
-- 第一次重建 MD-C 遇到部署配置缺陷：旧 `.env.prod` 的 `DEPLOY_ROOT=/data/dc-saas-runtime` 是 Linux 路径，Mac 上 bind mount 不存在，因此容器创建后启动失败。**已立即修复并恢复节点**：只为 Mac 这次 Compose 命令覆写 `DEPLOY_ROOT=\"$HOME/.opentradingcore/dc-saas-runtime-ordered-20261015\"`；不覆盖含密钥的源 env 文件、不清除数据。以后 Mac 重新部署必须显式带上此路径。MD-C 后续完整启动，先前的安装失败不能被伪记为零故障。
+- 第一次重建 MD-C 遇到部署配置缺陷：旧 `.env.prod` 的 `DEPLOY_ROOT=/data/dc-saas-runtime` 是 Linux 路径，Mac 上 bind mount 不存在，因此容器创建后启动失败。**已立即修复并恢复节点**：只为 Mac 这次 Compose 命令覆写 `DEPLOY_ROOT="$HOME/.opentradingcore/dc-saas-runtime-ordered-20261015"`；不覆盖含密钥的源 env 文件、不清除数据。以后 Mac 重新部署必须显式带上此路径。MD-C 后续完整启动，先前的安装失败不能被伪记为零故障。
 - MD-C 重订阅 Order 后 8 个活跃 Robot 市场 Image **8/8 `MD_MARKET_READY role:LEARNER`**；MD-B 负责的 3 个活跃市场 **3/3 `role:PRIMARY`**；MD-A 负责的 5 个活跃市场 **5/5 `role:PRIMARY`**。
 - 三个 MD 容器均运行、OOM=false、restartCount=0；ZooKeeper MD **256/256 READY**，Primary A=128 / B=128，C 仍为 Learner。
 - 用真实 `MDSvr.queryPublicMarket` 查询 **8/8** 活跃 Robot 租户，全部买盘/卖盘分别 **10/10 档**。Robot **8/8 RUNNING，320 挂单，8/8 有效租约**；其他服务仍然正常运行。
