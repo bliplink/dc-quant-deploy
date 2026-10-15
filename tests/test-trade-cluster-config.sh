@@ -76,6 +76,17 @@ grep -Fqx 'trade.cluster.recovery.replica.staging.path=../../data/TradeSvrB/reco
 grep -Fqx 'trade.cluster.lifecycle.enabled=true' "${a_config}" || fail 'Trade recovery lifecycle must be enabled'
 grep -Fqx 'trade.cluster.recovery.authoritative=true' "${a_config}" || fail 'Trade authoritative recovery must be enabled'
 grep -Fqx 'trade.cluster.recovery.rollbackUncommittedTail.enabled=false' "${a_config}" || fail 'Trade rollback must remain opt-in outside full-cluster profile'
+grep -Fqx 'trade.cluster.recovery.rollbackUncommittedTail.enabled=false' "${b_config}" || fail 'Trade B rollback must remain disabled with sync ACKs'
+# An accidental direct generate from an unsafe environment must be rejected,
+# not silently accepted as an opt-in despite requiring synchronous Replica WAL.
+cp "${TEST_ROOT}/cluster.env" "${TEST_ROOT}/unsafe-wal-rebase.env"
+printf '%s\n' 'TRADE_CLUSTER_ROLLBACK_UNCOMMITTED_TAIL_ENABLED=true' >> "${TEST_ROOT}/unsafe-wal-rebase.env"
+if "${DEPLOY_DIR}/generate-saas-configs.sh" "${TEST_ROOT}/unsafe-wal-rebase.env" >"${TEST_ROOT}/unsafe-wal-rebase.log" 2>&1; then
+  fail 'Full Trade cluster must reject unverified local rebase even with explicit override'
+fi
+grep -Fq 'Synchronous Trade replication forbids unverified local WAL tail rollback' "${TEST_ROOT}/unsafe-wal-rebase.log" ||
+  fail 'Unsafe Trade WAL rebase must fail with actionable error'
+
 grep -Fqx 'trade.cluster.replication.enabled=true' "${a_config}" || fail 'Trade replication must be enabled'
 grep -Fqx 'trade.cluster.replication.required=true' "${a_config}" || fail 'TradeSvrA replica ACK must gate safe failover commits'
 grep -Fqx 'trade.cluster.replication.required=true' "${b_config}" || fail 'TradeSvrB replica ACK must gate safe failover commits'
@@ -225,8 +236,8 @@ grep -Fq 'set_env_value TRADE_CLUSTER_REPLICATION_REQUIRED true' "${DEPLOY_DIR}/
   fail 'full cluster must require Trade replication'
 grep -Fq 'set_env_value TRADE_CLUSTER_FAILOVER_ENABLED true' "${DEPLOY_DIR}/deploy-saas.sh" ||
   fail 'full cluster must enable Trade automatic failover'
-grep -Fq 'set_env_value TRADE_CLUSTER_ROLLBACK_UNCOMMITTED_TAIL_ENABLED true' "${DEPLOY_DIR}/deploy-saas.sh" ||
-  fail 'full cluster must enable Trade dirty-tail rollback'
+grep -Fq 'set_env_value TRADE_CLUSTER_ROLLBACK_UNCOMMITTED_TAIL_ENABLED false' "${DEPLOY_DIR}/deploy-saas.sh" ||
+  fail 'full cluster must forbid Trade unverified WAL rebase'
 grep -Fq "printf 'TRADE_CLUSTER_PERIODIC_SNAPSHOT_ENABLED=true" "${DEPLOY_DIR}/deploy-saas.sh" ||
   fail 'deployment must enable Trade periodic snapshots when the env setting is missing'
 grep -Fq 'apply_full_cluster_profile' "${DEPLOY_DIR}/deploy-saas.sh" ||

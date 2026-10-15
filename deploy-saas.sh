@@ -327,7 +327,10 @@ apply_full_cluster_profile() {
   set_env_value TRADE_CLUSTER_ENABLED true
   set_env_value TRADE_CLUSTER_REPLICATION_REQUIRED true
   set_env_value TRADE_CLUSTER_FAILOVER_ENABLED true
-  set_env_value TRADE_CLUSTER_ROLLBACK_UNCOMMITTED_TAIL_ENABLED true
+  # The synchronous Replica has a physically immutable WAL. Never permit
+  # legacy single-node rollback/rebase in the full HA deployment profile.
+  # Dirty tails must remain fenced until Common certified recovery.
+  set_env_value TRADE_CLUSTER_ROLLBACK_UNCOMMITTED_TAIL_ENABLED false
   set_env_value TRADESVR_ZOOKEEPER_SESSION_TIMEOUT_MS 6000
   set_env_value TRADESVR_ZOOKEEPER_CONNECTION_TIMEOUT_MS 5000
   log "Enabled full cluster topology: MD A/B/C, Order A/B/C, Trade A/B with automatic failover, ProjectionSvr."
