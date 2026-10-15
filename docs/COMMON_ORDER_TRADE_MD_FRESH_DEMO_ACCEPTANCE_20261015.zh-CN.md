@@ -39,3 +39,27 @@
 - 50/200 租户持续负载、2–3x burst 尚未执行；当前三个成功租户不能证明生产容量。Common 统一接口不应被为了 Demo 测试绕过：必须保持 WAL 证据、Epoch fencing、持久化 Ledger 和 Replica READY 防线。
 
 **运行指引：** 重新部署必须走 `deploy-saas-macos.sh --full-cluster` / `deploy-saas.sh` 正式分阶段入口，或者在有明确验证证据时逐项执行同样的 MySQL migration、服务身份创建、ZK assignment、Order/Trade/MD READY 步骤；不能仅按 Compose 容器 Up 数量宣布通过。代码通过已合入 `saas-crypto` 的 GitHub PR 发布，**GitHub Actions 费用限制不在本次任务范围内**。
+
+## 21:17 更新：Order/Trade 同步 WAL 本地回退风险修复并实际部署（HA 仍 NO-GO）
+
+**新发现的共同机制风险**：`deploy-saas.sh --full-cluster` 意外把 Trade `rollbackUncommittedTail.enabled` 设置为 `true`，Order A/B/C 生成器也把相同开关固定为 `true`，同时两者都是 `replication.required=true`。这会允许旧 `RecoveryManager` 在新 Primary／同 Epoch 重启时，按单节点已提交水位对物理 Chronicle 原始 WAL 执行本地 archive/rebase；但另一个同步副本可能已经持久化相同 seq 的原始尾部，造成同 Epoch 物理 WAL 分叉。即使旧路径通过本机 snapshot/epoch 检查，也不足以证明 Common 独立物理 Quorum 的接收事务。
+
+**已合入源码与部署配置：**
+
+- [Trade PR #33](https://github.com/bliplink/com.app.dc.tradesvr/pull/33)，`f441cf7d89c59b5f2471689800daae4b373a9e87`：同步复制时禁止旧式本地 dirty-tail rollback/rebase。无论是在 `start()` 还是 `runOnce()`，配置非法即阻止服务取得 READY；之前已有 READY 标记也会撤销。无损保留原始 WAL，必须改走 Common 认证恢复。Trade Java 8 全量 **287/287 PASS**。
+- [Order PR #13](https://github.com/bliplink/com.app.dc.ordersvr/pull/13)，`dba87a46fe9a519bdc4475012d3a9d89a6fb7519`：在 `OrderPartitionRecoveryManager` 的普通 Epoch 提升和 `rollbackSameEpochRestartTail()` 两条旧恢复入口检查 `order.cluster.replication.required`。有同步副本时拒绝本地 rebase，原始 WAL 不改写。Order Java 8 全量 **374 tests、0 failed、0 errors、3 skipped**。
+- [dc-quant-deploy PR #55](https://github.com/bliplink/dc-quant-deploy/pull/55)：Trade full-cluster profile 默认 `rollback=false`，且配置生成器拒绝 `rollback=true` 与同步复制组合。
+- [dc-quant-deploy PR #56](https://github.com/bliplink/dc-quant-deploy/pull/56)：Order A/B/C 和 Order dev HA 配置统一 `rollback=false`，Order/Trade 配置测试均 PASS。
+- Common 本轮额外运行 `DurableReplicaAckGuardTest`、`RecoveryQuorumCommitAttestationTest` 和 `VerifiedRecoveryQuorumClientTest`，共 **12 tests PASS**（只证明 Common 单元契约，不是三台独立物理投票的在线证明）。
+
+**Mac Demo 实际替换：** 保留既有数据、订单和 WAL，暂停 Robot，按业务组分别整组替换 Trade A/B 与 Order A/B/C，随后恢复 Robot。新本地 ARM64 镜像为 `dc-saas/tradesvr:merged-wal-fence-20261015`、`dc-saas/ordersvr:merged-wal-fence-20261015`。两种镜像仍引用和 MD A/B/C、Gateway **完全相同**的 Common Jar SHA-256 `8898812068751cc3ab3916bb7b55fe535c10a413ffef7e9be20436d6ac8ff154`。原本配置值在 Mac 运行目录改为 `false`，恢复配置备份只留在本机具私有权限的 `~/.opentradingcore/otc-demo-direct-20261015/acceptance-evidence/`（绝不提交凭据文件）。**这些镜像仍是 Mac 本地验收候选，不是官方 GHCR release。**
+
+**上线后实测**（2026-10-15 21:17 CST）：Order 256/256 Snapshot、assignment 和路由只读检查 `PASS`，Order/Trade Projection DB 尾部 `5/5 MATCH`；新业务租户 `BS5GUJ` 在 Trade 修复后、新租户 `FHJ2E4` 在 Order+Trade 两组修复后均独立通过自动审批、40 笔 Robot 报价、10 bid/10 ask、模拟入金、真实 IOC 开仓成交、持仓核验、reduce-only 平仓后持仓归零和活动委托归零。最终 **5 个 Robot RUNNING，200 笔挂单**，各核心容器无新增重启／OOM。另一个早于集群初始化时产生的测试租户 `W4UB6K` 仍 `NEEDS_RECONCILIATION/FUND`，此轮未绕过财务门禁，故不能宣称所有 6 租户正常。
+
+**未通过及下一步唯一需要收口的 HA 证明：**
+
+1. 真正的 Common `Snapshot + 原始 WAL + diff`、源端 HEAD、持久 Replica ACK、独立节点签名／Quorum，以及接收端恢复事务与**资金／持仓／委托／成交／Projection**权威一致性证明未构成在线闭环。这一轮虽阻止了单节点错误 rebase，**仍不能授权 SIGKILL／自动主切／滚动 Order-C 同步副本停机**。
+2. Order → MD 的*在线行情*正常，但 MD 的**完整已提交市场恢复 Image**尚未被证明可用：实际只读 `check_order_md_market_snapshot_readonly.audit` 对目前 5 个成功租户得到 `verifiedTriplicateSnapshots=4/5`。新租户 `FHJ2E4` 所属 `P064` 的 Order A/B/C 持久化 Snapshot 均为 `snapshotSeq=6, commitMarkerSeq=0, books=[]`，而它在实际交易 API 中有 10+10 档行情。这代表**在线 Order 盘口与过期磁盘 Image 之间有验收缺口**，不能拿实时盘口代替已提交原始 WAL 下的完整可恢复状态；修复须遵循 Order 当前权威 source、Snapshot/Diff 和旧 MD publisher Epoch 隔离，不能强行把未提交空快照标记为可信。
+3. Mac 当前 ZooKeeper 仍在一个 Docker VM 中运行；缺乏独立物理 Quorum，未进行真实主切、持仓 failover／rejoin／角色反转、50/200 租户稳态或 burst 压测。以上须在恢复授权和在线证据充足后再测。
+
+**结论：**本轮完成了 Order/Trade **共性不安全物理 WAL rebase** 的代码、测试和 Demo 统一部署修复；正常交易仍 PASS；**HA 认证恢复和 MD 自动主切仍明确 NO-GO**。不要清盘绕过不可用的证明链，也不需要再维护历史 P190/P220。
