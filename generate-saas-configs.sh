@@ -1037,7 +1037,37 @@ if [[ "${ORDER_CLUSTER_ENABLED}" == "true" ]]; then
 else
   write_standard_log_config OrderSvr
 fi
-write_standard_log_config ProjectionSvr
+# Never permit a replay/GAP failure to fill the entire Demo disk again.
+# Projection's missing-watermark/empty-gap exception fan-out previously
+# produced 259 GiB in under 12 hours. Use byte-bounded rotation, with
+# explicit category suppression for the unbounded WARN retry loop. Errors
+# from other service categories are still logged to both sinks.
+write_projection_log_config() {
+  local target="${OVERRIDE_ROOT}/ProjectionSvr/config/log4j.ini"
+  cat > "${target}" <<EOF
+log4j.rootLogger=INFO,file,stdout
+log4j.logger.com.app.dc.projection.OrderProjectionBinaryConsumer=ERROR
+log4j.logger.com.gateway.connector.tcp.client.GateWayApi=ERROR
+log4j.logger.com.gw.common.utils.GwServerResource=WARN
+log4j.logger.com.gw.common.utils=WARN
+
+log4j.appender.file=org.apache.log4j.RollingFileAppender
+log4j.appender.file.File=../../log/ProjectionSvr.log
+log4j.appender.file.Append=true
+log4j.appender.file.MaxFileSize=20MB
+log4j.appender.file.MaxBackupIndex=4
+log4j.appender.file.layout=org.apache.log4j.PatternLayout
+log4j.appender.file.layout.ConversionPattern=%d{yyyy/MM/dd HH:mm:ss.SSS} %p %m (%C{1}:%L)%n
+
+log4j.appender.stdout=org.apache.log4j.ConsoleAppender
+log4j.appender.stdout.Target=System.out
+log4j.appender.stdout.follow=true
+log4j.appender.stdout.layout=org.apache.log4j.PatternLayout
+log4j.appender.stdout.layout.ConversionPattern=%d{yyyy/MM/dd HH:mm:ss.SSS} %p %m (%C{1}:%L)%n
+
+EOF
+}
+write_projection_log_config
 write_standard_log_config LiqSvr
 write_standard_log_config ManagerSvr
 write_standard_log_config AdminSvr
