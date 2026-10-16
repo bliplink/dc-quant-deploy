@@ -60,3 +60,11 @@
 3. WAL 定时 Snapshot/归档/安全删除、Trade 跨节点持仓、Projection 全量事务性权威对账、50/200 租户持续负载、2–3× burst 仍需单独验收。
 4. GitHub Actions **持续禁止**直至用户明确恢复；源码交付使用 GitHub `saas-crypto` PR/合并，所有编译继续在 Mac 本地 ARM64。
 
+
+## 5. 10:55–11:10 Trade 正常停机提交 Drain 已合并，尚未热部署
+
+- 真实代码已提交并合并 [Trade PR #34](https://github.com/bliplink/com.app.dc.tradesvr/pull/34)，merge commit `1563ddb92941929e7d692e126f9a9bfe824bbdd5`，分支 `saas-crypto`。**未使用 GitHub Actions**。
+- 在 Trade `TradeStateCoordinator` 中接入 Spring `ContextClosedEvent` 优雅停机回调：设置全进程**新业务拒绝**状态，允许之前通过分区锁的业务完成同步 `STATE_BATCH + STATE_COMMIT`；等待当前 Primary 所有分区锁，读取真实 Chronicle WAL、`TradeCommitWatermark`，拒绝未提交尾部、失败/降级副本并对干净 HEAD 执行本地 `syncJournalThrough`。即使有任一分区异常，也必须等待**其他分区之前已接纳的业务**结束，再清除本地 PartitionReadinessGuard 并记录明确 `TRADE_GRACEFUL_DRAIN_BLOCKED`；不自动截断 WAL、不伪造补写 Commit Marker。
+- Java 8 / Maven 本地真实完整 Trade 回归 **74 suites / 292 tests / 0 failures / 0 errors / 0 skipped**；新增 5 项物理 Chronicle 测试，覆盖干净 `STATE_COMMIT` 停机、只写 `STATE_BATCH` 必须阻断且保留 WAL、SIGTERM 与在途业务写入并发、已接纳操作可在 Drain 后完成真正 `TradeStateCoordinator.record` 及 replica ACK、水位及 READY 撤销、过期本地 Primary 不对外授权。原 Common `3.0.22-SNAPSHOT` / `com.app.dc 0.0.5-SNAPSHOT` 一致。
+- 已在 Mac **本地**基于原 Trade 镜像编译 ARM64 候选 `dc-saas/tradesvr:pr34-graceful-drain-local-20261016`，image ID `sha256:9bd502d80302f74907f0b79b602aee8b6729e030fe910ca38febacb5f3e44629`，容器内用 javap 确认新 `beginGracefulDrain` 和 `onContextClosed` 方法实际存在。**仅构建候选，不替换运行中的 Trade-A/B**：10 户新 Demo 实时仍为 Robot 10/10 RUNNING、400 挂单，Trade-A/B 使用之前已验证的 `cluster-dev-ha322-local-20261016`。
+- **不可放大解释的范围：** 这修复的是 Spring 正常 SIGTERM 时**本地 Primary 已接纳业务提交边界**。它不保证一条已经在被动 Replica 写入、但 Primary 的 Commit Marker 尚未抵达的半批 WAL；不适用于 `SIGKILL`、断电或跨物理主机 Quorum；不能替代受信任 Source HEAD + Receiver Ledger + Snapshot/Diff、真正副本恢复和外部财务/Projection READY 对账。下一轮应先在隔离实例验证被动 Replica restart、双节点交错 shutdown 和真实故障注入。没有真实证明前，**禁止在线直接滚动重启当前健康的 Trade A/B**。
