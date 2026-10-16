@@ -30,6 +30,24 @@
 5. **Epoch 切换 + 旧主 fencing**：只有在第4步完成且 A 的逐分区业务写入仍被冻结，ZK 版本 CAS 才把 Primary 变为 B，并增加 Epoch；A 本地永久撤销旧 Epoch 写权限，B 恢复后才发布新 Epoch READY。故障重试必须幂等，无双主、不能回滚已经生效的新 Epoch。
 6. **恢复正常分工**：按小批量推进，逐分区记录切换耗时、业务中断、A是否持续服务其他分区、B追平证据，最终 `A=128,B=128`；检查订单/成交/资金/持仓/Projection watermark，再做反向 `SIGKILL A`，重复闭环。
 
+
+## 2026-10-16 后续源码实装（阶段一：冻结并封存 Source HEAD）
+
+- Trade 开发分支：`fix/trade-safe-auto-rebalance-20261016`，**commit `1a01beaf5ae0c62a13ce29376799b3fb288239a4`**，未合入 `saas-crypto`。
+- `TradeStateCoordinator.preparePartitionHandoff(partition,target,epoch,zkVersion)`：只对单个分区锁定；等待已开始的业务动作结束，要求真实 ZK Primary/Replica/Epoch 版本一致、健康 ACK 足够新且覆盖完整本地已提交 WAL、无已知降级；按分区 fsync，记录本地 seal，拒绝该分区后续写入。**不会更改 ZK 主权**。
+- `cancelPartitionHandoff`：仅当**相同** ZK 版本/源 Primary/Epoch 和本地封存提交序号仍完整时，才安全解除写入冻结。交接期间出现 ZK 版本漂移、WAL 持久化失败或封存失败，旧主保持 fail-closed，而不是自动重新交易。
+- `TradePlannedHandoffSourceHead`：封存窗口内复用 Common 既有的 `TradeRecoverySourceHeadProvider`，验证 Source HEAD 与冻结的提交 marker、Epoch 上限和 ZK 版本一致。HEAD 仍**不是** Quorum ACK、目标已完全追平证明或切主授权。
+- 新增 `TradePartitionHandoffFenceTest` 并覆盖真实物理 Chronicle WAL、未提交尾部、健康证据过期、交易并发、单分区隔离、ZK CAS 竞态、过期签名 HEAD 拒绝。
+- 本地 Trade Maven 全量回归：**307项，0 failure，0 error，0 skipped**。
+- Mac 本地镜像：`dc-saas/tradesvr:cluster-dev-handoff-seal-20261016`，镜像 ID `sha256:81840683fedbf5def1230a15ae759fc13bd789129da6ccc93910de5c639e6f63`，Common JAR SHA256 `8cbb195a131664c96692598bef51644ced9074f01ad80b3878b84cfce9444da4`。
+- **尚未替换 Demo**；当前上线仍为 `cluster-dev-fenced-transport-20261016`。新代码属于第一阶段，未接入自动 Failback 控制器，不具备实际自动切换能力。
+
+### 下一个代码阻断
+
+1. B 必须先完成受 Common 可信状态机保护的完整 Snapshot/连续 WAL 前缀及物理接收端事务证明，不能用 ZooKeeper 的 `replicatedSeq` 或空闲 Snapshot 代替。
+2. 在冻结期间取得真正的 Source HEAD 与 B 的**独立**接收端签名/水位证明（必须同一分区、Epoch、ZK 版本、提交头），验证业务持仓/余额与 Projection 权威水位。
+3. 完成 Common 主权转移授权、原 A 隔离和新 B 的 Epoch CAS + READY 流程；当前 `TradeFailoverController` 仍只支持主节点死亡后晋升。未经真实联调确认，不自动执行 `switch-primary --apply`，不做反向 SIGKILL A。
+
 ## 防止误验收
 
 - `python3 scripts/check-trade-failback-preflight.py`：只读检查，输出永远 `automaticPrimaryChangeAuthorized=false`，直到另行完成完整可信交接机制。工具的奇数分区候选判定**只适合本次 Demo 恢复记录**，不是真实调度的主权事实来源。
