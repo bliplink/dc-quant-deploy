@@ -95,6 +95,25 @@
 - 只读 Trade Failback 检查：128 个原属 B 的 Epoch2 分区，健康记录 123 个缺失、5 个过期；`automaticPrimaryChangeAuthorized=false`、`safeToSigkillAForReverseTest=false`。缺失健康记录的可能包括原本没有成交的空分区，不能直接等同于丢数据；但无独立可信证明前不能用 READY 填补。
 - **本次未完成 HA 总验收**：Common 已有 CROSS_EPOCH 边界判断，但生产可信接收端从 A Source HEAD 恢复新 Epoch 的**实际安装事务、回放后的资金/持仓/委托/成交及 Projection 对账、B 重新成为同步 Replica、受权 Epoch 主权转换**尚未开发/联调闭环。现有 `CertifiedRecoverySourceAuthority` 强制要求当前物理投票多数派对同一个原始 WAL 区间签名，若 B 正是落后的唯一副本，不能凭空制造历史 B 的 ACK。必须设计经 ZooKeeper 真正选主/原主隔离授权的新 Epoch bootstrap，然后恢复 B、完成新的同步多数派证据；这不是简单切换路由或删旧 WAL。
 
+
+### 2026-10-16 后续推进：跨 Epoch 恢复中断修复和签名数据暂存
+
+- Trade 新提交 [`27cdc8a`](https://github.com/bliplink/com.app.dc.tradesvr/commit/27cdc8a470641ecda4b3589541c85525eaf6afba)：补旧日志封存**mkdir 后、intent 写入前**崩溃空窗。重启后的 `TradeRecoveryInstallGuard` 现在只要发现 `cross-epoch-old-tail` 目录（即使空目录或损坏的 marker）就保持 NOT_READY。原始 Snapshot/WAL 清单现在可从磁盘重新载入并逐帧审计顺序、Epoch、原始 wire 和 SHA256；封存成功也强制走一次该磁盘审计。不允许修改、重写、清理旧证据假装已恢复。
+- Trade 新提交 [`7d7da00`](https://github.com/bliplink/com.app.dc.tradesvr/commit/7d7da00f37551f9260dc12c4ab54b25fed24a3b4)：`TradeCertifiedRecoveryReceiver.stageCrossEpochSource` 作为**显式、默认关闭**的恢复阶段 1，先完整审计 B 的旧证据并要求精确匹配实际 oldEpoch/oldTailSeq，再验证真实 ZooKeeper 主副本及版本、独立物理节点密钥；调用 Common `VerifiedRecoveryStagingClient.stageWithSourceManifest` 对当前 A 的 HEAD、Snapshot 与完整提交 WAL 逐段认证暂存，事后复核 ZK 角色与旧封存证据。此过程**绝不**安装新 Snapshot、重写 CQ、清除恢复标记、授权主切或开放 READY；也不能伪造 B 停机期间不存在的历史多数派 ACK。
+- 跨 Epoch 封存覆盖 >4095 条物理 WAL，额外回归覆盖旧封存内容篡改、意图/清单不匹配、仅存空目录的异常重启、源 HEAD 与封存的旧 Epoch 身份不匹配。Trade 全量 **328 测试通过，0 failures、0 errors、0 skips**。测试涉及模拟接收端与 Chronicle 旧 WAL；**当前尚未执行真实 A↔B 网络传输恢复验收**。
+- 本地 ARM64 镜像 `dc-saas/tradesvr:cluster-dev-cross-epoch-signed-stage-20261016`，镜像 `sha256:93ff91ce7fb8c12a2433cadc4dafca45d4e69e538dd241eaf2713142dc92bd25`。已核验镜像 Entrypoint 的 Java `CLASSPATH=classes:config:lib/*`，新类在运行路径内。Common JAR SHA256 `8cbb195a131664c96692598bef51644ced9074f01ad80b3878b84cfce9444da4`。**没有替换 Demo，不触发 Actions**。
+- **关键剩余问题仍未闭环**：独立可信 Quorum/权威恢复许可下新 Epoch 的物理 Snapshot/CQ 安装、重放后资金/持仓/委托/成交/Projection 的权威一致性、接收端业务 READY 和自动回迁的 Epoch-fenced CAS、双向真实故障注入。Common 通用 CROSS_EPOCH 边界尚不能单独给 Trade 跨 Epoch 数据删除/安装授权。当前阶段严禁将经过签名的“暂存成功”冒充正式恢复成功。
+
+
+### 2026-10-16 B 端跨 Epoch 物理安装与崩溃重试（新增）
+
+- Trade commit [`6823bd8`](https://github.com/bliplink/com.app.dc.tradesvr/commit/6823bd88dcc16283169641a7d7226917b0118e47)，分支 `fix/trade-safe-auto-rebalance-20261016`。
+- `TradePartitionJournal.rebaseCertifiedCrossEpochSnapshot` 新增与现有同 Epoch 接口**隔离**的物理恢复路径：拒绝篡改旧 Epoch/旧 Seq、拒绝 Epoch 降级、拒绝重复归档同一旧 WAL。支持新 Epoch 已认证 Snapshot 的序号比 B 旧 Epoch 未提交尾部**更小**，并把旧原始 Chronicle Queue 保留在本地 `.archive`。
+- `TradeRecoveryReplicaJournalBaseline.forCertifiedCrossEpoch` 新增维护模式：逐项核实 B 旧 Epoch 完整封存的 Snapshot/WAL SHA+身份，要求 Common `DurableRecoveryInstallLedger` 精确处于 `INSTALLING` 且与完整的新 Snapshot/HEAD 水位及哈希一致；进入同一业务分区 Fencing Barrier 后才允许新 Snapshot 基线安装与旧 CQ 归档。中断后同一签名请求可比对磁盘上新基线完成重试，保证旧 WAL 不会被再次归档，READY 一直关闭。
+- 新增真实 Chronicle Queue 测试：旧 WAL 归档和新基线磁盘冷读；原始尾部高于新 Epoch Snapshot 时的隔离安装；旧证据被篡改、ZooKeeper 版本变化、Common Ledger 缺失、Ledger 非 INSTALLING 阶段、崩溃重试和重复封存旧 WAL 均拒绝或保持幂等。Trade Maven **333 项通过，0 错误/0 失败/0 跳过**。测试中的认证 Authority 是离线替身，**不等于 Demo HA 故障注入通过**。
+- 新本地 ARM64 镜像 `dc-saas/tradesvr:cluster-dev-b-physical-install-20261016`，镜像 `sha256:671c3f68d1b6f311c0feb995a99f887da8d0d192ec8a6c064a7fa6f37bda90b9`，Common JAR SHA256 `8cbb195a131664c96692598bef51644ced9074f01ad80b3878b84cfce9444da4`。镜像类路径核查通过；未替换 Demo。
+- **仍未通过生产端到端恢复**：Common 当前 `CertifiedRecoverySourceAuthority` 的物理多数派要求可能与“B 尚未恢复新 Epoch WAL”的故障状态形成循环，不能制造伪造的 B ACK。需基于合法的新主选举/旧主隔离证据单独设计可信新 Epoch bootstrap 授权，再接已实现的物理安装分支、补业务/Projection 权威对账、接收端 READY 与 A/B 128/128 Epoch-fenced 主权转移。未完成前不执行真实切主或 SIGKILL A。
+
 ## 防止误验收
 
 - `python3 scripts/check-trade-failback-preflight.py`：只读检查，输出永远 `automaticPrimaryChangeAuthorized=false`，直到另行完成完整可信交接机制。工具的奇数分区候选判定**只适合本次 Demo 恢复记录**，不是真实调度的主权事实来源。
