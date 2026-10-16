@@ -90,6 +90,8 @@ grep -Fq 'Synchronous Trade replication forbids unverified local WAL tail rollba
 grep -Fqx 'trade.cluster.replication.enabled=true' "${a_config}" || fail 'Trade replication must be enabled'
 grep -Fqx 'trade.cluster.replication.required=true' "${a_config}" || fail 'TradeSvrA replica ACK must gate safe failover commits'
 grep -Fqx 'trade.cluster.replication.required=true' "${b_config}" || fail 'TradeSvrB replica ACK must gate safe failover commits'
+grep -Fqx 'trade.cluster.replication.transportFallback.localCommit.enabled=false' "${a_config}" || fail 'TradeSvrA transport fallback must default fail-closed'
+grep -Fqx 'trade.cluster.replication.transportFallback.localCommit.enabled=false' "${b_config}" || fail 'TradeSvrB transport fallback must default fail-closed'
 grep -Fqx 'trade.cluster.failover.enabled=true' "${a_config}" || fail 'TradeSvrA automatic failover must be enabled'
 grep -Fqx 'trade.cluster.failover.enabled=true' "${b_config}" || fail 'TradeSvrB automatic failover must be enabled'
 grep -Fqx 'trade.cluster.failover.pollMillis=500' "${a_config}" || fail 'Trade failover poll interval mismatch'
