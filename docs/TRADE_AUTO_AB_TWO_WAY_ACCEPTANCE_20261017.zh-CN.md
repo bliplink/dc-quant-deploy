@@ -30,3 +30,11 @@
 - 非空业务的持久 ACK、Replica 同步、Projection 权威对账仍未完成，不能仅凭 128/128 ZERO-data Genesis 主权均衡宣称高可用通过。
 
 本报告记录真实通过与未通过边界；不得根据离线单测和镜像标签将 Demo 标成 "双向 HA 已验收"。
+
+## 2026-10-17 07:10 后续：Epoch/CAS 与真实 ACK 水位修复
+
+- Trade [`0607f3a`](https://github.com/bliplink/com.app.dc.tradesvr/commit/0607f3a15a3b05ba73a66b36dfb93ddba9c4a721)：`TradeFailoverControlPlaneClient` 发布健康时读取真实 ZooKeeper 当前 Primary/Replica/Epoch，读健康 znode Stat 并使用 ZK CAS，拒绝晚到的旧主节点、旧 Epoch、同 Epoch 健康 ACK 倒退、角色漂移；实测之外纯单测及 370 项 Trade 回归通过。
+- Trade [`a450e61`](https://github.com/bliplink/com.app.dc.tradesvr/commit/a450e617eaccbe45fe2098687e73624e7261cb2e)：副本降级时保留最后一次已 fsync 的健康 ACK 高水位，不再用 degraded seq=0 抹除历史；新健康证明必须补齐先前 committed ACK 水位。371/371 全量回归通过，0 失败。
+- 已本地构建 **未授权上线的**最新候选 `dc-saas/tradesvr:two-way-ack-fenced-candidate-20261017`，Docker image SHA `b77f919911ab3d9d036265980dc1000b9b5eae0170883f8d63fe87d9d150104d`，镜像保留 `dc.release.authorized=false` 和 Common 统一 SHA `6b4bf7aff300e69198587d06e7243c5c9594977b94b82f789f943f370bba12bd`。
+- 07:10 纯只读复核：现网 A=128/E1，B=128/E3；**B 对应 A 副本 E2 物理 Snapshot 仍为旧代共 128 个，256/256 ZK 复制健康证明缺失**。Trade-A 现网 `trade.cluster.recovery.replica.autoWarm.enabled=false`，Trade-B 现网没有开启 Genesis observer/反向签名源。两端当前容器运行健康，ZooKeeper/MySQL healthy。**最新代码未上 Demo，未运行真实双向 SIGKILL**。
+- 双向自动故障切换的实际剩余阻断是物理独立认证与业务副本 READY/健康发布。对既有阻拦的配置/部署不能换方式绕过执行环境安全检查；不能用 Lua、脚本或运维模拟复制完成。先等待受许可的真实双端部署，然后进行本文件所列全部真实双向带单/持仓故障验证。
