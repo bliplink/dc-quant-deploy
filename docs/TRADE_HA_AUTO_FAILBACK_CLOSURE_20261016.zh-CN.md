@@ -159,6 +159,13 @@
 - **安全边界**：把 A 私密 HMAC 材料写入 B 配置的操作受安全检查拦截，已停止，不绕过。Mac 两个容器同一 VM 不能宣称独立物理 quorum；生产恢复授权必须分离验证秘密和签名私钥，解决落后 B 无法拥有故障期间新 Epoch ACK 的循环，不能伪造 B ACK。
 - **Demo MySQL 初始化修复**：应用仓库原始 `mysql/migrations/20260904_01_bankruptcy_insurance_adl.sql`，验证 `dc_adl_execution_v2`、`dc_bankruptcy_transfer`、`dc_insurance_fund`、`dc_insurance_position` 四张表存在。未重新认证全部交易业务 E2E。
 - **最终未交付**：Trade-B 可信正式安装、业务和 Projection 对账、同步 Replica READY、自动回迁 128/128、反向 SIGKILL A 和持仓成交故障验证仍缺失；Order 双向故障验收未开始。不许把签名暂存和 353 个本地测试当作 HA 成功。GitHub Actions 未使用。
+### 2026-10-16 夜：恢复源端隔离复制降级的错误联动，6 分区真 Netty 验签
+
+- **新源码提交**：Trade `6cb628fbdd8352309feca1d337604c1a39573bbc` 修改 `TradeRecoverySourceHeadProvider`：当 B 失联导致 A 处于远端 `replication degraded` 时，不能仅凭这个标记拒绝 A 提供可信源 HEAD。A 仍必须是 ZK 当前 Primary、本地业务 READY、不处于 `requiresRecovery`；完整 WAL 状态提交水位检查、Snapshot SHA256、Journal fsync、读前后 ZK epoch/version fencing 继续保留。**这不是伪造的物理 quorum / B ACK。**
+- **全量本地回归**：354 tests、0 failures、0 errors、0 skipped；Common Jar、Maven 本地编译，未使用 GitHub Actions。Trade-A 现用 `dc-saas/tradesvr:full-src-degraded-head-20261016`（sha256 `4a5c0a851840279f0ed7124778154ef937ef1a389f28fbbbb4b1913f7399ef24`），Trade-B 仍用 `dc-saas/tradesvr:full-src-auto-stage-pilot-20261016` 且新自动暂存任务默认 OFF。
+- **真实 Netty 验签**：P001（ZK version=1、Epoch=2）12 次独立签名 HEAD 成功，紧随其后 3 次独立 HEAD 成功；真实 Common `VerifiedRecoveryStagingClient` 获取 334 bytes Epoch2 Snapshot、0 WAL，返回 `VERIFIED_STAGING_NOT_READY`。另取 Epoch1 的 P000/P002/P004（ZK version=0）和 Epoch2 的 P001/P003/P005 共 6 个代表分区，真实 HEAD 验签 6/6 成功。**注意这些均是零业务分区，不能代替持仓/非空 WAL 的恢复。**
+- **当前权威运行状态**：ZK Trade 256 READY，A 256/B 0，Epoch1=128 / Epoch2=128；Order A128/B128、MD A128/B128。ZooKeeper/MySQL healthy，当前 MAC Demo 保持运行且未注入新的 SIGKILL。B 的自动可信安装和财务/Projection 对账、角色回迁 128/128、反向 Trade-A SIGKILL **仍未完成**，不可声称双向 HA 通过。
+- **后续技术边界**：新 worker 的自动暂存被 A 源端 HMAC 凭据共享安全拦截且默认关闭。不能复制源端签名私钥绕过安全检查，不能把单 Mac 的双容器冒充独立物理权威。下一阶段必须实现合法源端公开验签凭据/相应授权和 B 当前 Epoch 数据可信安装、商业状态/Projection 校验后才能恢复 READY，并开展真正非空持仓/成交双向 SIGKILL。
 ## 防止误验收
 
 - `python3 scripts/check-trade-failback-preflight.py`：只读检查，输出永远 `automaticPrimaryChangeAuthorized=false`，直到另行完成完整可信交接机制。工具的奇数分区候选判定**只适合本次 Demo 恢复记录**，不是真实调度的主权事实来源。
