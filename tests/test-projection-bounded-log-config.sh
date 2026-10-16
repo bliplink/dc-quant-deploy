@@ -23,4 +23,13 @@ if grep -Fq 'DailyRollingFileAppender' "${file}"; then
   echo "unbounded daily Projection log regression" >&2
   exit 1
 fi
+# Raw docker compose with an empty MySQL data directory runs mysql/init/,
+# not deploy-saas.sh's post-start migrations. Both must include the exact
+# idempotent Order Projection schema before GAP recovery starts.
+cmp -s "${root}/mysql/init/12-order-projection.sql" \
+       "${root}/mysql/migrations/20260908_order_projection.sql"
+grep -Fq 'CREATE TABLE IF NOT EXISTS `dc_order_projection_watermark`' \
+     "${root}/mysql/init/12-order-projection.sql"
+grep -Fq 'CREATE TABLE IF NOT EXISTS `dc_order_projection_event`' \
+     "${root}/mysql/init/12-order-projection.sql"
 echo PROJECTION_LOG_POLICY_BOUNDED_AND_RETRY_SPAM_SUPPRESSED_PASS
