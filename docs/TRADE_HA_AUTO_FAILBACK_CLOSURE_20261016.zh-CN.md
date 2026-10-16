@@ -184,6 +184,16 @@
 - **不能夸大**：该 real-ZK+HMAC preflight 是在 Mac 宿主进程使用 A 的现有验签资料，只做安全只读授权判定，没有把凭据复制进 B 也**没有在 B 进程内调用实际 destructive install**。无法把“PREPARED”写成 B 已追平。Preflight 脚本明确 `REPLICATION_HEALTH_MISSING=128`、`safeToSigkillAForReverseTest=false`。Trade-B 同步追平、财务/Projection 权威对账、自动回迁 128/128、双向真实 SIGKILL 持续交易仍未通过。
 - GitHub Actions 未调用；发布构建都在 Mac 本地。Demo 磁盘约 162 GiB 可用，当前未进行新 SIGKILL、无 ZooKeeper 人工 READY 篡改。
 
+### 2026-10-16 22:56：Trade-B 全部 128 分区旧数据封存 + A 全部 128 当前 Epoch 签名暂存
+
+- **源码交付**：Trade `b42c4c9ce6f97928917e0557b2d74ddc8a6eb28d` 将原 B 端单分区 Genesis 旧证据封存扩展成 **限速 batch fleet（每 tick 最多 8 次 ZK 校验，默认 OFF）**；每个分区仍执行 real ZK Replica+source+Epoch 检查、原 Snapshot 无业务状态验证、原始 WAL 逐条哈希封存，拒绝非空 business，不修改 Ready/ZK/commit。新增零 WAL 的 Common **完整恢复事务**测试（物理 Chronicle E1→E2、INSTALLING→REPLAY_COMPLETE、无 READY）；Trade **358 全量测试通过、0 fail/errors/skips**。
+- **Mac 实机镜像**：Trade-A 保持 `dc-saas/tradesvr:full-src-elected-bootstrap-20261016`；B 已替换为 `dc-saas/tradesvr:full-src-B-genesis-fleet-20261016`，image sha256 `b3b47b742cce6bdb38a8ecc3b13555c708b0ee18136f4abada55412e1bfd11a5`。B 配置显式 `sealOnly=true,fleetEnabled=true,fleetMaxPerTick=8`，**签名网络自动阶段和真实安装/READY 都为 false**；没有把 A HMAC secret 放入 B。
+- **真实 B 端**：B 启动实际逐批封存 128 个原属 B 的 Epoch1 分区（P001,P003,...,P255）物理 Snapshot/WAL。独立 Java `TradeVerifyRealFleetSeal` 逐个使用 `TradeCrossEpochReplicaTailSeal.verifyPreserved` 重新打开并验证全部 old Snapshot/WAL/manifest SHA256、epoch1、tail=0、target epoch2：**128/128 PASS，0 缺失**。重启 B 后再验证一次：**128/128 完整、哈希一致**。全部保持 NOT_READY。
+- **真实 A 端**：使用唯一真实 ZK assignment+Stat.version，`TradeBatchRealElectedAuthorityProbe` 对 128 个 E2 分区全量做新的 Netty HMAC HEAD 挑战与 Common `ZkReplicaRecoveryAuthority.requireSource/requireFinal`：**128/128 PASS，0 失败**。随后新增 `TradeBatchSignedSnapshotStagingProbe` 对全部 128 分区进行独立 source HEAD + Manifest + Snapshot chunk + WAL transfer 验签、hash/长度约束、原始空 WAL 区间完整性检查，再读 ZK 确认版本未漂移：**128/128 PASS、0 拒绝**。全部为真实 Epoch2 Snapshot + 0 WAL；Common receipt 为 `VERIFIED_STAGING_NOT_READY`。暂存资产位于**独立 host-only 审计目录** `~/.opentradingcore/trade-b-independent-host-signed-stage-audit-20261016`，**没有自动安装进 Trade-B**；这次 audit 只在宿主上使用 A 验签资料，未将任何 A 私钥写入 B 容器。
+- **源码复现**：Trade `1d692c2d5572c9a06a7bf627719f23c4ff291b3b` 推送两个全量 Java 复现工具 `integration-tests/TradeBatchSignedSnapshotStagingProbe.java` 与 `TradeVerifyRealFleetSeal.java`，前者需要从宿主命令行传入 A 配置文件和**独立** staging 目录，后者只读取 B sealed 文件。不能复制 A 的密钥材料进入 B，不能把 audit 证明当作 B 已安装。
+- **最新 Demo**：2026-10-16 22:56，本地 ZK **Trade A256/B0**（A E1=128、E2=128；256/256 READY），Order A128/B128，MD A128/B128，ZooKeeper/MySQL healthy；Mac ~118 GiB 可用。用户目标 A/B 都能接管、恢复 128/128 **尚未达到**。未执行反向 SIGKILL A，未使用 GitHub Actions。
+- **下一道实质阻断**：必须实现不共享 A HMAC *私密签名材料*的合法 B 进程内签名验证 + Common 安装调度；然后严格财务/Projection 校验、B 副本健康/READY、自动 128/128 回迁。已经有全部 128 个源端签名资产和 B 原始封存，**但数据未入 B Chronicle**，不应误报 HA 通过。
+
 ## 防止误验收
 
 - `python3 scripts/check-trade-failback-preflight.py`：只读检查，输出永远 `automaticPrimaryChangeAuthorized=false`，直到另行完成完整可信交接机制。工具的奇数分区候选判定**只适合本次 Demo 恢复记录**，不是真实调度的主权事实来源。
