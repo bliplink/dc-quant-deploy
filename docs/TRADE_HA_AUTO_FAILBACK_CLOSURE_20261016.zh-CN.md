@@ -123,6 +123,15 @@
 - 新本地 ARM64 candidate `dc-saas/tradesvr:cluster-dev-b-epoch-checkpoint-20261016`，image `sha256:47be6b3cb5792f900ff34b2650184330e0005c4a9d4e423002e571a91ff94383`，同 Common jar SHA256 `8cbb195a131664c96692598bef51644ced9074f01ad80b3878b84cfce9444da4`，**未替换 Demo**。
 - Demo 仍需先启用 `TRADE_CLUSTER_PERIODIC_SNAPSHOT_ENABLED=true` 并现场观察 Epoch2 source snapshot 实际落盘、已签名的 SOURCE HEAD、B 接收与可信授权事务后才能继续安装；对旧 Epoch 内完全空/无新 Epoch 提交的分区仍需可信空分区初始影像/合法 Epoch 记录协议。**仅测试通过不能视为 B 具备 READY。**
 
+### 2026-10-16 Common 跨 Epoch 真实装配入口 + 集成验证（新增）
+
+- Trade commit [`2a892c1`](https://github.com/bliplink/com.app.dc.tradesvr/commit/2a892c15f007566bc49cf7ce1ba0eccfa361d777) 已推送：新增 `TradeCertifiedRecoveryAssembly.prepareCrossEpoch` 与 `TradeCertifiedRecoveryReceiver.recoverStagedCrossEpoch`，把此前独立的“B 旧 WAL+Snapshot 封存 → A 签名数据暂存 → Common 恢复协调器 → Trade 物理 CQ 基线+业务 apply → 持久 Ledger”连接成显式、默认关闭的生产级调用入口。
+- **保持独立鉴权而不绕过多数派**：生产装配继续使用 Common `CertifiedRecoverySourceAuthority` 和实际 ZooKeeper 投票成员及独立物理节点签名校验；既不伪造 B 故障期间未提供的旧提交 ACK，也不因 A 的单份 Source HEAD 就执行未认证的 CQ 覆盖。当前 B 落后于 Epoch2 时，此鉴权条件仍可能拒绝恢复，须专门完成合法旧主隔离与新 Epoch bootstrap 的可信授权证明。
+- 新增 Common → Trade 的完整**离线集成**测试：调用 `StateMachineRecoveryCoordinator.recover` 触发真实 Chronicle 旧目录归档、新 Epoch 已认证 Snapshot 持久安装、业务恢复计划执行，Ledger 推进 `INSTALLING→BASELINE_DURABLE→REPLAY_COMPLETE` 且始终 `NOT_READY`。附加 ZK 版本变动时在修改原始 WAL 前拒绝、默认关闭/依赖缺失拒绝测试。授权器为离线测试双桩，**不代表真实物理投票多数派或现场 HA 通过**。
+- Trade Maven 全量 **339 tests, failures=0, errors=0, skipped=0**；本地候选镜像 `dc-saas/tradesvr:cluster-dev-b-certified-common-20261016`，image SHA256 `7c5dae8d1a99f09a0f8bcaba89c8660f0723d139ac6e3c9bb0f1e0beaf836948`，Common Jar SHA256 `8cbb195a131664c96692598bef51644ced9074f01ad80b3878b84cfce9444da4`。**未部署 Demo，未调用 GitHub Actions。**
+- 本轮实时 ZK 只读复核：Order A=128/B=128、MD A=128/B=128、Trade A=256/B=0（Epoch1=128, Epoch2=128），共 24 个 Docker 容器运行，Trade-A/B 仍为旧 `cluster-dev-fenced-transport-20261016`、重启0。磁盘使用率约89%。
+- **完成 B 恢复接管还欠**：解决新 Epoch 首次恢复时落后 B 无法签署同 epoch WAL 的授权循环；恢复安装后独立资金、持仓、委托、成交、Projection 对账；旧 Epoch 封存意图的正式受审计处置；恢复副本 READY/自动回迁 128/128；真实 B/A 双向 SIGKILL。以上均为未验收，不应以 339 个本地测试替代。
+
 ## 防止误验收
 
 - `python3 scripts/check-trade-failback-preflight.py`：只读检查，输出永远 `automaticPrimaryChangeAuthorized=false`，直到另行完成完整可信交接机制。工具的奇数分区候选判定**只适合本次 Demo 恢复记录**，不是真实调度的主权事实来源。
