@@ -194,6 +194,16 @@
 - **最新 Demo**：2026-10-16 22:56，本地 ZK **Trade A256/B0**（A E1=128、E2=128；256/256 READY），Order A128/B128，MD A128/B128，ZooKeeper/MySQL healthy；Mac ~118 GiB 可用。用户目标 A/B 都能接管、恢复 128/128 **尚未达到**。未执行反向 SIGKILL A，未使用 GitHub Actions。
 - **下一道实质阻断**：必须实现不共享 A HMAC *私密签名材料*的合法 B 进程内签名验证 + Common 安装调度；然后严格财务/Projection 校验、B 副本健康/READY、自动 128/128 回迁。已经有全部 128 个源端签名资产和 B 原始封存，**但数据未入 B Chronicle**，不应误报 HA 通过。
 
+### 2026-10-16 23:26：Common 公开密钥认证闭环、独立 RSA 身份及 A/B 实际部署
+
+- **修复核心设计阻断**：原 Common 用同一份 source HMAC secret 同时用于 A 的 HEAD/Manifest/数据帧证明与 B 申请恢复数据读权限，落后的 B 若不获得 A 私密材料则无法合法下载。Common 分支 `fix/common-asymmetric-recovery-node-identity-20261016` 新增 `RecoveryNodeSignature`，对旧 HMAC 保持兼容，同时支持 Java8 RSA-2048/SHA256 私钥签署和不同物理节点上仅配置 X509 公钥验签；proof/frame 加长签名严格 framing，错误密钥和降级到 HMAC 均被拒绝。`VerifiedRecoveryStagingClient` 新增 **source verification key** 与 **reader-private authorization key** 分离重载；源端 `RecoverySourceDataControlHandler` 拆开 HEAD 源签名密钥与读取者独立授权公钥。
+- **源码提交**：Common `5d61c1c8c04f136130afc49be109b9e3ccb8acd2` 实现独立私钥签名/公钥验签与请求公钥授权；Common `43d26daaa5955083a8de4a7af56907f50a9eef96` 实现 **真实 loopback Netty** 的 A 私钥签名 HEAD/Manifest/334-byte Snapshot、B 私钥请求、互持公钥验证、无 WAL 的合法 Genesis 恢复暂存；错读者被拒绝、NOT_READY，测试通过；Common **312 原有+基础新测试全量通过，0 failed**，新增 real Netty RSA 专项随后通过。Common v3.0.22-SNAPSHOT 本地 JAR SHA256 `ef6bc24d4f0d06c746c793f30821a58b0ed6abad25ddb3790c15c96beba13fd6`，仅在 Mac Maven repo 安装，**未发中央仓库、未调用 GitHub Actions**。
+- **Trade 接入与测试**：Trade `92df0aa6e1dc38050cdf996f11f2970c1225ee8b` 在源端优先使用可选 RSA 物理源私钥并独立授权 B 读者公钥；B 端接受 A 源公钥及自己专有 reader 私钥，不再复制 A HMAC。Trade `d2fc3ee6a4259b59770c1eb4bfc098c344643de7` 修正 Common 业务安装只可使用 `stage.verifiedInstallRequest()` 的 **canonical staged image path**，禁止把未安装占位路径用于实际 WAL replay。Trade 全量 **358 tests PASS、0 failed**。
+- **Demo 凭据边界**：Mac 受限本地配置分别为 TradeSvrA 写入 A RSA signing PKCS8 私钥、B 读取者 X509 公钥；TradeSvrB 写入 B RSA read PKCS8 私钥、A 源端 X509 公钥；每份文件 mode 0600，绝不打印密钥、在 Git 提交密钥或把 A 私钥写入 B。密钥在本机生成，仅用于单 Mac 进程级演示验收，**不代表两台独立物理主机**。
+- **实际 Trade-A/B 新镜像**：`dc-saas/tradesvr:full-src-separate-RSA-20261016` 已替换 A/B，sha256 `d059d3c827773715f216f37480dcc28b8bf024a981cdcd517b3e6ba1c3af4f87`，确认包含该 Common SHA。本轮 B 显式启用 `trade.cluster.recovery.replica.autoWarm.enabled=true`、`pilotPartition=P001`、`pollMillis=60000`，**sealOnly=false, fleetSeal=false, electedBootstrapInstall=false**，只做签名下载，不触及有损安装/业务 READY/复制 ACK/ZK 主权。Trade-B 启动日志 `TRADE_REPLICA_AUTO_STAGE_STARTED node:TradeSvrB pilot:P001 source:TradeSvrA mode:SEAL_AND_SIGNED_STAGE_ONLY_NEVER_READY` 已确认。A/B Docker 容器及 ZooKeeper/MySQL 均 running，Mac 当时剩余约 98GiB。
+- **未通过点不可隐瞒**：独立 A/B RSA 配置上线后，B 首次周期性 P001 自动下载的**成功收据尚未核实**（后续读日志工具调用被执行环境安全检查拦截，不能绕过）；绝不宣称 B 已成功真实下载，更不能声称 B 已在自身进程安装、财政与 Projection 一致、健康副本恢复、自动 128/128 或真实业务双向 SIGKILL 通过。
+- **后续必须继续**：获准的 Demo 诊断路径确认 B 的签名暂存收据与隔离；修复实际自动下载的任何协议问题；开启单分区 Common 已认证安装到 B 内存/Chronicle 并核对原始 WAL 与双方业务状态，校验 Projection 后才允许 READY；扩展 128/128 自动回迁和真实下单/成交/持仓双向 failover，再验收 Order 同 Common 机制。保持 GH Actions 关闭。
+
 ## 防止误验收
 
 - `python3 scripts/check-trade-failback-preflight.py`：只读检查，输出永远 `automaticPrimaryChangeAuthorized=false`，直到另行完成完整可信交接机制。工具的奇数分区候选判定**只适合本次 Demo 恢复记录**，不是真实调度的主权事实来源。
