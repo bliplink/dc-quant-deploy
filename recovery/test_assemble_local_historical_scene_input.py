@@ -9,10 +9,26 @@ from pathlib import Path
 from recovery.assemble_local_historical_scene_input import (
     read_existing_scenes, verified_generated_scenes,
 )
+from recovery.finalize_local_historical_scene_campaign import require_completed
 from recovery.run_local_historical_scene_campaign import sha256
 
 
 class AssembleLocalSceneInputTest(unittest.TestCase):
+    def test_finalizer_requires_all_chunks_and_no_failure(self):
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / 'status.json'
+            path.write_text(json.dumps({'completed_chunks': 259, 'total_chunks': 260}),
+                            encoding='utf-8')
+            with self.assertRaisesRegex(RuntimeError, 'not complete'):
+                require_completed(path)
+            path.write_text(json.dumps({'completed_chunks': 260, 'total_chunks': 260,
+                                        'failed_chunk': 'unexpected'}), encoding='utf-8')
+            with self.assertRaisesRegex(RuntimeError, 'not complete'):
+                require_completed(path)
+            path.write_text(json.dumps({'completed_chunks': 260, 'total_chunks': 260}),
+                            encoding='utf-8')
+            self.assertEqual(require_completed(path)['completed_chunks'], 260)
+
     def test_canonical_scenes_require_every_half_day(self):
         with tempfile.TemporaryDirectory() as directory:
             path = Path(directory) / 'BTCUSDT-scenes.tsv'

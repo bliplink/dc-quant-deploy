@@ -34,3 +34,7 @@ python -m recovery.assemble_local_historical_scene_input `
 2026-10-15 下午，任务在第 27 块（SOLUSDT 2024-12-21 至 12-30）停止：前 26 块检查点完整，共 520 条标签。该块 `attempt_001` 的 Codex 子日志明确报告账号使用限额；同时有 WebSocket 连接失败并回退 HTTPS 的记录。不能把这次失败归因于 K 线或场景校验，也不能将失败块算入进度。2026-10-16 已按检查点先单独重试此块。
 
 运行器增设可选 `--retry-failed --wait-on-usage-limit`：只有子日志明确包含 Codex 使用限额时，才将状态写为 `waiting_chunk` 并默认等待 60 分钟后重试同一块；其他失败仍立即停止并保留日志。此选项只用于本机后台批量任务，不允许将衍生模型标签冒充直接 Codex 标签，也不允许写入生产数据库。完成度以最新 `status.json` 和检查点为准，不以历史 PID 或先前的文档数字为准。
+
+SOL 失败块已于 2026-10-16 13:07（上海时间）重试成功，`persisted=false`，检查点恢复至 27/260。之后启动本机隐藏进程继续余下块（启动 PID `24556`，输出 `campaign.resume-20261016.stdout.log` / `.stderr.log`）。它带有上述使用限额等待选项；PID 只用于这次现场排查。
+
+另启动本机完成闸门 `recovery/finalize_local_historical_scene_campaign.py`（启动 PID `28948`，日志 `finalize.stdout.log` / `.stderr.log`）。它等待续跑进程退出，只在 `status.json` 明确为 260/260 且没有失败/等待块时调用原拼接器；拼接器还会逐一验证检查点、哈希、场景时间、模型及质量，成功后才生成扩展目录和 `READY.json`。如果续跑失败，完成闸门也会报错，不会把半成品拼接成可回测输入。2026-10-16 当时抽检 27 块共 540 行：从 12 月 15 日起的 260 行中，低质量 0、重复品种时间点 0。Python 合同测试增至 14 项通过。这些数字不是策略通过数。
