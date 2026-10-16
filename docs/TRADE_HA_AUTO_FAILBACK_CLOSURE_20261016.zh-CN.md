@@ -148,6 +148,17 @@
 - **Trade 阶段结论**：B 故障→A 接管空分区通过；B 重启后自动恢复/均衡失败；持仓+成交流量故障未验证；A 故障反向未验证。**Order 故障注入暂不进入**，它的干净部署基线是 A/B 各128。不要再重复上轮失败的“强制全量 Order Epoch2 恢复脚本”，直到 P065 非法尾部恢复路径解决。
 - **CI**：所有镜像 Mac 本地构建，未调用 GitHub Actions。
 
+### 2026-10-16 晚：Colima 修复、Common 真正验签传输与 B 自动暂存试点
+
+- **底层恢复**：经全容器挂载审计清理旧隔离数据，保留当前 `dc-saas-runtime-clean-20261016` 和 P246 哈希证据。Colima 一度出现 containerd / ZooKeeper I/O errors；重启现有 Colima（没有删除 VM 数据）后 Docker 镜像索引恢复，ZooKeeper/MySQL healthy。宿主可用空间超过 160 GiB。
+- **实际 ZK**：Trade A=256/B=0（128 Epoch1、128 Epoch2，256/256 READY）；Order A128/B128、MD A128/B128。128 个 former B partition 全部缺少健康证明，`automaticPrimaryChangeAuthorized=false`、`safeToSigkillAForReverseTest=false`，**反向 SIGKILL A 尚不可执行**。
+- **已部署源码修复**：Trade `de065c1` 修补合法空 Genesis 与零序列源 HEAD；`398a9ae` 修复 A 的 Epoch2 空 Snapshot/CQ 基线原子配对和重启中断续完；`767c76c` 修复零 WAL 签名 Manifest。P001 Epoch2 seq0 实际源端恢复后 Common Netty 签名 HEAD 验证通过。
+- **真实 Common 数据传输**：`VerifiedRecoveryStagingClient.stageWithSourceManifest` 通过 Netty 从正在运行的 A 获取 P001 HEAD、Manifest、334 字节 Snapshot、0 条 WAL，生成 `VERIFIED_STAGING_NOT_READY` 持久收据；部分独立 HEAD 请求仍偶发 `UNSAFE`，未解释完，不可声称来源始终稳定。
+- **B 自动恢复调度入口**：Trade `5f8f91c6177fba8f2a75fbc640d817639d45b1cb` 添加 `TradeReplicaRecoveryStageWorker`，只做旧 Epoch 物理证据封存、源端 HEAD 验签及 Common 暂存。默认 OFF、单分区试点、**不覆盖 CQ、不准 READY、不发布健康 ACK、不改 ZK Primary**；全量本地 353 tests, 0 fail/errors/skips。
+- **完整源码镜像实装**：A 保持 `dc-saas/tradesvr:full-src-signed-genesis-20261016`；B 更换为 `dc-saas/tradesvr:full-src-auto-stage-pilot-20261016`（sha256:8f2d936277d15542270b7d26e3bbe025e7cd20f3391df96382e6b0bd98ca48ac），启动日志确认新调度器**仍为 OFF**，尚无自动 B 暂存/安装的现场验收。
+- **安全边界**：把 A 私密 HMAC 材料写入 B 配置的操作受安全检查拦截，已停止，不绕过。Mac 两个容器同一 VM 不能宣称独立物理 quorum；生产恢复授权必须分离验证秘密和签名私钥，解决落后 B 无法拥有故障期间新 Epoch ACK 的循环，不能伪造 B ACK。
+- **Demo MySQL 初始化修复**：应用仓库原始 `mysql/migrations/20260904_01_bankruptcy_insurance_adl.sql`，验证 `dc_adl_execution_v2`、`dc_bankruptcy_transfer`、`dc_insurance_fund`、`dc_insurance_position` 四张表存在。未重新认证全部交易业务 E2E。
+- **最终未交付**：Trade-B 可信正式安装、业务和 Projection 对账、同步 Replica READY、自动回迁 128/128、反向 SIGKILL A 和持仓成交故障验证仍缺失；Order 双向故障验收未开始。不许把签名暂存和 353 个本地测试当作 HA 成功。GitHub Actions 未使用。
 ## 防止误验收
 
 - `python3 scripts/check-trade-failback-preflight.py`：只读检查，输出永远 `automaticPrimaryChangeAuthorized=false`，直到另行完成完整可信交接机制。工具的奇数分区候选判定**只适合本次 Demo 恢复记录**，不是真实调度的主权事实来源。
