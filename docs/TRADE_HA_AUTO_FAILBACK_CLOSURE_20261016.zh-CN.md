@@ -166,6 +166,13 @@
 - **真实 Netty 验签**：P001（ZK version=1、Epoch=2）12 次独立签名 HEAD 成功，紧随其后 3 次独立 HEAD 成功；真实 Common `VerifiedRecoveryStagingClient` 获取 334 bytes Epoch2 Snapshot、0 WAL，返回 `VERIFIED_STAGING_NOT_READY`。另取 Epoch1 的 P000/P002/P004（ZK version=0）和 Epoch2 的 P001/P003/P005 共 6 个代表分区，真实 HEAD 验签 6/6 成功。**注意这些均是零业务分区，不能代替持仓/非空 WAL 的恢复。**
 - **当前权威运行状态**：ZK Trade 256 READY，A 256/B 0，Epoch1=128 / Epoch2=128；Order A128/B128、MD A128/B128。ZooKeeper/MySQL healthy，当前 MAC Demo 保持运行且未注入新的 SIGKILL。B 的自动可信安装和财务/Projection 对账、角色回迁 128/128、反向 Trade-A SIGKILL **仍未完成**，不可声称双向 HA 通过。
 - **后续技术边界**：新 worker 的自动暂存被 A 源端 HMAC 凭据共享安全拦截且默认关闭。不能复制源端签名私钥绕过安全检查，不能把单 Mac 的双容器冒充独立物理权威。下一阶段必须实现合法源端公开验签凭据/相应授权和 B 当前 Epoch 数据可信安装、商业状态/Projection 校验后才能恢复 READY，并开展真正非空持仓/成交双向 SIGKILL。
+### 2026-10-16 夜：Trade-B 实际旧 Epoch Snapshot/WAL 封存（不需共享源端密钥）
+
+- **提交**：Trade `0cdd40d99681c7e5b9e77011bed861099dbc1103`。新增仅限空 Genesis 的 `trade.cluster.recovery.replica.sealOnly.enabled`，必须指定单分区 pilot，且远端完整 signed stage 配置不能同时启用。代码走真实 ZK 接收方身份校验 + Common/Trade 业务分区独占锁 + Snapshot/WAL 全量旧证据哈希，运行后仅标记 `NOT_READY`，不更改路由、不重写 CQ、不制造 quorum ACK。
+- **实机部署**：B 更新到完整源码镜像 `dc-saas/tradesvr:full-src-B-seal-pilot-20261016`（sha256 `1731ec31d5f1ffc8848dc9fc5651623eec2626886e565692a88d510efd20d430`）；A 保持 `dc-saas/tradesvr:full-src-degraded-head-20261016`。仅 B 配置 pilot=P001、sourceNode=TradeSvrA、sealOnly=true，签名 sourceKey 仍未配置/未复制；HMAC 网络 stage 仍关闭。
+- **真实成功与复审**：运行中 B 的定时调度产生日志 `TRADE_REPLICA_OLD_EPOCH_GENESIS_SEALED_NOT_READY node:TradeSvrB partition:P001 oldEpoch:1 newEpoch:2 WAL:0 physicalEvidence:true sourceAuthorization:false`。本机 Java 单独调用 `TradeCrossEpochReplicaTailSeal.verifyPreserved` **从磁盘重新校验** B 的 P001 旧原始证据：oldEpoch1、oldTailSeq0、oldBaselineSeq0、targetEpoch2、0 WAL frames；旧 WAL SHA256 `e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855`，旧快照 SHA256 `080b5fd7b468dcb9a0ff7f3fa1cf7aa25293f54149e12404e184c650f6a67c46`。重启 B 后再次校验，内容哈希完全不变，任务再次启动时未重复封存。
+- **不会误判**：上述试点仅证明 **P001 空 Genesis 原始旧数据自动封存、重启证据持久有效**。它未认证新 Epoch 数据到 B 内部工作流、没有安装快照和新 WAL，不能证明任何真实持仓/资金恢复。总验收仍失败，B 未成为可用同步副本。
+- **终态核对**：ZK Trade 256/256 READY 但 A256/B0；Order A128/B128，MD A128/B128；ZooKeeper 和 MySQL healthy；Mac 约 208 GiB 空闲。未 SIGKILL A，未使用 GitHub Actions，未伪造授权或 B 已追平的 ACK。下一任务仍是可信源端公共验证材料/安全读取授权 + 独立 ZK fencing 下原始新 Epoch WAL 事务安装 + 财务/Projection 校验 + 恢复 READY + 自动回迁 128/128，再验收正反双向故障和非空交易。
 ## 防止误验收
 
 - `python3 scripts/check-trade-failback-preflight.py`：只读检查，输出永远 `automaticPrimaryChangeAuthorized=false`，直到另行完成完整可信交接机制。工具的奇数分区候选判定**只适合本次 Demo 恢复记录**，不是真实调度的主权事实来源。
