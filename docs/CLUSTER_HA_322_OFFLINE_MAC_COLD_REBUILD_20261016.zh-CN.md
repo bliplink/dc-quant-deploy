@@ -41,6 +41,17 @@
 - 10 户 `tests/check-tenant-ramp-readiness.py`：`gate=BASELINE_READY_ONLY`、`reasons=[]`、`tenantLocations=10`、`enabledRobotsUnhealthy=[]`、CPU PSI some avg10 **13.08%**、Robot 配额使用率 **7.61%**、Order-B 最近3秒 Full GC **0**。**nextRampAuthorized=false**，不能称 50/200 户负载授权或订单 TPS 成功，市场数据频率 `1.56667/s` **不是**权威下单 TPS。
 - 在 10 户全部交易结束后再次运行 `tests/run-saas-acceptance.sh --quick --running` **PASS**：Order、Trade、MD 各 256/256 分配 READY，Trade **当前 Epoch 真实业务 READY 256/256 A=128 B=128**，24/24 容器 running，Gw TradeSvr/TDSvr online，MySQL/ClickHouse/ZK/Web healthy，核心交易服务 OOM 均为 0。Trade-B 受控修正重启 1 次，其余核心节点重启计数0。Mac 磁盘约 **84%**，剩余约 **70GiB**。
 
+## 3.1 10 户运行后的 WAL/周期快照现实核验（10:19 CST）
+
+本地读取**当前真正挂载**的 `~/.opentradingcore/dc-saas-runtime-ha322fresh-20261016/control/overrides/{OrderSvrA,B,C,TradeSvrA,B}/config/application.properties`，不是推测 GitHub 模板：
+
+- Order A/B/C 均 `order.cluster.journal.enabled=true`、`order.cluster.snapshot.enabled=true`、`order.cluster.snapshot.barrier.enabled=true`，**但** `order.cluster.snapshot.periodic.enabled=false`。
+- Trade A/B 均 `trade.cluster.journal.enabled=true`、`trade.cluster.snapshot.enabled=true`，**但** `trade.cluster.snapshot.periodic.enabled=false`，`trade.cluster.snapshot.periodic.recoveryTransferAware.enabled=false`。
+- 当前 Journal 占用：Order-A ~87MiB、Order-B ~87MiB、Order-C ~104MiB；Trade-A/B 各 ~67MiB；快照目录均约 1MiB。已有 Snapshot 目录不构成定时快照/安全 WAL 删除通过的证据。
+- Mac 全盘约 84% 使用、剩余 70GiB，老运行数据仍安全保存在上文 quarantine，**没有执行 WAL 自动删除或完整归档回收**。
+- 这轮不能在 Trade A/B 正常承载 10 户交易时直接重启来启用周期 Snapshot：此前真实热重启留下 `lastSeq > commitMarkerSeq` 的未提交尾部，且当前同机双 Trade 无经跨物理节点证明的接收端安全恢复事务。下一阶段先提供安全 drain + authoritative committed fence / Snapshot/WAL 验收，然后在隔离环境或受控冷部署中开启低频定时快照和自动回收，再通过真实物理 Quorum/业务回归确认。
+- 此处不改运行中服务开关，不声称周期归档已上线。不要把 `snapshot.enabled=true` 与 `snapshot.periodic.enabled=true` 混淆。
+
 ## 4. 严格未通过项、后续安全边界
 
 **10 户新数据 Demo 业务已恢复、可以演示；但 HA 耐久性与物理容错并未通过。**
