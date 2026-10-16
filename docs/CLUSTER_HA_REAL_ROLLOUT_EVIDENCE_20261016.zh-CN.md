@@ -2,6 +2,45 @@
 
 > 本文遵循 [集群最终统一验收任务书](CLUSTER_HA_FINAL_ACCEPTANCE_MISSION_20261015.zh-CN.md)；只记录真实已执行的操作。日期采用 Mac 所在时区 Asia/Shanghai。全程未新增产品功能，也未依赖 GitHub Actions。
 
+## 2026-10-16 09:14–09:38 本地统一编译与真实滚动部署事故（最新状态，重要）
+
+> 用户明确要求**GitHub 仅提交源码；Mac mini 本地 Maven、Docker 编译部署；在用户通知前不使用 GitHub Actions 构建**。本轮没有主动调用 GitHub Actions。
+
+**实际完成的 GitHub 提交：**
+- [com.app.dc PR #7](https://github.com/bliplink/com.app.dc/pull/7) 已合并 `dd08a2f7861d8930d5a26ff7b7dd951161eab0e1`：0.0.5-SNAPSHOT 直接引用 Common 3.0.22-SNAPSHOT、保留 Connector/J8.0.33；移除 JDBC5 兼容性 exclusion。核对本地 com.app.dc 原 Java 提交 `2fa8047` 与最新 GitHub 比较，除 Maven POM 外无 Java 源码差异。
+- [Order PR #19](https://github.com/bliplink/com.app.dc.ordersvr/pull/19) 解除 Draft 并合并 `3a09170cb686b998d409b1214035498900ca3e1c`，引入真实 `OrderDurableCommitWitnessSource` 及源端签名 Netty 操作。**仍默认禁用**，不是实际 physical quorum 已通过。
+
+**本地唯一完整 Common 源码依赖：** 最初从旧 Common 工作树 `a2ba385` 构建 3.0.22，Trade 编译发现缺少 `RecoveryDurablePrefixControlHandler` / `RecoveryQuorumCommitAttestation` / `RecoveryWalWindowDigest` / `CertifiedRecoverySourceAuthority` / `VerifiedRecoveryQuorumClient`。未伪造/删除任何类：从 GitHub `saas-crypto` commit `e6f088034a8fe137bae9ae199eba276d331a5e90` 新建完整干净工作树，验证以上五类均存在；**Common 300 项测试通过，0 错误**。用此源码离线重新安装 3.0.22-SNAPSHOT，再离线构建 com.app.dc 0.0.5-SNAPSHOT。
+
+**所有三项服务真实本地 Maven 编译、单元测试及 Docker 打包：**
+- Order：87 suites，387 tests，0 failures/0 errors，3 skipped，最终 GitHub 源码含 PR19；
+- Trade：73 suites，287 tests，0 failures/errors；
+- MD：33 suites，146 tests，0 failures/errors。
+- 所有服务 Docker 镜像 **linux/arm64**、完全离线编译（无 GitHub Actions/DockerHub 拉取基础镜像），且容器内真实 JAR SHA-256 **全部相同**：
+  - `com.app.common-3.0.22-SNAPSHOT.jar`: `9ea938bf6f78d6f1acdf840dc539a4bca049872f96e3069fdb362f595574dd59`
+  - `com.app.dc-0.0.5-SNAPSHOT.jar`: `1a9fdd422dcf3b17a562ed331009db541833439d0bdeb9070ea9795c02ec759c`
+  - 唯一 JDBC 为 `mysql-connector-j-8.0.33.jar`，无旧 5.x。
+- 本地候选：
+  - `dc-saas/ordersvr:ha322-local-20261016` ID `sha256:ae929bcea3bfdac479dd5ceca276e7e7a6042cbe2728e33cd8e00ab9361ddb91`
+  - `dc-saas/tradesvr:ha322-local-20261016` ID `sha256:f010ec5cfcd3819a4e2c620ade2773b42ff9b57905714d7db3781802d74071ef`
+  - `dc-saas/mdsvr:ha322-local-20261016` ID `sha256:e1623643ccc44d341cb7a46f5b408bed0f32f9cf427c015d79abd3305d13df88`
+
+**真实滚动部署已执行，不是纯方案：**
+1. 核实 MD-C 256/256 learner、0 Primary/Replica 后，先 MD-C、再 MD-B、MD-A 三台逐一 `docker compose up -d --no-deps`。每步检查 256/256 READY、A/B Primary 各128；最终 MD A/B/C **全部运行新版镜像，无 OOM、restart=0**。
+2. Trade-B、Trade-A 逐个替换本地新镜像，表面 ZK 为 256/256 READY，但业务日志持续 `TRADE_PARTITION_RECOVERY_FAILED`、`PARTITION_NOT_READY`；Robot 8/8 由 RUNNING 变 ERROR。确认 Trade 某分区 `lastSeq=commitMarkerSeq+1`（例如 A:P150 lastSeq108177 / committed marker108176，B:P041 157081/157080），新旧源码 `TradePartitionLifecycleManager.assertCleanCommittedTail` **均拒绝未提交尾部升 READY**。非镜像启动失败、非 ZooKeeper READY 问题。
+3. 立即**停止继续升级 Order Primary A/B**；把 Trade A/B **重新部署为升级前镜像** `dc-saas/tradesvr:merged-wal-fence-20261015`，未删 WAL/存储。由于未提交尾部已经持久存在，**单纯镜像回滚不能恢复原有业务**；实际 Robot 8 ERROR、0 open orders，Trade 实际持仓分区仍 NOT_READY。
+4. Order-C 同步 Replica 256/256 已升级新镜像，ZK Order 仍 256/256 READY、A/B 各 Primary128；**Order A/B 仍为旧镜像**，没有重启。Order-C 只是 ZK 逻辑 sync 分配通过，不能声称全量 256 分区真实 WAL 已安全追平。
+5. 本轮只读冷重置 `python3 scripts/mac-saas-reset.py --mode plan` 在当前 Mac runtime 及私有 P246 证据下通过，可报告合规 quarantine 方案；但实际隔离/重建准备操作遇执行环境安全检查拦截，**未执行任何整库数据删除/迁移/冷重置**，绝不可写成已经恢复清洁 Demo。
+
+**最后精确现状（09:38 CST 左右）：**
+- MD A/B/C：全部新版 Common3.0.22 镜像。
+- Trade A/B：都回退为 `merged-wal-fence-20261015`，但**存在未提交 WAL 尾部，业务仍 NOT_READY**；
+- Order A/B：旧 `merged-market-identity-image-20261015`，Order-C：新 `ha322-local-20261016`；
+- ZK Order/Trade/MD：三者都是 **256/256 READY**，但这是分配状态，**不能当作 Trade 业务恢复证明**；
+- Robot 表：**8 ERROR，0 活动挂单，8 有效租约**（进程尚在线，业务不可用）；
+- 数据完整保留、无 WAL 擅自删除。磁盘约 84% / 72GiB 剩余。
+- **优先恢复动作：** 以已经验证过的冷重置 quarantine + 新的 *本地固定镜像* Compose 和 MySQL/ZK/Trade/Order/MD 一致空起点进行 Demo 重建；或开发真实双副本提交证明认证后的安全 dirty-tail 恢复。**不能**只开启 `trade.cluster.recovery.rollbackUncommittedTail.enabled=true`：当前同步复制模式会显式拒绝不可信本地回滚。全量真实 HA 主切、Trade 资产权威对账、50/200租户测试都未验收。
+
 ## 2026-10-16 08:31–09:05 Order 真实持久化签名源端与公共版本依赖（最新进展）
 
 **直接核查最新 GitHub `saas-crypto`，避免误将较早 Mac 浅工作树中的缺陷重新提交。** 本轮**没有**更换运行中的 Order/Trade/MD 容器、没有清数据或故障 SIGKILL；GitHub Actions 账单额度已尽，全部验证均使用 Mac 本地 Java 8/Maven。
