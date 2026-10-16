@@ -2,6 +2,20 @@
 
 > 本文遵循 [集群最终统一验收任务书](CLUSTER_HA_FINAL_ACCEPTANCE_MISSION_20261015.zh-CN.md)；只记录真实已执行的操作。日期采用 Mac 所在时区 Asia/Shanghai。全程未新增产品功能，也未依赖 GitHub Actions。
 
+## 2026-10-16 08:16 Common 独立物理节点的提交证明与 Netty 控制接口（最新进展）
+
+**本轮真实代码已合并、离线全量测试通过；仅新增可复用的 Common 组件，没有改变现网容器或自动主切配置。**
+
+- [Common PR #27](https://github.com/bliplink/com.app.common/pull/27)，merge SHA `220d74eb2f3fdc27fa4f01be0ff60288289e20e0`：新增 `DurableCommitQuorumAttestation`。用途是让 Order/Trade/其他基于 Common 的业务服务，在恢复冷路径收集**不同物理主机**用**不同256-bit HMAC密钥**产生的、针对同一个已提交 Snapshot + WAL HEAD 的投票回执；绑定独立原始随机 Challenge、分区、Primary、Epoch、ZK version、Snapshot SHA、state/commit marker 和 committed HEAD。接收方采用外部可信的真实物理主机/密钥映射，拒绝重复节点、未分配同步副本、同物理主机、共享密钥、错节点、错 HEAD/epoch、伪造/过期 Challenge。证明签发要求业务注入 `LocalDurableAuthority` 并**前后两次**查询真正的本地 WAL 耐久提交状态。**本类只做签名与验证，`Verification.isPromotionAuthorized()=false`**，不提供假的实际 durable reader。
+- [Common PR #28](https://github.com/bliplink/com.app.common/pull/28)，merge SHA `2e38c95019e6c03451e9e91d57e9b646fbe15192`：新增 `DurableCommitQuorumControlHandler`，复用现有 exact-node Netty `ReplicationControlHandler`，操作 `DURABLE_COMMIT_WITNESS_V1`。请求端**仅可提交挑战**，不得把自己编造的 HEAD/投票成员/版本交给源端签。源端必须分别从注入的真实在线 ZK 状态+Stat version、自己的磁盘 WAL/提交 Marker 读取可信 Source HEAD，生成带签名回执，并在返回之前**重新读同一 ZK 版本、角色、HEAD**；变动即拒绝。过期或未来挑战在任何 ZooKeeper、磁盘访问之前 fail-closed。没有自动 Spring 注册/公共 HTTP/API Key 路径，不改 Gateway。
+- **实际测试：** 本地 ARM64 Mac，Java 8 / Maven 3.9.11 离线全量 Common `66 suites / 286 tests / 0 failures / 0 errors / 0 skipped`；其中针对性 15 项：两个不同 trusted physical host+独立密钥可验签但不能 promotion，重复节点/同机两容器/共享密钥/伪造 MAC/新旧 Challenge/HEAD 替换/错误 ZK 版本/不稳定 durable reader 全部拒绝；新增真实 Netty TCP 端到端回执交换测试。Common 原 `RecoverySourceAttestation.java` / `RecoverySourceHeadControlHandler.java` 两源文件 Git blob SHA 均与当前 GitHub `saas-crypto` 一致（分别 `4992edb83796087b85f9ecceeda17ba9aa2a1fe7`、`b124b907d1278e067a7970783c0c59c654a539b6`）。
+- **实际未完成的业务端接线：**
+  1. Order/Trade 必须从**各自真实 Replica 的本地 WAL、fsync/commit marker、ZK Stat version**实现 `LocalDurableAuthority` 和 `LiveAssignmentAuthority`，在现有服务 Netty 控制器中**显式注册**新的可选 operation；不能只把旧复制 ACK JSON 包装成签名。
+  2. 必须将受信任的**每台真实物理主机唯一身份及不同密钥**下发到独立节点，接收端从实时 ZK 原始投票成员判定已分配同步 Replica。**当前 Mac mini 是一个物理主机**，即使运行 Order A/B/C 三容器，也不能声称得到两份独立物理节点证明；生产物理 Quorum 审批须在不同机器上验证，Demo 可以保持逻辑故障注入但不能将其与物理证明混淆。
+  3. MD `MdImageRecoveryFailoverController.Safety` 尚须真实验证 Order 已提交 HEAD 多节点证明、旧 Epoch 发行者被隔离、候选实际应用完整 Image + Diff 的持久证明以及 RECOVERING→READY 事务；前述 Common 验签成功本身不放行 READY。
+- **发布状态：** Common 新代码已合并 `saas-crypto`，但**未发布新中央仓库版本/未更新现网 Common Jar**。当前 Demo Order A/B/C 全部仍运行 `dc-saas/ordersvr:merged-market-identity-image-20261015`，MD A/B/C 仍为 `pr13-empty-image-20261016`。本轮没有重启、清库、SIGKILL 或修改 Gateway；没有调用 GitHub Actions（账单余额不足）。
+- **当前真实结论：** 通用签名和传输的可测试机制已落地；**从真实磁盘 committed ACK → 物理独立 Quorum → MD Safety 的生产接线还没通过，因此 Order/Trade/MD Primary 自动故障接管和最终持仓权威对账仍 BLOCKED**。不要用 Common 286/286 单测替代实际故障注入验收。
+
 ## 2026-10-16 07:38–07:53 Order 自动晋升 Quorum 身份安全修复（最新进度）
 
 ### 生产安全逻辑修复并合并：Order [PR #17](https://github.com/bliplink/com.app.dc.ordersvr/pull/17)
