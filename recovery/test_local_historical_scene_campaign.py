@@ -11,12 +11,24 @@ from recovery.run_local_historical_scene_campaign import (
     build_command,
     date_chunks,
     expected_times,
+    hit_usage_limit,
     run_chunk,
     validate_rows,
 )
 
 
 class HistoricalSceneCampaignTest(unittest.TestCase):
+    def test_usage_limit_is_detected_only_from_codex_child_log(self):
+        with tempfile.TemporaryDirectory() as directory:
+            attempt = Path(directory)
+            child = attempt / 'run_001' / 'batch_001_codex_1.log'
+            child.parent.mkdir()
+            child.write_text('ERROR: You have hit your usage limit. Try again later.\n',
+                             encoding='utf-8')
+            self.assertTrue(hit_usage_limit(attempt))
+            child.write_text('ERROR: invalid scene response\n', encoding='utf-8')
+            self.assertFalse(hit_usage_limit(attempt))
+
     def test_chunks_are_disjoint_and_complete(self):
         chunks = list(date_chunks(date(2024, 12, 1), date(2024, 12, 23), 10))
         self.assertEqual(chunks, [

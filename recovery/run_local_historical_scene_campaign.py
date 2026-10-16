@@ -11,6 +11,7 @@ import hashlib
 import json
 import os
 import subprocess
+import time
 from datetime import date, datetime, timedelta, timezone
 from pathlib import Path
 
@@ -22,6 +23,20 @@ MAIN_CLASS = 'com.app.dc.service.signal.codex.selection.ai.HistoricalSceneLocalC
 CLASS_FILE = Path('target/test-classes/com/app/dc/service/signal/codex/selection/ai/HistoricalSceneLocalCodexTool.class')
 CLASSPATH = 'target/test-classes;target/classes;target/dependency/*;target/javalib/*'
 PROMPT_VERSION = 'market_scene_v3_historical_kline_v1'
+
+
+class UsageLimitError(RuntimeError):
+    """The local Codex account reported a temporary usage limit."""
+
+
+def hit_usage_limit(attempt_dir):
+    for path in attempt_dir.glob('run_*/batch_*_codex_*.log'):
+        with path.open('rb') as stream:
+            stream.seek(max(0, path.stat().st_size - 8192))
+            tail = stream.read().decode('utf-8', 'replace').lower()
+        if 'hit your usage limit' in tail:
+            return True
+    return False
 
 
 def sha256(path):
@@ -149,6 +164,8 @@ def run_chunk(args, bars_dir, symbol, begin, end, chunk_dir):
                                        stdout=output, stderr=subprocess.STDOUT,
                                        timeout=(2 * args.timeout_minutes + 5) * 60)
         if completed.returncode:
+            if hit_usage_limit(attempt_dir):
+                raise UsageLimitError('local Codex usage limit: %s' % attempt_dir)
             raise RuntimeError('historical scene tool failed (%d): %s' %
                                (completed.returncode, attempt_dir / 'runner.log'))
         rows_path, stats = newest_valid_rows(chunk_dir, symbol, begin, end, args.model)
@@ -177,9 +194,15 @@ def main():
     parser.add_argument('--max-chunks', type=int, default=0,
                         help='Limit newly executed chunks; zero means all')
     parser.add_argument('--retry-failed', action='store_true')
+    parser.add_argument('--wait-on-usage-limit', action='store_true',
+                        help='Wait and retry only after an explicit Codex usage-limit error')
+    parser.add_argument('--quota-retry-minutes', type=int, default=60)
     args = parser.parse_args()
-    if args.begin > args.end or not 1 <= args.chunk_days <= 10 or args.timeout_minutes < 1:
+    if (args.begin > args.end or not 1 <= args.chunk_days <= 10
+            or args.timeout_minutes < 1 or args.quota_retry_minutes < 1):
         parser.error('invalid date range, chunk-days or timeout')
+    if args.wait_on_usage_limit and not args.retry_failed:
+        parser.error('--wait-on-usage-limit requires --retry-failed')
     symbols = [item.strip().upper() for item in args.symbols.split(',') if item.strip()]
     if not symbols or len(symbols) != len(set(symbols)) or any(item not in SYMBOLS for item in symbols):
         parser.error('symbols must be unique members of the approved ten-symbol set')
@@ -212,13 +235,29 @@ def main():
         if args.max_chunks and executed >= args.max_chunks and not (chunk_dir / 'checkpoint.json').is_file():
             break
         print('chunk', symbol, begin, end, flush=True)
-        try:
-            stats, skipped = run_chunk(args, bars_dir, symbol, begin, end, chunk_dir)
-        except Exception as error:
-            write_json(args.output_dir / 'status.json',
-                       {'completed_chunks': completed, 'total_chunks': len(tasks),
-                        'failed_chunk': str(chunk_dir), 'error': str(error)})
-            raise
+        while True:
+            try:
+                stats, skipped = run_chunk(args, bars_dir, symbol, begin, end, chunk_dir)
+                break
+            except UsageLimitError as error:
+                if not args.wait_on_usage_limit:
+                    write_json(args.output_dir / 'status.json',
+                               {'completed_chunks': completed, 'total_chunks': len(tasks),
+                                'failed_chunk': str(chunk_dir), 'error': str(error)})
+                    raise
+                write_json(args.output_dir / 'status.json',
+                           {'completed_chunks': completed, 'total_chunks': len(tasks),
+                            'waiting_chunk': str(chunk_dir), 'reason': str(error),
+                            'retry_after_minutes': args.quota_retry_minutes,
+                            'updated_utc': datetime.now(timezone.utc).isoformat(timespec='seconds')})
+                print('Codex quota reached; wait', args.quota_retry_minutes,
+                      'minutes before retrying', chunk_dir, flush=True)
+                time.sleep(args.quota_retry_minutes * 60)
+            except Exception as error:
+                write_json(args.output_dir / 'status.json',
+                           {'completed_chunks': completed, 'total_chunks': len(tasks),
+                            'failed_chunk': str(chunk_dir), 'error': str(error)})
+                raise
         completed += 1
         if not skipped:
             executed += 1
