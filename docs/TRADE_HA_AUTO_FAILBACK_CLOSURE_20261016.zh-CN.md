@@ -58,6 +58,14 @@
 - 发现 `deploy-saas.sh` 全量集群配置以前**只在缺少** `TRADE_CLUSTER_PERIODIC_SNAPSHOT_ENABLED` 时追加 `true`，明确配置为 `false` 的旧 `.env` 会覆盖，因此修复 `apply_full_cluster_profile`：通过 `upsert_env_value TRADE_CLUSTER_PERIODIC_SNAPSHOT_ENABLED true` 强制开启 HA 验收的周期快照。其他非 full-cluster 环境仍可选择关闭。对应 `tests/test-trade-cluster-config.sh` 检验通过。
 - 后续上线时，仍需实测定时快照成功（包括主/副本当前 Epoch、水位、原始 WAL 数据链）、检查磁盘 87% 占用与归档清理，再开始受控自动回迁和反向 Kill。当前 B 128 分区**没有**达成实际恢复交接验收条件。
 
+### Snapshot 正好覆盖 HEAD 的边界修复（Trade `eefcf76`）
+
+- 在 Common 新鲜 Snapshot 恰好覆盖已提交 HEAD 时，`snapshotSeq == committedHeadSeq > 0`，虽然之后没有新的 WAL 增量，但这个**正序号的有效快照**仍可以接受独立物理节点的零长度 WAL 窗口摘要；原来的新接收端校验过于严格地拒绝 `<=`，已改成只拒绝倒退的 `<`。
+- 这不表示可以接受**初始空快照**（`snapshotSeq=0`）；该情况仍需独立的可信空分区恢复协议。
+- 新增回归测试，全量 Trade 本地 Maven **315 项通过、0 失败**。本地镜像 `dc-saas/tradesvr:cluster-dev-checkpoint-head-20261016`（`sha256:95bea313d5fffb5c4a80ca19464d001ef8f54e0fecbd96ff658fcc224cdf252c`），**未替换 Demo**。
+- 真实 Demo 全量只读核查：A/B 各256份 `latest.json`，**全部 Epoch1 / snapshotSeq0**，且运行日志明确 `Trade periodic snapshot disabled`。这是真实恢复阻断，不是少打印一个 READY 日志。
+- GitHub 的 Trade `eefcf76` 和 dc-quant-deploy `a14aea2` 均由 Mac 经本地代理推送到独立开发分支，未使用 Actions，尚未合入 `saas-crypto`。下一步必须先在新版 Demo 验证定时 Snapshot、B 的 WAL/持仓业务状态和源端冻结证据，然后再接通 Common 的受权 Epoch 交接及反向故障注入。
+
 ## 防止误验收
 
 - `python3 scripts/check-trade-failback-preflight.py`：只读检查，输出永远 `automaticPrimaryChangeAuthorized=false`，直到另行完成完整可信交接机制。工具的奇数分区候选判定**只适合本次 Demo 恢复记录**，不是真实调度的主权事实来源。
