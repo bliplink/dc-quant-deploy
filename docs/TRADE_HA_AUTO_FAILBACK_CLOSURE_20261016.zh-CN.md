@@ -132,6 +132,22 @@
 - 本轮实时 ZK 只读复核：Order A=128/B=128、MD A=128/B=128、Trade A=256/B=0（Epoch1=128, Epoch2=128），共 24 个 Docker 容器运行，Trade-A/B 仍为旧 `cluster-dev-fenced-transport-20261016`、重启0。磁盘使用率约89%。
 - **完成 B 恢复接管还欠**：解决新 Epoch 首次恢复时落后 B 无法签署同 epoch WAL 的授权循环；恢复安装后独立资金、持仓、委托、成交、Projection 对账；旧 Epoch 封存意图的正式受审计处置；恢复副本 READY/自动回迁 128/128；真实 B/A 双向 SIGKILL。以上均为未验收，不应以 339 个本地测试替代。
 
+### 2026-10-16 完整源码实际 Demo 部署与 Trade-B SIGKILL 实测（非单元测试）
+
+**用户验收目标不变**：Trade A/B 平时 A=128/B=128；任一节点 SIGKILL 时存活者持续接单/撮合/资金持仓更新，自动接管；旧节点恢复、可信同步、对账后**自动**回到 A/B 各128；再对另一节点做反向 SIGKILL。Trade 通过之后才对复用 Common 的 Order 做相同故障测试。当前不能标记最终通过。
+
+- 在 Mac 上用最新 Trade `2a892c1` **完整源码重新执行 Maven 离线 package + dependency:copy-dependencies**：249 个类、82 个依赖 JAR；本地 Common `3.0.22-SNAPSHOT` JAR SHA256 `8cbb195a131664c96692598bef51644ced9074f01ad80b3878b84cfce9444da4`。由于 Docker Hub DNS 不可用，基于已有 Trade 运行镜像**先彻底删除旧 classes/lib，再复制全部新 classes+82 JAR**，不是少量 .class patch。镜像 `dc-saas/tradesvr:full-src-ha-20261016`，sha256 `fb103d462d48a55e6cdb7e475bd7a8a6f2c111c8a88d5854d80599023c6d1f4a`。
+- A/B 均已**实际**替换为该完整源码镜像。第一次部署的现有 runtime `dc-saas-runtime-fenced-transport-20261016`，24 容器快速回归通过，但 **Trade A=256/B=0**，128 个 Epoch2 中 125 个源端空快照，另 P011/P099/P243 是有实际业务数据的 Epoch2 快照；B 尚无当前 Epoch 的可信恢复。
+- 首次完整业务 E2E 于 10月16日18点运行后**失败**：脚本对 Order 256 分区强制升 Epoch2 并批量恢复；在 `P065:OrderSvrB` 检测到未提交 WAL 尾部，`OrderPartitionRecoveryManager.rollbackUncommittedTail` 拒绝**未经 Common 认证的本地日志回滚**，至约 66 READY / 190 RECOVERING，另 E2E 报 `SYMBOL_NOTEXIST`。这是正确 fail-closed，但旧 Demo 留下不可用分区。不能把它误报为通过，也不能无证明把 ZK RECOVERING 改 READY。
+- 按用户“Demo 数据不重要、可清空重新部署”授权，用仓库现有 `scripts/mac-saas-reset.py --mode stage --confirm STAGE_DISPOSABLE_DC_SAAS` 成功做 24 容器**精确范围冷隔离**。原数据原封不动移至 `~/.opentradingcore/.dc-saas-quarantine/dc-saas-runtime-fenced-transport-20261016-20261016T101548Z`，独立 P246 证据 SHA256 保留；**没有删除旧数据**。
+- 使用所有 24 个原有本地缓存镜像（GHCR/Docker Hub 均不需要网络）、新的 `~/.opentradingcore/dc-saas-runtime-clean-20261016`、仓库标准 config/ZK bootstrap，启动 24 容器；干净新 ZK 的 Order/Trade/MD 各256分区均为 Epoch1 READY、A128/B128（Order-C、MD-C 仍作为额外 Replica/Learner）。Trade-A/B periodic snapshot=true、同步复制 required=true、未认证回滚=false，**针对单副本降级场景显式 opt-in `trade.cluster.replication.transportFallback.localCommit.enabled=true`**。退化持久化窗口必须单独报告，不能保证双节点同时宕机时的零数据丢失。
+- **真实故障注入已经执行**：新空快照 256/256 A/B 一致后，使用 `docker update --restart=no dc-saas-tradesvr-b` + `docker kill --signal=KILL dc-saas-tradesvr-b`。B 实际退出码137；A 的 `TradeFailoverController` 对 B 原有 **128 个分区**逐批执行 ZK CAS，Epoch1→2 并输出每分区 `TRADE_FAILOVER_PROMOTED`、`TRADE_PARTITION_READY`；现场脚本最终确认 ZK **256/256 READY，A=256/B=0**。因此“B SIGKILL→A 接管所有**空分区**”为 **PASS**，但故障时并未维持真实下单/持仓流量，**不得报告交易连续性已验收**。
+- B 已 `docker start` 恢复，重启策略已还原 `unless-stopped`，A/B 容器均 running；**B 自动修复/自动回迁实测失败**：实际 ZK 仍 A=256/B=0，B 初始 Epoch1 空快照，A 有128个 Epoch2 主权；B 没有真实自动 cross-epoch recover/install/READY + live replica rejoin + 128/128 planned role CAS。**反向 SIGKILL A 未执行**，因 B 尚不具备所有分区接管证明。
+- 新 MySQL 中 Robot 运行身份初始化被执行环境安全检查阻止；故 `run-saas-acceptance.sh --quick --running` 的业务运行校验因 `Dedicated Robot runtime API identity is missing or disabled` **失败**。尚无真实租户持续订单/成交/持仓故障验收。不要因 24 容器及256 READY 宣称完整 SaaS 验收通过。
+- 提醒：真实签名源端和持久恢复组件已经在 Trade 源码，但 `TradeCertifiedRecoveryReceiver` **只有显式调用入口，没有独立自动预热任务/恢复调度器**。部署 `autoWarm` 参数并不能创造该任务；对落后 B 仍不能要求伪造 Epoch2 期间 B 的历史 WAL ACK。下一处必须完成**由真实 ZooKeeper 主权与原主隔离证明授权的降级新 Epoch Source HEAD/bootstrap（源 A WAL fsync）、B 自动封存旧尾部→验签暂存→Common 安装→业务与 Projection 对账→真实同步 Replica READY、经源端冻结/ZK CAS 分区回迁到128/128**。任何不能证明安全的阶段继续 NOT_READY，不准手写 ZooKeeper 绕过状态机。
+- **Trade 阶段结论**：B 故障→A 接管空分区通过；B 重启后自动恢复/均衡失败；持仓+成交流量故障未验证；A 故障反向未验证。**Order 故障注入暂不进入**，它的干净部署基线是 A/B 各128。不要再重复上轮失败的“强制全量 Order Epoch2 恢复脚本”，直到 P065 非法尾部恢复路径解决。
+- **CI**：所有镜像 Mac 本地构建，未调用 GitHub Actions。
+
 ## 防止误验收
 
 - `python3 scripts/check-trade-failback-preflight.py`：只读检查，输出永远 `automaticPrimaryChangeAuthorized=false`，直到另行完成完整可信交接机制。工具的奇数分区候选判定**只适合本次 Demo 恢复记录**，不是真实调度的主权事实来源。
