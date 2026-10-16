@@ -114,6 +114,15 @@
 - 新本地 ARM64 镜像 `dc-saas/tradesvr:cluster-dev-b-physical-install-20261016`，镜像 `sha256:671c3f68d1b6f311c0feb995a99f887da8d0d192ec8a6c064a7fa6f37bda90b9`，Common JAR SHA256 `8cbb195a131664c96692598bef51644ced9074f01ad80b3878b84cfce9444da4`。镜像类路径核查通过；未替换 Demo。
 - **仍未通过生产端到端恢复**：Common 当前 `CertifiedRecoverySourceAuthority` 的物理多数派要求可能与“B 尚未恢复新 Epoch WAL”的故障状态形成循环，不能制造伪造的 B ACK。需基于合法的新主选举/旧主隔离证据单独设计可信新 Epoch bootstrap 授权，再接已实现的物理安装分支、补业务/Projection 权威对账、接收端 READY 与 A/B 128/128 Epoch-fenced 主权转移。未完成前不执行真实切主或 SIGKILL A。
 
+
+### 2026-10-16 B 恢复源端 Epoch Snapshot 修复
+
+- Trade commit [`d39a646`](https://github.com/bliplink/com.app.dc.tradesvr/commit/d39a6464298c85cbe8525c6cdbfe5f6ae0a0cbf9)：`TradeSnapshotScheduler` 新增“新主当前 Epoch Snapshot”生成条件。此前需要积累默认 10000 个新提交变更或已有快照年龄达阈值；一旦故障主切后新 Epoch 仅有少量已真实提交的事件，旧 Epoch Snapshot 可能长期得不到替换、A 无法为 B 提供当前 Epoch 的可签名 Snapshot HEAD。
+- 新策略只对**当前 ZK 主 Epoch 内真实已完成 STATE_COMMIT**且新的 commitMarkerSeq 和 committedStateSeq 不回退到旧 Snapshot 以前的分区，额外触发维护线程的旧 Epoch 快照更新（1分区/轮询；不增加热路径同步刷盘）。空分区、仍处于旧 Epoch 的提交记录、缺少 commit marker 的分区继续拒绝“伪造新 Epoch Snapshot”。
+- 本地新增 3 个测试覆盖“量少但有当前 Epoch 真实提交”“空/旧 Epoch 不伪造”和“水位回退拒绝”，Trade Maven 全量 **336 项通过，0 失败/0 错误/0 跳过**。
+- 新本地 ARM64 candidate `dc-saas/tradesvr:cluster-dev-b-epoch-checkpoint-20261016`，image `sha256:47be6b3cb5792f900ff34b2650184330e0005c4a9d4e423002e571a91ff94383`，同 Common jar SHA256 `8cbb195a131664c96692598bef51644ced9074f01ad80b3878b84cfce9444da4`，**未替换 Demo**。
+- Demo 仍需先启用 `TRADE_CLUSTER_PERIODIC_SNAPSHOT_ENABLED=true` 并现场观察 Epoch2 source snapshot 实际落盘、已签名的 SOURCE HEAD、B 接收与可信授权事务后才能继续安装；对旧 Epoch 内完全空/无新 Epoch 提交的分区仍需可信空分区初始影像/合法 Epoch 记录协议。**仅测试通过不能视为 B 具备 READY。**
+
 ## 防止误验收
 
 - `python3 scripts/check-trade-failback-preflight.py`：只读检查，输出永远 `automaticPrimaryChangeAuthorized=false`，直到另行完成完整可信交接机制。工具的奇数分区候选判定**只适合本次 Demo 恢复记录**，不是真实调度的主权事实来源。
