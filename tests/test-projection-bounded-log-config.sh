@@ -7,7 +7,10 @@ export OVERRIDE_ROOT="${temp}/config"
 install -d -m 0750 "${OVERRIDE_ROOT}/ProjectionSvr/config"
 # Only execute the self-contained generation function. No live runtime,
 # Docker, DB, public ports, or secrets are touched by this unit test.
-source /dev/stdin < <(sed -n '/^write_projection_log_config() {/,/^}/p' "${root}/generate-saas-configs.sh")
+sed -n '/^write_projection_log_config() {/,/^}/p' "${root}/generate-saas-configs.sh" > "${temp}/policy.sh"
+bash -n "${temp}/policy.sh"
+source "${temp}/policy.sh"
+declare -F write_projection_log_config >/dev/null
 write_projection_log_config
 file="${OVERRIDE_ROOT}/ProjectionSvr/config/log4j.ini"
 test -f "${file}"
