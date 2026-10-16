@@ -327,6 +327,10 @@ apply_full_cluster_profile() {
   set_env_value TRADE_CLUSTER_ENABLED true
   set_env_value TRADE_CLUSTER_REPLICATION_REQUIRED true
   set_env_value TRADE_CLUSTER_FAILOVER_ENABLED true
+  # Full HA acceptance requires periodic committed Trade checkpoints.
+  # Correct an explicit old .env "false", not only a missing default.
+  # Trade schedules bounded single-partition snapshots only on READY Primaries.
+  upsert_env_value TRADE_CLUSTER_PERIODIC_SNAPSHOT_ENABLED true
   # The synchronous Replica has a physically immutable WAL. Never permit
   # legacy single-node rollback/rebase in the full HA deployment profile.
   # Dirty tails must remain fenced until Common certified recovery.

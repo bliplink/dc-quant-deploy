@@ -236,6 +236,8 @@ grep -Fq 'set_env_value TRADE_CLUSTER_REPLICATION_REQUIRED true' "${DEPLOY_DIR}/
   fail 'full cluster must require Trade replication'
 grep -Fq 'set_env_value TRADE_CLUSTER_FAILOVER_ENABLED true' "${DEPLOY_DIR}/deploy-saas.sh" ||
   fail 'full cluster must enable Trade automatic failover'
+grep -Fq 'upsert_env_value TRADE_CLUSTER_PERIODIC_SNAPSHOT_ENABLED true' "${DEPLOY_DIR}/deploy-saas.sh" ||
+  fail 'full HA profile must correct an existing disabled Trade snapshot switch'
 grep -Fq 'set_env_value TRADE_CLUSTER_ROLLBACK_UNCOMMITTED_TAIL_ENABLED false' "${DEPLOY_DIR}/deploy-saas.sh" ||
   fail 'full cluster must forbid Trade unverified WAL rebase'
 grep -Fq "printf 'TRADE_CLUSTER_PERIODIC_SNAPSHOT_ENABLED=true" "${DEPLOY_DIR}/deploy-saas.sh" ||
