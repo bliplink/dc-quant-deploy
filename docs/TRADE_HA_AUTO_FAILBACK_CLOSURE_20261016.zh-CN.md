@@ -81,6 +81,20 @@
 - 还需设计并实现**Common 鉴权的跨 Epoch 可信完整安装事务**：源端仍有真实 ZK 主权 + 持久 HEAD，接收端旧日志不可静默删除，安装/重启中间状态继续阻止 READY；对已失去第二副本期间的 A-only 提交，不能凭空伪造 B 的历史多数派 ACK。
 - 在代码与真实 Demo 上证明此链路之前，不执行自动 128/128 回迁、反向 SIGKILL A 或将简单 ZK READY 视为资金/持仓恢复成功。
 
+
+## 2026-10-16 进一步验收｜Trade 跨 Epoch 旧日志完整封存
+
+- Trade commit `1fcfc3ea0dcc7a955c6e94c90be8c6a217b6f8ce`，开发分支 `fix/trade-safe-auto-rebalance-20261016`，**已推送 GitHub**。
+- 新增 `TradeCrossEpochReplicaTailSeal`：仅在 B 有真实 ZooKeeper Replica 身份且被 `TradeRecoveryReplicaFence` 的业务分区锁隔离后，先写持久 `tail-intent`，再复制旧完整 Snapshot、通过多次固定窗口读取**全部**旧 Chronicle WAL 原始 wire（而非只拿尾部 4096 条），独立 SHA256 校验并保存清单；若中途崩溃或 ZK 版本变化，旧意图仍阻止 READY。
+- `TradeCertifiedRecoveryReceiver.preserveOldEpochReplica` 为显式、默认关闭的前置入口。仅保留旧数据证据，**不调用**原有同 Epoch 认证恢复、不执行 destructive rebase、CAS 或投票主切。
+- `TradeRecoveryInstallGuard` 已补足旧日志封存意图扫描，防止进程重启后遗忘未完成的跨 Epoch 恢复。
+- 实体 WAL 实验：旧 Epoch 实际 4102 条 Chronicle 记录封存跨越 Common 的 4095 记录单区间限制；另外验证初始 Snapshot、完整证据哈希、ZK/本地Epoch差异拒绝与重启后 NOT_READY。Trade Maven 全量 **324 项通过，0 失败/0 跳过**。
+- 本地镜像 `dc-saas/tradesvr:cluster-dev-cross-epoch-tail-seal-20261016`，image sha256 `c34dff9c273dfd05886e9f614baac8397bfe3df98949fc6c62846b21eb0643aa`，使用同一份 Common JAR SHA256 `8cbb195a131664c96692598bef51644ced9074f01ad80b3878b84cfce9444da4`；仅本地构建，未替换 Demo。
+- 部署仓库非破坏性回归：`test-trade-cluster-config.sh`、`test-md-cluster-config.sh`、`test-order-cluster-c-config.sh` 均 PASS；Trade 12 项前置/transition Python 测试及 MD 20 项 transition/shadow 测试通过。
+- **本轮 ZooKeeper 实测：Order 256 READY（A=128、B=128），MD 256 READY（A=128、B=128），Trade 256 READY（A=256、B=0，其中 Epoch1=128、Epoch2=128）**。Trade Demo 镜像仍旧 `cluster-dev-fenced-transport-20261016`，A/B 周期 Snapshot 设置均为 false，A/B 各256份旧 Snapshot 均为 Epoch1/seq0。磁盘 88%，剩余约 52GiB。
+- 只读 Trade Failback 检查：128 个原属 B 的 Epoch2 分区，健康记录 123 个缺失、5 个过期；`automaticPrimaryChangeAuthorized=false`、`safeToSigkillAForReverseTest=false`。缺失健康记录的可能包括原本没有成交的空分区，不能直接等同于丢数据；但无独立可信证明前不能用 READY 填补。
+- **本次未完成 HA 总验收**：Common 已有 CROSS_EPOCH 边界判断，但生产可信接收端从 A Source HEAD 恢复新 Epoch 的**实际安装事务、回放后的资金/持仓/委托/成交及 Projection 对账、B 重新成为同步 Replica、受权 Epoch 主权转换**尚未开发/联调闭环。现有 `CertifiedRecoverySourceAuthority` 强制要求当前物理投票多数派对同一个原始 WAL 区间签名，若 B 正是落后的唯一副本，不能凭空制造历史 B 的 ACK。必须设计经 ZooKeeper 真正选主/原主隔离授权的新 Epoch bootstrap，然后恢复 B、完成新的同步多数派证据；这不是简单切换路由或删旧 WAL。
+
 ## 防止误验收
 
 - `python3 scripts/check-trade-failback-preflight.py`：只读检查，输出永远 `automaticPrimaryChangeAuthorized=false`，直到另行完成完整可信交接机制。工具的奇数分区候选判定**只适合本次 Demo 恢复记录**，不是真实调度的主权事实来源。
