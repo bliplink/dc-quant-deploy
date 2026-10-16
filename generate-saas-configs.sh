@@ -69,7 +69,9 @@ TRADE_CLUSTER_RECOVERY_PRIVATE_DOCKER_ENABLED="${TRADE_CLUSTER_RECOVERY_PRIVATE_
 # Signed Snapshot/WAL warm restore over local Host-mode loopback. No TLS needed.
 # All receiver/source components are enabled as one fail-closed switch.
 TRADE_CLUSTER_RECOVERY_WARM_ENABLED="${TRADE_CLUSTER_RECOVERY_WARM_ENABLED:-false}"
-TRADE_CLUSTER_RECOVERY_NODE_KEY_HEX="${TRADE_CLUSTER_RECOVERY_NODE_KEY_HEX:-}"
+# Independent physical-source keys; a shared A/B key is NOT a quorum.
+TRADE_CLUSTER_RECOVERY_NODE_A_KEY_HEX="${TRADE_CLUSTER_RECOVERY_NODE_A_KEY_HEX:-}"
+TRADE_CLUSTER_RECOVERY_NODE_B_KEY_HEX="${TRADE_CLUSTER_RECOVERY_NODE_B_KEY_HEX:-}"
 MDSVR_E2E_MARK_PRICE_OVERRIDE_ENABLED="${MDSVR_E2E_MARK_PRICE_OVERRIDE_ENABLED:-false}"
 MDSVR_E2E_MARK_PRICE_OVERRIDE_TOKEN="${MDSVR_E2E_MARK_PRICE_OVERRIDE_TOKEN:-}"
 MDSVR_E2E_MARK_PRICE_OVERRIDE_MAX_TTL_MS="${MDSVR_E2E_MARK_PRICE_OVERRIDE_MAX_TTL_MS:-60000}"
@@ -199,8 +201,12 @@ if [[ "${TRADE_CLUSTER_ENABLED}" == "true" ]]; then
   if [[ "${TRADE_CLUSTER_RECOVERY_WARM_ENABLED}" == "true" ]]; then
     [[ "${TRADE_CLUSTER_ENABLED}" == "true" && "${TRADE_CLUSTER_REPLICATION_REQUIRED}" == "true" && "${TRADE_CLUSTER_PERIODIC_SNAPSHOT_ENABLED}" == "true" && "${TRADE_CLUSTER_SNAPSHOT_TRANSFER_AWARE_ENABLED}" == "true" ]] ||
       die "Trade warm recovery needs synced HA and transfer-aware periodic snapshots"
-    [[ "${TRADE_CLUSTER_RECOVERY_NODE_KEY_HEX}" =~ ^[0-9A-Fa-f]{64}([0-9A-Fa-f]{64})?$ ]] ||
-      die "TRADE_CLUSTER_RECOVERY_NODE_KEY_HEX must have 64 or 128 hex digits"
+    [[ "${TRADE_CLUSTER_RECOVERY_NODE_A_KEY_HEX}" =~ ^[0-9A-Fa-f]{64}([0-9A-Fa-f]{64})?$ ]] ||
+      die "TRADE_CLUSTER_RECOVERY_NODE_A_KEY_HEX must have 64 or 128 hex digits"
+    [[ "${TRADE_CLUSTER_RECOVERY_NODE_B_KEY_HEX}" =~ ^[0-9A-Fa-f]{64}([0-9A-Fa-f]{64})?$ ]] ||
+      die "TRADE_CLUSTER_RECOVERY_NODE_B_KEY_HEX must have 64 or 128 hex digits"
+    [[ "$(printf '%s' "${TRADE_CLUSTER_RECOVERY_NODE_A_KEY_HEX}" | tr 'A-F' 'a-f')" != "$(printf '%s' "${TRADE_CLUSTER_RECOVERY_NODE_B_KEY_HEX}" | tr 'A-F' 'a-f')" ]] ||
+      die "Trade A and B physical recovery signer keys must differ"
     install -d -m 0700 "${DEPLOY_ROOT}/data/TradeSvrA/recovery-staging" "${DEPLOY_ROOT}/data/TradeSvrB/recovery-staging" \
       "${DEPLOY_ROOT}/data/TradeSvrA/recovery-sealed" "${DEPLOY_ROOT}/data/TradeSvrB/recovery-sealed"
   fi
@@ -815,6 +821,15 @@ write_trade_config() {
   if [[ "${TRADE_CLUSTER_ENABLED}" == "true" ]]; then
     peers="TradeSvrA=127.0.0.1:${TRADESVR_A_REPLICATION_PORT},TradeSvrB=127.0.0.1:${TRADESVR_B_REPLICATION_PORT}"
   fi
+  local recovery_key_hex="" recovery_key_base64=""
+  if [[ "${TRADE_CLUSTER_RECOVERY_WARM_ENABLED}" == "true" ]]; then
+    case "${node}" in
+      TradeSvrA) recovery_key_hex="${TRADE_CLUSTER_RECOVERY_NODE_A_KEY_HEX}" ;;
+      TradeSvrB) recovery_key_hex="${TRADE_CLUSTER_RECOVERY_NODE_B_KEY_HEX}" ;;
+      *) die "Trade signed recovery requires explicit A/B physical node" ;;
+    esac
+    recovery_key_base64="$(printf '%s' "${recovery_key_hex}" | xxd -r -p | base64 | tr -d '\r\n')"
+  fi
   local target="${OVERRIDE_ROOT}/${node}/config/application.properties"
   prepare_generated_file "${target}"
   cat > "${target}" <<EOF
@@ -847,15 +862,18 @@ trade.cluster.lifecycle.enabled=${TRADE_CLUSTER_ENABLED}
 trade.cluster.recovery.authoritative=${TRADE_CLUSTER_ENABLED}
 trade.cluster.recovery.rollbackUncommittedTail.enabled=${TRADE_CLUSTER_ROLLBACK_UNCOMMITTED_TAIL_ENABLED}
 trade.cluster.recovery.replica.privateDocker.enabled=${TRADE_CLUSTER_RECOVERY_PRIVATE_DOCKER_ENABLED}
-trade.cluster.recovery.source.enabled=${TRADE_CLUSTER_RECOVERY_WARM_ENABLED}
-trade.cluster.recovery.source.nodeKeyHex=${TRADE_CLUSTER_RECOVERY_NODE_KEY_HEX}
-trade.cluster.recovery.replica.headDiscovery.enabled=${TRADE_CLUSTER_RECOVERY_WARM_ENABLED}
-trade.cluster.recovery.replica.nodeKeyHex=${TRADE_CLUSTER_RECOVERY_NODE_KEY_HEX}
-trade.cluster.recovery.replica.stage.enabled=${TRADE_CLUSTER_RECOVERY_WARM_ENABLED}
+# Actual @Value keys of TradeRecoverySourceHeadEndpoint.
+trade.cluster.recovery.head.enabled=${TRADE_CLUSTER_RECOVERY_WARM_ENABLED}
+trade.cluster.recovery.manifest.enabled=${TRADE_CLUSTER_RECOVERY_WARM_ENABLED}
+trade.cluster.recovery.data.enabled=${TRADE_CLUSTER_RECOVERY_WARM_ENABLED}
+trade.cluster.recovery.quorumReceipt.enabled=${TRADE_CLUSTER_RECOVERY_WARM_ENABLED}
+trade.cluster.recovery.head.secretBase64=${recovery_key_base64}
+# Receiver implements supervised certified transactions, NOT auto failback.
+trade.cluster.recovery.certifiedRecipient.enabled=${TRADE_CLUSTER_RECOVERY_WARM_ENABLED}
+trade.cluster.recovery.certifiedRecipient.privateRoot=../../data/${node}/certified-recipient
 trade.cluster.recovery.replica.staging.path=../../data/${node}/recovery-staging
-trade.cluster.recovery.replica.install.enabled=${TRADE_CLUSTER_RECOVERY_WARM_ENABLED}
 trade.cluster.recovery.replica.seal.path=../../data/${node}/recovery-sealed
-trade.cluster.recovery.replica.autoWarm.enabled=${TRADE_CLUSTER_RECOVERY_WARM_ENABLED}
+trade.cluster.recovery.replica.autoWarm.enabled=false
 trade.cluster.lifecycle.pollMillis=1000
 trade.cluster.lifecycle.retryMillis=5000
 trade.cluster.replication.enabled=${TRADE_CLUSTER_ENABLED}

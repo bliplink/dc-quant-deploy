@@ -69,7 +69,7 @@ grep -Fqx 'trade.cluster.snapshot.periodic.minCommittedMutations=10000' "${a_con
 grep -Fqx 'trade.cluster.snapshot.periodic.recoveryTransferAware.enabled=false' "${a_config}" || fail 'Transfer-aware snapshots must remain opt-in'
 grep -Fqx 'trade.cluster.snapshot.periodic.recoveryTransferAware.maxWalSlots=2048' "${a_config}" || fail 'Trade WAL transfer snapshot threshold missing'
 grep -Fqx 'trade.cluster.recovery.replica.privateDocker.enabled=false' "${a_config}" || fail 'Private Docker recovery transport must stay opt-in'
-grep -Fqx 'trade.cluster.recovery.replica.privateDocker.enabled=false' "${b_config}" || fail 'Trade B Docker recovery transport must stay opt-in'grep -Fqx 'trade.cluster.recovery.source.enabled=false' "${a_config}" || fail 'Recovery source must be disabled by default'
+grep -Fqx 'trade.cluster.recovery.replica.privateDocker.enabled=false' "${b_config}" || fail 'Trade B Docker recovery transport must stay opt-in'grep -Fqx 'trade.cluster.recovery.head.enabled=false' "${a_config}" || fail 'Real signed HEAD source must be disabled by default'
 grep -Fqx 'trade.cluster.recovery.replica.autoWarm.enabled=false' "${b_config}" || fail 'Recovery auto-warm must be disabled by default'
 grep -Fqx 'trade.cluster.recovery.replica.staging.path=../../data/TradeSvrA/recovery-staging' "${a_config}" || fail 'A staging path must be separate'
 grep -Fqx 'trade.cluster.recovery.replica.staging.path=../../data/TradeSvrB/recovery-staging' "${b_config}" || fail 'B staging path must be separate'
@@ -195,15 +195,18 @@ fi
 cp "${TEST_ROOT}/transfer-aware.env" "${TEST_ROOT}/signed-loopback-warm.env"
 cat >> "${TEST_ROOT}/signed-loopback-warm.env" <<'EOF'
 TRADE_CLUSTER_RECOVERY_WARM_ENABLED=true
-TRADE_CLUSTER_RECOVERY_NODE_KEY_HEX=0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef
+TRADE_CLUSTER_RECOVERY_NODE_A_KEY_HEX=0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef
+TRADE_CLUSTER_RECOVERY_NODE_B_KEY_HEX=fedcba9876543210fedcba9876543210fedcba9876543210fedcba9876543210
 EOF
 "${DEPLOY_DIR}/generate-saas-configs.sh" "${TEST_ROOT}/signed-loopback-warm.env" >/dev/null
 for file in "${a_config}" "${b_config}"; do
-  grep -Fqx 'trade.cluster.recovery.source.enabled=true' "${file}" || fail "Trade signed source control disabled"
-  grep -Fqx 'trade.cluster.recovery.replica.headDiscovery.enabled=true' "${file}" || fail "Trade signed HEAD discovery disabled"
-  grep -Fqx 'trade.cluster.recovery.replica.stage.enabled=true' "${file}" || fail "Trade Replica stage disabled"
-  grep -Fqx 'trade.cluster.recovery.replica.install.enabled=true' "${file}" || fail "Trade verified install disabled"
-  grep -Fqx 'trade.cluster.recovery.replica.autoWarm.enabled=true' "${file}" || fail "Trade auto-warm disabled"
+  grep -Fqx 'trade.cluster.recovery.head.enabled=true' "${file}" || fail "Actual signed HEAD endpoint disabled"
+  grep -Fqx 'trade.cluster.recovery.manifest.enabled=true' "${file}" || fail "Actual signed manifest endpoint disabled"
+  grep -Fqx 'trade.cluster.recovery.data.enabled=true' "${file}" || fail "Actual signed WAL endpoint disabled"
+  grep -Fqx 'trade.cluster.recovery.quorumReceipt.enabled=true' "${file}" || fail "Actual independent physical voter receipt disabled"
+  grep -Fqx 'trade.cluster.recovery.certifiedRecipient.enabled=true' "${file}" || fail "Explicit certified recipient disabled"
+  grep -Fqx 'trade.cluster.recovery.replica.autoWarm.enabled=false' "${file}" || fail "Must not claim automatic recovery without a runtime orchestrator"
+  ! grep -Eq '^trade.cluster.recovery.(source.enabled|replica.install.enabled|replica.stage.enabled)=' "${file}" || fail "Unused recovery flag must not masquerade as runtime wiring"
 done
 grep -Fqx 'trade.cluster.recovery.replica.staging.path=../../data/TradeSvrA/recovery-staging' "${a_config}" || fail "Trade A staging wrong"
 grep -Fqx 'trade.cluster.recovery.replica.staging.path=../../data/TradeSvrB/recovery-staging' "${b_config}" || fail "Trade B staging wrong"
@@ -211,7 +214,7 @@ test -d "${TEST_ROOT}/runtime/data/TradeSvrA/recovery-staging" || fail "A stagin
 test -d "${TEST_ROOT}/runtime/data/TradeSvrB/recovery-staging" || fail "B staging directory missing"
 for rejected in empty_key no_snapshot; do
   if [[ "${rejected}" == empty_key ]]; then
-    sed -e 's/^TRADE_CLUSTER_RECOVERY_NODE_KEY_HEX=.*/TRADE_CLUSTER_RECOVERY_NODE_KEY_HEX=/' "${TEST_ROOT}/signed-loopback-warm.env" > "${TEST_ROOT}/bad-warm.env"
+    sed -e 's/^TRADE_CLUSTER_RECOVERY_NODE_B_KEY_HEX=.*/TRADE_CLUSTER_RECOVERY_NODE_B_KEY_HEX=/' "${TEST_ROOT}/signed-loopback-warm.env" > "${TEST_ROOT}/bad-warm.env"
   else
     sed -e 's/^TRADE_CLUSTER_SNAPSHOT_TRANSFER_AWARE_ENABLED=.*/TRADE_CLUSTER_SNAPSHOT_TRANSFER_AWARE_ENABLED=false/' "${TEST_ROOT}/signed-loopback-warm.env" > "${TEST_ROOT}/bad-warm.env"
   fi
