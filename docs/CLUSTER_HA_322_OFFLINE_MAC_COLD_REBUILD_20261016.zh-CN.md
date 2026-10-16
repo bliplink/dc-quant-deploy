@@ -1,5 +1,7 @@
 # Common 3.0.22 / com.app.dc 0.0.5 本地 ARM64 冷重建与 10 户真实交易验收（2026-10-16）
 
+> **10 月 16 日 11:45 后续直接 Demo 实测已完成：** [Trade PR34 直接 Demo 滚动故障复现、冷重建与新 10 户验收](TRADE_PR34_DIRECT_DEMO_WAL_ROLLOUT_REBUILD_20261016.zh-CN.md)。下文的旧镜像与原 10 户是当时的历史状态；当前 Demo 已重新部署 PR34 并重新创建 10 个租户。
+
 > 证据类型：**Mac mini 上真实本地 Maven/Docker 编译、真实容器启动、真实 SaaS 交易端到端验收**。本次**从未调用 GitHub Actions 编译**；Actions 的计费额度不足，在用户明确解除限制前禁止使用。**并未完成物理多节点 HA failover 或 200 tenants 负载验收**。以下日期均为 Mac 当前所在 Asia/Shanghai 时区。
 
 ## 1. GitHub 源码版本及本地一致构建
