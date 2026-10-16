@@ -1,5 +1,7 @@
 # 2026-10-16 Mac Demo 集群真实角色切换验收证据
 
+> **10:17 更新：** 本轮安全冷重建及 10 户真实交易回归已完成，详见 [Common 3.0.22 Mac 离线冷重建与 10 租户验收](CLUSTER_HA_322_OFFLINE_MAC_COLD_REBUILD_20261016.zh-CN.md)。前文 09:38 的 Trade 故障记录是当时的真实状态，不能误读为目前仍停在故障中。
+
 > 本文遵循 [集群最终统一验收任务书](CLUSTER_HA_FINAL_ACCEPTANCE_MISSION_20261015.zh-CN.md)；只记录真实已执行的操作。日期采用 Mac 所在时区 Asia/Shanghai。全程未新增产品功能，也未依赖 GitHub Actions。
 
 ## 2026-10-16 09:14–09:38 本地统一编译与真实滚动部署事故（最新状态，重要）
