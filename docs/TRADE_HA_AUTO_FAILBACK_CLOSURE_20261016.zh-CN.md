@@ -66,6 +66,21 @@
 - 真实 Demo 全量只读核查：A/B 各256份 `latest.json`，**全部 Epoch1 / snapshotSeq0**，且运行日志明确 `Trade periodic snapshot disabled`。这是真实恢复阻断，不是少打印一个 READY 日志。
 - GitHub 的 Trade `eefcf76` 和 dc-quant-deploy `a14aea2` 均由 Mac 经本地代理推送到独立开发分支，未使用 Actions，尚未合入 `saas-crypto`。下一步必须先在新版 Demo 验证定时 Snapshot、B 的 WAL/持仓业务状态和源端冻结证据，然后再接通 Common 的受权 Epoch 交接及反向故障注入。
 
+### A 单分区存活保障：交接准备失败后的自动安全取消（Trade `da14fcc`、`f40adb4`）
+
+- 修复源端 `TradeStateCoordinator.preparePartitionHandoff` 在**持有分区写锁**完成本地冻结后，遇到瞬时 WAL/ZooKeeper 后置校验异常而长期冻结该分区的问题；当确认旧主仍持有**完全相同 ZK 版本 / Epoch / Primary**，提交 WAL 物理 fsync、提交 marker 和 READY 全部有效后，自动撤销失败的准备并让 A 继续交易。
+- 如果控制面持续断开，保持冻结。支持在 ZK 恢复后调用 `abortIncompletePartitionHandoff`，再次校验来源与 WAL、仅解除匹配的未完成交接；即使 B 此时不在线，A 仍可在保有主权时恢复正常业务。
+- **失败闭合**：若 ZK 版本已变化、B 已成为新主、WAL 存在分叉/未提交尾部、分区不 READY 或 seal 已完成且被错误调用异常取消接口，则保留冻结，拒绝不可信旧 Epoch 写入。不触及 ZooKeeper CAS，不授权自动主切。
+- 新增持续断联、瞬时断联、B 离线、WAL 变动、Epoch/ZK 变动、其他分区正常交易等真实 Chronicle WAL 测试。Trade Maven 全量 **319 项通过，0失败**。
+- 本地新镜像 `dc-saas/tradesvr:cluster-dev-safe-auto-abort-20261016` ID `sha256:5edc5cf78906ae2b36d4c2256be0b25554f1bb2291c2e83a79b9d701ec2b08c2`，与 Demo 使用相同的 Common 3.0.22-SNAPSHOT JAR SHA。**此镜像尚未部署。**
+
+### B 跨 Epoch 恢复阻断（实际代码核实）
+
+- Common 的 `SnapshotRecoveryBoundary.requireInstallable` 已抽象 `CROSS_EPOCH` 和 `SAME_EPOCH_FORWARD`。因此不必新建状态机。
+- 但 Trade `TradeCertifiedRecoveryAdmissionGate`、`TradeCertifiedRecoveryReceiver`、`TradeCertifiedRecoveryAssembly`、`TradeRecoveryReplicaJournalBaseline` 当前**只允许同 Epoch 的前向 Snapshot 安装**，并拒绝有重叠/分叉物理尾部的 B。真实 Demo B 的旧 Epoch1 WAL 无法直接被当前源 Epoch2 Snapshot 安全覆盖。
+- 还需设计并实现**Common 鉴权的跨 Epoch 可信完整安装事务**：源端仍有真实 ZK 主权 + 持久 HEAD，接收端旧日志不可静默删除，安装/重启中间状态继续阻止 READY；对已失去第二副本期间的 A-only 提交，不能凭空伪造 B 的历史多数派 ACK。
+- 在代码与真实 Demo 上证明此链路之前，不执行自动 128/128 回迁、反向 SIGKILL A 或将简单 ZK READY 视为资金/持仓恢复成功。
+
 ## 防止误验收
 
 - `python3 scripts/check-trade-failback-preflight.py`：只读检查，输出永远 `automaticPrimaryChangeAuthorized=false`，直到另行完成完整可信交接机制。工具的奇数分区候选判定**只适合本次 Demo 恢复记录**，不是真实调度的主权事实来源。
