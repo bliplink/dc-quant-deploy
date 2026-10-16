@@ -2,6 +2,38 @@
 
 > 本文遵循 [集群最终统一验收任务书](CLUSTER_HA_FINAL_ACCEPTANCE_MISSION_20261015.zh-CN.md)；只记录真实已执行的操作。日期采用 Mac 所在时区 Asia/Shanghai。全程未新增产品功能，也未依赖 GitHub Actions。
 
+## 2026-10-16 08:31–09:05 Order 真实持久化签名源端与公共版本依赖（最新进展）
+
+**直接核查最新 GitHub `saas-crypto`，避免误将较早 Mac 浅工作树中的缺陷重新提交。** 本轮**没有**更换运行中的 Order/Trade/MD 容器、没有清数据或故障 SIGKILL；GitHub Actions 账单额度已尽，全部验证均使用 Mac 本地 Java 8/Maven。
+
+### 1. Order 实时 ZK ACK 校验与完整空市场 Inventory 边界已合并
+
+- 并行开发已经将 `DurableReplicaAckGuard` 及 Chronicle `syncJournalThrough` 加入远程 Order `saas-crypto`，因此**没有再次提交旧工作树的重复实现**。
+- 真正新增的缺口是 Order 现有生产 `OrderReplicationManager` 的副本 ACK 再确认只检查缓存角色/Epoch，却可能在 ZK 会话已断开后仍返回 OK/DUPLICATE。添加 `OrderPartitionRuntime.requireControlPlaneConnected()`，使生产 `OrderReplicaReplicationHandler` 的 `assignmentLookup` 在 Common durable ACK 守卫 msync **前后**两次检查 ZK 会话在线，不增加每条订单的 ZK 网络读取。模拟 WAL 已追加、会话断线和重投也不能成功 ACK。
+- 全量最新源码回归首次 382 项有 1 项失败：`OrderMdCommittedPrefixBoundaryTest` 仍要求空 `books=[]` 拒绝。进一步核查发现真正漏洞：Fastjson 反序列化省略 `books` 的旧 Snapshot 时，会自动初始化为 `[]`，错误地混淆**缺少来源库存**与**完整签名空市场清单**。源端已增加原始 JSON `books` 必须显式存在且为数组的 fail-closed 检验：合法 `books=[]` 通过、完全缺失/null 必须拒绝。
+- 通过上述修复，实际 Mac 最新 `saas-crypto` 完整 Java 8 回归 **85 suites / 383 tests / 0 failures / 0 errors / 3 skipped**。代码已合并 [Order PR #18](https://github.com/bliplink/com.app.dc.ordersvr/pull/18)，merge SHA `4f4efdc78628a315088d8ee507af7fa3a51dda7c`。
+- 注意：两项是必要安全边界，但**不能**代替真实 ZK 投票 Quorum 签名、旧主发布隔离与 Receiver Ledger。仅 GitHub 源码已更新，运行中的旧 Order 镜像**未替换**。
+
+### 2. Order 真实 WAL + SourceHead + Quorum 回执接线已开发并送审，尚未合并
+
+- [Order PR #19（Draft）](https://github.com/bliplink/com.app.dc.ordersvr/pull/19)：新增 `OrderDurableCommitWitnessSource`，接入现有内部 Netty `OrderMdRecoveryControlRouter` 的 `DURABLE_COMMIT_WITNESS_V1`，**只收原始 challenge**；读取真正的 ZooKeeper 分区 znode + `Stat.version`（不依赖只读缓存）、必须当前同步 Replica、磁盘原始 Snapshot 字节及其 SHA-256、连续 Chronicle WAL 和实际解析的 `OrderCommitWatermark` 提交 Marker；签名前后再次读取并核对 HEAD/Epoch/版本、将 WAL 尾部 `msync` 后才能签名。默认 `order.cluster.quorumWitness.enabled=false`，每台物理节点必须单独提供 256-bit 本机 key；任一依赖不满足返回 UNSAFE。Gateway/下单撮合热路径不变。
+- **非伪造 Commit Marker 的单测**：使用实际本地 Chronicle WAL 写入 `STATE_UPSERT` + 按 `OrderStateCommit.from` 序列化的有效 `STATE_COMMIT`，真实 `OrderCommitWatermark.scan` 从 WAL 推导水位（不预填测试假标记）；快照字节 SHA 与签名 HEAD 一致。模拟不同的 ZK Stat version 和第二物理节点 signer 验证拒绝改版；Snapshot 缺失 `books` 也拒绝。额外覆盖关闭开关/缺失密钥/错误节点/非 256-bit key。**模拟的第二物理节点仅限密码学单测，不是 Mac 上的真实第二台机器**；`Verification.isPromotionAuthorized()==false`。
+- 本地仅安装 Common 开发版 `3.0.22-devphysical-20261016-SNAPSHOT` 和单独编辑的 Order Maven POM 依赖进行编译测试；这**不是正式 Maven Central 发布**。隔离源码最新 HEAD `4f4efdc`，完整 Order 回归 **87 suites / 387 tests / 0 failures / 0 errors / 3 skipped**。
+- **为何保留 Draft：** 现在正式 Common 新 Quorum classes 尚未作为消费者可获取的 Maven GAV 发布；`com.app.dc` 尚未指向正式新版本。如果直接合并 Order PR19，会造成中央仓库尚无依赖的默认构建失败。先完成 Common 正式发布及 `com.app.dc` 统一依赖，再合并/统一镜像。这并不表示生产 Order 已开始响应 Quorum 控制操作。
+
+### 3. Common 新版本准备与 JDBC 8 回退问题
+
+- 已合并 [Common PR #29](https://github.com/bliplink/com.app.common/pull/29)，merge SHA `e6f088034a8fe137bae9ae199eba276d331a5e90`，`pom.xml` 准备将版本升级为 `3.0.22-SNAPSHOT`，移除旧 `mysql:mysql-connector-java:5.1.24`，改为 `com.mysql:mysql-connector-j:8.0.33`，明确针对用户发现的 JDBC 8 依赖回退。
+- 按**实际 JDBC8 Maven POM**本地离线 Common 全量回归：**66 suites / 286 tests / 0 failures / 0 errors**。当前 Mac 无可用的 Maven Central `~/.m2/settings.xml` 发布设置（已检查，未输出密钥），**3.0.22 并未发布中央仓库**，`com.app.dc`/运行镜像亦未切换。
+- 下一步必须先给新的 Common 正式 GAV 准备发布凭据/发布通道，然后 `com.app.dc` 唯一引用新 Common，Order/Trade/MD 依赖同一 `com.app.dc`/Common Jar，禁止服务端各自暗中覆盖不同 Common 版本。GitHub Actions 暂不使用。
+
+### 4. 本轮结束时 Mac Demo 实际运行验收（09:04 CST）
+
+- ZooKeeper **Order / Trade / MD 各 256/256 READY**；各两 Primary 节点 A/B 分别 128/128；实际 Order-C 是所有 256 分区的**同步 Replica**而非 Learner，故本轮**未滚动/重启任何 Order**。
+- Order-A/B/C、Trade-A/B、MD-A/B/C 容器均 `running=true, OOM=false, restartCount=0`；运行镜像分别仍为 `dc-saas/ordersvr:merged-market-identity-image-20261015`、`dc-saas/tradesvr:merged-wal-fence-20261015`、`dc-saas/mdsvr:pr13-empty-image-20261016`。
+- Robot **8/8 RUNNING、320 挂单、8/8 有效租约**。Mac 磁盘约 **83% 使用率、74 GiB 剩余**，需后续验证归档保留及清理，但不能以未验收的 WAL 删除替代保留安全检查。
+- **阻断仍未通过：** Order/Trade 真实不同物理机独立密钥 signed Quorum、接入 MD `Safety` 的旧主隔离+候选已应用 Image/Diff 证明、Order/Trade/MD Primary SIGKILL 自动接管、资金持仓委托成交 Projection 权威一致性、50/200 租户长期压测。**代码回归 PASS ≠ 故障接管 PASS**。当前单 Mac 的三个 Order 容器没有跨物理机隔离；Trade 目前只有 A/B、每分区一个同步副本，也不满足 Common 当前要求的**两个幸存独立同步 Replica**证据，需补拓扑或持久化既有 Quorum 回执机制。
+
 ## 2026-10-16 08:16 Common 独立物理节点的提交证明与 Netty 控制接口（最新进展）
 
 **本轮真实代码已合并、离线全量测试通过；仅新增可复用的 Common 组件，没有改变现网容器或自动主切配置。**
