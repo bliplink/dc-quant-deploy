@@ -1,0 +1,38 @@
+# Trade HA 自动回迁闭环｜2026-10-16
+
+> 本文件记录实际 Mac mini Demo 验收与尚未达成的安全机制。不要把“READY”“Replica 已接收部分 WAL”或“ZK CAS 成功”解释为可安全迁移 Primary。
+
+## 本轮真实数据
+
+- 运行镜像 `dc-saas/tradesvr:cluster-dev-fenced-transport-20261016`。
+- Trade-B 被 SIGKILL 后，Trade-A 接管 256/256 分区；Trade-B 恢复后 A=256，B=0；Epoch1/2 各128个，均显示 READY。
+- `scripts/check-trade-failback-preflight.py` 全量读取 ZooKeeper 256 个分区及 replication-health；原属 B 的奇数分区128个，预检查时124个无健康记录、4个健康记录超时。
+- **自动切回资格 0/128（仅初步复制健康指标）；自动授权=false，反向故障注入资格=false。**
+- Docker 24/24 运行，不意味着完成业务自动恢复。
+- Trade 源码分支 `fix/trade-safe-auto-rebalance-20261016`、commit `6477fd2` 已实现健康 ACK 水位的节流发布；本地 Maven 全量300项通过；本地镜像 `dc-saas/tradesvr:cluster-dev-health-progress-20261016` 已构建，但正式 Demo 未替换。GitHub Actions 不运行。
+
+## 已确认的机制缺口
+
+1. `TradeFailoverController.pollOnce()` 当前只处理 **原 Primary 在 ZK 中已失联**，存活即 `continue`。恢复 B 后没有自动 failback 的触发器；要补“失联接管”和“存活主节点受控回迁”两个明确路径，但共用 Common 状态机与仲裁机制。
+2. `TradeStateCoordinator.publishReplicationHealth` 原来只在角色/降级标记变化时发布，同 Epoch 正常 ACK 水位会陈旧；Trade `6477fd2` 已修复，但未部署验证。
+3. ZooKeeper replication-health 目前只有10/256分区。空闲分区不能伪造“有复制成功的 commit ACK”：应复用 Common 的**可认证空分区基线**；非空分区必须有 Snapshot + 连续、原始 WAL + committed watermark / digest 的可验证接收状态。
+4. `TradeRecoverySourceHeadProvider` 有挑战绑定的 HEAD，但其注释明确 HEAD **不是** 独立 Quorum ACK 或完整接收端镜像证明。当前 Trade `TradeRecoveryQuorumMembershipGate` 是恢复场景的投票成员校验，而不是允许活跃 Primary 交接的授权证明。
+5. `tests/trade_cluster_transition_host.py` 的 `switch-primary --apply` 是 CAS 写分区的操作工具，并未建立“旧 Primary 先停止新提交 + B 接收端可信完成证明 + 对账 + 旧主隔离”。**不准在现有 Demo 上直接批量执行。**
+
+## 最小正确实现（不扩新产品功能）
+
+整个活跃主权交接必须由 Common 原有状态机、恢复 Proof / Quorum 组件提供通用安全门槛，Trade 只提供业务状态 apply/snapshot、持久提交 HEAD 和权威账户/持仓校验。
+
+1. **候选识别**：控制器按明确的持久预期放置布局识别 B 应收回的128分区（Demo 是原始奇数分区），不能根据“当前负载均衡”推断历史主权。B 掉线时 A 持续交易，不因 B 卡住而丢失 Primary READY。
+2. **目标副本准备**：B 完成 Common 可信 Snapshot + WAL 原始续传、全量前缀校验、提交序号与哈希、Epoch/assignmentVersion/物理节点身份绑定、完整接收安装事务；空分区使用可信初始空基线的专门门槛。接收端不能自称 READY 或自行修改 ZK。
+3. **源端固定交接 HEAD**：A 按分区持有与业务突变共用的锁，封闭这一分区的新交易写入，完成未结事务和 WAL fsync，读取一致的最终 Source HEAD（包含原 Epoch、ZK 版本、提交 marker、state seq、签名），防止旧主在签名后继续提交。
+4. **同一交接点验收**：B 按 A 冻结 HEAD 验证连续 WAL、持久 ACK、状态映像和资金/持仓权威快照；独立物理成员和真实投票成员签名、接收端恢复事务等由 Common 核验。**任一条件失败：不得 CAS；A 继续做 Primary 并解开冻结，B 只做 Replica。**
+5. **Epoch 切换 + 旧主 fencing**：只有在第4步完成且 A 的逐分区业务写入仍被冻结，ZK 版本 CAS 才把 Primary 变为 B，并增加 Epoch；A 本地永久撤销旧 Epoch 写权限，B 恢复后才发布新 Epoch READY。故障重试必须幂等，无双主、不能回滚已经生效的新 Epoch。
+6. **恢复正常分工**：按小批量推进，逐分区记录切换耗时、业务中断、A是否持续服务其他分区、B追平证据，最终 `A=128,B=128`；检查订单/成交/资金/持仓/Projection watermark，再做反向 `SIGKILL A`，重复闭环。
+
+## 防止误验收
+
+- `python3 scripts/check-trade-failback-preflight.py`：只读检查，输出永远 `automaticPrimaryChangeAuthorized=false`，直到另行完成完整可信交接机制。工具的奇数分区候选判定**只适合本次 Demo 恢复记录**，不是真实调度的主权事实来源。
+- 无任何文件尺寸、MD/Trade 表面 READY、Robot RUNNING、10 条 WAL 接收日志足以证明 256 分区恢复。
+- GitHub Actions 暂时无额度，所有代码先走 Mac 本地 Maven/镜像，完整验收后再决定是否合入 `saas-crypto`。
+- Demo 可清理重部署，但不得以清理数据代替对真实故障后未丢单、无重复成交、无双主的验收。
