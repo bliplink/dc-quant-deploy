@@ -90,3 +90,13 @@
 **严格限定的安全范围**：本次 MySQL `dc_tenant`、余额、持仓、委托、成交记录均为 **0**；没有真实业务持仓、资金/委托/WAL 可用于零丢单测试。两次 A/B 接管都是 **空业务 Genesis Epoch1** 的授权特例，不等价于真实订单 / 非零 WAL / 资金一致性验收。尝试自动创建受控测试租户并调用真实入金 API 的操作触发 OpenAI 执行环境安全检查，被拦截后没有绕过该检查，所以本轮没有伪造真实业务负载。
 
 **剩余明确 BLOCKER（不是自动选主）**：为 Trade-A/Trade-B 对称接通真实签名恢复源，开启其 `TradeReplicaRecoveryStageWorker` 的 `autoWarm` + `electedBootstrap` 与 bounded fleet，恢复已认证 Snapshot/原始WAL/物理 installLedger，添加/验证返回节点跨 Epoch 业务 READY/独立物理健康回执，并取得256个真 ZK health 证据。前述密钥涉及的现网配置写入曾被安全检查拦截，不能回避独立物理签名与接收端授权。实现后再次执行**不清理数据**的 A→B→A、B→A→B 真正回归，以及非零资金/持仓/委托/成交/Projection watermark 对账。禁止在未追平旧副本时再次连杀双主。
+
+## 后续复核：Trade 恢复链路未接通，Order A/B/C 静态一致性预验收｜2026-10-17
+
+**Trade 当前 Demo**：仍是统一 ARM64 `local/dc-saas-tradesvr:ab-repair-ack-healthy-375-20261017`，A/B 正常运行、各有256份 Epoch1 Snapshot、各128 Primary，`/dc/cluster/tradesvr/controller/replication-health` 为空。A/B 的 `autoWarm.enabled=false`；这不是简单打开布尔开关能安全完成的。恢复架构已具备签名 HEAD、完整 Snapshot/原始 WAL staging、Common Ledger `REPLAY_COMPLETE_NOT_READY`，但缺乏最后独立物理签名/账务 Projection 对账后才能发布 READY/HEALTHY 的闭环。两方向零 WAL SIGKILL 128/128 接管通过仍不能替代这条证明。
+
+**新增可执行验收门禁** `tests/trade_ab_auto_ha_preflight.py`，配套 `tests/test_trade_ab_auto_ha_preflight.py` 七项测试通过，提交 `facbf4227014128eb6800e1b12584318d162eaf9`，`[skip ci]`。脚本只输出布尔/预期节点/端口/缺失字段，**不输出任何密钥值、不写配置、不改 ZK**。现场输出两端均 **`full-auto-recovery-config=BLOCKED`**。A 缺自身 Replica 签名身份、B→A 验证信任、恢复源、autoWarm/elected 全量、Genesis receipt/Replica 健康 observer；B 缺独立 RSA Source signer、reader trust、autoWarm/elected 和健康 observer；严格生产链路要求显式双向受信物理身份，不能凭当前单向 demo HMAC 或一个 flag 误判认证通过。此前涉及真实私钥配置更改被执行环境安全检查拦截，不绕过。
+
+**Order ABC 预检查**：使用真实当前 Mac 环境只读运行原项目 `tests/verify-order-cluster-state-host.sh`，包括 `ORDER_CLUSTER_VERIFY_LEARNERS=true` 的完整副本快照比对，均 **PASS**：256/256 ZK 分区 READY、全 Epoch1，OrderA/B 各128 Primary、OrderC 作为全部256分区 Replica，所有指派节点的 Snapshot 完全一致，没有 `SN` 可疑字段；OrderA/B/C/Gateway 进程正常，重启0、OOM false。业务网关被登录认证门禁挡住，因此未执行真实下单/撤单/成交或 SIGKILL。完整 Order HA 尚未通过，**Trade 修复后按同样的副本追平/Quorum/资产一致性标准注入故障**。
+
+**本阶段结论**：Trade 的 *双向自动接管* 在空业务测试中通过；*故障返回节点的完整恢复、持仓资金对账、256个认证 ACK* 仍 BLOCKED。Order 当前仅静态前置条件通过，不能提前宣称真实 HA 验收完成。
