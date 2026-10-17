@@ -61,6 +61,8 @@ def blockers(node: str, own: dict[str, str], peer: dict[str, str]) -> list[str]:
         "replica.electedBootstrap.enabled",
         "replica.electedBootstrap.fleetEnabled",
         "replica.genesisReceipt.enabled",
+        "replica.physicalReceipt.enabled",
+        "replica.physicalHealth.enabled",
         "genesisObserver.enabled",
         "genesisObserver.fleetEnabled",
         "genesisObserver.replicaHealthEnabled",

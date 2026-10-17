@@ -14,6 +14,7 @@ class TradeABAutoHaPreflightTest(unittest.TestCase):
             "replica.electedBootstrap.enabled",
             "replica.electedBootstrap.fleetEnabled",
             "replica.genesisReceipt.enabled", "genesisObserver.enabled",
+            "replica.physicalReceipt.enabled", "replica.physicalHealth.enabled",
             "genesisObserver.fleetEnabled",
             "genesisObserver.replicaHealthEnabled",
         ):
