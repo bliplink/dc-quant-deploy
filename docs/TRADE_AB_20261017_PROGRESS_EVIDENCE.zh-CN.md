@@ -219,3 +219,12 @@
 - Trade Java8 离线 Maven `clean test`：**414/414 PASS**，0 failures/errors/skips，新增纯准入测试4条 + 业务 action 未发生前严格阻断测试1条。代码 `bliplink/com.app.dc.tradesvr@28123c440895b2710853797ac62fadf5770cae9c` `[skip ci]`。Mac 本地 ARM64 镜像 `local/dc-saas-tradesvr:strict-healthy-replica-414-20261017` ID `sha256:1b71f0816b9c182bbe2ffe9200807a38c94845c0335b43659ae2745e9ee1f1a8`，Common Jar SHA `018d0e9e9a92a6620192bdc8fa438fff540076d9de47a4f5c1b66ce91b59071f`。已通过 Compose 将两个 Trade 容器实际更新并验证进容器的2条严格模式配置已正确加载。
 - **验收仍须补齐**：真实 Robot 持续报价→Order 匹配→Trade 帐户/仓位变动→原始 WAL 非零已确认双持久化→故障期间拒绝/重试同 client-order-id→两侧 Snapshot+WAL、执行去重记录、MySQL/Projection watermark 与余额持仓对账。单靠 Trade 严格写入门禁**不能**证明跨 Order→Trade→Projection 恰好一次交付；需要检查 Order 的持久事件重放以及 Robot 的稳定订单 ID/超时查询后再重试。当前尚未执行非零订单/入金/成交，先前隔离测试租户准备脚本受到 WebCodex 安全检查拦截，未执行，不能算 PASS。
 - **运行后续核验限制**：严格模式镜像部署后进一步复核256分区/日志的某次只读 WebCodex 命令被执行安全检查阻断，因此已核实容器新镜像与配置，但本节**不**声称新策略上线后完成了真实 Robot 有业务互切验收。不触发 GitHub Actions，不保留或提交任何私钥。
+
+## 2026-10-17 20:19 CST｜正式注册后的非零业务 WAL 与故障切换阻塞
+
+- 官方正式注册：A3F7FE、B3F7FE 均通过申请、自动审批、管理员与交易员注册登录，做市及 Tape Demo 入金已被 worker 确认，两租户各一个 Robot enabled=1。为匹配正式对外设计，将旧租户管理 API Key 测试与正常注册流程隔离。
+- 初始化机制：Demo 遗漏 20260930、20261008 数据库迁移，已补齐 liquidity bootstrap 表与 Tape 的 6 个字段及索引。RobotSvr 曾因 PLATFORM 管理员和专属运行时 API Key 未初始化报 9005 / API_NOT_EXIST；已复用 deploy-saas.sh 的原生 provision_robot_runtime_identity，重载 LoginSvr/Gateway 后实际登录成功、订阅 BTC 行情并运行 Worker。
+- 非零 WAL：两分区 P084/P250 在真实 Robot 业务下从低提交水位推进到千余条。Trade 热路径认证了两端实际落盘 ACK，冷重启曾发现 ZK 发布水位落后于本地已双写提交。修复采用原有 Netty 完整原始 WAL 字节对比 + 独立 Replica durable ACK，8 记录一批认证并推进 ZK，而非伪造水位；实机 P084/P250 由 seq=6 认证到 seq=124 且重新 READY。热进程只能使用本进程当前 Epoch 的已收到物理提交 ACK 暂时桥接健康水位批量刷新；冷重启仍必须从物理副本重新验证。
+- Trade 代码：离线 Maven clean test 416/416 PASS；saas-crypto commit a2005d3a969a7397c3f9a76645bd7dbde317624d，跳过 GitHub Actions；Demo A/B 均采用 ARM64 local/dc-saas-tradesvr:hot-physical-ack-416-20261017。
+- 当前仍未通过：P084 Trade-A 原始 CQ 最后序号 1621，但最后完整 STATE_COMMIT=1620，Trade-B committed=1620；P250 A=1633，最后完整 STATE_COMMIT=1632，B=1632。A 多出的均为一个未提交 STATE_BATCH。真实 Netty 接口对 B 的最后两条已提交物理 WAL 返回 DUPLICATE + durable ACK（P084=1620；P250=1632）。ZooKeeper 保留 degraded=true 和 seq=1620/1632，来源 A 不满足 READY，Robot ERROR 且 0 挂单。整体 256 分区中 254 份健康 ACK 与当前 Epoch 匹配。
+- 安全不变量：不人工改 ZK ACK、不能将未提交 STATE_BATCH 认作成交、不可未经独立证明丢弃分叉尾部，也不能打开 single-node localCommit。旧 Common Ledger 和恢复封存均保留。下一机制必需是对 A 的未提交原始 WAL 完整隔离及哈希证据、B 当前 Epoch 独立持久提交证明，以及可重启续传的原子恢复事务；完成后再跑持续 Robot 真实下单、SIGKILL 双向互切、资金持仓/委托成交/Projection 权威对账。当前全量非零业务 HA 尚未通过。
