@@ -46,3 +46,11 @@
 - 最新 Trade `saas-crypto` 探针修复提交 `18b1fc7f63be90b2450f484ea22c01c13464e2b5`；源码业务修复提交 `015acdaab960f2cff2a666edfad5fe80e668516b`。
 - Mac 离线构建 371 tests PASS 的 ARM64 镜像 `local/dc-saas-tradesvr:ab-ack-floor-015acda-20261017`，镜像 SHA `sha256:7f2354fa9f6f95b47d19bf2bf08f633492d405038c5bd3d7ba479b29c77a7be2`；Common JAR SHA `6b4bf7aff300e69198587d06e7243c5c9594977b94b82f789f943f370bba12bd`、MySQL Connector/J 8.0.33，`dc.release.authorized=false`。**未部署到 A/B。**
 - 最新只读现网观察：Trade-A 仍为 `full-src-auto-fenced-fleet-20261017`、Trade-B 仍为 `full-src-genesis-admission2-20261017`；ZooKeeper 复制健康证明 **0/256**；Mac 空闲空间约 279 GiB。**不得执行真实主节点 SIGKILL**，直到物理副本证明与认证接收端水位真正满足。
+
+## 后续同日修复：存活 Primary 本地提交前先发布 DEGRADED（2026-10-17 10:45 CST）
+
+- **严重故障门禁修复** `bliplink/com.app.dc.tradesvr@c8bf6c27235914daab2255135d43ab26bd2a6bc2`：原 `TradeStateCoordinator.maybeEnterSurvivingPrimaryDegraded` 能在 Replica 离线后进入本地持久化模式，却没有在 FIRST local-only STATE_BATCH 之前将当前健康证明以 ZK CAS 持久降级。旧健康 ACK 可能被恢复的过期副本用于提升，威胁 Primary 在降级期间确认过的资金/持仓。现在先重新读取当前 ZK assignment、核对 Epoch/角色/本地持久 WAL 与 committed marker，再持久发布 `degraded=true` 的**负提升证明**并回读；确认 ZK version/身份/副本仍离线/未产生新 WAL 后才允许单节点继续提交。ZK 写失败时不允许任何 unprotected STATE_BATCH。
+- 加入单测 `TradeSurvivorNegativePromotionFenceTest`，覆盖降级状态匹配、不同 Epoch/Primary/Replica/dirty WAL/恢复副本的拒绝；扩展 `TradeGracefulShutdownDrainTest` 的真实 Chronicle 测试，模拟 ZK 拒绝 DEGRADED 写入，确认 WAL=0 且 committed watermark=0。修改已有假 ZK stub，使其模拟实际持久化并回读。Mac Java8 / Maven 3.9.16 全量 `mvn -B -o clean test` **374 tests / 0 fail / 0 error / 0 skipped / BUILD SUCCESS**。
+- ARM64 离线构建新候选 `local/dc-saas-tradesvr:ab-survivor-fence-c8bf6c2-20261017`，镜像 `sha256:43c112458c518e4ecbc4cd840e8b7fe31b3cf30bb2ff9fe2dce086c661fcf0ef`；Common `3.0.22-SNAPSHOT` JAR `6b4bf7aff300e69198587d06e7243c5c9594977b94b82f789f943f370bba12bd`；MySQL Connector/J `8.0.33`。该镜像 `dc.release.authorized=false`，**未部署运行态**。
+- 再次只读复查：Demo Trade A/B 依旧保持不同旧镜像，`autoWarm.enabled=false`（A/B）、B `electedBootstrap.enabled=false`，ZK `replication-health` 返回 `[]`（**0/256**），Mac 剩余 279 GiB。未执行任何真实 Primary SIGKILL；不存在 256 个物理健康副本的证据，不能认定双向 HA 通过。
+- 本轮没有通过其他途径重试此前被执行环境安全检查拦截的现网密钥配置写入或 128 分区批量恢复验证，没有变更 ZK ACK/READY/assignment 或清理生产态数据。**Trade 自动副本追平→真实签名安装与业务财务对账→健康证明→双向 SIGKILL 的闭环依旧 BLOCKED，必须严格保持失败状态，不可伪造 PASS。**
