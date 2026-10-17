@@ -121,3 +121,10 @@
 - `dc-quant-deploy` 脚本 `tests/trade_ab_auto_ha_preflight.py` 已追加检查两端 `replica.physicalReceipt.enabled` 和 `replica.physicalHealth.enabled` 的独立配置；7/7 Python 测试通过。当前两端仍 `BLOCKED`，因为关键双向受信身份/签名配置、autoWarm+elected 安装和实际 ACK 未激活。这是实测而不是推测。
 - **仍未通过最终验收**：此非零 receipt 已实测协议+Java单元测试、容器启动，但**没有完成真实 Mac B→A/A→B 跨 Epoch 的物理安装、独立业务/Projection 财务对账和 ZK 256/256 健康证书**。真实当前 ZK `replication-health=[]`。不可用此次提交掩盖真正 HA 仍待完成。此前敏感签名材料现场配置尝试被安全检查拦截，本轮没有尝试绕过。
 - **Order** 仍保持既有只读静态 256/256 Snapshot 验证 PASS；按用户要求待 Trade 真正恢复并验收之后再注入真实 Order 故障，暂不同时使两个撮合核心失效。
+
+## 2026-10-17 13:11 CST｜非零已提交快照的真实 Chronicle/Common Ledger→RSA 物理回执端到端验证
+
+- Trade 新增 `src/test/java/com/app/dc/service/cluster/TradeRecoveredReplicaProofEndpointTest.java`，提交 `bliplink/com.app.dc.tradesvr@0dc477a3202fc5f1b3d14422452c3d7ad00a9f9f`（`[skip ci]`），不调用真实生产密钥。测试创建并封存老 Epoch1 Chronicle/Snapshot，然后经正式 `TradeRecoveryReplicaJournalBaseline.forCertifiedCrossEpoch` 安装 Source Epoch2 的 **`snapshotSeq=2 / committedStateSeq=1 / committedHeadSeq=2` 非零提交水位**，Common 持久 `DurableRecoveryInstallLedger.REPLAY_COMPLETE`，由被测真实 `TradeRecoveredReplicaProofEndpoint.handle` 验证签名 source HEAD、物理 ledger、Snapshot、CQ，并用独立 2048 位 RSA Replica 私钥签发回执，再由 Source publicKey 完整核验。回执本身不修改任何 ZK 或 READY。
+- 3 项端到端检查 PASS：正常已安装的非零 Snapshot 提供可验 RSA 回执；错误旧 ZK version 和删除 Common Ledger 均拒绝；不合法追加的 Chronicle 尾部也拒绝。连同此前的 5 项 RSA 协议伪造/过期/重放检查，当前 Java Mac 离线 Maven `clean test` **387/387 PASS，零失败、零跳过**。
+- 对已在 Demo 运行的 `ab-nonzero-physical-receipt-384-20261017` 二进制，再次使用真实 Netty+ZooKeeper `TradeLiveElectedPrimaryAuthorityProbe` 只读测试：`P090` A→B signed Source HEAD、过期 ZK-version 拒绝 PASS，`P180` B→A signed Source HEAD、过期 ZK-version 拒绝 PASS；实机输出均 `REAL_ZK_ELECTED_BOOTSTRAP_AUTHORIZED_NOT_INSTALLED`，**这不是已完成安装证明**。
+- 只在测试源码新增新回归，Demo 现有 `384` 镜像仍包含相同生产代码，可继续运行；无需因新增测试而反复重建 A/B 生产镜像。下阶段最关键依然是对称独立节点凭证/接收端当前 Epoch 安装门禁的授权、autoWarm/electedBootstrap/签名 receipt 实际启动、256/256真实 ZK HEALTHY、带业务现金/持仓的双向 SIGKILL 后重新自动追平与账务 Projection 对账。此前执行环境安全拦截的密钥配置行为仍未重试或绕过，严格不提前宣称 HA 完成。
