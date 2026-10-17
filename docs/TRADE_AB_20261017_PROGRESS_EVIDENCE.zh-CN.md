@@ -100,3 +100,12 @@
 **Order ABC 预检查**：使用真实当前 Mac 环境只读运行原项目 `tests/verify-order-cluster-state-host.sh`，包括 `ORDER_CLUSTER_VERIFY_LEARNERS=true` 的完整副本快照比对，均 **PASS**：256/256 ZK 分区 READY、全 Epoch1，OrderA/B 各128 Primary、OrderC 作为全部256分区 Replica，所有指派节点的 Snapshot 完全一致，没有 `SN` 可疑字段；OrderA/B/C/Gateway 进程正常，重启0、OOM false。业务网关被登录认证门禁挡住，因此未执行真实下单/撤单/成交或 SIGKILL。完整 Order HA 尚未通过，**Trade 修复后按同样的副本追平/Quorum/资产一致性标准注入故障**。
 
 **本阶段结论**：Trade 的 *双向自动接管* 在空业务测试中通过；*故障返回节点的完整恢复、持仓资金对账、256个认证 ACK* 仍 BLOCKED。Order 当前仅静态前置条件通过，不能提前宣称真实 HA 验收完成。
+
+## 2026-10-17 12:00 CST｜Trade Common 恢复后物理审计已补齐并替换 Demo，Order 静态预检通过
+
+- **Trade 代码提交**：`bliplink/com.app.dc.tradesvr@2c3b97984cfb184292624249064d98867528dbf8`（`saas-crypto`、`[skip ci]`）。在 `TradeCertifiedRecoveryReceiver.recoverStagedCrossEpoch` 与 `recoverStagedElectedPrimaryBootstrap` 接收端恢复完成后增加 `TradeRecoveredPhysicalAudit.requireInstalledNotReady`，独立回读 Common `DurableRecoveryInstallLedger.REPLAY_COMPLETE`、当前物理 Snapshot Epoch/序号/原始哈希、Chronicle WAL Epoch/seq、源 HEAD 的 Snapshot/committed-state/commit-marker 完整边界。不匹配则 fail-closed；成功也 **仍为 NOT_READY**，不是独立物理副本 ACK 或账务/Projection 一致性证明。不能凭 Common ledger 单独发布 HEALTHY。
+- **本地完整回归**：Java 8 离线 Maven `mvn -B -o clean test` **379/379 PASS、0 fail、0 skip**；新增4项异常物理后置检查（不完整 Ledger、过期 Epoch、脏 WAL、Snapshot哈希/业务摘要不匹配）。
+- **实际 Demo 已替换镜像**：A/B 均使用 `local/dc-saas-tradesvr:ab-physical-postflight-379-20261017`；ARM64 image `sha256:887befd6da2d125c1b454cc004d3b09058710150944aea6d3de4dac0b1cb3673`，Common 3.0.22-SNAPSHOT SHA256 `6b4bf7aff300e69198587d06e7243c5c9594977b94b82f789f943f370bba12bd`。新 overlay `/Users/kong/.opentradingcore/ha-trade-ab-postflight-379-compose-20261017.yaml`，只重建 Trade 两容器，其它 Order/MD 未重启。ZooKeeper 256分区仍 A/B 各128，全部 Epoch1；两节点各256份初始 Snapshot Epoch1，A/B 无 OOM、无自动重启、最近运行日志无报错。此修改没有现网非零 Epoch 恢复路径验证。
+- **实测自动恢复必要配置审计**：`tests/trade_ab_auto_ha_preflight.py` 的7项回归通过，当前现场 A/B 均 `BLOCKED`，细项见该脚本 stdout。A 缺 B→A 恢复来源信任/自身物理签名身份、autoWarm/electedBootstrap；B 缺单独 RSA 源端签名身份、双向健康 observer、autoWarm/electedBootstrap。此前涉及密钥配置更改操作遭执行环境安全检查拒绝，**不绕过/不伪造证据**。
+- **Order 只读预检**：`tests/verify-order-cluster-state-host.sh`，含 `ORDER_CLUSTER_VERIFY_LEARNERS=true`，两个模式均 PASS。真实 Order A/B/C/Gateway 进程均在，A/B 128/128 Primary，C 为全部256分区副本，**256/256 Snapshot exact equal**、所有分区 READY、全部 Epoch1，0 OOM/重启。没有认证业务会话，故没做真实委托、SIGKILL、持仓与 Projection 对账。
+- **当前正式验收**：空业务基线 A→B、B→A 独立 SIGKILL 各128/128自动接管PASS；恢复节点跨Epoch真实追平、可认证物理 ACK、256/256健康 ZK、非零真实订单资金一致性 **仍未通过**。严禁把379项测试通过或临时 READY 当完整Trade HA通过。
