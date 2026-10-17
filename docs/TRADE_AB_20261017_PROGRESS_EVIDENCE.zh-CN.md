@@ -70,3 +70,23 @@
 - ZK `/dc/cluster/tradesvr/controller/replication-health` 仍 `[]`（0/256）。无法安全宣称双向 SIGKILL、追平与财务对账已通过。上次配置密钥写入和批量验证的执行环境安全拦截未绕过；在真实双副本水位认证前，没有执行主节点 SIGKILL。
 
 **剩余关键闭环**：使 A 从当前 B-primary 的真正签名数据自动安装 E3 Snapshot/Committed WAL→Common Ledger REPLAY_COMPLETE→独立 A 物理回执与业务数据验收→B 真实健康发布（128 分区）；再对 A-primary 的128分区验证对称 Replica 当前水位/健康证明，完成 256/256；真实 A/B 双向故障和恢复自动切换、资产/持仓/委托/成交/Projection watermark 对账。严禁通过写一个任意 ZK healthy=0，或脚本手动切换来假装通过。
+
+## Demo Trade A/B 直接清空重建 + 双向真实 SIGKILL 验收｜2026-10-17 11:18–11:36 CST
+
+**已实际重建和部署**（不只本地打包）：
+- 原始 Mac Demo 根目录 `/Users/kong/.opentradingcore/dc-saas-runtime-clean-20261016`。两个 Trade 进程和 Robot/Liq 在重建期间暂停，Order/MD/MySQL/ZooKeeper 没有重启；仅将 `data/TradeSvrA`、`data/TradeSvrB` 归档到 `/Users/kong/.opentradingcore/trade-ab-fresh-20261017-evidence/`，并重置 Trade 专属 ZooKeeper 命名空间 `/dc/cluster/tradesvr`，**未重置** `/dc/cluster/ordersvr`、`/dc/cluster/mdsvr`。
+- 使用原有 `tests/trade_cluster_bootstrap_host.py --apply --confirm-root /dc/cluster/tradesvr/partitions`：每次 fresh bootstrap 的 `256/256` assignments `verify_exact PASS`，128 primary A、128 primary B，互为 Replica，`epoch=1`，`protocolVersion=3`。此为正常新集群初始分配，不是手工切换故障时的角色。
+- A 端旧的 `genesisObserver.transferEnabled` 与 `fleetEnabled` 在 Demo 的现有配置中设置为 `false`，避免新建 Epoch1 时仍按旧零 Genesis 主动搬迁128奇数分区造成不必要 E2/E3 分叉；该操作未改变密钥。
+- 实际 `docker compose up -d --no-deps --force-recreate tradesvr tradesvr-b` 使用同一新增 overlay `/Users/kong/.opentradingcore/ha-trade-ab-fresh-375-compose-20261017.yaml`，两容器均使用 `local/dc-saas-tradesvr:ab-repair-ack-healthy-375-20261017`，Docker image ID 同为 `sha256:262ab41ecd0092b00111fce46b70ce64774c70d34a26a53448a1f3a476a21da1`；实机容器内部 Common 3.0.22-SNAPSHOT SHA `6b4bf7aff300e69198587d06e7243c5c9594977b94b82f789f943f370bba12bd`，TradeStateCoordinator.class SHA `3b49eb6cefa3c4e2bc0215ef97cb03ba2ac7f283f555aa0d301b36c27dad791d` 完全相同。源码提交 `bliplink/com.app.dc.tradesvr@6a0d3aa415b7a83c3d2b59ca93b1267118490344`，375 测试通过、没有 GitHub Actions。
+- ZK+Netty 真实只读复核：fresh Epoch1 `P090` A→B、`P180` B→A 的独立签名 HEAD 和 stale ZK version 拒绝均 PASS；这只证明恢复源身份和权限，并**非已完成副本安装**。
+
+**真实 Docker SIGKILL，不使用任何人工 ZK 手动切换脚本**（两个独立空业务初始基线）：
+1. `docker update --restart=no dc-saas-tradesvr` + `docker kill --signal=SIGKILL dc-saas-tradesvr`，实测退出码137，A ZK membership 消失，B 无 OOM/重启；B 自身 `TradeFailoverController` 自动 CAS 提升所有原 A-primary `P000..P127`，`128/128` 已记录 `TRADE_FAILOVER_PROMOTED`，Epoch1→2，`128/128` 进入 `TRADE_PARTITION_READY`。保留真实 ZK / 物理日志证据 `trade-A-SIGKILL-B-auto-takeover-evidence.json`。
+2. 启动 A 且恢复 `unless-stopped` 后，A 的128个原主分区作为返回副本仍是 Epoch1，B 是 E2；A `autoWarm.enabled=false`、没有 Common 接收端安装 Ledger，**128/128 rejoin 未通过**；健康 ZK `0/256`。无数据/资金写入。
+3. 为独立反向故障测试，再次只重置 Trade 空基线（另存两个节点数据，未伪造角色切换）；`docker update --restart=no dc-saas-tradesvr-b` + `docker kill --signal=SIGKILL dc-saas-tradesvr-b`，实测退出码137。Trade-A 原生 `TradeFailoverController` 将 `P128..P255` **128/128** 自动提升 Epoch1→2，且 **128/128 Epoch2 READY**；A 没有重启、没有 OOM。证据 `trade-B-SIGKILL-A-auto-takeover-evidence.json`。
+4. B 返回且恢复 `unless-stopped` 后，也没有追平至 Epoch2，B 保持旧 E1 Snapshot，**反向 rejoin 未通过**，ZK健康 `0/256`。
+5. **结束状态**：将空 Demo Trade 数据和 Trade ZK 进行第三次正式初始化，留下正常的均衡 128/128、**全部 Epoch1**，两边各256 Snapshot且各128主分区 READY。A/B、Robot、Liq 已全部重启；Docker restart policy均为`unless-stopped`。保留所有两次故障现场旧目录和 JSON 证据。最终 ZK health目录仍 `[]`（0/256），**不能称为完整 HA 已验收通过**。
+
+**严格限定的安全范围**：本次 MySQL `dc_tenant`、余额、持仓、委托、成交记录均为 **0**；没有真实业务持仓、资金/委托/WAL 可用于零丢单测试。两次 A/B 接管都是 **空业务 Genesis Epoch1** 的授权特例，不等价于真实订单 / 非零 WAL / 资金一致性验收。尝试自动创建受控测试租户并调用真实入金 API 的操作触发 OpenAI 执行环境安全检查，被拦截后没有绕过该检查，所以本轮没有伪造真实业务负载。
+
+**剩余明确 BLOCKER（不是自动选主）**：为 Trade-A/Trade-B 对称接通真实签名恢复源，开启其 `TradeReplicaRecoveryStageWorker` 的 `autoWarm` + `electedBootstrap` 与 bounded fleet，恢复已认证 Snapshot/原始WAL/物理 installLedger，添加/验证返回节点跨 Epoch 业务 READY/独立物理健康回执，并取得256个真 ZK health 证据。前述密钥涉及的现网配置写入曾被安全检查拦截，不能回避独立物理签名与接收端授权。实现后再次执行**不清理数据**的 A→B→A、B→A→B 真正回归，以及非零资金/持仓/委托/成交/Projection watermark 对账。禁止在未追平旧副本时再次连杀双主。
