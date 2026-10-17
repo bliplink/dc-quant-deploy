@@ -148,3 +148,16 @@
 - 当前 Trade **Java8 Maven full `clean test` 399/399 PASS、0 failures/errors/skips**。
 - 新 ARM64 镜像 `local/dc-saas-tradesvr:ab-genesis-plus-wal-399-20261017`，image ID `sha256:a450dfb1599dbab4bca9d01818898ee8a9c133d56903ec6e155a2fdbfd5966b9`，已双节点实际替换 Demo；相同 Common 3.0.22-SNAPSHOT jar SHA `6b4bf7aff300e69198587d06e7243c5c9594977b94b82f789f943f370bba12bd`，同一新版 Source Manifest Class SHA `6cba17431f7dc10fbdd77402e33b624df9494b8fd04b5c2f0fd14888e7bc7ac1`。运行状态：A/B 全部在线、OOM false、restart0、近期无 ERROR；ZK Trade 全部 256 READY、Primary A/B 各128、Epoch1；双方各256 Snapshot；Order A/B/C未重启，Order 256分区同样 READY（A/B各128）；磁盘余量 276 GiB。Compose overlay `/Users/kong/.opentradingcore/ha-trade-ab-genesis-wal-399-compose-20261017.yaml`。
 - **关键未验收真实指标保持不变**：A/B `autoWarm.enabled=false`，ZooKeeper `replication-health=[]` / 0/256 真 ACK。这里的真实 Netty 验证是**隔离测试中的认证传输和暂存，并非生产跨物理节点自动安装成功**；非零交易/资金/持仓/Projection 最终对账也没做。依然需要两节点受信恢复签名身份、自动安装启用、后置认证完整物理 ACK 和业务财务对账才能连续双向真实 SIGKILL 通过。此前修改实际恢复密钥配置被执行环境安全检查拒绝，没有尝试绕过。
+
+## 2026-10-17 14:00 CST｜非零数据第二次反向自动主切 READY 门禁已修复并部署（Trade 402/402 PASS）
+
+**核心断点**：在 `TradeRecoveryInstallGuard.requireNoIncompleteAttempt`，此前 Common 完成 `REPLAY_COMPLETE` 即便非零业务物理恢复正确、旧 Primary 已出具准确物理 ACK、新节点在下一次故障被 ZK 自动升为 E+1 Primary，启动门禁也**无条件拒绝所有非零历史 Ledger**，从而永远无法完成 A→B→A 连续切换；单纯补 RSA ACK 无法解决此问题。
+
+**代码修复** `bliplink/com.app.dc.tradesvr@5bf3804d5ad75a530646b8f087c1d89d32796f87`（`saas-crypto` `[skip ci]`）：
+- 只在精确已经完成的 Common `DurableRecoveryInstallLedger.REPLAY_COMPLETE`（非零已提交 Snapshot/WAL，Source HEAD StateSeq/Epoch/commitMarker 精确）及原始旧 Epoch WAL 完整封存时，允许**真实 ZooKeeper 从原 Primary 通过 CAS 切换到当前节点 E+1**之后的恢复入口。严格要求当前 Primary=本节点、Replica=旧源、Epoch=Ledger.epoch+1、ZK version>=2、协议>=3。
+- 读取原先由旧 Primary 认证发布的 ZK `replication-health`：必须非降级、epoch=Ledger.epoch、primary=旧源、replica=本节点、replicatedSeq=当前磁盘 Ledger 的完整 committed HEAD。任意无 ACK/过期/降级/节点错配拒绝。
+- 磁盘真实 `TradePartitionSnapshot` 原始 SHA256 / epoch / snapshot seq 与 Ledger 比对，Chronicle 的磁盘与内存 baseline、最终 lastEpoch/lastSeq、`TradeCommitWatermark.scan` 完整 STATE_COMMIT 状态与签名源提交水位比对；强制 fsync，并在尾部重新读取 ZK assignment/ACK。失败不清除封存，不放行 READY。
+- 不再比较 `DurableRecoveryInstallLedger.Entry` 的 Java 对象 identity（它本来每次从盘反序列化成新对象，使用 `==` 会错误拒绝永远无法成功的读回），改为完整逐字段核对。legacy 非受信 ledger 永不自动获准。
+- 新增 `TradeRecoveredNonzeroHandoffGuardTest` 3 项**真实物理 CQ/旧 Epoch 封存/已安装 Snapshot/Common durable Ledger**验收：先模拟 E2 共识完成再 E3 自动换主，正常严格证书能够从原来永久拒绝变成正确放行；缺旧 ACK、降级、旧 seq、假 Replica/错误 Epoch、脏 CQ 或未完成 Ledger 都拒绝。既有 `TradeRecoveryInstallGuardTest` 3/3 PASS。**Trade Java8 离线 Maven全量 `clean test` 402/402 PASS，0 errors/failures/skips**。
+- 本地 ARM64 镜像 `local/dc-saas-tradesvr:ab-nonzero-rejoin-promotion-402-20261017` image ID `sha256:24c9881aa47be9f690a0cd0b8dbffa9307eead113f099eabac1449623acaaa8f`，已仅重建 Demo TradeA/B 容器；同一 Common `3.0.22-SNAPSHOT`，本地 compose override `/Users/kong/.opentradingcore/ha-trade-ab-nonzero-rejoin-402-compose-20261017.yaml`。实机 256 Trade 分区 READY（A/B 各128、Epoch1）、两节点各256 Snapshot、无 OOM/重启/近期错误；Order A/B/C 都保持运行、256/256 READY。
+- **真实剩余阻碍没有消失**：两个节点 `trade.cluster.recovery.replica.autoWarm.enabled=false`；`physicalReceipt`、`physicalHealth` 未激活，双向独立源签名/接收端签名信任缺失；配置只读审计 `tests/trade_ab_auto_ha_preflight.py` => A/B 都 `BLOCKED`。ZK 真正的 `/dc/cluster/tradesvr/controller/replication-health=[]` / 0/256；双向 E2→E3 的真实多节点 SIGKILL+追平+会计对账**尚未完成**。前次涉及真实身份/私钥配置的安全检查拦截不得绕过。新的测试是**隔离内存控制平面+真实持久磁盘**，不是声称 Demo 上已完成完整互切。
