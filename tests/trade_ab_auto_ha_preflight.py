@@ -30,9 +30,13 @@ def parse_properties(path: Path) -> dict[str, str]:
             values[key.strip()] = value.strip()
     return values
 
-def blockers(node: str, own: dict[str, str], peer: dict[str, str]) -> list[str]:
+def blockers(node: str, own: dict[str, str], peer: dict[str, str], *, mode: str = "fleet", partition: str = "P090") -> list[str]:
     if node not in ("A", "B"):
         raise ValueError("exact Trade A/B identity required")
+    if mode not in ("fleet", "pilot"):
+        raise ValueError("mode must be pilot or fleet")
+    if mode == "pilot" and not re.fullmatch(r"P[0-9]{3}", partition):
+        raise ValueError("pilot partition must be an exact Pxxx")
     peer_node = "TradeSvrB" if node == "A" else "TradeSvrA"
     peer_port = "19222" if node == "A" else "19221"
     problems: list[str] = []
@@ -59,23 +63,34 @@ def blockers(node: str, own: dict[str, str], peer: dict[str, str]) -> list[str]:
         "manifest.enabled",
         "replica.autoWarm.enabled",
         "replica.electedBootstrap.enabled",
-        "replica.electedBootstrap.fleetEnabled",
         "replica.genesisReceipt.enabled",
         "replica.physicalReceipt.enabled",
         "replica.physicalHealth.enabled",
         "genesisObserver.enabled",
-        "genesisObserver.fleetEnabled",
         "genesisObserver.replicaHealthEnabled",
     ):
         require_enabled(flag)
+    for suffix in ("replica.electedBootstrap.fleetEnabled", "genesisObserver.fleetEnabled"):
+        if mode == "pilot":
+            # The Java scheduler defaults OFF. An omitted fleet flag is safe;
+            # but explicit fleet=true would violate P090-only fault injection.
+            if own.get(PREFIX + suffix, "false") != "false":
+                problems.append(suffix + ": pilot requires disabled fleet")
+        else:
+            require_equal(suffix, "true")
     require_equal("replica.autoWarm.sourceNode", peer_node)
     require_equal("replica.autoWarm.sourcePort", peer_port)
     require_equal("genesisObserver.targetNode", peer_node)
     require_equal("genesisObserver.targetPort", peer_port)
     if own.get(PREFIX + "genesisObserver.transferEnabled", "false") == "true":
         problems.append("genesisObserver.transferEnabled: must be false during replica health recovery")
-    if not re.fullmatch(r"P[0-9]{3}", own.get(PREFIX + "replica.autoWarm.pilotPartition", "")):
+    own_pilot = own.get(PREFIX + "replica.autoWarm.pilotPartition", "")
+    if not re.fullmatch(r"P[0-9]{3}", own_pilot):
         problems.append("replica.autoWarm.pilotPartition: exact Pxxx pilot required")
+    elif mode == "pilot" and own_pilot != partition:
+        problems.append("replica.autoWarm.pilotPartition: expected " + partition)
+    if mode == "pilot":
+        require_equal("genesisObserver.pilotPartition", partition)
     for material in PRIVATE_OR_TRUST:
         require_material(material)
     require_material("certifiedRecipient.privateRoot")
@@ -88,24 +103,30 @@ def blockers(node: str, own: dict[str, str], peer: dict[str, str]) -> list[str]:
         problems.append("peer.replica.autoWarm.readerRsaPrivateKeyBase64: peer cannot sign an independent physical receipt")
     return problems
 
-def inspect(config_root: Path) -> dict[str, list[str]]:
+def inspect(config_root: Path, *, mode: str = "fleet", partition: str = "P090") -> dict[str, list[str]]:
     a = parse_properties(config_root / "TradeSvrA/config/application.properties")
     b = parse_properties(config_root / "TradeSvrB/config/application.properties")
-    return {"Trade-A": blockers("A", a, b), "Trade-B": blockers("B", b, a)}
+    return {"Trade-A": blockers("A", a, b, mode=mode, partition=partition),
+            "Trade-B": blockers("B", b, a, mode=mode, partition=partition)}
 
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--config-root", type=Path, required=True)
+    parser.add_argument("--mode", choices=("pilot", "fleet"), default="fleet",
+                        help="pilot keeps both fleet schedulers OFF (default: fleet)")
+    parser.add_argument("--partition", default="P090",
+                        help="exact Pxxx pilot partition (default: P090)")
     args = parser.parse_args()
-    report = inspect(args.config_root)
+    report = inspect(args.config_root, mode=args.mode, partition=args.partition)
+    print("VALIDATION_SCOPE: " + (args.partition if args.mode == "pilot" else "256-partition fleet"))
     for name, issues in report.items():
-        print(name + " full-auto-recovery-config=" + ("READY_FOR_LIVE_PROOF" if not issues else "BLOCKED"))
+        print(name + " " + (args.partition + "-pilot" if args.mode == "pilot" else "full-auto-recovery") + "-config=" + ("READY_FOR_LIVE_PROOF" if not issues else "BLOCKED"))
         for problem in issues:
             print("  - " + problem)
     if any(report.values()):
         print("RESULT: BLOCKED; no ZK ACK/READY, financial audit or physical failover may be inferred")
         return 2
-    print("RESULT: CONFIG_PREREQUISITES_ONLY; execute physical ledger/ACK, SIGKILL, and financial audits separately")
+    print("RESULT: CONFIG_PREREQUISITES_ONLY; independent key pairing, real ACK, SIGKILL and financial audits are NOT verified")
     return 0
 
 if __name__ == "__main__":

@@ -76,5 +76,37 @@ class TradeABAutoHaPreflightTest(unittest.TestCase):
         a[PREFIX + "replica.autoWarm.pilotPartition"] = ""
         self.assertTrue(any("pilotPartition" in x for x in blockers("A", a, b)))
 
+
+    def test_pilot_p090_with_fleet_off_can_pass_only_config_gate(self):
+        a, b = self.config("A"), self.config("B")
+        for x in (a, b):
+            x[PREFIX + "replica.electedBootstrap.fleetEnabled"] = "false"
+            x[PREFIX + "genesisObserver.fleetEnabled"] = "false"
+            x[PREFIX + "genesisObserver.pilotPartition"] = "P090"
+        self.assertEqual([], blockers("A", a, b, mode="pilot", partition="P090"))
+        self.assertEqual([], blockers("B", b, a, mode="pilot", partition="P090"))
+        self.assertTrue(any("fleetEnabled" in p for p in blockers("A", a, b, mode="fleet")))
+
+    def test_pilot_cannot_run_with_fleet_enabled(self):
+        a, b = self.config("A"), self.config("B")
+        a[PREFIX + "genesisObserver.pilotPartition"] = "P090"
+        self.assertTrue(any("fleetEnabled" in p for p in blockers("A", a, b, mode="pilot", partition="P090")))
+
+    def test_wrong_pilot_cannot_silently_run_other_partition(self):
+        a, b = self.config("A"), self.config("B")
+        for x in (a,b):
+            x[PREFIX + "replica.electedBootstrap.fleetEnabled"] = "false"
+            x[PREFIX + "genesisObserver.fleetEnabled"] = "false"
+            x[PREFIX + "genesisObserver.pilotPartition"] = "P001"
+        issues=blockers("A",a,b,mode="pilot",partition="P090")
+        self.assertTrue(any("genesisObserver.pilotPartition" in p for p in issues))
+
+    def test_invalid_pilot_partitions_are_rejected(self):
+        a, b = self.config("A"), self.config("B")
+        with self.assertRaises(ValueError):
+            blockers("A", a, b, mode="pilot", partition="../../P090")
+        with self.assertRaises(ValueError):
+            blockers("A", a, b, mode="unknown")
+
 if __name__ == "__main__":
     unittest.main()
