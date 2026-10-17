@@ -28,3 +28,13 @@
 4. **真实持续成交/持仓**条件下分别 SIGKILL Trade A、Trade B，观察自动 promotion 和节点自恢复为 Replica（**不得用脚本替代自动主切**）；验收无双主、无重复/丢失已确认提交，与 Order / Projection / MySQL 资金持仓对账。测试失败就做最小机制修复、本地构建与再部署；用户已授权 Demo 数据必要时重置。
 
 本轮未修改现网 Trade A/B 容器、ZK READY/ACK/assignment、业务数据；未执行真实 SIGKILL。
+
+## 本次会话新增实证｜2026-10-17
+
+- Trade 源码安全修复已提交 `bliplink/com.app.dc.tradesvr@015acdaab960f2cff2a666edfad5fe80e668516b`：降级（`degraded=true`）时保留 ZooKeeper 同一 Epoch 的历史最高已认证 ACK 水位，恢复健康时拒绝低于该水位的 ACK，合法更高新 Epoch 独立建立基线。重新本地 `mvn -B -o clean test`：**371/371 PASS**，0 fail/error/skip。
+- 双向签名恢复只读探针正式提交：`b5ec87edee2a7985f31e3194bc90518b3c9d3fe6`；A 的真实 HEAD 使用 RSA，而 B 当前真实 HEAD 使用 HMAC。探针之前错误地用 HMAC 检查 A，返回 `recovery proof/key algorithm mismatch`；已修复为根据真实签名算法选择 RSA/HMAC，并更新至 `18b1fc7f63be90b2450f484ea22c01c13464e2b5`。修复后两方向探针编译通过，Trade 371 项全量回归再次 PASS。
+- **真实 B→A / P001 / Epoch 3**：直接接触 Demo 当前 ZK `127.0.0.1:32181` 与 Trade-B `127.0.0.1:19222`；`REAL_ZK_ELECTED_BOOTSTRAP_AUTHORIZED_NOT_INSTALLED` 和 `REAL_ZK_AUTHORITY_STALE_VERSION_REJECTED` 都通过，证明当前 elected source 身份与 source signed HEAD 匹配，伪造过期 ZK 版本被拒绝。
+- **真实 B→A / P001 / Epoch 3 Snapshot+Manifest+WAL 窗口**：外部非运行态暂存目录 `/tmp/trade-ha-20261017-b-to-a-p001` 验证 `REAL_SIGNED_SOURCE_TO_REPLICA_AUDIT_SNAPSHOTS_READY_NOT_INSTALLED=1 rejected=0 epoch=3 walSlots=0 source=TradeSvrB replica=TradeSvrA`。确切范围是单个零业务 WAL 的分区，未写 A 的 live Ledger、READY 或 ACK。
+- **真实 A→B / P000 / Epoch 1**：用 RSA 签名方式验证，返回 `REAL_ZK_ELECTED_BOOTSTRAP_AUTHORIZED_NOT_INSTALLED` 与 `REAL_ZK_AUTHORITY_STALE_VERSION_REJECTED`；这不是跨 Epoch 接收端安装或切换。
+- 安全限制：向现网双向恢复配置写入密钥相关内容、以及执行 B→A 128 分区批量暂存验证，均被执行环境安全检查拦截。**未绕过阻断**，没有更改现网两节点配置、ZooKeeper 状态或交易数据；亦没有把失败/受阻验收计为 PASS。
+- **未完成**：A 落后 B 的 128 份 Epoch 3 Snapshot 安装、真正独立签名 Replica 安装回执、256/256 健康记录、双向自动 SIGKILL、重启追平、真实资金/持仓/Projection 权威对账。与上节 BLOCKED 结论一致。候选 Trade 镜像尚未替换 Demo。
