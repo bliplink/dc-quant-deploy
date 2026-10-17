@@ -228,3 +228,16 @@
 - Trade 代码：离线 Maven clean test 416/416 PASS；saas-crypto commit a2005d3a969a7397c3f9a76645bd7dbde317624d，跳过 GitHub Actions；Demo A/B 均采用 ARM64 local/dc-saas-tradesvr:hot-physical-ack-416-20261017。
 - 当前仍未通过：P084 Trade-A 原始 CQ 最后序号 1621，但最后完整 STATE_COMMIT=1620，Trade-B committed=1620；P250 A=1633，最后完整 STATE_COMMIT=1632，B=1632。A 多出的均为一个未提交 STATE_BATCH。真实 Netty 接口对 B 的最后两条已提交物理 WAL 返回 DUPLICATE + durable ACK（P084=1620；P250=1632）。ZooKeeper 保留 degraded=true 和 seq=1620/1632，来源 A 不满足 READY，Robot ERROR 且 0 挂单。整体 256 分区中 254 份健康 ACK 与当前 Epoch 匹配。
 - 安全不变量：不人工改 ZK ACK、不能将未提交 STATE_BATCH 认作成交、不可未经独立证明丢弃分叉尾部，也不能打开 single-node localCommit。旧 Common Ledger 和恢复封存均保留。下一机制必需是对 A 的未提交原始 WAL 完整隔离及哈希证据、B 当前 Epoch 独立持久提交证明，以及可重启续传的原子恢复事务；完成后再跑持续 Robot 真实下单、SIGKILL 双向互切、资金持仓/委托成交/Projection 权威对账。当前全量非零业务 HA 尚未通过。
+
+
+## 2026-10-18 04:32–04:38 CST｜真实 Robot 持续交易期间 SIGKILL Trade-A Replica（未通过恢复验收）
+
+**开始状态**：Mac Demo 使用 `local/dc-saas-tradesvr:cross-epoch-snapshot-manifest-419-20261017`，A/B 两容器运行约 6 小时、测试镜像标签 `419/419`。正式租户 A88A18、B88A18 的 Robot 均 RUNNING、各 40 open orders；P022/P184 是真实资金/交易 WAL 分区，当前 elected Primary=TradeSvrB，Replica=TradeSvrA，Epoch=2。ZooKeeper 256/256 assignments 为 READY；其中 128 个偶数分区处于 Epoch2、128个奇数分区还在 Epoch1，仅128个偶数分区拥有同 Epoch 的 non-degraded health records；不能将 READY 误读为完整256物理ACK。两业务分区原始 Chronicle WAL A/B 最后可读记录为 E2 STATE_BATCH+STATE_COMMIT。
+
+**事前配置**：`tests/trade_ab_auto_ha_preflight.py --mode fleet` 返回 A/B `READY_FOR_LIVE_PROOF`，但该预检只确认配置，并非实机 HA 通过；`pauseWritesUntilHealthyReplica.enabled=true`、`transportFallback.localCommit.enabled=false`。试图使用 `--mode pilot --partition P022` 与 fleet 参数不匹配，因此不能以 pilot 的 BLOCKED 推断 fleet 失败。
+
+**实际故障注入**：2026-10-18 04:32:25 CST 对**非Primary的 Trade-A Replica** 执行 `docker kill --signal=KILL dc-saas-tradesvr`，5 秒后 B 仍存活且未重新启动（原运行已6小时），A exited。之后 `docker start dc-saas-tradesvr`，A 于 04:32:30 重启成功；未操作 ZooKeeper 手工提升。ZK P022/P184 当前主节点始终是 B，未发现双主。故障前两个租户的资金 postings 行数分别为 13038、17510，之后在故障观测窗口内没有增加。Robot 从 RUNNING 各40挂单变为 ERROR 各0挂单，错误 `PARTITION_NOT_READY`；B 业务门禁正确 fail-closed。
+
+**物理 ACK 独立复验**：A重启后，使用原始 Netty peer endpoint `TradeSvrA@127.0.0.1:19221` 对 B 的同 Epoch 最新完整 committed marker 及邻近原始 WAL 进行物理重试。两个分区均返回 `DUPLICATE` 且 `success=true`，真实 A 持久ACK为 **P022 seq=78886**、**P184 seq=54910**。A重启后自身 Chronicle WAL 的 lastSeq/commitMarker 为 P022=78886/78886、P184=54910/54910。B Primary 当时物理 WAL 各多一条未完成 `STATE_COMMIT` 的 `STATE_BATCH`（P022 lastSeq=78887，P184 lastSeq=54911）。B health ZK 仍 `degraded=true`，停在 P022 seq78864、P184 seq54900，因此 B 新交易继续拒绝，Robot 未恢复。**不得将 replica 原始字节匹配当作 B 的未提交尾部已合法处置，更不能将 ZK 健康证明自行改写为 true**。
+
+**结论**：Replica SIGKILL 时未发生双主和单副本冒险业务确认，fail-closed 安全边界通过；但**同 Epoch Replica 重启后的自动 WAL 追平/未提交 tail 完整封存/健康 ACK 再认证尚未通过，真实有业务 A↔B 双向自动主切也尚未通过**。暂不执行 B SIGKILL，以免在 degraded=true 下造成不可恢复中断。下一修复范围应落在 Common 可复用的原始 WAL 未提交尾部封存与哈希证明、独立 Replica 已提交前缀认证、接收端一致性恢复事务，Trade 只负责 apply/snapshot 业务接口；严禁手动 ZK 主切、跳过旧尾部审计、单节点本地提交回退。数据和恢复 Ledger 暂保留供定位，不执行再次清空。
