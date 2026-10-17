@@ -139,7 +139,7 @@
   `epoch=1 snapshotSeq=0 baselineCommittedStateSeq=0 baselineCommitMarkerSeq=0 sourceCommittedHeadSeq=0 requiredWalSlots=0 imageBytes=334 NOT_INSTALLED`。两个方向过期版本拒绝 PASS。
 - **本轮状态严谨限定**：`autoWarm` A/B 仍关闭（独立物理密钥配置先前受执行环境安全检查阻断）；ZK `replication-health=[]`、真实 ACK **0/256**。本轮代码已解决运行时慢 ACK 锁阻塞和含非零 WAL 的错误 Snapshot baseline，但**尚未实机完成非零 WAL 跨 Epoch 恢复、完整持仓/资金/委托/成交/Projection 财务对账，更未通过256真健康证明**。不能将 395 单测、签名 Manifest、空业务下 A/B 128/128 自动接管等同完整 HA。
 
-## 2026-10-17 13:5x CST｜Trade A/B 又修复零 Snapshot + 新 Epoch 第一笔已提交 WAL 的真实恢复阻塞
+## 2026-10-17｜Trade A/B 又修复零 Snapshot + 新 Epoch 第一笔已提交 WAL 的真实恢复阻塞
 
 **实质性源码修复**：`bliplink/com.app.dc.tradesvr@d2bf2c33655711bca9e59130ca6cf32a64e40765`，`saas-crypto`，`[skip ci]`。
 - Source 端 `TradeRecoverySnapshotManifestSource.requireSourceManifest` 以前凡 `snapshotSeq=0` 就强制 `committedHeadSeq=0`，导致刚升任 Primary 并开始交易、定时 Snapshot 尚未生成时无法签发真实 Snapshot Manifest。修复：仍要求 Snapshot **确实完全 Genesis 空态**，源 WAL 无提交时维持零状态；若源真实提交则要求最新 HEAD 为当前 Epoch 完整的 `STATE_BATCH/STATE_COMMIT`（`sourceCommittedStateSeq>0`、`sourceStateEpoch=currentEpoch`、`commitMarkerSeq=committedHeadSeq>=2`）；零高度 Snapshot 的 Manifest baseline 永远保留 `0/0/0`，绝不把源最新业务状态混入空 Snapshot。
