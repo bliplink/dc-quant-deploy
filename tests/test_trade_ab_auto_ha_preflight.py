@@ -15,6 +15,7 @@ class TradeABAutoHaPreflightTest(unittest.TestCase):
             "replica.electedBootstrap.fleetEnabled",
             "replica.genesisReceipt.enabled", "genesisObserver.enabled",
             "replica.physicalReceipt.enabled", "replica.physicalHealth.enabled",
+            "replica.physicalHealth.fleetEnabled",
             "genesisObserver.fleetEnabled",
             "genesisObserver.replicaHealthEnabled",
         ):
@@ -83,6 +84,8 @@ class TradeABAutoHaPreflightTest(unittest.TestCase):
             x[PREFIX + "replica.electedBootstrap.fleetEnabled"] = "false"
             x[PREFIX + "genesisObserver.fleetEnabled"] = "false"
             x[PREFIX + "genesisObserver.pilotPartition"] = "P090"
+            x[PREFIX + "replica.physicalHealth.fleetEnabled"] = "false"
+            x[PREFIX + "replica.physicalHealth.pilotPartition"] = "P090"
         self.assertEqual([], blockers("A", a, b, mode="pilot", partition="P090"))
         self.assertEqual([], blockers("B", b, a, mode="pilot", partition="P090"))
         self.assertTrue(any("fleetEnabled" in p for p in blockers("A", a, b, mode="fleet")))
@@ -90,6 +93,7 @@ class TradeABAutoHaPreflightTest(unittest.TestCase):
     def test_pilot_cannot_run_with_fleet_enabled(self):
         a, b = self.config("A"), self.config("B")
         a[PREFIX + "genesisObserver.pilotPartition"] = "P090"
+        a[PREFIX + "replica.physicalHealth.pilotPartition"] = "P090"
         self.assertTrue(any("fleetEnabled" in p for p in blockers("A", a, b, mode="pilot", partition="P090")))
 
     def test_wrong_pilot_cannot_silently_run_other_partition(self):
@@ -98,8 +102,26 @@ class TradeABAutoHaPreflightTest(unittest.TestCase):
             x[PREFIX + "replica.electedBootstrap.fleetEnabled"] = "false"
             x[PREFIX + "genesisObserver.fleetEnabled"] = "false"
             x[PREFIX + "genesisObserver.pilotPartition"] = "P001"
+            x[PREFIX + "replica.physicalHealth.fleetEnabled"] = "false"
+            x[PREFIX + "replica.physicalHealth.pilotPartition"] = "P001"
         issues=blockers("A",a,b,mode="pilot",partition="P090")
         self.assertTrue(any("genesisObserver.pilotPartition" in p for p in issues))
+
+    def test_physical_health_must_not_scan_fleet_during_pilot(self):
+        a, b = self.config("A"), self.config("B")
+        for x in (a, b):
+            x[PREFIX + "replica.electedBootstrap.fleetEnabled"] = "false"
+            x[PREFIX + "genesisObserver.fleetEnabled"] = "false"
+            x[PREFIX + "genesisObserver.pilotPartition"] = "P090"
+            x[PREFIX + "replica.physicalHealth.pilotPartition"] = "P090"
+        a[PREFIX + "replica.physicalHealth.fleetEnabled"] = "true"
+        self.assertTrue(any("replica.physicalHealth.fleetEnabled" in p
+                            for p in blockers("A", a, b, mode="pilot", partition="P090")))
+        a[PREFIX + "replica.physicalHealth.fleetEnabled"] = "false"
+        self.assertEqual([], blockers("A", a, b, mode="pilot", partition="P090"))
+        a[PREFIX + "replica.physicalHealth.pilotPartition"] = "P091"
+        self.assertTrue(any("replica.physicalHealth.pilotPartition" in p
+                            for p in blockers("A", a, b, mode="pilot", partition="P090")))
 
     def test_invalid_pilot_partitions_are_rejected(self):
         a, b = self.config("A"), self.config("B")

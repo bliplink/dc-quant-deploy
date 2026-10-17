@@ -28,11 +28,15 @@ trade.cluster.recovery.replica.autoWarm.pilotPartition=P090
 trade.cluster.recovery.replica.genesisReceipt.enabled=true
 trade.cluster.recovery.replica.physicalReceipt.enabled=true
 trade.cluster.recovery.replica.physicalHealth.enabled=true
+trade.cluster.recovery.replica.physicalHealth.fleetEnabled=false
+trade.cluster.recovery.replica.physicalHealth.pilotPartition=P090
 trade.cluster.recovery.genesisObserver.enabled=true
 trade.cluster.recovery.genesisObserver.fleetEnabled=false
 trade.cluster.recovery.genesisObserver.pilotPartition=P090
 trade.cluster.recovery.genesisObserver.replicaHealthEnabled=true
 trade.cluster.recovery.genesisObserver.transferEnabled=false
+
+注意：本轮新增物理 ACK observer 的 pilot/fleet 隔离参数。如果 physicalHealth.fleetEnabled=true，则 Observer 不再只检查 P090，而会按配置轮询整个 256 分区。P090 验收必须保持 false；缺失 physicalHealth.pilotPartition 时新代码拒绝启动，不再静默扫描整个集群。
 
 Trade-A 源和回执目标：
 trade.cluster.recovery.replica.autoWarm.sourceNode=TradeSvrB

@@ -70,7 +70,8 @@ def blockers(node: str, own: dict[str, str], peer: dict[str, str], *, mode: str 
         "genesisObserver.replicaHealthEnabled",
     ):
         require_enabled(flag)
-    for suffix in ("replica.electedBootstrap.fleetEnabled", "genesisObserver.fleetEnabled"):
+    for suffix in ("replica.electedBootstrap.fleetEnabled", "genesisObserver.fleetEnabled",
+                   "replica.physicalHealth.fleetEnabled"):
         if mode == "pilot":
             # The Java scheduler defaults OFF. An omitted fleet flag is safe;
             # but explicit fleet=true would violate P090-only fault injection.
@@ -91,6 +92,7 @@ def blockers(node: str, own: dict[str, str], peer: dict[str, str], *, mode: str 
         problems.append("replica.autoWarm.pilotPartition: expected " + partition)
     if mode == "pilot":
         require_equal("genesisObserver.pilotPartition", partition)
+        require_equal("replica.physicalHealth.pilotPartition", partition)
     for material in PRIVATE_OR_TRUST:
         require_material(material)
     require_material("certifiedRecipient.privateRoot")
