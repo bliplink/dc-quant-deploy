@@ -54,3 +54,19 @@
 - ARM64 离线构建新候选 `local/dc-saas-tradesvr:ab-survivor-fence-c8bf6c2-20261017`，镜像 `sha256:43c112458c518e4ecbc4cd840e8b7fe31b3cf30bb2ff9fe2dce086c661fcf0ef`；Common `3.0.22-SNAPSHOT` JAR `6b4bf7aff300e69198587d06e7243c5c9594977b94b82f789f943f370bba12bd`；MySQL Connector/J `8.0.33`。该镜像 `dc.release.authorized=false`，**未部署运行态**。
 - 再次只读复查：Demo Trade A/B 依旧保持不同旧镜像，`autoWarm.enabled=false`（A/B）、B `electedBootstrap.enabled=false`，ZK `replication-health` 返回 `[]`（**0/256**），Mac 剩余 279 GiB。未执行任何真实 Primary SIGKILL；不存在 256 个物理健康副本的证据，不能认定双向 HA 通过。
 - 本轮没有通过其他途径重试此前被执行环境安全检查拦截的现网密钥配置写入或 128 分区批量恢复验证，没有变更 ZK ACK/READY/assignment 或清理生产态数据。**Trade 自动副本追平→真实签名安装与业务财务对账→健康证明→双向 SIGKILL 的闭环依旧 BLOCKED，必须严格保持失败状态，不可伪造 PASS。**
+
+## 2026-10-17 11:00 CST 新一轮推进（真实 ACK→ZK HEALTHY→自动重试）
+
+**提交已合入** `bliplink/com.app.dc.tradesvr@6a0d3aa415b7a83c3d2b59ca93b1267118490344`（`saas-crypto`，`[skip ci]`，Actions 0）。发现 `TradeStateCoordinator.repairDegradedReplicaOnce` 原本在拿到 Replica ACK 后，就先清除本地 `degradedRepairTargets`、`failoverDegradedPartitions`、`survivorLocalOnlyPartitions`、`degradedPartitions`，再以 `strict=false` 写 ZK HEALTHY。一旦 ZooKeeper 写入失败，旧代码仅记日志，进而丢失自动重试目标，可能造成本地“已恢复”而 ZK 仍 DEGRADED。修复为：真实有序持久复制 ACK → 在分区锁内校验最新物理序号与仍合法的 Primary、Replica、Epoch、ZK assignment version → **ZK CAS 发布 HEALTHY → 回读验证真实 ACK 值和身份** → 只有成功才清除本地降级状态与重试目标。任何失败保存自动重试状态。Common/Trade 中断保护与 ACK 水位单调约束继续有效。
+
+**验证**：`TradeGracefulShutdownDrainTest.recoveredReplicaAckCannotClearDegradedUntilZkHealthyCasIsDurable` 使用真实 Chronicle 持久 WAL：Replica 离线进入已认证降级；Replica 返回，耐久 ACK 成功但模拟 ZK healthy CAS 拒绝，继续保持 DEGRADED/重试目标；恢复 CAS 后二次 ACK 和回读成功，才恢复健康。现有 `TradeStateCoordinatorRecoveryGateTest` 补真实“Replica 已返回 ZK”必要条件。完整 Mac `mvn -B -o clean test` **375 项通过，0 失败、0 错误、0 跳过**。
+
+**本地 ARM64 候选**：`local/dc-saas-tradesvr:ab-repair-ack-healthy-375-20261017`，Docker image ID `sha256:262ab41ecd0092b00111fce46b70ce64774c70d34a26a53448a1f3a476a21da1`；Common 3.0.22-SNAPSHOT SHA256 `6b4bf7aff300e69198587d06e7243c5c9594977b94b82f789f943f370bba12bd`；`dc.release.authorized=false`、**未替换 Demo**。
+
+**现网只读证据（本轮）**：
+- B `data/TradeSvrB/certified-recipient/P*/install/ledger/*.recovery` 的 128 个奇数分区记录均包含 `REPLAY_COMPLETE`；此处是 B 侧的 Common 持久安装状态，并不代表 A 已追平 B。纠正过去“B 无恢复 Ledger”的错误概括。
+- A `data/TradeSvrA/certified-recipient` 目录不存在（没有 B→A 认证安装）。A 奇数分区仍 E2、B 奇数分区 E3。A/B `autoWarm.enabled=false`；B `electedBootstrap.enabled=false`，B `genesisReceipt.enabled=true`。A 缺 B 当前 SOURCE 恢复所需的对称配置/验签身份；B 当前 Source HEAD 为 HMAC，A 尚未配置其受信验签材料。不能擅自复制私钥或伪造 B 的物理证明。
+- 真实 Netty+ZooKeeper `B→A P001 Epoch3` HEAD 签名及旧 ZK-version 拒绝再次 PASS，返回 `REAL_ZK_ELECTED_BOOTSTRAP_AUTHORIZED_NOT_INSTALLED`，**仅恢复源认证，不是 A 端安装或 ACK。**
+- ZK `/dc/cluster/tradesvr/controller/replication-health` 仍 `[]`（0/256）。无法安全宣称双向 SIGKILL、追平与财务对账已通过。上次配置密钥写入和批量验证的执行环境安全拦截未绕过；在真实双副本水位认证前，没有执行主节点 SIGKILL。
+
+**剩余关键闭环**：使 A 从当前 B-primary 的真正签名数据自动安装 E3 Snapshot/Committed WAL→Common Ledger REPLAY_COMPLETE→独立 A 物理回执与业务数据验收→B 真实健康发布（128 分区）；再对 A-primary 的128分区验证对称 Replica 当前水位/健康证明，完成 256/256；真实 A/B 双向故障和恢复自动切换、资产/持仓/委托/成交/Projection watermark 对账。严禁通过写一个任意 ZK healthy=0，或脚本手动切换来假装通过。
