@@ -172,3 +172,15 @@
 - `tests/trade_ab_auto_ha_preflight.py` 实测两端均 `BLOCKED`，包括两端 `replica.autoWarm.enabled=false`, `replica.electedBootstrap.enabled=false`, `replica.physicalReceipt.enabled=false`, `replica.physicalHealth.enabled=false`；A 缺对 B 的 `sourcePublicKey`、A 本机 `readerRsaPrivateKey` 和 B 恢复源定位；B 缺自己的源端 `head.rsaPrivateKey`、对 A `read.readerPublicKey`、对称健康认证和 fleet 配置。真实 ZK `/dc/cluster/tradesvr/controller/replication-health=[]`（0/256）。
 - 这些是**第一轮故障前必须完成的条件**。没有 A 回归 E2 的安装和 ACK 时，连续 SIGKILL B 会使 P090 无已证明热副本，违背验收安全性。现阶段没有执行 P090 SIGKILL、没有修改 ZK/密钥、没有假造 ACK；拒绝把会失败的单向测试重复执行并破坏 Demo 可用性。
 - 历史尝试设置节点签名身份/跨节点信任被执行环境安全检查拦截，**不得改换工具/传输方式来绕过**。受信身份必须通过获得允许的安全配置渠道或获得必要配置权限之后启用。届时仅检查已存在的密钥身份，不记录或展示私钥本体。用户应先在 Mac 受保护的配置渠道完成 A/B 两端独立受信身份及双方恢复角色映射，只有预检严格通过，才正式执行 A→B→A→B 的故障注入。
+
+## 2026-10-17｜修复 P090 物理回执观察者的隐式 256 分区扫描；Trade 405/405，实机已部署
+
+**机制缺陷**：`TradeCertifiedRecoveredReplicaObserver` 原来只有 `physicalHealth.enabled` 和轮询 `maxPerTick`，没有 `pilotPartition` 或 `fleetEnabled`。即使按 P090 激活清单把其它 fleet 关闭，只要启用物理健康认证，Observer 仍会隐式 round-robin 扫描并尝试认证全部256分区。这违反 P090 pilot 独立验证的范围边界。
+
+**修复与测试**
+- Trade `bliplink/com.app.dc.tradesvr@dd2b1dbdbaf222dcbf446bf8263491bf9452308e`（`saas-crypto`，`[skip ci]`）：增加默认 OFF 的 `trade.cluster.recovery.replica.physicalHealth.fleetEnabled` 与显式 `trade.cluster.recovery.replica.physicalHealth.pilotPartition`。开启 Observer、fleet关闭时只评估给定 P090，空/非法 pilot 拒绝启动；显式 fleet=true 才最多8分区每tick轮询；当前 Epoch、真实 recipient 和签名/物理 Ledger/commit marker 验证保持不变。新增3项 scope/错配/有界fleet测试，之前 Race 4项仍 PASS。Trade **405/405 full Maven clean test PASS**。
+- Deploy `bliplink/dc-quant-deploy@48faf9a10bee8671523bcac84ad62508f1564052`：P090 preflight 同时拒绝 `physicalHealth.fleetEnabled=true` 和与 P090 不一致的 `physicalHealth.pilotPartition`；更新单分区激活清单。Python **12/12 PASS**，当前 P090 实机预检 A/B 依旧 `BLOCKED`（不是假PASS）。
+- 统一 Common：`bliplink/com.app.common@9eb6ae7bbadf22d4e59bb6b9f4a8d252fa572698`，本地依赖 `3.0.22-SNAPSHOT`，Common回归 `318/318 PASS`，本次不触发 Maven Central 发布或 GitHub Actions。
+- 新 Mac ARM64 镜像 `local/dc-saas-tradesvr:ab-common-p090-physical-ack-405-20261017`，image ID `sha256:228a511ee7060234e00a2f6ef7086b4bcd7f3258264a154c00661ab8c9d56590`，Common JAR `sha256:018d0e9e9a92a6620192bdc8fa438fff540076d9de47a4f5c1b66ce91b59071f`，Observer Class `sha256:00806c570ef735a85e6df16c8d89cdd8bc8e8ab317b056697a86d5c4a98e05a8`。已实际通过 `/Users/kong/.opentradingcore/ha-trade-ab-common-p090-405-compose-20261017.yaml` 只重建 Demo Trade A/B 容器；双节点 Class/Jar hashes 完全一致。
+- 实机后检：Trade、Order 均 `256/256 READY`，各 A/B 128 Primary Epoch1，P090 `TradeSvrA→TradeSvrB` Epoch1 ZK version0；Trade A/B、Order A/B/C 全部 running、OOM=false、restart0。Mac 磁盘约274 GiB free（38% used）。
+- **仍未达到用户的唯一最终验收标准**：两端 `autoWarm=false`，真实独立 RSA 双向物理源/接收签名身份未接通，`replication-health=[]` 即0/256。没有实际执行本次 P090 SIGKILL、更没有 A→B→A 连续自动安装/回执/对账。先前独立密钥部署操作受安全检查拦截，不能绕过。不能将健康 Observer pilot 隔离修复视为互切成功。Order/MD未修改，本轮未触发 GitHub Actions。
