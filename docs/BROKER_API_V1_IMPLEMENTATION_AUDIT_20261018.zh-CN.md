@@ -40,3 +40,14 @@
 实现阶段完成后，独立隔离 Broker 测试租户采用新 Key 和客户，先本地测试，再不可变镜像滚动部署，记录源码 commit / image digest / 数据库读数 / 时间 / 错误码。测试结果必须填入完整矩阵：价格数据隔离、互斥做市、行情新鲜度、Replay/Fencing、WS Gap、客户端幂等、四组合、故障恢复、50/200 租户性能数据。
 
 > **总体状态：Broker API v1.0 尚未完成，不具备按本方案正式发布的条件。**
+
+
+## E. 本轮新增提交（补充实测）
+
+- `com.app.dc.mdsvr/saas-crypto`：`TenantEffectivePriceBook` 实现与 JUnit 4 测试分别提交 `9b0b8a3` 和 `5cff93f`，7/7 standalone PASS；MD 整体 Maven 受已有 Common `VerifiedHead` 依赖阻塞，**没有发布新 MD 镜像**。
+- `com.app.dc.managersvr/saas-crypto`：`RobotRuntimeService.listRunnableSql` 加入 `t.liquidity_source='SYSTEM'` 与 `t.source_switch_state='ACTIVE'` 正向名单；正式从 LIST_RUNNABLE 中排除 BROKER 与切换中的租户。源代码 `ef8857a`、定向测试 `de14759`，Manager Maven 3/3 PASS。**需先应用新增迁移再部署 Manager**；本轮没有在生产 Demo 应用该迁移、也未启用 BROKER 切换。过滤已有 Robot 不等于完成自有订单撤单/切换状态机，此项仍未验收。
+- `dc-quant-deploy/saas-crypto`：新增 `mysql/migrations/20261018_broker_tenant_sources.sql`（`1f5ef70`）。包含相互独立的 `price_source`、`liquidity_source`（SYSTEM/BROKER）、`source_config_version` 与 `source_switch_state`，默认 SYSTEM/SYSTEM + ACTIVE，所有 ALTER 使用 information_schema 存在性判断。**实际在 MySQL 8.0 的独立临时 schema 跑迁移两次均成功**，检查默认 SYSTEM/SYSTEM/1/ACTIVE 后删除测试 schema；现有业务 `dc` schema 未修改。
+- `com.app.dc.api.demo/saas-crypto`：新增 `broker-python-sdk/`，包含经过实际 HmacSHA256+Gateway envelope 源码核对的 HTTP Broker Key Login Python 客户端、强制比对 Broker 身份/租户，以及 5 项 Python unittest（5/5 PASS）。`publish_price/place_order/subscribe_orders` **在服务端尚未具备正式协议时故意 fail-closed 报未实现**，未做虚假 Broker 下单，亦未提供真正的独立 Broker Demo。
+- 所有上述提交使用 `[skip ci]`。没有修改 Gateway 透传代码，也没有修改 Common HA 实现或执行故障注入。当前 `GW7XMI` 的 SYSTEM/SYSTEM Robot 仍保持 RUNNING，Broker 接口/租户来源切换不允许在当前产品 Demo 直接打开。
+
+**验收结论没有变化**：这些是可追溯基础组件及单测成果，**非 Broker API v1.0 完整交付**。本轮未执行跨服务 Broker price Publish/MD/Trade/Liq 数据流、真实租户隔离、WebSocket、API Docs 发布、独立 Broker Demo、50/200 租户压测或真实 HA failover；任何对应 PASS 都是虚假结论。
