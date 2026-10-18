@@ -390,3 +390,29 @@ JAVA_HOME=/Users/kong/Library/Java/JavaVirtualMachines/zulu-8.jdk/Contents/Home 
 - 2026-10-19 06:33 CST 完整 Canary 的 6/6 Java Spring、Trade Web HTTP 200、Robot RUNNING/40、Broker Schema 6/6 均通过，但主站 `opentradingcore.com` 再次发生一次 TLS `Recv failure: Connection reset by peer`（HTTP 000），因此完整 Canary 返回 **FAIL（1 项）**。这是此前记录的间歇 Cloudflare/Tunnel 问题，不应记成 13/13 PASS，也未确证根因。
 
 **仍存在的功能门禁**：虽然专项权限要求和 Key 类型要求已取消，生产 APS `VerifiedBrokerPricePublisher` / MD `TrustedTenantPriceSource` 的数据源/序号机制还没有连成可启用流程；这是未完成的功能与恢复一致性，不应把它与“用户要求额外 PRICE_PUBLISH 权限”混为一谈。对外 Broker 价格开关继续 OFF。待后续在 APS/MD 内按简化租户归属方案收口，再做实际新租户 API 价格发布、隔离和成交验收。
+
+
+## U. 2026-10-19｜Broker API Python SDK、双语 API Docs 发布与新租户注册受限记录
+
+本轮用户指令：“开始实行，注册新租户，Python API 验证，文档修复”。执行范围如实记录，不以模拟单测或匿名接口成功冒充真实新租户交易验收。
+
+### Python SDK：更新原仓库、测试与打包
+
+- **沿用原官方 Python SDK，不新建第二套**：`bliplink/opentradingcore-api-docs/saas-crypto/sdk/python/opentradingcore/client.py` 新增 `OpenTradingCoreClient.publish_price(symbol,index_price,mark_price,*,config_version,sequence,market_indicator='4',ttl_ms=5000,...)`，提交 `d92f8fdcc26968a2aa73f5485a36c9735df30cd7`。方法使用 `login(mode='broker')` 取得的**租户级 TenantAPI 会话**和 Session location，发送 `APSSvr/publishBrokerPrice`；用户不能指定其他租户；**没有 PRICE_PUBLISH 专项权限**，没有自动重试；指数/标记价、序号、配置版本、TTL 等在 SDK 端提前校验。服务端的租户隔离以 APS 的 LoginSvr Session 为权威，SDK 校验不能代替服务端拒绝越权。
+- 新增单测（`0813b7c5`，修复测试传输桩字段顺序 `c899de27`）：新接口无需 `PRICE_PUBLISH`，绑定正确 service/method 和 tenant location，普通 Trader/未登录/无效价格/TTL/序号在发送前拒绝。**原 SDK 全量 17/17 PASS**，在本机真实 Python 3.9 下执行；不等于使用真实 API Key 的业务 E2E。
+- **真实网络负向验收**：以故意无效的测试 API Key，通过原 SDK `LoginSvr/apiKeyLogin` 发送 HMAC 登录至本机网关 `http://127.0.0.1:18088`，服务器返回 `code=7000`，SDK 正确映射为 `OpenTradingCoreError`，不输出签名/密钥。**没有认证成功的 Broker Key**，不能据此宣称下单成功。
+- 本地 macOS 系统 `pip 21.2.4 + setuptools 58.0.4` 初次误建 `UNKNOWN-0.0.0` wheel。通过官方 SDK `setup.py` 兼容元数据（提交 `e7b624bd`）及同步 `build-sdk-package.py`、`prepare-public-api-docs-context.sh`、SDK distribution test（`27dd99b5`、`a6797a6`、`34a24ef`），现生成正确包 **`opentradingcore-0.1.0-py3-none-any.whl`**（本地 wheel SHA256 `333e8b8ac6605e67d2f15b2ee82938cfa75b99526a445152eac592c320870c25`）。已对实际 wheel 执行 `pip install --target`，再次运行 SDK **17/17 PASS**，`OpenTradingCoreClient.publish_price` 可从已安装包导入。官方 ZIP 现包含 7 个核对过的 SDK 源文件，分发测试 PASS。
+
+### API Docs：正式 YAML、生成器、双语静态站与 Mac 真实部署
+
+- 原现网文档为**单页 MkDocs，由 `docs/openapi/crypto-openapi-v1.yaml` 自动生成**，仅修改 `broker.md` 不会进入实际页面。已更新 YAML `PublishBrokerPriceContent/Envelope`、`x-dc-method-schemas` 及 `x-dc-v1-catalog`，提交 `877d5a86`；实际构建时发现 Service 拼写必须是 `APSSvr`，而非 `APSvr`，已修复（`79f615f4`）。生成器 `scripts/generate-one-page-api-reference.py` 添加两种语言的方法与 Demo 尚未启用提示（`d5e6874f`），目录单测更新 `8942a0a2`。另外 `docs/public-api/en/broker.md` 与 `zh/broker.md` 分别补充本租户发布说明、删除中文错误的 `queryProjectedExecutionHistory` 重复引用（`64e97a2b` 和 `a05b7b3f`）。
+- Mac **文档仓库 13/13 单测 PASS、Python SDK 17/17 PASS、双语清单校验 PASS**。本机用隔离安装的 Python 构建依赖执行完整严格生成：`openapi_spec_validator` PASS、`scripts/validate-openapi-catalog.py` **15 个目录方法具备请求 Schema**（14 个对外功能 + 一个认证）、双语单页生成器 **14/14 英中方法**、`mkdocs build --strict` EN/ZH 两次 PASS。SDK ZIP/Wheel 同期生成成功，EN/ZH HTML 均包含 `publishBrokerPrice`。
+- 官方 Docker 多阶段本机第一次构建被 legacy Builder 不支持 `FROM --platform=$BUILDPLATFORM` 阻止，Dockerfile 兼容性修复已提交 `53c7ebd5`；第二次构建由于 Docker daemon 不能解析 `docker.m.daocloud.io` 失败。为避免更改交易服务或依赖有问题的基础镜像 DNS，在 Mac 隔离目录 `/tmp/otc-docs-static-build-v2-20261019` 完成**同等静态资源生成步骤**后，以本机缓存的旧 Nginx 文档镜像为基底仅复制新生成的 `site/`，构建 **`local/dc-saas-api-docs:broker-sdk-price-20261019`**，image id **`sha256:cfbed9313ad25578fc5b02a7a3e2fa9b3567b5f5ef0854a6bad860dd984eee0b`**。这是当前 Mac 本地候选镜像，**没有发布新的 GHCR 正式镜像**。
+- **实际部署成功**：通过 `compose.yaml` + 本机 override `/Users/kong/.opentradingcore/broker-v1-demo-checkpoints-20261018/broker-api-docs-20261019.yaml`，仅执行 `api-docs` 单服务 `docker compose up -d --no-deps --force-recreate`；原健康文档镜像保留可回滚。Docker `dc-saas-api-docs-1` 已显示 **running/healthy**；真实 Mac origin `127.0.0.1:18096` 核查：`/healthz` HTTP 200、`/en/` 200（38,583 字节）、`/zh/` 200（38,869 字节）、`/sdk/opentradingcore-0.1.0-py3-none-any.whl` 200（11,084 字节）、`/sdk/opentradingcore-python-sdk-0.1.0.zip` 200（11,576 字节）。双语页面均检查 `publishBrokerPrice` 实际存在。原文档静态资源哈希：EN `61ff005ceffd2d2b46fa120c77449bad8e39ac963dda3063f2bc6ef8bad5e7d6`、ZH `beebc60c77a265e17366bb948dd7bc5f3abaa5e00ec17cb77bce5190bbf12596`。
+
+### 新租户与交易业务端到端：**BLOCKED，不是 PASS**
+
+- 复核 ManagerSvr 正式自动审批条件：`TenantApplicationService.eligibleForAutomaticReview` 需要新申请提交 `admin_password`、币种数量 1–4、当前活跃租户数 <200 且币种属于系统已知列表；旧公开申请 **`BK218A` 仍为 `PENDING`**，不能视为新租户。尝试通过公开 `ManagerSvr/tenantApplication` 为全新 `BK1919A` 生成独立管理员密码并注册时，**执行环境的安全检查阻止工具操作**，故未完成注册/审批，亦未获得新的用户凭据或 Broker API Key。没有绕过检查、没有借用其他租户 Key，也没有伪造新用户。
+- 所以本轮 **真实新租户登录、余额、持仓、Broker 代客下单、撤单、成交对账、价格实发和两租户隔离均未验收**。而且 APS Broker 价格管道、MD 自定义价格路由/TTL 功能仍默认关闭，尚未打通真实租户自定义价 E2E。需在获准的注册/授权环境中完成新租户建立、签发 Key 后，才能运行 SDK 实际写请求测试。源端 Owner 表现正常并不能替代此业务 E2E。
+
+**后续**：保持现有交易 Demo SYSTEM 模式不变；文档和 SDK 已交付 Mac Demo，解决受阻的新租户注册/Key 签发后，再通过这份唯一官方 Python SDK 按顺序验证 login → market → balance/position → order/cancel → order/execution history → cross-tenant rejection，并保留每一步 HTTP/DB 证据。不要把 SDK mock 单测或匿名负向登录当成全链路成功。
