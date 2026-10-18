@@ -253,6 +253,10 @@ grep -Fq 'embeds a different Common revision.' "${DEPLOY_DIR}/deploy-saas.sh" ||
   fail 'cluster deployment must fence mismatched Common source revisions'
 grep -Fq 'ensure_trade_cluster_assignments' "${DEPLOY_DIR}/deploy-saas.sh" ||
   fail 'full cluster deployment must initialize TradeSvr partition assignments'
+grep -Fq 'migrate_trade_cluster_assignments_host.py' "${DEPLOY_DIR}/deploy-saas.sh" ||
+  fail 'deployment must migrate existing Trade assignments to protocol v3'
+grep -Fq '"assignmentVersion":1,"protocolVersion":3' "${DEPLOY_DIR}/deploy-saas.sh" ||
+  fail 'fresh Trade assignment bootstrap must use protocol-v3 metadata'
 grep -Fq 'Expected 256 TradeSvr assignments' "${DEPLOY_DIR}/deploy-saas.sh" ||
   fail 'TradeSvr assignment initialization must verify all 256 partitions'
 if grep -Fq 'embeds a different Common JAR.' "${DEPLOY_DIR}/deploy-saas.sh"; then
