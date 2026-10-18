@@ -53,3 +53,12 @@
 这使本轮 Demo 的 Trade 镜像版本不再保持冻结，也会使故障注入或数据库初始化与其他会话冲突。**移交产品开发前必须终止/协调其他 HA 任务、确认唯一部署操作者，并重新确认最终镜像与服务状态。** 不允许多个会话独立做 `docker kill`、`docker compose up --force-recreate`、删数据或改 ZooKeeper 健康状态。
 
 本轮停止继续修改 Trade 容器，避免进一步覆盖并行会话。最终认定：**基础设施已干净重建、28 项 SQL 迁移成功、双租户申请为 PENDING，但产品完整 E2E 未完成；不能对外宣布可交易 Demo 已验收。**
+
+
+## 8. 2026-10-18 产品联调增量核查
+
+- GitHub `saas-crypto` 通过 GitHub API 合入干净 Demo 交接记录、`20261017_tenant_numeric_user_ids.sql` 及经静态检查的 E2E 工具；由于 Mac 本地工作树比远程旧且分叉明显，不使用强推覆盖远程。
+- 通过真实 `ManagerSvr.tenantApplication` 接口提交独立产品测试租户 **`P43510`**，服务返回业务 `code=0`、申请编号 `5c5700d4603644d9a99a3161d8ddc748`。此结果只证明申请受理，不代表审批、交易已正常。
+- 新 Demo `dc_users` 在 `PLATFORM` 范围仍无管理员；本轮新申请 `P43510` 以及先前的 `AAE5A1`、`BAE5A1` 均为 `PENDING`。既有 H00000/H00001/H00002 为 ACTIVE，但 `registration_enabled=0`，对应 Robot 处于 STOPPED，不能据此宣布自动审批、Robot 挂价或撮合验收通过。
+- 平台管理员在正式部署流程中应由 `deploy-saas.sh` 的 `provision_platform_admin` 创建；Mac 当前 sudo 非交互不可用，且之前直接身份写入操作遭安全检查阻断。本轮没有绕过授权控制。后续需要由有权限的部署执行环境完成平台管理员/Robot 身份正式初始化，随后才可审批 `P43510` 并继续注册/登录/入金/委托/成交/资金对账。
+- **HA 继续暂停**；多个会话不得同时替换 Trade 容器或注入故障。此次提交仅补齐代码/迁移/验收脚本，不宣称已完成产品业务链路验收。
