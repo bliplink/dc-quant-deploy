@@ -1,3 +1,5 @@
+> **2026-10-18 最新接手入口（优先于本文旧版运行态）**：本轮暂停 Trade/Order/MD HA 故障注入，先做产品功能。新租户 `GW7XMI` 已自动审批，Robot 已恢复登录并 `RUNNING`、40 笔活动报价，Maker/Tape 初始化 `COMPLETE:DONE`；但账户执行与实时市场逐笔的权威对账、双向自动 failover 均未验收。精确镜像 ID、Trade 本地比 GitHub 修复分支多出的 `dcbf10c`/`2a043ac`、代码同步边界及后续 HA 步骤见 **[产品 Demo 和 HA 冻结交接](docs/PRODUCT_DEMO_AND_TRADE_HA_HANDOFF_20261018.zh-CN.md)**。旧版 HA 进度或旧入口若与该文档冲突，以新文档和实机核对为准。禁止多个会话同时重建/杀进程。
+
 # OpenTradingCore 项目总览与跨账号交接
 
 > **2026-10-15 最新最高优先级：本轮只做 Common/Order/Trade/MD 全面集群验收，失败即最小修复、本地编译、直接替换 Demo；必要时按授权清理 Demo 数据重新部署。禁止扩大功能/反复预检。执行、验收矩阵及最近阻断详见 [集群最终统一验收任务书](docs/CLUSTER_HA_FINAL_ACCEPTANCE_MISSION_20261015.zh-CN.md)。此文件中的任何早期计划如有冲突，以该任务书及实时证据为准。**
