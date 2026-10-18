@@ -112,3 +112,41 @@
 - 本轮**没有替换 Mac 任何 APS/MD/Trade/Liq/Robot 镜像**，也没有修改生产 Demo 业务 `dc_tenant` 表（新增 `price_source/liquidity_source/source_config_version/source_switch_state` 字段仍为 0/4）。现有 Demo 按 SYSTEM/SYSTEM 原路径运行，确保无未经授权 Broker 价格进入真实强平逻辑。
 - 2026-10-18 19:32 CST 实机复查：`GW7XMI` `COMPLETE:DONE`、Robot `RUNNING`、40 个活动委托；主站 `https://opentradingcore.com` 和交易站 `https://trade.opentradingcore.com` 均 HTTP 200。
 - **下一步关键链路尚未通过**：实现经过正式认证的 Publisher Epoch 租约和可持久验证的 Source/Sequence 提交事务；MDSvr 安全 Broker 入站和 SYSTEM/BROKER 来源状态分发；Trade/Liq 对 STALE 价的拒绝/恢复；Admin Web 有审计的租户价源切换及系统自有报价撤销；完成全量 APS→MD→Trade/Liq 双租户 E2E 之后，才允许启用 `broker.price.publish.enabled` 和替换 Demo 镜像。独立 Broker Demo、公开 WS、API Docs Docker 部署、200 租户压测和 HA 故障恢复仍未做，**不能宣布 Broker v1.0 整体验收**。
+
+
+## I. 2026-10-18 19:52 CST｜MD Broker 独立接收入口与可信校验合同已提交（最新进度）
+
+**阶段结论：MD 已有独立、默认关闭的 Broker 价格接收及租户状态机调用；未获得可信配置/租约服务证明的价格不能进入接收端。真实风险价格下游尚未打通，故依然禁止启用 Broker 模式。**
+
+### 本轮实交付代码（`bliplink/com.app.dc.mdsvr/saas-crypto`）
+
+| 代码或测试 | GitHub 提交 | 行为 |
+|---|---|---|
+| `BrokerTenantPriceEvent.java` | `42d62bb` | 严格解析 `dc.aps.markprice.<Location>.<SecurityID>` 五段 Topic，核对 payload 同租户/币种、Index+Mark 同批值、MarketIndicator、时间/TTL、configVersion、publisherEpoch、sequence；旧系统 Topic、非法 ID、长度/数字不符均拒绝 |
+| `VerifiedBrokerPriceAdmission.java` | `3bd5813` | 可信配置/Publisher Epoch/Sequence **必须由独立校验器认可并先持久化**，不能把 APS 消息内声称的 Epoch/版本视为权威 |
+| `BrokerTenantPriceReceiver.java` | `bf240a2` | 在批准前不变更租户价格状态；先做价格合法性 preflight，再比对可信准入结果六个字段，最后交给原 `TenantEffectivePriceBook` |
+| `BrokerTenantPriceInput.java` | `13a0c7e` | 新的 Spring 订阅器，`broker.price.receive.enabled:false` 默认不订阅；开关开启而无真实 `VerifiedBrokerPriceAdmission` 实现时直接抛 `BROKER_PRICE_ADMISSION_NOT_INSTALLED`，不会误收价；只更新独立内存租户价格状态，不触及系统价和真实 Trade/Liq |
+| `IndexClient.java` + `MDStart.java` | `ec2fea0` + `ad26891` | 注册独立 Broker Map 类型订阅；仅显式开启时在 MD 后台订阅重试链路中安装，不改原四段 SYSTEM Mark Topic |
+| `TenantEffectivePriceBook.validateQuote()` | `9e32dd6` | 在调用持久化准入/序号提交前验证时间、TTL、价格有效性，避免非法报价先消耗持久序号 |
+| `BrokerTenantPriceReceiverTest` + `BrokerTenantPriceInputTest` | `e19df98` + `bf47af6` | 覆盖系统/租户及两币种隔离、Topic 与 payload 不一致、无校验器/伪造 Epoch、Sequence replay、过期后拒绝回退系统价、非法数字、默认关闭 |
+
+### 测试与已知阻塞（不隐瞒）
+
+- Java8，JUnit4 + 本地框架最小 Stub 进行新组件**独立隔离编译与测试：14/14 PASS**。此外共享价 Topic 严格匹配的 JUnit 之前已 4/4 PASS。Stub 编译覆盖 `BrokerTenantPriceInput` 缺失依赖下的功能开关路径；**不等于真实 Gateway 消息订阅 E2E**。
+- 使用 MD 原生 `mvn -B -o -Dtest=BrokerTenantPriceReceiverTest,BrokerTenantPriceInputTest test` 时，依旧在旧 HA 源码 `MdAuthenticatedOrderImageReview.java` 中 `RecoverySourceAttestation.VerifiedHead` 类型缺失处**编译失败**，测试尚未进入 Maven；这与本轮价源接收实现无关。为保持 Common HA 架构不变，未随意修改其恢复状态机、未强行发布 MD 镜像。
+- 可信 `VerifiedBrokerPriceAdmission` 是接口契约，**当前没有可用实现或发布者持久租约/ConfigVersion 事务**；因此 Broker 输入依然处于明确的 FAIL-CLOSED 状态，`broker.price.receive.enabled` 不应开启。
+- SDK、APS 和原 Robot 服务的完成状态详见本记录 F/G/H；**不能把已有的 14 项单测当成整个 Broker API 已经部署或通过压力/故障验收。**
+
+### 最新 Demo 运行态（2026-10-18 19:52 CST）
+
+- 实际 Mac Docker 的 APS `ghcr.io/bliplink/apssvr:sha-73e3fd5`、MD A/B/C `dc-saas/mdsvr:cluster-dev-fenced-transport-20261016`、Trade A/B `trade438-carriedepoch-2a043ac-20261018` **均未替换为这轮实验代码**，Gateway 透传和 Common HA 均未修改。
+- `dc.dc_tenant` 中 Broker 双来源配置字段仍为 **0/4**（迁移未应用产品库），`GW7XMI` 仍为 SYSTEM/SYSTEM：`COMPLETE:DONE`、Robot `RUNNING`、活动挂单 40，主站/交易站 HTTP 200。
+
+### 下一阶段必须推进（按依赖顺序）
+
+1. **真正的可信租约/配置事务**：Admin/APS/MD 验证租户选 BROKER、`PRICE_PUBLISH` Key Scope、PublisherEpoch 唯一性、签名/持久序号、配置版本、失效时间，提供 `VerifiedBrokerPricePublisher` 与 `VerifiedBrokerPriceAdmission` 的生产实现，校验不是靠调用方自报。
+2. **MD→Trade/Liq 价格状态分发**：显式 READY/STALE/UNAVAILABLE、Snapshot/Diff/恢复重订阅、故障/超时禁止回落 Binance，不修改 Gateway/Common HA 通用机制。
+3. **来源切换完整状态机**：Broker 流动性激活前禁止系统 Robot 继续下单，并撤销系统 Robot 现存委托（按 owner ID），确认完成后才 ACTIVE；切回 SYSTEM 需安全预热。
+4. 完成 Canonical Python SDK Broker 查询/下单实网验证、实时 WebSocket 连接和 Gap 补拉、单页 API Docs、独立 Broker Demo、两租户×四来源组合、完整资金持仓成交对账，最后做 10→50→200 租户负载及 HA 故障恢复。**全部还没有满足正式验收门槛**。
+
+**记录规则**：后续每一批真实代码提交、单测、Mac 镜像发布或故障注入都往此文档追加日期、仓库/分支/Git SHA、测试数字、环境状态、未通过项，不以无证据“全部完成”替代验收。
