@@ -51,3 +51,18 @@
 - 所有上述提交使用 `[skip ci]`。没有修改 Gateway 透传代码，也没有修改 Common HA 实现或执行故障注入。当前 `GW7XMI` 的 SYSTEM/SYSTEM Robot 仍保持 RUNNING，Broker 接口/租户来源切换不允许在当前产品 Demo 直接打开。
 
 **验收结论没有变化**：这些是可追溯基础组件及单测成果，**非 Broker API v1.0 完整交付**。本轮未执行跨服务 Broker price Publish/MD/Trade/Liq 数据流、真实租户隔离、WebSocket、API Docs 发布、独立 Broker Demo、50/200 租户压测或真实 HA failover；任何对应 PASS 都是虚假结论。
+
+
+## F. 既有 Python SDK 核对与统一决定（2026-10-18）
+
+用户提示此前已有 Python API，重新检查 GitHub 得到确切结果：**`bliplink/opentradingcore-api-docs` 的 `saas-crypto/sdk/python` 已包含独立 `opentradingcore` Python SDK v0.1.0**。源码包含 `opentradingcore/client.py`、`realtime.py`、`tests/test_client.py`、`examples/demo_readonly.py` 与 `pyproject.toml`；之前还构建过 Wheel。其主类 `OpenTradingCoreClient.from_api_key(...)` 允许直接在 Python 传 Key/Secret，无须 shell export。
+
+源代码实查已包含：HMAC-SHA256 登录（Trader `API/trade`、Broker `TenantAPI/broker` 身份校验）、`market_snapshot`、`kline`、`open_orders`、`order_history`（AdminSvr `queryOrder`）、`execution_history`（AdminSvr `queryExecOrder`）、`balances`、`positions`、`place_limit_order`、`cancel_order`，订单写操作不自动重发；`RealtimeTopics`、`DepthSequence` 负责 Topics、Snapshot/diff 和 gap 拒绝错误续接。**尚未实现已验收的公网 WebSocket Transport / Broker `customer_id` 完整授权 / `publishBrokerPrice` / 生产价格状态与发布者租约**。
+
+本轮经 GitHub 读取真实 `saas-crypto` 7 个文件到 Mac 临时目录 `/tmp/otc-canonical-python-sdk-audit-20261018`，执行 `PYTHONPATH=. python3 -m unittest discover -s tests -v`，结果 **12 tests / 12 PASS**。这是 Python 单元测试，**不是**实机 Trader/Broker E2E：没有替代真实 Gateway TCP/WS 和代客委托验收。
+
+**统一决定：既有 `opentradingcore` 是唯一正式 Python SDK**；在此基础上扩展 Broker customer_id、scope、批量价格发布、实时 WS 重连补拉、ExecID/ClOrdID 幂等。原本在 `com.app.dc.api.demo/saas-crypto/broker-python-sdk` 做的 `opentradingcore-broker` 是实验性的签名客户端，并没有已部署的交易能力，不能作为第二套对外 SDK。已在该目录 README 明确弃用指向正式 SDK（`ea92d16`），后续仅保留独立 Broker Demo 对正式 SDK 的调用。
+
+实机现状再次核验：`GW7XMI` 的 `dc_tenant_liquidity_bootstrap=COMPLETE:DONE`，Robot `RUNNING`、40 挂单；业务 `dc` 库的 `dc_tenant` 尚无 `price_source/liquidity_source/source_config_version/source_switch_state` 四列（迁移仅在隔离临时库验证过）。Docker 实际 APS 为 `sha-73e3fd5`、Manager 为 `sha-f8659fb7`、MD 为旧本地 cluster-dev 镜像，未安装 Broker 模式新代码；API Docs 容器运行旧 `sha-91ba653` 镜像并健康，但新的 Broker API Docs 没有编译发布。主站 HTTP 200，`docs.opentradingcore.com` 在本机 DNS 无法解析，不能声称新 Docs 公网地址已验收。
+
+**总体判断：旧 SDK 可复用，且 12 个单测通过；Broker v1.0 整体仍属于服务端基础代码阶段，关键价源开关、权限、实际 WS/代客链路、独立 Demo、完整 E2E/50-200 租户压力及 HA 验收尚未完成。**
