@@ -66,3 +66,25 @@
 实机现状再次核验：`GW7XMI` 的 `dc_tenant_liquidity_bootstrap=COMPLETE:DONE`，Robot `RUNNING`、40 挂单；业务 `dc` 库的 `dc_tenant` 尚无 `price_source/liquidity_source/source_config_version/source_switch_state` 四列（迁移仅在隔离临时库验证过）。Docker 实际 APS 为 `sha-73e3fd5`、Manager 为 `sha-f8659fb7`、MD 为旧本地 cluster-dev 镜像，未安装 Broker 模式新代码；API Docs 容器运行旧 `sha-91ba653` 镜像并健康，但新的 Broker API Docs 没有编译发布。主站 HTTP 200，`docs.opentradingcore.com` 在本机 DNS 无法解析，不能声称新 Docs 公网地址已验收。
 
 **总体判断：旧 SDK 可复用，且 12 个单测通过；Broker v1.0 整体仍属于服务端基础代码阶段，关键价源开关、权限、实际 WS/代客链路、独立 Demo、完整 E2E/50-200 租户压力及 HA 验收尚未完成。**
+
+
+## G. 新一轮实际交付：显式价格权限 + canonical SDK Broker 客户交易封装（2026-10-18）
+
+本轮没有重建 Mac Demo 或修改运行中的 APS/MD/Trade/Order/Robot 镜像；先提交独立、安全、可单测的代码。当前产品 Demo 继续 SYSTEM/SYSTEM，不宣称 Broker v1 完成。
+
+### 已提交到各仓库 saas-crypto
+
+1. **`bliplink/com.app.dc`（公共业务 API 契约，并非 Common HA）**：`DcOpenApi.Scope.PRICE_PUBLISH` 显式 Broker Scope；`isBrokerScope` 接受它，但 `BROKER_DEFAULT` **不包含它**，Trader/Tenant 原有 Scope 不继承价格发布权限。代码 `de76d8c`，测试 `e85100e`；Java 8 单文件编译、JUnit4 **6/6 PASS**。模块完整 Maven 在 Mac 本地缓存缺少 `io.github.bliplink:com.app.common:3.0.20` 时依赖解析失败，不以此修改 Common HA 状态机。
+2. **`bliplink/com.app.dc.apssvr`**：`BrokerPriceAccessPolicy` 和 `BrokerPriceAccessPolicyTest`，分别 `31b1249`、`b8b2dbc`。严格要求经过 LoginSvr 登录的 `TenantAPI/broker`、完整词元匹配 `PRICE_PUBLISH`、从 Session 得到租户并拒绝 body 冲突、单批指数/标记价格正数和精度、事件时间新鲜度及 TTL 限制。Java8 独立 JUnit4 **5/5 PASS**。**这只是正式入口的授权/校验组件，尚未安装 `publishBrokerPrice` Handler、可信发布者租约或消息发布，不能发正式 Broker Price。**
+3. **`bliplink/opentradingcore-api-docs` 原有 canonical Python SDK `sdk/python/`**：继续使用 `opentradingcore` 0.1.0，扩展以下 explicit customer API：`place_customer_limit_order`（`OrderSvr/placeOrder`，要求强制 `ClOrdID`）、`cancel_customer_order`（要求独立撤单 `ClOrdID`）、`customer_order_history`（`AdminSvr/queryOrder`）、`customer_execution_history`（`AdminSvr/queryExecOrder`）。全部限定 `TenantAPI/broker` Session + `ORDER_READ/WRITE`；客户 user_id 必须显式传入、location 从登录 Session 派生、SDK 不自行跨租户或自动重试不确定的写请求。客户端代码 `02c05aa`、测试 `a3b707b`；在 Mac 运行完整 Python SDK 单元测试 **15/15 PASS**；新增隐藏 Key/Secret 输入、只读客户历史示例 `examples/demo_broker_readonly.py`（`3dc5a91`）、README 用法（`54ea07b`）。
+
+### 额外核对的服务端约束与开放问题
+
+- 从最新 `com.app.dc.ordersvr/saas-crypto` 源码确认其 `SessionOrderAuthority.scope` 调用 `OpenApiAccountAuthority.resolve(session, location, userID, ORDER_WRITE, true)`，Broker 须为同租户启用的 TRADER 客户；`com.app.dc.adminsvr/saas-crypto` 当前 `LegacyOrderQueryScope` **已经**调用 `OpenApiAccountAuthority.resolve(..., ORDER_READ,false)`，无需用本机过时 `.work/adminsvr` 版本覆盖。仅源码确认；尚需用真实 Key 做 Order/History 端到端验收。
+- 以上 Python Broker 委托接口单元测试用注入 Transport 模拟 Gateway，验证分区路由、大小写正确的 `Location/UserID`、明确 customer_id、Broker 权限及无重复请求；**并未证明现在的公网站点已经支持此传输，更未验证实际成交和资金归属**。
+- 严禁仅放开 APS E2E 测试 Token：正式 APS Price Handler 还须引入真实 Broker Session、`PRICE_PUBLISH` 授予流程、按租户价格模式校验、可信 Publisher Epoch/Fencing、审计及频率限制；MD 旧 E2E 内存价源不能替代生产租户价格状态，Trade/Liq 仍需 STALE fail-closed。
+- **当前仍未完成**：真实 APS Handle 接 MD→Trade/Liq、双来源热切换与自有系统挂单撤销、Broker customer 资金查询权限、真正 WebSocket Gateway 传输和 Snapshot/Gap 恢复、API Docs 新 Docker 镜像/公网发布、独立可交易 Broker Demo、四组合与跨租户隔离 E2E、10/50/200 租户故障与性能压测及 HA 一致性验收。
+
+### 下轮顺序
+
+先确定并打通 APS 正式发布入口 + 签名发布者租约 → MD 有效价按租户来源选择并隔离下游 STALE → Admin/租户流动性切换撤销老系统 Robot 委托 → 真实独立 Broker Key、客户与 SDK 委托 E2E → WebSocket/Docs/Demo → 镜像/故障和 50/200 租户验收。期间保持 Gateway 透传与 Common HA 架构不变，Mac Demo 只在安全的联合验证门槛达到后再升级。
