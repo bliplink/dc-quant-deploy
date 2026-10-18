@@ -158,3 +158,25 @@
 - 拒绝事件处理改为捕获 `RuntimeException` 并累加 `rejectedCount`，避免异常事件或未准备好准入提供者在消息回调里触发订阅线程崩溃；未吞掉 JVM 级致命错误。代码 `com.app.dc.mdsvr/saas-crypto@68fde38`，测试 `@e4a61ab`。
 - Java8 独立测试现为 **15/15 PASS**（`BrokerTenantPriceInputTest` + `BrokerTenantPriceReceiverTest` + `TenantEffectivePriceBookTest`）；另有 SYSTEM Topic Guard **4/4 PASS**。完整 MD Maven 仍被已有 HA `RecoverySourceAttestation.VerifiedHead` 类型缺失阻塞，不能作为模块全量验收。
 - Mac 主站、交易站再次实测 HTTP 200；本轮未部署或替换任何 MD/APS/Trade/Liq/Robot 生产 Demo 容器，亦未改 Common 或 Gateway。当前依旧 **Broker 价格发布/消费实机 E2E 未通过**，需生产可信租约/数据库配置及下游风控状态链路，不能仅开两个 feature flag。
+
+
+## K. 2026-10-18 20:00 CST｜MD 全量 Maven 编译及回归解锁，启动联调测试
+
+**问题根因已定位**：MD 编译报错 `MdAuthenticatedOrderImageReview -> RecoverySourceAttestation.VerifiedHead` 并非 Broker 新代码本身错误。MD 经 `com.app.dc 0.0.4-SNAPSHOT` 传递解析的是旧 `com.app.common:3.0.17`，该版本没有 `VerifiedHead`；本机 Common 修复分支已有 `3.0.22-SNAPSHOT` Jar，此版本存在 `VerifiedHead` 且不需要改 Common HA 源码。
+
+**本轮实测**：在独立 MD worktree `/tmp/otc-broker-md-price-v1-20261018` 内通过直接显式依赖 `io.github.bliplink:com.app.common:3.0.22-SNAPSHOT` 对齐二进制依赖，执行：
+
+```bash
+JAVA_HOME=/Users/kong/Library/Java/JavaVirtualMachines/zulu-8.jdk/Contents/Home \
+  /Users/kong/.opentradingcore/ha-unified-validation-20261015/tools/apache-maven-3.9.16/bin/mvn -B -o test
+JAVA_HOME=/Users/kong/Library/Java/JavaVirtualMachines/zulu-8.jdk/Contents/Home \
+  /Users/kong/.opentradingcore/ha-unified-validation-20261015/tools/apache-maven-3.9.16/bin/mvn -B -o package
+```
+
+结果 **MD 全量 165/165 PASS，0 fail，0 error，0 skipped，BUILD SUCCESS**；包含 Broker 入站/消息隔离相关 **19/19 PASS**。jar 输出 `target/com.app.dc.mdsvr-0.0.1-SNAPSHOT.jar`，本地大小约 199 KiB。GitHub `com.app.dc.mdsvr/saas-crypto@aaa8f8be` 已提交显式二进制依赖对齐。**此修改是 MD Maven 依赖解析，不涉及 Common HA 状态机实现。**
+
+**发布门禁**：Common `3.0.22-SNAPSHOT` 目前仅确认本机离线仓库及 HA 修复分支源码，不能据此假定在中央仓库已发布并可以从任意干净构建机检出。推正式镜像前必须固定可重现的 Common Jar + SHA、建立发布凭证来源，避免部署引用旧 `3.0.17` 或误拉错误版本。尚未滚动替换 Mac Demo MD 容器。
+
+**重要剩余缺口**：上述是服务代码完整编译/单测，不是 Broker 模式生产完整 E2E；`VerifiedBrokerPricePublisher` 和 MD `VerifiedBrokerPriceAdmission` 仍无经过租户生效配置与授权租约证明的生产实现。缺少下游 Trade/Liq 的 STALE/UNAVAILABLE fail-closed、Broker 模式安全切换及撤单、Python SDK/WS/Docs/Demo 实网验收，暂不开 Broker feature flags。现有 `GW7XMI` SYSTEM/SYSTEM Robot 和公共站点保持原样。
+
+**后续必验顺序**：签名发布者租约与持久 Replay/Fencing → MD 租户来源配置入站、重启 Snapshot/序号追平 → Trade/Liq 风控状态正确传播 → SYSTEM/BROKER 双来源安全切换与 Robot 自有单撤销 → 2租户×4组合 E2E → WebSocket/SDK/Docs/Broker Demo → 50/200 tenants + 真实故障恢复及账务对账。
