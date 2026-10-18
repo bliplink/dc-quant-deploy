@@ -23,10 +23,14 @@ os.chmod(path,0o600)
 PY
 curl --noproxy '*' --fail --silent --show-error --max-time 35 -H 'Content-Type: application/json' --data-binary "@$REQ" "$BASE" > "$OUT"
 rm -f -- "$REQ"
-python3 - "$OUT" <<'PY'
-import json,sys
-r=json.load(open(sys.argv[1])); assert r.get('code')==0, 'tenant submission failed'; assert (r.get('data') or {}).get('application_id'), 'missing application_id'
+APP_ID="$(python3 - "$OUT" <<'PY'
+import json,re,sys
+r=json.load(open(sys.argv[1])); assert r.get('code')==0, 'tenant submission failed'
+appid=str((r.get('data') or {}).get('application_id',''))
+assert re.fullmatch(r'[a-f0-9]{32}',appid), 'missing or invalid application_id'
+print(appid)
 PY
+)"
 # Auto-approval is inside submit; no platform manager login is required.
 # All SQL literals below originate from our validated fixed-format location code.
 [[ "$LOCATION" =~ ^[A-Z][A-Z0-9]{5}$ ]] || { echo "Invalid location for smoke test" >&2; exit 2; }
@@ -35,7 +39,7 @@ query(){
 }
 STATE=''
 for i in $(seq 1 30); do
-  STATE="$(query "SELECT CONCAT(status,':',COALESCE(approved_location,'')) FROM dc_tenant_application WHERE tenant_code='${LOCATION}' ORDER BY create_time DESC LIMIT 1" || true)"
+  STATE="$(query "SELECT CONCAT(status,':',COALESCE(approved_location,'')) FROM dc_tenant_application WHERE application_id='${APP_ID}' LIMIT 1" || true)"
   [[ "$STATE" == APPROVED:* ]] && break
   sleep 1
 done
