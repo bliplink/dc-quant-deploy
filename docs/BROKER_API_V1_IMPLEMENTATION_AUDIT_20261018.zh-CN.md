@@ -88,3 +88,27 @@
 ### 下轮顺序
 
 先确定并打通 APS 正式发布入口 + 签名发布者租约 → MD 有效价按租户来源选择并隔离下游 STALE → Admin/租户流动性切换撤销老系统 Robot 委托 → 真实独立 Broker Key、客户与 SDK 委托 E2E → WebSocket/Docs/Demo → 镜像/故障和 50/200 租户验收。期间保持 Gateway 透传与 Common HA 架构不变，Mac Demo 只在安全的联合验证门槛达到后再升级。
+
+
+## H. 2026-10-18 19:32 CST｜APS 正式 Broker Price Handle 和 MD 系统价隔离（默认关闭）
+
+本轮完成了两个安全闭环的**代码层增量**，并同步更新至各仓库 **`saas-crypto`**，所有提交均带 `[skip ci]`。
+
+### APSvr：公开方法名已保留，尚无可信租约实现
+
+- `com.app.dc.apssvr@saas-crypto` 新增 `@Service("publishBrokerPrice")` 的 `PublishBrokerPriceHandler`（`5a60569`）、`BrokerPricePublishReq`（`3904dce`）、`VerifiedBrokerPricePublisher` 发布者接口（`267e1e1`）、测试（`d3f6760`、`525e494`），以及只在显式配置 `broker.price.publish.enabled=true` 时初始化 APS LoginSvr Session Cache 的 `APSService` 修改（`b6ec8ea`）。
+- 入口使用真实 `message.getSignalID()` → `LoginSvrClient.get(sid)` 的 Session，要求 `TenantAPI/broker` + 精确 `PRICE_PUBLISH` 权限；请求 body 中的 `location` 只能与 Session 租户一致。Index/Mark 同批、正值/精度/TTL/时间窗口校验，并检查请求 `config_version>0`、`sequence>0`。
+- **明确默认 FAIL-CLOSED**：`broker.price.publish.enabled` 默认 `false`；即使设置 `true`，若 Spring 中没有实现通过租户 BROKER 配置、已认证发布者 Epoch、持久化 Sequence/Fencing、MD→Trade/Liq 就绪/审计的 `VerifiedBrokerPricePublisher`，仍返回 `503 BROKER_PRICE_PIPELINE_NOT_READY`，**不发布任何价格消息**。当前故意不注册任何此实现，防止测试 Token 或伪造 Epoch 绕过硬门禁。未来可信租约接好时，Topic 才会是 `dc.aps.markprice.<authenticated-location>.<securityId>`，消息携带服务端可信的 Epoch/配置版本/序列。
+- **实测**：Mac JDK8，APS Maven offline **全量 40 tests、0 failed、0 errors、0 skipped，BUILD SUCCESS**（含入口默认关闭、仅开启开关不能绕过缺失租约两项测试，以及 Broker Scope/时间戳/跨租户校验）。这次是完整 APS 模块 Maven 构建测试，不是仅文件级单测。
+
+### MDSvr：阻断 Broker 租户 Topic 污染共享系统价格
+
+- `com.app.dc.mdsvr@saas-crypto` 新增 `SharedMarkPriceTopicGuard`（`5003ae9`）、对应 JUnit 4 测试（`130c730`），并在 `IndexInput` 真实 MarkPrice 接收入口接入（`8b7c10f`）。
+- 原 `IndexClient` 订阅 `dc.aps.markprice.**`，会覆盖标准四段 Topic `dc.aps.markprice.BTCUSDT` 和未来五段 `dc.aps.markprice.<Location>.BTCUSDT`。现在只允许四段系统 Topic、空 payload Location、与 payload SecurityID 同标的通过 `indexFacade.markPrice(t)`；带租户、标的错配、通配符、异常 Topic 均无法写入全局 mark-price 缓存。
+- **实测**：独立 Java8 + JUnit4 `SharedMarkPriceTopicGuardTest` **4/4 PASS**。MD 全模块 Maven 仍可能被先前 `RecoverySourceAttestation.VerifiedHead` 与本地 Common 依赖不一致阻挡，**本轮没有宣称 MD 全量构建/上线成功**；未来 Broker 租户价格必须走单独的授权消费者，严格配置版本/Publisher Epoch、Seq、Snapshot/Diff 和 STALE fail-closed。
+
+### 生产运行态与后续未完成项
+
+- 本轮**没有替换 Mac 任何 APS/MD/Trade/Liq/Robot 镜像**，也没有修改生产 Demo 业务 `dc_tenant` 表（新增 `price_source/liquidity_source/source_config_version/source_switch_state` 字段仍为 0/4）。现有 Demo 按 SYSTEM/SYSTEM 原路径运行，确保无未经授权 Broker 价格进入真实强平逻辑。
+- 2026-10-18 19:32 CST 实机复查：`GW7XMI` `COMPLETE:DONE`、Robot `RUNNING`、40 个活动委托；主站 `https://opentradingcore.com` 和交易站 `https://trade.opentradingcore.com` 均 HTTP 200。
+- **下一步关键链路尚未通过**：实现经过正式认证的 Publisher Epoch 租约和可持久验证的 Source/Sequence 提交事务；MDSvr 安全 Broker 入站和 SYSTEM/BROKER 来源状态分发；Trade/Liq 对 STALE 价的拒绝/恢复；Admin Web 有审计的租户价源切换及系统自有报价撤销；完成全量 APS→MD→Trade/Liq 双租户 E2E 之后，才允许启用 `broker.price.publish.enabled` 和替换 Demo 镜像。独立 Broker Demo、公开 WS、API Docs Docker 部署、200 租户压测和 HA 故障恢复仍未做，**不能宣布 Broker v1.0 整体验收**。
