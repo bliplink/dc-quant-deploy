@@ -335,3 +335,29 @@ JAVA_HOME=/Users/kong/Library/Java/JavaVirtualMachines/zulu-8.jdk/Contents/Home 
 - MySQL `dc_tenant` 校验：**0 个租户处于 `price_source=BROKER` 或 `liquidity_source=BROKER`**。
 
 这次验证是**实际公开接口的负向/只读测试**。生产 Publisher/TrustedSource 仍缺，不能开启 Broker 价源，也不能据此将新租户 Broker API E2E 标为 PASS。Trade/Liq 继续订阅 MD 原 Tenant Trade topic，无源码改动。
+
+
+## R. 2026-10-18 23:40 CST｜MD Broker 实时报价主动推送和 TTL 失效通知已提交、已灰度部署（功能仍 OFF）
+
+### 已开发并提交（`bliplink/com.app.dc.mdsvr/saas-crypto`）
+
+- `TenantEffectivePriceBook.Effective.expiresAt`（commit `62de74fce8af0d5e946109340fad63a06afbe2c7`）：把服务端验收时间计算出的到期时间暴露给独立 TTL 通知器；重放重复报价不会延长原来的 TTL。
+- `BrokerTenantPriceReceiver.receiveEvent()`（commit `ac39f712654a6007d659cc18f5b61ff5a93d094d`）与 `BrokerTenantPriceInput.onAccepted()`（commit `d25bdd574740007829f308f7124fe23ab560c58b`）：仅经可信 Admission 校验并写入租户价簿后才回调价格变更，非法报文计入拒绝；回调本身失败会增加 notificationFailures，不被误记成价格准入成功以外的状态变更。
+- `TradeFacade.publishTenantEffectiveMarkPrice()`（commit `4cb92d5290b3d080e146b11ce01d4388548c2583`）：仅向**已存在的租户行情**通过原有 `Trade` 消息 Topic 发布最新生效价，不凭空创建市场；必须通过 `MdPartitionRuntime.canPublish(location,market,symbol)` 的当前 Primary/READY 隔离检查，复用既有 MD 异步发送 Epoch/发布隔离。
+- 新增 `BrokerTenantMarkPublishBridge`（commit `295e0ac8f92b8f82adadb2ddb4b73ebf1c3ecfa1`）：`broker.price.event.publish.enabled=false` 默认关闭。须 **receive + route + event.publish 三个开关**均显式启用，Broker tick 经 Admission 接纳后立即触发既有租户 Trade Topic 的发布；使用单线程惰性 TTL 定时任务在已验证报价到期后触发一次不可用/空 MarkPrice，旧 Epoch/Sequence/ConfigVersion 的计时器不可清除随后新报价。限制最多 10,000 个未完成 TTL 任务；不创建长期轮询线程直到实际接纳事件。此逻辑只是 Data Plane 边界，生产授权仍需独立实现。
+- 新增 `BrokerTenantMarkPublishBridgeTest`（commit `6141facfaefd5ce584cc88f7495cc03de2e90940`），在 Java 真实定时器上验证 Tick 立即推送、TTL 到期发布空 MarkPrice、旧 TTL 不能抹掉新 Sequence、功能关闭不启动通知。
+
+**测试结果：** Mac JDK8 Maven `mvn -B -o test` **169/169 PASS，0 failures，0 errors，0 skipped**，日志 `/tmp/otc-broker-md-ttl-full-test-20261018.log`。新增 3 项独立通知/定时器测试 **3/3 PASS**；完整 MD 模块与此前全部 HA/行情案例一起回归通过。源代码工作树 `/tmp/otc-broker-md-runtime-baseline-20261018` 本地提交 `6a1c756c89c1bbbb526604630aecba4f478c38e7`。
+
+### 已实际部署 Mac mini Demo
+
+- 以此前已部署的 `dc-saas/mdsvr:broker-v1-selector-disabled-20261018` 为基底，只在覆盖层更新本轮编译类，构建 `dc-saas/mdsvr:broker-v1-ttl-push-disabled-20261018`，**image ID `sha256:f080e358c367b8b8283c2a09b4bfe9292cc065dd08bf4c6d33b8bb199e3897d1`**；镜像中 Common Jar SHA256 **`8cbb195a131664c96692598bef51644ced9074f01ad80b3878b84cfce9444da4`** 与上一版相同。
+- Compose 覆盖文件 `/Users/kong/.opentradingcore/broker-v1-demo-checkpoints-20261018/broker-md-ttl-20261018.yaml`（无密钥），三个 Broker 开关 `BROKER_PRICE_RECEIVE_ENABLED=false`、`BROKER_PRICE_ROUTE_ENABLED=false`、`BROKER_PRICE_EVENT_PUBLISH_ENABLED=false`。本地执行 `deploy-md-ttl-20261018.sh`，逐个 **MD-C → MD-B → MD-A** 灰度，每一步必须看到启动日志 `Started application in` 且租户 Robot `RUNNING/40` 才继续，否则中断滚动。不重启 Order/Trade/Liq/Gateway/Robot。
+- 三个 MD 当前均使用新镜像、Docker `running`、Spring `Started application`；最终只读 `tests/verify-broker-v1-canary-health-host.sh` **13/13 PASS（Exit 0）**：Admin、Manager、APS、MD-A/B/C 六服务 Spring Ready、主站与交易站 HTTP 200、`GW7XMI` SYSTEM/SYSTEM 且 Robot RUNNING 40 单、Broker Schema 6/6、未认证 Broker 租户操作拒绝。Mac 保留原始完整滚动输出 `/Users/kong/.opentradingcore/broker-v1-demo-checkpoints-20261018/md-broker-ttl-rollout-20261018.log`，SHA256 `5a7485d21d22dd26638df1fa760886422232b0f72b8fac4effa9d8268fc89103`。
+- 线上 `dc_tenant` 当前 **0 个 BROKER 价格租户**，`GW7XMI` 未切价，旧 Maker/盘口健康正常。
+
+### 仍然没有通过的验收与禁止的操作
+
+**不要打开 Broker 开关**：MD `TrustedTenantPriceSource` 当前仍只是接口，生产可信租户配置生效/更新/撤销服务缺失；APS `VerifiedBrokerPricePublisher`、MD `VerifiedBrokerPriceAdmission` 的真正 Publisher 租约/签名/持久 Replay/Fencing 未接通。还需验证 HA 故障恢复后的新 Primary 发送权威租户生效价/TTL 失效、订阅 Snapshot 与 Gap 后重新下发不可用状态。即使本轮 Java 测试模拟了可信 Broker 事件，**仍不构成真实 Broker Key API 价格发布 → 交易/强平/资金 E2E**。
+
+待生产可信源完成后，只验证 APS→MD→现有 Trade Topic，不对 TradeSvr/LiqSvr/Gateway/Common HA 增加新接口；再新建能够自动审批的独立 Broker 测试租户，以真实 API Key 验证价格配置、下单/撤单/成交/资金/持仓、租户隔离和 10/50/200 压测。
