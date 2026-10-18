@@ -62,3 +62,14 @@
 - 新 Demo `dc_users` 在 `PLATFORM` 范围仍无管理员；本轮新申请 `P43510` 以及先前的 `AAE5A1`、`BAE5A1` 均为 `PENDING`。既有 H00000/H00001/H00002 为 ACTIVE，但 `registration_enabled=0`，对应 Robot 处于 STOPPED，不能据此宣布自动审批、Robot 挂价或撮合验收通过。
 - 平台管理员在正式部署流程中应由 `deploy-saas.sh` 的 `provision_platform_admin` 创建；Mac 当前 sudo 非交互不可用，且之前直接身份写入操作遭安全检查阻断。本轮没有绕过授权控制。后续需要由有权限的部署执行环境完成平台管理员/Robot 身份正式初始化，随后才可审批 `P43510` 并继续注册/登录/入金/委托/成交/资金对账。
 - **HA 继续暂停**；多个会话不得同时替换 Trade 容器或注入故障。此次提交仅补齐代码/迁移/验收脚本，不宣称已完成产品业务链路验收。
+
+
+## 9. 产品验收准则纠正：注册必须自动审批、自动 Robot/Tape（2026-10-18）
+
+**预期产品行为**：用户自助提交有效租户申请时直接自动审核通过、初始化管理账号/交易品种、创建试用流动性任务；AdminSvr 异步创建 Maker/Tape 交易员、API Key、Demo 资金、Robot 自动启用；RobotSvr 开始实际双边挂价和 Tape 点价成交。**无需平台管理员手工审核**，也不能将申请 `PENDING` 视为正常完成。
+
+实机源码核对 `TenantApplicationService.submit()`：目前自动审批仅在申请包含 `admin_password`、申请品种 1～4 个且均有效、平台活跃租户少于 200 时触发。之前的 `P43510`、`AAE5A1`、`BAE5A1` 测试请求**遗漏 `admin_password`**，因此不满足自动审批门禁；不应以此推断产品设计要求人工审核。`TrialLiquidityBootstrapWorker` 的 bootstrap/Tape 环境开关在当前 AdminSvr 容器均为 true，`VERIFY` 阶段要求真实 Robot `RUNNING`、盘口至少 2 笔活动挂单才会将任务写为 `COMPLETE:DONE`。
+
+**当前独立第二阻塞**：当前新 Demo `PLATFORM` 管理账号尚未初始化，RobotSvr 反复报告 `RobotSvr gateway login failed: USER_ACCOUNT_OR_PWD_ERROR (9005)`；即使租户审批成功，也不能据此认定 Robot 已开始真正双边挂价或 Tape 成交。正式部署路径应调用 `deploy-saas.sh` 的平台管理员与 Robot 运行身份初始化并让 LoginSvr 刷新认证缓存；禁止手改数据库伪造运行状态。
+
+新增正式端到端探针 `tests/run-auto-tenant-liquidity-e2e-host.sh`：必须在安全来源提供 `E2E_AUTO_TENANT_ADMIN_PASSWORD`，通过公开 `tenantApplication/SUBMIT` 发完整注册申请，不使用平台审批接口；检查 `APPROVED`、试用租户开通、bootstrap `COMPLETE:DONE`、Tape 开启且资金确认、Robot `RUNNING` 并具有双边挂单。探针静态语法检查已通过，但由于 Mac 现有平台身份缺失和执行安全检查阻断，**尚未完成真实整链验收**。Tape 的实际逐笔成交/成交量仍需独立验证，不能只凭 `tape_enabled=1` 认定通过。
