@@ -93,3 +93,11 @@
 - 实际已通过离线 Docker 构建 `local/dc-saas-adminsvr:trial-verify-recovery-20261018`，镜像 `sha256:3b8fb7be4c7349b1e52ef2355cb7844f02cb64fb56e2bae05f9ee1caf01a5449`，**只滚动替换 AdminSvr**；其他业务服务未重启。升级后新 AdminSvr 实际重新认领 `GW7XMI` 的 `FAILED:VERIFY`，尝试次数由 30 → 31，下次尝试时刻 `2026-10-18 15:34:34.204`。这是 `FAILED` 的安全再检查**确已执行**的证据，并非编造 `COMPLETE`。
 - **最终业务状态仍 FAIL**：因为 `PLATFORM` 用户数 0、有效 `ROBOT_RUNTIME` Key 数 0，Robot 仍 `STOPPED`、盘口 0、Tape 没有真实点价成交。部署的正式初始化环节 `provision_platform_admin`/`provision_robot_runtime_identity` 需要被有权限的执行环境完成，并刷新 LoginSvr 的 Runtime API Key 缓存；不能用直改认证表、假 ACK、强行标记机器人 RUNNING 代替。`tests/preflight-product-tenant-robot-host.sh` 已作为产品上线前置门禁提交到 `saas-crypto`。
 - 重建后主站与交易站实测 HTTP 200，但尚未完成长稳观测。**HA 工作仍冻结，不进行故障注入。**
+
+
+## 12. 2026-10-18 16:53 CST｜正式身份初始化仍被工具阻断，产品注册前置门禁上线
+
+- Mac 当前身份前置检查：`platform_active=0`、`robot_runtime_keys=0`，AdminSvr 自动流动性与 Tape 开关均为 `true`；`GW7XMI` 仍是 `TRIAL`、Maker/Tape 入金已确认、Robot `STOPPED`、挂单数 0，AdminSvr 每 300 秒只重试 `FAILED:VERIFY`，本轮已达第 47 次，**没有再执行资金步骤**。
+- 曾尝试**原样使用官方部署脚本 `deploy-saas.sh` 定义的 `provision_platform_admin` 和 `provision_robot_runtime_identity`**，不直接修改认证数据；正式身份写入操作仍被执行环境安全检查阻断。后续必须由具备操作权限的受信任执行环境完成部署初始化；不应绕过这层检查或直接假写健康状态。
+- 新提交 `dc-quant-deploy/saas-crypto@82f6eab`：`tests/run-auto-tenant-liquidity-e2e-host.sh` 在向公开注册 API 提交前先运行 `preflight-product-tenant-robot-host.sh`。实机执行返回 2，且本轮测试前后申请总数均保持 4，不再生成无法最终启动 Robot 的孤儿申请。
+- 当前 AdminSvr 产品镜像 `local/dc-saas-adminsvr:trial-verify-recovery-20261018` 的 `FAILED:VERIFY` 低频重试已真实生效；GitHub AdminSvr `saas-crypto@46698459` 包含相关单元测试。主站最近测试 HTTP 200，**业务最终验收仍 FAIL：Robot Gateway 登录 9005，没有双边挂价、Tape 实际成交或交易业务闭环**。Trade HA 故障注入继续暂停。
