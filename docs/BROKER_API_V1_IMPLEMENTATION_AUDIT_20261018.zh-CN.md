@@ -233,3 +233,46 @@ JAVA_HOME=/Users/kong/Library/Java/JavaVirtualMachines/zulu-8.jdk/Contents/Home 
 ### 2026-10-18 20:56 CST｜最新发布门禁复验（本轮续补）
 
 已从最新 `saas-crypto/tests/preflight-broker-v1-release-host.sh` 的 6 字段/双 Admin Handler 条件在 Mac 本机执行同等只读核查：**核心服务 8/8 RUNNING；Broker Release Gate BLOCKED（5 项）**：业务 `dc_tenant` Broker 字段 `0/6`；运行 APS 镜像没有 `PublishBrokerPriceHandler`；运行 MD 镜像没有 `BrokerTenantPriceInput`；运行 Admin 镜像没有 `TenantBrokerLiquiditySwitchHandler` 和 `TenantBrokerPriceSourceHandler`。Robot Scheduler 基础类存在不能证明新门禁已发布。该结果证明新 Broker 模块尚未上线，不允许据此宣称生产价源可用或最终租户 E2E 成功；此检测不修改原业务数据和容器。
+
+
+## N. 2026-10-18 21:24 CST｜Mac mini Demo 实际灰度部署、失败回滚修复及 API 验收证据
+
+> 本节是最新的**真实运行环境**记录，不等同于完整 Broker v1.0 风控价源与交易功能验收。Broker 高风险功能依旧 OFF；Gateway 透传、Common HA 状态机及 Order/Trade/Liq 镜像均没有修改。
+
+### 一、Demo 数据库迁移与备份（已部署）
+
+- 在实际 `dc-saas-mysql` 的产品 `dc` 库按顺序执行：
+  1. `mysql/migrations/20261018_broker_tenant_sources.sql`；
+  2. `mysql/migrations/20261018_broker_price_source_staging.sql`。
+- 迁移前通过 `mysqldump --single-transaction` 备份租户/Robot/审计表到 Mac 的本地受限目录：`/Users/kong/.opentradingcore/broker-v1-demo-checkpoints-20261018/tenant-before-broker-migrations.sql`；文件 SHA256 `7dc2985bf1e51977ec93a9fa73212fd145383d69d8a4d5594acb17cdb6e240c9`（21,607 字节）。备份不上传 GitHub，含测试业务数据。
+- **实测 Schema 6/6 字段齐全**；现有 `GW7XMI` `price_source=SYSTEM`、`liquidity_source=SYSTEM`、`price_switch_state=ACTIVE`、`source_switch_state=ACTIVE`、`pending_price_source=NULL`；0 个租户被迁移意外切换到 BROKER。
+
+### 二、实际编译、候选镜像与滚动发布
+
+为避免覆盖已有真实 HA/Robot 修复，采用当前运行基础镜像 **保留原全部类和依赖，仅 COPY 本轮编译的新增/必要替换 `.class`** 的有限覆盖镜像，而不是把落后 git 工作树整体打包；新代码均已提交其源仓库 `saas-crypto`。
+
+| 运行服务 | 新 Docker Image | 发布/实测 |
+|---|---|---|
+| AdminSvr | `local/dc-saas-adminsvr:broker-v1-staging-beanfix-20261018`，image id `sha256:b1ab436afb7081f0db1de2a27e5bd40ea7daada48641faa2bd5929d21efa019b` | 新配置查询/价格 PREPARE-ABORT、流动性两阶段 Handler 部署；本地 Admin 全量 91（0fail/1skip），MySQL 真实隔离 IT 两个均通过。|
+| ManagerSvr | `local/dc-saas-managersvr:broker-maker-gate-20261018`，image id `sha256:fbce49abfec89d0c54696b51b1b068f8b4fbbfe7d713d9d1711db1be4c81b2aa` | SYSTEM+ACTIVE 才能启动系统 Robot 的 gate 已安装，定向 Maven 3/3 PASS。|
+| APSvr | `local/dc-saas-apssvr:broker-v1-ingress-disabled-20261018`，image id `sha256:64fa26eef1918c91a07c224f9c4884a7ff8436cef2e053fd3768c867ea8146db` | `publishBrokerPrice` Handler/权限检查类进入运行镜像；Maven 40/40 PASS；`BROKER_PRICE_PUBLISH_ENABLED=false`。|
+| MD-A/B/C | `dc-saas/mdsvr:broker-v1-ingress-disabled-runtime6cfb-20261018`，image id `sha256:6dc26ee41b76d4bc7a6f97e96367df20333a48e5e52eb2ea5c6bc4dec4172bdf` | 以 **当前运行** MD 源 commit `6cfb99486d24af92d47288e3565f186e553e1fc9` 为源码起点，仅集成与 `saas-crypto` 相同的 Broker 接收类/IndexInput 防串租户条件/IndexClient/MDStart 订阅步骤；Mac JDK8 Maven **159/159 PASS**、离线 package SUCCESS；按 **C→B→A** 滚动替换，三节点 Spring 全部 Started。底层 Common Jar SHA256 **`8cbb195a131664c96692598bef51644ced9074f01ad80b3878b84cfce9444da4` 保持不变**，`BROKER_PRICE_RECEIVE_ENABLED=false`。|
+
+**Admin 实际部署发现并修复**：初版 Service `TenantBrokerLiquiditySwitch` 的默认 Spring Bean 名与 `@Service("tenantBrokerLiquiditySwitch")` Handler 冲突，`SpringApplication` 初始化失败；不能把 Docker `running` 等同健康。已将 Service 显式注解为 `@Service("tenantBrokerLiquiditySwitchService")`，GitHub `com.app.dc.adminsvr/saas-crypto@c63775d`，重编译全量 91 项通过，构建上述 `beanfix` 镜像重新部署。最终 Admin `Started application` 出现、ZooKeeper Status 回到 MASTER。
+
+**APS 重启期间短暂报价影响及恢复**：`GW7XMI` Robot 曾暂时 `STALE`/0 挂单，APS Binance WS 在 21:12 CST 恢复 BTC/ETH/SOL/UNI 标记价格流后 Robot **自动**恢复 `RUNNING`、40 挂单；未手工更改租户或脚本插入价格。随后 MD C/B/A 依次滚动，Robot 保持 40 单。
+
+本机独立 Compose 覆盖、备份及镜像构建工作目录均保留在 `/Users/kong/.opentradingcore/broker-v1-demo-checkpoints-20261018/` 和 `/tmp/otc-broker-{admin,manager,apssvr,md}-overlay-image-20261018/`。旧镜像未删除：Admin `local/dc-saas-adminsvr:trial-verify-recovery-20261018`、Manager `ghcr.io/bliplink/managersvr:sha-f8659fb7afff28f280c76abc808347b5d4089227`、APS `ghcr.io/bliplink/apssvr:sha-73e3fd5`、MD `dc-saas/mdsvr:cluster-dev-fenced-transport-20261016`；需要回滚时把独立 override 指回这些旧镜像并仅逐个 `docker compose up -d --no-deps --force-recreate <service>`，**不能清理或重装已有 Order/Trade 业务数据**。
+
+### 三、真实发布验收（2026-10-18 21:24 CST）
+
+- **Mac 实机包装/Schema 前置门禁已通过**：`tests/preflight-broker-v1-release-host.sh` 等价当前脚本，8/8 核心服务运行、6/6 数据库列、APS/MD/Admin 新 Broker 类存在、Manager Maker Gate 类存在；终端输出 `PARTIAL: packaging/schema prerequisites pass; real Broker E2E still mandatory.`。这是**部署前置条件通过**而非 Broker API 交付成功。
+- Admin/Manager/APS/MD-A/B/C **全部 Java 进程在运行且容器日志含 Spring `Started application`**；主站 `https://opentradingcore.com` 和 Trade `https://trade.opentradingcore.com` 均 HTTP **200**。现有 `GW7XMI` Robot `RUNNING`、40 挂单。
+- 不带认证调用 `AdminSvr.tenantBrokerLiquiditySwitch` 与 `tenantBrokerPriceSource` 的公网 API 负向验收，均返回 **10004 AUTHENTICATED_SESSION_REQUIRED**；未测试真实授权登录后切换。这两个 Handler 显式功能开关均 `false`。
+- 公开 API 真实提交全新租户申请 `BK218A`：`ManagerSvr.tenantApplication/SUBMIT` 返回 **code=0**、application_id `f9618af9aa1c4a99988974ea8609edce`，数据库 `PENDING`；无 `dc_tenant`/Robot 初始化，**不能宣称租户已完成创建**。源码核查解释其原因：自动审批的 `eligibleForAutomaticReview(...)` 需要提交新租户 `admin_password` 且请求币种<5、当前活跃租户<200。本次原始公开提交没有管理员密码，仅成功提交申请。第二次尝试含新生成的管理员密码提交一个独立测试租户时，调用被执行环境安全检查拦截，**未产生任何第二个租户**；没有绕过该限制、未读取/外传已有管理员密码。不能将其写成 Broker Key API 交易已经成功。
+
+### 四、未通过的真正 Broker v1.0 验收
+
+**继续 FAIL / BLOCKED**：APS `VerifiedBrokerPricePublisher` 的可信 Epoch/持久 Seq/租户配置事务生产实现、MD `VerifiedBrokerPriceAdmission` 生产实现、Trade/Liq READY/STALE/UNAVAILABLE 风控及强平一致性、新 Broker 价源/流动性正式激活、Order-Primary 系统自有单权威水位回执、Trader/Broker Key 公网代客下单与余额/历史/资金完整 E2E、WebSocket 重连 Gap 补拉、正式 API Docs、独立 Broker Demo、10/50/200 tenants 压测、真实 Order/Trade/MD HA 故障注入与权威对账。上述缺口未完成时 **严禁将 `BROKER_PRICE_PUBLISH_ENABLED`、`BROKER_PRICE_RECEIVE_ENABLED` 或租户切换功能直接打开**。
+
+**下一步方向**：先把已部署候选镜像在 `GW7XMI` SYSTEM 模式连续观测、保留日志，再解决 Broker 可信准入与 Trade/Liq 的失效保护；经真实客户/租户权限 E2E 和故障恢复后，再创建能自动审批的 Broker 新租户，完成实盘 API/SDK 演示。任何新的提交/部署必须继续追加本页证据。
