@@ -199,3 +199,32 @@ JAVA_HOME=/Users/kong/Library/Java/JavaVirtualMachines/zulu-8.jdk/Contents/Home 
 2026-10-18 20:26 CST：`GW7XMI` 流动性任务 `COMPLETE:DONE`、Robot `RUNNING`、活动挂单 40；主站和交易站均 HTTP 200；没有重建/升级现网容器，**Broker v1 正式接口和独立租户尚未上线**。
 
 **阻塞进入部署/新建 API 验收租户的剩余工作**：可信 Broker Publisher epoch/持久续传校验与 MD 生产 Admission，Trade/Liq 的 Broker 价 READY/STALE/UNAVAILABLE 风控与恢复，SYSTEM↔BROKER 四组合的反向/旧单安全清理，公共 SDK WebSocket 与 API Docs 正式发布、独立 Broker Demo、镜像依赖完整可重建、真实用户 Key API 下单/撤单/查询/资金/持仓/成交、两租户隔离、故障恢复与 50/200 租户性能报告。**上述项未做或未通过前，不标记 Broker v1.0 完成，更不注册正式验收租户以冒充 E2E 成功。**
+
+
+## M. 2026-10-18 20:55 CST｜生产切换权威门禁修复＋价格/流动性独立切换准备与真 MySQL 验收
+
+本轮用户要求继续直至开发完成、部署、新租户真实 API 测试，以下是**本轮已完成的客观交付**及尚不能通过发布门禁的事实。
+
+### 1. 系统做市流动性 ACTIVATE 增加 Order Primary 权威校验
+
+- `bliplink/com.app.dc.adminsvr/saas-crypto` 新增 `SystemMakerOrderDrainVerifier`（`0455037`）；修改 `TenantBrokerLiquiditySwitch`（`36de697`）。Robot 租约释放 + MySQL `dc_orders` 看似无未结委托只是投影条件，不再足以从 `BROKER/SWITCHING` 升为 `BROKER/ACTIVE`。
+- ACTIVATE 须另外持有来自**独立 Order Primary** 的精确 Location/configVersion、提交 watermark、零活动及在途 System Maker 单的收敛凭据。生产没有实现该接口时会返回 `AUTHORITATIVE_ORDER_DRAIN_NOT_READY` 并不更新状态。错误租户、旧版本或 0 watermark 全部拒绝。SQL 对未知状态或 NULL 数量采取保守拒绝，不仅查询 `New/PartiallyFilled`；不会误撤独立 Broker 自有委托。
+- 本轮修改及测试 `TenantBrokerLiquiditySwitchMysqlIT`（`b512156`）：在真实 MySQL 8 独立 Schema 对 Robot lease 未释放、系统旧单尚未清、无可信 Order 证明、伪造租户/无效 watermark 连续拒绝；最后仅由**测试伪造**有效权威证明允许 ACTIVATE。**这不能冒充真实 OrderSvr 权威验收！** 实测 `1/1 PASS`，零 skip，Schema 已删除。Admin Maven 全量编译测试 89 项、0 failed、1 skipped。
+
+### 2. 独立价格来源准备流程（不影响 SYSTEM 实际生效价）
+
+- 新迁移 `dc-quant-deploy/saas-crypto/mysql/migrations/20261018_broker_price_source_staging.sql`（`2ddd520`）：单独增加 `price_switch_state ENUM('ACTIVE','PREPARING','FAILED')` 和 `pending_price_source ENUM('SYSTEM','BROKER')`，使价格来源与流动性来源切换状态各自独立。旧的四字段迁移必须先执行；已在**临时 MySQL Schema 重复应用两次**，默认价/流动性源均 SYSTEM，两个状态均 ACTIVE、pending NULL，测试库已删，Demo 正式 `dc` schema 尚未改动。
+- `com.app.dc.adminsvr/saas-crypto` 增加 `TenantBrokerPriceSourceService`（`a6c7847`）、`TenantBrokerPriceSourceReq`（`79fc8da`）、`TenantBrokerPriceSourceHandler`（`bb4f1b9`）和独立 Handler/SQL 事务测试（`1655eba`/`3f04a6a`），租户设置 GET 额外返回 pending source / price switching state（`2c6b242`）。请求由 LoginSvr Session 验证同租户 Tenant Admin / TENANT_WRITE；功能开关 `broker.price.source.config.enabled=false` 默认关闭；仅接受 `PREPARE` 与 `ABORT`，没有不安全的 `ACTIVATE` 捷径。
+- PREPARE 与 ABORT 采用租户行锁、期望版本单调控制、同一事务写入审计。PREPARE 仅把 `pending_price_source=BROKER`、`price_switch_state=PREPARING`，**price_source 继续 SYSTEM**，Robot 流动性字段保持不变；ABORT 回滚 pending 请求并增加版本。真正切 Broker 风控价仍须 MD/Trade/Liq 原子隔离与回归试验。
+- 本轮 Admin `mvn -B -o test` **91 项，0 failed、0 errors、1 skipped，BUILD SUCCESS**；其中 `TenantBrokerPriceSourceMysqlIT` 使用独立真实 MySQL8 Schema 验证 PREPARE→版本冲突拒绝→ABORT、价格不切、流动性不变、审计 2 条，**1/1 PASS、0 skipped**。日志 `/tmp/otc-broker-price-staging-mysql-real-it.log`，临时 Schema 已清理。
+
+### 3. 上线前置门禁更新、当前 Demo 实机结果
+
+- `dc-quant-deploy/saas-crypto/tests/preflight-broker-v1-release-host.sh` 更新（`fc46441`），要求总共 **6 个** Broker 来源配置字段（价格两状态额外字段）及新增 Admin `TenantBrokerPriceSourceHandler.class`、APS/MD/流动性处理类。**此脚本只是包装与 DB 前置条件，不可代替真实 Broker E2E/HA 性能测试**。
+- 2026-10-18 20:55 CST，Mac 实测主站及 Trade Web HTTP 200；`GW7XMI` Robot `RUNNING`、40 挂单、流动性任务 `COMPLETE:DONE`；**Demo `dc` 数据库 Broker 配置字段 0/6**，运行中的 APS/MD/Admin 仍是之前的 SYSTEM 默认版容器，新组件未部署/未开启。
+
+### 4. 真实剩余阻塞（必须完成后才能“开发完、部署、新租户 API 测试”）
+
+生产 `VerifiedBrokerPricePublisher` 与 `VerifiedBrokerPriceAdmission` 的独立可信签名/Publisher Epoch/持久 ConfigVersion/Sequence 事务仍未接通；Order 主节点真实水位证明的 `SystemMakerOrderDrainVerifier` 生产实现尚不存在；MD BROKER READY/STALE 信息尚未贯通 Trade/Liq 真实风险拒绝，Price Source ACTIVATE 尚不可用；系统 Robot ↔ 自定义流动性反向切换/旧单全量权威收敛仍待实现。Python SDK 公网 Broker 代客交易/WS 重连、API Docs 最终 Docker、独立 Broker Demo、两租户四组合、50/200 tenants 压力和真实 HA 故障注入均未完成。
+
+**请勿以源码通过编译、单元测试通过、HTTP 200 或 Demo 盘口有成交而宣告 Broker v1.0 整体验收通过。** 下一阶段仍应先实现跨服务可信配置/价格与 Trade/Liq 过期保护，再锁定发布镜像，迁移/部署，注册一名全新 Broker 测试租户，用唯一 Key 验证账户、委托、取消、成交、资金持仓及强平和跨租户隔离。
