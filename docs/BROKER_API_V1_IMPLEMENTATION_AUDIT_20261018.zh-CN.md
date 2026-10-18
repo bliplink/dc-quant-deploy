@@ -150,3 +150,11 @@
 4. 完成 Canonical Python SDK Broker 查询/下单实网验证、实时 WebSocket 连接和 Gap 补拉、单页 API Docs、独立 Broker Demo、两租户×四来源组合、完整资金持仓成交对账，最后做 10→50→200 租户负载及 HA 故障恢复。**全部还没有满足正式验收门槛**。
 
 **记录规则**：后续每一批真实代码提交、单测、Mac 镜像发布或故障注入都往此文档追加日期、仓库/分支/Git SHA、测试数字、环境状态、未通过项，不以无证据“全部完成”替代验收。
+
+
+## J. 2026-10-18｜MD 订阅回调完整性补测与进度更新（最新）
+
+- 基于前一阶段新增的 `BrokerTenantPriceInput`，使用可捕获 `BaseApi.IMessage<Map>` 订阅回调的测试桩直接触发：可信事件接收 1 次、重复订阅仍只注册 1 次、伪造租户 Topic/不合法 SYSTEM Topic 共拒绝 2 次；`T1` MarkPrice 为独立 Broker 价、`T2` 无 Broker 价。
+- 拒绝事件处理改为捕获 `RuntimeException` 并累加 `rejectedCount`，避免异常事件或未准备好准入提供者在消息回调里触发订阅线程崩溃；未吞掉 JVM 级致命错误。代码 `com.app.dc.mdsvr/saas-crypto@68fde38`，测试 `@e4a61ab`。
+- Java8 独立测试现为 **15/15 PASS**（`BrokerTenantPriceInputTest` + `BrokerTenantPriceReceiverTest` + `TenantEffectivePriceBookTest`）；另有 SYSTEM Topic Guard **4/4 PASS**。完整 MD Maven 仍被已有 HA `RecoverySourceAttestation.VerifiedHead` 类型缺失阻塞，不能作为模块全量验收。
+- Mac 主站、交易站再次实测 HTTP 200；本轮未部署或替换任何 MD/APS/Trade/Liq/Robot 生产 Demo 容器，亦未改 Common 或 Gateway。当前依旧 **Broker 价格发布/消费实机 E2E 未通过**，需生产可信租约/数据库配置及下游风控状态链路，不能仅开两个 feature flag。
