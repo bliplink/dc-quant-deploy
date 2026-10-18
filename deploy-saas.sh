@@ -8,6 +8,7 @@ SKIP_HOST_PREPARE="false"
 SKIP_PULL="false"
 FULL_CLUSTER="false"
 RUN_WEB_TRADING_ACCEPTANCE="false"
+PROVISION_IDENTITIES_ONLY="false"
 ROBOT_IDENTITY_CHANGED="false"
 LOGIN_CONTAINER_EXISTED="false"
 SAAS_CHANGED_SERVICES="${SAAS_CHANGED_SERVICES:-}"
@@ -23,14 +24,16 @@ die() {
 
 usage() {
   cat <<'EOF'
-Usage: sudo ./deploy-saas.sh [--full-cluster] [--web-trading-acceptance] [--skip-host-prepare] [--skip-pull]
+Usage: sudo ./deploy-saas.sh [--full-cluster] [--web-trading-acceptance] [--skip-host-prepare] [--skip-pull] [--provision-identities-only]
 
 Deploy the DC cryptocurrency SaaS stack. --full-cluster enables the production-style
 MDSvr A/B/C, OrderSvr A/B, TradeSvr A/B, and ProjectionSvr cluster topology.
 --web-trading-acceptance runs the isolated state-changing Web trading acceptance
 after normal non-destructive validation. It requires E2E_PASSWORD and uses an
 isolated *_E2E location. This script never starts, stops, or reconfigures the
-independent quantitative-trading stack.
+independent quantitative-trading stack. --provision-identities-only provisions
+existing MySQL platform and Robot runtime identities, and reloads LoginSvr
+only when the Robot key changes; it does not rebuild or recreate containers.
 EOF
 }
 
@@ -41,6 +44,9 @@ while [[ "$#" -gt 0 ]]; do
       ;;
     --web-trading-acceptance)
       RUN_WEB_TRADING_ACCEPTANCE="true"
+      ;;
+    --provision-identities-only)
+      PROVISION_IDENTITIES_ONLY="true"
       ;;
     --skip-host-prepare)
       SKIP_HOST_PREPARE="true"
@@ -1130,6 +1136,31 @@ verify_ghcr_access() {
 
   die "Private GHCR images are not readable. Run 'docker login ghcr.io' with a classic PAT containing read:packages, or set GHCR_USERNAME/GHCR_TOKEN in the protected runtime environment."
 }
+
+# Scoped recovery for an already running Demo rebuilt directly with Compose.
+# Unlike a full deploy this never generates/updates env secrets, pulls images,
+# migrates the schema or changes any service except LoginSvr when its API key
+# cache needs refreshing. It calls the exact same provisioning functions used
+# by the normal installer, so there is one identity authority.
+if [[ "${PROVISION_IDENTITIES_ONLY}" == "true" ]]; then
+  [[ -f "${ENV_FILE}" ]] || die "Existing private ENV_FILE is required for identity-only provisioning."
+  # Identity repair needs only the existing private credentials; do not mutate
+  # Compose profiles or force other service configuration to be generated.
+  set -a
+  . "${ENV_FILE}"
+  set +a
+  [[ "$(docker inspect dc-saas-mysql --format '{{.State.Status}}' 2>/dev/null)" == "running" ]] \
+    || die "Existing dc-saas-mysql container must be running."
+  log "Provisioning platform and Robot runtime identities in existing Demo (no full redeploy)."
+  provision_platform_admin
+  provision_robot_runtime_identity
+  if [[ "${ROBOT_IDENTITY_CHANGED}" == "true" ]] && docker inspect dc-saas-loginsvr >/dev/null 2>&1; then
+    log "Robot API credential changed; restarting LoginSvr once to reload the key cache."
+    docker restart dc-saas-loginsvr >/dev/null
+  fi
+  log "Identity provisioning complete. Verify with tests/preflight-product-tenant-robot-host.sh."
+  exit 0
+fi
 
 ensure_env_file
 ensure_env_defaults
