@@ -120,3 +120,15 @@ bash tests/preflight-product-tenant-robot-host.sh
 注意：当前 Mac 的 `/Users/kong/dc-quant-deploy` 工作树明显落后于远程且存在大量未提交修改。操作员必须**在确认代码版本一致后**运行该命令，可在独立干净检出分支中执行、以 `ENV_FILE` 指向原私有 env；不能用 `git reset --hard` 清理原工作树。正式初始化成功后需要观察 RobotSvr 是否恢复 Gateway Manager/API Key 两条登录链，现有 `GW7XMI` 的 `FAILED:VERIFY` 每 300 秒自动复查；只有任务 `COMPLETE:DONE`、Robot `RUNNING`、双边挂价数量>=2、Tape 实际成交/Projection 记录有增量，才可宣称自动流动性正常。
 
 本轮再次只读核查：`platform_active=0`，`robot_runtime_keys=0`，`GW7XMI` 为 `TRIAL`、`AUTO_APPROVAL`、资金确认和 Tape 资金确认均为 1，但 Robot `STOPPED`、活动挂单 0、`VERIFY` 第 50 次失败；主站、交易站 HTTP 200。**产品最终 E2E 未通过；Trade HA 仍暂停。**
+
+
+## 14. 2026-10-18｜PLATFORM/Robot 身份初始化成功，自动报价已恢复
+
+**此节覆盖前面身份初始化被阻断的旧状态。** 2026-10-18 17:09（Mac Asia/Shanghai），通过 WebCodex 实际运行正式部署脚本 `--provision-identities-only`，使用 macOS 原生 `lockf -t 0 /tmp/dc-saas-auto-update.lock` 独占锁和项目内已有的 `SAAS_DEPLOY_LOCK_HELD=true` 锁交接；Demo 使用预设的 `SAAS_ALLOW_UNPRIVILEGED_HOST=true`。复用当前本机受保护 `ha-fresh-clean-demo-20261016.env`，**没有在文档中存储或展示凭证**，也没有重建 Trade/Order/MD 或清理业务数据。
+
+- 正式初始化函数返回：`Platform administrator platformadmin provisioned for location PLATFORM`；`Dedicated Robot runtime identity PLATFORM/robotsvr provisioned`；`Robot API credential changed; restarting LoginSvr once to reload the key cache`。随后 `tests/preflight-product-tenant-robot-host.sh` **PASS**，有效 PLATFORM 用户共 2（platformadmin、robotsvr），有效 `ROBOT_RUNTIME` API Key 共 1。
+- LoginSvr 重启注册到 Gateway 后，RobotSvr 的 Manager 登录及 Runtime API Key 登录均返回 `NO_ERROR code=0`；`GW7XMI` 的 Maker/Tape 用户 API Key 登录也成功。
+- `GW7XMI` 的 BTCUSDT Robot 先从 `STOPPED` 转为 `WAITING_MARKET_DATA`，随后 **`RUNNING`**，`open_order_count=40` 且 `enabled=1`；可观测到持续的 `RobotSvr tape instruction` 买/卖点价指令以及 APSSvr 的 BTCUSDT mark/index/ticker 更新。
+- **2026-10-18 17:14:38.954**：AdminSvr 自动重新认领旧 `FAILED:VERIFY` 任务，结果变为 **`COMPLETE:DONE`**、`tape_enabled=1`、`tape_funding_confirmed=1`，服务日志：`trial liquidity ready: location=GW7XMI, symbolCount=1`。该恢复没有重放此前已完成的资金步骤，也没有手工篡改任务状态。
+- **留存一个独立验收点**：Robot 已 RUNNING、挂单计数 40 且在生成 Tape 买卖指令；但 `dc_orders_execorders` 按 `location='GW7XMI'` 查询仍为 0，不能仅凭指令日志宣布 Tape 实际撮合和成交记录落库。需要随后核查 Order/Trade/Projection 的该租户权威成交和仓位一致性。主站 HTTP 200。
+- 本次使用的正式身份修复入口及非破坏性测试已提前提交 `dc-quant-deploy/saas-crypto`（`b8887b4`、`3dbac7e`），AdminSvr 失败 VERIFY 自动再试版本见 `com.app.dc.adminsvr/saas-crypto`。**Trade HA 仍冻结，产品身份初始化/自动开通/Robot 自动挂价在本 Demo 已达到可用状态，但 Tape 真实成交尚未通过权威核验。**
