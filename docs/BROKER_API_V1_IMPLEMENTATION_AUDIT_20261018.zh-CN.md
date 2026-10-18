@@ -361,3 +361,12 @@ JAVA_HOME=/Users/kong/Library/Java/JavaVirtualMachines/zulu-8.jdk/Contents/Home 
 **不要打开 Broker 开关**：MD `TrustedTenantPriceSource` 当前仍只是接口，生产可信租户配置生效/更新/撤销服务缺失；APS `VerifiedBrokerPricePublisher`、MD `VerifiedBrokerPriceAdmission` 的真正 Publisher 租约/签名/持久 Replay/Fencing 未接通。还需验证 HA 故障恢复后的新 Primary 发送权威租户生效价/TTL 失效、订阅 Snapshot 与 Gap 后重新下发不可用状态。即使本轮 Java 测试模拟了可信 Broker 事件，**仍不构成真实 Broker Key API 价格发布 → 交易/强平/资金 E2E**。
 
 待生产可信源完成后，只验证 APS→MD→现有 Trade Topic，不对 TradeSvr/LiqSvr/Gateway/Common HA 增加新接口；再新建能够自动审批的独立 Broker 测试租户，以真实 API Key 验证价格配置、下单/撤单/成交/资金/持仓、租户隔离和 10/50/200 压测。
+
+
+## S. 2026-10-18 23:43 CST｜灰度部署后的公网连接抖动复测（未解决）
+
+尽管上一节首次 13/13 Canary 返回 PASS，**23:41 CST 再次运行同一严格脚本出现 FAIL 1 项**：`https://opentradingcore.com` 的 `curl` 偶发 `Recv failure: Connection reset by peer`（HTTP 000）。同一轮其他 12 项通过：6 个 Spring Ready、Trade Web 200、`GW7XMI` SYSTEM/SYSTEM RUNNING 40 单及受保护接口拒绝。因而不能宣称整个公网入口持续稳定或 100% 可用。
+
+追加证据：在 23:42 CST 连续五组公网请求，`opentradingcore.com` **5/5 HTTP 200**，`trade.opentradingcore.com` **4/5 HTTP 200、一次 HTTP 000**；Cloudflare Tunnel 仍为 Mac 主机进程 `cloudflared tunnel --config /Users/kong/.cloudflared/config.yml run opentradingcore-macmini`，已持续运行多日。配置中主站指向主机本地 `127.0.0.1:18094`，Trade Web 指向 `127.0.0.1:18088`；这两个**正确源站端口**各执行三次本机请求，分别 **3/3 HTTP 200** 和 **3/3 HTTP 200**，响应均约 1ms。平台 Web 容器为 `running/healthy`。以上结果提示问题更可能出现在外部 TLS/Tunnel 路径，但**尚未定位重置发生的确切层级，不能假称已修复**。
+
+处理策略：本轮保持现有 Cloudflare Tunnel 和全部候选服务运行，不对生产交易线程进行盲目 Tunnel 重启；独立记录公网间歇连接复位，下一轮可对客户端→Cloudflare、Cloudflare→cloudflared 的连接日志和隧道协议/重连事件做时间关联，再决定是否调整。**严格 Canary 仍保持单次失败即失败，不通过重试掩盖回归。** Broker 价源三个开关维持 OFF。
