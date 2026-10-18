@@ -276,3 +276,13 @@ JAVA_HOME=/Users/kong/Library/Java/JavaVirtualMachines/zulu-8.jdk/Contents/Home 
 **继续 FAIL / BLOCKED**：APS `VerifiedBrokerPricePublisher` 的可信 Epoch/持久 Seq/租户配置事务生产实现、MD `VerifiedBrokerPriceAdmission` 生产实现、Trade/Liq READY/STALE/UNAVAILABLE 风控及强平一致性、新 Broker 价源/流动性正式激活、Order-Primary 系统自有单权威水位回执、Trader/Broker Key 公网代客下单与余额/历史/资金完整 E2E、WebSocket 重连 Gap 补拉、正式 API Docs、独立 Broker Demo、10/50/200 tenants 压测、真实 Order/Trade/MD HA 故障注入与权威对账。上述缺口未完成时 **严禁将 `BROKER_PRICE_PUBLISH_ENABLED`、`BROKER_PRICE_RECEIVE_ENABLED` 或租户切换功能直接打开**。
 
 **下一步方向**：先把已部署候选镜像在 `GW7XMI` SYSTEM 模式连续观测、保留日志，再解决 Broker 可信准入与 Trade/Liq 的失效保护；经真实客户/租户权限 E2E 和故障恢复后，再创建能自动审批的 Broker 新租户，完成实盘 API/SDK 演示。任何新的提交/部署必须继续追加本页证据。
+
+
+## O. 2026-10-18 21:30 CST｜Mac Demo 完整灰度启动回归（可重复脚本）与真实只读 API 检查
+
+- **新增可重复的只读 Canary 验收脚本**：`tests/verify-broker-v1-canary-health-host.sh`，commit **`3947d54c84ddedf7f71a2dd0e0ea86333cbfdcf7`**。脚本不仅检查 Docker `running`，还按容器实际启动时间查看 **Admin、Manager、APS、MD A/B/C 六个 Spring 上下文是否真正 `Started application`**。这一检查用于发现上一轮 Admin Bean 命名冲突时那种容器 Up、应用却未初始化的故障。另验两公开站点 HTTP 200、`GW7XMI` 仍 SYSTEM/SYSTEM/ACTIVE/ACTIVE、Robot RUNNING 且挂单>0、MySQL Schema 6/6，最后用无登录 HTTP 验证两个 Broker Admin 操作均被 LoginSvr 拒绝（`10004 AUTHENTICATED_SESSION_REQUIRED`）。
+- **运行结果**：第一次执行脚本时，`opentradingcore.com` HTTPS 偶发一次 `Connection reset by peer`，因此脚本如实返回 **FAIL**；主站 Nginx 容器一直 `healthy`，Cloudflare Tunnel 进程仍运行。在后续连续三轮公网复测中，主站与交易站**均 6/6 HTTP 200**；同一脚本再次执行 **14 项检查全部 PASS**，输出 `CANARY_STAGING_HEALTH=PASS (NOT FULL BROKER API E2E)`。当前观察到的是一次非持续的网络/Tunnel 波动，**不是已经定位并修复的根因**，如再次发生需单独分析 Cloudflare 连接日志。
+- 通过日志保存在 Mac `/Users/kong/.opentradingcore/broker-v1-demo-checkpoints-20261018/canary-health-20261018-2128.log`；SHA256：`00b20232bbac7428033f46ee8775326275f17e8d8ec8e6387928ca8950acea5a`。文件不含 API Key/密码。
+- 发布前置 `tests/preflight-broker-v1-release-host.sh` 当前 **8/8 核心服务 running，6/6 schema columns，APS/MD/Admin/Manager 候选类均已安装，返回 PARTIAL**；该结果只是镜像/数据库一致性，不是可启用 Broker Price 的授权租约与 Trade/Liq STALE 端到端证明。
+- **真实无认证读 API 验收**：经本机 Gateway `/httpapi/` 查询 `AdminSvr.publicTenantDirectory` 返回 **code=0**，公开租户数为 **1**；调用 `ManagerSvr.tenantApplication/STATUS`（仅本轮公开申请 ID 与联系邮箱）返回 **code=0、status=PENDING**，确认 `BK218A` 的自动审核尚未完成。未触发任何基于未授权凭证的管理员审批或 Broker 下单。
+- **实际运行服务状态**：Admin `beanfix`、Manager Maker Gate、APS `publishBrokerPrice` OFF、MD A/B/C `BrokerTenantPriceInput` OFF 均已部署并 Spring Ready，`GW7XMI` SYSTEM 模式自动报价 40 单继续；Broker 独立自定义指数/标记价格、外部流动性激活、真实代客交易/WS/独立 Demo及 HA/50-200 租户压力测试仍为 **BLOCKED，不能启用开关或宣称完成验收**。
