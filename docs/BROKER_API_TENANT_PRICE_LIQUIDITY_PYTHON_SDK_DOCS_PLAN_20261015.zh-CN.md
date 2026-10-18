@@ -1,3 +1,5 @@
+> **2026-10-19 决策更新（覆盖本文旧的 PRICE_PUBLISH 权限设计）**：Broker 自定义价格仅在 **APSvr** 认证租户 API 会话（LoginSvr 的 `TenantAPI`）并验证消息 `location` 不得指向其他租户；**不检查 PRICE_PUBLISH 专项权限，不要求 `apiKeyType=broker`**。MDSvr 不重复做用户权限认证，负责按租户选择自定义/Binance 有效价格并通过现有行情通道发布，Gateway/Common HA、Trade/Liq 订阅架构不变。此项已在 APS `saas-crypto` 提交并灰度部署，但 Broker 价格实发仍受尚未打通的发布者/配置流程阻挡；详见 [当前实施验收记录](BROKER_API_V1_IMPLEMENTATION_AUDIT_20261018.zh-CN.md) 最新 T 节。
+
 > **实施进度与实际验收记录（持续更新）**：见 [BROKER_API_V1_IMPLEMENTATION_AUDIT_20261018.zh-CN.md](BROKER_API_V1_IMPLEMENTATION_AUDIT_20261018.zh-CN.md)。当前 APS 正式 Handler 默认关闭；MD Broker 独立接收组件测试 15/15 PASS，但可信发布者租约、MD 全量编译及 Trade/Liq STALE 风控尚未打通，Broker API v1.0 未完成 E2E 验收。请按该记录中的最新日期和 Git SHA 接续开发，勿将原设计目标误当完成状态。
 
 # OpenTradingCore Broker API v1.0：租户自定义价格、流动性、SDK 与 API Docs 一体化开发及验收方案
