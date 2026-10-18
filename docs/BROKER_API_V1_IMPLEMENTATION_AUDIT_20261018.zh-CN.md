@@ -180,3 +180,22 @@ JAVA_HOME=/Users/kong/Library/Java/JavaVirtualMachines/zulu-8.jdk/Contents/Home 
 **重要剩余缺口**：上述是服务代码完整编译/单测，不是 Broker 模式生产完整 E2E；`VerifiedBrokerPricePublisher` 和 MD `VerifiedBrokerPriceAdmission` 仍无经过租户生效配置与授权租约证明的生产实现。缺少下游 Trade/Liq 的 STALE/UNAVAILABLE fail-closed、Broker 模式安全切换及撤单、Python SDK/WS/Docs/Demo 实网验收，暂不开 Broker feature flags。现有 `GW7XMI` SYSTEM/SYSTEM Robot 和公共站点保持原样。
 
 **后续必验顺序**：签名发布者租约与持久 Replay/Fencing → MD 租户来源配置入站、重启 Snapshot/序号追平 → Trade/Liq 风控状态正确传播 → SYSTEM/BROKER 双来源安全切换与 Robot 自有单撤销 → 2租户×4组合 E2E → WebSocket/SDK/Docs/Broker Demo → 50/200 tenants + 真实故障恢复及账务对账。
+
+
+## L. 2026-10-18 20:26 CST｜Admin 流动性两阶段切换、真实 MySQL 集成测试与发布前门禁
+
+### 新提交代码与验证（当前轮次）
+
+- **AdminSvr `saas-crypto`**：新增 `TenantBrokerLiquiditySwitch`、`TenantBrokerLiquiditySwitchHandler`、`TenantBrokerLiquiditySwitchReq`，见代码提交 `8b5f4f1`、`0654d4b`、`ac2f710`；默认配置 `broker.liquidity.switch.enabled=false`，须从 LoginSvr Session 取得真实同租户 TENANT_WRITE 管理员身份；请求体 Location 不得越权。只实现 `SYSTEM/ACTIVE → BROKER/SWITCHING → BROKER/ACTIVE`（其余反向模式在安全证明未具备前拒绝）。
+- 切换 BEGIN 单事务更新 `liquidity_source=BROKER`、`source_switch_state=SWITCHING`、递增 `source_config_version`，并将该租户全部系统 Robot `enabled=0`，**保留运行时 lease** 等待 RobotSvr 正常执行取消订单/释放租约；在 `SWITCHING` 期间 ManagerSvr 的 `SYSTEM/ACTIVE` 门禁不会再次启动 Robot。
+- ACTIVATE 需要同一租户数据库锁、期望的 source_version、Robot `enabled=0`、运行 owner 已释放、Robot 现有报价数为零、SYSTEM maker 用户在 `dc_orders` 的 `New/PartiallyFilled` 且 `leaves_qty>0` 订单为零。所有条件未通过，保持 `SWITCHING` 并拒绝激活；每次成功切换的状态及审计在同一事务提交。**需要注意**：最终切换前还要有权威 Order 路由/未决写入和下游独立 Broker 流动性证据，本提交只完成数据库/Robot 层门禁；不能仅凭 MySQL 投影数据就宣称不再有在途订单。
+- **AdminSvr `saas-crypto`** `TenantSettingsService` GET 增加 `price_source`、`liquidity_source`、`source_config_version`、`source_switch_state` 的只读输出（commit `4e3c5ca`）；代码依赖 `20261018_broker_tenant_sources.sql` 先迁移，当前 Demo 未应用迁移。
+- **测试**：Mac JDK8 AdminSvr 全量 `mvn -B -o test` **89 项（0 fail, 0 error, 1 skipped）**；新增 `TenantBrokerLiquiditySwitchMysqlIT`（commit `4dba5b9`）利用真实 Docker MySQL8 的**独立临时 Schema**，完整执行 BEGIN → 验证 Robot 仍占有 lease 时拒绝 ACTIVATE → lease 释放但 `New` 订单未撤时再次拒绝 → 标记 Cancelled 及 0 leaves 后成功 ACTIVATE，检查 config_version 与两笔审计事务、价格来源仍 SYSTEM；结果 **1/1 PASS，0 skipped**，测试 Schema 已删除，无生产租户数据修改。日志 `/tmp/otc-broker-admin-switch-mysql-it-real.log`。
+- **部署仓库 `saas-crypto`**：新增只读 `tests/preflight-broker-v1-release-host.sh`（commit `14802bc`），检查服务 Up、源配置 Schema 列数、APS/MD/Admin 新 Broker 类是否在运行镜像。该脚本**不是完整业务验收**，只作为部署最低门禁；在 Mac 实机执行返回非零，具体 4 个未通过项：`dc_tenant` Broker 四列当前为 0/4；APS Broker Handler、MD Broker Receiver、Admin Broker Liquidity Handler 均尚未在当前运行镜像。服务本身 8/8 Up；旧 Manager Scheduler 类存在，但不代表 Broker gating 镜像已替换。
+- **MD `saas-crypto@aaa8f8be`** 显式 Common 3.0.22-SNAPSHOT ABI 对齐后 Maven 全量 **165/165 PASS**、`mvn package` BUILD SUCCESS；这一结果仍依赖本机缓存的 3.0.22-SNAPSHOT，未验证中央仓库干净重建。Common HA 业务源未修改。
+
+### 当前真实 Demo 与正式交付状态
+
+2026-10-18 20:26 CST：`GW7XMI` 流动性任务 `COMPLETE:DONE`、Robot `RUNNING`、活动挂单 40；主站和交易站均 HTTP 200；没有重建/升级现网容器，**Broker v1 正式接口和独立租户尚未上线**。
+
+**阻塞进入部署/新建 API 验收租户的剩余工作**：可信 Broker Publisher epoch/持久续传校验与 MD 生产 Admission，Trade/Liq 的 Broker 价 READY/STALE/UNAVAILABLE 风控与恢复，SYSTEM↔BROKER 四组合的反向/旧单安全清理，公共 SDK WebSocket 与 API Docs 正式发布、独立 Broker Demo、镜像依赖完整可重建、真实用户 Key API 下单/撤单/查询/资金/持仓/成交、两租户隔离、故障恢复与 50/200 租户性能报告。**上述项未做或未通过前，不标记 Broker v1.0 完成，更不注册正式验收租户以冒充 E2E 成功。**
