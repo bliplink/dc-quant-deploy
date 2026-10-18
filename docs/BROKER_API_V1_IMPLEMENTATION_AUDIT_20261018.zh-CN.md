@@ -370,3 +370,23 @@ JAVA_HOME=/Users/kong/Library/Java/JavaVirtualMachines/zulu-8.jdk/Contents/Home 
 追加证据：在 23:42 CST 连续五组公网请求，`opentradingcore.com` **5/5 HTTP 200**，`trade.opentradingcore.com` **4/5 HTTP 200、一次 HTTP 000**；Cloudflare Tunnel 仍为 Mac 主机进程 `cloudflared tunnel --config /Users/kong/.cloudflared/config.yml run opentradingcore-macmini`，已持续运行多日。配置中主站指向主机本地 `127.0.0.1:18094`，Trade Web 指向 `127.0.0.1:18088`；这两个**正确源站端口**各执行三次本机请求，分别 **3/3 HTTP 200** 和 **3/3 HTTP 200**，响应均约 1ms。平台 Web 容器为 `running/healthy`。以上结果提示问题更可能出现在外部 TLS/Tunnel 路径，但**尚未定位重置发生的确切层级，不能假称已修复**。
 
 处理策略：本轮保持现有 Cloudflare Tunnel 和全部候选服务运行，不对生产交易线程进行盲目 Tunnel 重启；独立记录公网间歇连接复位，下一轮可对客户端→Cloudflare、Cloudflare→cloudflared 的连接日志和隧道协议/重连事件做时间关联，再决定是否调整。**严格 Canary 仍保持单次失败即失败，不通过重试掩盖回归。** Broker 价源三个开关维持 OFF。
+
+
+## T. 2026-10-19 06:34 CST｜按租户身份发布价格：移除 PRICE_PUBLISH 权限要求（已提交、APS 已部署）
+
+**用户最终明确：APS 只检查认证租户身份，不检查 `PRICE_PUBLISH` 或 Key 子类型；MD 不重复校验租户身份。** Broker 只能为自己所属的租户发布指数价/标记价，不能以请求体 `location` 修改其他租户的价格。
+
+### 实际代码（`bliplink/com.app.dc.apssvr/saas-crypto`）
+
+- `BrokerPriceAccessPolicy.authorizedTenant(clientType, sessionLocation, claimedLocation)` **现在只要求 LoginSvr 已认证的 `clientType=TenantAPI`**，取权威 `session.location` 并标准化。请求体 `location` 可以省略、也可与会话同租户，但其他租户/通配符/无效租户 ID 拒绝；删除 `PRICE_PUBLISH` scope 判断和 `apiKeyType=broker` 附加要求。不是让未认证用户或 Trader 会话任意发布。最新 commit **`734d32a26163bcc8ff7703e3914b32479a3ff19a`**。
+- `PublishBrokerPriceHandler` 不再把权限 CSV/Key 类型传给策略：以 **认证会话得到的 location 构造 `dc.aps.markprice.<location>.<symbol>`**，并保留数值、时间戳、TTL 等数据合法性验证。最新 commit **`3373431e6935d2620c01de6bfcfa8990945ec54a`**。
+- `BrokerPriceAccessPolicyTest` 改为接受不带 `PRICE_PUBLISH` scope 的合法租户级 API 会话；覆盖本租户/省略 location、其他租户、通配符、空租户及 Trader/管理会话拒绝。commit **`6620eb7cbc5800a9c2e4daf6c22f006bb03da51c`**。
+
+### 本机编译部署与实测
+
+- Mac JDK8 `mvn -B -o test` APS 全量 **40/40 PASS，0 fail/error/skip，BUILD SUCCESS**；定向 Handler/策略 7/7 PASS，日志 `/tmp/otc-aps-tenant-only-final-20261019.log`。
+- 保留原 APS 镜像，只覆盖上述最终版两处编译类，构建 **`local/dc-saas-apssvr:broker-tenant-identity-v2-20261019`，image id `sha256:6aefe7b1509062320e9664a6442c3f11b0c1706b6d6a940c8b0d4eb6de74be05`**。已通过 Compose 只重建/替换 APSvr；未重建 Order/Trade/Liq/MD、Gateway 或 Common。回滚镜像：`local/dc-saas-apssvr:broker-v1-ingress-disabled-20261018`，原 override 备份路径 `/Users/kong/.opentradingcore/broker-v1-demo-checkpoints-20261018/broker-aps-staging-compose-before-tenant-identity-20261019.yaml`。
+- APS Spring `Started application` PASS，Binance 流恢复后 `GW7XMI` Robot 从短暂 `STALE/0` 自动恢复为 **RUNNING/40**，租户继续 `SYSTEM/SYSTEM`；`BROKER_PRICE_PUBLISH_ENABLED=false` 保持关闭，**本次没有宣称能够完成认证 Broker 价格实发与交易 E2E**。
+- 2026-10-19 06:33 CST 完整 Canary 的 6/6 Java Spring、Trade Web HTTP 200、Robot RUNNING/40、Broker Schema 6/6 均通过，但主站 `opentradingcore.com` 再次发生一次 TLS `Recv failure: Connection reset by peer`（HTTP 000），因此完整 Canary 返回 **FAIL（1 项）**。这是此前记录的间歇 Cloudflare/Tunnel 问题，不应记成 13/13 PASS，也未确证根因。
+
+**仍存在的功能门禁**：虽然专项权限要求和 Key 类型要求已取消，生产 APS `VerifiedBrokerPricePublisher` / MD `TrustedTenantPriceSource` 的数据源/序号机制还没有连成可启用流程；这是未完成的功能与恢复一致性，不应把它与“用户要求额外 PRICE_PUBLISH 权限”混为一谈。对外 Broker 价格开关继续 OFF。待后续在 APS/MD 内按简化租户归属方案收口，再做实际新租户 API 价格发布、隔离和成交验收。
