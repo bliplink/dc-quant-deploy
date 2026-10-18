@@ -2,6 +2,10 @@
 # Verify real self-service onboarding: SUBMIT -> AUTO_APPROVAL -> liquidity job -> Robot/Tape.
 # Supply E2E_AUTO_TENANT_ADMIN_PASSWORD out of band; this script never prints credentials.
 set -euo pipefail
+# Avoid creating orphaned trial tenants when a rebuilt Demo has no platform
+# or Robot runtime identities; the VERIFY stage cannot succeed in that state.
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+bash "$SCRIPT_DIR/preflight-product-tenant-robot-host.sh"
 : "${E2E_AUTO_TENANT_ADMIN_PASSWORD:?set E2E_AUTO_TENANT_ADMIN_PASSWORD securely before running}"
 [[ ${#E2E_AUTO_TENANT_ADMIN_PASSWORD} -ge 8 ]] || { echo 'Admin password too short' >&2; exit 2; }
 BASE="${E2E_BASE_URL:-http://127.0.0.1:18088/httpapi/}"
