@@ -296,3 +296,30 @@ JAVA_HOME=/Users/kong/Library/Java/JavaVirtualMachines/zulu-8.jdk/Contents/Home 
 - 核对到当前真正差异：MD `TradeFacade.effectiveMark()` 现在走 SYSTEM shared mark + 专用 E2E override，尚未正式接入 `TenantEffectivePriceBook.resolve(location,market,symbol,now)`。需要将此接入现有 MD 租户行情合成/发布链：SYSTEM 取共享价；BROKER 只取该租户经可信准入的最新价；**BROKER 无价/过期时发送不可用状态或空 MarkPrice，不能回落 SYSTEM，也不能保留旧 MarkPrice。** 价格来源配置/版本必须由独立可信租户配置状态确定，不能依靠 APS 自报 JSON；Publisher Epoch/Sequence 恢复与重订阅沿用原 MD 集群恢复机制，不修改 Common。
 - **本次架构校正不包含新的 Trade/Liq 源码提交或上线**；之前创建的 `/tmp/otc-broker-liq-price-origin-gate-20261018` 只是隔离工作树，尝试写入 Liq 校验器被执行环境安全检查阻止，未产生可用改动，不应继续该分支。后续验收验证 Trade/Liq 是否收到正确的 MD 租户行情即可。
 - 当前本机灰度 APS+MD A/B/C 已部署**入口但功能开关仍 OFF**，这是现网稳定默认 SYSTEM 的前提。不得将此次架构澄清误记录为 Broker 模式正式启用成功。下一步只在 APS/MD 完成可信价格路由、失效发布及租户隔离回归后，开启独立测试租户 E2E。
+
+
+## Q. 2026-10-18 22:09 CST｜MD 租户价源真实选路接入、166项回归及三节点部署 PASS
+
+本轮继续严格按用户确认的架构：**Broker 自定义指数/标记价只从 APSvr→MDSvr 接入，MD 仍通过既有 tenant Trade/MarkPrice topic 向 TradeSvr、LiqSvr 发布；不修改 TradeSvr/LiqSvr/Gateway/Common HA 代码或订阅协议。**
+
+### 代码与提交（`bliplink/com.app.dc.mdsvr/saas-crypto`）
+
+- 新增 `TrustedTenantPriceSource`（commit `35b6c4298e19a318b3469d7a5a656a1a8f03d1d4`），将有效 `price_source`、`source_config_version` 的权威来源与未经认证的 Broker 报文隔离。目前**仅是接口，无生产可信配置 provider**，不允许靠请求体自称 BROKER 改价源。
+- 新增 `TenantMarkPriceSelector`（commit `2cda2ebaf3b3d56a716bdb597b2204fd797e2ffb`），默认 `broker.price.route.enabled=false`。当将来启用时，若没有可信租户配置、BROKER 租户价格没有 READY、租户/合约不匹配或 Broker 配置版本不一致，选出的 Mark/Index **均为空**，严禁回落至 Binance/system；可信 SYSTEM 租户仍从共享价源读值；Broker 来源不会夹带 Binance 的 funding rate。
+- 将上面选择器接入 MD `TradeFacade` 的 **`getLatestTrade` 订阅初始化、`publishTenantMarkPrice` 系统广播和 `AsyncMarketDataSnapshotFullRefresh.process` 成交行情合成**，并防止原先的 E2E Override 清除代码强行回写 SYSTEM 标记价格。代码 commit `dacd1e4a0d86480712d1688c566bcdd27c14bc93`。这些都是已有向 Trade/Liq 的同一条行情发布路径，没有新风险服务订阅。
+- 新增 `TenantMarkPriceSelectorTest`（commit `cb32231cdc63ab40b91484262161745545f92944`）与 `TradeFacadeTenantTest.sharedMarksCannotOverwriteTrustedBrokerTenant`（commit `a2859a7dbb74c10172f6dd0749fcb8e0075b7f2f`）；用伪造可信价源注入验证双租户同合约 SYSTEM/BROKER 路由、过期、version 变化、无配置拒绝及系统广播不能重写 Broker 价。这是测试对象模拟，不是已验证的生产租约。
+
+### 全量编译和实机滚动部署
+
+- 以实际运行 MD 源 commit `6cfb99486d24af92d47288e3565f186e553e1fc9` 的隔离 worktree 编译，Mac JDK8 `mvn -B -o test` **166 tests / 0 failures / 0 errors / 0 skipped，BUILD SUCCESS**；`mvn -B -o -DskipTests package` 亦 BUILD SUCCESS。定向选择器+TradeFacade 集成测试 15/15 PASS。
+- Docker 构建 `dc-saas/mdsvr:broker-v1-selector-disabled-20261018`（Image ID `sha256:17f541d7b3b67ea204b6a7d643f5aad958d2c34250f6c19babefd1f76e7a9778`），只在上一轮经验证的 `dc-saas/mdsvr:broker-v1-ingress-disabled-runtime6cfb-20261018` 上覆盖本轮新 `.class`。Common Jar SHA256仍是 **`8cbb195a131664c96692598bef51644ced9074f01ad80b3878b84cfce9444da4`**，没有修改 Common 恢复状态机。
+- Compose override `/Users/kong/.opentradingcore/broker-v1-demo-checkpoints-20261018/broker-md-selector-20261018.yaml`（不含敏感凭据），显式设置 `BROKER_PRICE_ROUTE_ENABLED=false`、`BROKER_PRICE_RECEIVE_ENABLED=false`。按 **MD-C → MD-B → MD-A** 滚动 `--no-deps --pull never --force-recreate`；三者皆运行该 Image 且 Java Spring `Started application` 正常，未触及 Order/Trade/Liq 镜像。
+- 刚替换 MD-C 时 Spring 仍在启动，最初 Canary 因 Spring 尚未 Started 和一次公网 TLS `connection reset` 返回失败。随后 C/B/A 均 Ready，主站和 Trade Web 均 HTTP 200；**最终**运行只读 `tests/verify-broker-v1-canary-health-host.sh` **13/13 PASS，退出码 0**：六个 Java 服务 Spring Ready、两个站点 200、`GW7XMI` SYSTEM/SYSTEM/ACTIVE/ACTIVE、Robot RUNNING 且挂单 **40**、Schema 6/6、未认证请求被拒绝。最终日志 `/Users/kong/.opentradingcore/broker-v1-demo-checkpoints-20261018/md-selector-canary-20261018.log` SHA256 `00b20232bbac7428033f46ee8775326275f17e8d8ec8e6387928ca8950acea5a`。
+
+### 尚未完成且不能开启 BROKER 实价
+
+- `TrustedTenantPriceSource` 只有接口；缺少可信的生产配置分发/订阅刷新、正式 `VerifiedBrokerPricePublisher` + `VerifiedBrokerPriceAdmission` 的 Epoch/租约/序号持久化，及配置/MD HA 恢复重订阅。因而这一轮只**部署已编译并测试的价源选择代码，但继续 OFF**；不能使用真正 Broker 自定义 MarkPrice，也不能宣称隔离真实用户已经验收。
+- MD 新价源在真正上线前仍需补 Broker 更新主动触发已订阅租户发布、TTL 到期即时失效传播和订阅 Snapshot 的失效状态清理。现有 Trade/Liq 原路径虽然会拒绝 stale mark，但不可依赖它替代 Broker TTL 状态机的完整验收。
+- `BK218A` 是此前公开申请成功但 **PENDING** 的验收申请（缺乏自动审批要求的 `admin_password`）；尚未创建真正可登录的新租户并完成 API Key 真实委托 E2E。用户级 API、独立 Broker Demo、WS/Docs 以及 50/200 租户压测和真实 HA 故障恢复仍未通过验收。
+
+**下一轮优先级**：先完成 Admin→MD 权威租户价源配置分发与 APS Broker 发布者租约，再让 Broker tick 主动通过原 MD topic 发布；补 TTL Snapshot/Gap/恢复与本地跨租户 E2E。可信交易风控价链路验证通过后，才能开启独立验收租户价格源；不修改 LiqSvr/TradeSvr。
