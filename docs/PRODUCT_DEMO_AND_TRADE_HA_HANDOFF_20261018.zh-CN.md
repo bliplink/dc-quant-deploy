@@ -48,3 +48,14 @@
 - 之前的 Docker 清单、SQL 初始化和重建日志：`/Users/kong/.opentradingcore/product-baseline-reset-20261018/evidence/`。这些是**本地排障资料，不含可公开发布的完整审计报告**，切勿将原始日志内的 Token/API Key 直接推 GitHub。
 - 历史详尽信息见 `docs/TRADE_HA_PAUSED_PRODUCT_DEMO_BASELINE_20261018.zh-CN.md`、`docs/COMMON_CLUSTER_REUSE_CONTRACT_20261017.zh-CN.md`、`docs/TRADE_P090_AUTOMATIC_REVERSAL_ACTIVATION.zh-CN.md`。
 - 产品继续验收：真实交易页面可见盘口/逐笔 → 订单/执行数据库与实时数据逐项核对 → Admin/租户/手机端功能 → API Docs / Python SDK / Broker API。**保持 HA 冻结，除非另行要求恢复开发。**
+
+
+## 六、Trade 尚未远程同步的本地源码备份（实机已完成）
+
+针对 GitHub 修复分支暂缺的 `dcbf10c`、`2a043ac` 两次本地提交，已将完整本地 Trade 修复分支创建为 **Git bundle** 并验证：
+
+```
+/Users/kong/.opentradingcore/product-baseline-reset-20261018/evidence/trade-ha-unsynced-2a043ac-20261018.bundle
+```
+
+文件权限 `0600`，`git bundle verify` 返回 `is okay`，文件约 552 KiB；本地源 HEAD `2a043ac909169c4c7e81973674e77cbf7362e712`，Common 本地/远程修复 HEAD `68e37d3a65296b09ee415cbd20725f97ca4e485c`。这份 bundle **只是本机源码保险副本，不等于代码已推送 GitHub 或完成 QA 验收**。后续由授权的开发/发布环境审核、补齐 Trade 修复分支后再生成正式镜像；不要将 bundle 的本机路径当成公共下载地址，也不要推送含诊断认证日志的文件。
