@@ -17,11 +17,12 @@ for name in dc-saas-adminsvr dc-saas-apssvr dc-saas-mdsvr dc-saas-managersvr dc-
   if [ "$(docker inspect "$name" --format '{{.State.Status}}' 2>/dev/null || true)" = running ];then pass "$name running";else fail "$name not running";fi
 done
 # Never print root credentials, API keys, login responses or personal data.
-col_count="$(printf '%s\n' "SELECT COUNT(*) FROM information_schema.columns WHERE table_schema=DATABASE() AND table_name='dc_tenant' AND column_name IN ('price_source','liquidity_source','source_config_version','source_switch_state');" | docker exec -i dc-saas-mysql sh -c 'mysql -uroot -p"$MYSQL_ROOT_PASSWORD" -N dc' 2>/dev/null || true)"
-if [ "$col_count" = 4 ];then pass 'source schema 4/4 columns';else fail "Broker source schema columns not installed: ${col_count:-unavailable}/4";fi
+col_count="$(printf '%s\n' "SELECT COUNT(*) FROM information_schema.columns WHERE table_schema=DATABASE() AND table_name='dc_tenant' AND column_name IN ('price_source','liquidity_source','source_config_version','source_switch_state','pending_price_source','price_switch_state');" | docker exec -i dc-saas-mysql sh -c 'mysql -uroot -p"$MYSQL_ROOT_PASSWORD" -N dc' 2>/dev/null || true)"
+if [ "$col_count" = 6 ];then pass 'source schema 6/6 columns';else fail "Broker source schema columns not installed: ${col_count:-unavailable}/6";fi
 check_class dc-saas-apssvr /srv/dc/dc/APSSvr/classes/com/app/dc/handler/PublishBrokerPriceHandler.class 'APS Broker price ingress'
 check_class dc-saas-mdsvr /srv/dc/dc/MDSvr/classes/com/app/dc/service/index/BrokerTenantPriceInput.class 'MD Broker price receiver'
 check_class dc-saas-adminsvr /srv/dc/dc/AdminSvr/classes/com/app/dc/handler/TenantBrokerLiquiditySwitchHandler.class 'Admin Broker liquidity handover'
+check_class dc-saas-adminsvr /srv/dc/dc/AdminSvr/classes/com/app/dc/handler/TenantBrokerPriceSourceHandler.class 'Admin Broker price staging'
 check_class dc-saas-managersvr /srv/dc/dc/ManagerSvr/classes/com/app/dc/service/RobotRuntimeService.class 'Robot scheduler'
 # The classes above are packaging checks only. To claim Broker v1.0 ready,
 # an operator must also attach verified tests for authenticated publisher lease,
