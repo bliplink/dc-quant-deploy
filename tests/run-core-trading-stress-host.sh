@@ -15,14 +15,13 @@ LOAD_PAUSE_ROBOTSVR="${LOAD_PAUSE_ROBOTSVR:-false}"
 LOAD_VERIFY_RESTART="${LOAD_VERIFY_RESTART:-true}"
 LOAD_RUN_ID="${LOAD_RUN_ID:-$(date +%Y%m%d%H%M%S)}"
 LOAD_RUNNER_NAME="${LOAD_RUNNER_NAME:-dc-saas-web-e2e-runner}"
-LOAD_PASSWORD="${LOAD_E2E_PASSWORD:-${E2E_PASSWORD:-}}"
+LOAD_PASSWORD=""
 
 log() { printf '[core-stress] %s\n' "$*"; }
 die() { printf '[core-stress] ERROR: %s\n' "$*" >&2; exit 1; }
 safe_identifier() { [[ "$1" =~ ^[A-Za-z0-9_.-]+$ ]]; }
 
 [[ -r "${ENV_FILE}" ]] || die "Cannot read ${ENV_FILE}"
-[[ -n "${LOAD_PASSWORD}" ]] || die "LOAD_E2E_PASSWORD or E2E_PASSWORD is required"
 for value in "${LOAD_LOCATION}" "${LOAD_MAKER}" "${LOAD_TAKER}" "${LOAD_RUN_ID}"; do
   safe_identifier "${value}" || die "Unsupported identifier: ${value}"
 done
@@ -38,6 +37,9 @@ set -a
 # shellcheck disable=SC1090
 . "${ENV_FILE}"
 set +a
+
+LOAD_PASSWORD="${LOAD_E2E_PASSWORD:-${E2E_PASSWORD:-${LOGIN_DEFAULT_PASSWORD:-}}}"
+[[ -n "${LOAD_PASSWORD}" ]] || die "LOAD_E2E_PASSWORD, E2E_PASSWORD or LOGIN_DEFAULT_PASSWORD is required"
 
 order_containers=(dc-saas-ordersvr)
 if [[ "${ORDER_CLUSTER_ENABLED:-false}" == "true" ]]; then
@@ -417,7 +419,7 @@ SQL
 [[ "${recovery}" == $'1\n1' ]] || die "Restart recovery verification failed: ${recovery}"
 
 log "Closing the recovered positions through reduce-only matching."
-api_order "{\"OCType\":\"ClOSE\",\"OrderQty\":\"${quantity}\",\"OrdType\":\"Limit\",\"ClOrdID\":\"LOAD-${LOAD_RUN_ID}-CLOSE-SHORT\",\"Terminal\":\"API\",\"AlgoName\":\"cross\",\"Side\":\"Buy\",\"PositionSide\":\"Short\",\"Price\":\"60000\",\"UserID\":\"${LOAD_MAKER}\",\"MarketIndicator\":\"4\",\"TimeInForce\":\"GTC\",\"SecurityID\":\"BTCUSDT\",\"ReduceOnly\":\"true\",\"Location\":\"${LOAD_LOCATION}\"}" "${LOAD_MAKER}"
+api_order "{\"OCType\":\"CLOSE\",\"OrderQty\":\"${quantity}\",\"OrdType\":\"Limit\",\"ClOrdID\":\"LOAD-${LOAD_RUN_ID}-CLOSE-SHORT\",\"Terminal\":\"API\",\"AlgoName\":\"cross\",\"Side\":\"Buy\",\"PositionSide\":\"Short\",\"Price\":\"60000\",\"UserID\":\"${LOAD_MAKER}\",\"MarketIndicator\":\"4\",\"TimeInForce\":\"GTC\",\"SecurityID\":\"BTCUSDT\",\"ReduceOnly\":\"true\",\"Location\":\"${LOAD_LOCATION}\"}" "${LOAD_MAKER}"
 for _ in $(seq 1 60); do
   close_maker_ready="$({
     cat <<SQL
@@ -429,7 +431,7 @@ SQL
   sleep 1
 done
 [[ "${close_maker_ready:-0}" == "1" ]] || die "Recovered short close order did not rest"
-api_order "{\"OCType\":\"ClOSE\",\"OrderQty\":\"${quantity}\",\"OrdType\":\"Limit\",\"ClOrdID\":\"LOAD-${LOAD_RUN_ID}-CLOSE-LONG\",\"Terminal\":\"API\",\"AlgoName\":\"cross\",\"Side\":\"Sell\",\"PositionSide\":\"Long\",\"Price\":\"60000\",\"UserID\":\"${LOAD_TAKER}\",\"MarketIndicator\":\"4\",\"TimeInForce\":\"GTC\",\"SecurityID\":\"BTCUSDT\",\"ReduceOnly\":\"true\",\"Location\":\"${LOAD_LOCATION}\"}" "${LOAD_TAKER}"
+api_order "{\"OCType\":\"CLOSE\",\"OrderQty\":\"${quantity}\",\"OrdType\":\"Limit\",\"ClOrdID\":\"LOAD-${LOAD_RUN_ID}-CLOSE-LONG\",\"Terminal\":\"API\",\"AlgoName\":\"cross\",\"Side\":\"Sell\",\"PositionSide\":\"Long\",\"Price\":\"60000\",\"UserID\":\"${LOAD_TAKER}\",\"MarketIndicator\":\"4\",\"TimeInForce\":\"GTC\",\"SecurityID\":\"BTCUSDT\",\"ReduceOnly\":\"true\",\"Location\":\"${LOAD_LOCATION}\"}" "${LOAD_TAKER}"
 for _ in $(seq 1 120); do
   close_ok="$({
     cat <<SQL
