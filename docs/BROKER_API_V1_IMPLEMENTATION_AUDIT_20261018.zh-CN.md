@@ -323,3 +323,15 @@ JAVA_HOME=/Users/kong/Library/Java/JavaVirtualMachines/zulu-8.jdk/Contents/Home 
 - `BK218A` 是此前公开申请成功但 **PENDING** 的验收申请（缺乏自动审批要求的 `admin_password`）；尚未创建真正可登录的新租户并完成 API Key 真实委托 E2E。用户级 API、独立 Broker Demo、WS/Docs 以及 50/200 租户压测和真实 HA 故障恢复仍未通过验收。
 
 **下一轮优先级**：先完成 Admin→MD 权威租户价源配置分发与 APS Broker 发布者租约，再让 Broker tick 主动通过原 MD topic 发布；补 TTL Snapshot/Gap/恢复与本地跨租户 E2E。可信交易风控价链路验证通过后，才能开启独立验收租户价格源；不修改 LiqSvr/TradeSvr。
+
+
+### 2026-10-18 22:10 CST｜正式 API 负向/只读回归补充
+
+在已滚动的实际 Mac Gateway `http://127.0.0.1:18088/httpapi/` 发起三笔 JSON HTTP 调用，不使用管理员 Key、Broker Key 或测试伪认证：
+
+- `APSSvr.publishBrokerPrice`：**code=10004, AUTHENTICATED_SESSION_REQUIRED**，验证未经认证不能发布价格；这**不是**已验证 `PRICE_PUBLISH` 授权后成功接收/成交。
+- `AdminSvr.publicTenantDirectory`：**code=0, NO_ERROR**，公开读正常。
+- `ManagerSvr.tenantApplication/STATUS` 查询 `BK218A` 申请：**code=0、PENDING**，说明该请求因缺乏管理员密码尚未自动审批，也尚未建立可供 Broker API 交易的新租户。
+- MySQL `dc_tenant` 校验：**0 个租户处于 `price_source=BROKER` 或 `liquidity_source=BROKER`**。
+
+这次验证是**实际公开接口的负向/只读测试**。生产 Publisher/TrustedSource 仍缺，不能开启 Broker 价源，也不能据此将新租户 Broker API E2E 标为 PASS。Trade/Liq 继续订阅 MD 原 Tenant Trade topic，无源码改动。
