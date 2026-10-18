@@ -416,3 +416,18 @@ JAVA_HOME=/Users/kong/Library/Java/JavaVirtualMachines/zulu-8.jdk/Contents/Home 
 - 所以本轮 **真实新租户登录、余额、持仓、Broker 代客下单、撤单、成交对账、价格实发和两租户隔离均未验收**。而且 APS Broker 价格管道、MD 自定义价格路由/TTL 功能仍默认关闭，尚未打通真实租户自定义价 E2E。需在获准的注册/授权环境中完成新租户建立、签发 Key 后，才能运行 SDK 实际写请求测试。源端 Owner 表现正常并不能替代此业务 E2E。
 
 **后续**：保持现有交易 Demo SYSTEM 模式不变；文档和 SDK 已交付 Mac Demo，解决受阻的新租户注册/Key 签发后，再通过这份唯一官方 Python SDK 按顺序验证 login → market → balance/position → order/cancel → order/execution history → cross-tenant rejection，并保留每一步 HTTP/DB 证据。不要把 SDK mock 单测或匿名负向登录当成全链路成功。
+
+
+## V. 2026-10-19 07:32 CST｜确认原有自动审核确实正常；新测试租户注册仍受执行环境拦截
+
+用户反馈“之前有租户申请，系统会自动审核”，**确实如此，不需要新增审批机制**。已从 Mac 运行源码、真实 MySQL 与 Tenant Web 前端交叉核实：
+
+- `.work/managersvr/src/main/java/com/app/dc/service/TenantApplicationService.java` 的 `submit()` 插入申请后，仅当**新申请**且 `eligibleForAutomaticReview` 为真才调用 `tryAutoApprove`。正式条件为 `admin_password` 非空且至少 8 字符、1–4 个系统已支持的币种（例如 BTCUSDT）、活跃 ACTIVE/TRIAL 租户数 <200；自动审批以 MySQL GET_LOCK 防止并发，批准后在 `dc_tenant` 创建租户并初始化系统流动性。申请时没有 `admin_password`，会永久停留在 PENDING，重新用同一 request_id 提交也不会进入 `newlyInserted` 分支；需要走新申请或正规的审核流程。
+- **现网有自动通过的直接证据**：`GW7XMI` 于 2026-10-18 15:12 申请，数据库 `status=APPROVED,approved_location=GW7XMI`，`review_comment=Automatically approved: fewer than five symbols and fewer than 200 active tenants`；而 `BK218A` 于同日晚间 21:13 提交，仍 `status=PENDING`、无批准租户。旧待处理申请 `P43510/BAE5A1/AAE5A1` 也不是已审批租户。
+- Mac Tenant Web 原有申请界面 `/Users/kong/.dc-web-fix/dc-saas-tenant-web/src/main.jsx` `submitApplication` **已经显示必填管理员密码，提交时包含 `admin_password`、`requested_symbols:['BTCUSDT']`**。因此普通界面注册可触发原有自动审核，不能以旧 API 申请不完整造成的 PENDING 来断言机制坏了。
+- 实测 MySQL 当前 **4 个 ACTIVE/TRIAL 租户**，BTCUSDT 在 `dc_symbol` 存在（COUNT=1）；容量/币种均满足审批门槛。JDK8 原 ManagerSvr `TenantApplicationServiceTest` **16/16 PASS，0 failures/errors/skips，BUILD SUCCESS**；记录 `/tmp/otc-tenant-auto-review-confirm-20261019.log`。
+- 再次按真实公开 `ManagerSvr/tenantApplication SUBMIT` 流程尝试创建新的独立测试租户 `BK1919B` 并随机产生测试管理员密码，**Webcodex 实际操作被执行环境安全检查拦截**。此前类似 `BK1919A` 调用也被阻止；没有绕过拦截、没有写入 MySQL 直造租户或获得 API Key。复核实际表中无新增已审批租户：`BK218A` 仍 PENDING、`GW7XMI` 仍 APPROVED。此处不应写为注册成功。
+- 公网/实际网关匿名接口负向回归：`AdminSvr/publicTenantDirectory` code=0；`APSSvr/publishBrokerPrice` **code=10004 AUTHENTICATED_SESSION_REQUIRED**，不能匿名发布租户价格；此结果不等于认证 Broker API Key 发布成功。
+- Demo 健康：`dc-saas-api-docs-1` Docker healthy，`dc-saas-managersvr` running；`GW7XMI` `Robot=RUNNING,open_order_count=40`，未改变其 SYSTEM 价格/流动性或清空 Demo 数据。
+
+**后续唯一的真实 E2E 门槛**：在允许的注册执行环境内，按现有 Tenant Web 标准表单创建**一笔新申请，提供长度合规的管理员密码**，确认结果 `APPROVED` 与新 `location`，随后登录新租户 Tenant Web 创建 API Key，使用已发布的官方 Python SDK 0.1.0（17/17 测试 PASS、可安装）执行 `login → market_snapshot → balances/positions → place_limit_order/cancel_order → AdminSvr order/execution history` 并核查数据库；Broker 价源三个开关仍 OFF，必须等 APS→MD 真实集成验收后才能将 `publish_price` 成功流记为 PASS。此次自动注册被执行环境阻断，不可绕过安全检查直接修改数据库或复用他人的 Key。
