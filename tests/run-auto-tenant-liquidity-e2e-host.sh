@@ -8,11 +8,12 @@ BASE="${E2E_BASE_URL:-http://127.0.0.1:18088/httpapi/}"
 SUFFIX="${E2E_SUFFIX:-$(date +%H%M%S)}"
 LOCATION="${E2E_LOCATION:-A${SUFFIX: -5}}"
 EMAIL="auto-${SUFFIX}@acceptance.invalid"
-ROOT="${E2E_OUTPUT_DIR:-/tmp}"
+umask 077
+ROOT="${E2E_OUTPUT_DIR:-$(mktemp -d /tmp/otc-tenant-smoke.XXXXXX)}"
 mkdir -p "$ROOT"
 REQ="$ROOT/auto-tenant-application-${LOCATION}.json"
 OUT="$ROOT/auto-tenant-result-${LOCATION}.json"
-chmod 700 "$ROOT" 2>/dev/null || true
+trap 'rm -f -- "$REQ"' EXIT
 python3 - "$LOCATION" "$EMAIL" "$SUFFIX" "$REQ" <<'PY'
 import json,os,sys
 location,email,suffix,path=sys.argv[1:]
