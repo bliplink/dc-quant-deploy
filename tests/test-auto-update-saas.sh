@@ -323,7 +323,7 @@ grep -q '^verify_projection_watermarks_advanced()' "${SCRIPT_DIR}/tests/restart-
   fail "projection advancement helper is missing"
 grep -q 'verify_projection_watermarks_advanced' "${SCRIPT_DIR}/tests/run-core-trading-acceptance.sh" ||
   fail "projection advancement check is missing from core trading acceptance"
-grep -q 'Fence confirmed; restarting OrderSvr cluster and TradeSvr inside epoch' \
+grep -q 'Fence confirmed; restarting OrderSvr replicas before TradeSvr inside epoch' \
   "${SCRIPT_DIR}/tests/recover-order-cluster-partitions-host.sh" ||
   fail "cluster recovery does not own the fenced restart boundary"
 grep -q 'restart_containers+=("${TRADE_B_CONTAINER}")' \
