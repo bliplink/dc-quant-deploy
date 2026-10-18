@@ -49,7 +49,7 @@ async function loginApi(api, username, password, location, clientType = 'WEB') {
 
 async function tenantConsoleLogin(page) {
   await page.goto(`${tenantBaseUrl}/?location=${encodeURIComponent(locationB)}`, {waitUntil: 'domcontentloaded'});
-  await page.getByText('Tenant Console', {exact: true}).waitFor({timeout: 30000});
+  await page.getByText(/^(Tenant Console|租户管理控制台)$/).waitFor({timeout: 30000});
   await page.getByLabel('租户管理员账号').fill(adminUser);
   await page.getByLabel('密码').fill(adminPasswordB);
   await page.getByRole('button', {name: '登录租户控制台'}).click();
@@ -144,8 +144,8 @@ async function tenantRobot(page, api) {
   const apiKey = apiKeyData.api_key;
   if (!apiKey || !trader.user_id) throw new Error('could not create Robot API credential fixture');
 
-  await page.getByRole('button', {name: 'Robot 管理'}).click();
-  await page.getByRole('heading', {name: 'Robot 管理'}).waitFor();
+  await page.getByRole('button', {name: /^(Robot 管理|流动性管理)$/}).click();
+  await page.getByRole('heading', {name: /^(Robot 管理|流动性管理)$/}).waitFor();
   const robotName = `UI Robot ${suffix}`;
   const editedName = `${robotName} Edited`;
 
@@ -218,7 +218,7 @@ async function tenantInfoAuditSettings(page) {
 
 async function tenantLogout(page) {
   await page.locator('aside footer').getByRole('button', {name: '退出'}).click();
-  await page.getByText('Tenant Console', {exact: true}).waitFor({timeout: 30000});
+  await page.getByText(/^(Tenant Console|租户管理控制台)$/).waitFor({timeout: 30000});
   const session = await page.evaluate(() => sessionStorage.getItem('dc-tenant-admin-session'));
   if (session) throw new Error('tenant console logout left a session behind');
 }
@@ -360,6 +360,7 @@ async function platformLogout(page) {
   const tenantApi = await request.newContext({baseURL: tenantBaseUrl});
   const platformApi = await request.newContext({baseURL: platformBaseUrl});
   const tenantContext = await browser.newContext({viewport: {width: 1600, height: 1000}});
+  await tenantContext.addInitScript(() => localStorage.setItem('dc-trade-language', 'zh'));
   const platformContext = await browser.newContext({viewport: {width: 1600, height: 1000}});
   const tenantPage = await tenantContext.newPage();
   const platformPage = await platformContext.newPage();
