@@ -286,3 +286,13 @@ JAVA_HOME=/Users/kong/Library/Java/JavaVirtualMachines/zulu-8.jdk/Contents/Home 
 - 发布前置 `tests/preflight-broker-v1-release-host.sh` 当前 **8/8 核心服务 running，6/6 schema columns，APS/MD/Admin/Manager 候选类均已安装，返回 PARTIAL**；该结果只是镜像/数据库一致性，不是可启用 Broker Price 的授权租约与 Trade/Liq STALE 端到端证明。
 - **真实无认证读 API 验收**：经本机 Gateway `/httpapi/` 查询 `AdminSvr.publicTenantDirectory` 返回 **code=0**，公开租户数为 **1**；调用 `ManagerSvr.tenantApplication/STATUS`（仅本轮公开申请 ID 与联系邮箱）返回 **code=0、status=PENDING**，确认 `BK218A` 的自动审核尚未完成。未触发任何基于未授权凭证的管理员审批或 Broker 下单。
 - **实际运行服务状态**：Admin `beanfix`、Manager Maker Gate、APS `publishBrokerPrice` OFF、MD A/B/C `BrokerTenantPriceInput` OFF 均已部署并 Spring Ready，`GW7XMI` SYSTEM 模式自动报价 40 单继续；Broker 独立自定义指数/标记价格、外部流动性激活、真实代客交易/WS/独立 Demo及 HA/50-200 租户压力测试仍为 **BLOCKED，不能启用开关或宣称完成验收**。
+
+
+## P. 2026-10-18｜架构校正：Broker 价格只改 APSvr/MDSvr，不改 TradeSvr/LiqSvr 订阅路径
+
+用户确认的唯一正式边界：**APSvr 负责 SYSTEM/BROKER 价格接入，MDSvr 根据租户的 `price_source` 选择权威生效指数价/标记价，并继续通过现有租户 Trade/MarkPrice 发布通道给 TradeSvr 和 LiqSvr。Gateway 只透传，Common HA 不改变。无需新增 LiqSvr 或 TradeSvr 的 Broker 价订阅器。**
+
+- 已核对现有代码：MD `IndexFacade.markPrice()` → `TradeFacade.publishTenantMarkPrice()`；Trade 和 Liq 仍使用 `MDSvrClient.subscribeTradeForMD(location,symbol,...)` 获取按租户维度的行情，且现有风险价读取实现对过期 MarkPrice 进行拒绝、不回退 LastPrice。
+- 核对到当前真正差异：MD `TradeFacade.effectiveMark()` 现在走 SYSTEM shared mark + 专用 E2E override，尚未正式接入 `TenantEffectivePriceBook.resolve(location,market,symbol,now)`。需要将此接入现有 MD 租户行情合成/发布链：SYSTEM 取共享价；BROKER 只取该租户经可信准入的最新价；**BROKER 无价/过期时发送不可用状态或空 MarkPrice，不能回落 SYSTEM，也不能保留旧 MarkPrice。** 价格来源配置/版本必须由独立可信租户配置状态确定，不能依靠 APS 自报 JSON；Publisher Epoch/Sequence 恢复与重订阅沿用原 MD 集群恢复机制，不修改 Common。
+- **本次架构校正不包含新的 Trade/Liq 源码提交或上线**；之前创建的 `/tmp/otc-broker-liq-price-origin-gate-20261018` 只是隔离工作树，尝试写入 Liq 校验器被执行环境安全检查阻止，未产生可用改动，不应继续该分支。后续验收验证 Trade/Liq 是否收到正确的 MD 租户行情即可。
+- 当前本机灰度 APS+MD A/B/C 已部署**入口但功能开关仍 OFF**，这是现网稳定默认 SYSTEM 的前提。不得将此次架构澄清误记录为 Broker 模式正式启用成功。下一步只在 APS/MD 完成可信价格路由、失效发布及租户隔离回归后，开启独立测试租户 E2E。
