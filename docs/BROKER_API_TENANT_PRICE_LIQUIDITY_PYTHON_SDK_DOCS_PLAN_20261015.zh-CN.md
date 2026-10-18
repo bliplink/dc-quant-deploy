@@ -1,3 +1,5 @@
+> **实施进度与实际验收记录（持续更新）**：见 [BROKER_API_V1_IMPLEMENTATION_AUDIT_20261018.zh-CN.md](BROKER_API_V1_IMPLEMENTATION_AUDIT_20261018.zh-CN.md)。当前 APS 正式 Handler 默认关闭；MD Broker 独立接收组件测试 15/15 PASS，但可信发布者租约、MD 全量编译及 Trade/Liq STALE 风控尚未打通，Broker API v1.0 未完成 E2E 验收。请按该记录中的最新日期和 Git SHA 接续开发，勿将原设计目标误当完成状态。
+
 # OpenTradingCore Broker API v1.0：租户自定义价格、流动性、SDK 与 API Docs 一体化开发及验收方案
 
 > 状态：设计提案 / 待开发、待验收。2026-10-15。目标分支：`saas-crypto`。
