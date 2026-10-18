@@ -101,3 +101,22 @@
 - 曾尝试**原样使用官方部署脚本 `deploy-saas.sh` 定义的 `provision_platform_admin` 和 `provision_robot_runtime_identity`**，不直接修改认证数据；正式身份写入操作仍被执行环境安全检查阻断。后续必须由具备操作权限的受信任执行环境完成部署初始化；不应绕过这层检查或直接假写健康状态。
 - 新提交 `dc-quant-deploy/saas-crypto@82f6eab`：`tests/run-auto-tenant-liquidity-e2e-host.sh` 在向公开注册 API 提交前先运行 `preflight-product-tenant-robot-host.sh`。实机执行返回 2，且本轮测试前后申请总数均保持 4，不再生成无法最终启动 Robot 的孤儿申请。
 - 当前 AdminSvr 产品镜像 `local/dc-saas-adminsvr:trial-verify-recovery-20261018` 的 `FAILED:VERIFY` 低频重试已真实生效；GitHub AdminSvr `saas-crypto@46698459` 包含相关单元测试。主站最近测试 HTTP 200，**业务最终验收仍 FAIL：Robot Gateway 登录 9005，没有双边挂价、Tape 实际成交或交易业务闭环**。Trade HA 故障注入继续暂停。
+
+
+## 13. 2026-10-18｜恢复现有 Demo 身份的独立正式入口
+
+新提交到 `dc-quant-deploy/saas-crypto`：`deploy-saas.sh --provision-identities-only`（`b8887b4`），以及模拟 Docker 回归测试 `tests/test-provision-identities-only.sh`（`3dbac7e`）。此模式调用原有 `provision_platform_admin` / `provision_robot_runtime_identity`，使用已存在的私有 `ENV_FILE`，**不重新安装、拉取镜像、跑迁移、清理数据或重建 Order/Trade/MD**；仅当 Runtime Key 与已存在账号不一致时重启 LoginSvr 刷新认证缓存。模拟测试验证了缺少 env 时安全拒绝和写入范围受限。身份写入在当前 ChatGPT 受控执行环境仍被安全检查拦截，**未在真实数据库执行成功**。
+
+具有本机交互 sudo 权限的部署管理员可在 Mac 终端使用以下**正式入口**（不是直接编辑身份表）：
+
+```bash
+cd /Users/kong/dc-quant-deploy
+# 先同步 saas-crypto 最新部署脚本，并检查当前工作树的未提交修改；禁止强制覆盖本地工作。
+ENV_FILE=/Users/kong/.opentradingcore/ha-fresh-clean-demo-20261016.env \\
+  sudo -E ./deploy-saas.sh --provision-identities-only
+bash tests/preflight-product-tenant-robot-host.sh
+```
+
+注意：当前 Mac 的 `/Users/kong/dc-quant-deploy` 工作树明显落后于远程且存在大量未提交修改。操作员必须**在确认代码版本一致后**运行该命令，可在独立干净检出分支中执行、以 `ENV_FILE` 指向原私有 env；不能用 `git reset --hard` 清理原工作树。正式初始化成功后需要观察 RobotSvr 是否恢复 Gateway Manager/API Key 两条登录链，现有 `GW7XMI` 的 `FAILED:VERIFY` 每 300 秒自动复查；只有任务 `COMPLETE:DONE`、Robot `RUNNING`、双边挂价数量>=2、Tape 实际成交/Projection 记录有增量，才可宣称自动流动性正常。
+
+本轮再次只读核查：`platform_active=0`，`robot_runtime_keys=0`，`GW7XMI` 为 `TRIAL`、`AUTO_APPROVAL`、资金确认和 Tape 资金确认均为 1，但 Robot `STOPPED`、活动挂单 0、`VERIFY` 第 50 次失败；主站、交易站 HTTP 200。**产品最终 E2E 未通过；Trade HA 仍暂停。**
