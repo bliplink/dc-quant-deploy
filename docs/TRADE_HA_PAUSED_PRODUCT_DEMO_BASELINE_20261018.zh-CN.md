@@ -83,3 +83,13 @@
 - 已补充 `tests/preflight-product-tenant-robot-host.sh`：只读断言平台身份、Robot Runtime Key、自动流动性与 Tape 开关。**当前实机执行如预期失败**：`platform_active=0 robot_runtime_keys=0 liquidity_worker_enabled=true tape_enabled=true`，退出码 2。
 - 已修复 `tests/run-auto-tenant-liquidity-e2e-host.sh` 的定位错误：真实审批会分配新六位 location，不能按提交时暂定的 `tenant_code` 找批准结果；改用不可变 32 位 `application_id` 查询并校验返回 location、任务 `COMPLETE:DONE:1:1`、Robot `RUNNING` 且盘口至少两笔。该脚本语法检查通过。此前测试脚本曾因为错误查询短暂报失败，**实机自动审批实际成功**；工作流的终态仍未通过，因为 Robot 登录没有恢复。
 - 未手工修改 ZooKeeper ACK、未操作 Trade A/B 故障注入、未伪造 Robot/RUNNING、未对产品 Demo 宣布撮合或点价已通过。后续只需运行**正式授权的** `deploy-saas.sh` 里 `provision_platform_admin` 与 `provision_robot_runtime_identity` 并刷新 LoginSvr API Key 缓存，然后观察 `GW7XMI` 的已有 `RETRY:VERIFY` Job 是否自动完成、盘口/成交是否有增量。之前环境执行对直接写身份/密钥操作曾被安全检查阻断；不可绕过。
+
+
+## 11. 2026-10-18 15:30 CST｜AdminSvr 自动恢复 FAILED:VERIFY 已上线实机验证
+
+- `GW7XMI` 的真实租户申请经 `AUTO_APPROVAL` 审批成功，状态 `TRIAL`，注册及交易启用；Maker 和 Tape 模拟入金确认均为 1，`trial-liquidity-BTCUSDT` 已配置 enabled=1，但 RobotSvr 因平台身份缺失无法 Gateway 登录（`USER_ACCOUNT_OR_PWD_ERROR 9005`），导致 Robot `STOPPED`、盘口 0。
+- 旧 AdminSvr 的 `TrialLiquidityBootstrapWorker` 对 `VERIFY` 仅重试 30 次，就把健康验证任务永久标为 `FAILED`；即使后续恢复 Robot，也不会自行继续。
+- 已在 **`bliplink/com.app.dc.adminsvr@saas-crypto`** 更新 Worker 和测试（提交 `d4105a33`、`46698459`）：只允许当前仍为有效 `TRIAL` 且 `AUTO_APPROVAL` 的 `FAILED:VERIFY` 工作被定期重新认领；已完成资金步骤不会重新入金或重新运行。VERIFY 在达到 30 次重试后采用 300 秒低频探测；其他资金及初始化步骤仍遵守既有失败上限。代码经过 AdminSvr 离线 `mvn test` **88 项（0 fail,0 error,1 skipped）**。
+- 实际已通过离线 Docker 构建 `local/dc-saas-adminsvr:trial-verify-recovery-20261018`，镜像 `sha256:3b8fb7be4c7349b1e52ef2355cb7844f02cb64fb56e2bae05f9ee1caf01a5449`，**只滚动替换 AdminSvr**；其他业务服务未重启。升级后新 AdminSvr 实际重新认领 `GW7XMI` 的 `FAILED:VERIFY`，尝试次数由 30 → 31，下次尝试时刻 `2026-10-18 15:34:34.204`。这是 `FAILED` 的安全再检查**确已执行**的证据，并非编造 `COMPLETE`。
+- **最终业务状态仍 FAIL**：因为 `PLATFORM` 用户数 0、有效 `ROBOT_RUNTIME` Key 数 0，Robot 仍 `STOPPED`、盘口 0、Tape 没有真实点价成交。部署的正式初始化环节 `provision_platform_admin`/`provision_robot_runtime_identity` 需要被有权限的执行环境完成，并刷新 LoginSvr 的 Runtime API Key 缓存；不能用直改认证表、假 ACK、强行标记机器人 RUNNING 代替。`tests/preflight-product-tenant-robot-host.sh` 已作为产品上线前置门禁提交到 `saas-crypto`。
+- 重建后主站与交易站实测 HTTP 200，但尚未完成长稳观测。**HA 工作仍冻结，不进行故障注入。**
