@@ -228,3 +228,8 @@ JAVA_HOME=/Users/kong/Library/Java/JavaVirtualMachines/zulu-8.jdk/Contents/Home 
 生产 `VerifiedBrokerPricePublisher` 与 `VerifiedBrokerPriceAdmission` 的独立可信签名/Publisher Epoch/持久 ConfigVersion/Sequence 事务仍未接通；Order 主节点真实水位证明的 `SystemMakerOrderDrainVerifier` 生产实现尚不存在；MD BROKER READY/STALE 信息尚未贯通 Trade/Liq 真实风险拒绝，Price Source ACTIVATE 尚不可用；系统 Robot ↔ 自定义流动性反向切换/旧单全量权威收敛仍待实现。Python SDK 公网 Broker 代客交易/WS 重连、API Docs 最终 Docker、独立 Broker Demo、两租户四组合、50/200 tenants 压力和真实 HA 故障注入均未完成。
 
 **请勿以源码通过编译、单元测试通过、HTTP 200 或 Demo 盘口有成交而宣告 Broker v1.0 整体验收通过。** 下一阶段仍应先实现跨服务可信配置/价格与 Trade/Liq 过期保护，再锁定发布镜像，迁移/部署，注册一名全新 Broker 测试租户，用唯一 Key 验证账户、委托、取消、成交、资金持仓及强平和跨租户隔离。
+
+
+### 2026-10-18 20:56 CST｜最新发布门禁复验（本轮续补）
+
+已从最新 `saas-crypto/tests/preflight-broker-v1-release-host.sh` 的 6 字段/双 Admin Handler 条件在 Mac 本机执行同等只读核查：**核心服务 8/8 RUNNING；Broker Release Gate BLOCKED（5 项）**：业务 `dc_tenant` Broker 字段 `0/6`；运行 APS 镜像没有 `PublishBrokerPriceHandler`；运行 MD 镜像没有 `BrokerTenantPriceInput`；运行 Admin 镜像没有 `TenantBrokerLiquiditySwitchHandler` 和 `TenantBrokerPriceSourceHandler`。Robot Scheduler 基础类存在不能证明新门禁已发布。该结果证明新 Broker 模块尚未上线，不允许据此宣称生产价源可用或最终租户 E2E 成功；此检测不修改原业务数据和容器。
