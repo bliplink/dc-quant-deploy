@@ -73,3 +73,13 @@
 **当前独立第二阻塞**：当前新 Demo `PLATFORM` 管理账号尚未初始化，RobotSvr 反复报告 `RobotSvr gateway login failed: USER_ACCOUNT_OR_PWD_ERROR (9005)`；即使租户审批成功，也不能据此认定 Robot 已开始真正双边挂价或 Tape 成交。正式部署路径应调用 `deploy-saas.sh` 的平台管理员与 Robot 运行身份初始化并让 LoginSvr 刷新认证缓存；禁止手改数据库伪造运行状态。
 
 新增正式端到端探针 `tests/run-auto-tenant-liquidity-e2e-host.sh`：必须在安全来源提供 `E2E_AUTO_TENANT_ADMIN_PASSWORD`，通过公开 `tenantApplication/SUBMIT` 发完整注册申请，不使用平台审批接口；检查 `APPROVED`、试用租户开通、bootstrap `COMPLETE:DONE`、Tape 开启且资金确认、Robot `RUNNING` 并具有双边挂单。探针静态语法检查已通过，但由于 Mac 现有平台身份缺失和执行安全检查阻断，**尚未完成真实整链验收**。Tape 的实际逐笔成交/成交量仍需独立验证，不能只凭 `tape_enabled=1` 认定通过。
+
+
+## 10. 2026-10-18 15:15 CST｜真实自动审批成功，Robot 启动链未通过
+
+- 本轮通过**真实公开注册接口**（带 `admin_password` 和 `BTCUSDT`）完成新租户申请。后台自动分配正式六位 `location`：**`GW7XMI`**。数据库 `dc_tenant_application` 显示 `APPROVED`、`reviewer_id=AUTO_APPROVAL`，`dc_tenant` 为 `TRIAL`、`registration_enabled=1`、`trade_enabled=1`。**这证明自动审批无需平台管理员介入，纠正了之前只传缺失密码的 `PENDING` 请求导致的误判。**
+- `TrialLiquidityBootstrapWorker` 按 `CREATE_MAKER` → `CREATE_KEY` → `FUND` → `FUND_TAPE` → `CREATE_ROBOT` → `ENABLE` 逐步执行。`GW7XMI` 的 `funding_confirmed=1`、`tape_enabled=1`、`tape_funding_confirmed=1`，`dc_tenant_robot` 已有 `trial-liquidity-BTCUSDT` 且 `enabled=1`。
+- **实际 Robot 未启动**：`runtime_status=STOPPED`、`open_order_count=0`；初始化任务停在 `RETRY:VERIFY`，反复 `IllegalStateException`。RobotSvr 定期日志明确 `RobotSvr gateway login failed: USER_ACCOUNT_OR_PWD_ERROR`。新 Demo `dc_users WHERE location='PLATFORM'` 的有效账号数 **0**，`dc_users_api` 的启用 `ROBOT_RUNTIME` Key 数 **0**；AdminSvr `TRIAL_LIQUIDITY_BOOTSTRAP_ENABLED=true`、`TRIAL_LIQUIDITY_TAPE_ENABLED=true`。因此真正根因是初始平台/Robot 运行身份未按正式部署流程创建，而不是 Robot/Tape 功能开关关闭，也不是租户必须人工审批。
+- 已补充 `tests/preflight-product-tenant-robot-host.sh`：只读断言平台身份、Robot Runtime Key、自动流动性与 Tape 开关。**当前实机执行如预期失败**：`platform_active=0 robot_runtime_keys=0 liquidity_worker_enabled=true tape_enabled=true`，退出码 2。
+- 已修复 `tests/run-auto-tenant-liquidity-e2e-host.sh` 的定位错误：真实审批会分配新六位 location，不能按提交时暂定的 `tenant_code` 找批准结果；改用不可变 32 位 `application_id` 查询并校验返回 location、任务 `COMPLETE:DONE:1:1`、Robot `RUNNING` 且盘口至少两笔。该脚本语法检查通过。此前测试脚本曾因为错误查询短暂报失败，**实机自动审批实际成功**；工作流的终态仍未通过，因为 Robot 登录没有恢复。
+- 未手工修改 ZooKeeper ACK、未操作 Trade A/B 故障注入、未伪造 Robot/RUNNING、未对产品 Demo 宣布撮合或点价已通过。后续只需运行**正式授权的** `deploy-saas.sh` 里 `provision_platform_admin` 与 `provision_robot_runtime_identity` 并刷新 LoginSvr API Key 缓存，然后观察 `GW7XMI` 的已有 `RETRY:VERIFY` Job 是否自动完成、盘口/成交是否有增量。之前环境执行对直接写身份/密钥操作曾被安全检查阻断；不可绕过。
