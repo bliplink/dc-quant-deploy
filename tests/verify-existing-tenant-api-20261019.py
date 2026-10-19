@@ -19,6 +19,7 @@ def main():
     p.add_argument("--tenant",default="GW7XMI")
     p.add_argument("--base",default="http://127.0.0.1:18088")
     p.add_argument("--credentials-file",type=pathlib.Path)
+    p.add_argument("--require-book",action="store_true",help="Fail when depth is empty")
     a=p.parse_args()
     tenant=a.tenant.upper()
     if not tenant.isascii() or not tenant.isalnum():p.error("invalid tenant")
@@ -31,6 +32,8 @@ def main():
     assert str(market.get("code"))=="0", "public market unavailable"
     entries=((market.get("data") or {}).get("orderBook") or {}).get("NoMDEntries") or []
     print("PASS publicMarket", "bookEntries="+str(len(entries)))
+    if a.require_book and not entries:
+        raise RuntimeError("public market has no depth for the requested tenant")
     protected=[
         ("AdminSvr","queryOrder",{},None),
         ("AdminSvr","queryExecOrder",{},None),
