@@ -42,7 +42,20 @@ def main():
         visible=[row["security_id"] for row in rows]
         assert not set(visible).intersection(args.hidden),(tenant,visible)
         assert set(args.expect).issubset(set(visible)),(tenant,visible,args.expect)
-        findings.append({"tenant":tenant,"visible":visible,"enabled":len(visible)})
+        if visible:
+            symbol=visible[0]
+            market=post(args.gateway,"MDSvr","queryPublicMarket",
+                        {"location":tenant,"securityID":symbol})
+            assert market.get("code")==0,(tenant,symbol,market)
+            snapshot=market.get("data") or {}
+            assert snapshot.get("location")==tenant,(tenant,snapshot.get("location"))
+            assert snapshot.get("securityID")==symbol,(tenant,snapshot.get("securityID"))
+            assert "orderBook" in snapshot and "ticker" in snapshot and "recentTrades" in snapshot
+            findings.append({"tenant":tenant,"visible":visible,"enabled":len(visible),
+                             "public_market_http_api":0,
+                             "book_entries":len((snapshot.get("orderBook") or {}).get("NoMDEntries") or [])})
+        else:
+            findings.append({"tenant":tenant,"visible":[],"enabled":0})
     admin=post(args.gateway,"AdminSvr","tenantProductDataSource",{"action":"LIST"})
     assert admin.get("code")==10004,admin
     findings.append({"unscoped_administrative_list":"AUTHENTICATED_SESSION_REQUIRED"})
@@ -58,6 +71,18 @@ def main():
             page=browser.new_page(viewport={"width":width,"height":850})
             errors=[]
             page.on("pageerror",lambda error:errors.append(str(error)))
+            snapshots=[]
+            def capture_public_market(reply):
+                if "/httpapi/" not in reply.url or reply.request.method!="POST":return
+                try:
+                    request=reply.request.post_data_json or {}
+                    if request.get("method")=="queryPublicMarket":
+                        response=reply.json()
+                        data=response.get("data") or {}
+                        snapshots.append((reply.status,response.get("code"),
+                                          data.get("location"),data.get("securityID")))
+                except Exception:pass
+            page.on("response",capture_public_market)
             response=page.goto(args.trade_web.rstrip("/")+
                 "/#/trade?location="+tenant,wait_until="domcontentloaded",timeout=25000)
             page.locator(".tradeWrap").wait_for(timeout=30000)
@@ -69,7 +94,10 @@ def main():
             assert any(x in text for x in (args.expect or [x["security_id"] for x in post(
                 args.gateway,"AdminSvr","tenantProductDataSource",
                 {"action":"LIST","location":tenant}).get("data",[])])), "no public product visible"
-            browser_checks.append({"viewport":width,"http":response.status,"public":True,"js_errors":0})
+            page.wait_for_timeout(6500)
+            assert snapshots and snapshots[0]==(200,0,tenant,"BTCUSDT"),snapshots
+            browser_checks.append({"viewport":width,"http":response.status,
+                                   "public":True,"public_md_snapshot":snapshots[0],"js_errors":0})
             page.close()
         browser.close()
     print(json.dumps({"api_checks":findings,"browser_checks":browser_checks},
