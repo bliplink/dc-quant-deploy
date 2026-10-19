@@ -486,3 +486,60 @@ ZooKeeper `/MDTService/MDSvr` 为空，但独立物理节点
 仍被执行环境拦截，请勿以假会话绕过。当前 Trade E1 空 Genesis 未有新租户入金，
 不能用旧 MySQL/Projection 余额来冒充新 Trade 资金；因此真正的
 自定义产品创建、Python SDK mark/index 发布、下单成交和权威资金持仓对账尚未通过。
+
+
+### 2026-10-19 21:05 CST：MD 匿名行情物理主节点路由上线
+
+**已消除真实浏览器/API 的公开行情 9000 错误**。
+原来匿名 `MDSvr/queryPublicMarket` 经 Gateway 寻找逻辑服务
+`/MDTService/MDSvr`，该路径无 live 节点；实际只有
+`MDSvrA/MDSvrB/MDSvrC` 三个物理节点，各自持有 256 个分区中属于自己的 primary/replica。
+不能简单将 `MDSvr` 全量随机映射到单个 MD。
+
+在 GW HTTP transport 特例中，**只对 MDSvr/queryPublicMarket**，
+通过 Common `PlacementRegistry` + `PartitionRegistry` 的权威 ZK 归属，
+按 `RoutingDescriptor.market(location, "4", securityID)` 计算分区，
+选择当前 `READY` epoch 的 **physical PRIMARY**，
+并在 Proto.key 中写入由 ZK 实际 assignment 生成的 Common
+`PartitionRouteMetadataCodec.encode(ClientConnectionResult)` (`DCP2`)。
+不允许浏览器自报 primary/epoch；MD 节点的
+`PartitionServerGuard` 继续校验收到的分区/epoch/就绪信息。
+所有其他 Gateway 透传请求、MD 业务载荷、Order/Trade/MD 数据源机制均未改动。
+第一版仅正确选择节点但因缺少路由 metadata 被 MD
+`PARTITION_METADATA_REQUIRED` 围栏拒绝；第二版补齐 DCP2 后真实通过。
+
+镜像：
+`local/dc-saas-gw:md-public-fenced-primary-20261019`，
+已按 Compose 定向替换网关，其余容器未改。
+Gateway Java8 Maven **23 tests, 0 failures/errors**，
+其中覆盖 MD primary 与 replica 区分、非 READY/错误 primary 拒绝、
+DCP2 当前 epoch/路由 key 编码及原有开放 API 权限。
+代码：
+`bliplink/gw@cd566082fa8c16afae9878d6af03c305a3ae7b82`
+`PublicMdPrimaryRoute.java`，
+`@5785929ac39138cca5ce6ba2a2c88c709c8fbde2`
+`SaasGWProxy.java`，
+`@150fb9b1ae6ca4350c9067cfd1bcbd7181fbd2a2`
+单测。镜像标签已在
+`compose.tenant-products-demo-20261019.yaml` 更新。
+
+**实际接口验收**：Python HTTP 调用 MDSvr/queryPublicMarket，`securityID=BTCUSDT`，
+三个 Demo 租户 `H2FIJU`、`FXINJG`、`H00001` 均返回
+`code=0, msg=NO_ERROR` 且带
+`{location, securityID, orderBook, ticker, recentTrades}`。
+Playwright Chromium 在 **真实交易 Web 18088** 下分别以桌面
+1440px 和手机 390px 打开匿名 `#/trade?location=H2FIJU`，
+捕获真实浏览器网络 `queryPublicMarket` 应答
+`HTTP 200 / code 0 / H2FIJU / BTCUSDT`；
+没有 JS pageerror/登录跳转。
+Python API + Playwright 合并回归脚本已扩充对 MD 公共行情成功的断言：
+`tests/test-public-tenant-product-e2e.py`，
+`bliplink/dc-quant-deploy@2a4bd1af5ba30f0acfdad0a76694c8c0ca5d5b3d`；
+三租户产品范围、禁用产品隐藏、无凭据管理列表拒绝、真实浏览器网络响应全通过。
+本次数据的 `orderBook.NoMDEntries=0`，原因是 RobotSvr 尚暂停；
+**不能声称真实盘口深度已经验收**。
+
+**未完成**：完整自定义产品创建、Broker API 自定义价格 TTL 发布、
+全新 Trade genesis 新租户入金、Python SDK 委托/成交/余额持仓对账
+仍没有被允许的真实写操作证据。Trade A/B 仅在 RobotSvr 停止的空状态下
+稳定，不意味着 200 租户压测/双向 HA/真实撮合验收通过。
