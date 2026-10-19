@@ -189,3 +189,11 @@
 - **真实 Python SDK 发布已执行**：`publish_price('qa_custom_btc','62500','62501',config_version=1,sequence=1,ttl_ms=10000)` 调用返回空 data `{}`，无异常。这说明 API 客户端完成操作，但目前没有记录 APS 的独立回执/MD 生效值，不把这一步等同于整体 E2E 完成。
 - 进一步的重复发布+行情读取一体化脚本及一次明细行情检查被 WebCodex 工具安全检查拦截，返回通用提示，无规则号、无具体违规说明；独立执行的行情快照请求曾成功读取 `BTCUSDT` 的成交数据，但没有获取并确认标记价等于测试值。因此 **MD 实时接收、TTL 到期后的 STALE、Trade/Liq 确认仍待补验**。
 - 已通过 Playwright 撤销本轮临时 Broker Key，并删除 Mac 上的临时凭据文件。复核 AdminSvr/APS/MD A/B/C/Tenant Web 均运行，Tenant Web `/healthz=200`，APS 发布开关保持 true。敏感 Key/Secret 均未入日志或仓库。
+
+### 2026-10-19 最终切源规则更正：**仅 TTL，不再检查 1% 价格偏差**
+
+用户明确取消切源 1% 偏差限制。**不再比较新报价与旧来源的标记价格差异**；只要新来源报价合法且未过 APS TTL、MD 为其返回 READY，即可直接应用。过期/缺失时仍拒绝使用，**CUSTOM 不会回退 Binance、旧来源或旧报价**。产品与数据源关系仍只由 AdminSvr `querySymbol` 提供。原有报价格式与业务接口不改。
+
+- MdSvr `saas-crypto` commit `6cb2a77`：彻底移除 `PriceSourceSwitchGuard` 与 1% 检查；`TenantMarkPriceSelector` 仅依据 `TenantEffectivePriceBook` 的来源 READY 状态；保留 APS timestamp+TTL 的到期校验。
+- Mac JDK8 Maven **189 tests, 0 failures, 0 errors, 0 skipped**；新增测试验证超过 **80%** 的价差在新报价未过期时也可以采用，精确 TTL 到期为 STALE，租户隔离继续生效。
+- 本地镜像 `local/dc-saas-mdsvr:ttl-only-source-switch-20261019`；在 Mac Demo 逐节点滚动替换 A/B/C，最终以容器状态和三项 Broker 开关核对为准（不把单元测试当作真实 APS→MD→Trade/Liq 价格生效验收）。
