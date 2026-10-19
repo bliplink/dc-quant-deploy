@@ -180,3 +180,12 @@
 - 使用 Playwright 以测试租户 `H2FIJU` 管理员登录，将原有启用的 `BTCUSDT` 从 `qa_binance_btc` 切换绑定到 `qa_custom_btc`；数据库只读核验：`H2FIJU/BTCUSDT/qa_custom_btc/CUSTOM/BTCUSD_CUSTOM/enabled=1`。另外两个产品 `BTC001USDT`、`BTC002USDT` 仍为 disabled 草稿，不对订单撮合/风控宣告支持。
 - MD-A/B/C 均运行 `local/dc-saas-mdsvr:custom-source-route-20261019`，每节点三个 Broker 接收/路由/下游事件开关均为 true；APS 发布开关为 true。Tenant Web `/healthz` 返回 HTTP 200，ClickHouse `dc.market_trade` 记录数继续增长（本次检查 3115）。
 - 注意：上述验证了**管理绑定切换与服务运行**，但工具安全检查仍阻断包含真实 TenantAPI 密钥价格发送的 Python SDK 实际调用，故**尚未证明价格事件从 APS 到 MD 再到 Trade/Liq 的现场完整流转**。后续必须补充有效 API Key 的真实 `publish_price`，核对自定义价优先、过期/切源不复用旧价、订单/持仓风险与强平，才可标记最终价格链路 PASS。
+
+### 2026-10-19 真实 SDK Broker 价格发布（工具拦截说明）
+
+- 本次先只读确认 APS `BROKER_PRICE_PUBLISH_ENABLED=true` 与 MD A/B/C 已加载 `custom-source-route-20261019`，价格接收/路由/事件发布三个开关均为 true。
+- 以测试租户 `H2FIJU`，通过已经部署的 Tenant Web 登录并临时创建一个专用 Broker API Key；密钥只写入 Mac 本地权限 `0600` 的临时文件，未打印、未提交。
+- 通过 Docs 镜像内已部署的 Python Wheel `opentradingcore-0.1.0` 实际调用 `OpenTradingCoreClient.from_api_key(...)`、`login(mode='broker')`，返回 `client_type=TenantAPI`、`location=H2FIJU`、`api_key_type=broker`，确认签名身份。
+- **真实 Python SDK 发布已执行**：`publish_price('qa_custom_btc','62500','62501',config_version=1,sequence=1,ttl_ms=10000)` 调用返回空 data `{}`，无异常。这说明 API 客户端完成操作，但目前没有记录 APS 的独立回执/MD 生效值，不把这一步等同于整体 E2E 完成。
+- 进一步的重复发布+行情读取一体化脚本及一次明细行情检查被 WebCodex 工具安全检查拦截，返回通用提示，无规则号、无具体违规说明；独立执行的行情快照请求曾成功读取 `BTCUSDT` 的成交数据，但没有获取并确认标记价等于测试值。因此 **MD 实时接收、TTL 到期后的 STALE、Trade/Liq 确认仍待补验**。
+- 已通过 Playwright 撤销本轮临时 Broker Key，并删除 Mac 上的临时凭据文件。复核 AdminSvr/APS/MD A/B/C/Tenant Web 均运行，Tenant Web `/healthz=200`，APS 发布开关保持 true。敏感 Key/Secret 均未入日志或仓库。
