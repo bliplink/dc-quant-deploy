@@ -11,6 +11,23 @@
   differ by any percentage from the previously selected source.
 - Expired TTL prices must not be forwarded to Trade/Liq as usable marks.
 
+## Corrected price binding (2026-10-20)
+
+**User-confirmed behavior:** one tenant product can have only **one current
+source**, stored as `dc_tenant_symbol.data_source_id`. Tenant administration
+may switch to a different enabled source in the same tenant using `BIND`.
+After the AdminSvr `querySymbol` image refreshes, MD must use only the new
+route; previous source ticks become unauthorized and cached quotes cannot
+be reused. A fresh price can differ by any amount from the old price (no 1%
+cap). The current quote's TTL alone determines price freshness; on expiry,
+no old source or system/Binance price is used as automatic fallback.
+
+The mistaken optional `fallback_data_source_id` migration and supporting
+Admin/MD candidate logic were reverted locally and were never deployed.
+Targeted tests verify route replacement, previous publisher refusal and
+no-fallback-after-expiry. The Demo still needs a genuine authenticated BIND
+followed by an actual APS tick and Trade/Liq publication acceptance.
+
 ## Verified locally on the Demo
 
 1. Gateway `local/dc-saas-gw:public-csv-20261019`: CSV whitelist and
@@ -44,10 +61,12 @@
   end-to-end TTL expiry, and a live source rebind/switch.
 - Matching two independently funded trader accounts, cancellation,
   balances/positions/execution consistency, and Trade A/B automatic failover.
-- The present model has **one primary `data_source_id` per product**. A
-  separately configured, ordered secondary source with automatic TTL failover
-  has not been verified/implemented. The existing selector rejects stale
-  custom prices rather than silently falling back to a different provider.
+- **One current `data_source_id` per tenant product**, not primary/standby.
+  The tenant administrator changes the selected source explicitly with BIND.
+  MD invalidates the former mapping on the refreshed authoritative catalog,
+  accepts the current source if its quote TTL is valid, and does not enforce a
+  switch-price deviation threshold. When the current quote expires, it becomes
+  unavailable; no automatic fallback to the former provider is permitted.
 - Playwright PC/mobile E2E was previously green, but one 2026-10-20 rerun
   timed out without producing a result. Browser pass has **not** been renewed.
 
