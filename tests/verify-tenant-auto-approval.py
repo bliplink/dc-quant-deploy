@@ -8,7 +8,9 @@ import time
 import urllib.request
 from datetime import datetime
 
-ENDPOINT = "http://127.0.0.1:18088/httpapi/"
+ENDPOINT = os.environ.get("TENANT_APPLICATION_E2E_ENDPOINT", "http://127.0.0.1:18088/httpapi/")
+if not ENDPOINT.startswith(("http://127.0.0.1:", "http://localhost:")):
+    raise SystemExit("Tenant application E2E requires a localhost endpoint")
 
 
 def call(server, method, content):
