@@ -59,3 +59,41 @@
 4. **APS 自定义报价**：继续使用租户 API Key 的 TenantAPI 会话身份防串租户，不要求 `PRICE_PUBLISH` 额外权限；产品/来源配置启用前不影响 Binance 原路径。实际 Broker 发布 E2E 和强平、资金风险回归完成后，才可打开相应价格功能开关。
 
 **总判定：数据模型、后台元数据接口、前端页面源码及本地编译已完成；Demo 数据库迁移已应用；新页面未部署，实际自定义产品交易/价格数据源路由尚未验收。**
+
+## 统一交付方案：租户产品、数据源、Broker API、SDK、Demo 验收（2026-10-19）
+
+### 目标及禁止项
+
+本轮**一条完整交付链**，不再增加中间关系表或为 MD 单独设计配置系统。核心逻辑：租户可定义任意产品代码，绑定本租户一个数据源（多产品可共享来源）；接收 Binance 或 Broker 发布的指数价/标记价，MD 按 AdminSvr 提供的 Symbol 映射到产品，沿原有交易与风控/强平链路使用。旧产品保持兼容。不可仅以 UI CRUD 成功视为交易功能完成。
+
+- 数据模型固定：`dc_tenant_symbol(location,security_id,data_source_id,...)` 关联 `dc_tenant_data_source(location,data_source_id,source_type,source_symbol,...)`；拒绝跨租户绑定。
+- AdminSvr 作为 Symbol 数据的唯一配置提供方，对既有 Symbol 下发结构作兼容扩展，组装产品规则、来源关联及必要启用状态；MD 只能消费现有 AdminSvr→MD Symbol 快照/更新，不查库、不读取独立配置、不新增第二套同步路径。
+- APS 负责接收并提供来源价格，Broker API 的发布操作使用真实租户身份；MD 负责来源价→租户产品价映射和扇出；Order/Trade/Liq/Projection 只按交易产品身份处理业务，不将 source_symbol 当成 security_id。
+- 暂不启用未端到端验证的自定义产品；无有效价格或切换中采用阻断/不就绪，**禁止使用之前来源的旧价格**；保持现有租户和 robot 的行情与交易路径不变。
+
+### 开发顺序与验收门槛
+
+**阶段 A — 管理页面上线及 E2E（优先）**
+
+核对现有 AdminSvr 与 Tenant Web 镜像和本地构建产物，优先本地编译、替换 Demo 镜像（目前 GitHub Actions 额度不足）。验收有效租户身份下数据源 LIST/CREATE/UPDATE/DELETE、产品 CREATE_DRAFT/BIND/UNBIND、已绑定来源变更与删除限制、跨租户拒绝、现有产品展示/编辑及回滚；API Key 页面租户/用户两个 Tab，Robot Key 归入用户 Key。DB 迁移已经完成，不重复破坏旧数据。记录实际部署镜像 ID、接口响应和测试结果。
+
+**阶段 B — Symbol 数据整合与 APS→MD 价格映射**
+
+先阅读现有 AdminSvr Symbol 组装/推送以及 MD 接收/恢复实现，确认现有协议/字段/快照/增量语义，再以向后兼容的方式扩展，禁止另建配置入口。MD 内存索引按 `(location,data_source_id)` 找到关联的所有产品，按产品代码扇出；BN/CUSTOM 源相同路径，索引价格必须区分 tenant/source 与价格类型（index/mark），验证过期、重绑定、停用和断线重订阅。APS 价格入口权限与来源归属须检查，避免串租户、乱序和旧价覆盖；不要替换现有 MD 行情盘口恢复语义。
+
+**阶段 C — 真正的租户产品交易**
+
+核查既有全局 `dc_symbol` 与租户 `dc_tenant_symbol` 的责任边界，把必要交易规则/注册信息传至 Order/Trade/MD/Liq/Projection；验证下单、撤单、撮合、委托/成交查询、余额、持仓、保证金、标记价风险和强平。不得用“产品草稿已保存”代替真实可交易证据；与现有 Common HA 快照/日志/恢复机制保持一致，不在高频价格路径查询数据库。
+
+**阶段 D — Broker API / Python SDK / API Docs**
+
+使用租户 API Key 创建代客账户、入金、下单、查询、发布自定义指数价和标记价；Robot 按已有两把用户 API Key 工作，租户 API Key 与用户 API Key 分离。SDK 按正式接口实现并提供端到端 demo；文档展示对外交易和价格发布，不暴露租户管理内部接口，WebSocket 补实时用法。验证失败响应、权限隔离、幂等/重复发布处理。
+
+**阶段 E — 灰度与回归**
+
+在 Demo 先选测试租户：Binance BTCUSDT → BTCUSDT/BTC001USDT 多产品扇出；自定义 CUSTOM_BTC → BTC002USDT；断开/恢复来源、动态重绑及多租户交叉测试。跑完整交易、风险/强平、Projection 权威一致性以及 Trade/Order/MD 重启和 HA；确认旧 BTCUSDT 及 Robot 正常。全部成功后才允许启用新产品交易，并记录发布 SHA、镜像、数据、各项验收结果。
+
+### 进度与报告口径
+
+截至本段录入：此前真实 MySQL 迁移及数据库外键验证、本地 AdminSvr 74 项回归、Tenant Web 构建已完成；**管理页面 Demo 镜像替换、Symbol/MD 价格路由、自定义产品交易、Broker Python SDK 端到端验收均未确认完成**。每个阶段应分别记录【代码已提交】【编译通过】【Demo 已部署】【端到端通过】，不允许混为一谈。遇到工具阻断，保留实际错误与最小可继续的代码进度，不声称部署成功。
+
