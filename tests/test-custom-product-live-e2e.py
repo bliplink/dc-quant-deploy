@@ -62,6 +62,8 @@ def run(url):
     application_id='CUSTOM_PRODUCT_E2E_'+suffix
     email='custom-'+suffix.lower()+'@acceptance.invalid'
     checkpoints=[]
+    broker_key=None
+    admin_token=None
     def record(name, **details):
         checkpoints.append({'step':name,**details})
         print(json.dumps(checkpoints[-1],sort_keys=True),flush=True)
@@ -79,7 +81,8 @@ def run(url):
             'cid':'LOGIN_'+suffix,'user_id':'tenantadmin','user_name':'tenantadmin',
             'password':password,'client_type':'TenantAdmin','Location':location})
         if not login.get('token'):raise AssertionError('No TenantAdmin session token')
-        token=login['token'];record('tenant_admin_authenticated')
+        token=login['token'];admin_token=token
+        record('tenant_admin_authenticated')
         source_id='QA_CUSTOM_'+suffix
         alt_id='QA_ALT_'+suffix
         primary=ok(url,'AdminSvr','tenantDataSourceAdmin',{
@@ -132,6 +135,7 @@ def run(url):
             'cid':'BROKER_CREATE_'+suffix},token)
         if not broker.get('api_key') or not broker.get('secret_key'):
             raise AssertionError('Broker API key response lacked credentials')
+        broker_key=broker['api_key']
         record('broker_key_issued')
         broker_login=signed_login(url,broker['api_key'],broker['secret_key'],location)
         if broker_login.get('client_type')!='TenantAPI':
@@ -151,6 +155,17 @@ def run(url):
     except Exception as e:
         record('FAILED',error=type(e).__name__,message=str(e)[:220])
         return False
+    finally:
+        # Never leave a newly created, privileged Broker API key active after
+        # a completed or failed QA execution. No plaintext key is logged.
+        if broker_key and admin_token:
+            try:
+                removed=call(url,'LoginSvr','tenantApiKeyAdmin',{
+                    'action':'DELETE','api_key':broker_key,
+                    'cid':'QA_BROKER_CLEANUP_'+suffix},admin_token)
+                record('broker_key_cleanup',deleted=removed.get('code')==0)
+            except Exception as error:
+                record('broker_key_cleanup_failed',reason=type(error).__name__)
 
 
 def main():

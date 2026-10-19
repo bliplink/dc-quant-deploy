@@ -29,6 +29,8 @@ def main():
                         help="A disabled product code that MUST NOT appear")
     parser.add_argument("--expect",action="append",default=[],
                         help="An enabled product code that MUST be visible")
+    parser.add_argument("--require-null-mark",action="append",default=[],
+                        help="A public product whose expired/unbound MarkPrice and IndexPrice must be null")
     args=parser.parse_args()
     findings=[]
     for tenant in args.tenant:
@@ -46,6 +48,15 @@ def main():
             market=post(args.gateway,"MDSvr","queryPublicMarket",
                         {"location":tenant,"securityID":disabled})
             assert market.get("code")==5004,(tenant,disabled,market)
+        # Prevent a cached pre-switch/custom quote outliving its declared TTL
+        # on the externally visible MD snapshot. No risk of writing test data.
+        for product in args.require_null_mark:
+            market=post(args.gateway,"MDSvr","queryPublicMarket",
+                        {"location":tenant,"securityID":product})
+            assert market.get("code")==0,(tenant,product,market.get("code"))
+            ticker=(market.get("data") or {}).get("ticker") or {}
+            assert ticker.get("MarkPrice") is None,(tenant,product,"stale_mark_returned")
+            assert ticker.get("IndexPrice") is None,(tenant,product,"stale_index_returned")
         if visible:
             symbol=visible[0]
             market=post(args.gateway,"MDSvr","queryPublicMarket",
@@ -98,12 +109,24 @@ def main():
             assert response.status==200
             assert "/login" not in page.url
             assert not errors,errors
-            text=page.locator("body").inner_text()
-            assert any(x in text for x in (args.expect or visible)), "no public product visible"
-            page.wait_for_timeout(6500)
-            assert snapshots and snapshots[0][:3]==(200,0,tenant) and snapshots[0][3] in visible, snapshots
+            # Drawer exists off-screen by default. Checking body.innerText or
+            # clicking an off-screen drawer row is not evidence of user-facing
+            # navigation. Open the actual symbol selector and choose a product.
+            target=(args.expect or visible)[0]
+            page.locator(".symbolDiv.cp").first.click(timeout=15000)
+            market_item=page.get_by_text(target,exact=True).first
+            market_item.wait_for(timeout=16000)
+            market_item.click(timeout=12000)
+            page.wait_for_function(
+                "code => document.querySelector('.symbolCode')?.textContent?.includes(code)",
+                arg=target, timeout=12000)
+            page.wait_for_timeout(2000)
+            matches=[s for s in snapshots if s[:3]==(200,0,tenant) and s[3]==target]
+            assert matches,(target,snapshots)
+            assert not errors,errors
             browser_checks.append({"viewport":width,"http":response.status,
-                                   "public":True,"public_md_snapshot":snapshots[0],"js_errors":0})
+                                   "public":True,"selected_product":target,
+                                   "public_md_snapshot":matches[-1],"js_errors":0})
             page.close()
         browser.close()
     print(json.dumps({"api_checks":findings,"browser_checks":browser_checks},
