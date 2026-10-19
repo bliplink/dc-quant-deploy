@@ -42,6 +42,15 @@
 - 部署后续仍需要开启合法 TenantAdmin 管理会话，对 `CREATE→BIND→LIST→UPDATE→DELETE/解绑` 进行正向 API E2E；当前只做了 MySQL 事务及匿名鉴权验证。不要读取或借用 Robot 两把 Trader Key 代替 Tenant API。
 - 现有 GW7XMI `BTCUSDT` 产品仍 `enabled=1,data_source_id=NULL,product_name=NULL`，Robot `RUNNING/40`；现有 Demo `BROKER_PRICE_PUBLISH_ENABLED=false`，三台 MD 的 Broker 接收/路由/转发仍 OFF。**未改变任何实际订单、资金、行情或强平路径**。
 
+## 2026-10-19 追加确认：MdSvr 仅消费 AdminSvr Symbol（强制架构约束）
+
+- **AdminSvr 是产品与数据源绑定关系的唯一配置组装方。** AdminSvr 从 `dc_tenant_symbol` 与 `dc_tenant_data_source` 取得关联信息，在既有 Symbol 数据下发路径中携带来源字段（租户 location、产品 security_id、data_source_id、source_type、source_symbol、来源是否可用及必要的价格路由元数据）。
+- **MdSvr 只依赖既有 AdminSvr → MdSvr Symbol 获取/刷新机制。** MdSvr 禁止新增数据源表 SQL 读取、独立配置文件、额外 AdminSvr 数据源配置 RPC/订阅或第二套配置缓存。价格处理所需的来源映射只从现有 Symbol 快照/增量数据派生到内存索引，不能把运行时内存索引误当成另一份配置来源。
+- 价格数据可沿既有 APS → MdSvr 报价链路流入。MdSvr 基于 `(location, data_source_id)` 或等价的已下发 Symbol 字段完成来源到多个产品的路由，再使用**产品自己的 security_id**发布行情；外部 source_symbol 不能直接作为交易产品代码。
+- `data_source_id=NULL` 的历史产品继续原有价格路径；未启用的自定义产品不得进入交易/强平。配置变更必须通过现有 Symbol 更新流程，进行版本/顺序校验和原子映射切换；新来源没有有效价格时不可沿用旧来源缓存值。
+- **实现前核对原有 Symbol 的具体数据结构和 MdSvr 的既有接收入口**，只对这些既有接口做向后兼容扩展；不要凭本文臆造新接口或配置通道。AdminSvr 需维持已有订阅/重新订阅快照语义。
+- 端到端验收至少覆盖：同租户两个不同产品复用同一 Binance 来源；自定义来源 Broker 发布；跨租户隔离；动态重绑定无旧价格穿透；旧产品兼容；Trade/Liq 消费产品价格；故障重订阅后映射重建。任何未完成的项目均不得标成“已上线”。
+
 ## 正式生效仍需后续集成
 
 1. 部署新 Admin/Web 镜像并跑带授权租户的 CRUD 验收、禁用/解绑/跨租户拒绝、审计与回滚。
