@@ -25,10 +25,10 @@ services:
   managersvr:
     image: local/dc-saas-managersvr:tenant-scoped-20261019
   mdsvr:
-    image: local/dc-saas-mdsvr:tenant-binance-alias-fanout-20261019
+    image: local/dc-saas-mdsvr:full-symbol-image-revocation-20261019
   mdsvr-b:
-    image: local/dc-saas-mdsvr:tenant-binance-alias-fanout-20261019
+    image: local/dc-saas-mdsvr:full-symbol-image-revocation-20261019
   mdsvr-c:
-    image: local/dc-saas-mdsvr:tenant-binance-alias-fanout-20261019
+    image: local/dc-saas-mdsvr:full-symbol-image-revocation-20261019
   apssvr:
     image: local/dc-saas-apssvr:tenant-price-enabled-20261019
