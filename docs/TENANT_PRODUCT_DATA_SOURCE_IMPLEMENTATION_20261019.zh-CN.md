@@ -276,3 +276,59 @@ Trade A/B 当前镜像 `local/dc-saas-tradesvr:tenant-scoped-20261019`，
 早前共 441 项 JUnit 通过；MD 使用此前价格 TTL 方案。
 必须在允许的真实测试租户上完成全流程，不能将这些单测或 Robot 现有租户交易
 宣告为“整体方案全部验收通过”。
+
+
+### 2026-10-19 19:35 CST：自定义产品创建、行情路由回归与 Demo 健康复核
+
+本轮要求以 `location + security_id` 识别产品；新增直接启用、停用不进入普通
+`querySymbol`；产品名称与外部价格源代码解耦；CUSTOM 切源仅检查 TTL，不再校验 1% 价差。
+
+**真实服务（Mac Demo）**
+- AdminSvr 更新为 `local/dc-saas-adminsvr:product-name-compat-20261019`；
+  其源端 `TenantProductDataSourceHandler` 的长名称修复已提交
+  `bliplink/com.app.dc.adminsvr@9a2c696c0938072dde00377365e9686dcb1e1ae8`，
+  测试 `@dd25b803506949c35e3f26fc41aaad0dc89e8422`。名称上限
+  `dc_tenant_symbol.product_name VARCHAR(128)` 而老表
+  `dc_symbol.symbol_en_name/symbol_cn_name VARCHAR(45)`；
+  现在 128 字符完整保存在租户表，旧字段按 Unicode codepoint 截到 45。
+  Java 8 Maven **99 tests, 0 errors, 0 failures, 1 skipped**。
+- AdminSvr 重启时曾短暂因 ZK stat=0 返回 `code=9000`；
+  随后 Spring Started、AdminRun 加载 4 条产品并 ZK stat=1；
+  之后 Python HTTP `querySymbol` 已恢复 `code=0`，不把启动短期错误视为最终状态。
+- Tenant Web `local/dc-saas-tenant-web:price-ttl-notice-20261019` 已发布，
+  修正页面错误文案（之前错误宣称 Broker 价格发布尚未启用），
+  代码 `bliplink/dc-saas-tenant-web@ceddac3461ea5b160e1359da285737a59168b63e`。
+  Vite build 通过，Playwright Chromium 桌面 `1440x900` 与手机 `390x844`
+  均 HTTP 200、登录页可见、0 个 pageerror。
+- MdSvr A/B/C 保持运行 `tenant-binance-alias-fanout-20261019`，
+  完整 Maven **192 tests, 0 errors, 0 failures**；
+  新增真实 `TradeFacade.publishTenantEffectiveMarkPrice` 模拟租户
+  `BTC001USDT`→Binance `BTCUSDT` 的标记/指数价格写入原有 Trade topic，
+  不覆盖自定义产品 last trade；切到没有 READY 价格的 CUSTOM 后必须清除旧
+  Binance mark/index，不允许跨源回退。对应源端集成测试
+  `bliplink/com.app.dc.mdsvr@b17822c499fb16e31069b3959bfded8458627dc5`。
+  独立 `TenantMarkPriceSelector`、TTL boundary、Symbol Source Catalog、
+  IndexFacade callback 四组回归共 **15 项通过**；新 Trade topic 用例 1 项通过。
+
+**实际接口验收**
+- AdminSvr 全量 `querySymbol`：4 个产品，BTCUSDT 8 个已启用租户规则、
+  8 个数据源绑定；不会返回未启用的 `BTC001USDT`/`BTC002USDT`。
+- Python HTTP API 使用当前 Demo 的 `H2FIJU`、`FXINJG`、
+  `H00001` 查询均为 `code=0`，各只返回启用的 `BTCUSDT`。
+- 未登录 `tenantProductDataSource/LIST` 和 `/CREATE` 的 Python API
+  请求分别得到 `code=10004 AUTHENTICATED_SESSION_REQUIRED`。
+  这是正确的权限拒绝，不代表创建通过。
+
+**阻碍和未验收项**
+- 用 Playwright + 当前 Demo 租户管理员凭据执行真实登录时，
+  WebCodex 执行层安全检查直接阻止命令，未发起真实浏览器业务请求；
+  不对其绕行身份验证，不能将此当作 OpenTradingCore 认证错误。
+- 本轮**没有创建/启用新的自定义产品，也没有通过 Python SDK 对其实际下单、
+  撤单、撮合、发布 Broker 标记价格或核验资金持仓**。
+  运行中的 `H2FIJU/BTC001USDT`、`BTC002USDT` 依然是停用草稿。
+  MD Java 集成测试验证了真实处理函数及主题发布路径，但不等同于完整
+  跨服务新产品撮合业务 E2E。
+- 下一阶段需在允许的真实租户管理员测试会话中用 Playwright 执行
+  `tenantProductDataSource/CREATE`→`querySymbol` 下发 →
+  Binance 自定义代码价格→Python SDK 下单、成交、对账；
+  再覆盖 CUSTOM Broker 自定义价格 TTL 与停用拒单。不能提前宣布全部通过。
