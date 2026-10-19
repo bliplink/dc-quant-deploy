@@ -225,3 +225,54 @@
 - 测试租户 `H2FIJU` 的正常交易 Symbol 查询只匹配已启用 `BTCUSDT`（CUSTOM 来源）；`BTC001USDT`、`BTC002USDT` 仍是停用草稿。**尚未新建并交易自定义产品，未完成 Playwright 登录/创建与 Python SDK 下单、成交、余额及持仓 E2E。**
 
 **后续优先顺序**：先修复现网 Order B/C 的复制 ACK 超时和分区 READY（必要时按用户授权清空 Demo Order 数据、从头重新部署，但保留源代码/配置证据）；之后滚动替换 Order A/B/C 并验证租户启用/停用的拒单；再替换 Trade B→A、Tenant Web；最后新建租户/新产品、用 Playwright 和 Python SDK 完成真实撮合、余额、持仓、风控对账。不可把镜像构建/单测通过等同于全链路验收通过。
+
+
+### 2026-10-19 19:05 Demo Order 恢复验证：querySymbol 全量镜像补偿
+
+本轮不纠结旧测试数据：停止 Order A/B/C 后，将 13 GiB 旧 Order 数据移出运行目录
+`/Users/kong/.opentradingcore/order-clean-reset-20261019-1757`，重建 ZooKeeper
+`/dc/cluster/ordersvr` 及 256 个全新分区；MySQL、Trade、MD、源码镜像未清空。
+Order A/B/C 使用 `local/dc-saas-ordersvr:tenant-scoped-20261019` 重新初始化，
+之后滚动部署最新 Symbol 补偿修复。
+
+**发现及修复**：AdminSvr 的 `querySymbol` HTTP 实测包含 4 个产品与 8 条启用的
+BTCUSDT 租户规则，Trade A/B 的运行日志已成功收到这些规则；
+但 Order A/B/C 启动后偶尔收不到相同的 GW Symbol Snapshot，导致租户机器人
+`SYMBOL_NOTEXIST` 且 6/6 停止交易。
+
+Order `SymbolRuleFacade` 保留原有 `subscribeWithImage("SERVER.AdminSvr",...,"querySymbol")`，
+添加低频（默认 30 秒）、只读的 **相同 AdminSvr querySymbol 全量镜像补取**，
+**不直连 MySQL**。收取完整镜像后，验证所有产品和租户规则，原子替换租户规则表，
+撤销已禁用或已从完整镜像消失的自定义产品；部分/错误响应不得清空上一份可用列表。
+最终源码提交：
+`bliplink/com.app.dc.ordersvr@dbc182518823ca9346fdd08e75e67268252a80fb`
+及回归测试
+`bliplink/com.app.dc.ordersvr@7871ab6556cfe35f6db620bea23288f49c5ea0ec`。
+5 项针对性 JUnit 全通过，包括禁用及从完整镜像消失的自定义产品不再授权交易。
+
+**现场结果**：三台新镜像均为
+`local/dc-saas-ordersvr:tenant-symbol-fullimage-20261019`，全部出现
+`ORDER_SYMBOL_PULL_APPLIED symbols:4 enabledTenantRules:8`。
+Order-B 首次可能因 AdminSvr 通道尚未在线而重试，但 30 秒后成功。
+本轮检测 Order A/B/C 没有新出现 `replication ack timeout`、
+`ORDER_PARTITION_RECOVERY_FAILED` 或 `SYMBOL_NOTEXIST`。
+恢复 RobotSvr 后 ClickHouse `dc.market_trade` 从 8765 增至 8772
+（同一测试窗口新增 7 条成交记录）；继续观测达 8824。
+启用的 6 个 Robot 中，2 个 `RUNNING`、4 个 `WAITING_MARKET_DATA`：
+部分旧租户未指定数据源，`H2FIJU` 自定义价格源也没有持续提供有效价格；
+不是本轮 `SYMBOL_NOTEXIST` 故障的继续复现。**不能把 2/6 机器人当成完整压测通过**。
+
+**UI**：Tenant Web `local/dc-saas-tenant-web:tenant-scoped-20261019` 已运行，
+Playwright Chromium 桌面 1440px 和手机 390px 只读烟测：HTTP 200、页面可见、
+无 JS pageerror。自动登录、新建租户、创建自定义产品的 Playwright 修改操作仍被
+执行环境拦截，尚未完成完整的交互 E2E。
+
+**API**：Python HTTP 只读 `querySymbol` 实测
+`H2FIJU`、`FXINJG`、`H00001` 各只返回启用的 `BTCUSDT`，
+不返回禁用草稿 `BTC001USDT`/`BTC002USDT`。
+**尚未完成 Python SDK 真实新建客户、入金、下单/成交、发布自定义标记/指数价格，
+及新建自定义产品 `location+security_id` 全链路验收**。
+Trade A/B 当前镜像 `local/dc-saas-tradesvr:tenant-scoped-20261019`，
+早前共 441 项 JUnit 通过；MD 使用此前价格 TTL 方案。
+必须在允许的真实测试租户上完成全流程，不能将这些单测或 Robot 现有租户交易
+宣告为“整体方案全部验收通过”。
