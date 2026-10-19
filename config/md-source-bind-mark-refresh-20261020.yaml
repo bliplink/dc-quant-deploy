@@ -1,0 +1,9 @@
+# Demo MD source binding refresh, deployed and validated 2026-10-20.
+# Include LAST in the compose -f overlays for MD A/B/C.
+services:
+  mdsvr:
+    image: local/dc-saas-mdsvr:source-bind-mark-refresh-20261020
+  mdsvr-b:
+    image: local/dc-saas-mdsvr:source-bind-mark-refresh-20261020
+  mdsvr-c:
+    image: local/dc-saas-mdsvr:source-bind-mark-refresh-20261020
