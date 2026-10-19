@@ -206,3 +206,22 @@
 - MdSvr `saas-crypto` 提交 `e989595`；新增两个测试（索引别名与 IndexFacade 真实 callback），Mac Java8 Maven **191 tests, 0 failures, 0 errors**，测试 GitHub 提交 `f833258`；镜像 `local/dc-saas-mdsvr:tenant-binance-alias-fanout-20261019` 在 MD-C→MD-B→MD-A 完成滚动替换。三台均 `BROKER_PRICE_RECEIVE_ENABLED=true`、`BROKER_PRICE_ROUTE_ENABLED=true`、`BROKER_PRICE_EVENT_PUBLISH_ENABLED=true`，重启次数为 0；MD-A 有 Spring Started、READ_ROUTES_READY、H2FIJU 市场 PRIMARY/READY 日志。
 - Tenant Web 本地源码的激活按钮改动已独立提交 `e2e3386`，但推送 GitHub 两次超时；**不可称远程 Web 仓库已同步**，本地 Demo 镜像已有代码。
 - 用户最新切源规则仍为 **只看 APS TTL；未过期可立即切换，取消 1% 价差限制**。Broker 价格到 Trade/Liq 生效、自定义产品的实际下单、成交及资金持仓对账仍缺正式 E2E 证据。
+
+### 2026-10-19 Demo 上线检查：租户产品复合身份（中途暂停 Order/Trade 变更）
+
+**最终功能要求**：交易产品以 `location + security_id` 唯一标识。新建时直接在 `dc_symbol` 插入租户专属规则并在同一事务启用 `dc_tenant_symbol`，前端取消 `ACTIVATE`。Trader/Web 普通 `querySymbol` 只展示当前租户已启用且有效的产品；Order/Trade/MD/Liq 不得通过全局规则回退赋予未启用产品交易权限。价格切源只检查 APS TTL，不检查 1% 价差。
+
+**本地回归**：
+- AdminSvr 合并当前 `saas-crypto` 后 Java8 Maven：96 tests、0 failures、0 errors、1 skipped。启用/禁用现增加 `querySymbol` 立即刷新，提交 `bliplink/com.app.dc.adminsvr@8f583aa`。
+- TradeSvr 基于**现网 HA 提交 `2a043ac`** 引入租户规则，并使用运行时 Common **3.0.22-SNAPSHOT** 编译；Java8 全源码、全测试源码及 **441 JUnit tests** 通过。**尚未替换 Trade A/B**。
+- LiqSvr 合并远端修复后 31 tests、0 failures/errors。ManagerSvr 54 tests 通过。OrderSvr 的旧基线 210 tests 通过；合并远端更新后 211 tests 已完成且 0 failures、0 errors、1 skipped，但整套 Maven 执行最终超时，**不能写成完整验收通过**。
+- MySQL 中已存在 `dc_symbol.location` 与唯一索引 `uq_dc_symbol_tenant_code(location,symbol)`；4 条全局 Symbol 均保留 `location=''`，0 条租户专属 Symbol。已经在 Mac 创建完整 `mysqldump --no-tablespaces` 备份，路径 `/tmp/otc-tenant-scoped-release-20261019/db/dc_symbol-after-identity-before-app.sql`。隔离测试表证明两个不同租户可以拥有同名产品。
+- Web Vite 构建成功；本地候选镜像均构建成功，统一标签 `local/dc-saas-{adminsvr,ordersvr,tradesvr,liqsvr,managersvr}:tenant-scoped-20261019` 与 `local/dc-saas-tenant-web:tenant-scoped-20261019`。
+
+**现网容器截至检查**：
+- 已上线：`dc-saas-adminsvr`、`dc-saas-managersvr`、`dc-saas-liqsvr` 均运行 `tenant-scoped-20261019`；Admin Spring 启动、`querySymbol` 刷新与 ZK 注册成功。管理员状态切换刷新补丁源端已提交。
+- 保持旧版本：Trade A/B、Tenant Web；MD A/B/C 保持已验收的 TTL-only + Binance 源别名映射镜像。
+- Order A/B/C **全部保留/恢复为** `dc-saas/ordersvr:cluster-dev-fenced-transport-20261016`。尝试 C→B 滚动替换时 B 出现大量 `ORDER_PARTITION_RECOVERY_FAILED`、`replication ack timeout`（目标 OrderC:19123）和 `PARTITION_NOT_READY`；故 **A 未替换**，B/C 按原数据卷、原配置恢复旧镜像。回滚后 B 及 A 仍出现恢复/下单错误，说明 HA 恢复问题未解决，不能宣告 Demo 交易健康。
+- 测试租户 `H2FIJU` 的正常交易 Symbol 查询只匹配已启用 `BTCUSDT`（CUSTOM 来源）；`BTC001USDT`、`BTC002USDT` 仍是停用草稿。**尚未新建并交易自定义产品，未完成 Playwright 登录/创建与 Python SDK 下单、成交、余额及持仓 E2E。**
+
+**后续优先顺序**：先修复现网 Order B/C 的复制 ACK 超时和分区 READY（必要时按用户授权清空 Demo Order 数据、从头重新部署，但保留源代码/配置证据）；之后滚动替换 Order A/B/C 并验证租户启用/停用的拒单；再替换 Trade B→A、Tenant Web；最后新建租户/新产品、用 Playwright 和 Python SDK 完成真实撮合、余额、持仓、风控对账。不可把镜像构建/单测通过等同于全链路验收通过。
