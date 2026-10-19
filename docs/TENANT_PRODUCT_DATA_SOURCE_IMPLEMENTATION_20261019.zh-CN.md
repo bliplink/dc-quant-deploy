@@ -149,3 +149,28 @@
 - **Web 页面回归**：真实 Chrome Playwright 于 1365×900 与 390×844 查看当前租户产品页，均有 BTCUSDT、BTC001USDT、BTC002USDT，且无 JS pageerror 与 document 级横向溢出。
 - **Python SDK 真调用**：已安装现有 Docs 镜像内 `opentradingcore-0.1.0-py3-none-any.whl`。通过 Tenant Web 临时创建只读 Broker Key，SDK `login(mode='broker')` 使用真实签名返回 `client_type=TenantAPI`、`api_key_type=broker`、`location=H2FIJU`；`market_snapshot('BTCUSDT')` 成功。临时 Key 随后经 Tenant Web 确认撤销；不持久化 Secret。
 - **仍未完成**：Broker 代客开户/入金/下单/撤单/撮合/持仓对账；CUSTOM index/mark 源→MD 价格扇出与 Trade/Liq STALE 保障；自定义产品注册 Order/Trade/Projection/强平；真实 HA 与 50/200 租户压力测试。因此相关 Broker price 接收/路由/发布开关仍保持关闭，**不能宣告整体方案通过**。
+
+## 2026-10-19 更正需求：默认 Binance、管理端切换 CUSTOM、Broker 发布与 MD 优先价（实际部署记录）
+
+### 确定的正式机制
+
+- **不增加数据模型**。新租户审批注册时，ManagerSvr 在同一数据库事务内为每个默认产品创建 `dc_tenant_data_source` BINANCE 来源并设置 `dc_tenant_symbol.data_source_id`。例如 `BTCUSDT → binance_btcusdt`。
+- 租户管理员在现有 Tenant Web 数据源、产品页面可以把产品直接关联 CUSTOM 来源；同一来源支持多产品。AdminSvr 仍是配置唯一提供方：Order、Trade、MD 复用既有 `querySymbol`。
+- APS 的 `publishBrokerPrice` 仅使用 LoginSvr 已认证的 **TenantAPI API Key** 确定租户，不在 APS 建额外的来源审批表或租户白名单。请求的 `security_id` 可填 **data_source_id**；其他租户身份不能由 JSON 伪造。用户 API Key 不可作为租户发布身份。
+- MD 的 CUSTOM 来源权限、产品路由全部从 `querySymbol.tenant_sources` 派生，按 `(location,data_source_id)` 消费价格，再按该租户对应的产品 security_id 发布。未绑定产品保持原 Binance 行情。选择 CUSTOM 但价格不可用或已过期时，不能沿用旧 Binance/历史自定义价。
+- 原有 MD 交易 topic、Order/Trade/Projection 消费接口不新建第二套配置通道。
+
+### 代码与部署
+
+- ManagerSvr `bliplink/com.app.dc.managersvr` / `saas-crypto` commit `d341526`：注册自动创建默认 Binance 来源并绑定。Mac Java8 **54 tests, 0 failures, 0 errors**。镜像 `local/dc-saas-managersvr:default-binance-20261019` 已部署。
+- APS `bliplink/com.app.dc.apssvr` / `saas-crypto` commit `3d3062e`：原 TenantAPI 鉴权保留，支持按来源 ID 价格发布；`TenantApiBrokerPricePublisher` 不引入独立配置载入。Mac **43 tests, 0 failures, 0 errors**。镜像 `local/dc-saas-apssvr:tenant-price-enabled-20261019` 已部署，`BROKER_PRICE_PUBLISH_ENABLED=true`。
+- MdSvr `bliplink/com.app.dc.mdsvr` / `saas-crypto` commit `eda266a`：`CatalogBrokerPriceAdmission`、`TenantSymbolSourceCatalog.sourceForProduct`、`TenantMarkPriceSelector`、`BrokerTenantMarkPublishBridge` 统一采用 AdminSvr Symbol 确定 Binance 或 CUSTOM 映射与有效价格。Mac **183 tests, 0 failures, 0 errors**。镜像 `local/dc-saas-mdsvr:custom-source-route-20261019` 已滚动部署至 MD A/B/C，三个节点 `BROKER_PRICE_RECEIVE_ENABLED=true`、`BROKER_PRICE_ROUTE_ENABLED=true`、`BROKER_PRICE_EVENT_PUBLISH_ENABLED=true`。
+- Tenant Web/ AdminSvr 仍为已验证的产品来源管理版本。原有 MD 价格选取不需要查询 MySQL、独立数据源配置接口或配置文件。
+
+### 真实验收边界
+
+- **PASS**：Chrome Playwright 在 Mac Demo 新注册租户 `FXINJG` 后，真实 MySQL 确认 `dc_tenant_data_source` 自动有 `binance_btcusdt/BINANCE/BTCUSDT/enabled=1`，`dc_tenant_symbol(BTCUSDT)` 直接绑定且启用。这是注册自动生成，而非测试脚本手动绑定。
+- **PASS**：Manager、APS、MD A/B/C 容器使用上述镜像运行；三个 MD 确认价格接收/路由/发布配置为 true；MD A/B 启动成功，B 的行情分区恢复 READY；Tenant Web /healthz 返回 200；ClickHouse `dc.market_trade` 持续有成交写入。
+- **PASS（负面认证）**：Python 直接调用 `APSSvr/publishBrokerPrice` 无认证会话，返回 `code=10004 AUTHENTICATED_SESSION_REQUIRED`，未允许匿名发布。
+- **尚未 PASS**：带真实 TenantAPI Key 的 Python SDK `publish_price` 执行尝试受到工具执行环境安全检查拦截，没有确认真实接收、映射及 Trade/Liq 的价格生效结果。因此**虽然开关已启用，仍不可声称完整 Broker 价格端到端通过**；这部分与自定义产品真实交易、风控强平、Projection 权威对账需继续验收。不能把 Java 单元测试通过、容器启动与真实发布成功混淆。
+
