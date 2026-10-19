@@ -103,3 +103,22 @@
 - **所有 Web 开发均采用真实部署后 Playwright E2E 验收**：浏览器访问正在运行的 Demo（不是静态源码或 mock），以合法租户/交易员身份完成导航、表单 CRUD、绑定/解绑、错误反馈、页面刷新保持、跨租户权限拒绝及桌面/移动端关键流程；保留截图、浏览器控制台和网络响应证据。新镜像构建成功不等于部署验收通过。
 - **所有 API 开发均采用 Python API/SDK 端到端验收**：使用真实租户 API Key，不借用 Robot 的两把交易员 Key；执行代客开户、入金、创建/绑定来源和产品（若为内部管理操作则由合法管理会话单独执行）、发布 INDEX/MARK 价格、下单/撤单/撮合、查询委托/成交/余额/持仓，并核对 Projection/Trade/Liq 结果。兼容用户 Trader Key，明确两个角色权限；测试错误权限、跨租户拒绝、序列/过期/重播、断线恢复。
 - **完成标准**：每一项需分别提供构建 SHA、镜像 ID、部署容器 ID、Playwright 测试报告/截图或 Python 脚本及其执行日志、业务数据一致性结论；旧租户 Robot/行情回归不能省略。没有真实执行不得标记 PASS。Playwright 只覆盖 Web；Python API 只覆盖 API；均需对真实 Demo 验证。
+
+## 2026-10-19 Mac Demo 最新执行记录（逐项区分）
+
+### 本轮已完成并有执行证据
+
+- `bliplink/com.app.dc.adminsvr` / `saas-crypto`：新增 `TenantRoutedSymbol`，在 `TenantSymbolService.effectiveSymbols()` 中按同租户 `location,data_source_id` LEFT JOIN `dc_tenant_data_source`，把 `location/product_name/data_source_id/source_type/source_symbol/data_source_enabled` 随**现有 querySymbol 返回的 Symbol** 一起序列化；未创建新的 MD 配置加载路径。提交：`379c178`（DTO）、`bff87c2`（SQL/映射）、`f97d2ed`（契约测试）。此阶段**只处理已有全局产品的租户来源元数据**，不会将自定义草稿投入交易。
+- Mac mini Java 8 Maven 离线测试：**76 tests, 0 failures, 0 errors, 1 skipped**；新增的 DTO 运行时 JSON 兼容及 JDBC public 继承字段检查均通过。
+- 已本地构建并重启 Demo AdminSvr 镜像：`local/dc-saas-adminsvr:tenant-symbol-source-20261019`，镜像 `sha256:0609da853eaaafdb66d657b42157f9739e1b26bf811e3b0eef19ddfc67d07e90`。Tenant Web 镜像仍为 `local/dc-saas-tenant-web:product-source-20261019`，镜像 `sha256:167906628eb859bd6dc6d370e7ac6d5dd90438a790eee9bb13bfb7b5892d3d6a`。
+- Mac Demo MySQL 只读查询证实 `dc.dc_tenant_symbol` 和 `dc.dc_tenant_data_source` 存在；带双 location/data_source_id 条件的联表在 GW7XMI 返回 BTCUSDT 的旧兼容记录，`data_source_id=NULL`（LEGACY），未对现有产品绑定或资金做写入。
+- **真实部署后的 Playwright Chrome**：`http://127.0.0.1:18092/?location=GW7XMI` 在 1365×900 和 390×844 均 HTTP 200，能找到登录按钮与租户 ID，无横向溢出和 JS pageerror。
+- Docs 正在运行的镜像内已存在 `opentradingcore-0.1.0-py3-none-any.whl` 和对应 SDK 源码 zip；**仅确认产物存在，未证明 Python SDK 真实交易 E2E**。
+
+### 尚未通过 / 不得误报
+
+- 使用无会话 Python HTTP 请求 `AdminSvr/querySymbol` 返回 `code=9000, msg=INTERNAL_ERROR`；既不能据此证明携带有效授权会话的 Symbol 业务成功，也不能判断是 SQL 失败。需在已认证的合法测试会话下复验并核查调用入口。
+- Playwright 自动创建测试租户/登录的执行被运行环境安全检查拦截；**新租户未创建，登录后 CRUD 未完成**，不借用 Robot Trader Key 充当 Tenant API Key。
+- 使用部署版 SDK Wheel 的 Python 测试命令被运行环境安全检查拦截；真实 Broker API Key 的开户/入金/交易/发布价格全流程仍无 PASS 证据。
+- MdSvr 源码当前仍未消费来源关联信息；原 `IndexInput.indexList` 用于系统指标订阅，不能将它误认作已完成的租户产品数据源绑定；MD 的 Broker price publish 仍由现有功能开关控制。独立自定义产品还受 `TenantSymbolService.effectiveSymbols()` 的 `JOIN dc_symbol` 约束，Order/Trade/Liq/Projection 的租户独立产品交易规则/风控仍待开发验收。
+- **绝不可启用新产品交易或宣告整体完成**。下一步应先完成实际 AdminSvr→MD Symbol 消费路径、独立产品规则扩展，再通过部署后 Playwright/合法租户 Python SDK 跑 end-to-end 与风控对账。
