@@ -445,3 +445,15 @@ JAVA_HOME=/Users/kong/Library/Java/JavaVirtualMachines/zulu-8.jdk/Contents/Home 
 6. **明确未完成**：经批准在 Mac Demo 创建独立测试租户时，使用正规 `ManagerSvr/tenantApplication` 的 **SUBMIT + 新生成管理员密码**操作再次被工具执行环境的安全检查拦截；用户对 Mac 的授权不覆盖平台安全检查。原自动审批功能是正确存在的（`GW7XMI=APPROVED`、16/16 单元测试），但 `BK218A=PENDING`，没有新测试租户/有效 API Key。没有走数据库造 Key、冒用 Robot 内部 Key 或其它途径绕过拦截。因此**完整 Python API Key 正向登录、下单/撤单/成交/资金/持仓、Broker 自定义价 E2E 尚未验收通过**。之前跑过的非法 Key HMAC login `code=7000`、未认证 APS `code=10004` 是安全负向验证，不是正向交易成功。
 
 **交付状态：** API Docs 和官方 SDK 的兼容修复/自动化单测/安装包 HTTP 已验证并实际部署；Broker 新租户写入、Key 签发和实盘交易 E2E 尚未完成。**不能通知用户“API 全部验证好了”。** 不因一项安全工具拒绝而删除或重置现有 Demo 业务数据；应在被允许的标准租户注册和 API Key 创建流程取得合法测试账号后执行最终 E2E。
+
+
+## X. 2026-10-19 08:20 CST｜WebCodex 实际 Python 接口验收与注册操作安全检查拦截原文
+
+用户再次确认 Mac/WebCodex 可操作、要求实际 Python 验收。直接调用**真实** `mcp__webcodex__run_shell`（project `agent:device-a475543f402e4667:dc-quant-deploy-42a03569`，运行 Mac `/Users/kong/dc-quant-deploy`），不通过 ChatGPT 推测：
+
+- WebCodex `run_shell` 已通过读取健康诊断：Mac 2026-10-19 08:18 CST 的 MySQL、Manager、Login、3xOrder 均运行，`api-docs` Healthy。Python `urllib.request` 真正 POST `AdminSvr/publicTenantDirectory` → `code=0`。
+- **正常新租户注册写入被 OpenAI 工具安全检查明确屏蔽**：使用 Python 标准库生成独立 `PYxxxxx` 租户标识、随机管理员密码、独立申请 request_id；按 `ManagerSvr/tenantApplication` `SUBMIT` 正式 JSON 封装，`BTCUSDT`、14 天 TRIAL、admin_password 必填；要求在 Mac `~/.opentradingcore/broker-v1-demo-checkpoints-20261018/api-acceptance-live-20261019.json` 私有文件保存密码且不输出。WebCodex **没有执行脚本**，工具直接原文返回 **`Script error: 此工具调用被 OpenAI 的安全检查屏蔽。请仔细检查你发送的内容。`**。不是 ManagerSvr 的 code、HTTP 4xx、Docker/Mac 权限，也不是系统自动审核失败。用户授权不能覆盖此独立的 OpenAI 工具安全检查；不应绕过安全检查通过数据库造账号、复用别人密钥或拆解同一动作。
+- **真正执行成功的 Python 负向/公开接口测试**：`AdminSvr/publicTenantDirectory` → `code=0 NO_ERROR`；匿名 `APSSvr/publishBrokerPrice` → `code=10004 AUTHENTICATED_SESSION_REQUIRED`，无法跨越会话发布租户价格；通过公开 STATUS 查询旧申请 `BK218A` → `code=0,status=PENDING`；`GW7XMI` 机器人 `RUNNING/40`。
+- **使用现网已部署 SDK 实包的网络验收**：Python `urllib` 从 Mac origin `http://127.0.0.1:18096/sdk/opentradingcore-0.1.0-py3-none-any.whl` 实际下载 wheel，`pip install --target` 在隔离临时目录真实安装，再使用安装版 `OpenTradingCoreClient.from_api_key(base_url='http://127.0.0.1:18088', location='GW7XMI', api_key='invalid-test-api-key', ...)` 真正发 HMAC LoginSvr 请求；服务端正确拒绝 **`code=7000`**，SDK 抛出受控 `OpenTradingCoreError`；安装包包含 `publish_price`。现场从 `/sdk/opentradingcore-python-sdk-0.1.0.zip` 下载解包并确认源码及 README 与最新规则一致。**以上均不是有效 Key 登录成功和订单 E2E**。
+
+**真实验收结论：未通过/未完成。** 当前 Python SDK 18/18 自动化测试、文档下载、公开/拒绝接口已验证，但尚无**新租户申请 APPROVED + 有效 API Key 正向登录 + Order 下单/撤单 + Admin 历史/成交 + Trade 资金持仓**全链路结果。若用户随后提供经过正规界面创建的测试租户 API Key 并经可用通道导入 Mac 私有凭据目录，则可直接运行正向验收；不得将普通工具安全检查误解释成用户未授权。
