@@ -1,0 +1,34 @@
+# Local Mac mini Demo image overlay for tenant-scoped products.
+# These local tags were built and deployed on 2026-10-19; GHCR is not required.
+# This is an IMAGE overlay, not a new configuration or data reset recipe.
+# Retain the appropriate runtime / Trade HA config overlays and env file.
+services:
+  adminsvr:
+    image: local/dc-saas-adminsvr:anonymous-product-list-20261019
+  gateway:
+    image: local/dc-saas-gw:public-tenant-product-20261019
+    mem_limit: 768m
+  tenant-web:
+    image: local/dc-saas-tenant-web:price-ttl-notice-20261019
+  ordersvr:
+    image: local/dc-saas-ordersvr:tenant-symbol-fullimage-20261019
+  ordersvr-b:
+    image: local/dc-saas-ordersvr:tenant-symbol-fullimage-20261019
+  ordersvr-c:
+    image: local/dc-saas-ordersvr:tenant-symbol-fullimage-20261019
+  tradesvr:
+    image: local/dc-saas-tradesvr:tenant-scoped-20261019
+  tradesvr-b:
+    image: local/dc-saas-tradesvr:tenant-scoped-20261019
+  liqsvr:
+    image: local/dc-saas-liqsvr:tenant-scoped-20261019
+  managersvr:
+    image: local/dc-saas-managersvr:tenant-scoped-20261019
+  mdsvr:
+    image: local/dc-saas-mdsvr:tenant-binance-alias-fanout-20261019
+  mdsvr-b:
+    image: local/dc-saas-mdsvr:tenant-binance-alias-fanout-20261019
+  mdsvr-c:
+    image: local/dc-saas-mdsvr:tenant-binance-alias-fanout-20261019
+  apssvr:
+    image: local/dc-saas-apssvr:tenant-price-enabled-20261019
