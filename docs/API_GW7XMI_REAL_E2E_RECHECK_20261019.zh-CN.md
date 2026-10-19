@@ -51,3 +51,14 @@ SDK：已发布 `bliplink/opentradingcore-api-docs/saas-crypto/sdk/python`，Mac
 - 已经把可重复测试正式加入 `saas-crypto` 的 `tests/verify-existing-tenant-api-20261019.py`（GitHub commit `8078347aa344a269fdc1427696a03ec2489a0529`）。Mac 实际以默认 `GW7XMI` 及 `--tenant H00001` 运行 PASS 公共行情/六项匿名隔离。该程序可选加载用户自己安全保存、`chmod 600` 的 JSON Trader Key 文件，并运行官方 `OpenTradingCoreClient` 的签名登录、行情、K 线、挂单、余额、持仓、订单和成交历史七项**只读**查询；没有凭据文件时明确输出 `NOT_RUN authenticatedTraderAPI`，不打印 Secret/Token，也**绝不发交易写入**。不得把这一组 PASS 当成完整 Trader/Broker E2E。
 - `GW7XMI` 现有仅 3 个用户：两名系统 Maker/Tape 和 `tenantadmin`；其两把 `trade` Key 均属于 Maker/Tape 自动流动性策略。历史 `.default-e2e-credentials.txt` 属于已不在本轮现网表中的 `E2E001`。当前 `.env.prod` 缺所有 `TRADER_E2E_*` / `BROKER_E2E_*` Key。曾按公开 `AdminSvr/tenantUserRegistration` 规范尝试**新建本租户独立 QA Trader**，WebCodex 在执行该带密码的脚本前返回 `Script error: 此工具调用被 OpenAI 的安全检查屏蔽。请仔细检查你发送的内容。`，无注册成功、无新 Key；未通过查出并使用 Maker/Tape API Secret 绕过检查。未对现有 Robot、资金持仓或数据库执行写入。
 - 官方 Python SDK 在 Mac JDK8 环境旁使用系统 Python 实际执行 `18/18` unittest PASS，文档仓库 `13/13` PASS（均与真实 E2E 严格区分）。后续正向闭环仍需要在既有 `GW7XMI` **合法获取独立 Trader Key**，执行 `login → account/market reads → 唯一 ClOrdID 写单 → 有归属的撤单 → Admin/Projection/资金持仓权威对账`；测试脚本本身不能代替缺失的合法 Key。
+
+
+## 2026-10-19 09:17 CST｜H00001 保守诊断、回滚验证及现网 Broker 开关
+
+- `H00001` 是此前压力/深度测试留下的 `e2e-depth10`，`enabled=1` 但 `STALE_MARKET_DATA`，持续 `open_order_count=0`；`GW7XMI` `RUNNING/40`。原 `stale_price_ms` 分别为 **3000** 和 **5000**。
+- 在 Mac Demo 仅针对 `H00001/e2e-depth10` 用 **条件性单行 SQL** 将 `stale_price_ms=3000→5000`，确保更新影响行数 1；保留原始值，**每 5 秒连续检查 8 次（40 秒）**。实际 8/8 次仍为 `STALE/0/STALE_MARKET_DATA`，没有出现恢复证据。验收程序随后以条件性单行更新自动**回滚 `5000→3000`（ROW_COUNT=1）**；最后 `GW7XMI=RUNNING/40`，没有更改其任何参数、停止 Robot 或改变盘口资金数据。**因此不能把过期阈值短作为已证实根因，也不能声称问题修复。** 当前 `H00001` 仍是待查的旧租户行情问题。
+- RobotSvr 实际 `GatewayMarketDataClient` 复用 APSSvr `bookTicker/depth/trade` 订阅，`RobotWorker` 在缓存报价缺失/超过 `stalePriceMs` 后转 `STALE`；历史 Robot 日志确有 `ROBOT_MD_GATEWAY_RECYCLE` 表明此前曾因 10–12 秒未收到新盘口而重建连接。仍需分辨订阅事件时效、配置热刷新、行情间隔与运行分区，不宜盲目部署改动。
+- Python 程序 [`tests/verify-existing-tenant-api-20261019.py`](../tests/verify-existing-tenant-api-20261019.py) 已升级 **`--require-book` 严格盘口开关**（commit `57d8a186b66fe8e84ce342144e6a3dd8504673cd`）。Mac 实测：`--tenant GW7XMI --require-book` PASS，`bookEntries=20`，随后六种匿名私有 API 均返回正确 `10004`；`--tenant H00001 --require-book` **预期失败，进程 exit=1**，因 `bookEntries=0`，从机制上避免把空盘口误报正常。无登录 Key 时打印 `NOT_RUN authenticatedTraderAPI`。
+- 现网 `docker inspect` 直接核对环境：`dc-saas-apssvr` 的 `BROKER_PRICE_PUBLISH_ENABLED=false`；`dc-saas-mdsvr` 三节点的 `BROKER_PRICE_RECEIVE_ENABLED=false`、`BROKER_PRICE_ROUTE_ENABLED=false`、`BROKER_PRICE_EVENT_PUBLISH_ENABLED=false`，均仍为关闭。**官方 SDK `publish_price` 方法已打包与单测，但实际 Broker 指数/标记价格发布并未启用，不能标记 E2E PASS。**
+
+**最终状态仍为部分通过**：系统健康、现有主展示租户公开行情、网关匿名鉴权隔离和官方 SDK 单测有真实证据；但缺独立已有租户的合法 Trader/Broker Key，无法完成签名正向交易 E2E；H00001 已启用 Robot 的行情过期问题未修复。所有既有 Demo 资金、订单、Robot/API Key 均保持不变，仅发生上述单行参数**试验及成功回滚**。
