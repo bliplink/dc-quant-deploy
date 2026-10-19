@@ -6,7 +6,7 @@ services:
   adminsvr:
     image: local/dc-saas-adminsvr:anonymous-product-list-20261019
   gateway:
-    image: local/dc-saas-gw:public-tenant-product-20261019
+    image: local/dc-saas-gw:public-tenant-symbol-scope-20261019
     mem_limit: 768m
   tenant-web:
     image: local/dc-saas-tenant-web:price-ttl-notice-20261019
