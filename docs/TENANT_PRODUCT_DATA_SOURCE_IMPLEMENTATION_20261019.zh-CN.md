@@ -122,3 +122,16 @@
 - 使用部署版 SDK Wheel 的 Python 测试命令被运行环境安全检查拦截；真实 Broker API Key 的开户/入金/交易/发布价格全流程仍无 PASS 证据。
 - MdSvr 源码当前仍未消费来源关联信息；原 `IndexInput.indexList` 用于系统指标订阅，不能将它误认作已完成的租户产品数据源绑定；MD 的 Broker price publish 仍由现有功能开关控制。独立自定义产品还受 `TenantSymbolService.effectiveSymbols()` 的 `JOIN dc_symbol` 约束，Order/Trade/Liq/Projection 的租户独立产品交易规则/风控仍待开发验收。
 - **绝不可启用新产品交易或宣告整体完成**。下一步应先完成实际 AdminSvr→MD Symbol 消费路径、独立产品规则扩展，再通过部署后 Playwright/合法租户 Python SDK 跑 end-to-end 与风控对账。
+
+## 2026-10-19 用户再次确认：统一 querySymbol 全量产品流 + Tenant Web 服务端过滤
+
+- **OrderSvr、MdSvr、TradeSvr** 全部消费 **AdminSvr 既有 `querySymbol`** 产品流，禁止 MD 再读另一份产品/数据源配置。数据源关联、产品规则变更都从 AdminSvr 统一组装并更新。
+- `querySymbol` 给服务的**全局产品目录**必须保留历史产品的唯一 `symbol`（目前 Order、Trade 仍按 `symbol` 建索引），不同租户对同一源/同一符号的关联以嵌套 `tenant_sources` 传递，不能直接重复扁平化同名 `symbol` 导致规则覆盖。附属关联按 `location + data_source_id` 与 `location + security_id` 区分；一个源可以关联多个产品。
+- **Tenant Web 产品查询必须在 AdminSvr 服务端按已认证会话 `location` 过滤**，前端过滤不能代替鉴权。当前 `tenantSymbolAdmin/LIST` 和 `tenantProductDataSource/LIST` 各自依会话确定租户并在 SQL 中限定 location；后续若复用 `querySymbol` 也必须维持此边界。
+- 禁用的自定义草稿虽然在租户管理页可见，但仍没有全局 `dc_symbol` 的撮合/风控规则；当前完整业务订阅流**不应把草稿误作为可交易产品推给旧服务**。待 Order/Trade/MD/Projection/Liq 统一支持 tenant-local 产品身份、规则与风险后才允许激活。
+
+### 已推进代码及 Demo 灰度（不可与 E2E PASS 混淆）
+
+- AdminSvr `saas-crypto`：`TenantSymbolSourceRoute` 和 `TenantRoutedSymbol.tenant_sources`；`CommonDao.selectAllSymbol()` 组装全局 `dc_symbol` + 按租户的数据源绑定，遇到关联数据库查询失败不替换旧可信目录；不同租户同名产品避免覆盖。提交 `9238472`、`e121b83`、`1ad9a70`，测试 `127d841`；Mac 本地 JDK8 **78 tests, 0 failures, 0 errors, 1 skipped**，运行镜像 `local/dc-saas-adminsvr:full-tenant-symbol-20261019`。
+- MdSvr `saas-crypto`：通过现有 `querySymbol` 订阅只读更新 `TenantSymbolSourceCatalog`，内存按 `(location,data_source_id)` 找到对应产品；重绑替换映射，禁用产品/来源不进入路由。提交 `9e6b125`、`3d063a4`、`9de4de4`；Mac JDK8 Maven **179 tests, 0 failures, 0 errors**；测试过程在既有 `MDFacadeTenantQueueIsolationTest` 日志中出现并发修改堆栈，需另行检查。新 MD 镜像 `local/dc-saas-mdsvr:querysymbol-readonly-20261019` **仅灰度至 MD-C**，MD-A/B 仍为旧镜像；当前仅容器启动得到确认，实时 Symbol 订阅收包证据尚缺。
+- **APS/MD Broker 价格接收、价格路由、价格事件发布仍关闭**；MD 当前新增的是只读索引，绝不代表自定义价已传给 Trade/Liq。真实新租户产品端到端交易、保证金和强平仍未验收，不能开放自定义产品交易。
