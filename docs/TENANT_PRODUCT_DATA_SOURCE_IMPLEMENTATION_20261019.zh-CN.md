@@ -135,3 +135,17 @@
 - AdminSvr `saas-crypto`：`TenantSymbolSourceRoute` 和 `TenantRoutedSymbol.tenant_sources`；`CommonDao.selectAllSymbol()` 组装全局 `dc_symbol` + 按租户的数据源绑定，遇到关联数据库查询失败不替换旧可信目录；不同租户同名产品避免覆盖。提交 `9238472`、`e121b83`、`1ad9a70`，测试 `127d841`；Mac 本地 JDK8 **78 tests, 0 failures, 0 errors, 1 skipped**，运行镜像 `local/dc-saas-adminsvr:full-tenant-symbol-20261019`。
 - MdSvr `saas-crypto`：通过现有 `querySymbol` 订阅只读更新 `TenantSymbolSourceCatalog`，内存按 `(location,data_source_id)` 找到对应产品；重绑替换映射，禁用产品/来源不进入路由。提交 `9e6b125`、`3d063a4`、`9de4de4`；Mac JDK8 Maven **179 tests, 0 failures, 0 errors**；测试过程在既有 `MDFacadeTenantQueueIsolationTest` 日志中出现并发修改堆栈，需另行检查。新 MD 镜像 `local/dc-saas-mdsvr:querysymbol-readonly-20261019` **仅灰度至 MD-C**，MD-A/B 仍为旧镜像；当前仅容器启动得到确认，实时 Symbol 订阅收包证据尚缺。
 - **APS/MD Broker 价格接收、价格路由、价格事件发布仍关闭**；MD 当前新增的是只读索引，绝不代表自定义价已传给 Trade/Liq。真实新租户产品端到端交易、保证金和强平仍未验收，不能开放自定义产品交易。
+
+## 2026-10-19 真实 Demo 验收续报：租户管理 + Broker SDK 初验
+
+本段是实测结果，所有 Key/Secret/管理员密码均**不写入仓库**。
+
+- **新测试租户**：使用 Tenant Web Playwright 实际申请并自动审批 `H2FIJU`；使用真实租户管理员会话登录成功。测试密码由 Mac 本地已有 Demo E2E 环境提供；未放入任何测试日志/提交。
+- **数据源 CRUD**：Playwright 在该租户新建 `qa_binance_btc`（BINANCE / BTCUSDT）及 `qa_custom_btc`（CUSTOM / BTCUSD_CUSTOM）；另新建临时 `qa_temp_delete`，通过网页更新名称并删除。均有页面提交/回显证据。
+- **产品 CRUD（草稿）**：Playwright 新建 `BTC001USDT` 关联 `qa_binance_btc`、`BTC002USDT` 关联 `qa_custom_btc`；两项数据库状态为 `enabled=0`，**不可交易**。Playwright 将租户原有 `BTCUSDT` 绑定 `qa_binance_btc`；经 MySQL 只读查询证实一个数据源关联两产品（BTCUSDT 启用、BTC001USDT 草稿），CUSTOM 数据源另绑 BTC002USDT 草稿。
+- **统一 Symbol 刷新代码**：`bliplink/com.app.dc.adminsvr` 追加 `TenantDataSourceAdminHandler`（提交 `0bb4764`）与 `TenantProductDataSourceHandler`（`0ad8c1d`），CRUD 事务提交后通过 AdminSvr `SymbolCache.loadSymbol()` 刷新既有 `querySymbol`，不会引入 MD 第二套数据源配置。返回 `query_symbol_refresh=QUEUED`；失败则日志告警并标记 DEFERRED，定时任务仍会重试。Mac Java8 Maven **78 测试，0 失败/0 错误/1 跳过**。AdminSvr 镜像 `local/dc-saas-adminsvr:source-refresh-20261019` 已真实替换运行。
+- **租户查询隔离**：通过真实租户管理员会话 + Python HTTP 调用 AdminSvr，`tenantDataSourceAdmin/LIST` 与 `tenantProductDataSource/LIST` 当前租户 `H2FIJU` 分别返回 2 个来源/3 个产品；伪造 `location=GW7XMI` 均被服务端 `code=9004` 拒绝。
+- **授权后 querySymbol**：Python 带会话调用 `AdminSvr/querySymbol` 成功，返回当前租户 1 个可交易产品 BTCUSDT，其 `data_source_id=qa_binance_btc`、`source_type=BINANCE`、`source_symbol=BTCUSDT`，确认为真实配置读取；两项新草稿不出现在可交易 Symbol 列表。
+- **Web 页面回归**：真实 Chrome Playwright 于 1365×900 与 390×844 查看当前租户产品页，均有 BTCUSDT、BTC001USDT、BTC002USDT，且无 JS pageerror 与 document 级横向溢出。
+- **Python SDK 真调用**：已安装现有 Docs 镜像内 `opentradingcore-0.1.0-py3-none-any.whl`。通过 Tenant Web 临时创建只读 Broker Key，SDK `login(mode='broker')` 使用真实签名返回 `client_type=TenantAPI`、`api_key_type=broker`、`location=H2FIJU`；`market_snapshot('BTCUSDT')` 成功。临时 Key 随后经 Tenant Web 确认撤销；不持久化 Secret。
+- **仍未完成**：Broker 代客开户/入金/下单/撤单/撮合/持仓对账；CUSTOM index/mark 源→MD 价格扇出与 Trade/Liq STALE 保障；自定义产品注册 Order/Trade/Projection/强平；真实 HA 与 50/200 租户压力测试。因此相关 Broker price 接收/路由/发布开关仍保持关闭，**不能宣告整体方案通过**。
