@@ -372,3 +372,65 @@ no live current-epoch physical replica partition=P206`，单个 45 秒窗口
 没有真实创建新产品或 Python Broker SDK 下单成交的 E2E 证据。
 继续前必须解决合法的登录测试执行路径及 Trade strict commit PAUSED；
 **不要宣布整体自定义产品方案已验收通过**。
+
+
+### 2026-10-19 20:15 CST：匿名租户产品公开查询与 Trade A/B 空 Genesis 重建
+
+**公开查询正式上线**：`AdminSvr/tenantProductDataSource` `action=LIST` 且请求明确带 `location`
+时，不要求登录，直接调用与 `querySymbol` 一致的
+`TenantSymbolService.effectiveSymbols(location)` 权威过滤器；返回
+`security_id`、`product_name`、`enabled=true`、交易精度/最小下单量等公开数据，
+不暴露内部数据源 ID、管理配置、已停用草稿。无 `location` 的管理端完整 `LIST`
+继续要求租户管理员会话，`CREATE`/`BIND`/`UNBIND` 等写操作保持认证。
+Gateway `OpenApiIngressSecurityCheck` 新增精确 allowlist：仅允许
+AdminSvr/tenantProductDataSource 的 `action=LIST` + 合法租户 location。
+Admin Java8 Maven **101 tests / 0 failed / 0 errors / 1 skipped**；
+Gateway Java8 Maven **17 tests / 0 failed / 0 errors**。
+实际部署镜像 `local/dc-saas-adminsvr:anonymous-product-list-20261019`、
+`local/dc-saas-gw:public-tenant-product-20261019`。
+Python 匿名请求核验 H2FIJU、FXINJG、H00001 各返回 [BTCUSDT]；
+不存在的租户返回空；不提供 location、匿名 CREATE/BIND/UNBIND 均被 Gateway 拒绝
+`AUTHENTICATED_SESSION_REQUIRED`。
+源代码提交：
+`bliplink/com.app.dc.adminsvr@38c30bd4d90804e611e70f5c76ebf502fbef55c6`、
+单测 `@1a5d35eed3c3266c55646718c586203c3c912cfb`；
+`bliplink/gw@63f2fbc3863e11c092f7c8aef69477ccc149ba91`、
+单测 `@c32776a3d4505361e1a52914e067fe267e088499`。
+
+**Trade Demo 从头重建，而非追旧状态**：因 Trade-B strict commit PAUSED、
+跨 epoch 恢复不可信，按用户指示暂停 20 个业务容器，仅保留 mysql/zookeeper/clickhouse，
+将 2.1 GiB 的 TradeSvrA/B 旧数据移出运行目录至
+`/Users/kong/.opentradingcore/trade-clean-state-quarantine-20261019-2000`。
+只删除并重新创建 ZK `/dc/cluster/tradesvr` 目录和
+`/partitions/P000..P255`，重建 epoch=1、assignmentVersion=1、
+TradeSvrA/B 交错主备的 256 个完整分区；未清理 Order / MD ZK 目录。
+使用当前运行 Trade 镜像内的 Java 8 classes + lib 编译运行真实
+`TradeEmptyGenesisBootstrap` fixture，以新生成且已校验的
+`reset-proof.json` 和分区清单执行：
+`GENESIS_PASS nodes=2 partitions=256 snapshots=512 moneyRows=0 databaseReads=0`；
+Trade A/B 各 256 份空快照。
+按依赖顺序重启之前 20 个业务服务，保持原镜像与配置；
+Trade A/B `tenant-scoped-20261019` 出现
+`TRADE_PHYSICAL_EMPTY_GENESIS_BOUND` 与 `TRADE_PARTITION_READY`。
+最新 60/90 秒日志中没有再见 `Trade strict commit PAUSED`、
+`TRADE_RECOVERED_PHYSICAL_RECEIPT_REFUSED`、
+`TRADE_PARTITION_RECOVERY_FAILED`，
+Order A/B/C 也没有新的复制 ACK 超时。
+ZK P000/P001 保持 epoch=1、assignmentVersion=1、A/B 交错主备。
+匿名产品读 API 和 Tenant Web /healthz 200 在全服务重启后再次通过。
+**RobotSvr 仍保留 stopped/exited**，因为旧租户的持仓、资金、Projection
+属于旧 Trade epoch；不将历史余额冒充新 Genesis。
+未执行新租户充值/下单/成交，尚不能宣称 Trade 真实提交或 HA 主切已验收通过。
+
+尝试使用标准 ManagerSvr/tenantApplication SUBMIT（匿名公共租户注册）
+创建新的 Demo 验收租户，WebCodex 执行层仍直接拦截请求，
+并非 ManagerSvr 返回错误。未继续尝试绕过执行环境检查。
+下一步只有通过被允许的正常流程创建全新租户与入金，才能恢复 Robot、
+进行订单/成交/资金/持仓的全链路对账；不要复用旧 Trade 账户当作新账户。
+当前 Mac 本地镜像统一 overlay 已写入
+`compose.tenant-products-demo-20261019.yaml`，
+重建及数据目录的具体证据在 `/tmp/otc-trade-clean-init-20261019/`。
+
+**注意**：这次针对 Trade 的干净重建没有清空 MySQL / Projection 旧业务表；
+旧交易数据仅可作为历史测试遗留，不可与新 Trade E1 状态做一致性对账。
+全环境一致性需基于新注册租户与新的业务流水单独验证。
