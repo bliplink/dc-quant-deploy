@@ -934,6 +934,12 @@ cat > "${OVERRIDE_ROOT}/GW/config/spring-tcp-server.xml" <<EOF
 </beans>
 EOF
 
+# Keep operator edits across regeneration; only seed the policy on first deploy.
+if [[ ! -e "${OVERRIDE_ROOT}/GW/config/publicMethodWhitelist.csv" ]]; then
+  cp "${SCRIPT_DIR}/config/gateway-publicMethodWhitelist.csv" \
+    "${OVERRIDE_ROOT}/GW/config/publicMethodWhitelist.csv"
+fi
+
 cat > "${OVERRIDE_ROOT}/GW/config/spring-gw-client.xml" <<'EOF'
 <?xml version="1.0" encoding="UTF-8"?>
 <beans xmlns="http://www.springframework.org/schema/beans"

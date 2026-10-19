@@ -1,0 +1,10 @@
+# serverName,method -- list a method to allow unauthenticated requests.
+# Optional for multipurpose handlers: serverName,method,contentField,allowedValue1|allowedValue2
+LoginSvr,login
+LoginSvr,SYS.ATS.LOGIN,method,login
+MDSvr,queryPublicMarket
+AdminSvr,queryKLine
+AdminSvr,publicTenantDirectory
+AdminSvr,querySymbol,location,*
+ManagerSvr,tenantApplication,action,SUBMIT|STATUS
+AdminSvr,tenantUserRegistration,action,REGISTER
