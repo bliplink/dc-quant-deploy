@@ -543,3 +543,54 @@ Python API + Playwright 合并回归脚本已扩充对 MD 公共行情成功的�
 全新 Trade genesis 新租户入金、Python SDK 委托/成交/余额持仓对账
 仍没有被允许的真实写操作证据。Trade A/B 仅在 RobotSvr 停止的空状态下
 稳定，不意味着 200 租户压测/双向 HA/真实撮合验收通过。
+
+
+### 2026-10-19 21:25 CST：MD 完整 Symbol Image 撤销旧数据源路由
+
+**发现并修复下线产品仍在 MD 缓存的问题**：
+MD 原来的 `TenantSymbolSourceCatalog.accept(CatalogSymbol)`
+只处理单个产品的新增和 rebind。当产品已从 AdminSvr 的完整
+`querySymbol` image 中删除/停用时，不会收到对应产品的单条 tombstone，
+从而可能保留旧 `BINANCE/CUSTOM` 路由。特别是用户将
+`BTC001USDT` 删除或禁用后，MD 仍会把 `BTCUSDT` 的价格路由给旧别名。
+Web / Order / Trade 返回已启用产品的检查不能代替 MD 的源端清理。
+
+**实施方案**：
+- 保留原有 `SERVER.AdminSvr/querySymbol` 订阅（实时推送），另增加每 30 秒一次的
+  **同一 AdminSvr querySymbol 只读全量快照**补偿，MD 不连接 MySQL；
+- 将 MD instrument/source/Binance 外部代码索引合成单一 immutable `CatalogState`
+  并通过 volatile 引用一次发布，单条推送只替换该 symbol，完整 image
+  则重新构建并删除 image 中消失的整个自定义产品和所有数据源关联；
+- 后端错误、空 image、重复或非法 product image 不能清空上一次有效目录；
+  停用产品和 data source 仍按 `product_enabled/data_source_enabled` 过滤；
+- 没有修改 Common 分区状态机、Gateway 透传、APS 价格 TTL 机制和 Trade HA。
+
+**测试/部署**：
+Java8 Maven **196 tests / 0 failures / 0 errors / 0 skipped**，其中新增
+整产品下线后删除别名、错误快照不清空旧状态、单产品推送不污染其他产品，
+以及**按 AdminSvr 实际 `data.symbols[].tenant_sources` JSON wire schema**
+解析并移除旧别名测试。
+使用本地 image `local/dc-saas-mdsvr:full-symbol-image-revocation-20261019`，
+滚动替换 MD-C → MD-B → MD-A，三台 Spring Started、ZK 注册正常，
+均 0 容器重启，保留原 Broker price 开关为开启。
+正式源代码与测试提交：
+`bliplink/com.app.dc.mdsvr@19ab4630cd8ef985e63aad1061fdd9ed2c1947e0`，
+`@4bcc1976e4cbde27c4a8b2144304ae5020012726`，
+`@f2a5e4ef0bc8e319e3321212a5537014d48b486a`。
+统一镜像标签已更新
+`compose.tenant-products-demo-20261019.yaml`
+(`bliplink/dc-quant-deploy@426b17a7237506d4389d406ced88a9060eee3746`)。
+
+**滚动后黑盒检查**：
+Python API + Playwright Chromium 桌面 1440px / 手机 390px，
+真实交易 Web `http://127.0.0.1:18088/#/trade?location=H2FIJU` 通过；
+H2FIJU、FXINJG、H00001 公开产品查询、公开 MD snapshot
+全部 `code=0`。匿名管理列表被拒，BTC001USDT/BTC002USDT 停用产品未返回。
+FXINJG 在该时刻盘口有 1 条 NoMDEntries，另外两租户 0 条，
+不能将其视作全部流动性就绪。Trade A/B 最近五分钟
+0 次 strict commit PAUSED / 分区恢复失败；
+MD A/B/C 最近五分钟
+0 条 full-image catch-up 错误 / MD 分区恢复异常。
+RobotSvr 仍暂停（Trade 旧资金/持仓不可信），新建租户、
+Python SDK 自定义产品真实入金、Broker 发布价格、委托/成交/清算
+**仍未通过完整业务 E2E**；执行环境的账号自动注册/登录写操作拦截尚未解除。
