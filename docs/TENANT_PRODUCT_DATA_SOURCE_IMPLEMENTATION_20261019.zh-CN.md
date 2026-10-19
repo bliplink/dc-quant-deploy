@@ -197,3 +197,12 @@
 - MdSvr `saas-crypto` commit `6cb2a77`：彻底移除 `PriceSourceSwitchGuard` 与 1% 检查；`TenantMarkPriceSelector` 仅依据 `TenantEffectivePriceBook` 的来源 READY 状态；保留 APS timestamp+TTL 的到期校验。
 - Mac JDK8 Maven **189 tests, 0 failures, 0 errors, 0 skipped**；新增测试验证超过 **80%** 的价差在新报价未过期时也可以采用，精确 TTL 到期为 STALE，租户隔离继续生效。
 - 本地镜像 `local/dc-saas-mdsvr:ttl-only-source-switch-20261019`；在 Mac Demo 逐节点滚动替换 A/B/C，最终以容器状态和三项 Broker 开关核对为准（不把单元测试当作真实 APS→MD→Trade/Liq 价格生效验收）。
+
+### 2026-10-19 15:20 CST：自定义产品交易前置修复（真实构建部署）
+
+- Mac Demo 现网 `dc-saas-adminsvr` 与 `dc-saas-tenant-web` 已运行 `custom-product-active-20261019` 镜像，包含 `tenantProductDataSource/ACTIVATE` 和“注册并启用”按钮；AdminSvr Java8 本地回归 **78 测试、0 失败、0 错误、1 跳过**。源端接口已提交 `bliplink/com.app.dc.adminsvr@c6c6de1`。
+- **仍未激活**：测试租户 `H2FIJU` 的 `BTC001USDT`、`BTC002USDT` 在检查时均为 `enabled=0`，全局 `dc_symbol` 只有 BTCUSDT，不能报告自定义产品真实下单、成交、持仓已通过。一次包含管理员登录的 Playwright 验收被 WebCodex 执行层安全检查拦截；后续不将工具拦截当成业务接口错误。
+- 修复了 MD 的真实行情路径：过去 `IndexFacade` 接收 Binance `BTCUSDT` 标记价只刷新同名产品，导致租户产品 `BTC001USDT`→来源 `BTCUSDT` 无后续标记价推送。现在由 `TenantSymbolSourceCatalog` 从 AdminSvr `querySymbol.tenant_sources` 建立只读 `source_symbol→租户产品` 关联，在原价事件到来时调用**既有 Trade topic** 发布接口；只处理已存在本地市场且通过 `MdPartitionRuntime.canPublish` 权限的记录，不生成虚假成交或订单簿，也不对 CUSTOM 错误转发 Binance。
+- MdSvr `saas-crypto` 提交 `e989595`；新增两个测试（索引别名与 IndexFacade 真实 callback），Mac Java8 Maven **191 tests, 0 failures, 0 errors**，测试 GitHub 提交 `f833258`；镜像 `local/dc-saas-mdsvr:tenant-binance-alias-fanout-20261019` 在 MD-C→MD-B→MD-A 完成滚动替换。三台均 `BROKER_PRICE_RECEIVE_ENABLED=true`、`BROKER_PRICE_ROUTE_ENABLED=true`、`BROKER_PRICE_EVENT_PUBLISH_ENABLED=true`，重启次数为 0；MD-A 有 Spring Started、READ_ROUTES_READY、H2FIJU 市场 PRIMARY/READY 日志。
+- Tenant Web 本地源码的激活按钮改动已独立提交 `e2e3386`，但推送 GitHub 两次超时；**不可称远程 Web 仓库已同步**，本地 Demo 镜像已有代码。
+- 用户最新切源规则仍为 **只看 APS TTL；未过期可立即切换，取消 1% 价差限制**。Broker 价格到 Trade/Liq 生效、自定义产品的实际下单、成交及资金持仓对账仍缺正式 E2E 证据。
