@@ -434,3 +434,55 @@ ZK P000/P001 保持 epoch=1、assignmentVersion=1、A/B 交错主备。
 **注意**：这次针对 Trade 的干净重建没有清空 MySQL / Projection 旧业务表；
 旧交易数据仅可作为历史测试遗留，不可与新 Trade E1 状态做一致性对账。
 全环境一致性需基于新注册租户与新的业务流水单独验证。
+
+
+### 2026-10-19 20:30–20:45 CST：匿名 Symbol 越权收口与 Python/Playwright E2E
+
+**本轮真实运行**：Mac 上 23 个核心容器保持运行（RobotSvr 因 Trade 空 Genesis 旧资金不可信继续停用），Order A/B/C、Trade A/B 最近八分钟检测 0 次新出现 replication ACK timeout、PARTITION_RECOVERY_FAILED、Trade strict commit PAUSED、cross-epoch physical receipt refused。此为运行日志健康检查，不等于故障切换或交易对账成功。
+
+**匿名租户产品 E2E（真实 HTTP + Playwright）**：新增可复用的只读回归脚本
+`tests/test-public-tenant-product-e2e.py`（提交
+`bliplink/dc-quant-deploy@3d2bd01d718c7feda685f4ef22ba4ee935a3aa5e`），支持多租户、
+`--expect` 和 `--hidden` 校验、管理员未登录拒绝、Playwright Chromium 桌面 1440px
+和手机 390px。实测 H2FIJU / FXINJG / H00001 都只返回启用的 BTCUSDT，
+BTC001USDT 和 BTC002USDT 停用状态被正确过滤；页面没有 JS error、
+不跳转 login。真实交易 Web 是宿主机 18088；18090 是平台后台登录页面，
+不能将打开 18090 的 HTTP 200 当作 Trade Web 验收通过。
+
+**发现并修复匿名 querySymbol 泄漏范围**：此前
+`AdminSvr/querySymbol` 经 Gateway 被任何匿名 HTTP 访问且不传 `location`
+时返回整个 `CategoryEx`，包含 4 个公共产品以及 8 条内部 `tenant_rules`
+和 8 条 `tenant_sources`。匿名页面实际请求包含 `location`，
+只需允许带合法 location 的查询。Gateway 仅收紧入站匿名
+`querySymbol` 调用，要求非空合法 `location`；
+内部 Order/Trade/MD 使用的直连 `SERVER.AdminSvr/querySymbol`
+全量 Snapshot 通道不受 HTTP Gateway 此规则影响。
+本地 Maven Gateway **19 tests / 0 failures / 0 errors**；
+对应远端提交 `bliplink/gw@335faed51d9b34a9509f4a70a0549878b9fdbd23`
+及新增测试 `@7edf8f7b494baf660d35ee0b92135c0376537b3a`。
+镜像已替换 `local/dc-saas-gw:public-tenant-symbol-scope-20261019`，
+真实 HTTP 验证：匿名 querySymbol 无 location 返回
+`10004 AUTHENTICATED_SESSION_REQUIRED`；带 location H2FIJU
+返回 code=0、仅 BTCUSDT、0 个嵌套其他租户规则。
+另外 `tenantProductDataSource` 无 location LIST 仍需登录，
+带 location 匿名 LIST 成功，匿名 CREATE/BIND/UNBIND 均未放开。
+更新后的镜像标签已写入 `compose.tenant-products-demo-20261019.yaml`。
+
+**仍存在的公共行情可用性问题（不可报成功）**：真实浏览器网络请求表明
+Trade Web 也调用 `MDSvr/queryPublicMarket`；
+匿名 REST 请求即便按正确 `securityID=BTCUSDT` 发送，仍收到
+`9000 INTERNAL_ERROR`，Gateway 记录
+`GW_METHOD_CALL_FAIL serverName=MDSvr method=queryPublicMarket`；
+ZooKeeper `/MDTService/MDSvr` 为空，但独立物理节点
+`/MDTService/MDSvrA`/`B`/`C` 已注册。
+现有 MD `QueryPublicMarketHandler` 在物理实例，
+集群主/备节点具有不同分区权限，因此**不能简单把 MDSvr 全量请求随机导向单个物理节点**，
+否则非所属分区仍会 NOT_READY；需要按 MD partition 做正确的公开市场路由、
+或通过有效逻辑服务入口解决。现有匿名 Trade Web 已能显示市场 BTCUSDT，
+但盘口标记/指数价格为 `--`，Robot 停止且公共行情接口未恢复，
+**完整匿名盘口/价格显示尚未验收通过**。
+
+**E2E 仍阻塞**：重新创建全新 Demo 租户的 ManagerSvr/tenantApplication SUBMIT
+仍被执行环境拦截，请勿以假会话绕过。当前 Trade E1 空 Genesis 未有新租户入金，
+不能用旧 MySQL/Projection 余额来冒充新 Trade 资金；因此真正的
+自定义产品创建、Python SDK mark/index 发布、下单成交和权威资金持仓对账尚未通过。
