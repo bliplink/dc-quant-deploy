@@ -332,3 +332,43 @@ Trade A/B 当前镜像 `local/dc-saas-tradesvr:tenant-scoped-20261019`，
   `tenantProductDataSource/CREATE`→`querySymbol` 下发 →
   Binance 自定义代码价格→Python SDK 下单、成交、对账；
   再覆盖 CUSTOM Broker 自定义价格 TTL 与停用拒单。不能提前宣布全部通过。
+
+
+### 2026-10-19 19:40 CST：Trade strict commit PAUSED 阻断自定义产品真实撮合
+
+在 AdminSvr 名称兼容补丁及 Tenant Web TTL 文案部署后，系统功能检查：
+- AdminSvr `product-name-compat-20261019` 已 Spring Started、ZK 注册 `Stat:1`，HTTP `querySymbol` 返回 `code=0`；启动时曾短暂 code=9000，不是稳定状态。
+- Tenant Web `price-ttl-notice-20261019` HTTP health 200；
+  Playwright Chromium 桌面 1440x900 与移动 390x844 登录页只读检查全部通过，无 JS pageerror。
+- Python HTTP 读取 AdminSvr 全量产品为 4 条，BTCUSDT 8 条有效租户规则、8 条绑定数据源；
+  查询 H2FIJU / FXINJG / H00001 各只返回已启用 BTCUSDT，停用的
+  BTC001USDT/BTC002USDT 没有返回。无凭据 LIST/CREATE 返回
+  `10004 AUTHENTICATED_SESSION_REQUIRED`。
+- MdSvr Java 8 Maven 完整回归 **192 tests / 0 failures / 0 errors**；
+  TradeFacade 的真实租户 Trade topic 中，模拟 BTC001USDT 使用 Binance
+  BTCUSDT 标记/指数价，切 CUSTOM 未 READY 后清空旧值、新价不回退，
+  集成测试 `bliplink/com.app.dc.mdsvr@b17822c4`。
+- AdminSvr Java 8 Maven **99 tests / 0 failures / 0 errors / 1 skipped**；
+  长名称修复提交 `bliplink/com.app.dc.adminsvr@9a2c696`，
+  对应测试 `@dd25b80`。前端 DataSources stale Broker pricing 提示修复
+  `bliplink/dc-saas-tenant-web@ceddac3`。
+
+**运行阻断（非产品路由失败）**：重启 AdminSvr 后，6 个启用 Robot 的运行状态变为
+2 DEGRADED、4 ERROR，共同原因 `gateway TCP response is empty for queryTradePosition`。
+Trade-B 多个分区拒绝严格提交，例如 `Trade strict commit PAUSED:
+no live current-epoch physical replica partition=P206`，单个 45 秒窗口
+367 次；Trade-A 同时有 `TRADE_REPLICA_AUTO_STAGE_SIGNED_NOT_READY`、
+`unverified physical cross-epoch install`。ClickHouse `dc.market_trade` 停在
+9028 条，不可称 Trade A/B HA 或 E2E 成交验收通过。Order A/B/C 最近检查
+0 个新的复制超时/分区失败。为防止不断向不能提交的 Trade 分区发送委托，
+**已停止 dc-saas-robotsvr 容器（状态 exited）**，未停 Trade/Order/Gateway，
+需在修复或干净重建 Trade HA 后恢复 Robot。
+不为迁就测试直接绕开 strict commit 或伪造物理副本证明。
+用户已授权不保留旧 Demo 数据，可在确认独立 Trade HA Genesis 重置脚本后
+走干净 Trade A/B 初始化；清除 Trade 旧目录、ZK Trade 分区记录时必须同阶段
+同步清理不再可信的 Projection/旧持仓状态，不能把旧快照伪装为新 Genesis。
+
+另：Playwright 提交真实租户管理员登录时 WebCodex 执行层安全检查阻止；
+没有真实创建新产品或 Python Broker SDK 下单成交的 E2E 证据。
+继续前必须解决合法的登录测试执行路径及 Trade strict commit PAUSED；
+**不要宣布整体自定义产品方案已验收通过**。
