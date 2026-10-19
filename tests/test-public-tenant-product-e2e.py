@@ -23,7 +23,10 @@ def main():
     parser.add_argument("--tenant-web",default="http://127.0.0.1:18092")
     parser.add_argument("--trade-web",default="http://127.0.0.1:18088")
     parser.add_argument("--tenant",action="append",required=True)
-    parser.add_argument("--hidden",action="append",default=["BTC001USDT","BTC002USDT"])
+    parser.add_argument("--hidden",action="append",default=[],
+                        help="A disabled product code that MUST NOT appear")
+    parser.add_argument("--expect",action="append",default=[],
+                        help="An enabled product code that MUST be visible")
     args=parser.parse_args()
     findings=[]
     for tenant in args.tenant:
@@ -38,6 +41,7 @@ def main():
             assert all(field not in row for row in rows),field
         visible=[row["security_id"] for row in rows]
         assert not set(visible).intersection(args.hidden),(tenant,visible)
+        assert set(args.expect).issubset(set(visible)),(tenant,visible,args.expect)
         findings.append({"tenant":tenant,"visible":visible,"enabled":len(visible)})
     admin=post(args.gateway,"AdminSvr","tenantProductDataSource",{"action":"LIST"})
     assert admin.get("code")==10004,admin
@@ -61,7 +65,10 @@ def main():
             assert response.status==200
             assert "/login" not in page.url
             assert not errors,errors
-            assert "BTCUSDT" in page.locator("body").inner_text()
+            text=page.locator("body").inner_text()
+            assert any(x in text for x in (args.expect or [x["security_id"] for x in post(
+                args.gateway,"AdminSvr","tenantProductDataSource",
+                {"action":"LIST","location":tenant}).get("data",[])])), "no public product visible"
             browser_checks.append({"viewport":width,"http":response.status,"public":True,"js_errors":0})
             page.close()
         browser.close()
