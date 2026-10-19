@@ -29,6 +29,7 @@ CREATE TABLE IF NOT EXISTS dc_tenant_data_source (
 -- Apply once in a migration runner that records completion, do not execute
 -- this bare ALTER twice. Existing dc_tenant_symbol is tenant product config.
 ALTER TABLE dc_tenant_symbol
+  ADD COLUMN product_name VARCHAR(128) DEFAULT NULL COMMENT 'Tenant display name for the product',
   ADD COLUMN data_source_id VARCHAR(64)
     CHARACTER SET utf8mb4 COLLATE utf8mb4_bin DEFAULT NULL
     COMMENT 'Tenant data source ID, separate from security_id/product code',
