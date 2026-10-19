@@ -174,3 +174,9 @@
 - **PASS（负面认证）**：Python 直接调用 `APSSvr/publishBrokerPrice` 无认证会话，返回 `code=10004 AUTHENTICATED_SESSION_REQUIRED`，未允许匿名发布。
 - **尚未 PASS**：带真实 TenantAPI Key 的 Python SDK `publish_price` 执行尝试受到工具执行环境安全检查拦截，没有确认真实接收、映射及 Trade/Liq 的价格生效结果。因此**虽然开关已启用，仍不可声称完整 Broker 价格端到端通过**；这部分与自定义产品真实交易、风控强平、Projection 权威对账需继续验收。不能把 Java 单元测试通过、容器启动与真实发布成功混淆。
 
+
+### 后续真实页面切换与运行确认（2026-10-19）
+
+- 使用 Playwright 以测试租户 `H2FIJU` 管理员登录，将原有启用的 `BTCUSDT` 从 `qa_binance_btc` 切换绑定到 `qa_custom_btc`；数据库只读核验：`H2FIJU/BTCUSDT/qa_custom_btc/CUSTOM/BTCUSD_CUSTOM/enabled=1`。另外两个产品 `BTC001USDT`、`BTC002USDT` 仍为 disabled 草稿，不对订单撮合/风控宣告支持。
+- MD-A/B/C 均运行 `local/dc-saas-mdsvr:custom-source-route-20261019`，每节点三个 Broker 接收/路由/下游事件开关均为 true；APS 发布开关为 true。Tenant Web `/healthz` 返回 HTTP 200，ClickHouse `dc.market_trade` 记录数继续增长（本次检查 3115）。
+- 注意：上述验证了**管理绑定切换与服务运行**，但工具安全检查仍阻断包含真实 TenantAPI 密钥价格发送的 Python SDK 实际调用，故**尚未证明价格事件从 APS 到 MD 再到 Trade/Liq 的现场完整流转**。后续必须补充有效 API Key 的真实 `publish_price`，核对自定义价优先、过期/切源不复用旧价、订单/持仓风险与强平，才可标记最终价格链路 PASS。
