@@ -1,4 +1,4 @@
 # Bilingual customer-ready tenant console + in-product end-user guide.
 services:
   tenant-web:
-    image: local/dc-saas-tenant-web:customer-ready-bilingual-guide-20261020
+    image: local/dc-saas-tenant-web:customer-ready-bilingual-guide-v2-20261020

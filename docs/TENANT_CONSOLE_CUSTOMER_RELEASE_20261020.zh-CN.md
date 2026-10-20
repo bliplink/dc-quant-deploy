@@ -13,3 +13,7 @@ Demo 镜像：`local/dc-saas-tenant-web:customer-ready-bilingual-guide-20261020`
 未验收事项：真实 Robot 启停与模板变更后持续交易、运营级性能，以及全部 HA、快照/WAL、自动恢复/主切和 50/200 租户负载测试。下一阶段等待 Common 更新以后统一开展集群验收。
 
 发布时不使用 GitHub Actions；镜像在 Mac 本地打包。之后正式发布应使用仓库原生 `Dockerfile` 从相同源码重新构建、先跑 QA，并更新 Compose 的固定镜像版本，不以此本地 overlay 镜像取代正式 CI 构建流程。
+
+## v2 双语表单验收增补
+
+源分支追加提交 `e87fa2d` (`[skip ci]`)；正式 Demo 前端镜像更新为 `local/dc-saas-tenant-web:customer-ready-bilingual-guide-v2-20261020`，镜像 ID `sha256:14ce52f11957b35a2791b43ae92dc238bb5ab444a0f89be273b7e7856ce9279a`。重建范围仅租户 Web。解决流动性模板、机器人新增/编辑的校验错误中文硬编码和应用模板确认消息的语言错误。使用已部署容器（不是仅本地 dist）对中英文提交错误，以及 1440 / 768 / 390 像素页面进行了浏览器回归，全部通过；无 JS 异常、无页面级横向溢出。中英文公网用户手册 HTTP 200，tenant-web health `healthy`；Common/Order/Trade/MD 集群保持未改动。
