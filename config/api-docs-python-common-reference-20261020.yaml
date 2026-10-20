@@ -1,0 +1,6 @@
+# Bilingual single-page Python SDK reference: methods + rate limits, error codes,
+# public enums and parameter rules. Inherits existing 0.1.6 SDK download assets.
+# Built locally from opentradingcore-api-docs branch codex/sdk-python-common-reference-20261020.
+services:
+  api-docs:
+    image: local/dc-saas-api-docs:python-common-reference-20261020

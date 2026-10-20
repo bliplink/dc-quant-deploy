@@ -232,7 +232,12 @@ def accept_trade_scenario(url,location,suffix,broker_session,source_id,record,
             for trader in traders:
                 role=trader['role']
                 feed=AccountStreams(client=trader['sdk'])
+                # Probe whether a delayed TOKEN handshake is the cause, not a
+                # subscription-topic mismatch. No write is retried.
+                feed._socket.timeout=30
+                record('signed_private_stream_connect_attempt',role=role,timeout_seconds=30)
                 feed.connect()
+                record('signed_private_stream_connected',role=role)
                 feed.subscribe_balances()
                 feed.subscribe_positions()
                 feed.subscribe_order_status('BTC003USDT')
@@ -457,7 +462,18 @@ def run(url,with_traders=False,near_simultaneous=False,sdk_signed=False,verify_p
             raise AssertionError('Broker API key response lacked credentials')
         broker_key=broker['api_key']
         record('broker_key_issued')
-        broker_login=signed_login(url,broker['api_key'],broker['secret_key'],location)
+        # Registry/policy propagation follows successful API key CREATE;
+        # signed login is read-only and may safely retry only 7000/7004.
+        for key_attempt in range(20):
+            try:
+                broker_login=signed_login(url,broker['api_key'],broker['secret_key'],location)
+                break
+            except RuntimeError as error:
+                if not any(c in str(error) for c in ('code=7000','code=7004')) or key_attempt==19:
+                    raise
+                if key_attempt==0:record('signed_broker_key_registration_pending')
+                time.sleep(3)
+        record('signed_broker_key_ready',attempts=key_attempt+1)
         if broker_login.get('client_type')!='TenantAPI':
             raise AssertionError('Signed broker API identity was not TenantAPI')
         broker_session=broker_login['token']
