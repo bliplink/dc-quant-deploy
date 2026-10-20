@@ -1,0 +1,4 @@
+# User-facing market/chart UX only. Keep Order, Trade, MD, Common and robot services unchanged.
+services:
+  web:
+    image: local/dc-saas-trade-web:market-icon-chart-switch-20261020
