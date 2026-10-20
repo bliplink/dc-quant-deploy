@@ -1,0 +1,5 @@
+# Apply after the existing frontend-language-rollout override.
+# Intentionally replaces only the API Docs image and public Python SDK files.
+services:
+  api-docs:
+    image: local/dc-saas-api-docs:sdk-014-20261020

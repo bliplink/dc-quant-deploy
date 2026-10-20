@@ -76,10 +76,11 @@ def readonly_sql(statement):
 
 
 def accept_trade_scenario(url,location,suffix,broker_session,source_id,record,
-                          near_simultaneous=False):
+                          near_simultaneous=False,sdk_signed=False,broker_client=None):
     """Small simulated, authenticated trader-to-trader match; no manual DB writes."""
     traders=[]
     active=[]
+    trader_keys=[]
     try:
         for role in ('maker','taker'):
             username='custom_'+suffix.lower()+'_'+role
@@ -93,9 +94,34 @@ def accept_trade_scenario(url,location,suffix,broker_session,source_id,record,
                 'cid':'LOGIN_'+username,'user_id':user_id,'user_name':username,
                 'password':password,'client_type':'WEB','Location':location})
             token=identity['token']
-            traders.append({'role':role,'id':user_id,'session':token})
-            ok(url,'TradeSvr','setLeverage',{'userID':user_id,'securityID':'BTC003USDT',
-                'location':location,'leverage':10},token)
+            trader={'role':role,'id':user_id,'session':token,'web_session':token}
+            traders.append(trader)
+            if sdk_signed:
+                issued=ok(url,'LoginSvr','updateApiKey',{
+                    'cid':'TRADER_KEY_'+suffix+'_'+role,
+                    'label':'sdk-qa-'+suffix+'-'+role,'type':'trade'},token)
+                if not issued.get('api_key') or not issued.get('secret_key'):
+                    raise AssertionError('Trader API Key missing from self-service response')
+                trader_keys.append((trader,issued['api_key']))
+                from opentradingcore import OpenTradingCoreClient
+                sdk=OpenTradingCoreClient.from_api_key(
+                    base_url=url.rsplit('/httpapi/',1)[0],
+                    api_key=issued['api_key'],api_secret=issued['secret_key'],
+                    location=location)
+                signed=sdk.login(mode='trader')
+                if signed.client_type!='API' or signed.user_id!=str(user_id):
+                    raise AssertionError('Signed Trader identity mismatch')
+                trader['sdk']=sdk
+                trader['session']=signed.token
+                record('signed_trader_api_login',role=role)
+                sdk.wait_for_product('BTC003USDT',timeout=12,poll_interval=1)
+                sdk.set_leverage('BTC003USDT',10)
+            else:
+                ok(url,'TradeSvr','setLeverage',{'userID':user_id,'securityID':'BTC003USDT',
+                    'location':location,'leverage':10},token)
+            # A public Broker trading key is deliberately not allowed to
+            # provision customer cash. Fund only through the tenant's normal
+            # authenticated Demo account management flow.
             ok(url,'TradeSvr','cashIn',{'Amount':'1000','UserID':user_id,
                 'Location':location,'Demo':'0'},token)
             # The successful cashIn response is durable business evidence;
@@ -155,6 +181,19 @@ def accept_trade_scenario(url,location,suffix,broker_session,source_id,record,
             for attempt in range(48):
                 if time.monotonic()-price_at>35:
                     refresh_price()
+                if sdk_signed:
+                    from opentradingcore import OpenTradingCoreError
+                    try:
+                        user['sdk'].place_limit_order('BTC003USDT',side.upper(),
+                            '0.001',price,clord_id=client_id)
+                        active.append((user,client_id))
+                        return client_id
+                    except OpenTradingCoreError as error:
+                        if 'code=5004' in str(error):
+                            if attempt==0:record('order_catalog_refresh_pending',role=user['role'])
+                            time.sleep(5)
+                            continue
+                        raise
                 reply=call(url,'OrderSvr','placeOrder',content,user['session'])
                 if reply.get('code')==0:
                     active.append((user,client_id))
@@ -253,9 +292,23 @@ def accept_trade_scenario(url,location,suffix,broker_session,source_id,record,
                 raise AssertionError('Balance unavailable after fill')
             record('trader_posttrade_account',role=trader['role'],
                 position=str(position[side+'Position']),balance=str(balance['Balance']))
+            if sdk_signed:
+                sdk=trader['sdk']
+                assert sdk.balances().get('Balance') is not None
+                assert sdk.positions().get(side+'Position') is not None
+                assert sdk.order_history(symbol='BTC003USDT') is not None
+                assert sdk.execution_history(symbol='BTC003USDT') is not None
+                record('signed_trader_sdk_account_history',role=trader['role'])
         active.clear()
         return True
     finally:
+        for trader,key in trader_keys:
+            try:
+                removed=call(url,'LoginSvr','deleteApiKey',{
+                    'cid':'TRADER_KEY_DELETE_'+suffix,'api_key':key},trader['web_session'])
+                record('trader_key_revoke',role=trader['role'],code=removed.get('code'))
+            except Exception as error:
+                record('trader_key_revoke_unconfirmed',role=trader['role'],reason=type(error).__name__)
         # Do not auto-close real positions upon failed acceptance. Cancel only
         # outstanding orders created by this run; never affect existing users.
         for trader in traders:
@@ -267,7 +320,7 @@ def accept_trade_scenario(url,location,suffix,broker_session,source_id,record,
                 pass
 
 
-def run(url,with_traders=False,near_simultaneous=False):
+def run(url,with_traders=False,near_simultaneous=False,sdk_signed=False):
     suffix=secrets.token_hex(5).upper()
     password=secrets.token_urlsafe(22)
     application_id='CUSTOM_PRODUCT_E2E_'+suffix
@@ -343,6 +396,7 @@ def run(url,with_traders=False,near_simultaneous=False):
         record('one_current_binding_persisted')
         broker=ok(url,'LoginSvr','tenantApiKeyAdmin',{
             'action':'CREATE','type':'broker','label':'custom-product-e2e-'+suffix,
+            'permissions':'MARKET_READ,ACCOUNT_READ,ORDER_READ,ORDER_WRITE',
             'cid':'BROKER_CREATE_'+suffix},token)
         if not broker.get('api_key') or not broker.get('secret_key'):
             raise AssertionError('Broker API key response lacked credentials')
@@ -353,18 +407,36 @@ def run(url,with_traders=False,near_simultaneous=False):
             raise AssertionError('Signed broker API identity was not TenantAPI')
         broker_session=broker_login['token']
         record('signed_tenant_broker_login')
+        broker_sdk=None
+        if sdk_signed:
+            from opentradingcore import OpenTradingCoreClient
+            broker_sdk=OpenTradingCoreClient.from_api_key(
+                base_url=url.rsplit('/httpapi/',1)[0],api_key=broker['api_key'],
+                api_secret=broker['secret_key'],location=location)
+            assert broker_sdk.login(mode='broker').client_type=='TenantAPI'
+            # Re-login can rotate/replace the API-key session. Never use the
+            # previous manual signed_login token for subsequent broker writes.
+            broker_session=broker_sdk.session.token
+            record('python_broker_sdk_signed_login')
         # Publish only the currently bound source ID, not BTC003USDT itself.
-        quote=call(url,'APSSvr','publishBrokerPrice',{
-            'location':location,'data_source_id':alt_id,
-            'market_indicator':'4','index_price':'90000','mark_price':'90001',
-            'source_time_ms':int(time.time()*1000),'ttl_ms':60000,
-            'config_version':1,'sequence':1,'cid':'PRICE_'+suffix},broker_session)
-        record('broker_price_publish_result',code=quote.get('code'),msg=quote.get('msg'))
-        if quote.get('code')!=0:
-            raise AssertionError('Broker price rejected by APS')
+        if sdk_signed:
+            broker_sdk.publish_price(data_source_id=alt_id,index_price='90000',
+                mark_price='90001',ttl_ms=60000,config_version=1,sequence=1,
+                cid='PRICE_'+suffix)
+            record('broker_price_publish_result',code=0,msg='SDK_ACCEPTED')
+        else:
+            quote=call(url,'APSSvr','publishBrokerPrice',{
+                'location':location,'data_source_id':alt_id,
+                'market_indicator':'4','index_price':'90000','mark_price':'90001',
+                'source_time_ms':int(time.time()*1000),'ttl_ms':60000,
+                'config_version':1,'sequence':1,'cid':'PRICE_'+suffix},broker_session)
+            record('broker_price_publish_result',code=quote.get('code'),msg=quote.get('msg'))
+            if quote.get('code')!=0:
+                raise AssertionError('Broker price rejected by APS')
         if with_traders:
             accept_trade_scenario(url,location,suffix,broker_session,alt_id,record,
-                                  near_simultaneous=near_simultaneous)
+                                  near_simultaneous=near_simultaneous,
+                                  sdk_signed=sdk_signed,broker_client=broker_sdk)
         return True
     except Exception as e:
         record('FAILED',error=type(e).__name__,message=str(e)[:220])
@@ -388,9 +460,13 @@ def main():
     parser.add_argument('--execute',action='store_true',help='Create fresh test tenant and products')
     parser.add_argument('--with-traders',action='store_true',
         help='Simulated account deposits and two-trader limit-order matching')
+    parser.add_argument('--sdk-signed',action='store_true',
+        help='Exercise self-issued Trader API Keys and signed Broker price; Demo funds are prepared by WEB sessions')
     parser.add_argument('--near-simultaneous',action='store_true',
         help='Submit opposing demo orders together; requires --execute --with-traders')
     args=parser.parse_args()
+    if args.sdk_signed and not (args.execute and args.with_traders):
+        parser.error('--sdk-signed requires --execute --with-traders')
     if args.near_simultaneous and not (args.execute and args.with_traders):
         parser.error('--near-simultaneous requires --execute --with-traders')
     url=require_local(args.endpoint)
@@ -400,6 +476,7 @@ def main():
     if args.with_traders and not args.execute:
         parser.error('--with-traders requires --execute')
     return 0 if run(url,with_traders=args.with_traders,
-                    near_simultaneous=args.near_simultaneous) else 1
+                    near_simultaneous=args.near_simultaneous,
+                    sdk_signed=args.sdk_signed) else 1
 
 if __name__=='__main__':raise SystemExit(main())
