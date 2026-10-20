@@ -32,7 +32,7 @@ Compose 覆盖文件：`config/tenant-admin-bilingual-usernames-20261020.yaml`�
 
 ## GitHub 交付分支
 
-- `bliplink/adminsvr`：`codex/tenant-trader-key-usernames-20261020`，提交 `b1c1e77`。
+- `bliplink/com.app.dc.adminsvr`：`codex/tenant-trader-key-usernames-20261020`，提交 `b1c1e77`。
 - `bliplink/dc-saas-tenant-web`：`codex/tenant-product-matching-ui-20261020`，提交 `da53a81`。
 - `bliplink/dc-quant-deploy`：`codex/tenant-admin-bilingual-usernames-release-20261020`，本报告与 Compose 覆盖配置。
 
