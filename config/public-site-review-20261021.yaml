@@ -1,0 +1,4 @@
+# Language-consistent public tenant table, developer SDK positioning, mobile preview.
+services:
+  public-web:
+    image: local/dc-saas-public-web:customer-site-i18n-20261021

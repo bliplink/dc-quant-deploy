@@ -1,0 +1,4 @@
+# TradingView configured tick precision and only one active chart market subscription.
+services:
+  web:
+    image: local/dc-saas-trade-web:precision-and-chart-subscriptions-20261021
