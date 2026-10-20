@@ -1,0 +1,7 @@
+# Applies only to tenant bootstrap jobs created at or after the immutable rollout boundary.
+# All legacy jobs keep their original login names through retries and restart.
+services:
+  adminsvr:
+    image: local/dc-saas-adminsvr:robot-friendly-new-tenant-20261020
+    environment:
+      TRIAL_LIQUIDITY_FRIENDLY_NAMES_CUTOVER: "2026-10-20 22:15:48.031"
