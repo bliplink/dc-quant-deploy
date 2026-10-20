@@ -13,6 +13,7 @@ import hmac
 import json
 import secrets
 import time
+import threading
 import urllib.request
 from urllib.parse import urlparse
 
@@ -76,11 +77,17 @@ def readonly_sql(statement):
 
 
 def accept_trade_scenario(url,location,suffix,broker_session,source_id,record,
-                          near_simultaneous=False,sdk_signed=False,broker_client=None):
+                          near_simultaneous=False,sdk_signed=False,broker_client=None,
+                          verify_private_streams=False):
     """Small simulated, authenticated trader-to-trader match; no manual DB writes."""
     traders=[]
     active=[]
     trader_keys=[]
+    private_feeds=[]
+    private_threads=[]
+    private_seen={}
+    private_errors={}
+    private_stop=threading.Event()
     try:
         for role in ('maker','taker'):
             username='custom_'+suffix.lower()+'_'+role
@@ -219,6 +226,36 @@ def accept_trade_scenario(url,location,suffix,broker_session,source_id,record,
         record('current_source_mark_live',mark='90001')
 
         maker,taker=traders
+        if verify_private_streams:
+            from opentradingcore import AccountStreams
+            from websocket import WebSocketTimeoutException
+            for trader in traders:
+                role=trader['role']
+                feed=AccountStreams(client=trader['sdk'])
+                feed.connect()
+                feed.subscribe_balances()
+                feed.subscribe_positions()
+                feed.subscribe_order_status('BTC003USDT')
+                feed.subscribe_executions('BTC003USDT')
+                private_feeds.append(feed)
+                private_seen[role]=[]
+                private_errors[role]=[]
+                def receive_notifications(stream=feed, user_role=role):
+                    while not private_stop.is_set():
+                        try:
+                            for event in stream.events():
+                                if private_stop.is_set():return
+                                private_seen[user_role].append(str(event['topic']))
+                        except WebSocketTimeoutException:
+                            continue
+                        except Exception as error:
+                            if not private_stop.is_set():
+                                private_errors[user_role].append(type(error).__name__)
+                            return
+                worker=threading.Thread(target=receive_notifications,daemon=True)
+                worker.start()
+                private_threads.append(worker)
+            record('signed_private_streams_subscribed',accounts=2,topics_per_account=4)
         if near_simultaneous:
             # Launch both authenticated writes against the same new product
             # together. Do not wait for the Maker to become a resting New
@@ -281,6 +318,19 @@ def accept_trade_scenario(url,location,suffix,broker_session,source_id,record,
             record('match_projection_not_converged',orders=[r[1:4] for r in rows])
             raise AssertionError('Two real orders did not converge to Filled with executions')
         record('maker_taker_filled_and_projected',filled=2,executions=sum(int(r[3]) for r in rows))
+        if verify_private_streams:
+            targets={trader['role']:('dc.order.trade.BTC003USDT.4.'+
+                      str(trader['id'])+'.'+location) for trader in traders}
+            for attempt in range(15):
+                if (all(targets[role] in private_seen[role] for role in targets)
+                        or any(private_errors.values())):break
+                time.sleep(1)
+            record('signed_private_stream_notifications',
+                   per_role={role:sorted(set(private_seen[role])) for role in targets},
+                   errors=private_errors)
+            for role,expected in targets.items():
+                if expected not in private_seen[role]:
+                    raise AssertionError('Missing authenticated execution stream: '+role)
 
         for trader in traders:
             position=ok(url,'TradeSvr','queryTradePosition',{'securityid':'BTC003USDT'},trader['session'],route_location=location)
@@ -295,13 +345,18 @@ def accept_trade_scenario(url,location,suffix,broker_session,source_id,record,
             if sdk_signed:
                 sdk=trader['sdk']
                 assert sdk.balances().get('Balance') is not None
-                assert sdk.positions().get(side+'Position') is not None
+                assert sdk.positions('BTC003USDT').get(side+'Position') is not None
                 assert sdk.order_history(symbol='BTC003USDT') is not None
                 assert sdk.execution_history(symbol='BTC003USDT') is not None
                 record('signed_trader_sdk_account_history',role=trader['role'])
         active.clear()
         return True
     finally:
+        private_stop.set()
+        for feed in private_feeds:
+            feed.close()
+        for worker in private_threads:
+            worker.join(timeout=5)
         for trader,key in trader_keys:
             try:
                 removed=call(url,'LoginSvr','deleteApiKey',{
@@ -320,7 +375,7 @@ def accept_trade_scenario(url,location,suffix,broker_session,source_id,record,
                 pass
 
 
-def run(url,with_traders=False,near_simultaneous=False,sdk_signed=False):
+def run(url,with_traders=False,near_simultaneous=False,sdk_signed=False,verify_private_streams=False):
     suffix=secrets.token_hex(5).upper()
     password=secrets.token_urlsafe(22)
     application_id='CUSTOM_PRODUCT_E2E_'+suffix
@@ -436,7 +491,8 @@ def run(url,with_traders=False,near_simultaneous=False,sdk_signed=False):
         if with_traders:
             accept_trade_scenario(url,location,suffix,broker_session,alt_id,record,
                                   near_simultaneous=near_simultaneous,
-                                  sdk_signed=sdk_signed,broker_client=broker_sdk)
+                                  sdk_signed=sdk_signed,broker_client=broker_sdk,
+                                  verify_private_streams=verify_private_streams)
         return True
     except Exception as e:
         record('FAILED',error=type(e).__name__,message=str(e)[:220])
@@ -462,9 +518,13 @@ def main():
         help='Simulated account deposits and two-trader limit-order matching')
     parser.add_argument('--sdk-signed',action='store_true',
         help='Exercise self-issued Trader API Keys and signed Broker price; Demo funds are prepared by WEB sessions')
+    parser.add_argument('--verify-private-streams',action='store_true',
+        help='Require actual authenticated execution push to both Trader Python API sessions')
     parser.add_argument('--near-simultaneous',action='store_true',
         help='Submit opposing demo orders together; requires --execute --with-traders')
     args=parser.parse_args()
+    if args.verify_private_streams and not (args.execute and args.with_traders and args.sdk_signed):
+        parser.error('--verify-private-streams requires --execute --with-traders --sdk-signed')
     if args.sdk_signed and not (args.execute and args.with_traders):
         parser.error('--sdk-signed requires --execute --with-traders')
     if args.near_simultaneous and not (args.execute and args.with_traders):
@@ -477,6 +537,6 @@ def main():
         parser.error('--with-traders requires --execute')
     return 0 if run(url,with_traders=args.with_traders,
                     near_simultaneous=args.near_simultaneous,
-                    sdk_signed=args.sdk_signed) else 1
+                    sdk_signed=args.sdk_signed,verify_private_streams=args.verify_private_streams) else 1
 
 if __name__=='__main__':raise SystemExit(main())
