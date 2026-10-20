@@ -77,3 +77,17 @@ GitHub 提交/交付分支：
 - Playwright 用独立本地静态资源服务和假数据隔离模拟已登录租户界面，不使用任何真实会话或 Secret，验证 1440px、390px 产品创建弹窗的 EN/中文切换、默认 `TRADE`、MODE 选项、无 JS 报错及无整页横向溢出。此项属于**UI 合约验证**，不计入真实授权用户的完整端到端业务验收。
 - 最新租户 Web Docker 镜像：`local/dc-saas-tenant-web:product-matching-i18n-20261020`，已替换 `dc-saas-tenant-web`，容器 `healthy`；部署时叠加 `config/tenant-product-language-polish-20261020.yaml`。三台 OrderSvr 未在本次 UI 更新中重启，镜像仍为 `local/dc-saas-ordersvr:product-matching-mode-20261020`。
 - 只读 `N9NZV5` 公共产品和行情回归继续通过。**真实 Order-only 成交、取消未完成委托、MD 成交推送及资金零变更仍待实际授权验收。**
+
+## 七、租户控制台统一语言与表单样式巡检（待部署版本）
+
+
+本轮增补**仅已编译与 Playwright 验证**，租户前端 Docker 替换调用被执行环境安全检查拦截，**尚未上线到 Demo**；旧镜像 `local/dc-saas-tenant-web:product-matching-i18n-20261020` 仍 healthy。绝不将源码提交等同于部署。
+
+- 统一读取跨页面共享的 `otc_language` 语言偏好，登录后导航保持 EN/中文切换。
+- 已改造主要页面的中英文展示：`Dashboard` 工作台、`TenantInfo` 基本信息/配额、`Settings` 系统设置、`Trading` 交易查询、`AuditLogs` 审计日志、`DataSources` 数据源管理、`Users` 用户管理及此前完成的 `Symbols` 产品管理。只翻译显示字段，不改变请求方法、租户权限或交易模型。
+- 用户列表显示 `username` 而不是技术性 `user_id`。后端仍通过 ID 完成启用/停用与重置密码的作用域校验；前端未暴露任何后台能力。
+- `DataSources` 新建/编辑弹窗修复复选框受表单通用 input 样式影响而呈现巨大蓝色方块的问题：使用原生 16px checkbox、文字水平对齐。新旧截图已在工作目录 Playwright 测试时核对。
+- 本地 Vite 正式构建完成。Playwright 使用本地静态 UI 和隔离 mock API，分别在 **1440px** 与 **390px** 检查 EN/中文的用户管理、数据源管理、工作台、租户配额、交易查询、审计日志与创建/编辑弹窗。**两尺寸全部通过，页面级 JS 异常为 0，整页横向溢出为 0**。这是前端交互与显示层回归，不能据此宣称有真实用户会话业务验收。
+- 正在执行的 Order A/B/C 仍为 `local/dc-saas-ordersvr:product-matching-mode-20261020`，未改动 Common/Trade HA；新一轮 `ORDER_ONLY` 真实成交流程仍待许可环境实际执行。
+- 下次部署候选镜像按此次 Tenant Web `dist/` 编译产物单独叠加现有稳定镜像，切换 `tenant-web` 即可，不必重启 Order/Trade/MySQL。
+- 仍需翻译的模块包含 API Key 管理、Robot 流动性管理及其高级策略配置、部分其他功能说明文字。本轮没有声称整站多语言及设计一致性已经 100% 完成。
