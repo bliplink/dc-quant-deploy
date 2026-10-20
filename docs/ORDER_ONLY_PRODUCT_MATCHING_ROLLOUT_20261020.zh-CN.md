@@ -67,3 +67,13 @@ GitHub 提交/交付分支：
 - 为方便恢复，旧镜像仍是 `local/dc-saas-ordersvr:single-key-queue-b0be90c-20261020`。**一旦有任何真实 ORDER_ONLY 未完成委托，禁止直接回滚到不识别 ORDER_ONLY 的旧 Order 镜像。** 先停止该产品新单、完成或安全撤销未结委托并做快照与一致性检查，才能评估回滚。
 - 如果要将产品模式从 TRADE 转 ORDER_ONLY，当前必须在业务迁移后创建新产品标识，不能直接 UPDATE matching_mode；未来如需要同标识在线迁移，必须单独设计无挂单/无持仓/无历史回调的冻结与恢复过程。
 - 当前交付仍属于 Demo 业务开发候选，不得以 Java 单测、容器存活或 Playwright 视觉冒烟代替**真实 ORDER_ONLY 撮合与客户资金隔离验收**。
+
+## 六、2026-10-20 后续回归（仅非破坏性验收）
+
+
+- OrderSvr 通过新增 `ProductMatchingExecutionRouterTest` 回归直接调用 `DefaultExecOrder`，验证订单双方各生成唯一一条 `Filled` 成交回报、无额外手续费/盈亏、`TRADE` 执行器 New/Trade 没有被调用。`ProductMatchingExecutionRouterTest`、`OrderAdminSymbolResponseTest` 以及本地业务延续测试合计 **7/7 JUnit 通过**。此为内存级模拟，与真实两账户撮合、MySQL 持久化、MD 订阅之间严格区分。
+- 对客户产品管理页面新增登录后共享语言读取及 EN／中文切换，侧边栏的主要导航、产品列表、新建/绑定产品弹窗和模式说明实现双语。其余租户业务模块仍有中文硬编码，**不能因此声称全租户管理端已经完整多语言**。
+- 手机端调整：缩短 TRADE/ORDER_ONLY 选择文案、英文产品名称占位符、添加等宽内边距的说明区，避免原版英文选择框截断和帮助文字贴边。
+- Playwright 用独立本地静态资源服务和假数据隔离模拟已登录租户界面，不使用任何真实会话或 Secret，验证 1440px、390px 产品创建弹窗的 EN/中文切换、默认 `TRADE`、MODE 选项、无 JS 报错及无整页横向溢出。此项属于**UI 合约验证**，不计入真实授权用户的完整端到端业务验收。
+- 最新租户 Web Docker 镜像：`local/dc-saas-tenant-web:product-matching-i18n-20261020`，已替换 `dc-saas-tenant-web`，容器 `healthy`；部署时叠加 `config/tenant-product-language-polish-20261020.yaml`。三台 OrderSvr 未在本次 UI 更新中重启，镜像仍为 `local/dc-saas-ordersvr:product-matching-mode-20261020`。
+- 只读 `N9NZV5` 公共产品和行情回归继续通过。**真实 Order-only 成交、取消未完成委托、MD 成交推送及资金零变更仍待实际授权验收。**

@@ -1,0 +1,4 @@
+# Add after product matching overlay; updates Tenant Web only.
+services:
+  tenant-web:
+    image: local/dc-saas-tenant-web:product-matching-i18n-20261020
