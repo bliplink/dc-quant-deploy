@@ -1,0 +1,4 @@
+# TradingView slow initial datafeed callback safety. UX-only deployment.
+services:
+  web:
+    image: local/dc-saas-trade-web:kline-coldstart-ready-20261021
