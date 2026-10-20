@@ -78,16 +78,41 @@ def run(endpoint):
         maker=create_trader('maker');taker=create_trader('taker')
         checkpoint('trader_ids_are_numeric',both_12_digit=True)
         # Non-funded users are supposed to trade an Order-only product.
-        before=sql("SELECT user_id,COALESCE(balance,0) FROM dc_users_balance WHERE location='"+location+"' ORDER BY user_id")
-        checkpoint('trade_balances_before',existing_rows=len(before))
+        # Auto-approved tenants bootstrap liquidity users asynchronously.
+        # Their demo cash-ins are unrelated to this product's Order-only
+        # settlement; assert strictly against the TWO unfunded QA traders.
+        trader_scope=(" WHERE location='"+location+"' AND user_id IN ('"+
+                      maker['user_id']+"','"+taker['user_id']+"')")
+        balance_query=("SELECT user_id,COALESCE(balance,0) FROM dc_users_balance"+
+                       trader_scope+" ORDER BY user_id")
+        position_query=("SELECT user_id,security_id,long_position,short_position "
+                        "FROM dc_orders_position"+trader_scope+
+                        " AND security_id='BTC003USDT' ORDER BY user_id")
+        before=sql(balance_query)
+        before_positions=sql(position_query)
+        checkpoint('trade_balances_before',trader_rows=len(before),
+                   position_rows=len(before_positions))
 
         broker=h.ok(endpoint,'LoginSvr','tenantApiKeyAdmin',{
             'action':'CREATE','type':'broker','label':'order-only-qa-'+suffix,
             'permissions':'MARKET_READ,ACCOUNT_READ,ORDER_READ,ORDER_WRITE',
             'cid':'BROKER_OO_'+suffix},admin_session)
         broker_api_key=broker['api_key']
-        broker_session=h.signed_login(endpoint,broker['api_key'],broker['secret_key'],location)['token']
-        checkpoint('broker_authenticated')
+        # Signed API key registration may lag CREATE. Retrying LOGIN is safe;
+        # never replay orders or other ambiguous writes.
+        for login_attempt in range(30):
+            try:
+                broker_session=h.signed_login(
+                    endpoint,broker['api_key'],broker['secret_key'],location)['token']
+                break
+            except RuntimeError as error:
+                if (not any(code in str(error) for code in ('code=7000', 'code=7004'))
+                        or login_attempt == 29):
+                    raise
+                if login_attempt == 0:
+                    checkpoint('broker_registration_pending')
+                time.sleep(3)
+        checkpoint('broker_authenticated',attempts=login_attempt+1)
         price_sequence=0
         def publish_price():
             nonlocal price_sequence
@@ -146,9 +171,15 @@ def run(endpoint):
         fills=sql("SELECT exec_id,order_id,side,last_qty,last_px FROM dc_orders_execorders WHERE location='"+location+"' AND security_id='BTC003USDT' AND last_qty>0")
         if len(fills)!=2 or len({row[0] for row in fills})!=2:
             raise AssertionError('Missing/duplicate order-only execution reports: '+str(len(fills)))
-        after=sql("SELECT user_id,COALESCE(balance,0) FROM dc_users_balance WHERE location='"+location+"' ORDER BY user_id")
-        if before!=after:raise AssertionError('ORDER_ONLY unexpectedly changed TradeSvr balances')
-        checkpoint('order_only_filled_no_trade_balance_mutation',orders=2,executions=len(fills),trade_balance_rows=len(after))
+        after=sql(balance_query)
+        after_positions=sql(position_query)
+        if before!=after:
+            raise AssertionError("ORDER_ONLY changed one of its traders' TradeSvr balances")
+        if before_positions!=after_positions:
+            raise AssertionError("ORDER_ONLY changed one of its traders' TradeSvr positions")
+        checkpoint('order_only_filled_no_trade_balance_mutation',orders=2,
+                   executions=len(fills),trader_balance_rows=len(after),
+                   trader_position_rows=len(after_positions))
         return 0
     except Exception as error:
         checkpoint('FAILED',error_type=type(error).__name__,message=str(error)[:210])
