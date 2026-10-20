@@ -1,0 +1,5 @@
+# Python 0.1.8: one public OpenTradingCoreClient class with signed TOKEN rotation.
+# Private market/account delivery observed in Demo; HA/replay not certified.
+services:
+  api-docs:
+    image: local/dc-saas-api-docs:python-single-client-018-20261020

@@ -227,17 +227,21 @@ def accept_trade_scenario(url,location,suffix,broker_session,source_id,record,
 
         maker,taker=traders
         if verify_private_streams:
-            from opentradingcore import AccountStreams
             from websocket import WebSocketTimeoutException
             for trader in traders:
                 role=trader['role']
-                feed=AccountStreams(client=trader['sdk'])
-                # Probe whether a delayed TOKEN handshake is the cause, not a
-                # subscription-topic mismatch. No write is retried.
-                feed._socket.timeout=30
-                record('signed_private_stream_connect_attempt',role=role,timeout_seconds=30)
-                feed.connect()
-                record('signed_private_stream_connected',role=role)
+                feed=trader['sdk']
+                # Public surface has one client; the Demo's REST (33002) and
+                # WS Upgrade (18088) share a hostname but use different ports.
+                record('signed_private_stream_connect_attempt',role=role,gateway_port=18088)
+                feed.connect_stream('private',gateway_base_url='http://127.0.0.1:18088')
+                # A TOKEN resume rotates the HTTP session: immediately verify
+                # that the same Python client can still make authenticated calls.
+                assert feed.balances().get('Balance') is not None
+                # The direct readback helpers below must use the new token too.
+                # Otherwise the server correctly rejects the consumed SID.
+                trader['session']=feed.session.token
+                record('signed_private_stream_connected_and_http_session_rotated',role=role)
                 feed.subscribe_balances()
                 feed.subscribe_positions()
                 feed.subscribe_order_status('BTC003USDT')
@@ -248,7 +252,7 @@ def accept_trade_scenario(url,location,suffix,broker_session,source_id,record,
                 def receive_notifications(stream=feed, user_role=role):
                     while not private_stop.is_set():
                         try:
-                            for event in stream.events():
+                            for event in stream.events(channel='private'):
                                 if private_stop.is_set():return
                                 private_seen[user_role].append(str(event['topic']))
                         except WebSocketTimeoutException:
@@ -324,18 +328,33 @@ def accept_trade_scenario(url,location,suffix,broker_session,source_id,record,
             raise AssertionError('Two real orders did not converge to Filled with executions')
         record('maker_taker_filled_and_projected',filled=2,executions=sum(int(r[3]) for r in rows))
         if verify_private_streams:
-            targets={trader['role']:('dc.order.trade.BTC003USDT.4.'+
-                      str(trader['id'])+'.'+location) for trader in traders}
+            # The server publishes the real market indicator (e.g. 0 or 1),
+            # while the authenticated SDK subscription uses one wildcard
+            # segment. Match the actual scoped topics, never assume "4".
+            from opentradingcore.streams import MarketStreams
+            targets={}
+            for trader in traders:
+                uid=str(trader['id'])
+                role=trader['role']
+                targets[role]=(
+                    'dc.order.trade.BTC003USDT.*.'+uid+'.'+location,
+                    'dc.order.status.BTC003USDT.'+uid+'.'+location,
+                    'dc.trade.accountbalance.'+uid+'.'+location,
+                    'dc.trade.position.'+uid+'.'+location,
+                )
+            def received_all(role):
+                return all(any(MarketStreams._topic_matches(pattern,actual)
+                               for actual in private_seen[role])
+                           for pattern in targets[role])
             for attempt in range(15):
-                if (all(targets[role] in private_seen[role] for role in targets)
-                        or any(private_errors.values())):break
+                if all(received_all(role) for role in targets) or any(private_errors.values()):break
                 time.sleep(1)
             record('signed_private_stream_notifications',
                    per_role={role:sorted(set(private_seen[role])) for role in targets},
                    errors=private_errors)
-            for role,expected in targets.items():
-                if expected not in private_seen[role]:
-                    raise AssertionError('Missing authenticated execution stream: '+role)
+            for role in targets:
+                if not received_all(role):
+                    raise AssertionError('Missing authenticated private streams: '+role)
 
         for trader in traders:
             position=ok(url,'TradeSvr','queryTradePosition',{'securityid':'BTC003USDT'},trader['session'],route_location=location)
@@ -359,7 +378,7 @@ def accept_trade_scenario(url,location,suffix,broker_session,source_id,record,
     finally:
         private_stop.set()
         for feed in private_feeds:
-            feed.close()
+            feed.close_stream(channel='private')
         for worker in private_threads:
             worker.join(timeout=5)
         for trader,key in trader_keys:
