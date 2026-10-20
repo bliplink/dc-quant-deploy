@@ -1,0 +1,10 @@
+# Overlay LAST over the existing Demo compose files. Does not change backend.
+services:
+  public-web:
+    image: local/dc-saas-public-web:shared-language-20261020
+  api-docs:
+    image: local/dc-saas-api-docs:custom-price-shared-language-20261020
+  web:
+    image: local/dc-saas-trade-web:shared-language-20261020
+  tenant-web:
+    image: local/dc-saas-tenant-web:shared-language-20261020
