@@ -1,0 +1,9 @@
+# This override changes only the OrderSvr image. Original service config,
+# volumes, endpoints, ZooKeeper assignments and HA libraries are unmodified.
+services:
+  ordersvr:
+    image: local/dc-saas-ordersvr:single-key-queue-b0be90c-20261020
+  ordersvr-b:
+    image: local/dc-saas-ordersvr:single-key-queue-b0be90c-20261020
+  ordersvr-c:
+    image: local/dc-saas-ordersvr:single-key-queue-b0be90c-20261020

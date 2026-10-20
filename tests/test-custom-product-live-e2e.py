@@ -75,7 +75,8 @@ def readonly_sql(statement):
     return [row.split('\t') for row in query.stdout.splitlines()]
 
 
-def accept_trade_scenario(url,location,suffix,broker_session,source_id,record):
+def accept_trade_scenario(url,location,suffix,broker_session,source_id,record,
+                          near_simultaneous=False):
     """Small simulated, authenticated trader-to-trader match; no manual DB writes."""
     traders=[]
     active=[]
@@ -179,26 +180,45 @@ def accept_trade_scenario(url,location,suffix,broker_session,source_id,record):
         record('current_source_mark_live',mark='90001')
 
         maker,taker=traders
-        resting=put(maker,'Sell','MAKER')
-        record('maker_order_submitted',clientOrderId=resting)
-        # A successful placeOrder call only acknowledges submission. The
-        # actual matching engine first completes asynchronous Trade Newing
-        # admission; wait for the maker order to be resting before crossing.
-        for wait in range(40):
-            rows=readonly_sql(
-                "SELECT ord_status FROM dc_orders WHERE location='"+location+
-                "' AND clord_id='"+resting+"' LIMIT 1")
-            if rows==[['New']]:
-                time.sleep(1.5)
-                break
-            if rows and rows[0][0] in ('Rejected','Canceled','Cancelled'):
-                raise AssertionError('Maker order left the resting state')
-            time.sleep(1)
+        if near_simultaneous:
+            # Launch both authenticated writes against the same new product
+            # together. Do not wait for the Maker to become a resting New
+            # order: this is exactly the previous concurrent bug scenario.
+            from concurrent.futures import ThreadPoolExecutor
+            from threading import Barrier
+            gate=Barrier(2)
+            def concurrent_put(user,side,name):
+                gate.wait(timeout=8)
+                started=time.monotonic_ns()
+                client_id=put(user,side,name)
+                return client_id,started
+            with ThreadPoolExecutor(max_workers=2) as pool:
+                sell=pool.submit(concurrent_put,maker,'Sell','MAKER')
+                buy=pool.submit(concurrent_put,taker,'Buy','TAKER')
+                resting,sell_at=sell.result(timeout=220)
+                buying,buy_at=buy.result(timeout=220)
+            record('near_simultaneous_orders_submitted',
+                   request_launch_delta_ms=round(abs(sell_at-buy_at)/1e6,3),
+                   sell=resting,buy=buying)
         else:
-            raise AssertionError('Maker order never became a resting New order')
-        record('maker_resting_confirmed')
-        buying=put(taker,'Buy','TAKER')
-        record('taker_order_submitted',clientOrderId=buying)
+            resting=put(maker,'Sell','MAKER')
+            record('maker_order_submitted',clientOrderId=resting)
+            # Place the Taker only after the Maker is actually resting.
+            for wait in range(40):
+                rows=readonly_sql(
+                    "SELECT ord_status FROM dc_orders WHERE location='"+location+
+                    "' AND clord_id='"+resting+"' LIMIT 1")
+                if rows==[['New']]:
+                    time.sleep(1.5)
+                    break
+                if rows and rows[0][0] in ('Rejected','Canceled','Cancelled'):
+                    raise AssertionError('Maker order left the resting state')
+                time.sleep(1)
+            else:
+                raise AssertionError('Maker order never became a resting New order')
+            record('maker_resting_confirmed')
+            buying=put(taker,'Buy','TAKER')
+            record('taker_order_submitted',clientOrderId=buying)
 
         # Actual executions must exist for each independently authenticated
         # trader; do not mistake HTTP order acknowledgement for a fill.
@@ -247,7 +267,7 @@ def accept_trade_scenario(url,location,suffix,broker_session,source_id,record):
                 pass
 
 
-def run(url,with_traders=False):
+def run(url,with_traders=False,near_simultaneous=False):
     suffix=secrets.token_hex(5).upper()
     password=secrets.token_urlsafe(22)
     application_id='CUSTOM_PRODUCT_E2E_'+suffix
@@ -343,7 +363,8 @@ def run(url,with_traders=False):
         if quote.get('code')!=0:
             raise AssertionError('Broker price rejected by APS')
         if with_traders:
-            accept_trade_scenario(url,location,suffix,broker_session,alt_id,record)
+            accept_trade_scenario(url,location,suffix,broker_session,alt_id,record,
+                                  near_simultaneous=near_simultaneous)
         return True
     except Exception as e:
         record('FAILED',error=type(e).__name__,message=str(e)[:220])
@@ -367,13 +388,18 @@ def main():
     parser.add_argument('--execute',action='store_true',help='Create fresh test tenant and products')
     parser.add_argument('--with-traders',action='store_true',
         help='Simulated account deposits and two-trader limit-order matching')
+    parser.add_argument('--near-simultaneous',action='store_true',
+        help='Submit opposing demo orders together; requires --execute --with-traders')
     args=parser.parse_args()
+    if args.near_simultaneous and not (args.execute and args.with_traders):
+        parser.error('--near-simultaneous requires --execute --with-traders')
     url=require_local(args.endpoint)
     if not args.execute:
         print('Refusing mutations without --execute')
         return 2
     if args.with_traders and not args.execute:
         parser.error('--with-traders requires --execute')
-    return 0 if run(url,with_traders=args.with_traders) else 1
+    return 0 if run(url,with_traders=args.with_traders,
+                    near_simultaneous=args.near_simultaneous) else 1
 
 if __name__=='__main__':raise SystemExit(main())
