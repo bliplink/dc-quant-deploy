@@ -1,0 +1,7 @@
+# Requires AdminSvr class overlay for username (tenant-scoped query).
+# No Order/Trade/Common/MD/Snapshot/WAL service changes.
+services:
+  adminsvr:
+    image: local/dc-saas-adminsvr:trader-key-usernames-20261020
+  tenant-web:
+    image: local/dc-saas-tenant-web:unified-admin-bilingual-20261020
