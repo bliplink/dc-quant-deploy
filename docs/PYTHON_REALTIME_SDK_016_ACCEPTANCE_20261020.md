@@ -65,3 +65,10 @@
 - 资金流水没有独立已验证的推送源，所以本轮公开的是定时读取，而不是虚构的实时订阅。
 - 租户 Web 最新用户、数据源、交易查询和管理页的双语修订已在 `bliplink/dc-saas-tenant-web` 源码分支提交并 Playwright 验证，但**尚未升级 Demo 租户 Web 镜像**；现网仍为 `local/dc-saas-tenant-web:product-matching-i18n-20261020`。Robot/API Key 管理端翻译仍需收尾。
 - Order-only 模式未完成未入金交易员真实撮合、MD 推送、资金零变更的端到端验收。Common/Trade HA 验收在另一会话进行。
+
+## 租户 API Key 管理界面附加验收（仍待部署）
+
+- 独立 Tenant Web 源码分支 `https://github.com/bliplink/dc-saas-tenant-web/tree/codex/tenant-product-matching-ui-20261020`，提交 `51cfd70`：API Key 管理中的双类别标签、权限说明、创建/撤销确认、一次性 Secret 警告、IP 白名单及移动端表单补英文翻译，跟随登录后共享语言；没有修改密钥申请/使用的服务端权限。
+- Vite 生产构建通过。Playwright 以本地静态资源和**伪造的隔离测试会话**巡检中英文 API Key 表格与创建弹窗、已有用户/数据源/交易记录模块；1440px 和 390px 全部通过，JavaScript 页级错误 0，整页横向溢出 0。英语手机截图检查后的中文占位符已修复。
+- **尚未上线**：Docker Demo 当前 `dc-saas-tenant-web` 仍运行 `local/dc-saas-tenant-web:product-matching-i18n-20261020`（healthy）。最新双语源码不会在实际生产页面显示，直到审核并替换镜像；此前安全检查阻断过该前端的部署操作，本轮未尝试绕过。
+- **用户名待补**：`TenantTraderApiKeyService` 当前只返回 `user_id` 而不是用户名，因此用户 Key 表格仍存在技术性 ID；需要下一轮在 AdminSvr 受限查询中安全返回 `user_name` 后一并调整展示。Robot/流动性模块仍未完成全部双语和布局验收。
