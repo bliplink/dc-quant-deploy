@@ -1,0 +1,7 @@
+# Overlay after frontend-language-rollout-20261020.yaml and customer-product-ui-20261020.yaml.
+# Only public website and trading terminal UI. No backend or Common/HA changes.
+services:
+  public-web:
+    image: local/dc-saas-public-web:api-links-locale-20261020
+  web:
+    image: local/dc-saas-trade-web:tenant-nav-label-20261020
