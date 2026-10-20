@@ -1,0 +1,11 @@
+# Product-level immutable matching mode (TRADE default / ORDER_ONLY).
+# Keep current Common hotfix+HA binaries; only add scoped API/routing code.
+services:
+  adminsvr:
+    image: local/dc-saas-adminsvr:product-matching-mode-20261020
+  ordersvr:
+    image: local/dc-saas-ordersvr:product-matching-mode-20261020
+  ordersvr-b:
+    image: local/dc-saas-ordersvr:product-matching-mode-20261020
+  ordersvr-c:
+    image: local/dc-saas-ordersvr:product-matching-mode-20261020

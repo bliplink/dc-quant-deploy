@@ -1,0 +1,4 @@
+# Use after the existing language overlay. Only switches tenant web frontend.
+services:
+  tenant-web:
+    image: local/dc-saas-tenant-web:product-matching-mode-20261020

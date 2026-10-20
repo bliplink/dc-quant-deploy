@@ -1,0 +1,6 @@
+# Local Demo rollout: public website and AdminSvr only, no Common/Trade HA changes.
+services:
+  public-web:
+    image: local/dc-saas-public-web:customer-ui-v2-20261020
+  adminsvr:
+    image: local/dc-saas-adminsvr:customer-stats-ids-20261020
