@@ -12,6 +12,7 @@ from pathlib import Path
 import secrets
 import time
 import sys
+import threading
 
 HELPERS = Path(__file__).with_name('test-custom-product-live-e2e.py')
 spec = importlib.util.spec_from_file_location('otc_custom_e2e_helpers', str(HELPERS))
@@ -21,13 +22,18 @@ spec.loader.exec_module(h)
 def sql(statement):
     return h.readonly_sql(statement)
 
-def run(endpoint):
+def run(endpoint,verify_streams=False):
     suffix=secrets.token_hex(5).upper()
     password=secrets.token_urlsafe(23)
     location=None
     admin_session=None
     broker_api_key=None
     maker=taker=None
+    market_stream=None
+    stream_thread=None
+    stream_stop=threading.Event()
+    stream_topics=[]
+    stream_errors=[]
     def checkpoint(name,**details):
         print(json.dumps({'checkpoint':name,**details},sort_keys=True),flush=True)
     try:
@@ -132,6 +138,33 @@ def run(endpoint):
             time.sleep(1)
         else:raise AssertionError('MD custom mark price not visible')
         checkpoint('mark_price_live')
+        if verify_streams:
+            # Attach the *actual* public Python SDK before the trade, rather
+            # than interpreting a subscription ACK as proof of notifications.
+            from opentradingcore import MarketStreams
+            from websocket import WebSocketTimeoutException
+            market_stream=MarketStreams(base_url='http://127.0.0.1:18088',
+                                        location=location)
+            market_stream.connect()
+            market_stream.subscribe_ticker('BTC003USDT')
+            market_stream.subscribe_recent_trades('BTC003USDT')
+            market_stream.subscribe_order_book('BTC003USDT')
+            market_stream.subscribe_candles('BTC003USDT',interval='5m')
+            def observe_market():
+                while not stream_stop.is_set():
+                    try:
+                        for event in market_stream.events():
+                            if stream_stop.is_set():return
+                            stream_topics.append(str(event.get('topic')))
+                    except WebSocketTimeoutException:
+                        continue
+                    except Exception as error:
+                        if not stream_stop.is_set():
+                            stream_errors.append(type(error).__name__)
+                        return
+            stream_thread=threading.Thread(target=observe_market,daemon=True)
+            stream_thread.start()
+            checkpoint('python_public_stream_subscribed',topics=5)
         orders=[]
         def place(trader,side,name):
             client_id='OO-'+suffix+'-'+name
@@ -180,11 +213,27 @@ def run(endpoint):
         checkpoint('order_only_filled_no_trade_balance_mutation',orders=2,
                    executions=len(fills),trader_balance_rows=len(after),
                    trader_position_rows=len(after_positions))
+        if verify_streams:
+            # Market notifications are async; wait a short bounded window
+            # after the durable fill and demand the actual recent-trades push.
+            expected='dc.md.market.trade.BTC003USDT.'+location
+            for _ in range(10):
+                if expected in stream_topics or stream_errors:break
+                time.sleep(1)
+            checkpoint('python_public_stream_observed',received=len(stream_topics),
+                       topic_counts={topic:stream_topics.count(topic)
+                                     for topic in sorted(set(stream_topics))},
+                       errors=stream_errors)
+            if expected not in stream_topics:
+                raise AssertionError('Python SDK received no actual recent-trades push after two Filled orders')
         return 0
     except Exception as error:
         checkpoint('FAILED',error_type=type(error).__name__,message=str(error)[:210])
         return 1
     finally:
+        stream_stop.set()
+        if market_stream is not None:market_stream.close()
+        if stream_thread is not None:stream_thread.join(timeout=5)
         if broker_api_key and admin_session:
             try:
                 result=h.call(endpoint,'LoginSvr','tenantApiKeyAdmin',{
@@ -198,6 +247,8 @@ if __name__=='__main__':
     parser=argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--execute',action='store_true',help='Required for Demo tenant creation and test orders')
     parser.add_argument('--endpoint',default='http://127.0.0.1:33002/httpapi/')
+    parser.add_argument('--verify-streams',action='store_true',
+                        help='Additionally require an actual Python SDK recent-trades notification')
     args=parser.parse_args()
     if not args.execute: parser.error('refusing mutations without --execute')
-    sys.exit(run(h.require_local(args.endpoint)))
+    sys.exit(run(h.require_local(args.endpoint),verify_streams=args.verify_streams))

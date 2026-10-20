@@ -27,3 +27,14 @@
 - Trade / Order / MD 的 HA 自动主切、200 租户负载、最终一致性。
 
 重现命令只应在隔离 Demo 环境执行；会真实创建测试租户、产品和少量测试委托。此记录不包含密码、Key 或 Session。
+
+## Python SDK 公开实时通知：新增真实成交触发验证
+
+在新的独立租户 `PZT10Y/BTC003USDT`，使用 OpenTradingCore Python SDK 0.1.6 `MarketStreams` 于 Maker/Taker 撮合**前**建立匿名连接和订阅。执行 `PYTHONPATH=.work/sdk-realtime-probe-deps:.work/api-python-methods-corrected-016-20261020/sdk_source python3 tests/test-order-only-product-live-e2e.py --execute --verify-streams`，退出码 0。真实 Gateway 事件而非仅 ACK：
+
+- `dc.md.depth.snapshot.BTC003USDT.PZT10Y`：1
+- `dc.md.depth.diff.BTC003USDT.PZT10Y`：1
+- `dc.md.market.trade.BTC003USDT.PZT10Y`：1
+- `dc.md.trade.BTC003USDT.PZT10Y`：1
+
+本次订单同样 2 笔 `Filled`、2 条唯一 execution，Maker/Taker 两名交易员资金和持仓均未变化；临时 Broker Key 关闭成功。测试仅记录 topic 和数量，不打印用户密码、Secret、Session 或正文。该测试使用 Python `websocket-client==1.8.0` 可选依赖。未观察到 K 线 notification，不能据此宣称 K 线、账户私有事件或断线恢复已通过。
