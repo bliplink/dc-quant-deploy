@@ -1,0 +1,4 @@
+# Public API docs list only Python methods; SDK 0.1.6 fixes distinct ticker/trade topics.
+services:
+  api-docs:
+    image: local/dc-saas-api-docs:python-only-016-20261020

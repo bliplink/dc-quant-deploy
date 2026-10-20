@@ -1,0 +1,5 @@
+# API documentation: Python SDK method-centric single page, English and Chinese.
+# No HTTP or raw push topic reference is publicly exposed by this release.
+services:
+  api-docs:
+    image: local/dc-saas-api-docs:python-only-015-20261020
