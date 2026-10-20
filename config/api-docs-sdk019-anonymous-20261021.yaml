@@ -1,0 +1,4 @@
+# SDK 0.1.9 anonymous product catalog fix. Existing releases retained.
+services:
+  api-docs:
+    image: local/dc-saas-api-docs:python-unified-sdk019-20261021
