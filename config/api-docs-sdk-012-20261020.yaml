@@ -1,0 +1,4 @@
+# Apply after frontend-language-rollout-20261020.yaml; API Docs only.
+services:
+  api-docs:
+    image: local/dc-saas-api-docs:sdk-012-20261020
