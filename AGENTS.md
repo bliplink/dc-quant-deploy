@@ -15,3 +15,5 @@
 完整规定：`docs/FRONTEND_USER_MANUAL_SYNC_POLICY.zh-CN.md`。交易、租户、主站和 API 文档仓库各自也有对应的 `AGENTS.md`。
 
 Common/Order/Trade/MD 的 HA、资金、订单一致性必须独立验收，不能被手册/页面测试替代。
+
+统一图文 PDF 一键生成：`./scripts/generate-user-manuals.sh`，详见 `docs/USER_MANUAL_ONE_CLICK_GENERATION.zh-CN.md`。

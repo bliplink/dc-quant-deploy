@@ -15,6 +15,10 @@
 | 主站 | `bliplink/opentradingcore-web`: `docs/PUBLIC_SITE_USER_MANUAL_IMPACT.md` 记录用户入口/流程影响及对应截图。若改动影响交易或租户操作步骤，必须同步修改上述相应 PDF，并记录关联源码提交 | 主站不是独立交易员/租户操作手册；入口、语言与操作指引必须和对应两份手册一致 |
 | Python API Docs / SDK | `bliplink/opentradingcore-api-docs`: 同步 SDK 方法、真实示例与文档；若涉及用户 Web 创建 API Key/开户/操作流程，必须同步上述相应 PDF | `https://api.opentradingcore.com/zh/` 和 `/en/` |
 
+## 统一一键生成
+
+每次需要重新生成六份图文 PDF，运行 `./scripts/generate-user-manuals.sh`。详细用法和安全选项见 `docs/USER_MANUAL_ONE_CLICK_GENERATION.zh-CN.md`。生成不会自动上线，发布前仍必须完成截图及同版验收。
+
 ## 每次页面修改必须执行的步骤
 
 1. **识别手册影响**：在编码阶段指出受影响的页面与章节；增加/删除功能时同步增加/删除说明，调整名称时更新中英文用词及截图。
