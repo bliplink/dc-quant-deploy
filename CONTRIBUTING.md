@@ -15,6 +15,7 @@ data should not be added here.
 - Do not commit real API keys, Telegram tokens, exchange keys, ClickHouse passwords, or production data.
 - Keep example values as placeholders such as `replace-with-*`, `change-me`, or `example-*`.
 - For script/config changes, run the same static checks as CI (at minimum `bash -n` on changed shell scripts and `./tests/test-auto-update-saas.sh`). `validate-saas.sh` is a live-stack validator and should be run on an installed host, not treated as a checkout-only command.
+- **Mandatory**: For every user-visible Frontend change, update the illustrated user manual, current Playwright screenshots, and PDF **in the same release**. See `docs/FRONTEND_USER_MANUAL_SYNC_POLICY.zh-CN.md`. Run the relevant repo’s `qa/check-user-manual-sync.py` before release; a failed check blocks delivery.
 - Update the relevant documentation under `docs/` when changing user-visible behavior.
 - Changes to install, topology, Tenant/Platform Web, business flows, pressure gates, failover, or recovery must keep `README.md`, `docs/USER_GUIDE.zh-CN.md`, `SAAS_IMPLEMENTATION_PLAN.md`, and `acceptance-saas.sh` consistent.
 
