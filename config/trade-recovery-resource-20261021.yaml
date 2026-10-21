@@ -1,0 +1,10 @@
+# Verified non-destructive Demo resource limits used while Trade A/B catches up.
+# Do not recreate Trade containers just to apply during an in-progress recovery.
+# Include this Compose override in the NEXT controlled deployment after preflight.
+services:
+  tradesvr:
+    cpus: 1.0
+    mem_limit: 1536m
+  tradesvr-b:
+    cpus: 1.5
+    mem_limit: 1536m
