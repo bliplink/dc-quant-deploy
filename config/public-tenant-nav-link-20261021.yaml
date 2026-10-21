@@ -1,0 +1,4 @@
+# Main-site-only link correction. All other SaaS services and links remain unchanged.
+services:
+  public-web:
+    image: local/dc-saas-public-web:tenant-nav-only-20261021
