@@ -1,0 +1,4 @@
+# Demo-only tenant Web release, keeps all trading services untouched.
+services:
+  tenant-web:
+    image: local/dc-saas-tenant-web:mobile-nav-account-menu-20261021
