@@ -1,0 +1,4 @@
+# Adds static 13-page Chinese trader Web user guide. No application code changes.
+services:
+  web:
+    image: local/dc-saas-trade-web:with-zh-guide-20261021
