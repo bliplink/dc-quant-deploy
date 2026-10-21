@@ -1,0 +1,4 @@
+# Branding-only tenant UI update; no change to trading, admin or databases.
+services:
+  tenant-web:
+    image: local/dc-saas-tenant-web:brand-home-link-20261021
