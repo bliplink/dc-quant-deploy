@@ -16,6 +16,7 @@ data should not be added here.
 - Keep example values as placeholders such as `replace-with-*`, `change-me`, or `example-*`.
 - For script/config changes, run the same static checks as CI (at minimum `bash -n` on changed shell scripts and `./tests/test-auto-update-saas.sh`). `validate-saas.sh` is a live-stack validator and should be run on an installed host, not treated as a checkout-only command.
 - Update the relevant documentation under `docs/` when changing user-visible behavior.
+- When changing a user-visible frontend, regenerate screenshot-backed ZH/EN PDF manuals in the same release and run each repository’s documentation synchronization check; see `docs/FRONTEND_USER_MANUAL_SYNC_POLICY.zh-CN.md`. The one-command generator is `./scripts/generate-user-manuals.sh`.
 - Changes to install, topology, Tenant/Platform Web, business flows, pressure gates, failover, or recovery must keep `README.md`, `docs/USER_GUIDE.zh-CN.md`, `SAAS_IMPLEMENTATION_PLAN.md`, and `acceptance-saas.sh` consistent.
 
 ## Documentation Style
