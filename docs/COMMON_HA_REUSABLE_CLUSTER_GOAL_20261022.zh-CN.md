@@ -4,6 +4,12 @@
 > WebCodex 持久目标 ID：`wc_goal_MyIn_BkCaRv9Wt8r`
 > 原始 v17/v18 根因报告：`/Users/kong/Documents/Codex/2026-10-18/referenced-chatgpt-conversation-this-is-an/outputs/async-ha-v18-hotpath-20261022/COMMON_HA_HOTPATH_ROOT_CAUSE_20261022.zh-CN.md`
 
+## 2026-10-23 按分区RF2/RF3扩容实施最新进度
+
+**已通过**：Common每分区1主1备（严格2/2）与1主2备（严格2/3）固定物理成员证明，4/5/20节点的静态分区规划功能和CPU模拟压测，Common 37项组合回归、Demo 132项完整回归。RF2新增独立试验集群`otc-common-ha-v19-rf2-shard-pilot`：真实A/B双Docker JVM、独立WAL卷、三ZooKeeper控制票，正常8笔2/2签名提交通过；SIGKILL B后严格ACK必须503；恢复B后同8个requestId重试幂等通过。并发10/50/200模拟客户端分别80/400/1600笔均成功，最高证书水位seq2176，A/B WAL文件物理SHA一致。候选Common本地提交`b59ab1d`；参照`docs/COMMON_HA_SHARD_PLACEMENT_REPLICATION_DESIGN_20261023.zh-CN.md`和`docs/COMMON_HA_RF2_RF3_FUNCTIONAL_AND_STRESS_20261023.zh-CN.md`。
+
+**仍NO-GO**：当前v19实验只配置P000、A/B、Epoch1，不是可任意扩展真实20数据节点的自动放置运行时；RF2跨Epoch安全自动接管、Learner迁移、证书独立副本保管在真正client ACK前的强制门禁、RF3自动主切、真实OrderTradeMD、200租户业务对账与P99<=30ms仍未通过。**不可将单Mac双Docker进程当作两个独立物理故障域**。Mac盘使用率约96%，长压前先审计归档，绝不误删在用WAL、证书或正式容器。未触发GitHub Actions或正式发布Common。
+
 ## 一、长期目标与架构边界
 
 目标定位：将 OpenTradingCore Common 打造成业务无关、可复用的高性能、高可用集群内核（Common HA）；目前使用独立隔离 Demo v17/v18 作为研发与故障注入验证台，不以 Demo 自身为最终产品。待机制在 Demo 中通过性能、可靠性和恢复验收，再以稳定的 Common API/版本接入 Order、Trade、MD 及未来服务。避免把分区选主、WAL、复制、快照和恢复实现分别复制到各业务服务；Common 不理解撮合/持仓/行情等业务对象。

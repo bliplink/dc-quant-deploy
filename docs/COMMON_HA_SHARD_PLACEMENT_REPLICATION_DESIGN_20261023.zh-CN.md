@@ -6,6 +6,8 @@
 
 Common 实验分支已通过分区RF=2/3数据成员边界和定向放置的11项新增功能测试、Common兼容组合37项与Demo全量132项回归；RF=2已完成真Netty回环+两份物理WAL文件的2/2 RSA认证及重启验证，小规模测试100批×8条、全部成功、约98.58条/s、批次P99=58.62ms。节点4/5/20的分区规划每轮1,000分区均通过、Primary分布均衡且每分区仅向1或2个指定备复制。代码在Common本地实验分支提交`b59ab1d`，**尚未接入实际双Docker JVM动态成员/迁移和自动跨Epoch主切**。详见`docs/COMMON_HA_RF2_RF3_FUNCTIONAL_AND_STRESS_20261023.zh-CN.md`。此处性能属于规划CPU和单JVM Netty TCP回环，不是完整Order/Trade真实压力验收。
 
+**最新现场补充**：RF=2已经在**隔离的双Docker数据JVM（A+B）加三ZooKeeper节点**实现一次真实严格2/2 Netty/WAL签名提交，并在B SIGKILL后正确拒绝只有A的严格ACK。B恢复后重发同requestId成功且不重复应用；并发10/50/200模拟客户端分别80/400/1600条全部成功，最高认证seq2176，A/B物理WAL SHA一致。但这里的RF2数据成员仍由隔离实验开关选择，只演示单分区P000，**并非正式动态成员、多分区扩容或跨Epoch自动主切完成**。性能批次P99仍1.55–2.25秒。完整记录参见本目录RF2/RF3验收文档的第二阶段补充。
+
 ## 1. 节点扩容≠每个节点全网复制
 
 - 复制单元是业务隔离的分区 `service + partitionId`；业务可以据`location + security_id`路由到分区，Common只处理`byte[]`状态机命令、WAL、snapshot/diff、durable cursor、fencing，不解释证券产品。

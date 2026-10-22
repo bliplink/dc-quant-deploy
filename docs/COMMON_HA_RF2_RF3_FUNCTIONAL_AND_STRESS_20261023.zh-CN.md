@@ -1,5 +1,28 @@
 # Common HA 按分区 RF=2/3：功能验收→压测实施记录（2026-10-23）
 
+## 第二阶段补充：RF=2 真正双独立 Docker JVM 功能→故障→并发压测（2026-10-23）
+
+**这是本报告第一阶段单JVM回环测试之后完成的新增验收；以下数据优先作为RF2真实Docker阶段依据。仍然只在同一Mac的一个Colima VM内，不具有两独立物理故障域。**
+
+- 独立新项目 `compose.v19-rf2-shard-pilot.yaml`，仅启动A与B两个**独立JVM/独立Docker WAL卷**和**三个ZooKeeper控制投票容器**（没有第三个数据副本C，也未触碰旧RF3/asyncstream或正式服务）；隔离开关`DEMO_V19_RF2_SHARD_PILOT=1`、`DEMO_V19_THREE_DATA_NODES=0`、`DEMO_V19_COMMON_QUORUM_TEST=1`、`DEMO_V19_SINGLE_HOST_QUORUM_TEST=1`、`DEMO_V19_GROUP_FORCE_PILOT=1`、`DEMO_V19_SIGNED_BATCH_ACK_PILOT=1`。新启动的ZooKeeper首次Bootstrap写入的P000成员恰为A Primary/B Replica/Epoch1。
+- Demo实验适配 `src/main/java/com/opentradingcore/demo/DemoV19DurableRuntime.java` 根据**隔离开关**只选择A+B真实数据身份并在签名/复制循环中只询问本分区指定的B。注意这**尚不是任意分区任意成员的正式动态运行时接线**，仍是实验P000固定Epoch1与A/B的最小双Docker验证。压力客户端名称已改为`isolated_v19_single_partition_multi_client_strict_quorum`并显式带`dataReplicaCount=2`，避免旧脚本错误显示“3JVM”。
+- **正常真实功能**：A首组8条Netty TCP订单模拟请求，B真实WAL group fsync并返回独立RSA签名前缀证明，Common在A持久化严格2/2证书后，8条均`code=0/appliedCount=1`，证书seq8；没有C副本参与。
+- **真实SIGKILL B**（exit137）后A单独尝试下一组8条严格ACK：收到`503 DEMO_GROUP_NOT_DURABLE`，本地WAL有待认证seq9–16，但磁盘严格证书**只到seq8**，没有错误地降低为本地异步成功。恢复B后其WAL**自动追平seq16且Sha与A相同**；第一时间重试时B的签名授权暂不可用，仍安全503，稍后**复用完全相同8个requestId**再次重试成功、全部`appliedCount=1`，A+B证书seq16落盘，零重复应用。该初次签名恢复延迟需继续优化，不能称故障瞬间无中断。
+- **实际严格2/2并发（每Netty RPC预组装8条；与单笔API不同口径）**：
+
+| 模拟客户端 | 同时进行的组 | 成功业务记录 | 实际记录TPS | 组P99 |
+|---|---:|---:|---:|---:|
+| 10 | 2 | 80/80 | 24.77 | 1554.72ms |
+| 50 | 8 | 400/400 | 93.36 | 2249.28ms |
+| 200 | 16 | 1600/1600 | 187.72 | 2044.00ms |
+| 额外10人回归 | 2 | 80/80 | 27.36 | 1715.55ms |
+
+三档总计**2080/2080成功**，额外回归80/80成功；最末A/B WAL均**231072 bytes**、SHA256=`ec1adebe4fa2dd090447e21eb84473d4b133bb1e2afb5bb4f3296234a3a4d621`，Common严格证书最高**seq2176**，证书文件共272份（每8条一份）。**真实性能P99仍1.5–2.25秒，远超30ms目标，不可称性能GO。**
+
+- 本次功能与短压验收都在**单分区P000、同一Mac虚拟故障域、模拟客户端**完成。**没有**10/50/200个真实注册租户、多分区动态重新分配/自动Learner迁移、主A SIGKILL后B自动跨Epoch接管、双独立物理主机、正式Order/Trade/MD交易/持仓/余额/成交的权威对账。RF2的普通Backup故障会阻断严格2/2 ACK；如希望A独活仍可交易，必须明确切换`LOCAL_DURABLE_ASYNC`并承认未复制的ACK有丢失风险，不能自动降低持久化合同。
+- 当前源码Common本地commit`b59ab1d`、文档历史提交`9d31c0b`；本段作为新追加进度。Common统一Jar仍SHA256 `57ff996c5ba0f6ed2509c27abab154d53f596ded80c2cbbe67dbed73df7eb546`，正式Maven/Common版本/OrderTradeMD容器未替换，GitHub Actions未启动。Mac磁盘约96%使用、余21GiB，长压前必须审计归档，不得误删在用WAL/证书及生产卷。
+- **下一步顺序**：正式`PartitionAssignment`/ZooKeeper成员动态配置接线（替代实验ENV固定A/B与P000）→ RF2双JVM断线恢复与Learner新增节点的真实安装/授权功能验收 → RF3对照 → 10/50/200真实分区/租户稳定5分钟与突发 → 自动安全新Primary跨Epoch和全业务权威一致性。未通过的步骤不可声明完成。
+
 ## 一、固定目标及本轮边界
 
 正式规划文档：`docs/COMMON_HA_SHARD_PLACEMENT_REPLICATION_DESIGN_20261023.zh-CN.md`。按每个业务分区只向指定的 RF-1 个数据副本复制 WAL；4、5、20 个集群节点只是分担不同 Partition Primary，不参与其他分区的复制。Common 不识别证券、交易资金的业务结构，业务层实现 byte[] 状态机、Snapshot/Diff、恢复接口。ZooKeeper 2/3 控制投票与真正 WAL 数据的 2/2、2/3 持久化投票不能混淆。
