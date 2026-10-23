@@ -1,0 +1,4 @@
+# Trade Web anonymous order form and consistent buy/sell buttons.
+services:
+  web:
+    image: local/dc-saas-trade-web:order-entry-20261023
