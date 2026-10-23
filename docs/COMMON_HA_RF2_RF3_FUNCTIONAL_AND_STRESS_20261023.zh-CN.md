@@ -114,3 +114,11 @@ SHA256=`57ff996c5ba0f6ed2509c27abab154d53f596ded80c2cbbe67dbed73df7eb546`。未�
 - 本地独立 Demo 增加*只观测、不参与 ACK/选主*的 `custodyLocalFsyncAndSign` 与 `custodyRemoteReceipt` 指标后，Maven 编译及 `DemoV19SignedBatchAckTcpTest` 返回 PASS，实验 A/B 保留 WAL 重启，再测 80/80 成功、11.60 records/s、组 P99 3629.28 ms（FAIL）；结果是新采样，不能视为性能优化成功。
 - 第二次样本：主节点 local custody install/fsync/sign 平均约 32.9ms（10 次）；远端证书托管回执平均约 46.1ms（10 次）；复制 batch RPC 平均约 61.1ms（10 次）；status RPC 平均约 505ms（仅 3 次）。客户端组 P99 同时包含前置排队等待，和单次 Netty handler 局部耗时不能混用。
 - **后续硬关口**：Common 实现旧 Epoch 已 ACK 证书可信水位发现及多数保管证明、新 Epoch ZK 授权与旧主 fencing、独立 Demo 无脚本自动 A→B/B→A 接管，并在安全约束不降低的前提下消除高延迟队列/状态 RPC 等待；最后完成 10/50/200 各 >=5 分钟、2–3x Burst 5–10 分钟和故障中压力验收。此刻仍 NO-GO for Trade/Order/MD。
+
+
+### 2026-10-23 进一步收口：旧 Epoch 可信证书只读网络发现
+
+- Common 实验分支新增提交 `4f2d740 feat(common): expose verified read-only old-epoch custody head`。为 `DurableWalCertificateCustodyControlHandler` 增加有界 Netty `HEAD_READ_V1` 操作：返回本地已 fsync 的旧 Epoch 提交证书，客户端按固定旧 Membership 的 RSA WAL 票重验；拒绝跨 Membership、跨分区、伪造及空证书。旧 Epoch 授权被撤销后，历史证书仍允许**只读查询**，不允许继续安装新证书。相关测试 2/2 PASS，原安装协议回归 4/4 PASS。
+- 独立 Demo 的 Netty 服务端路由和 TCP 客户端已经接入只读查询（当前在 Mac 本地 v19 实验工作目录；Demo 源码并非 Common Git 子仓库）。真实 A/B Docker 验证从 B 返回 `oldEpoch=1,certifiedSeq=176,oldWalVoterCount=2,cryptographicallyVerified=true,authorizesPromotion=false`，历史提交证书 SHA256=`e50cb866259a6e6bfb6bee30f33d316cb23091233292078646894330dae7b0f3`。
+- 再次真实 SIGKILL A 后，只依赖 B 网络服务的旧证书查询仍成功（返回同一 seq176 SHA）；B 未获新 Epoch 授权时追加请求仍 503 拒绝。随后 A 原 WAL 卷原样启动。**持久证书远程读取 PASS，自动主切仍 FAIL**。
+- 此只读证明不能单独确定最高已 ACK 水位：仍需从足够的旧数据托管幸存成员采集带节点身份的可信 HEAD、水位取最大并证明与所有可能的旧多数 ACK 有交集；再证明候选 WAL 覆盖水位、新 Epoch ZK 租约 CAS 和旧主 Fencing 后才能 READY。禁止仅凭 `HEAD_READ_V1` 返回值自动授权交易。
