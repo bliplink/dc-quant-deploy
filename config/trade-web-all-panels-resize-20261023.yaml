@@ -1,0 +1,4 @@
+# Every desktop trading panel: hover-revealed left/right/bottom resizing.
+services:
+  web:
+    image: local/dc-saas-trade-web:unified-resize-hover-20261023
