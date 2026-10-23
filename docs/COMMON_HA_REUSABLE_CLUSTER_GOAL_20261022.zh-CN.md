@@ -4,6 +4,12 @@
 > WebCodex 持久目标 ID：`wc_goal_MyIn_BkCaRv9Wt8r`
 > 原始 v17/v18 根因报告：`/Users/kong/Documents/Codex/2026-10-18/referenced-chatgpt-conversation-this-is-an/outputs/async-ha-v18-hotpath-20261022/COMMON_HA_HOTPATH_ROOT_CAUSE_20261022.zh-CN.md`
 
+## 2026-10-23 最新：双JVM证书保管ACK实际接线成功，但自动主切/P99仍NO-GO
+
+最新Common实验commit `2dc42d3`，实验新候选Jar SHA256 `20878d2bd9031a4b923f2857edb80de0a2df27a29ee7dbaa98e7549736916bf9`。已把严格2/2确认接到第二阶段的物理证书持久化门禁：在全新`otc-common-ha-v19-rf2-custody-pilot`中A/B**不同Docker JVM/WAL卷**实际完成WAL 2/2签名、A自己的提交证书fsync、通过Common Netty发送签名证书至B、B独立fsync后返回RSA证书保管签名、A确认2/2证书保管多数**才向客户端发成功ACK**。正常8条成功，B SIGKILL后A严格ACK 503、恢复B重发同8个requestId应用一次，A SIGKILL后B仍持久保管高水位、重启验证有效但未被授权自动升主，A恢复后继续8条成功。短压10模拟客户端80/80成功但仅10.84TPS、组P99=3566.95ms，**新增证书保管热路径性能回退明显**。Common相关34/34及Demo完整132/132 JDK8测试通过；独立测试和实际故障均只在同一Mac的模拟物理节点进行。
+
+**下一件最重要的事**：先优化**可信累计证书与回执的流水线**，保证证明不丢但避免每批两轮串行Netty/fsync/RSA；并实现真实跨Epoch自动主切，单主A死后B可在满足最高已ACK水位/旧主Fencing/新ZK租约后自动READY。然后继续真正动态分区RF2/3与Learner扩容、真实10/50/200租户对账。在两项前不能宣布Demo Common HA完成。Trade现有`TradeClusterAdapter/TradeReplicationManager/TradeSnapshotManager/TradeRecoveryApplier`可先做只读接口核对与状态机适配准备；**不得把尚未达到Common GO的版本替换Trade正式A/B容器**。验收报告`docs/COMMON_HA_RF2_RF3_FUNCTIONAL_AND_STRESS_20261023.zh-CN.md`第三阶段详记。
+
 ## 2026-10-23 按分区RF2/RF3扩容实施最新进度
 
 **已通过**：Common每分区1主1备（严格2/2）与1主2备（严格2/3）固定物理成员证明，4/5/20节点的静态分区规划功能和CPU模拟压测，Common 37项组合回归、Demo 132项完整回归。RF2新增独立试验集群`otc-common-ha-v19-rf2-shard-pilot`：真实A/B双Docker JVM、独立WAL卷、三ZooKeeper控制票，正常8笔2/2签名提交通过；SIGKILL B后严格ACK必须503；恢复B后同8个requestId重试幂等通过。并发10/50/200模拟客户端分别80/400/1600笔均成功，最高证书水位seq2176，A/B WAL文件物理SHA一致。候选Common本地提交`b59ab1d`；参照`docs/COMMON_HA_SHARD_PLACEMENT_REPLICATION_DESIGN_20261023.zh-CN.md`和`docs/COMMON_HA_RF2_RF3_FUNCTIONAL_AND_STRESS_20261023.zh-CN.md`。

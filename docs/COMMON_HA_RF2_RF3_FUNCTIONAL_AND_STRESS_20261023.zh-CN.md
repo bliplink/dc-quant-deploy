@@ -1,5 +1,22 @@
 # Common HA 按分区 RF=2/3：功能验收→压测实施记录（2026-10-23）
 
+## 第三阶段：已 ACK 证书双节点保管 + A/B 故障验证（2026-10-23，新一轮）
+
+- 此阶段建立**另一个完全隔离**实验 `compose.v19-rf2-custody-pilot.yaml`，新3个ZooKeeper容器、A/B两个独立数据JVM及各自独立WAL卷；只共享只读实验测试身份，不复用上一阶段WAL/证书，也不修改正式Trade/Order/MD或默认Docker。Common候选jar另外构建在`common-upstream-review-20261022/target-rebuilt-20261023/common-3.0.22-v19-custody-source-built.jar`（Java8 SHA256 `20878d2bd9031a4b923f2857edb80de0a2df27a29ee7dbaa98e7549736916bf9`）；旧试验Jar独立保留。
+- **Common新增本地提交 `2dc42d3`**：`DurableWalCertificateCustodyControlHandler`为固定旧membership/Epoch发送经2/2或2/3 RSA验证的精确WAL提交证书；B校验本地WAL已fsync且同前缀Hash，将证书temp force→atomic rename→目录force，再以独立节点私钥签署**证书保管回执**。`DurableWalCertificateCustodyAckGate`校验旧Epoch主授权、源节点真实WAL刷盘、Primary自己的证书持久保管、足够不同物理Host的保管RSA回执后才能返回严格ACK。`DurableWalCommitIndex.verifiedHighestCertificate()`支持从完整磁盘链重启验证后恢复最高签名证书。对每份源WAL证书只做一次批级RSA验真以降低多签名的重复CPU。
+- Demo试验开关`DEMO_V19_CUSTODY_ACK_PILOT=1`时，`DemoV19DurableRuntime`真实发送该Common TCP control帧，并在`certify/certifyBatch/certifyCovered`客户端严格成功前执行证书保管门禁；没开开关时RF3/旧实验保持原路径。本段仅实验固定A/B/Epoch1，不应把代码描述为已可跨Epoch自动提升。
+- Common相关JUnit **34/34 PASS**，Demo完整Java8 JUnit **132/132 PASS**；新增网络保管协议+ACK门禁特定测试**13/13 PASS**（真实Netty TCP、身份验证、伪造签名、跨Epoch、WAL未追平、旧授权撤销、严格缺多数拒ACK、重启验签）。
+- **首批8笔**双Docker成功，返回`QUORUM_DURABLE_SINGLE_HOST_TEST`，A/B各自`/srv/v19/wal/.cert-custody/head.bin`物理存在且SHA256完全一致，严格证书序号8。是真实独立JVM+磁盘卷，但它们在同一Mac主机上，`physicalHost`仅实验模拟身份，不具备两个硬件故障域。
+- **SIGKILL B**（真实退出137）后，A独活8条新请求严格ACK被拒绝，不能伪造2/2签名，原已ACK证书只到seq8；B恢复后第1次同请求ID重试安全503，追平到seq16后**相同8个requestId**重试8/8成功且`appliedCount=1`，双方`head.bin`再次完全同SHA（seq16）。无数据清零、无人工复制证书。
+- **SIGKILL Primary A** 后B的WAL和证书文件依然完整；B自行重启时证书文件被启动代码验证并加载，**但B尝试交易仍503，因为没有跨Epoch选主授权与候选权威CommitIndex**。这是预期的安全拒绝，**自动主切仍是NO-GO**。A原容器不清数据启动后新8条seq17..24成功，A/B证书SHA又一致。
+- **双重证书保管短压测**：10模拟客户端/2并发组×8条=80/80成功，最高证书seq104、A/B文件SHA相同，真实吞吐**10.84条/s**，组P50 **280.28ms**、P99 **3566.95ms**。功能PASS，**性能FAIL**，相较上一阶段没有证书独立保管时更慢；原因待详细Profile（串行WAL签名→证书fsync→Netty证书install→B证书fsync与RSA回执→客户端ACK，还有热路径全历史Prefix SHA）。下一步必须设计累计水位的**异步流水线、批量合并fsync及重复PrefixHash增量索引**，不允许绕过已确认的物理证书保管条件。
+- **距离结束Demo/开始Trade的准确门槛**：
+  1. Common完成`RF2/3`动态PartitionAssignment/成员切换、Learner追平的实际Netty运行时接线（目前独立实验仍固定P000/A/B/Epoch1）。
+  2. 完成已向客户端ACK水位的可信跨Epoch发现/证明、新Primary合法ZK租约和旧Primary强Fencing；真实SIGKILL A后**无需脚本**自动B升主READY、已ACK完全一致、旧A恢复降为Replica再追平，A/B互相交换主角色；无丢单/无重复应用/无双主。
+  3. 优化到约定的性能目标（历史讨论P99<=30ms、10/50/200真实租户稳态5分钟和2–3倍Burst5–10分钟、故障期间正常业务或有界暂停、最终权威订单/成交/持仓/资金/Projection一致）。
+  4. Common经此验收后固定版本/接口，开始Trade真实A/B HA部署；**Trade接口调查可以现在启动**，因为Trade既有`TradeClusterAdapter`、`TradeReplicationManager`、`TradeSnapshotManager`、`TradeRecoveryApplier`等适配组件；**Trade生产或Demo正式新镜像替换此刻仍不允许称GO**。具体完成日期依赖自动主切及性能验收，不能凭小范围单测指定。
+- Mac宿主盘仍约**96%**、余**19GiB**；不得在继续长压时无界增长WAL；归档回收前先确认无Docker引用，不删除正在使用的CommitIndex/custody/WAL。
+
 ## 第二阶段补充：RF=2 真正双独立 Docker JVM 功能→故障→并发压测（2026-10-23）
 
 **这是本报告第一阶段单JVM回环测试之后完成的新增验收；以下数据优先作为RF2真实Docker阶段依据。仍然只在同一Mac的一个Colima VM内，不具有两独立物理故障域。**
