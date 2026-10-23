@@ -169,3 +169,34 @@
 
 - 故障测试结束后核对 A 的持久恢复证据：.rf2-learner-evidence 下实际存在 **2 份旧原始 WAL 归档和 2 份 receipt**，对应 seq10 与 seq11 两轮自动追平，未直接删除/覆盖无法审计的原始尾部。为降低同一 Mac 压力，本轮仅将 otc-common-ha-v19-rf2-degrade-e2e 隔离项目容器 stop，保留原 ZooKeeper/WAL 卷，正式 Order/Trade 容器未动，磁盘剩余约 21GiB。
 - **恢复操作注意**：此隔离项目已处于 B/Epoch2 配置，不能再次运行仅接受全新 Epoch1 的 bootstrap；它会因 Assignment 不符安全退出，属于预期行为。继续验证时直接 start 三个 ZooKeeper 与现有 A/B（或以 --no-deps 重建独立节点），不要用普通 up 强制重复 bootstrap，更不要 down -v。上线前应补可重入的“只读校验当前配置”启动路径。
+
+## 14. 2026-10-23：RF2 自动双向切换 Epoch1→2→3→4 验收
+
+**本节为最新隔离实验结论**，覆盖上方早期只完成 Epoch2 的旧状态。仅 Mac/Docker 中 Common v19 的 P000，三 ZooKeeper 和两个独立 JVM/WAL；不等于生产 Order/Trade 或独立物理故障域验证。
+
+| 场景 | 真实结果 | 判定 |
+|---|---|---|
+| A Epoch1 / B Replica | 原 RF2 严格 2/2 8/8 ACK | PASS |
+| SIGKILL A | B 经 ZK 自动切为 Epoch2/READY，并本地持久化 ACK | PASS |
+| A 以 Learner 回归 | A/B WAL 一致，B 可继续交易 | PASS |
+| SIGKILL B | A 经 ZK 自动切为 Epoch3/READY，本地 WAL 写入 seq13，code=0，appliedCount=1 | PASS |
+| B 作为 Learner 回归 | B 自动追到 seq13；A 再写 seq14 后 B 自动追平，A/B SHA 一致 | PASS |
+| 再 SIGKILL A | B 经 ZK 自动切为 Epoch4/READY；seq15 写入 code=0，appliedCount=1 | PASS |
+| A 重新以 Learner 回归 | A/B 都是 Epoch4、seq15、Clean，SHA256 同为 94172373ceaeae2ada0f183f3e43d2af68629444a413f7a6bf8a4e8f254a3816；A 写入拒绝 503 | PASS |
+| Epoch4 关闭 ZooKeeper 3 节点中的 2 节点 | B 停止确认写入，返回 503，没有无仲裁双主 | PASS |
+
+以上真实切换的主节点/Epoch/READY 均由隔离 JVM 内 ZooKeeper 协调器自动 CAS；实验命令只做 SIGKILL、启动容器、业务请求与取证，未人工写入 ZK Assignment。切换存在秒级会话检测与旧授权隔离窗口，不能宣称零停顿。
+
+### 实际修复问题
+
+1. 将隔离 Demo 的本地持久化确认、就绪守卫与双向 Learner 自动复制扩展为 Epoch2–8 的有界模式，严格要求 ZK 控制授权、原主成员失效、候选洁净 WAL 覆盖 Epoch1 经多数证明的已 ACK 前缀；新主先进入 RECOVERING，延迟隔离旧授权后才 READY。每次记录 candidateDurableSeqAtPromotion 和 previousEpochMayHaveUnreplicatedAcks=true。
+2. 解决恢复镜像原子替换 WAL 后，旧证书验证回调引用已经关闭的 Journal 对象，导致真实 Epoch3→4 候选拒绝的问题；现在重新读取 Catalog 中当前已打开的 WAL，仍需核验旧签名证书和已确认前缀，并未跳过校验。
+3. 双向 Learner 无需脚本直接复制文件：Netty 有界镜像传输、完整 SHA256/提交序列/状态摘要校验、原旧 WAL fsync 归档、独立 WAL 回放、ZK 成员版本复核、原子安装。归档和传输模型还不是生产级增量 WAL/Diff。
+
+### 验收边界及重放源码
+
+- Demo Maven 完整回归：37 suites / 143 tests / 0 failures / 0 errors / 1 skipped（142 通过）。
+- 本轮修改后的 9 个 Java 源文件快照：tests/patches/common-v19-rf2-epoch4-rotation-source-20261023.tar.gz；对应逐文件 SHA256：tests/patches/common-v19-rf2-epoch4-rotation-source-20261023.sha256。快照已解压逐文件比对确认一致。**该文件是源文件快照而不是独立增量 patch**；使用时应先确认前面三轮 v19 补丁和工作树差异，不能无审核覆盖其它代码。
+- **当前全部 Epoch2/3/4 新写入均为 AUTO_DEGRADED_LOCAL_DURABLE，quorumDurable=false**；还没有把追平的 Learner 正式恢复为 Replica，也没有动态安装 Epoch2+ 的真实双副本签名/提交合同。下一阶段必须修复 Common 正式新配置切换（写屏障、提交水位证明、ZK CAS、复制 ACK 批量和动态成员），不能将两个节点 WAL 一致等同于严格 2/2。
+- 本地单副本期间存在 RPO>0 风险；任何被选中新主缺少前任单机期间已 ACK WAL 的情况不得冒充零丢失，已将 possibleDataLossIfPrimaryPermanentlyLost=true 返回客户端。
+- 当前仅 P000 单机隔离试验，不代表 256 分区、2→4 节点各 64 主、Order/Trade/MD 资金持仓一致性、真实多物理节点、TPS/p99、ZooKeeper 仲裁恢复后的新 Epoch 自动重新授权都已通过。正式 HA 仍 NO-GO。
