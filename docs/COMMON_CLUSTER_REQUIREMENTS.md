@@ -128,3 +128,6 @@
 
 - **T33（2026-10-23 隔离单分区反向主切/严格 ACK PASS）** 在 Epoch7 A备/B主真严格 seq15 后 SIGKILL B，A 由真实 ZK 自动晋升为 Epoch8 主并本地继续真实新交易 seq16 code0/appliedCount1/quorumDurable=false；B 恢复自动追平 A 的 seq16 且 SHA一致，A 自动完成 Epoch9 新签名 Genesis、双证书保管和严格 READY。恢复就绪检查 Epoch1-8 限制后，A 作为严格主的 seq17 首次 TCP 超时，但同 requestId 重试 code0、appliedCount1、无重复；全新 seq18 code0/quorumDurable=true，A/B WAL epoch9/seq18 SHA 一致，两个独立 head.bin SHA 一致，CommitIndex 证书落盘。Demo 全量 181 测试：180通过、1跳过、0失败。
 - **T34（仍未完成）** 评估更多真实 Epoch 滚动故障与不重启 JVM 的重复 rearm、完整不同物理故障域、256分区/4节点拓扑的 ZooKeeper 授权规模和负载、10/50/200 tenants TPS与p99、签名及证书双保管批量优化，消除高延迟/客户端 TCP 超时、验证安全重试、订单成交去重和权威资金/持仓/Projection 一致性。隔离 v19 Epoch 上限已统一提升至128，仅验证 Epoch9，不得视为更高 Epoch 或生产 HA 都已验收。
+
+- **T35（2026-10-23：RF2 buddy 256分区本地规划合成基准 PASS）** Common现有PartitionBuddyPlacementPlanner按2节点每个128主、4节点A/B与C/D每个64主、8节点每个32主做单buddy复制；新规划只能PREPARING、不能自行READY；新增本地PartitionBuddyPlacementLoadProbe/ScaleTest，Common commit 786bdbc，40次256分区规划4节点median1.179ms/p99 4.867ms（仅Java规划CPU，不是交易p99/TPS）；Common本地全量423单测全部通过。
+- **T36（未完成）** 实际4独立数据JVM、256分区ZK PREPARING和认证READY、两组buddy持续WAL、自动故障注入、10/50/200租户真实负载TPS与p99、2–3倍burst、最终资金/持仓/委托/成交/Projection一致性均需验收。目前Mac磁盘仅剩12–13GiB，虽已安全清理两个停止的旧实验Compose及未引用镜像，宿主空间未显著增加；高压前必须定量处理磁盘资源，不允许删除正式容器卷/当前严格Epoch9证据。

@@ -290,3 +290,20 @@ A 控制线程随后自动执行 Epoch9 / FREEZE → GENESIS_PREPARE(seq16) → 
 最新 Demo Maven 全量回归：**43 suites / 181 tests / 180 passed / 1 skipped / 0 failures/errors**。20 个指定 Java/Compose 文件快照 tests/patches/common-v19-rf2-epoch9-bidirectional-strict-20261023.tar.gz，配套同前缀 .sha256 清单，经干净临时目录安全解压及逐文件字节相等验证。属于源码阶段快照，不是独立增量补丁；合并到其它仓库前还需差异审查。
 
 本轮完整闭环覆盖两个方向：严格 B主→A备、B 存活单节点→恢复严格；严格 A主→B备、A 单节点继续交易→恢复严格。**没有**证明长期 p99 满足目标或可无限次滚动切换：目前仅单 Mac/Docker P000、有限 Epoch 的故障注入，新 Epoch 每次 RSA+证书双保管路径仍需性能优化；真实 Order/Trade/MD/Projection 权威对账和256分区/4节点/10-50-200租户压测未执行。初次 TCP 超时表明仍需重试策略与 ACK 超时指标验收。对所有 LOCAL_DURABLE 的单机确认必须继续明确 RPO>0 可能性。当前按阶段判定 P000 双向功能试验 PASS；生产级整个 Common HA 尚未最终验收。
+
+## 21. 2026-10-23：256 分区 RF2 buddy 规划与磁盘安全回收
+
+在 Common 本地分支 feat/common-durable-wal-quorum-20261022 提交 **786bdbc**，新增 PartitionBuddyPlacementLoadProbe 和 PartitionBuddyPlacementScaleTest，复用现有 PartitionBuddyPlacementPlanner，不另造选主或复制算法。256 分区下 2 个数据节点各主128/备128；4 节点各主64/备64，采用 A/B 与 C/D 两个独立互备组；8 节点各主32/备32。每个分区只向自己的 buddy 发送一条副本 WAL，不做全互连。新分区初始只标记 PREPARING，不得直接发布 READY；现存分区扩容必须走经过认证的 Learner/Genesis 迁移事务。
+
+本机合成 CPU 规划测试（每种规模 256 分区，预热3次，采样40次）：
+- 2节点：每节点128个主分区；规划中位1.815ms、p99 11.371ms；
+- 4节点：每节点64个主分区；规划中位1.179ms、p99 4.867ms；
+- 8节点：每节点32个主分区；规划中位0.791ms、p99 10.870ms。
+
+以上是**一次生成256个初始分区方案的纯Java本地耗时**，不是订单p99、ZooKeeper延迟或实际TPS；40次样本只建立粗略CPU基线，不允许据此宣称真实4 JVM /256分区 HA验收完成。Common Maven全量测试 **98 suites /423 tests、0 failures/errors/skipped**，含新拓扑分组、每分区唯一备份、PREPARING不提前READY和非法池拒绝。控制台曾有缺失 ATSConfig.ini 的环境警告，最终JUnit/Surefire全部通过，正式集成仍应单独复核该环境差异。
+
+磁盘：先核实容器均停止及Compose卷确属旧试验后，清理了两个早期 RF2 auto-stage 和 degrade-e2e 实验的容器及专属ZK/WAL卷；执行 Docker image prune -a 仅删除没有任何现有容器引用的镜像。严格 v19-rf2-strict-cutover 当前8个ZK/WAL证据卷保留，正式Order/Trade/MD与生产卷不改，未运行GitHub Actions。清理后Mac APFS仍报419/460GiB已使用、剩余12–13GiB（97–98%），表示未释放出足够真实宿主空间，**不能宣布磁盘容量问题已解决**，也不能运行危险的全局 volumes prune。
+
+下一阶段应先为4个独立数据JVM准备各自WAL目录及相互独立数据身份，在隔离ZK下创建P000–P255 PREPARING并验证2组buddy的认证Genesis/READY；随后真实持续下单/撤单/撮合测试256分区、SIGKILL四节点中的任一主/备，以及租户10→50→200每档稳态不少于5分钟、p50/p95/p99、TPS、CPU/RSS/磁盘IO/网络、2–3倍burst；最终做资金/持仓/委托/成交及Projection权威一致性检查。性能上始终只有一个buddy副本目标，严格模式的双签名与保管仍需测量实际CPU和耗时。
+
+**结论：Common RF2 256分区规划层PASS；4物理数据进程、256分区并发交易、200租户和生产级HA均未验收。**
