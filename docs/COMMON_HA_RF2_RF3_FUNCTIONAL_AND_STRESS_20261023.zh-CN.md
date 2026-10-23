@@ -122,3 +122,11 @@ SHA256=`57ff996c5ba0f6ed2509c27abab154d53f596ded80c2cbbe67dbed73df7eb546`。未�
 - 独立 Demo 的 Netty 服务端路由和 TCP 客户端已经接入只读查询（当前在 Mac 本地 v19 实验工作目录；Demo 源码并非 Common Git 子仓库）。真实 A/B Docker 验证从 B 返回 `oldEpoch=1,certifiedSeq=176,oldWalVoterCount=2,cryptographicallyVerified=true,authorizesPromotion=false`，历史提交证书 SHA256=`e50cb866259a6e6bfb6bee30f33d316cb23091233292078646894330dae7b0f3`。
 - 再次真实 SIGKILL A 后，只依赖 B 网络服务的旧证书查询仍成功（返回同一 seq176 SHA）；B 未获新 Epoch 授权时追加请求仍 503 拒绝。随后 A 原 WAL 卷原样启动。**持久证书远程读取 PASS，自动主切仍 FAIL**。
 - 此只读证明不能单独确定最高已 ACK 水位：仍需从足够的旧数据托管幸存成员采集带节点身份的可信 HEAD、水位取最大并证明与所有可能的旧多数 ACK 有交集；再证明候选 WAL 覆盖水位、新 Epoch ZK 租约 CAS 和旧主 Fencing 后才能 READY。禁止仅凭 `HEAD_READ_V1` 返回值自动授权交易。
+
+
+### 本轮最终回归结果（新增 HEAD_READ_V1 后）
+
+- Common `mvn -q test`：93 suites / **388 tests** / failures=0 / errors=0 / skipped=0，退出码 0。
+- 独立 Demo `mvn -q test`：35 suites / **132 tests** / failures=0 / errors=0 / skipped=1，退出码 0。分别读取 Surefire XML，不能把 Demo 跳过项算通过。
+- 两次隔离 RF2 10 虚拟客户端短压，80/80 严格确认，吞吐约 11.07/11.60 records/s，P99 约 3971/3629 ms；**性能 FAIL，未启动正式 5 分钟与 Burst 验收**。
+- 旧 A SIGKILL 后 B 的证书 HEAD_READ 经真实 Netty 查询 seq176 并验签 PASS；B 自动升主 FAIL、未授权写入 503 PASS。证书发现是安全接管的必要条件之一，不是完整 promotion proof。
