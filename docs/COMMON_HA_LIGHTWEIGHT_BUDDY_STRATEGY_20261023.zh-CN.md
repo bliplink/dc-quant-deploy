@@ -88,3 +88,10 @@
 - Common 全量 Maven（新增规划器后）**94 suites / 395 tests / 0 failures / 0 errors / 0 skipped**，退出码 0。存在旧 `./control/ATSConfig.ini` 不存在的测试环境堆栈输出，但 XML 统计及退出码均正常。
 - 此阶段**没有**完成线上 256 个分区的 ZooKeeper Assignment 发布、业务 WAL 分布、2→4 迁移，也没有证明 B 在 A 故障时 READY。以上必须列入下一阶段独立 Docker 测试，不能将规划器 PASS 说成 HA PASS。
 - 方案文档本地提交 `36da560`（`saas-crypto`）；Common 源码本地提交 `06c650e`；本阶段未运行 GitHub Actions。
+
+## 9. RF2 单幸存副本的受控接管准备（2026-10-23）
+
+- Common 本地提交 `0946323`：`PartitionFailoverController` 在明确配置 `minimumLiveSynchronizedReplicas=1` 时，允许原 RF2 仅剩的同步 Replica 在租约有效、旧主失效、`PromotionSafety.requireSafe` 证明可信提交边界通过后，执行新 Epoch / Assignment CAS。原 RF3 只剩一个同步副本仍拒绝提升。
+- **结果为 `APPLIED_NOT_READY`，Assignment 状态为 `RECOVERING`，不可路由写入。** 新主的 Replica 列表为空，旧主作为 Learner 保留；不伪造存活的备机，不把严格 RF2 2/2 ACK 降为单节点成功。
+- 新增 `PartitionRf2SurvivorFailoverTest` 9/9 PASS，覆盖合法接管、旧主存活、丢租约、未证明提交水位、CAS 冲突、失去备机、RF3 多数不足、严格 ACK 拒绝、恢复中禁止反复升任。Common 全量回归 **95 suites / 404 tests / 0 failed / 0 errors / 0 skipped**。
+- **下一阶段尚缺**：从 `RECOVERING` 经过真实 WAL/旧 Epoch 已确认提交水位/旧主 Fencing/持续授权核验的恢复事务，再按明确的 durability 合同安全发布 READY；独立 Demo 真实 A→B→A 自动切换尚未通过。不能把单元测试或控制面 CAS 当作完整 HA 通过。

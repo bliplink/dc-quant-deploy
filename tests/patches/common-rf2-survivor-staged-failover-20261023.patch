@@ -1,0 +1,243 @@
+diff --git a/src/main/java/com/app/common/partition/PartitionFailoverController.java b/src/main/java/com/app/common/partition/PartitionFailoverController.java
+index c74ad67..11cb24e 100644
+--- a/src/main/java/com/app/common/partition/PartitionFailoverController.java
++++ b/src/main/java/com/app/common/partition/PartitionFailoverController.java
+@@ -56,6 +56,8 @@ public final class PartitionFailoverController {
+ 
+     public enum Outcome {
+         APPLIED,
++        /** Epoch CAS succeeded; single survivor must still complete recovery. */
++        APPLIED_NOT_READY,
+         PRIMARY_STILL_LIVE,
+         CONTROL_PLANE_UNAVAILABLE,
+         LEASE_NOT_HELD,
+@@ -104,15 +106,17 @@ public final class PartitionFailoverController {
+      * @param minimumLiveSynchronizedReplicas number of already-synchronized live
+      *        replicas required before failover, including the promoted candidate.
+      *        A value of 2 guarantees the new primary still has at least one live
+-     *        synchronous replica after promotion.
++     *        synchronous replica after promotion. A value of 1 stages a lone RF2
++     *        survivor as non-routable RECOVERING; it neither reconfigures a
++     *        strict 2/2 ACK policy nor grants READY without a recovery protocol.
+      */
+     public PartitionFailoverController(Guard guard, Membership membership, PromotionSafety safety,
+             AssignmentStore store, int minimumLiveSynchronizedReplicas) {
+         if (guard == null || membership == null || safety == null || store == null) {
+             throw new IllegalArgumentException("controller dependencies are required");
+         }
+-        if (minimumLiveSynchronizedReplicas < 2) {
+-            throw new IllegalArgumentException("failover requires at least two live synchronized replicas");
++        if (minimumLiveSynchronizedReplicas < 1) {
++            throw new IllegalArgumentException("failover requires at least one live synchronized replica");
+         }
+         this.guard = guard;
+         this.membership = membership;
+@@ -139,7 +143,8 @@ public final class PartitionFailoverController {
+         }
+ 
+         List<String> liveSynchronized = liveSynchronizedReplicas(current);
+-        if (liveSynchronized.size() < minimumLiveSynchronizedReplicas) {
++        if (liveSynchronized.size() < minimumLiveSynchronizedReplicas
++                || (liveSynchronized.size() == 1 && current.replicaNodes().size() != 1)) {
+             return result(Outcome.INSUFFICIENT_SYNCHRONIZED_REPLICAS, partitionId, previousPrimary, null,
+                     current.getEpoch(), current.getEpoch(), null);
+         }
+@@ -176,10 +181,15 @@ public final class PartitionFailoverController {
+                     current.getEpoch(), current.getEpoch(), null);
+         }
+ 
+-        PartitionAssignment updated = buildFailoverAssignment(current, candidate, liveRechecked);
++        boolean rf2Survivor = liveRechecked.size() == 1
++                && current.replicaNodes().size() == 1;
++        PartitionAssignment updated = rf2Survivor
++                ? buildRecoveringRf2Assignment(current, candidate)
++                : buildFailoverAssignment(current, candidate, liveRechecked);
+         PartitionAssignmentValidator.requireValid(updated);
+         boolean applied = store.compareAndSet(partitionId, versioned.getVersion(), updated);
+-        return result(applied ? Outcome.APPLIED : Outcome.CAS_CONFLICT,
++        return result(applied ? (rf2Survivor ? Outcome.APPLIED_NOT_READY : Outcome.APPLIED)
++                        : Outcome.CAS_CONFLICT,
+                 partitionId, previousPrimary, candidate, current.getEpoch(),
+                 applied ? updated.getEpoch() : current.getEpoch(), null);
+     }
+@@ -192,6 +202,27 @@ public final class PartitionFailoverController {
+         return live;
+     }
+ 
++    /** Stage the sole RF2 survivor without enabling strict or local client ACKs. */
++    private static PartitionAssignment buildRecoveringRf2Assignment(
++            PartitionAssignment current, String candidate) {
++        if (current == null || blank(candidate) || current.replicaNodes().size() != 1
++                || !current.isReplica(candidate))
++            throw new IllegalArgumentException("one designated RF2 survivor required");
++        PartitionAssignment next = copy(current);
++        next.setEpoch(Math.addExact(current.getEpoch(), 1L));
++        next.setAssignmentVersion(Math.addExact(current.getAssignmentVersion(), 1L));
++        next.setPrimary(candidate);
++        next.setReplica(null);
++        next.setReplicas(Collections.<String>emptyList());
++        Set<String> learners = new LinkedHashSet<String>();
++        for (String learner : current.getLearners())
++            if (!sameNode(learner, candidate)) learners.add(learner);
++        learners.add(current.getPrimary());
++        next.setLearners(new ArrayList<String>(learners));
++        next.setState("RECOVERING");
++        return next;
++    }
++
+     static PartitionAssignment buildFailoverAssignment(PartitionAssignment current,
+             String candidate, List<String> liveSynchronized) {
+         if (current == null || blank(candidate) || liveSynchronized == null) {
+diff --git a/src/test/java/com/app/common/partition/PartitionRf2SurvivorFailoverTest.java b/src/test/java/com/app/common/partition/PartitionRf2SurvivorFailoverTest.java
+new file mode 100644
+index 0000000..f0e9e4b
+--- /dev/null
++++ b/src/test/java/com/app/common/partition/PartitionRf2SurvivorFailoverTest.java
+@@ -0,0 +1,146 @@
++package com.app.common.partition;
++
++import java.util.Arrays;
++import java.util.Collections;
++import java.util.HashSet;
++import java.util.List;
++import java.util.Set;
++import java.util.concurrent.atomic.AtomicInteger;
++import org.junit.Test;
++import static org.junit.Assert.*;
++
++/** RF2 sole survivor may acquire fenced epoch metadata, never writable READY. */
++public final class PartitionRf2SurvivorFailoverTest {
++    private static final class Fixture implements PartitionFailoverController.Guard,
++            PartitionFailoverController.Membership,
++            PartitionFailoverController.AssignmentStore,
++            PartitionFailoverController.PromotionSafety {
++        final Set<String> live = new HashSet<String>(Arrays.asList("A", "B"));
++        final AtomicInteger proofs = new AtomicInteger();
++        int writes, version = 9;
++        boolean connected = true, leased = true, conflict, safe = true;
++        Runnable afterProof;
++        PartitionAssignment current = assignment("B");
++        PartitionFailoverController controller() {
++            return new PartitionFailoverController(this, this, this, this, 1);
++        }
++        public boolean isConnected() { return connected; }
++        public boolean hasLease() { return leased; }
++        public boolean isLive(String node) { return live.contains(node); }
++        public PartitionFailoverController.VersionedAssignment read(String p) {
++            return new PartitionFailoverController.VersionedAssignment(current, version);
++        }
++        public boolean compareAndSet(String p, int expected, PartitionAssignment next) {
++            writes++;
++            if (conflict || expected != version) return false;
++            current = next;
++            version++;
++            return true;
++        }
++        public void requireSafe(PartitionAssignment old, String candidate, List<String> replicas) {
++            proofs.incrementAndGet();
++            assertEquals("B", candidate);
++            assertEquals(Collections.singletonList("B"), replicas);
++            if (afterProof != null) afterProof.run();
++            if (!safe) throw new IllegalStateException("unproven ACK boundary");
++        }
++    }
++    private static PartitionAssignment assignment(String... replicas) {
++        PartitionAssignment a = new PartitionAssignment();
++        a.setPartitionId("P000");
++        a.setEpoch(7);
++        a.setAssignmentVersion(4);
++        a.setProtocolVersion(2);
++        a.setPrimary("A");
++        a.setReplicas(Arrays.asList(replicas));
++        a.setState("READY");
++        return a;
++    }
++    @Test public void loneSynchronizedRf2SurvivorTransitionsToNonRoutableEpoch() {
++        Fixture f = new Fixture();
++        f.live.remove("A");
++        PartitionFailoverController.Result result = f.controller().reconcile("P000");
++        assertEquals(PartitionFailoverController.Outcome.APPLIED_NOT_READY, result.getOutcome());
++        assertEquals(8, result.getNewEpoch());
++        assertEquals("B", f.current.getPrimary());
++        assertEquals(8, f.current.getEpoch());
++        assertEquals(5, f.current.getAssignmentVersion());
++        assertEquals("RECOVERING", f.current.getState());
++        assertFalse(f.current.isRoutable());
++        assertTrue(f.current.replicaNodes().isEmpty());
++        assertEquals(Collections.singletonList("A"), f.current.getLearners());
++        assertEquals(1, f.proofs.get());
++        assertEquals(1, f.writes);
++        assertEquals(0, PartitionAssignmentValidator.validate(f.current).size());
++    }
++    @Test public void previousPrimaryStillLiveCannotTriggerTransition() {
++        Fixture f = new Fixture();
++        assertEquals(PartitionFailoverController.Outcome.PRIMARY_STILL_LIVE,
++                f.controller().reconcile("P000").getOutcome());
++        assertEquals(0, f.proofs.get());
++        assertEquals(0, f.writes);
++    }
++    @Test public void lostLeaseAfterProofCannotCas() {
++        Fixture f = new Fixture();
++        f.live.remove("A");
++        f.afterProof = () -> f.leased = false;
++        assertEquals(PartitionFailoverController.Outcome.STALE_BEFORE_CAS,
++                f.controller().reconcile("P000").getOutcome());
++        assertEquals(0, f.writes);
++    }
++    @Test public void noVerifiedAckFrontierCannotCas() {
++        Fixture f = new Fixture();
++        f.live.remove("A");
++        f.safe = false;
++        assertEquals(PartitionFailoverController.Outcome.PROMOTION_UNSAFE,
++                f.controller().reconcile("P000").getOutcome());
++        assertEquals(0, f.writes);
++    }
++    @Test public void casConflictDoesNotClaimHandoff() {
++        Fixture f = new Fixture();
++        f.live.remove("A");
++        f.conflict = true;
++        assertEquals(PartitionFailoverController.Outcome.CAS_CONFLICT,
++                f.controller().reconcile("P000").getOutcome());
++        assertEquals("A", f.current.getPrimary());
++        assertEquals(7, f.current.getEpoch());
++    }
++    @Test public void noLiveStandbyFailsClosed() {
++        Fixture f = new Fixture();
++        f.live.clear();
++        assertEquals(PartitionFailoverController.Outcome.INSUFFICIENT_SYNCHRONIZED_REPLICAS,
++                f.controller().reconcile("P000").getOutcome());
++        assertEquals(0, f.writes);
++    }
++    @Test public void rf3OnlyOneSurvivorMustNotStageHandoff() {
++        Fixture f = new Fixture();
++        f.current = assignment("B", "C");
++        f.live.remove("A");
++        assertEquals(PartitionFailoverController.Outcome.INSUFFICIENT_SYNCHRONIZED_REPLICAS,
++                f.controller().reconcile("P000").getOutcome());
++        assertEquals(0, f.writes);
++    }
++    @Test public void survivorWithoutDataQuorumCannotPretendStrictRf2Ready() {
++        Fixture f = new Fixture();
++        f.live.remove("A");
++        f.controller().reconcile("P000");
++        assertFalse(f.current.isRoutable());
++        f.current.setState("READY");
++        try {
++            PartitionReplicaGroup.from(f.current,
++                    PartitionReplicaGroup.Durability.QUORUM_DURABLE,
++                    Collections.singletonMap("B", "physical-b"));
++            fail("RF1 must not advertise strict RF2 2/2");
++        } catch (IllegalArgumentException expected) {
++            // Missing RF2 voter is not an eligible strict data majority.
++        }
++    }
++    @Test public void recoveringOwnerCannotAutoReconcileSecondEpoch() {
++        Fixture f = new Fixture();
++        f.live.remove("A");
++        f.controller().reconcile("P000");
++        assertEquals(PartitionFailoverController.Outcome.STALE_BEFORE_CAS,
++                f.controller().reconcile("P000").getOutcome());
++        assertEquals(1, f.writes);
++    }
++}
+\ No newline at end of file
