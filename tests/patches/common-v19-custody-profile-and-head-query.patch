@@ -1,0 +1,151 @@
+--- a/src/main/java/com/opentradingcore/demo/DemoV19PerfCounters.java
++++ b/src/main/java/com/opentradingcore/demo/DemoV19PerfCounters.java
+@@ -18,6 +18,8 @@
+     private static final Metric QUORUM_LOCAL = new Metric();
+     private static final Metric QUORUM_WAIT = new Metric();
+     private static final Metric QUORUM_CERT = new Metric();
++    private static final Metric CUSTODY_LOCAL = new Metric();
++    private static final Metric CUSTODY_PEER = new Metric();
+ 
+ 
+     private DemoV19PerfCounters() {}
+@@ -27,6 +29,8 @@
+     static void recordQuorumLocal(long durationNs) { QUORUM_LOCAL.record(durationNs); }
+     static void recordQuorumWait(long durationNs) { QUORUM_WAIT.record(durationNs); }
+     static void recordQuorumCert(long durationNs) { QUORUM_CERT.record(durationNs); }
++    static void recordCustodyLocal(long durationNs) { CUSTODY_LOCAL.record(durationNs); }
++    static void recordCustodyPeer(long durationNs) { CUSTODY_PEER.record(durationNs); }
+ 
+ 
+     static Map<String,Object> status() {
+@@ -36,6 +40,8 @@
+         data.put("quorumLocalWitness", QUORUM_LOCAL.status());
+         data.put("quorumPeerWait", QUORUM_WAIT.status());
+         data.put("quorumCertAndAckGate", QUORUM_CERT.status());
++        data.put("custodyLocalFsyncAndSign", CUSTODY_LOCAL.status());
++        data.put("custodyRemoteReceipt", CUSTODY_PEER.status());
+         data.put("resolution","bucket_upper_bound_us");
+         return data;
+     }
+--- a/src/main/java/com/opentradingcore/demo/DemoV19DurableRuntime.java
++++ b/src/main/java/com/opentradingcore/demo/DemoV19DurableRuntime.java
+@@ -177,8 +177,11 @@
+     }
+ 
+     ReplicationControlResponse control(ReplicationControlRequest request) {
+-        if(request!=null && DurableWalCertificateCustodyControlHandler.OPERATION
+-                .equals(request.getOperation()))
++        if(request!=null &&
++                (DurableWalCertificateCustodyControlHandler.OPERATION
++                        .equals(request.getOperation())
++                 || DurableWalCertificateCustodyControlHandler.HEAD_QUERY_OPERATION
++                        .equals(request.getOperation())))
+             return custodyTcp==null
+                     ? ReplicationControlResponse.error("CUSTODY_DISABLED","pilot not active")
+                     : custodyTcp.handle(request);
+@@ -220,9 +223,15 @@
+             requireGrant(membership);
+             return;
+         }
+-        certificateCustody.install(exact);
+-        DurableWalCustodyQuorum.Receipt own=certificateCustody.signInstalled(
+-                node,localKey);
++        DurableWalCustodyQuorum.Receipt own;
++        long custodyLocalStart=System.nanoTime();
++        try {
++            certificateCustody.install(exact);
++            own=certificateCustody.signInstalled(node,localKey);
++        } finally {
++            DemoV19PerfCounters.recordCustodyLocal(
++                    System.nanoTime()-custodyLocalStart);
++        }
+         Exception lastFailure=null;
+         long until=System.nanoTime()+TimeUnit.MILLISECONDS.toNanos(1300);
+         while(System.nanoTime()<until){
+@@ -232,6 +241,7 @@
+             receipts.add(own);
+             for(String peer:designatedDataPeers()){
+                 Future<ReplicationControlResponse> pending=null;
++                long custodyRemoteStart=System.nanoTime();
+                 try {
+                     pending=transport.control(DemoNettyBridge.endpoint(peer),
+                         DurableWalCertificateCustodyControlHandler.request(
+@@ -240,7 +250,11 @@
+                     receipts.add(DurableWalCertificateCustodyControlHandler.decodeVerified(
+                             membership,exact,peer,response));
+                 }catch(Exception fail){lastFailure=fail;}
+-                finally{if(pending!=null && !pending.isDone())pending.cancel(true);}
++                finally{
++                    DemoV19PerfCounters.recordCustodyPeer(
++                            System.nanoTime()-custodyRemoteStart);
++                    if(pending!=null && !pending.isDone())pending.cancel(true);
++                }
+                 if(receipts.size()>=membership.majority())break;
+             }
+             if(receipts.size()>=membership.majority()){
+--- a/src/main/java/com/opentradingcore/demo/DemoV19TcpService.java
++++ b/src/main/java/com/opentradingcore/demo/DemoV19TcpService.java
+@@ -57,6 +57,8 @@
+         if (com.app.common.replication.DurableWalReceiptControlHandler.OPERATION
+                 .equals(req.getOperation())
+                 || com.app.common.replication.DurableWalCertificateCustodyControlHandler.OPERATION
++                .equals(req.getOperation())
++                || com.app.common.replication.DurableWalCertificateCustodyControlHandler.HEAD_QUERY_OPERATION
+                 .equals(req.getOperation())) {
+             return durable==null
+                     ? ReplicationControlResponse.error("DISABLED","quorum signer not enabled")
+--- a/src/main/java/com/opentradingcore/demo/DemoV19TcpClient.java
++++ b/src/main/java/com/opentradingcore/demo/DemoV19TcpClient.java
+@@ -17,6 +17,41 @@
+     public Map<String,Object> status(String node) throws Exception {
+         return request(node, DemoV19TcpService.STATUS,
+                 Collections.<String,Object>emptyMap());
++    }
++
++    /** Read-only, cryptographically verified old-epoch persisted proof.
++     * Never promotes a node, grants an epoch, or treats one head as complete.
++     */
++    public Map<String,Object> custodyHeadEvidence(String node) throws Exception {
++        java.security.KeyFactory keys=java.security.KeyFactory.getInstance("RSA");
++        java.util.List<DurableWalCommitQuorum.Member> participants=
++                new java.util.ArrayList<DurableWalCommitQuorum.Member>();
++        char last="1".equals(System.getenv("DEMO_V19_RF2_SHARD_PILOT"))?'B':'C';
++        for(char suffix='A';suffix<=last;suffix++){
++            String id="CommonHaDemo"+suffix;
++            byte[] encoded=java.nio.file.Files.readAllBytes(java.nio.file.Paths.get(
++                    "/srv/v19/identities",id+".pub.der"));
++            participants.add(new DurableWalCommitQuorum.Member(id,
++                    "simulated-single-mac-jvm-"+suffix,keys.generatePublic(
++                            new java.security.spec.X509EncodedKeySpec(encoded))));
++        }
++        DurableWalCommitQuorum.Membership pinned=new DurableWalCommitQuorum.Membership(
++                "CommonHaDemo","P000","CommonHaDemoA",1,1,participants);
++        ReplicationControlResponse raw=transport.control(DemoNettyBridge.endpoint(node),
++                DurableWalCertificateCustodyControlHandler.headQueryRequest(pinned))
++                .get(8,TimeUnit.SECONDS);
++        DurableWalCommitQuorum.Certificate cert=
++                DurableWalCertificateCustodyControlHandler.decodeHeadEvidence(pinned,raw);
++        Map<String,Object> result=new LinkedHashMap<String,Object>();
++        result.put("partitionId","P000");
++        result.put("sourceNode",node);
++        result.put("oldEpoch",cert.epoch);
++        result.put("certifiedSeq",cert.committedSequence);
++        result.put("certifiedSha256",cert.commitPrefixSha256);
++        result.put("oldWalVoterCount",cert.votes.size());
++        result.put("cryptographicallyVerified",true);
++        result.put("authorizesPromotion",false);
++        return result;
+     }
+ 
+     public Map<String,Object> append(String node, Map<String,Object> command) throws Exception {
+@@ -71,7 +106,9 @@
+         String node = "CommonHaDemo" + args[2];
+         try (DemoV19TcpClient client = new DemoV19TcpClient()) {
+             Map<String,Object> data;
+-            if ("status".equals(args[1]) && args.length == 3) {
++            if ("custody-head".equals(args[1]) && args.length == 3) {
++                data = client.custodyHeadEvidence(node);
++            } else if ("status".equals(args[1]) && args.length == 3) {
+                 data = client.status(node);
+             } else if ("snapshot".equals(args[1]) && args.length == 3) {
+                 DemoV19TcpSnapshotReceiver.Image image = client.snapshot(node);
