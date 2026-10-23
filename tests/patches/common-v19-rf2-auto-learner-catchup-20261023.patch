@@ -1,0 +1,306 @@
+--- a/src/main/java/com/opentradingcore/demo/DemoJournalCatalog.java
++++ b/src/main/java/com/opentradingcore/demo/DemoJournalCatalog.java
+@@ -81,6 +81,95 @@
+         if (journal == null) throw new IllegalArgumentException("unknown partition " + partitionId);
+         return journal;
+     }
++
++    /** v19 isolated learner catch-up. A is still non-writable and remains a
++     * learner after install; this never changes membership or grants READY.
++     * Original WAL is fsync-archived before a fully replayed copy replaces it.
++     */
++    synchronized boolean installRf2LearnerImage(String partitionId,
++            DemoV19TcpSnapshotReceiver.Image image,
++            Rf2LearnerRecheck proof) throws Exception {
++        if (!"P000".equals(partitionId) || image==null || proof==null
++                || image.bytes==null || image.bytes.length==0
++                || image.bytes.length>DemoV19SnapshotExport.MAX_BYTES
++                || image.committedSeq<1 || image.epoch!=2
++                || !"CommonHaDemoB".equals(image.node))
++            throw new IOException("invalid certified learner image");
++        DemoDurableJournal old=journal(partitionId);
++        synchronized (old) {
++            if (!old.isReadyForWrites() || old.committedSeq()>image.committedSeq)
++                throw new IOException("learner WAL dirty or ahead of source");
++            if (!DemoV19SnapshotExport.sha256(image.bytes).equals(image.sha256))
++                throw new IOException("remote image digest mismatch");
++            if (old.committedSeq()==image.committedSeq) {
++                if (!old.committedPrefixSha256().equals(image.sha256))
++                    throw new IOException("same-index learner history diverged");
++                return false;
++            }
++            Path active=old.path();
++            Path evidence=active.getParent().resolve(".rf2-learner-evidence");
++            Files.createDirectories(evidence);
++            String ticket="P000-epoch2-"+UUID.randomUUID();
++            Path archive=evidence.resolve(ticket+".original.wal");
++            Path staged=evidence.resolve(ticket+".staged.wal");
++            Path receipt=evidence.resolve(ticket+".receipt.json");
++            byte[] original=Files.readAllBytes(active);
++            if (original.length>16*1024*1024)
++                throw new IOException("old learner WAL exceeds bounded archive");
++            Files.write(staged,image.bytes,StandardOpenOption.CREATE_NEW,StandardOpenOption.WRITE);
++            forceFile(staged);
++            try (DemoDurableJournal candidate=new DemoDurableJournal(staged)) {
++                if (!candidate.isReadyForWrites() || candidate.committedSeq()!=image.committedSeq
++                        || candidate.lastEpoch()!=image.epoch
++                        || !image.sha256.equals(candidate.committedPrefixSha256())
++                        || !image.stateDigest.equals(candidate.state().stateDigest())
++                        || !old.isCommittedPrefixOf(candidate))
++                    throw new IOException("learner WAL cannot prove append-only source history");
++            }
++            Files.write(archive,original,StandardOpenOption.CREATE_NEW,StandardOpenOption.WRITE);
++            forceFile(archive);
++            if (!sha256(original).equals(sha256(Files.readAllBytes(archive))))
++                throw new IOException("old learner evidence archive mismatch");
++            Map<String,Object> record=new LinkedHashMap<String,Object>();
++            record.put("kind","RF2_EPOCH2_LEARNER_INSTALL_UNACTIVATED");
++            record.put("partitionId",partitionId);
++            record.put("node","CommonHaDemo"+node);
++            record.put("source",image.node);
++            record.put("sourceEpoch",image.epoch);
++            record.put("oldSeq",old.committedSeq());
++            record.put("oldSha256",old.committedPrefixSha256());
++            record.put("sourceSeq",image.committedSeq);
++            record.put("sourceSha256",image.sha256);
++            record.put("sourceStateDigest",image.stateDigest);
++            record.put("archivedWal",archive.toString());
++            record.put("activated",false);
++            Files.write(receipt,JsonUtils.Serializer(record).getBytes(StandardCharsets.UTF_8),
++                    StandardOpenOption.CREATE_NEW,StandardOpenOption.WRITE);
++            forceFile(receipt);
++            forceDirectory(evidence);
++            proof.requireStillLearner();
++            old.close();
++            try {
++                Files.move(staged,active,StandardCopyOption.ATOMIC_MOVE,
++                        StandardCopyOption.REPLACE_EXISTING);
++                forceDirectory(active.getParent());
++            } finally {
++                try { journals.put(partitionId,new DemoDurableJournal(active)); }
++                catch(IOException failure) {
++                    journals.remove(partitionId);
++                    throw failure;
++                }
++            }
++            DemoDurableJournal installed=journal(partitionId);
++            if (!installed.isReadyForWrites() || installed.committedSeq()!=image.committedSeq
++                    || !image.sha256.equals(installed.committedPrefixSha256())
++                    || !image.stateDigest.equals(installed.state().stateDigest()))
++                throw new IOException("learner installed WAL replay mismatch");
++            return true;
++        }
++    }
++
++    interface Rf2LearnerRecheck { void requireStillLearner() throws Exception; }
+ 
+     public Map<String, Object> physicalStatus(String partitionId) throws IOException {
+         DemoDurableJournal journal = journal(partitionId);
+--- a/src/main/java/com/opentradingcore/demo/DemoV19Rf2AutoStage.java
++++ b/src/main/java/com/opentradingcore/demo/DemoV19Rf2AutoStage.java
+@@ -31,6 +31,7 @@
+     private final ZkPartitionFailoverRuntime runtime;
+     private final ZookeeperClient zk;
+     private final DemoV19DurableRuntime durable;
++    private final DemoV19Rf2LearnerCatchup learner;
+     private final ScheduledExecutorService autoDegrade=Executors.newSingleThreadScheduledExecutor(r->{
+         Thread t=new Thread(r,"v19-rf2-auto-degrade"); t.setDaemon(true); return t;
+     });
+@@ -45,7 +46,7 @@
+     }
+ 
+     DemoV19Rf2AutoStage(ZookeeperClient zk, String node,
+-            DemoV19DurableRuntime durable) {
++            DemoV19DurableRuntime durable,DemoJournalCatalog catalog) {
+         if (!enabled() || zk==null || durable==null
+                 || (!"CommonHaDemoA".equals(node) && !"CommonHaDemoB".equals(node)))
+             throw new IllegalArgumentException("isolated RF2 auto-stage requires live custody quorum");
+@@ -63,6 +64,9 @@
+             throw new IllegalStateException("duplicate live data identity: "+node,alreadyExists);
+         }
+         plane=new ZkPartitionFailoverControlPlane(zk,ASSIGN,MEMBERS,LEASE,node);
++        learner="1".equals(System.getenv("DEMO_V19_RF2_AUTO_LEARNER"))
++                && "CommonHaDemoA".equals(node)
++                ? new DemoV19Rf2LearnerCatchup(node,plane,catalog) : null;
+         runtime=new ZkPartitionFailoverRuntime(plane,
+                 (current,candidate,replicas)->{
+                     if (!node.equals(candidate)
+@@ -96,6 +100,15 @@
+ 
+     void start() {
+         runtime.start();
++        if (learner!=null) autoDegrade.scheduleWithFixedDelay(()->{
++            try {
++                if (learner.once()) System.out.println(
++                        "V19_RF2_LEARNER_CAUGHT_UP learner=CommonHaDemoA source=CommonHaDemoB");
++            } catch (Exception denied) {
++                System.err.println("V19_RF2_LEARNER_CATCHUP_DELAYED reason="
++                        +denied.getClass().getSimpleName()+": "+denied.getMessage());
++            }
++        },3,3,TimeUnit.SECONDS);
+         if ("1".equals(System.getenv("DEMO_V19_RF2_AUTO_DEGRADE"))) {
+             autoDegrade.scheduleWithFixedDelay(()->{
+                 try { tryPublishDegradedReady(); }
+--- a/src/main/java/com/opentradingcore/demo/DemoV19ClusterHarness.java
++++ b/src/main/java/com/opentradingcore/demo/DemoV19ClusterHarness.java
+@@ -54,7 +54,7 @@
+             async.useSignedBatchProofs(durable);
+         }
+         final DemoV19Rf2AutoStage autoStage=DemoV19Rf2AutoStage.enabled()
+-                ? new DemoV19Rf2AutoStage(zk,node,durable) : null;
++                ? new DemoV19Rf2AutoStage(zk,node,durable,catalog) : null;
+         DemoV19TcpService v19Tcp = new DemoV19TcpService(node, catalog,
+                 writer, async, controller,durable);
+         com.app.common.replication.DirectNettyReplicationServer replica =
+--- a/compose.v19-rf2-auto-degrade-e2e.yaml
++++ b/compose.v19-rf2-auto-degrade-e2e.yaml
+@@ -37,6 +37,7 @@
+     DEMO_V19_RF2_AUTO_STAGE: "1"
+     # Explicit test-only agreement: after fencing, single WAL ACK may risk RPO > 0.
+     DEMO_V19_RF2_AUTO_DEGRADE: "1"
++    DEMO_V19_RF2_AUTO_LEARNER: "1"
+   volumes:
+     - ./target-v19-auto-degrade-compiled:/tmp/v19:ro
+     - ./common-upstream-review-20261022/target/com.app.common-3.0.22-SNAPSHOT.jar:/tmp/common.jar:ro
+--- /dev/null
++++ b/src/main/java/com/opentradingcore/demo/DemoV19Rf2LearnerCatchup.java
+@@ -0,0 +1,48 @@
++package com.opentradingcore.demo;
++
++import com.app.common.partition.PartitionAssignment;
++import com.app.common.partition.PartitionFailoverController;
++import com.app.common.partition.ZkPartitionFailoverControlPlane;
++import java.io.IOException;
++
++/** One partition, opt-in automatic A learner catch-up over authenticated
++ * ZooKeeper ownership plus bounded Netty WAL image. Does NOT promote A.
++ */
++final class DemoV19Rf2LearnerCatchup {
++    private final String local;
++    private final ZkPartitionFailoverControlPlane plane;
++    private final DemoJournalCatalog journals;
++
++    DemoV19Rf2LearnerCatchup(String local,ZkPartitionFailoverControlPlane plane,
++            DemoJournalCatalog journals) {
++        if (!"CommonHaDemoA".equals(local) || plane==null || journals==null)
++            throw new IllegalArgumentException("only the fenced old A may recover as learner");
++        this.local=local;this.plane=plane;this.journals=journals;
++    }
++
++    boolean once() throws Exception {
++        if (!plane.isConnected() || !plane.isLive("CommonHaDemoB")) return false;
++        PartitionFailoverController.VersionedAssignment v=plane.read("P000");
++        if (v==null || !valid(v.getAssignment())) return false;
++        try(DemoV19TcpClient tcp=new DemoV19TcpClient()) {
++            DemoV19TcpSnapshotReceiver.Image image=tcp.snapshot("CommonHaDemoB");
++            if (image.epoch!=2 || !"CommonHaDemoB".equals(image.node))
++                throw new IOException("untrusted new owner image");
++            return journals.installRf2LearnerImage("P000",image,()->{
++                if (!plane.isConnected() || !plane.isLive("CommonHaDemoB"))
++                    throw new IOException("source owner ZK membership revoked");
++                PartitionFailoverController.VersionedAssignment current=plane.read("P000");
++                if (current==null || current.getVersion()!=v.getVersion()
++                        || !valid(current.getAssignment()))
++                    throw new IOException("epoch or learner set changed during WAL installation");
++            });
++        }
++    }
++
++    private boolean valid(PartitionAssignment a) {
++        return a!=null && "P000".equals(a.getPartitionId())
++                && a.getEpoch()==2 && a.isRoutable()
++                && "CommonHaDemoB".equals(a.getPrimary())
++                && a.replicaNodes().isEmpty() && a.isLearner(local);
++    }
++}
+--- /dev/null
++++ b/src/test/java/com/opentradingcore/demo/DemoV19Rf2LearnerInstallTest.java
+@@ -0,0 +1,88 @@
++package com.opentradingcore.demo;
++
++import org.junit.Rule;
++import org.junit.Test;
++import org.junit.rules.TemporaryFolder;
++import java.io.IOException;
++import java.nio.file.Path;
++import java.util.concurrent.atomic.AtomicInteger;
++import static org.junit.Assert.*;
++
++/** No ZK authority here: the caller's frozen Learner proof is separately tested. */
++public final class DemoV19Rf2LearnerInstallTest {
++    @Rule public TemporaryFolder temp=new TemporaryFolder();
++
++    private static void append(DemoDurableJournal wal,long epoch,long seq,
++            String requestId,long delta) throws Exception {
++        wal.prepareAndCommitSingleForce(epoch,seq,new DemoStateMachine.Operation(requestId,delta));
++    }
++    private static DemoV19TcpSnapshotReceiver.Image image(DemoDurableJournal wal)
++            throws Exception {
++        return new DemoV19TcpSnapshotReceiver.Image(wal.committedPrefixBytes(),
++                wal.committedSeq(),wal.lastEpoch(),wal.committedPrefixSha256(),
++                wal.state().stateDigest(),"CommonHaDemoB");
++    }
++    @Test public void confirmedOldAckPrefixIsKeptAndCaughtUpWithoutReady() throws Exception {
++        Path r=temp.newFolder("recovery").toPath();
++        try(DemoJournalCatalog a=new DemoJournalCatalog("A",r.resolve("A"));
++            DemoDurableJournal b=new DemoDurableJournal(r.resolve("B.wal"))) {
++            DemoDurableJournal before=a.journal("P000");
++            append(before,1,1,"old-1",1);append(b,1,1,"old-1",1);
++            append(b,2,2,"new-2",2);
++            AtomicInteger authorization=new AtomicInteger();
++            assertTrue(a.installRf2LearnerImage("P000",image(b),authorization::incrementAndGet));
++            assertEquals(1,authorization.get());
++            assertEquals(2,a.journal("P000").committedSeq());
++            assertEquals(2,a.journal("P000").lastEpoch());
++            assertEquals(b.committedPrefixSha256(),a.journal("P000").committedPrefixSha256());
++            assertEquals(1,a.journal("P000").state().appliedCount("old-1"));
++            assertEquals(1,a.journal("P000").state().appliedCount("new-2"));
++            assertFalse(a.installRf2LearnerImage("P000",image(b),authorization::incrementAndGet));
++            assertEquals(1,authorization.get());
++        }
++    }
++    @Test public void divergentCommittedHistoryNeverReplaced() throws Exception {
++        Path r=temp.newFolder("diverged").toPath();
++        try(DemoJournalCatalog a=new DemoJournalCatalog("A",r.resolve("A"));
++            DemoDurableJournal b=new DemoDurableJournal(r.resolve("B.wal"))) {
++            append(a.journal("P000"),1,1,"ack-on-a",4);
++            append(b,1,1,"different-ack",4);
++            append(b,2,2,"new-2",5);
++            String oldSha=a.journal("P000").committedPrefixSha256();
++            try {a.installRf2LearnerImage("P000",image(b),()->{});
++                fail("divergent confirmed ACK overwritten");
++            }catch(IOException expected) { }
++            assertEquals(1,a.journal("P000").committedSeq());
++            assertEquals(oldSha,a.journal("P000").committedPrefixSha256());
++        }
++    }
++    @Test public void staleMembershipBeforeAtomicInstallLeavesOldWal() throws Exception {
++        Path r=temp.newFolder("stale").toPath();
++        try(DemoJournalCatalog a=new DemoJournalCatalog("A",r.resolve("A"));
++            DemoDurableJournal b=new DemoDurableJournal(r.resolve("B.wal"))) {
++            append(a.journal("P000"),1,1,"old-1",1);
++            append(b,1,1,"old-1",1);append(b,2,2,"new-2",2);
++            try {a.installRf2LearnerImage("P000",image(b),()->{
++                    throw new IOException("epoch lease was revoked");
++                });fail("stale membership permitted install");
++            } catch(IOException expected) { }
++            assertEquals(1,a.journal("P000").committedSeq());
++            assertEquals(1,a.journal("P000").lastEpoch());
++        }
++    }
++    @Test public void fakeImageHashCannotAlterWal() throws Exception {
++        Path r=temp.newFolder("fake").toPath();
++        try(DemoJournalCatalog a=new DemoJournalCatalog("A",r.resolve("A"));
++            DemoDurableJournal b=new DemoDurableJournal(r.resolve("B.wal"))) {
++            append(b,2,1,"new-1",1);
++            DemoV19TcpSnapshotReceiver.Image trueImage=image(b);
++            DemoV19TcpSnapshotReceiver.Image forged=new DemoV19TcpSnapshotReceiver.Image(
++                    trueImage.bytes,trueImage.committedSeq,trueImage.epoch,
++                    new String(new char[64]).replace("\0","0"),trueImage.stateDigest,trueImage.node);
++            try {a.installRf2LearnerImage("P000",forged,()->{});
++                fail("tampered WAL accepted");
++            }catch(IOException expected) { }
++            assertEquals(0,a.journal("P000").committedSeq());
++        }
++    }
++}

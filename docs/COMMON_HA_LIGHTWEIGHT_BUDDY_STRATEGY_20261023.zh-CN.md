@@ -154,3 +154,15 @@
 **代码与配置复现**：之前自动 Epoch staging 基础补丁 `tests/patches/common-v19-rf2-auto-stage-real-zk-20261023.patch`；本轮后续代码和 Compose 增量补丁 `tests/patches/common-v19-rf2-auto-degrade-local-20261023.patch`（经 `git apply --check` 与应用内容逐文件验证）。本轮只更新了独立 Demo，尚未将新的持久化模式正式抽成 Common 的统一可配置策略；正式 RF2/Order/Trade/MD 以及多物理节点验收保持 NO-GO。
 
 **下一关（按顺序）**：A Learner 从 B 的 Epoch2 ACK 尾部自动追平 → ZK 恢复 2/2 的新配置与 READY → A/B 双向多次 SIGKILL 仍能继续交易 → ZooKeeper 仲裁恢复后的合法新 Epoch 自动重授权 → 256 分区 / 4 节点 / 压力测试。性能重点是降低当前十余秒的故障检测和旧授权等待，而不能缩短到双主的风险窗口以下。
+
+## 13. 自动 Learner 追平：B 单节点期间确认的 WAL 自动补到 A（2026-10-23）
+
+- 本轮已通过真实隔离 Docker 验证：使用 compose.v19-rf2-auto-degrade-e2e.yaml 保留的 ZooKeeper Epoch2，B 为唯一可写 Primary；A 曾落后 B 已确认的降级 WAL。新环境参数 DEMO_V19_RF2_AUTO_LEARNER=1 允许原 A 以真实 ZooKeeper Learner 身份启动自动 Netty WAL 镜像拉取；无需人工复制数据或修改 ZooKeeper 主节点身份。
+- 复用 DemoV19TcpSnapshotReceiver 的有界分块全镜像 SHA256、Epoch/提交序列/状态摘要校验。独立回放候选 WAL，并检查 A 已确认 requestId/序列/载荷构成 B 新历史的前缀，拒绝孤儿和分叉。新镜像安装前再次核验 B 仍是 Epoch2 READY 主、A 仍是 Learner，fsync 封存 A 原始 WAL、持久审计记录 activated=false，再进行原子文件替换、目录 fsync 和回放。A 始终不会因复制得到写权限。
+- 首轮 A 原 seq8，B 已确认 seq10，A 后台自动追到 seq10；两者 epoch2、clean=true，WAL SHA 相同。随后 B 再本地 fsync ACK seq11，A 又自动追平 seq11，双方 SHA=88f63745f691664aefce74f3acca53419c43e5949dd1fbda9d67254417da250e，A 日志两次输出 V19_RF2_LEARNER_CAUGHT_UP。
+- A 重启后独立回放 seq11 / epoch2 / clean=true，仍不具备主节点写入授权；测试 A 的旧主写入返回 503，防止双主。
+- 新增 DemoV19Rf2LearnerInstallTest 4/4 PASS，覆盖正确追平、旧提交历史分叉、安装前成员证明失效、伪造全镜像哈希。隔离 Demo 全量 Maven：37 suites /142 tests，141 通过、1 跳过、0 失败/错误。
+- 本轮源码、全量镜像试验及新配置增量补丁保存为 tests/patches/common-v19-rf2-auto-learner-catchup-20261023.patch，已验证在临时重建树 git apply --check、apply 和逐文件内容一致。
+- 性能边界：仅 P000 且每次最多 16MiB WAL 镜像；全量复制、每轮封存原始 WAL 属于阶段性可靠性试验，不可直接推广到 256 分区。生产仍需 Common 的原始 WAL 区间增量续传、差量 Snapshot/Diff、自动归档删除与 CPU/IO 压测。
+
+**剩余 NO-GO**：A 只是 Learner，还未通过 ZK 原子配置变更成为 B 的有效同步 Replica；B 当前 ACK 仍标记 AUTO_DEGRADED_LOCAL_DURABLE，不能声称恢复 RF2 2/2。下一步要建立写入屏障/最高已 ACK 边界/新 Epoch 与配置 CAS 的切换事务，将 A 转为 Replica、恢复定向 WAL 复制与累计持久 ACK，再 SIGKILL B 验证 A 自动接管及继续交易。ZK 仲裁恢复后的自动新 Epoch 重授权、256 分区及真实多物理节点压力测试亦未验收。
