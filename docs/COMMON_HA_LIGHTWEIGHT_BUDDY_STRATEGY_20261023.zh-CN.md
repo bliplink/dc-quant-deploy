@@ -248,3 +248,15 @@
 源码与隔离 Compose 精确 12 文件快照 tests/patches/common-v19-rf2-real-strict-genesis-20261023.tar.gz，附逐文件 SHA256 清单 tests/patches/common-v19-rf2-real-strict-genesis-20261023.sha256，已解压逐字节核对。快照不是独立增量补丁，须结合先前 v19 实验补丁谨慎合并，不可直接覆盖其它源码。
 
 **仍为 NO-GO**：本轮只证明新 Epoch 两独立签名与 B 主节点本地持久化 CommitIndex Genesis；A 第二节点尚未持久保管新的认证证书、动态正式 WAL 复制及新 Epoch 严格客户端 ACK 未接通，因此没有发布严格 READY。该隔离实验目前停在安全但不可交易的 RECOVERING；切勿将自动严格恢复实验开关直接配置到已有 Demo/正式 Order/Trade，否则违反故障后保持交易可用的目标。后续必须补第二节点证书 fsync Custody、双副本持久 ACK、严谨的新配置 READY 和失败时自动降级恢复，然后做 256 分区和 200 租户压力测试。模拟故障域不代表两物理节点。
+
+## 18. 2026-10-23：新 Epoch Genesis A/B 双独立保管及重启复核通过
+
+继续第17节的独立隔离实验，保留 ZooKeeper Epoch3 / strictConfigurationVersion=5 / strictGenesisSeq=9 / RECOVERING / STRICT_REJOIN_GENESIS_PREPARE、B 主原有 1035 字节 Common CommitIndex 证书与 A/B 原 WAL。无需清空数据或修改 ZK Assignment。
+
+1. 新 DemoV19Rf2DynamicReceiptService.handleCustody 及 Netty opcode V19_RF2_DYNAMIC_CUSTODY_INSTALL_V1 复用 Common 原有 DurableWalCertificateCustodyControlHandler / DurableWalCertificateCustody。凭当前 ZK 配置版本、Epoch3 的两 RSA 公钥和各自独立本地私钥，反复校验 seq8 旧严格 ACK 前缀及 seq9 新 Genesis；通过 Common 证书解析、两 RSA 签名验证、各自本地 WAL 真实 fsync，再执行 head.pending 强制落盘、原子更名 head.bin、目录 fsync。配置漂移、WAL 分叉、证书不一致均安全拒绝。
+2. B 的 DemoV19Rf2StrictCutoverCoordinator.custodyGenesis 调用 A/B 两套独立 Netty 节点，收集并验证两份真实 signed custody reply，再用 DurableWalCustodyQuorum.verify 验证两不同物理成员的证书保管多数。Docker 日志：V19_RF2_STRICT_GENESIS_DUAL_CUSTODY_FSYNCED epoch=3 seq=9 custodians=2 clientStrictReady=false certifiedClientAck=false。A/B 各自 WAL 卷存有 /srv/v19/wal/.strict-custody-epoch-3-config-5/head.bin，每份 1018 bytes。
+3. 实际重启 A/B 两个 JVM 后，B 从 ZK GENESIS_PREPARE 和持久化 CommitIndex 安全恢复，原子重复 custody 安装幂等。新增只读 Netty V19_RF2_DYNAMIC_CUSTODY_HEAD_READ_V1 使用 Common headQueryRequest/decodeHeadEvidence，各自重新装载和验签两份 head.bin：V19_RF2_STRICT_DUAL_CUSTODY_RESTART_VERIFIED epoch=3 seq=9 twoIndependentHeadFiles=true clientStrictReady=false。完全没有脚本覆盖物理 WAL 或直接修改 ZK 主身份。
+4. Genesis 双保管后在 A/B 各测试一笔新业务写入，均返回 503，因为目前仍是 strict PREPARE 的不可写 RECOVERING；这是隔离实验预期，并非可用性上线达标。正式订单/交易服务不受影响。
+5. Demo Maven 全量回归 41 suites /171 tests：170 PASS、1 SKIPPED、0 FAIL/ERROR。新 11 文件源码与隔离 Compose 快照保存在 tests/patches/common-v19-rf2-epoch3-dual-custody-restart-20261023.tar.gz，SHA256 清单 tests/patches/common-v19-rf2-epoch3-dual-custody-restart-20261023.sha256，已安全解压逐文件字节验证。此为源码快照而非独立增量补丁，不能直接覆盖其它尚未合并工作树。
+
+**剩余不可省略：** 仍未把新 Epoch 的正式 PrimaryWriter 接到同步 B→A WAL 复制/逐笔双 fsync 收据、Common CommitIndex 与双保管持续更新。必须先证明这些真正交易链路能工作，再通过 ZK CAS 发布 READY/QUORUM_DURABLE，最后实测 A/B 故障自动降级单节点继续交易、恢复后重新严格 2/2。单机 Mac/Docker 进程分离不是多物理机验收；256 分区、200 租户负载及 Order/Trade/MD 一致性未执行。当前仅 Genesis 证书双保管与重启复验 PASS，整体严格双副本自动恢复 NO-GO；不能把自动 FREEZE 实验开关用于正式 Demo。

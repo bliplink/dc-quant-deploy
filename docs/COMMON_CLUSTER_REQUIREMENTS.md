@@ -119,3 +119,6 @@
 
 - **T27（2026-10-23 隔离 P000 部分 PASS）** 经 A/B 初始 8/8 严格 ACK、SIGKILL A、B 单节点本地继续 ACK seq9、A Learner 追平后，按真实 ZK CAS 冻结旧授权进入 Epoch3/RECOVERING，等待旧租约隔离并重验两物理 WAL/旧双签名历史前缀，CAS 进入新双副本签名 Genesis 准备；两台 RSA 独立 Netty Receipt 对新 Epoch3/seq9 一致，Common CommitIndex fsync 证书落盘（B 主节点 1035 字节）。仍不应发布严格 READY 或新客户端 ACK。
 - **T28（未完成）** 新 Epoch 严格 Genesis 的完整证书须再由第二数据节点独立 fsync 保管并验证真实两节点 Custody ACK，随后接通动态双节点 WAL 复制与 2/2 交易 ACK、READY 事务及失败自动降级回单节点正常交易。当前禁止在正式 Demo 开启自动严格恢复试验开关。
+
+- **T29（2026-10-23：独立 P000 新 Epoch3 双物理数据节点证书 Custody PASS）** B 的 Common CommitIndex 已 fsync Genesis seq9，经真实 Netty 发送给 A/B；两份独立真实 WAL 重新验签并执行本地 certificate fsync/原子安装，各节点 signed custody receipt 由 Common 验证双保管；A/B JVM 全部重启后，通过各自 Netty HEAD_READ 再次验证真实 head.bin（各 1018 B）的一致签名、Seq 和 membership。该过程不发布客户端 READY，实验期写入 503 正确。
+- **T30（未完成）** 接入新 Epoch 动态严格写入、同 Epoch B→A 的持久 WAL 复制、每笔客户端 2/2 ACK 与双保管证书更新，成功后原子 ZK READY；随后 SIGKILL 单数据节点自动降级继续交易、恢复节点自动追平并切回严格 2/2，才算完整 Common HA。生产和正式 Demo 禁止启用停在 RECOVERING 的严格切换实验。
