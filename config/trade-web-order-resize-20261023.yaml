@@ -1,0 +1,4 @@
+# Order-entry panel resize grips and persisted layout compatibility, preserving prior web changes.
+services:
+  web:
+    image: local/dc-saas-trade-web:order-resizable-20261023
