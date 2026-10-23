@@ -137,3 +137,6 @@
 
 - **T39（2026-10-23：真实四个持续Netty数据JVM与512 RPC PASS）** 隔离3ZK+4JVM，A/B/C/D精确端口35411至35414各独占128本地WAL，实际256分区双目标共512 STATUS RPC，每节点128命中，物理空WAL前缀一致、ZK成员及version0、PREPARING/ready=false校验通过。真实二进制WAL ReplicationBatch到四节点以及COMMIT控制均拒绝。SIGKILL C导致全量探测安全失败，恢复C并重获本地文件锁后512 RPC全部恢复；当前0笔订单、0 READY。Demo193项测试192通过、1跳过、0失败。
 - **T40（NO-GO：4节点真实交易HA与容量）** 必须抽象动态分区上下文，接入A/B、C/D各自认证Genesis、持久签名CommitIndex/Custody、ZooKeeper分区级CAS READY与旧主隔离、单分区真正双fsync交易ACK及失效后单节点自动续写，再扩展256分区、10/50/200租户持续下单撤单成交TPS/p99与资金持仓委托成交Projection权威对账。PREPARING不可对外发交易ACK；Mac当前磁盘98%应先保证压测空间。
+
+- **T41（2026-10-23：P000 A/B和P128 C/D启动前RSA双节点证明PASS）** 4个持续Netty JVM各自持久存储2048bit RSA私钥、公钥只在独立ZK create-once绑定；两组真实分区分别以32B随机挑战和当前ZK assignment version0、节点/主备身份及各自clean/空WAL seq0 SHA独立签名并验证，两份证据写入不可覆盖的preflight-evidence ZK节点（读取还须version0），持久ZK重启、4节点重启后原签名重新验证通过。SIGKILL C时当前证明拒绝，恢复C再次通过。全Demo197项测试196通过、1跳过、0失败。真实Common WAL seq1/CommitIndex/双Custody和客户严格ACK尚不存在，不得发布READY。
+- **T42（仍未完成）** 在上述A/B、C/D双签名PRECHECK上，接入真正分区级Epoch写入授权与可信空集群Genesis（不能用虚构订单或seq0冒充已提交证书），按旧主fencing与ZK CAS恢复事务写入真实fsync WAL seq1，产生Common验证过的2/2 WAL RSA quorum证书并在两节点独立fsync Custody；之后接入动态 PrimaryWriter+Netty持续复制/严格ACK，真实主切和恢复，最后扩大256分区/10–50–200租户、TPS/p99与资金持仓订单成交及Projection权威一致性。Mac约12GiB剩余，压力测试前需安全释放空间，禁止删正式业务及严格Epoch9证据卷。

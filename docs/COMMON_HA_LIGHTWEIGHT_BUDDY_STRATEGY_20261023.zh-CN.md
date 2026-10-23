@@ -334,3 +334,24 @@ FOUR_NODE_LIVE_NETTY_PROBE_PASS partitions=256 physicalStatusRPCs=512 perNode=12
 Demo本地Maven全量回归：46 suites/193 tests，192 PASS、1 SKIPPED、0 FAIL/ERROR。十文件源码+Compose精确阶段快照：tests/patches/common-v19-four-live-netty-256-shard-routing-20261023.tar.gz，配套同前缀SHA256清单；独立临时目录安全解压后逐文件字节相等验证。仅作本地源码阶段记录，非直接可覆盖生产的补丁。实验容器已停止，3 ZK卷/4 WAL卷和先前Epoch9八份证据卷保留；正式Order/Trade/MD容器未改、没有GitHub Actions。Mac剩余约13GiB，磁盘使用率98%。
 
 **判定：四节点持续Netty、256分区真实定向只读RPC、安全拒绝和C失联后恢复PASS；不是四数据节点交易HA通过。** 仍未实现该项目真实分区级签名Genesis、动态认证READY、双持久化WAL、CommitIndex及双保管、连续订单ACK、C→D自动接管交易。下一步应在A/B和C/D分别选一个独立分区，以现有Common状态机完成可信Genesis→READY→真实2/2 ACK→故障注入与恢复后，再安全扩展至256分区和10/50/200租户。PREPARING不可做真实交易。
+
+## 24. 2026-10-23：A/B、C/D 分区独立 RSA 空 WAL 启动前证明，ZooKeeper 持久化和故障反证
+
+在第23节 4个常驻Netty数据JVM、256 PREPARING分区/512 STATUS RPC都通过的基础上，新建 DemoV19FourNodeGenesisPreflight，将真正 Common 严格 RF2 的**下一步可信 Genesis 事务之前**必须先验证的条件，绑定到各分区及其确定的两个物理JVM的数据副本身份。
+
+只选择两个独立分区做最小实验：P000（A主/B备）和 P128（C主/D备），它们均在各自隔离的持久 WAL 卷，ZK Assignment 初始epoch1/stat.version=0/state PREPARING。四个JVM第一次运行分别创建本地 RSA 2048 私钥（只写入各自WAL卷里的 .preflight-identity，写文件和目录都fsync），公钥一经写入独立三ZK项目的 /preflight-identities/<node> 之后不可覆盖；运行时必须验证文件中原有私钥匹配公钥、ZK公钥内容与stat.version=0相同，否则拒绝。这些只用于隔离开发身份，不是生产真实物理节点私钥发布方案，所有容器仍位于同一台Mac。
+
+客户端发32字节安全随机挑战，A/B或者C/D各自从本地持有FileLock的当前WAL证明 seq0、clean=true、SHA256为标准空文件哈希，并校验 ZK里的当前分区原始字节、成员关系、初始ZK版本；用独立RSA SHA256withRSA签署具有域分隔的分区ID/签名节点/primary/replica/assignmentVersion/seq0/空WAL SHA/nonce。协调者经 Common Netty TCP 从两个不同JVM收齐并分别使用ZK已固定的公钥验证，之后再次读取ZK确认无version/content漂移；任何缺少节点、篡改分区、重放随机数、错误旧版本或不匹配的私钥都应拒绝。
+
+本轮增加 PREPARING-only 辅助ZK证据路径 /dc/cluster/commonhademo/v19-four-node-placement-pilot/preflight-evidence/<Pxxx>，记录两份完整验签过的响应及分区初始方案SHA256；仅首次create，之后不得覆盖，stat.version必须仍为0。后续再次运行时必须从持久化旧证据重验**两份RSA签名**并通过两个当前TCP连接重新核对当前仍为空且清洁的WAL，所以即使原证据仍在，缺失数据节点也不能蒙混过关。不改动原256条 PREPARING assignments，**不创建任何真实seq1 WAL记录，不调用Common DurableWalCommitIndex，不执行ZK READY CAS，更不返回客户端交易成功ACK。** 这一步是签名 Genesis PRECHECK，不是RF2真正已提交的 Genesis。
+
+真实 Docker 验收：
+- P000 A/B与P128 C/D 各两份独立RSA签名、两端TCP及ZK版本验证PASS，原始结果明确 committedGenesis=false、ready=false、clientAck=false；
+- 再次运行用已有ZK签名证据校验PASS，未覆盖证据；
+- 全部3个ZK和4个数据JVM停止，保留原卷重启后，再次用原节点公钥/本地私钥与原始证据校验通过；
+- 真正SIGKILL C时，P128 的现时双节点证明失败（不能凭ZK历史签名宣称可用），恢复C并重新获取WAL文件锁后再次验签通过；
+- 专项4项RSA/绑定/挑战/错版单测PASS，全Demo Maven **47 suites /197 tests，196 PASS、1 SKIPPED、0 FAIL/ERROR**。
+
+源码4文件精确快照 tests/patches/common-v19-four-node-dual-rsa-empty-wal-preflight-20261023.tar.gz 和同前缀 .sha256 文件，已安全解压在独立临时目录逐字节核对；**不会随源码归档用户/节点私钥**，私钥只保留在隔离测试 WAL 卷。试验容器现已停止，原三ZK及四独立WAL（该项目共10个卷）和上一轮严格Epoch9另8个证据卷均保留；正式Order/Trade/MD未变更、不用GitHub Actions。Mac仍419–420/460GiB已用、剩余约12GiB、98%，200租户高压仍暂缓。
+
+**当前的准确边界**：两个分区已经完成分区级密钥持久化和双独立 RSA 空WAL签名 preflight，并有ZK可信重启审计证据；尚**没有**完成真正 Common RF2 提交型WAL Genesis、CommitIndex链、双证书Custody、分区ZK READY、A/B或C/D真实新订单2/2 ACK或故障后自动续写。下一步要先在明确独立旧/新Epoch授权、分区级写入隔离的前提下生成真实fsync seq1（且不能把模拟业务写入混作系统Genesis），再收两节点Common DurableWalCommitQuorum收据、双保管后CAS READY，方可扩到256并发交易。此阶段归类为PRECHECK PASS、交易HA仍NO-GO。
