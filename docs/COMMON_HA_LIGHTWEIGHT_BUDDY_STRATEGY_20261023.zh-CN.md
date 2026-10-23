@@ -200,3 +200,22 @@
 - **当前全部 Epoch2/3/4 新写入均为 AUTO_DEGRADED_LOCAL_DURABLE，quorumDurable=false**；还没有把追平的 Learner 正式恢复为 Replica，也没有动态安装 Epoch2+ 的真实双副本签名/提交合同。下一阶段必须修复 Common 正式新配置切换（写屏障、提交水位证明、ZK CAS、复制 ACK 批量和动态成员），不能将两个节点 WAL 一致等同于严格 2/2。
 - 本地单副本期间存在 RPO>0 风险；任何被选中新主缺少前任单机期间已 ACK WAL 的情况不得冒充零丢失，已将 possibleDataLossIfPrimaryPermanentlyLost=true 返回客户端。
 - 当前仅 P000 单机隔离试验，不代表 256 分区、2→4 节点各 64 主、Order/Trade/MD 资金持仓一致性、真实多物理节点、TPS/p99、ZooKeeper 仲裁恢复后的新 Epoch 自动重新授权都已通过。正式 HA 仍 NO-GO。
+
+## 15. 2026-10-23：RF2 双副本恢复真实预检与新 Epoch 双签名 Genesis
+
+**本节覆盖上一轮 Epoch4 结论之后的增量进度；这次没有开启严格 2/2 ACK。** 新目标是：A/B 自动主切并恢复 Learner 后，必须先真实验证两个物理 WAL 的相同已提交前缀和旧签名证书，再在新 Epoch 通过独立 RSA 双签名构建持久可审计的 Genesis，最后才能发布新配置的严格 ACK。
+
+### 本轮实际交付
+
+1. **独立 Demo read-only 预检**：新增 DemoV19Rf2StrictRejoinPreflight + DemoV19Rf2StrictRejoinProbe，并在 DemoV19Rf2AutoStage 增加低频可选预检开关 DEMO_V19_RF2_STRICT_REJOIN_PREFLIGHT=1。由真实 ZooKeeper 当前 Assignment（Primary/Learner、版本、Epoch、持久化合同）和两个独立 JVM 的 Netty status 构建证据：双方 committedSeq、WAL prefix SHA256、stateDigest、distinctRequests、clean 必须完全一致；TCP 声称物理身份必须与目标匹配。使用 DemoV19TcpClient.custodyHeadEvidence 分别验证两台的旧 RF2 两签名 Certificate（旧 Epoch1 已 ACK frontier）且证书序列/哈希一致。之后重查 ZK 控制多数、成员存活、Assignment version 与 durabilityPolicy。任何错误只拒绝预检，不改变旧 degraded 交易可用性；**读一致性快照不是写入屏障和提交事务**。
+2. **实际测试**：原隔离 Docker P000 因 B JVM 重新创建，控制器真实执行了另一轮自动角色转换至 A/Epoch5/B Learner。两份物理 WAL 都处于 seq15 / 最后数据 Epoch4，没有 Epoch5 新 WAL。这种“ZK Epoch 已上升但还没有本 Epoch 新 WAL”不构成丢单，修复预检允许最后数据 Epoch 不大于当前控制 Epoch，仍必须双方 Epoch 相同、历史哈希相同。实测独立只读命令返回 RF2_STRICT_REJOIN_CANDIDATE epoch=5 seq=15。随后向 A 真实写入 seq16 code=0，B 自动追平到 seq16；两台 SHA256=3192d2900d54b46d58cd0205642cea180fdbe335c8ae61cb2937e9c89bdcb0fa，第二次只读命令返回 RF2_STRICT_REJOIN_CANDIDATE epoch=5 seq=16，ZK version=8，Old 2-voter RSA cert 独立验签通过。客户端 ACK 仍标记 AUTO_DEGRADED_LOCAL_DURABLE / quorumDurable=false。
+3. **Common 新 Epoch 双签名账本 Genesis 可行性实测**：新增 DurableWalRf2RejoinGenesisTest，证明完全独立的物理 RSA A/B 两份新 Epoch6、配置版本9 签名，可以先在原 WAL seq16 上建立新的 DurableWalCommitIndex fsynced certificate，然后 seq17 可连续持久认证和重启恢复。单节点签名、旧 Epoch5 签名、过期主授权都不能生成或发送 QUORUM_DURABLE 结果。**这是 Common 状态机/签名器的 JVM 单元级验证，尚未接到真实 ZooKeeper CAS 与数据 Netty Epoch6 双签名 RPC。**
+4. **回归结果**：Common 97 suites /419 tests /0 failures /0 errors /0 skipped，源码本地提交 2c67699；Demo 38 suites /153 tests /0 failures /0 errors /1 skipped（152 通过）。真实 A/B 的恢复预检另外经过 Docker/ZK + TCP 验证。
+
+### 证据/局限
+
+- 回放型 v19 增量补丁：tests/patches/common-v19-rf2-strict-rejoin-readonly-preflight-20261023.patch；从上一轮 Epoch4 Java 快照和 Compose 差分生成，已在临时重建目录通过 git apply --check / apply / 六文件逐字节内容比对。
+- Common 双签名 Genesis 专项源码补丁：tests/patches/common-rf2-rejoin-genesis-certification-test-20261023.patch；已对当前 Common 工作树做 git apply --reverse --check 验证。
+- 下一项不可跳过的真正集成：**原 Primary 单机 ACK 业务屏障（锁定最高已 ACK WAL） → 两节点独立确认完整前缀 → 创建下一 Epoch 的新主/备配置与双独立签名器 → 原子 ZK 配置发布及 fencing → 开启新 Epoch 数据 WAL 定向复制 → 首份新 Epoch 2/2 持久 Genesis 和真实每笔 ACK → 旧主/failover/崩溃重启多轮验收**。旧严格签名服务仍固定 Primary A/Epoch1；预检仅意味着“具备进入切换事务的候选条件”，不能把它作为 READY/2of2 证书。
+- 预检是低频控制面任务，正常下单不额外读取 ZooKeeper/证书；为避免 256 分区下大量控制调用，规模化时应以分区水位变化和批量控制事件触发，不可简单把 P000 的 12 秒轮询复制 256 份。
+- 以上均为隔离 Demo Mac 单物理宿主的独立进程测试，不代表 RF2 多物理 AZ 无损、Order/Trade 资金持仓一致性或 200 租户压测完成。整体严格 2/2 恢复仍 NO-GO。

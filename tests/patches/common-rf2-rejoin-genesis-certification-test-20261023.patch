@@ -1,0 +1,95 @@
+diff --git a/src/test/java/com/app/common/replication/DurableWalRf2RejoinGenesisTest.java b/src/test/java/com/app/common/replication/DurableWalRf2RejoinGenesisTest.java
+new file mode 100644
+index 0000000..72aed97
+--- /dev/null
++++ b/src/test/java/com/app/common/replication/DurableWalRf2RejoinGenesisTest.java
+@@ -0,0 +1,89 @@
++package com.app.common.replication;
++
++import org.junit.Rule;
++import org.junit.Test;
++import org.junit.rules.TemporaryFolder;
++import java.nio.file.Path;
++import java.security.KeyPair;
++import java.security.KeyPairGenerator;
++import java.util.Arrays;
++import java.util.concurrent.atomic.AtomicBoolean;
++import static org.junit.Assert.*;
++
++/** Dynamic RF2 rejoin epoch can certify its existing matched WAL frontier.
++ * A second distinct RSA signer must attest the SAME fsynced bytes under the
++ * NEW epoch before a QUORUM_DURABLE client ACK becomes possible.
++ * Control-plane READY publication/real Netty replication remain independent.
++ */
++public final class DurableWalRf2RejoinGenesisTest {
++    @Rule public TemporaryFolder dir=new TemporaryFolder();
++    private static final String BASE="0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef";
++    private static final String NEW="abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789";
++    private static final class Pair {
++        final KeyPair a,b;
++        final DurableWalCommitQuorum.Membership old,next;
++        final AtomicBoolean granted=new AtomicBoolean(true);
++        Pair()throws Exception {
++            KeyPairGenerator keys=KeyPairGenerator.getInstance("RSA");keys.initialize(2048);
++            a=keys.generateKeyPair();b=keys.generateKeyPair();
++            java.util.List<DurableWalCommitQuorum.Member> voters=Arrays.asList(
++                new DurableWalCommitQuorum.Member("A","physicalA",a.getPublic()),
++                new DurableWalCommitQuorum.Member("B","physicalB",b.getPublic()));
++            old=new DurableWalCommitQuorum.Membership("OrderSvr","P000","B",5,8,voters);
++            next=new DurableWalCommitQuorum.Membership("OrderSvr","P000","A",6,9,voters);
++        }
++        DurableWalCommitQuorum.Receipt receipt(DurableWalCommitQuorum.Membership m,
++                String node,long seq,String hash)throws Exception {
++            return DurableWalCommitQuorum.sign(m,node,seq,(epoch,at)->{
++                if(!granted.get() || epoch!=m.epoch || at!=seq)
++                    throw new java.io.IOException("stale or no new-epoch WAL grant");
++                return hash;
++            },"A".equals(node)?a.getPrivate():b.getPrivate());
++        }
++    }
++    @Test public void rejoinGenesisIsNewQuorumProofAndCanCarryForwardSequence()throws Exception {
++        Pair p=new Pair();Path path=dir.newFolder("epoch6").toPath();
++        try(DurableWalCommitIndex index=new DurableWalCommitIndex(path,p.next)) {
++            assertEquals(0,index.committedSequence());
++            // Old-local-ACK head at sequence 16 cannot be called quorum
++            // durable until BOTH recovered independent nodes sign new epoch.
++            try {
++                index.certifyAndPersist(16,BASE,Arrays.asList(p.receipt(p.next,"A",16,BASE)));
++                fail("one recovered peer must never count as 2/2");
++            }catch(Exception expected) { }
++            assertEquals(0,index.committedSequence());
++            try {
++                index.certifyAndPersist(16,BASE,Arrays.asList(
++                    p.receipt(p.old,"A",16,BASE),p.receipt(p.old,"B",16,BASE)));
++                fail("an older epoch certificate must not bootstrap a new one");
++            }catch(Exception expected) { }
++            assertEquals(0,index.committedSequence());
++            index.certifyAndPersist(16,BASE,Arrays.asList(
++                p.receipt(p.next,"A",16,BASE),p.receipt(p.next,"B",16,BASE)));
++            assertEquals(16,index.committedSequence());
++            DurableWalCommitAckGate.Confirmed covered=DurableWalCommitAckGate.requireDurable(
++                p.next,index,16,BASE,(partition,epoch)->{
++                    if(!p.granted.get() || epoch!=6)throw new java.io.IOException("stale fence");
++                });
++            assertEquals(16,covered.sequence);assertEquals(6,covered.epoch);
++            assertEquals("QUORUM_DURABLE",covered.durability);
++            index.certifyAndPersistBatch(17,17,NEW,Arrays.asList(
++                p.receipt(p.next,"A",17,NEW),p.receipt(p.next,"B",17,NEW)),
++                (epoch,seq)->{
++                    if(epoch!=6)throw new java.io.IOException("wrong epoch");
++                    return seq==16?BASE:seq==17?NEW:null;
++                });
++            assertEquals(17,index.committedSequence());
++            p.granted.set(false);
++            try {
++                DurableWalCommitAckGate.requireDurable(p.next,index,17,NEW,
++                    (partition,epoch)->{throw new java.io.IOException("grant expired");});
++                fail("expired epoch must prevent old client ACK");
++            }catch(Exception expected) { }
++        }
++        try(DurableWalCommitIndex restored=new DurableWalCommitIndex(path,p.next)) {
++            assertEquals(17,restored.verifiedHighestCertificate().committedSequence);
++            assertEquals(NEW,restored.verifiedHighestCertificate().commitPrefixSha256);
++        }
++    }
++}

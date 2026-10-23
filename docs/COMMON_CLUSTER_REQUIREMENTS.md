@@ -111,3 +111,6 @@
 
 - **T22（2026-10-23，P000 隔离试验 PASS）** A/B 两数据节点、真实 ZooKeeper 三协调进程、两独立 JVM/WAL，经 SIGKILL A、B、A，自动获得 Epoch2/3/4 唯一主及可持续本地持久化写入，双向 Learner 追平与重启回放一致、旧主 Fencing、ZooKeeper 仲裁丢失时拒绝写入。单机降级 ACK 明确标记 quorumDurable=false，不是零丢失严格双副本提交。
 - **T23（未完成）** Learner 已追平之后需自动、原子地把它纳入新配置中的同步 Replica，建立随 Epoch 动态切换的严格 RF2 2/2 WAL 持久复制与真实签名/累计 ACK，并执行多轮故障、重新授权、256 分区/4 节点及业务权威一致性验收。
+
+- **T24（2026-10-23：部分 PASS）** 经 A/B 单节点故障恢复并进入新 Epoch 后，真实远程读取两个不同 JVM 的洁净 WAL、committedSeq、hash、业务 stateDigest 和原双签名证书，复验 ZooKeeper 的 Epoch、Assignment 版本与成员身份。现阶段 P000 read-only preflight Docker PASS（Epoch5/seq16），不构成严格 2/2 ACK 及成员切换完成。
+- **T25（2026-10-23：Common 单测 PASS，动态生产接线未完成）** 可在新的 Epoch 双签名成员下，对已存在的 WAL 水位签出新的两物理数据节点持久 Genesis，连续认证后续序列并在重启后验证；必须拒绝单签名、旧签名、失效授权。真实 Order/Trade 数据接线、恢复同步 Replica 的 ZK CAS/数据屏障/新 Epoch 2/2 TCP RPC 和故障注入仍 NO-GO。

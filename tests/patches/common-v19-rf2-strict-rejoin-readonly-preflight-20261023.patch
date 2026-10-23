@@ -1,0 +1,383 @@
+--- a/src/main/java/com/opentradingcore/demo/DemoV19Rf2AutoStage.java
++++ b/src/main/java/com/opentradingcore/demo/DemoV19Rf2AutoStage.java
+@@ -32,6 +32,9 @@
+     private final ZookeeperClient zk;
+     private final DemoV19DurableRuntime durable;
+     private final DemoV19Rf2LearnerCatchup learner;
++    private final DemoV19Rf2StrictRejoinPreflight strictPreflight;
++    private volatile String lastPreflightFingerprint="";
++    private volatile String lastPreflightFailure="";
+     private final ScheduledExecutorService autoDegrade=Executors.newSingleThreadScheduledExecutor(r->{
+         Thread t=new Thread(r,"v19-rf2-auto-degrade"); t.setDaemon(true); return t;
+     });
+@@ -64,6 +67,8 @@
+             throw new IllegalStateException("duplicate live data identity: "+node,alreadyExists);
+         }
+         plane=new ZkPartitionFailoverControlPlane(zk,ASSIGN,MEMBERS,LEASE,node);
++        strictPreflight="1".equals(System.getenv("DEMO_V19_RF2_STRICT_REJOIN_PREFLIGHT"))
++                ? new DemoV19Rf2StrictRejoinPreflight(zk,plane,node) : null;
+         learner="1".equals(System.getenv("DEMO_V19_RF2_AUTO_LEARNER"))
+                 && ("CommonHaDemoA".equals(node) || "CommonHaDemoB".equals(node))
+                 ? new DemoV19Rf2LearnerCatchup(node,plane,catalog) : null;
+@@ -100,6 +105,28 @@
+ 
+     void start() {
+         runtime.start();
++        // Read-only, independently authenticated readiness observation;
++        // it is NOT permission to reconfigure membership or ACK strict 2/2.
++        if (strictPreflight!=null) autoDegrade.scheduleWithFixedDelay(()->{
++            try {
++                DemoV19Rf2StrictRejoinPreflight.Evidence candidate=strictPreflight.once();
++                lastPreflightFailure="";
++                String fingerprint=candidate.summary();
++                if (!fingerprint.equals(lastPreflightFingerprint)) {
++                    lastPreflightFingerprint=fingerprint;
++                    System.out.println("V19_RF2_STRICT_REJOIN_PREFLIGHT_MATCH "+fingerprint
++                            +" eligibleForStrictCutover=false actualStrict2of2Ack=false");
++                }
++            } catch (Exception denied) {
++                // Keep degrade ACK live. Never open strict readiness on failure.
++                if(!lastPreflightFingerprint.isEmpty())lastPreflightFingerprint="";
++                String reason=denied.getClass().getSimpleName()+": "+denied.getMessage();
++                if(!reason.equals(lastPreflightFailure)) {
++                    lastPreflightFailure=reason;
++                    System.err.println("V19_RF2_STRICT_REJOIN_PREFLIGHT_DENIED "+reason);
++                }
++            }
++        },4,12,TimeUnit.SECONDS);
+         if (learner!=null) autoDegrade.scheduleWithFixedDelay(()->{
+             try {
+                 if (learner.once()) System.out.println(
+--- a/src/main/java/com/opentradingcore/demo/DemoV19Rf2LearnerCatchup.java
++++ b/src/main/java/com/opentradingcore/demo/DemoV19Rf2LearnerCatchup.java
+@@ -29,7 +29,11 @@
+         if (!plane.isLive(source)) return false;
+         try(DemoV19TcpClient tcp=new DemoV19TcpClient()) {
+             DemoV19TcpSnapshotReceiver.Image image=tcp.snapshot(source);
+-            if (image.epoch!=v.getAssignment().getEpoch() || !source.equals(image.node))
++            // After a ZK-only promotion, the source may not have appended an
++            // entry in its newly granted epoch yet. A fully verified old WAL
++            // image remains valid if the CURRENT owner and prefix agree.
++            if (image.epoch<2 || image.epoch>v.getAssignment().getEpoch()
++                    || !source.equals(image.node))
+                 throw new IOException("untrusted new owner image");
+             return journals.installRf2LearnerImage("P000",image,()->{
+                 if (!plane.isConnected() || !plane.isLive(source))
+--- a/compose.v19-rf2-auto-degrade-e2e.yaml
++++ b/compose.v19-rf2-auto-degrade-e2e.yaml
+@@ -38,6 +38,7 @@
+     # Explicit test-only agreement: after fencing, single WAL ACK may risk RPO > 0.
+     DEMO_V19_RF2_AUTO_DEGRADE: "1"
+     DEMO_V19_RF2_AUTO_LEARNER: "1"
++    DEMO_V19_RF2_STRICT_REJOIN_PREFLIGHT: "1"
+   volumes:
+     - ./target-v19-auto-degrade-compiled:/tmp/v19:ro
+     - ./common-upstream-review-20261022/target/com.app.common-3.0.22-SNAPSHOT.jar:/tmp/common.jar:ro
+--- /dev/null
++++ b/src/main/java/com/opentradingcore/demo/DemoV19Rf2StrictRejoinPreflight.java
+@@ -0,0 +1,158 @@
++package com.opentradingcore.demo;
++
++import com.app.common.partition.PartitionAssignment;
++import com.app.common.partition.PartitionFailoverController;
++import com.app.common.partition.ZkPartitionFailoverControlPlane;
++import com.app.common.zk.ZookeeperClient;
++import com.gateway.connector.utils.JsonUtils;
++import java.io.IOException;
++import java.util.Map;
++import java.util.Objects;
++import org.apache.zookeeper.data.Stat;
++
++/**
++ * A real, READ-ONLY preflight for restoring RF2 strict replication.
++ * Uses independent JVM TCP status and old RSA quorum certificates, then
++ * rechecks physical ZooKeeper Assignment version. A matching pair is only a
++ * candidate: writes can advance after this method returns. In particular it
++ * never advertises READY/2-of-2, never changes the ZK membership, and NEVER
++ * converts a local ACK into a dual durable ACK.
++ */
++final class DemoV19Rf2StrictRejoinPreflight {
++    private static final String PATH=DemoZkFenceSource.ISOLATED_ROOT
++            +"/harness/assignments/P000";
++    private final ZookeeperClient zk;
++    private final ZkPartitionFailoverControlPlane plane;
++    private final String local;
++
++    DemoV19Rf2StrictRejoinPreflight(ZookeeperClient zk,
++            ZkPartitionFailoverControlPlane plane,String local) {
++        this.zk=Objects.requireNonNull(zk);
++        this.plane=Objects.requireNonNull(plane);
++        this.local=Objects.requireNonNull(local);
++    }
++
++    static final class Evidence {
++        final long epoch,sequence,strictGenesisSeq,zkVersion;
++        final String primary,learner,prefixSha256,stateDigest;
++        Evidence(long epoch,long sequence,long strictGenesisSeq,long zkVersion,
++                String primary,String learner,String hash,String stateDigest) {
++            this.epoch=epoch;this.sequence=sequence;
++            this.strictGenesisSeq=strictGenesisSeq;this.zkVersion=zkVersion;
++            this.primary=primary;this.learner=learner;
++            this.prefixSha256=hash;this.stateDigest=stateDigest;
++        }
++        String summary(){return "epoch="+epoch+" seq="+sequence+" sha="+prefixSha256
++            +" zkVersion="+zkVersion+" primary="+primary+" learner="+learner;}
++    }
++
++    Evidence once() throws Exception {
++        if (!plane.isConnected()) throw new IOException("ZK quorum disconnected");
++        PartitionFailoverController.VersionedAssignment pinned=plane.read("P000");
++        if (pinned==null) throw new IOException("ZK assignment unavailable");
++        PartitionAssignment a=pinned.getAssignment();
++        String primary=a.getPrimary();
++        if (!local.equals(primary) || !a.isRoutable() || a.getEpoch()<2
++                || a.getEpoch()>8 || !a.replicaNodes().isEmpty()
++                || a.getLearners().size()!=1)
++            throw new IOException("current primary must have one learner and no replica: "+a+" local="+local);
++        String learner=a.getLearners().get(0);
++        if (primary.equals(learner) || !plane.isLive(primary) || !plane.isLive(learner))
++            throw new IOException("distinct live physical peers required");
++        Stat initial=new Stat();
++        Object raw=zk.readData(PATH,initial);
++        requireDegradedAssignment(raw,a);
++        if(initial.getVersion()!=pinned.getVersion())
++            throw new IOException("assignment advanced during read");
++
++        Evidence proposed;
++        try (DemoV19TcpClient tcp=new DemoV19TcpClient()) {
++            Map<String,Object> first=tcp.status(primary);
++            Map<String,Object> second=tcp.status(learner);
++            Map<String,Object> firstProof=tcp.custodyHeadEvidence(primary);
++            Map<String,Object> secondProof=tcp.custodyHeadEvidence(learner);
++            proposed=compare(a,learner,pinned.getVersion(),first,second,
++                    firstProof,secondProof);
++        }
++        if (!plane.isConnected() || !plane.isLive(primary) || !plane.isLive(learner))
++            throw new IOException("ZK member disappeared after physical proof");
++        PartitionFailoverController.VersionedAssignment after=plane.read("P000");
++        if(after==null || after.getVersion()!=pinned.getVersion()
++                || after.getAssignment().getEpoch()!=a.getEpoch()
++                || !primary.equals(after.getAssignment().getPrimary())
++                || !after.getAssignment().getLearners().equals(a.getLearners()))
++            throw new IOException("assignment changed after physical proof");
++        Stat finalStat=new Stat();
++        requireDegradedAssignment(zk.readData(PATH,finalStat),a);
++        if(finalStat.getVersion()!=initial.getVersion() || !plane.isConnected())
++            throw new IOException("ZK durability policy changed during physical proof");
++        return proposed;
++    }
++
++    private static void requireDegradedAssignment(Object raw,PartitionAssignment a)
++            throws IOException {
++        if(raw==null) throw new IOException("missing persisted durability policy");
++        @SuppressWarnings("unchecked") Map<String,Object> v=JsonUtils.Deserialize(
++                String.valueOf(raw),Map.class);
++        if(v==null || !"AUTO_DEGRADED_LOCAL_DURABLE".equals(v.get("durabilityPolicy"))
++                || !Boolean.FALSE.equals(v.get("quorumDurable"))
++                || !a.getPrimary().equals(v.get("primary"))
++                || number(v,"epoch")!=a.getEpoch()
++                || !"READY".equals(v.get("state")))
++            throw new IOException("degraded contract is not currently published");
++    }
++
++    static Evidence compare(PartitionAssignment a,String learner,int version,
++            Map<String,Object> primary,Map<String,Object> replica,
++            Map<String,Object> primaryOld,Map<String,Object> replicaOld)
++            throws IOException {
++        if(a==null || primary==null || replica==null || primaryOld==null
++                || replicaOld==null || !"P000".equals(a.getPartitionId())
++                || !a.isRoutable() || !a.isLearner(learner)
++                || !a.replicaNodes().isEmpty() || a.getEpoch()<2)
++            throw new IOException("not an admissible recovering RF2 group");
++        if (!a.getPrimary().equals(primary.get("localNode"))
++                || !learner.equals(replica.get("localNode"))
++                || !a.getPrimary().equals(primaryOld.get("sourceNode"))
++                || !learner.equals(replicaOld.get("sourceNode")))
++            throw new IOException("TCP proof source does not match expected physical identity");
++        if (!Boolean.TRUE.equals(primary.get("clean"))
++                || !Boolean.TRUE.equals(replica.get("clean"))
++                || !"P000".equals(primary.get("partitionId"))
++                || !"P000".equals(replica.get("partitionId"))
++                || number(primary,"committedSeq")<1
++                || number(primary,"committedSeq")!=number(replica,"committedSeq")
++                || number(primary,"lastEpoch")<2
++                || number(primary,"lastEpoch")>a.getEpoch()
++                || number(primary,"lastEpoch")!=number(replica,"lastEpoch")
++                || !equalHash(primary.get("committedPrefixSha256"),
++                        replica.get("committedPrefixSha256"))
++                || !Objects.equals(primary.get("stateDigest"),replica.get("stateDigest"))
++                || !Objects.equals(primary.get("distinctRequests"),replica.get("distinctRequests")))
++            throw new IOException("physical WAL or replayed business state mismatch");
++        if (!Boolean.TRUE.equals(primaryOld.get("cryptographicallyVerified"))
++                || !Boolean.TRUE.equals(replicaOld.get("cryptographicallyVerified"))
++                || number(primaryOld,"oldEpoch")!=1 || number(replicaOld,"oldEpoch")!=1
++                || number(primaryOld,"oldWalVoterCount")!=2
++                || number(replicaOld,"oldWalVoterCount")!=2
++                || number(primaryOld,"certifiedSeq")<1
++                || number(primaryOld,"certifiedSeq")!=number(replicaOld,"certifiedSeq")
++                || number(primaryOld,"certifiedSeq")>number(primary,"committedSeq")
++                || !equalHash(primaryOld.get("certifiedSha256"),
++                        replicaOld.get("certifiedSha256")))
++            throw new IOException("old strict RF2 quorum certificate not corroborated");
++        return new Evidence(a.getEpoch(),number(primary,"committedSeq"),
++                number(primaryOld,"certifiedSeq"),version,a.getPrimary(),learner,
++                String.valueOf(primary.get("committedPrefixSha256")),
++                String.valueOf(primary.get("stateDigest")));
++    }
++    private static long number(Map<String,Object> row,String key)throws IOException {
++        Object v=row.get(key);
++        if(!(v instanceof Number))throw new IOException("missing number "+key);
++        return ((Number)v).longValue();
++    }
++    private static boolean equalHash(Object left,Object right) {
++        return left instanceof String && right instanceof String
++                && ((String)left).matches("[0-9a-f]{64}") && left.equals(right);
++    }
++}
+--- /dev/null
++++ b/src/main/java/com/opentradingcore/demo/DemoV19Rf2StrictRejoinProbe.java
+@@ -0,0 +1,27 @@
++package com.opentradingcore.demo;
++
++import com.app.common.partition.ZkPartitionFailoverControlPlane;
++import com.app.common.zk.ZookeeperClient;
++
++/** One-shot read-only diagnostic. It CANNOT publish a ZK grant or client ACK. */
++public final class DemoV19Rf2StrictRejoinProbe {
++    private DemoV19Rf2StrictRejoinProbe() {}
++    public static void main(String[] args)throws Exception {
++        if(args.length!=1 || !args[0].matches("CommonHaDemo[AB]"))
++            throw new IllegalArgumentException("single local node ID required");
++        String root=DemoZkFenceSource.ISOLATED_ROOT+"/harness";
++        ZookeeperClient zk=new ZookeeperClient(DemoAssignmentBootstrap.HOSTS,null,null);
++        try {
++            // Never claim/release the real failover owner's ephemeral lease.
++            try(ZkPartitionFailoverControlPlane plane=new ZkPartitionFailoverControlPlane(
++                    zk,root+"/assignments",root+"/members",root+"/rf2-auto-stage-controller","rf2-read-only-probe")) {
++                DemoV19Rf2StrictRejoinPreflight.Evidence proof=
++                        new DemoV19Rf2StrictRejoinPreflight(zk,plane,args[0]).once();
++                System.out.println("RF2_STRICT_REJOIN_CANDIDATE "+proof.summary()
++                        +" fullyProvenStrict2of2Ack=false controlMutation=false");
++            }
++        } finally {
++            zk.close();
++        }
++    }
++}
+--- /dev/null
++++ b/src/test/java/com/opentradingcore/demo/DemoV19Rf2StrictRejoinPreflightTest.java
+@@ -0,0 +1,114 @@
++package com.opentradingcore.demo;
++
++import com.app.common.partition.PartitionAssignment;
++import java.io.IOException;
++import java.util.Arrays;
++import java.util.Collections;
++import java.util.LinkedHashMap;
++import java.util.Map;
++import org.junit.Test;
++import static org.junit.Assert.*;
++
++public final class DemoV19Rf2StrictRejoinPreflightTest {
++    private static final String HASH=repeat('a');
++    private static final String OLD_HASH=repeat('b');
++    private static String repeat(char c){char[] chars=new char[64];Arrays.fill(chars,c);return new String(chars);}
++    private static PartitionAssignment current(){
++        PartitionAssignment a=new PartitionAssignment();
++        a.setPartitionId("P000");a.setPrimary("CommonHaDemoB");
++        a.setEpoch(4);a.setState("READY");
++        a.setReplicas(Collections.<String>emptyList());
++        a.setLearners(Collections.singletonList("CommonHaDemoA"));
++        return a;
++    }
++    private static Map<String,Object> status(){
++        Map<String,Object> m=new LinkedHashMap<String,Object>();
++        m.put("clean",true);m.put("partitionId","P000");m.put("committedSeq",15L);
++        m.put("localNode","CommonHaDemoB");
++        m.put("lastEpoch",4L);m.put("committedPrefixSha256",HASH);
++        m.put("stateDigest","state-sha");m.put("distinctRequests",15L);
++        return m;
++    }
++    private static Map<String,Object> certificate(){
++        Map<String,Object> m=new LinkedHashMap<String,Object>();
++        m.put("cryptographicallyVerified",true);m.put("oldEpoch",1L);
++        m.put("oldWalVoterCount",2L);m.put("certifiedSeq",8L);
++        m.put("certifiedSha256",OLD_HASH);
++        m.put("sourceNode","CommonHaDemoB");return m;
++    }
++    private static Map<String,Object> statusA(){
++        Map<String,Object> m=status();m.put("localNode","CommonHaDemoA");return m;
++    }
++    private static Map<String,Object> certificateA(){
++        Map<String,Object> m=certificate();m.put("sourceNode","CommonHaDemoA");return m;
++    }
++    private static DemoV19Rf2StrictRejoinPreflight.Evidence verify(
++            Map<String,Object> primary,Map<String,Object> replica,
++            Map<String,Object> oldPrimary,Map<String,Object> oldReplica)throws IOException {
++        return DemoV19Rf2StrictRejoinPreflight.compare(current(),"CommonHaDemoA",7,
++                primary,replica,oldPrimary,oldReplica);
++    }
++    private static void denied(Map<String,Object> p,Map<String,Object> r,
++            Map<String,Object> a,Map<String,Object> b){
++        try {verify(p,r,a,b);fail("unsafe strict rejoin preflight was accepted");}
++        catch(IOException expected) { }
++    }
++    @Test public void fullyMatchedPhysicalImageIsOnlyCandidateNotAck(){
++        try {
++            DemoV19Rf2StrictRejoinPreflight.Evidence e=verify(
++                    status(),statusA(),certificate(),certificateA());
++            assertEquals(4,e.epoch);assertEquals(15,e.sequence);
++            assertEquals(8,e.strictGenesisSeq);assertEquals(HASH,e.prefixSha256);
++            assertEquals("CommonHaDemoB",e.primary);
++            assertEquals("CommonHaDemoA",e.learner);
++        }catch(IOException error){throw new AssertionError(error);}
++    }
++    @Test public void rejectSpoofedPhysicalEndpoints(){
++        Map<String,Object> b=status();b.put("localNode","CommonHaDemoB");
++        denied(status(),b,certificate(),certificateA());
++        Map<String,Object> c=certificate();c.put("sourceNode","UnknownNode");
++        denied(status(),statusA(),c,certificateA());
++    }
++    @Test public void controlEpochMayAdvanceWithoutAnyNewPhysicalWalEntry()throws IOException {
++        Map<String,Object> a=status();Map<String,Object> b=statusA();
++        a.put("lastEpoch",3L);b.put("lastEpoch",3L);
++        DemoV19Rf2StrictRejoinPreflight.Evidence proof=verify(
++                a,b,certificate(),certificateA());
++        assertEquals(4,proof.epoch);assertEquals(15,proof.sequence);
++    }
++    @Test public void rejectMissingOneOfTwoPhysicalReplicas(){
++        Map<String,Object> b=statusA();b.put("committedSeq",14L);
++        denied(status(),b,certificate(),certificateA());
++    }
++    @Test public void rejectSameSequenceDivergedWal(){
++        Map<String,Object> b=statusA();b.put("committedPrefixSha256",repeat('c'));
++        denied(status(),b,certificate(),certificateA());
++    }
++    @Test public void rejectBusinessStateMismatchEvenWhenWalHashMatches(){
++        Map<String,Object> b=statusA();b.put("stateDigest","other");
++        denied(status(),b,certificate(),certificateA());
++    }
++    @Test public void rejectDirtyRecoveryTailAndWrongEpoch(){
++        Map<String,Object> b=statusA();b.put("clean",false);
++        denied(status(),b,certificate(),certificateA());
++        b=statusA();b.put("lastEpoch",3L);
++        denied(status(),b,certificate(),certificateA());
++    }
++    @Test public void rejectMissingOldTwoVoterSignatures(){
++        Map<String,Object> c=certificateA();c.put("oldWalVoterCount",1L);
++        denied(status(),statusA(),certificate(),c);
++        c=certificateA();c.put("cryptographicallyVerified",false);
++        denied(status(),statusA(),certificate(),c);
++    }
++    @Test public void rejectTwoOldQuorumHeadsDisagreeing(){
++        Map<String,Object> c=certificateA();c.put("certifiedSha256",repeat('d'));
++        denied(status(),statusA(),certificate(),c);
++        c=certificateA();c.put("certifiedSeq",9L);
++        denied(status(),statusA(),certificate(),c);
++    }
++    @Test public void rejectCertificatesBeyondCurrentWal(){
++        Map<String,Object> c=certificate();c.put("certifiedSeq",16L);
++        Map<String,Object> cA=certificateA();cA.put("certifiedSeq",16L);
++        denied(status(),statusA(),c,cA);
++    }
++}
