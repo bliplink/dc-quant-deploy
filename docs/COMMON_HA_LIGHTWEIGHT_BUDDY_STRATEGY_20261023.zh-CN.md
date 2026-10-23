@@ -76,3 +76,12 @@
 - 本地提交/本地构建优先，不触发 GitHub Actions，不擅自清理在用数据或更新正式 Docker。
 
 **放行状态：目前仍 NO-GO。纯初始规划测试 ≠ 真实主切通过；两节点成对放置的性能优化必须单独测量。**
+
+
+## 8. 第一阶段实际实现与回归记录（2026-10-23）
+
+- Common 本地隔离分支 `feat/common-durable-wal-quorum-20261022` 提交 `06c650e`：新增纯 `PartitionBuddyPlacementPlanner`，只返回不可路由的 `PREPARING` 初始分区建议；不修改现网 ZooKeeper / WAL 或旧分区。
+- `PartitionBuddyPlacementPlannerTest` **7/7 PASS**：2 节点 128/128、4 节点 64/64、6 节点 42–43、每分区仅一个配对 Replica、异常配置拒绝、禁止覆盖已有分区、节点/服务身份校验。
+- Common 全量 Maven（新增规划器后）**94 suites / 395 tests / 0 failures / 0 errors / 0 skipped**，退出码 0。存在旧 `./control/ATSConfig.ini` 不存在的测试环境堆栈输出，但 XML 统计及退出码均正常。
+- 此阶段**没有**完成线上 256 个分区的 ZooKeeper Assignment 发布、业务 WAL 分布、2→4 迁移，也没有证明 B 在 A 故障时 READY。以上必须列入下一阶段独立 Docker 测试，不能将规划器 PASS 说成 HA PASS。
+- 方案文档本地提交 `36da560`（`saas-crypto`）；Common 源码本地提交 `06c650e`；本阶段未运行 GitHub Actions。
