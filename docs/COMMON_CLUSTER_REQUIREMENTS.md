@@ -116,3 +116,6 @@
 - **T25（2026-10-23：Common 单测 PASS，动态生产接线未完成）** 可在新的 Epoch 双签名成员下，对已存在的 WAL 水位签出新的两物理数据节点持久 Genesis，连续认证后续序列并在重启后验证；必须拒绝单签名、旧签名、失效授权。真实 Order/Trade 数据接线、恢复同步 Replica 的 ZK CAS/数据屏障/新 Epoch 2/2 TCP RPC 和故障注入仍 NO-GO。
 
 - **T26（2026-10-23：Demo 接线/负向验收 PASS，自动切回严格复制未完成）** 新 Epoch 独立物理 WAL RSA Receipt 服务从 ZooKeeper Assignment 固定 Primary、2 数据成员、Epoch/config、旧已确认签名边界和拟发布 Genesis；仅当 RECOVERING/STRICT_REJOIN_GENESIS_PREPARE 或 READY/QUORUM_DURABLE 的严格门禁真实成立才能签名，每次签名前后再核实 ZK，拒绝降级模式冒充严格 ACK。当前隔离 Netty B/旧降级 READY 的错误签名请求正确拒绝，7 新单测通过；仍需自动切换事务、双签名证书保管以及真实客户端 2/2 ACK 验收。
+
+- **T27（2026-10-23 隔离 P000 部分 PASS）** 经 A/B 初始 8/8 严格 ACK、SIGKILL A、B 单节点本地继续 ACK seq9、A Learner 追平后，按真实 ZK CAS 冻结旧授权进入 Epoch3/RECOVERING，等待旧租约隔离并重验两物理 WAL/旧双签名历史前缀，CAS 进入新双副本签名 Genesis 准备；两台 RSA 独立 Netty Receipt 对新 Epoch3/seq9 一致，Common CommitIndex fsync 证书落盘（B 主节点 1035 字节）。仍不应发布严格 READY 或新客户端 ACK。
+- **T28（未完成）** 新 Epoch 严格 Genesis 的完整证书须再由第二数据节点独立 fsync 保管并验证真实两节点 Custody ACK，随后接通动态双节点 WAL 复制与 2/2 交易 ACK、READY 事务及失败自动降级回单节点正常交易。当前禁止在正式 Demo 开启自动严格恢复试验开关。

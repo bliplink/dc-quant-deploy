@@ -231,3 +231,20 @@
 - **真实 Docker 反向测试**：原隔离项目 ZooKeeper 仍为 A/Epoch5/READY/AUTO_DEGRADED_LOCAL_DURABLE、B Learner，调用新 TCP 动态签名 opcode（提出 Epoch6/config10/seq16）被 B 正确拒绝：missing numeric strictConfigurationVersion。证明新 RPC 不会从单节点降级态擅自发放严格持久证明。恢复当前业务单机 WAL 模式继续真实写入 seq17，code=0/appliedCount=1/quorumDurable=false；B 自动追平 seq17，A/B 完整 WAL SHA=b851cc2a0a7c986fcb2ad1af85f80b97a908045f166b27fd0eedc1aad18c640b。
 - 本轮 Demo 全量 Maven **39 suites /160 tests，159 通过、1 跳过、0 失败/错误**。Common 源自上一轮的全量 419 PASS，本轮未修改 Common 工厂主代码。
 - **下一关仍未完成**：有界写屏障阻止单节点本地 ACK、冻结最高已确认 Seq、原子 ZooKeeper 进入新 Epoch RECOVERING/strict GENESIS_PREPARE、收齐 2 个独立 Netty Receipt、落盘 Common CommitIndex + 将证书保管到第二节点、原子发布严格 Ready 并切换真实订单写入 ACK/恢复正式复制。每个条件未成立不得报 QUORUM_DURABLE，也不能长期牺牲 A/B 正常单节点可用性。此协议暂不启用自动切换，仅可显式隔离试验；正式 Order/Trade/MD 集成、256 分区、多物理节点故障以及 200 租户压测仍为 NO-GO。
+
+## 17. 2026-10-23：真实 ZK Freeze → Genesis Prepare → 双签名 CommitIndex fsync
+
+本轮在全新隔离 Compose 项目 compose.v19-rf2-strict-cutover.yaml 中验证，3 个独立 ZooKeeper 进程、A/B 独立 JVM 与独立 WAL 卷，均在同一台 Mac Docker VM 内。原有实验与正式 Order/Trade/MD 服务未更改。
+
+真实实验依次执行：Epoch1 A 主/B 备，8 笔请求获得原严格 2/2 ACK（8/8 code=0、appliedCount=1）；SIGKILL A，B 自动取得 Epoch2/READY，B 在单节点本地 fsync 模式确认新 seq9；A 作为 Learner 恢复后自动追平 B 的 WAL。B 的严格恢复自动线程随后调用两次真正的 ZK stat-version CAS：
+
+1. 首次进入 Epoch3 / RECOVERING / STRICT_REJOIN_FREEZE_PENDING / quorumDurable=false，旧 Epoch 的主节点不可继续确认新写入。这个阶段**不能**请求签名或恢复 READY。
+2. 等待超过 5 秒旧授权隔离窗口，重新从两台物理 JVM 读取 clean WAL、提交 seq、SHA、业务状态摘要和独立认证的旧 Epoch1 双签名证书；通过 Netty HASH_THROUGH(seq8) 再验证旧 ACK 的实际物理历史前缀。证明一致后第二次 CAS 进入 Epoch3 / RECOVERING / STRICT_REJOIN_GENESIS_PREPARE，严格两个指定节点、strictConfigurationVersion=5、strictGenesisSeq=9、strictOldCertifiedSeq=8，quorumDurable=false。
+3. 新动态 WAL Receipt Netty RPC 分别获得 B 与 A 对 Epoch3/config5/seq9 同一 WAL 前缀的独立 RSA 签名。Common DurableWalCommitQuorum 校验 2 个物理签名，Common DurableWalCommitIndex 原子落盘与 fsync。真实 B WAL 卷中生成 /srv/v19/wal/.strict-epoch-3-config-5/commit-00000000000000000009.bin（1035 字节）。B 日志记录 V19_RF2_STRICT_GENESIS_FSYNCED epoch=3 seq=9 twoSignedPhysicalVoters=true clientStrictReady=false certificateCustodyPeer=false。
+4. 反向测试：此时 B（新主）与 A（备机）收到新的真实 TCP APPEND 均返回 503，证明仍处于不可写 RECOVERING，未假称正式 2/2 ACK 已恢复。原自动降级 READY 定时线程被新状态守卫阻止，不能错误开放严格恢复中分区。
+
+专项测试 DemoV19Rf2StrictCutoverPlanTest 7/7、DemoV19Rf2StrictFreezeAdmissionTest 4/4、DemoV19Rf2DynamicReceiptServiceTest 7/7 PASS；完整 Demo Maven：41 suites、171 tests、170 pass、1 skipped、0 failures/errors。
+
+源码与隔离 Compose 精确 12 文件快照 tests/patches/common-v19-rf2-real-strict-genesis-20261023.tar.gz，附逐文件 SHA256 清单 tests/patches/common-v19-rf2-real-strict-genesis-20261023.sha256，已解压逐字节核对。快照不是独立增量补丁，须结合先前 v19 实验补丁谨慎合并，不可直接覆盖其它源码。
+
+**仍为 NO-GO**：本轮只证明新 Epoch 两独立签名与 B 主节点本地持久化 CommitIndex Genesis；A 第二节点尚未持久保管新的认证证书、动态正式 WAL 复制及新 Epoch 严格客户端 ACK 未接通，因此没有发布严格 READY。该隔离实验目前停在安全但不可交易的 RECOVERING；切勿将自动严格恢复实验开关直接配置到已有 Demo/正式 Order/Trade，否则违反故障后保持交易可用的目标。后续必须补第二节点证书 fsync Custody、双副本持久 ACK、严谨的新配置 READY 和失败时自动降级恢复，然后做 256 分区和 200 租户压力测试。模拟故障域不代表两物理节点。
