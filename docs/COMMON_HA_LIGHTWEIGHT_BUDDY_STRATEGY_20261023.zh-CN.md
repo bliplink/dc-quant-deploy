@@ -97,3 +97,12 @@
 - **下一阶段尚缺**：从 `RECOVERING` 经过真实 WAL/旧 Epoch 已确认提交水位/旧主 Fencing/持续授权核验的恢复事务，再按明确的 durability 合同安全发布 READY；独立 Demo 真实 A→B→A 自动切换尚未通过。不能把单元测试或控制面 CAS 当作完整 HA 通过。
 
 - 新 Common 本地 Maven Jar 已安装并被独立 Demo 全量回归使用：35 个套件，共 132 项，131 项通过、1 项跳过、0 失败、0 错误，退出码 0。这证明编译和单测兼容，不代表真正自动 HA 已通过。
+
+## 10. RF2 恢复完成门禁（2026-10-23，本地实验）
+
+- Common 本地分支提交 `ca6f1d5`：新增业务无关的 `PartitionRf2StrictReadyController`。先对 `RECOVERING` 旧成员配置执行只读准备，再在业务写入互斥屏障内核对控制面租约、Assignment 版本、旧主作为 Learner 的在线/追平证据和严格提交安全门禁；资源关闭成功后，才尝试 ZooKeeper CAS 将旧主重新作为 Replica、版本递增并发布 `READY`。
+- 控制器通过 `RecoveryProof` 接口注入旧 Epoch 已 ACK WAL 证书、候选 WAL 前缀、旧主 Fencing、新 Epoch 授权、备机追平等权威证明；**目前只提供门禁和模拟证明测试，还没有将其与真实 Demo WAL 证明/物理 ZooKeeper 实例接线**。生产适配器禁止无条件通过或返回伪造认证结果。
+- 对旧 Epoch/Assignment 版本变化、恢复备机不在线、租约过期、提交证据不充分、CAS 冲突、恢复资源关闭失败等场景 fail-closed；CAS 已成功但随后租约失效的场景返回 `APPLIED_NOT_READY`，不发布本地写入就绪。
+- RF2 严格 2/2 下：A 故障后 B 可获得新的非路由 `RECOVERING` Epoch，但只有 A 恢复并持久追平、恢复为有效同步 Replica 后才可按严格 2/2 重新 READY；故障期间如果希望 B 单节点持续交易，须走**显式 LOCAL_DURABLE_ASYNC/降级合同**及其独立认证门禁，不得自动从严格多数降级。
+- 测试：`PartitionRf2StrictReadyControllerTest` 14/14 通过；Common 全量 **96 suites / 418 tests / 0 failures / 0 errors / 0 skipped**；重新本地安装 Common 后独立 Demo **35 suites / 132 tests / 0 failures / 0 errors / 1 skipped**（131 项通过）。都不构成真实 A→B 自动交易继续的证明。
+- 下一阶段必须接入真实 ZooKeeper 的独立 Controller/Assignment 事务和真实 Common WAL/提交边界验证；然后运行 Docker 多 JVM A SIGKILL→B 无双主接管、A 回归追平、READY、持续业务写入和错误路径故障注入。

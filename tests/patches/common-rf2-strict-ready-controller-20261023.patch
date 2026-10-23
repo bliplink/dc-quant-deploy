@@ -1,0 +1,387 @@
+diff --git a/src/main/java/com/app/common/partition/PartitionRf2StrictReadyController.java b/src/main/java/com/app/common/partition/PartitionRf2StrictReadyController.java
+new file mode 100644
+index 0000000..88fd8e0
+--- /dev/null
++++ b/src/main/java/com/app/common/partition/PartitionRf2StrictReadyController.java
+@@ -0,0 +1,175 @@
++package com.app.common.partition;
++
++import java.util.ArrayList;
++import java.util.List;
++import java.util.Objects;
++
++/**
++ * Finishes an RF2 survivor's RECOVERING epoch only AFTER the old data peer
++ * has returned and the caller proves strict two-voter durability.
++ *
++ * Control-plane lease/CAS alone never authorizes an ACK. RecoveryProof must
++ * check the highest previously ACKed WAL prefix, old-epoch fencing, recovered
++ * peer's durable matching prefix, and the current epoch's write eligibility.
++ * Expensive read-only proof preparation occurs outside the business barrier;
++ * final revalidation and ZK publication are serialized with business writes.
++ */
++public final class PartitionRf2StrictReadyController {
++    public interface RecoveryProof {
++        Prepared prepare(PartitionAssignment recovering, String recoveredReplica);
++    }
++    public interface Prepared extends AutoCloseable {
++        /** A cheap, authoritative check with no network I/O under the barrier. */
++        void requireSafeUnderBarrier(PartitionAssignment recovering, String recoveredReplica);
++        @Override void close();
++    }
++    public enum Outcome {
++        READY, APPLIED_NOT_READY, INVALID_RECOVERY, CONTROL_UNAVAILABLE,
++        LEASE_NOT_HELD, REPLICA_NOT_LIVE, UNSAFE, STALE, CAS_CONFLICT
++    }
++    public static final class Result {
++        private final Outcome outcome;
++        private final RuntimeException failure;
++        private Result(Outcome outcome, RuntimeException failure) {
++            this.outcome=outcome; this.failure=failure;
++        }
++        public Outcome getOutcome() { return outcome; }
++        public RuntimeException getFailure() { return failure; }
++    }
++
++    private final PartitionFailoverController.Guard guard;
++    private final PartitionFailoverController.Membership membership;
++    private final PartitionFailoverController.AssignmentStore store;
++    private final PartitionRecoveryCoordinator.Barrier barrier;
++    private final RecoveryProof recovery;
++
++    public PartitionRf2StrictReadyController(PartitionFailoverController.Guard guard,
++            PartitionFailoverController.Membership membership,
++            PartitionFailoverController.AssignmentStore store,
++            PartitionRecoveryCoordinator.Barrier barrier, RecoveryProof recovery) {
++        this.guard=Objects.requireNonNull(guard,"guard");
++        this.membership=Objects.requireNonNull(membership,"membership");
++        this.store=Objects.requireNonNull(store,"store");
++        this.barrier=Objects.requireNonNull(barrier,"barrier");
++        this.recovery=Objects.requireNonNull(recovery,"proof");
++    }
++
++    /**
++     * Only the old peer, now a fully caught-up learner, can restore RF2 strict
++     * quorum. This method does not implement LOCAL_DURABLE_ASYNC degradation.
++     */
++    public Result restoreStrictReady(String partitionId, String recoveredReplica) {
++        if (blank(partitionId) || blank(recoveredReplica))
++            throw new IllegalArgumentException("partition and recovered replica required");
++        if (!guard.isConnected()) return result(Outcome.CONTROL_UNAVAILABLE);
++        if (!guard.hasLease()) return result(Outcome.LEASE_NOT_HELD);
++        PartitionFailoverController.VersionedAssignment versioned=store.read(partitionId);
++        // Store implementations may expose a mutable object; pin its contents.
++        PartitionAssignment old=versioned==null?null:copy(versioned.getAssignment());
++        if (!validRecovering(partitionId, old, recoveredReplica))
++            return result(Outcome.INVALID_RECOVERY);
++        if (!membership.isLive(recoveredReplica))
++            return result(Outcome.REPLICA_NOT_LIVE);
++
++        Prepared prepared=null;
++        final Outcome[] result={Outcome.UNSAFE};
++        final boolean[] closeAttempted={false};
++        try {
++            prepared=recovery.prepare(old,recoveredReplica);
++            if (prepared==null) throw new IllegalStateException("missing certified recovery proof");
++            final Prepared evidence=prepared;
++            barrier.run(partitionId,()->{
++                if (!guard.isConnected() || !guard.hasLease()) {
++                    result[0]=Outcome.LEASE_NOT_HELD;
++                    return;
++                }
++                PartitionFailoverController.VersionedAssignment reread=store.read(partitionId);
++                if (reread==null || reread.getVersion()!=versioned.getVersion()
++                        || !sameRecovering(old,reread.getAssignment())
++                        || !membership.isLive(recoveredReplica)) {
++                    result[0]=Outcome.STALE;
++                    return;
++                }
++                // A recovering assignment must never retain a previous
++                // process-local READY bit for the same epoch.
++                PartitionReadinessGuard.revoke(old.getPrimary(), partitionId);
++                // Strictly require proof BEFORE the ZK CAS. Prepared verification
++                // must be pinned to the same epoch, configuration and WAL prefix.
++                evidence.requireSafeUnderBarrier(old,recoveredReplica);
++                if (!guard.isConnected() || !guard.hasLease()
++                        || !membership.isLive(recoveredReplica)) {
++                    result[0]=Outcome.STALE;
++                    return;
++                }
++                PartitionAssignment next=copy(old);
++                next.setReplica(recoveredReplica);
++                next.setReplicas(java.util.Collections.singletonList(recoveredReplica));
++                List<String> learners=new ArrayList<String>(old.getLearners());
++                learners.remove(recoveredReplica);
++                next.setLearners(learners);
++                next.setAssignmentVersion(Math.addExact(old.getAssignmentVersion(),1));
++                next.setState("READY");
++                PartitionAssignmentValidator.requireValid(next);
++
++                // READY must not be published while an adapter owns recovery
++                // scratch resources. close can itself fail and must fail closed.
++                closeAttempted[0]=true;
++                evidence.close();
++                // If close failed, the CAS below is never attempted.
++                if (!store.compareAndSet(partitionId,versioned.getVersion(),next)) {
++                    result[0]=Outcome.CAS_CONFLICT;
++                    return;
++                }
++                result[0]=Outcome.APPLIED_NOT_READY;
++                if (guard.isConnected() && guard.hasLease()
++                        && membership.isLive(recoveredReplica)) {
++                    PartitionReadinessGuard.markReady(next.getPrimary(), partitionId,next.getEpoch());
++                    result[0]=Outcome.READY;
++                }
++            });
++            return result(result[0]);
++        } catch (RuntimeException unsafe) {
++            return new Result(Outcome.UNSAFE,unsafe);
++        } finally {
++            if (prepared!=null && !closeAttempted[0]) {
++                closeAttempted[0]=true;
++                // No READY was published by this attempt if CAS was not reached.
++                try { prepared.close(); } catch(RuntimeException ignored) { }
++            }
++        }
++    }
++
++    private static boolean validRecovering(String partition, PartitionAssignment a, String replica) {
++        return a!=null && partition.equals(a.getPartitionId())
++                && "RECOVERING".equalsIgnoreCase(a.getState()) && a.getEpoch()>0
++                && a.replicaNodes().isEmpty() && a.getLearners().size()==1
++                && sameNode(a.getLearners().get(0),replica)
++                && !sameNode(a.getPrimary(),replica);
++    }
++    private static boolean sameRecovering(PartitionAssignment left, PartitionAssignment right) {
++        return right!=null && left.getEpoch()==right.getEpoch()
++                && left.getAssignmentVersion()==right.getAssignmentVersion()
++                && left.effectiveProtocolVersion()==right.effectiveProtocolVersion()
++                && java.util.Objects.equals(left.getPrimary(),right.getPrimary())
++                && java.util.Objects.equals(left.getPartitionId(),right.getPartitionId())
++                && java.util.Objects.equals(left.getState(),right.getState())
++                && left.replicaNodes().equals(right.replicaNodes())
++                && left.getLearners().equals(right.getLearners());
++    }
++    private static boolean sameNode(String a, String b) {
++        return a!=null && b!=null && a.trim().equalsIgnoreCase(b.trim());
++    }
++    private static boolean blank(String s) { return s==null || s.trim().isEmpty(); }
++    private static PartitionAssignment copy(PartitionAssignment a) {
++        PartitionAssignment n=new PartitionAssignment();
++        n.setPartitionId(a.getPartitionId()); n.setEpoch(a.getEpoch());
++        n.setAssignmentVersion(a.getAssignmentVersion());
++        n.setProtocolVersion(a.getProtocolVersion());
++        n.setPrimary(a.getPrimary()); n.setReplica(a.getReplica());
++        n.setReplicas(a.getReplicas()); n.setLearners(a.getLearners());
++        n.setPlacementGroup(a.getPlacementGroup()); n.setNodePool(a.getNodePool());
++        n.setState(a.getState());
++        return n;
++    }
++    private static Result result(Outcome outcome) { return new Result(outcome,null); }
++}
+diff --git a/src/test/java/com/app/common/partition/PartitionRf2StrictReadyControllerTest.java b/src/test/java/com/app/common/partition/PartitionRf2StrictReadyControllerTest.java
+new file mode 100644
+index 0000000..c41dc4a
+--- /dev/null
++++ b/src/test/java/com/app/common/partition/PartitionRf2StrictReadyControllerTest.java
+@@ -0,0 +1,200 @@
++package com.app.common.partition;
++
++import java.util.Arrays;
++import java.util.Collections;
++import java.util.HashSet;
++import java.util.Set;
++import java.util.concurrent.atomic.AtomicInteger;
++import org.junit.After;
++import org.junit.Test;
++import static org.junit.Assert.*;
++
++/** Mock-store tests: no case assumes a synthetic proof is real WAL evidence. */
++public final class PartitionRf2StrictReadyControllerTest {
++    private static final class Fixture implements PartitionFailoverController.Guard,
++            PartitionFailoverController.Membership,
++            PartitionFailoverController.AssignmentStore,
++            PartitionRecoveryCoordinator.Barrier {
++        final Set<String> live=new HashSet<String>(Arrays.asList("A","B"));
++        PartitionAssignment current=rf2Recovering();
++        int version=6, casCount=0;
++        boolean connected=true, lease=true, conflict=false, inBarrier=false;
++        final AtomicInteger prepared=new AtomicInteger(), verified=new AtomicInteger(), closed=new AtomicInteger();
++        Runnable whenPrepared=()->{}, whenVerified=()->{}, whenClosed=()->{};
++        boolean failProof=false, failClose=false;
++        public boolean isConnected(){ return connected; }
++        public boolean hasLease(){ return lease; }
++        public boolean isLive(String node){ return live.contains(node); }
++        public PartitionFailoverController.VersionedAssignment read(String partition){
++            return new PartitionFailoverController.VersionedAssignment(current,version);
++        }
++        public boolean compareAndSet(String partition,int expect,PartitionAssignment next){
++            assertTrue(inBarrier);
++            casCount++;
++            if(conflict || expect!=version) return false;
++            current=next; version++;return true;
++        }
++        public void run(String partition,Runnable action){
++            assertFalse(inBarrier);inBarrier=true;
++            try { action.run(); } finally { inBarrier=false; }
++        }
++        PartitionRf2StrictReadyController controller() {
++            return new PartitionRf2StrictReadyController(this,this,this,this,proof());
++        }
++        PartitionRf2StrictReadyController.RecoveryProof proof() {
++            return (current,replica)->{
++                assertFalse(inBarrier);
++                prepared.incrementAndGet();
++                whenPrepared.run();
++                return new PartitionRf2StrictReadyController.Prepared() {
++                    public void requireSafeUnderBarrier(PartitionAssignment a,String replica){
++                        assertTrue(inBarrier);
++                        assertEquals("B",a.getPrimary());
++                        assertEquals("A",replica);
++                        verified.incrementAndGet();
++                        whenVerified.run();
++                        if(failProof) throw new IllegalStateException("unproven WAL quorum frontier");
++                    }
++                    public void close(){
++                        closed.incrementAndGet();
++                        whenClosed.run();
++                        if(failClose)throw new IllegalStateException("recovery proof resource leak");
++                    }
++                };
++            };
++        }
++    }
++    private static PartitionAssignment rf2Recovering(){
++        PartitionAssignment a=new PartitionAssignment();
++        a.setPartitionId("P000");a.setPrimary("B");a.setEpoch(8);
++        a.setAssignmentVersion(5);a.setProtocolVersion(2);
++        a.setReplica(null);a.setReplicas(Collections.<String>emptyList());
++        a.setLearners(Collections.singletonList("A"));a.setState("RECOVERING");
++        return a;
++    }
++    @After public void cleanup(){
++        PartitionReadinessGuard.clear("B");
++    }
++    @Test public void provenRecoveredPeerPublishesNewVersionAndProcessReadiness(){
++        Fixture f=new Fixture();
++        PartitionRf2StrictReadyController.Result r=f.controller().restoreStrictReady("P000","A");
++        assertEquals(PartitionRf2StrictReadyController.Outcome.READY,r.getOutcome());
++        assertEquals("READY",f.current.getState());
++        assertEquals("B",f.current.getPrimary());
++        assertEquals(8,f.current.getEpoch());
++        assertEquals(6,f.current.getAssignmentVersion());
++        assertEquals(Collections.singletonList("A"),f.current.replicaNodes());
++        assertTrue(f.current.getLearners().isEmpty());
++        assertTrue(f.current.isRoutable());
++        assertTrue(PartitionReadinessGuard.isReady("B","P000",8));
++        assertEquals(1,f.casCount);
++        assertEquals(1,f.prepared.get());
++        assertEquals(1,f.verified.get());
++        assertEquals(1,f.closed.get());
++        assertEquals(0,PartitionAssignmentValidator.validate(f.current).size());
++        PartitionReplicaGroup group=PartitionReplicaGroup.from(f.current,
++                PartitionReplicaGroup.Durability.QUORUM_DURABLE,
++                new java.util.HashMap<String,String>(){{put("A","hostA");put("B","hostB");}});
++        assertEquals(2,group.requiredDataAcks());
++    }
++    @Test public void absentFollowerMustNeverBeginRecoveryProof(){
++        Fixture f=new Fixture();f.live.remove("A");
++        assertEquals(PartitionRf2StrictReadyController.Outcome.REPLICA_NOT_LIVE,
++                f.controller().restoreStrictReady("P000","A").getOutcome());
++        assertEquals(0,f.prepared.get());assertEquals(0,f.casCount);
++    }
++    @Test public void staleEpochAfterPreparationMustNotPublish(){
++        Fixture f=new Fixture();
++        f.whenPrepared=()->f.current.setEpoch(9);
++        assertEquals(PartitionRf2StrictReadyController.Outcome.STALE,
++                f.controller().restoreStrictReady("P000","A").getOutcome());
++        assertEquals(0,f.casCount);assertEquals(0,f.verified.get());
++        assertFalse(PartitionReadinessGuard.isReady("B","P000",8));
++    }
++    @Test public void invalidRecoveryAssignmentAndUnknownPeerFailClosed(){
++        Fixture f=new Fixture();
++        assertEquals(PartitionRf2StrictReadyController.Outcome.INVALID_RECOVERY,
++                f.controller().restoreStrictReady("P000","C").getOutcome());
++        f.current.setState("READY");
++        assertEquals(PartitionRf2StrictReadyController.Outcome.INVALID_RECOVERY,
++                f.controller().restoreStrictReady("P000","A").getOutcome());
++        assertEquals(0,f.casCount);
++    }
++    @Test public void unsafeDurableProofCannotPublishReady(){
++        Fixture f=new Fixture();f.failProof=true;
++        assertEquals(PartitionRf2StrictReadyController.Outcome.UNSAFE,
++                f.controller().restoreStrictReady("P000","A").getOutcome());
++        assertEquals("RECOVERING",f.current.getState());
++        assertEquals(0,f.casCount);assertFalse(PartitionReadinessGuard.isReady("B","P000",8));
++        assertEquals(1,f.closed.get());
++    }
++    @Test public void closeFailureCannotPublishReady(){
++        Fixture f=new Fixture();f.failClose=true;
++        assertEquals(PartitionRf2StrictReadyController.Outcome.UNSAFE,
++                f.controller().restoreStrictReady("P000","A").getOutcome());
++        assertEquals(0,f.casCount);assertFalse(PartitionReadinessGuard.isReady("B","P000",8));
++    }
++    @Test public void leaseLostDuringEvidenceReviewCannotCas(){
++        Fixture f=new Fixture();f.whenVerified=()->f.lease=false;
++        assertEquals(PartitionRf2StrictReadyController.Outcome.STALE,
++                f.controller().restoreStrictReady("P000","A").getOutcome());
++        assertEquals(0,f.casCount);assertFalse(PartitionReadinessGuard.isReady("B","P000",8));
++    }
++    @Test public void recoveredPeerDiesDuringVerificationCannotCas(){
++        Fixture f=new Fixture();f.whenVerified=()->f.live.remove("A");
++        assertEquals(PartitionRf2StrictReadyController.Outcome.STALE,
++                f.controller().restoreStrictReady("P000","A").getOutcome());
++        assertEquals(0,f.casCount);
++    }
++    @Test public void conflictLeavesRecoveringUnchanged(){
++        Fixture f=new Fixture();f.conflict=true;
++        assertEquals(PartitionRf2StrictReadyController.Outcome.CAS_CONFLICT,
++                f.controller().restoreStrictReady("P000","A").getOutcome());
++        assertEquals("RECOVERING",f.current.getState());
++        assertEquals(1,f.casCount);assertFalse(PartitionReadinessGuard.isReady("B","P000",8));
++    }
++    @Test public void postCasLeaseLossLeavesLocalReadinessClosed(){
++        Fixture f=new Fixture();
++        // A realistic test store may observe loss of lease immediately after CAS.
++        PartitionRf2StrictReadyController controller=new PartitionRf2StrictReadyController(f,f,
++                new PartitionFailoverController.AssignmentStore(){
++                    public PartitionFailoverController.VersionedAssignment read(String p){return f.read(p);}
++                    public boolean compareAndSet(String p,int v,PartitionAssignment next){
++                        boolean ok=f.compareAndSet(p,v,next);
++                        f.lease=false;return ok;
++                    }
++                },f,f.proof());
++        assertEquals(PartitionRf2StrictReadyController.Outcome.APPLIED_NOT_READY,
++                controller.restoreStrictReady("P000","A").getOutcome());
++        assertFalse(PartitionReadinessGuard.isReady("B","P000",8));
++    }
++    @Test public void staleLocalReadyBitRevokedBeforeUnsafeProof() {
++        Fixture f=new Fixture();
++        PartitionReadinessGuard.markReady("B","P000",8);
++        f.failProof=true;
++        assertEquals(PartitionRf2StrictReadyController.Outcome.UNSAFE,
++                f.controller().restoreStrictReady("P000","A").getOutcome());
++        assertFalse(PartitionReadinessGuard.isReady("B","P000",8));
++        assertEquals(0,f.casCount);
++    }
++    @Test public void abandonedPreparationClosesResourcesExactlyOnce() {
++        Fixture f=new Fixture();
++        f.whenPrepared=()->f.version++;
++        assertEquals(PartitionRf2StrictReadyController.Outcome.STALE,
++                f.controller().restoreStrictReady("P000","A").getOutcome());
++        assertEquals(1,f.closed.get());
++        assertEquals(0,f.casCount);
++    }
++    @Test public void proofClosedBeforeCasAndOnlyOnceOnConflict() {
++        Fixture f=new Fixture();f.conflict=true;
++        assertEquals(PartitionRf2StrictReadyController.Outcome.CAS_CONFLICT,
++                f.controller().restoreStrictReady("P000","A").getOutcome());
++        assertEquals(1,f.closed.get());
++    }
++    @Test public void noConnectedControlPlaneCanPublishReady(){
++        Fixture f=new Fixture();f.connected=false;
++        assertEquals(PartitionRf2StrictReadyController.Outcome.CONTROL_UNAVAILABLE,
++                f.controller().restoreStrictReady("P000","A").getOutcome());
++        assertEquals(0,f.casCount);
++    }
++}
