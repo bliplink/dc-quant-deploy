@@ -16,9 +16,25 @@ from recovery.run_local_historical_scene_campaign import (
     run_chunk,
     validate_rows,
 )
+from recovery.supervise_local_historical_scene_campaign import may_resume_capacity
 
 
 class HistoricalSceneCampaignTest(unittest.TestCase):
+    def test_supervisor_resumes_only_explicit_capacity_in_pinned_chunk(self):
+        with tempfile.TemporaryDirectory() as directory:
+            campaign = Path(directory)
+            chunk = campaign / 'chunks' / 'BTCUSDT' / '2025-01-01_2025-01-10'
+            child = chunk / 'attempt_001' / 'run_001' / 'batch_001_codex_1.log'
+            child.parent.mkdir(parents=True)
+            child.write_text('ERROR: Selected model is at capacity.\n', encoding='utf-8')
+            status = {'failed_chunk': str(chunk), 'completed_chunks': 1, 'total_chunks': 260}
+            self.assertTrue(may_resume_capacity(status, campaign))
+            child.write_text('ERROR: invalid scene response\n', encoding='utf-8')
+            self.assertFalse(may_resume_capacity(status, campaign))
+            status['failed_chunk'] = str(campaign.parent / 'unrelated')
+            with self.assertRaisesRegex(ValueError, 'outside'):
+                may_resume_capacity(status, campaign)
+
     def test_usage_limit_is_detected_only_from_codex_child_log(self):
         with tempfile.TemporaryDirectory() as directory:
             attempt = Path(directory)
