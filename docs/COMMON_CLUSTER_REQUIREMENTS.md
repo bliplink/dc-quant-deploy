@@ -125,3 +125,6 @@
 
 - **T31（2026-10-23：隔离 P000 动态 Epoch 严格 ACK→单节点→严格 ACK 闭环 PASS）** 真实 Epoch5 B/A seq13 新交易 code0/appliedCount1/QUORUM_DURABLE，A/B 两独立 WAL hash、CommitIndex 证书与 2 个 Custody head.bin 对齐，重复 requestId 不重复执行；SIGKILL A，B 自动 Epoch6 单节点续写 seq14 code0/quorumDurable=false，A 自动追平；随后 Epoch7 自动 ZK Freeze/双签名 Genesis/双保管/READY，seq15 新交易 code0/quorumDurable=true，A/B 同 WAL hash 和 custody。Demo 181 项测试：180 pass、1 skipped、0 fail。
 - **T32（未完成）** 仍需实际不重启 JVM 的多轮重复重新武装测试、Epoch7 严格 B Primary 故障时 A 自动接管和恢复、移除隔离 Demo Epoch8 上界并在更长 Epoch 链持续故障注入、多物理机器故障域、256分区与4节点扩展、10/50/200 租户长期负载 TPS/p99/2-3倍 burst、Order/Trade/MD/Projection 权威资金与成交一致性。未通过前禁止标记完整 Common 生产 HA 完成。
+
+- **T33（2026-10-23 隔离单分区反向主切/严格 ACK PASS）** 在 Epoch7 A备/B主真严格 seq15 后 SIGKILL B，A 由真实 ZK 自动晋升为 Epoch8 主并本地继续真实新交易 seq16 code0/appliedCount1/quorumDurable=false；B 恢复自动追平 A 的 seq16 且 SHA一致，A 自动完成 Epoch9 新签名 Genesis、双证书保管和严格 READY。恢复就绪检查 Epoch1-8 限制后，A 作为严格主的 seq17 首次 TCP 超时，但同 requestId 重试 code0、appliedCount1、无重复；全新 seq18 code0/quorumDurable=true，A/B WAL epoch9/seq18 SHA 一致，两个独立 head.bin SHA 一致，CommitIndex 证书落盘。Demo 全量 181 测试：180通过、1跳过、0失败。
+- **T34（仍未完成）** 评估更多真实 Epoch 滚动故障与不重启 JVM 的重复 rearm、完整不同物理故障域、256分区/4节点拓扑的 ZooKeeper 授权规模和负载、10/50/200 tenants TPS与p99、签名及证书双保管批量优化，消除高延迟/客户端 TCP 超时、验证安全重试、订单成交去重和权威资金/持仓/Projection 一致性。隔离 v19 Epoch 上限已统一提升至128，仅验证 Epoch9，不得视为更高 Epoch 或生产 HA 都已验收。

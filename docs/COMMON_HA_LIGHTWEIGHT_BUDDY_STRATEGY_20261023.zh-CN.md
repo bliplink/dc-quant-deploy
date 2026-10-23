@@ -276,3 +276,17 @@
 **测试与源码**：本轮 Demo 全量 Maven 为 43 suites / 181 tests，180 PASS、1 SKIPPED、0 failures/errors；新增重复重启恢复准入 5/5 PASS。精确 18 个 Java/Compose 文件源代码阶段快照：tests/patches/common-v19-rf2-dynamic-strict-recovery-epoch7-20261023.tar.gz，配套同前缀 .sha256 清单；已安全解压到临时目录进行逐文件字节核对。源文件快照不是独立增量 patch，不应未经差异审核覆盖其他工作树的修改。
 
 **未完成**：这次 Epoch7 是重建 B JVM 后恢复，不能声称不重启 JVM 的反复自动 rearm 已完成。当前实验仍有 Epoch2-8 上界和固定 P000，未进行本轮严格 READY 下 B 主被杀后 A 接管的独立链路验收、多物理故障域、256 分区/4节点、10/50/200 租户持续及 burst 压测、p99、Order/Trade/MD 金额持仓委托成交及 Projection 权威对账。结论应分级：隔离 P000 严格2/2 ACK→单节点继续交易→再次严格2/2 ACK 业务闭环 PASS；完整生产 Common HA 仍 NO-GO。
+
+## 20. 2026-10-23：反向严格主切 B→A、Epoch9 真实严格 ACK 与高 Epoch 就绪门禁修复
+
+紧接第19节的单机隔离 P000 Epoch7：B 主、A 备、双副本严格 WAL 已认证到 seq15。真实 SIGKILL B，A 的 ZooKeeper 控制线程首先进入 Epoch8 / RECOVERING，等待旧主租约隔离窗口；首次过早发新单正确收到 503。随后自动进入 Epoch8 / READY / AUTO_DEGRADED_LOCAL_DURABLE，A 主节点独立 fsync 新交易 rf2-epoch8-a-primary-solo-after-b-kill-16，响应 code0、appliedCount1、seq16、quorumDurable=false、possibleDataLossIfPrimaryPermanentlyLost=true。重启 B 后，B 自动作为 Learner 追平 A 的 seq16，A/B WAL 最后数据 Epoch8，SHA 都是 913c840e404c5da15a6ebdc7e26cd421810eb5b5ffaf5986e99c0bd3a7006842。
+
+A 控制线程随后自动执行 Epoch9 / FREEZE → GENESIS_PREPARE(seq16) → 两独立 RSA 签名及 CommitIndex fsync → A/B 证书双保管 → ZK 原子严格 READY/QUORUM_DURABLE。初次向 A 发送新交易时发现一个真实回归：v19 harness 就绪线程仅检查 Epoch1-8，不会为 Epoch9 主机授予本地 readiness，因此返回 503。这不是签名证书缺失。修复后统一实验最大 Epoch 为 DemoV19Rf2EpochLimits.MAX_EPOCH=128，并修改一批关联代码（DemoV19DurableRuntime、DemoV19Rf2AutoStage、DemoJournalCatalog Learner 图像验证、DemoV19Rf2StrictRejoinPreflight 等），保证同一个上界，后续不能只增加写入侧而漏掉恢复侧。注意这个数字仍然是隔离实验保护上界，不等于生产 Common 必须限制为128。
+
+**性能机制修复**：原 DemoV19ClusterHarness 在每次 35ms 就绪轮询及每秒一次 async retry 中循环检查 Epoch1..8。若简单把循环提升至128，会浪费 CPU。现在控制线程仅通过已经安装、TTL 控制的 DemoHotpathLeaseCache.view(P000) 读一次当前 Epoch，使用相同缓存验证该 Epoch 的 Primary grant；每个轮询周期 O(1)，不用访问 ZooKeeper 和历史 Epoch。源码已编译，并完成隔离 JVM 实测。
+
+为了加载新字节码，仅重建隔离 A JVM（B 独立 Replica 持续保留原 WAL/ZK）。A 发 rf2-epoch9-a-primary-strict-after-epoch-limit-fix-17 时，首个 TCP 客户端 RPC 超时；服务端同时记录 seq17 的证书、local custody、remote custody 和 finalACK。**不能把超时本身视为成功**，使用**同一 requestId、同一 delta**从独立客户端重试，得到 code0、seq17、appliedCount1、QUORUM_DURABLE，确认无重复应用。随后 A 收到另一笔全新请求 rf2-epoch9-a-primary-strict-fresh-18，立即返回 code0、seq18、appliedCount1、quorumDurable=true、durabilityMode=QUORUM_DURABLE。A/B 物理 WAL 各为 Epoch9、seq18，完整 SHA256 同为 20b7893cd86b61799396018d66f1e87ed344a9f227113018fbca3ca0396cc1ae；两节点独立证书 Custody head.bin 的 SHA256 均为 674c98accf33e824b1968336e4ab9744d1bfbde51a7f1b8ed4c73db9f9501ad4；A 的 seq18 CommitIndex commit-00000000000000000018.bin 为1092字节。
+
+最新 Demo Maven 全量回归：**43 suites / 181 tests / 180 passed / 1 skipped / 0 failures/errors**。20 个指定 Java/Compose 文件快照 tests/patches/common-v19-rf2-epoch9-bidirectional-strict-20261023.tar.gz，配套同前缀 .sha256 清单，经干净临时目录安全解压及逐文件字节相等验证。属于源码阶段快照，不是独立增量补丁；合并到其它仓库前还需差异审查。
+
+本轮完整闭环覆盖两个方向：严格 B主→A备、B 存活单节点→恢复严格；严格 A主→B备、A 单节点继续交易→恢复严格。**没有**证明长期 p99 满足目标或可无限次滚动切换：目前仅单 Mac/Docker P000、有限 Epoch 的故障注入，新 Epoch 每次 RSA+证书双保管路径仍需性能优化；真实 Order/Trade/MD/Projection 权威对账和256分区/4节点/10-50-200租户压测未执行。初次 TCP 超时表明仍需重试策略与 ACK 超时指标验收。对所有 LOCAL_DURABLE 的单机确认必须继续明确 RPO>0 可能性。当前按阶段判定 P000 双向功能试验 PASS；生产级整个 Common HA 尚未最终验收。
