@@ -1,0 +1,4 @@
+# Trade Web: change tenant navigation label only; preserve previous order-entry and guide build.
+services:
+  web:
+    image: local/dc-saas-trade-web:tenant-label-only-20261023

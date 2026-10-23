@@ -1,0 +1,4 @@
+# Tenant public entry: aligned create/sign-in buttons and Tenant naming, retaining prior image's guide and home link.
+services:
+  tenant-web:
+    image: local/dc-saas-tenant-web:tenant-labels-aligned-20261023
