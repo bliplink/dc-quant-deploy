@@ -381,3 +381,17 @@ Demo本地Maven全量回归：46 suites/193 tests，192 PASS、1 SKIPPED、0 FAI
 Demo Maven全量回归 **51 suites /209 tests，208 PASS、1 SKIPPED、0 errors/failures**。精确四文件源码阶段快照 tests/patches/common-v19-4node-common-seq1-local-commit-custody-20261023.tar.gz，配套同前缀.sha256清单，临时目录安全解压逐文件字节核对通过。下一步须在真实A/B、C/D Netty数据平面写相同seq1，并使用ZK当前授权及主节点fencing门禁收两节点Common fsync RSA Receipts、强制落盘CommitIndex、两节点真实Common custody，签名证书与水位完整核验后才可发布READY及严格ACK。之后做真实故障注入、256分区10/50/200租户TPS/p99及业务权威对账。Mac磁盘约11GiB空闲，不可直接做大规模压力测试。
 
 **分级结论：双buddy Common证书本地集成PASS；四节点真正网络业务提交、READY和ACK仍NO-GO。**
+
+## 27. 2026-10-23：4个真实Netty JVM两组分区seq1双WAL、Common提交证书及双Common Custody实测
+
+承接第26节的本地JUnit证书集成，本轮在单台Mac的完全隔离Docker网络、3个ZooKeeper及A/B/C/D四个持续Netty JVM上真正验收：P000=A主/B备、P128=C主/D备。四个节点各独占原来64主64备的128个WAL物理文件锁。现有256个ZK分区配置都保持epoch1、version0、PREPARING，原先seq0 Genesis、双RSA preflight、双bootstrap custody都保留。
+
+新增 DemoV19FourNodeSeq1NettyPilot（仅实验环境开关 DEMO_V19_FOUR_NODE_INTERNAL_SEQ1=1），只接受两个精确分区P000/P128及固定内部非交易Demo状态机指令。客户端用Common Netty Transport分别请求主备两个独立JVM，在实际节点验证当前ZK成员和版次、Genesis、bootstrap custody后，各自force/fsync真正seq1 WAL，由各自RSA密钥调用Common DurableWalCommitQuorum.sign，客户端验证2/2独立收据和实际WAL哈希。随后主节点调用真实Common DurableWalCommitIndex.certifyAndPersist把seq1证书fsync到本地；再分别请求两节点用真正的Common DurableWalCertificateCustody.install将完整签名的正式提交证书各自fsync至独立Docker WAL卷，再由各节点signInstalled返回真实Common custody RSA票，客户端通过DurableWalCustodyQuorum.verify确认两个独立保管者及精确seq1/hash。它与前面seq0 bootstrap证据不同，是Common原有提交证书格式。
+
+真实独立卷证据：P000 A/B各自的seq1 WAL SHA256都是698a756492e97da22d5fd1ea852946b9dafb60d4351c9fe833014410a6068b42，两份正式Common Custody head.bin SHA256均为131ec4383de7dcdb3d9b7b6eece2c2a42f167037177dc641f28202b7a8187659。P128 C/D各自seq1 WAL SHA256均为d612508476a3df80638b901f917a9236fb25a0125542301c0a73fe5d3e0804a7，两份正式Common Custody SHA256均为b52606b90d9759500b155ae2210e2d52fd0526aca5e09c691f887c775dc23980。两组WAL各214字节（含非业务seq0 Genesis和本轮Demo模拟seq1），**用户真实订单数仍为0**，不能冒充Order/Trade实盘交易。
+
+幂等重复同请求不产生新业务应用和新提交边界；真实SIGKILL C期间，P128的实时双节点/证书核验按预期失败关闭，恢复C后再次通过。随后完全停止隔离3ZK+4Netty JVM，保留原始WAL和证书卷重启，P000/P128各自两个物理WAL及两份正式Common Custody再次重新验签，实际文件SHA256全部不变。全部256分区/512次真实Netty只读状态RPC仍PASS、每节点128次，禁止的普通二进制WAL批次及COMMIT控制请求仍全部拒绝。追加JUnit测试覆盖严格试点白名单、非白名单指令、Genesis身份、重复/缺少RSA证书投票及伪造签名，避免误开放非法分区。
+
+Demo Maven全量回归52 suites、214 tests、213 PASS、1 SKIPPED、0失败/错误。11个Java源码/测试与隔离Compose文件快照保存到 tests/patches/common-v19-4node-netty-seq1-two-common-custodies-20261023.tar.gz，附同前缀.sha256校验清单，经独立临时目录安全解压和逐文件字节相等验证；没有归档私钥和实验WAL数据。实验结束后四数据JVM及三ZK均停止，四节点实验10个卷、旧严格Epoch9另外8个证据卷均保留；正式Order/Trade/MD/MySQL保持运行，未使用GitHub Actions。之前安全清理日志、MySQL binlog后Mac剩余55GiB、88%占用，正式Order A/B共76GiB journal未经可信水位认证不删除。
+
+**范围限制**：本次在4个真实Netty JVM及两个具体分区已通过内部seq1的双fsync、RSA CommitIndex和2独立Common Custody实际持久化及崩溃重启核验。但四容器都在同一台Mac，不是物理故障域；这只是非交易内部试点，未有动态ZK Epoch授予、旧主fencing、任何分区CAS READY、真实交易API提交ACK、A/B与C/D自动主切继续交易、256分区同时写入、200租户TPS/p99及权威资金持仓成交对账。所有分区维持PREPARING和ready=false。真正4节点交易HA仍NO-GO。下一关是把分区级ZK动态租约/旧主隔离与当前真实Common提交/双Custody验证整合，经过有授权的CAS READY后才能接交易写入和严格ACK，之后主切、恢复和逐档负载。内部开关绝不能部署到生产业务。
