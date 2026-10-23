@@ -114,3 +114,5 @@
 
 - **T24（2026-10-23：部分 PASS）** 经 A/B 单节点故障恢复并进入新 Epoch 后，真实远程读取两个不同 JVM 的洁净 WAL、committedSeq、hash、业务 stateDigest 和原双签名证书，复验 ZooKeeper 的 Epoch、Assignment 版本与成员身份。现阶段 P000 read-only preflight Docker PASS（Epoch5/seq16），不构成严格 2/2 ACK 及成员切换完成。
 - **T25（2026-10-23：Common 单测 PASS，动态生产接线未完成）** 可在新的 Epoch 双签名成员下，对已存在的 WAL 水位签出新的两物理数据节点持久 Genesis，连续认证后续序列并在重启后验证；必须拒绝单签名、旧签名、失效授权。真实 Order/Trade 数据接线、恢复同步 Replica 的 ZK CAS/数据屏障/新 Epoch 2/2 TCP RPC 和故障注入仍 NO-GO。
+
+- **T26（2026-10-23：Demo 接线/负向验收 PASS，自动切回严格复制未完成）** 新 Epoch 独立物理 WAL RSA Receipt 服务从 ZooKeeper Assignment 固定 Primary、2 数据成员、Epoch/config、旧已确认签名边界和拟发布 Genesis；仅当 RECOVERING/STRICT_REJOIN_GENESIS_PREPARE 或 READY/QUORUM_DURABLE 的严格门禁真实成立才能签名，每次签名前后再核实 ZK，拒绝降级模式冒充严格 ACK。当前隔离 Netty B/旧降级 READY 的错误签名请求正确拒绝，7 新单测通过；仍需自动切换事务、双签名证书保管以及真实客户端 2/2 ACK 验收。

@@ -1,0 +1,386 @@
+--- a/src/main/java/com/opentradingcore/demo/DemoV19ClusterHarness.java
++++ b/src/main/java/com/opentradingcore/demo/DemoV19ClusterHarness.java
+@@ -55,8 +55,11 @@
+         }
+         final DemoV19Rf2AutoStage autoStage=DemoV19Rf2AutoStage.enabled()
+                 ? new DemoV19Rf2AutoStage(zk,node,durable,catalog) : null;
+-        DemoV19TcpService v19Tcp = new DemoV19TcpService(node, catalog,
+-                writer, async, controller,durable);
++        DemoV19Rf2DynamicReceiptService dynamicReceipt=
++                "1".equals(System.getenv("DEMO_V19_RF2_DYNAMIC_RECEIPT_PILOT"))
++                ? new DemoV19Rf2DynamicReceiptService(zk,node,catalog) : null;
++        DemoV19TcpService v19Tcp = new DemoV19TcpService(durable,node,catalog,
++                writer,async,controller,dynamicReceipt);
+         com.app.common.replication.DirectNettyReplicationServer replica =
+                 DemoNettyBridge.server(suffix, catalog, v19Tcp::control, durable);
+         try {
+--- a/src/main/java/com/opentradingcore/demo/DemoV19TcpService.java
++++ b/src/main/java/com/opentradingcore/demo/DemoV19TcpService.java
+@@ -30,6 +30,7 @@
+     private final DemoZkLeaseController controller;
+     private final DemoV19DurableRuntime durable;
+     private final DemoV19SnapshotExport images;
++    private final DemoV19Rf2DynamicReceiptService dynamicReceipt;
+ 
+     DemoV19TcpService(String node, DemoJournalCatalog journals,
+             DemoPrimaryWriter writer, DemoAsyncReplicator async,
+@@ -40,7 +41,15 @@
+     DemoV19TcpService(String node,DemoJournalCatalog journals,
+             DemoPrimaryWriter writer,DemoAsyncReplicator async,
+             DemoZkLeaseController controller,DemoV19DurableRuntime durable) {
++        this(durable==null?null:durable,node,journals,writer,async,controller,null);
++    }
++
++    DemoV19TcpService(DemoV19DurableRuntime durable,String node,
++            DemoJournalCatalog journals,DemoPrimaryWriter writer,
++            DemoAsyncReplicator async,DemoZkLeaseController controller,
++            DemoV19Rf2DynamicReceiptService dynamicReceipt) {
+         this.durable=durable;
++        this.dynamicReceipt=dynamicReceipt;
+         this.node = node;
+         this.journals = journals;
+         this.writer = writer;
+@@ -54,6 +63,10 @@
+                 || !"P000".equals(req.getPartitionId()))
+             return ReplicationControlResponse.error("INVALID",
+                     "v19 TCP API only accepts the isolated CommonHaDemo P000");
++        if (DemoV19Rf2DynamicReceiptService.OPERATION.equals(req.getOperation()))
++            return dynamicReceipt==null
++                    ? ReplicationControlResponse.error("DISABLED","dynamic signer not configured")
++                    : dynamicReceipt.handle(req);
+         if (com.app.common.replication.DurableWalReceiptControlHandler.OPERATION
+                 .equals(req.getOperation())
+                 || com.app.common.replication.DurableWalCertificateCustodyControlHandler.OPERATION
+--- a/src/main/java/com/opentradingcore/demo/DemoV19TcpClient.java
++++ b/src/main/java/com/opentradingcore/demo/DemoV19TcpClient.java
+@@ -65,6 +65,34 @@
+     }
+ 
+ 
++    /** Probe dynamic signer on the REAL isolated Netty socket; a sole receipt
++     * is never a quorum certificate and NEVER authorizes a client trade ACK.
++     */
++    public boolean probeDynamicReceipt(String target,long epoch,long config,long seq)
++            throws Exception {
++        java.nio.ByteBuffer raw=java.nio.ByteBuffer.allocate(28);
++        raw.putInt(1);raw.putLong(config);raw.putLong(epoch);raw.putLong(seq);
++        ReplicationControlRequest command=new ReplicationControlRequest(
++                "CommonHaDemo",DemoV19Rf2DynamicReceiptService.OPERATION,
++                "P000",raw.array());
++        ReplicationControlResponse response=transport.control(
++                DemoNettyBridge.endpoint(target),command).get(8,TimeUnit.SECONDS);
++        if (!response.isSuccess()) {
++            System.out.println("V19_RF2_DYNAMIC_RECEIPT_DENIED target="+target
++                    +" reason="+response.getMessage());
++            return false;
++        }
++        DurableWalCommitQuorum.Receipt receipt=
++                DurableWalReceiptControlHandler.decodeReceiptPayload(response.getPayload());
++        if(!target.equals(receipt.node) || receipt.epoch!=epoch
++                || receipt.sequence!=seq)
++            throw new IOException("dynamic receipt source or epoch mismatched");
++        System.out.println("V19_RF2_DYNAMIC_RECEIPT_ONE_VOTE_ONLY target="+target
++                +" epoch="+epoch+" seq="+seq+" walSha="+receipt.commitPrefixSha256
++                +" clientQuorumAck=false");
++        return true;
++    }
++
+     /** Return a completely verified WAL byte image, but never install it. */
+     DemoV19TcpSnapshotReceiver.Image snapshot(String node) throws Exception {
+         return DemoV19TcpSnapshotReceiver.fetch(
+@@ -106,6 +134,11 @@
+         String node = "CommonHaDemo" + args[2];
+         try (DemoV19TcpClient client = new DemoV19TcpClient()) {
+             Map<String,Object> data;
++            if ("dynamic-receipt".equals(args[1]) && args.length == 6) {
++                client.probeDynamicReceipt(node,Long.parseLong(args[3]),
++                        Long.parseLong(args[4]),Long.parseLong(args[5]));
++                return;
++            }
+             if ("custody-head".equals(args[1]) && args.length == 3) {
+                 data = client.custodyHeadEvidence(node);
+             } else if ("status".equals(args[1]) && args.length == 3) {
+--- a/compose.v19-rf2-auto-degrade-e2e.yaml
++++ b/compose.v19-rf2-auto-degrade-e2e.yaml
+@@ -39,6 +39,7 @@
+     DEMO_V19_RF2_AUTO_DEGRADE: "1"
+     DEMO_V19_RF2_AUTO_LEARNER: "1"
+     DEMO_V19_RF2_STRICT_REJOIN_PREFLIGHT: "1"
++    DEMO_V19_RF2_DYNAMIC_RECEIPT_PILOT: "1"
+   volumes:
+     - ./target-v19-auto-degrade-compiled:/tmp/v19:ro
+     - ./common-upstream-review-20261022/target/com.app.common-3.0.22-SNAPSHOT.jar:/tmp/common.jar:ro
+--- /dev/null
++++ b/src/main/java/com/opentradingcore/demo/DemoV19Rf2DynamicReceiptService.java
+@@ -0,0 +1,187 @@
++package com.opentradingcore.demo;
++
++import com.app.common.replication.*;
++import com.app.common.zk.ZookeeperClient;
++import com.gateway.connector.utils.JsonUtils;
++import java.io.IOException;
++import java.nio.ByteBuffer;
++import java.nio.file.Files;
++import java.nio.file.Paths;
++import java.security.KeyFactory;
++import java.security.PrivateKey;
++import java.security.spec.PKCS8EncodedKeySpec;
++import java.security.spec.X509EncodedKeySpec;
++import java.util.*;
++import org.apache.zookeeper.data.Stat;
++
++/** A separately scoped, opt-in signed WAL receipt for proposed RF2 epochs.
++ * It NEVER returns a client trade ACK and cannot itself publish READY.
++ * Membership/epoch/configuration come only from a versioned, majority-backed
++ * ZK assignment, not from the request. Old Epoch1 handler remains unchanged.
++ */
++final class DemoV19Rf2DynamicReceiptService {
++    static final String OPERATION="V19_RF2_DYNAMIC_DURABLE_RECEIPT_V1";
++    private static final String PATH=DemoZkFenceSource.ISOLATED_ROOT
++            +"/harness/assignments/P000";
++    private final ZookeeperClient zk;
++    private final DemoJournalCatalog journals;
++    private final String node;
++    private final PrivateKey privateKey;
++    private final List<DurableWalCommitQuorum.Member> configured;
++
++    DemoV19Rf2DynamicReceiptService(ZookeeperClient zk,String node,
++            DemoJournalCatalog journals)throws Exception {
++        if(zk==null || journals==null
++                || !("CommonHaDemoA".equals(node) || "CommonHaDemoB".equals(node)))
++            throw new IllegalArgumentException("only isolated A/B data signer");
++        this.zk=zk;this.node=node;this.journals=journals;
++        KeyFactory rsa=KeyFactory.getInstance("RSA");
++        List<DurableWalCommitQuorum.Member> voters=new ArrayList<>();
++        for(char suffix='A';suffix<='B';suffix++){
++            String id="CommonHaDemo"+suffix;
++            voters.add(new DurableWalCommitQuorum.Member(id,
++                    "simulated-single-mac-jvm-"+suffix,
++                    rsa.generatePublic(new X509EncodedKeySpec(Files.readAllBytes(
++                            Paths.get("/srv/v19/identities",id+".pub.der"))))));
++        }
++        this.configured=Collections.unmodifiableList(voters);
++        this.privateKey=rsa.generatePrivate(new PKCS8EncodedKeySpec(Files.readAllBytes(
++                Paths.get("/srv/v19/local-identity/node.pk8"))));
++    }
++
++    static final class Plan {
++        final long epoch,configVersion,genesisSeq,oldCertifiedSeq;
++        final String primary,replica,genesisSha,oldCertifiedSha;
++        final boolean preparing;
++        Plan(long epoch,long configVersion,long genesisSeq,long oldCertifiedSeq,
++                String primary,String replica,String sha,String oldSha,boolean preparing){
++            this.epoch=epoch;this.configVersion=configVersion;
++            this.genesisSeq=genesisSeq;this.oldCertifiedSeq=oldCertifiedSeq;
++            this.primary=primary;this.replica=replica;
++            this.genesisSha=sha;this.oldCertifiedSha=oldSha;
++            this.preparing=preparing;
++        }
++    }
++
++    /** Validate trusted ZK content, not caller-supplied body. */
++    static Plan requirePlan(Map<String,Object> a)throws IOException {
++        if(a==null || !"P000".equals(a.get("partitionId")))
++            throw new IOException("wrong RF2 assignment");
++        long epoch=number(a,"epoch"),config=number(a,"strictConfigurationVersion"),
++             genesis=number(a,"strictGenesisSeq"),
++             oldCertified=number(a,"strictOldCertifiedSeq");
++        if(epoch<2 || epoch>128 || config<2 || genesis<1 || oldCertified<1
++                || genesis<oldCertified)
++            throw new IOException("invalid dynamic membership version or Genesis");
++        String primary=string(a,"primary");
++        if(!"CommonHaDemoA".equals(primary) && !"CommonHaDemoB".equals(primary))
++            throw new IOException("invalid strict primary");
++        String replica="CommonHaDemoA".equals(primary)?"CommonHaDemoB":"CommonHaDemoA";
++        Object peers=a.get("replicas"),learners=a.get("learners");
++        if(!(peers instanceof List) || !((List<?>)peers).equals(Collections.singletonList(replica))
++                || !(learners instanceof List) || !((List<?>)learners).isEmpty())
++            throw new IOException("strict RF2 membership must be exactly two data voters");
++        String state=string(a,"state"),policy=string(a,"durabilityPolicy"),
++                sha=string(a,"strictGenesisSha256");
++        String oldSha=string(a,"strictOldCertifiedSha256");
++        if(!sha.matches("[0-9a-f]{64}") || !oldSha.matches("[0-9a-f]{64}"))
++            throw new IOException("unsigned Genesis or old ACK hash");
++        boolean preparing="RECOVERING".equals(state)
++                && "STRICT_REJOIN_GENESIS_PREPARE".equals(policy)
++                && Boolean.FALSE.equals(a.get("quorumDurable"))
++                && "GENESIS_PENDING".equals(a.get("strictTransition"));
++        boolean active="READY".equals(state)
++                && "QUORUM_DURABLE".equals(policy)
++                && Boolean.TRUE.equals(a.get("quorumDurable"))
++                && "GENESIS_CERTIFIED".equals(a.get("strictTransition"));
++        if(!preparing && !active)
++            throw new IOException("strict epoch signing requires explicit ZK transition");
++        return new Plan(epoch,config,genesis,oldCertified,primary,replica,
++                sha,oldSha,preparing);
++    }
++    private static long number(Map<String,Object> m,String field)throws IOException {
++        Object v=m.get(field);
++        if(!(v instanceof Number))throw new IOException("missing numeric "+field);
++        return ((Number)v).longValue();
++    }
++    private static String string(Map<String,Object> m,String key)throws IOException {
++        Object v=m.get(key);if(!(v instanceof String))throw new IOException("missing "+key);
++        return (String)v;
++    }
++
++    private Plan current(int requiredVersion,DurableWalCommitQuorum.Membership pinned)
++            throws Exception {
++        if(!zk.isConnected())throw new IOException("ZK quorum unavailable");
++        Stat stat=new Stat();Object raw=zk.readData(PATH,stat);
++        if(raw==null || stat.getVersion()!=requiredVersion)
++            throw new IOException("strict membership changed");
++        @SuppressWarnings("unchecked") Map<String,Object> map=
++                JsonUtils.Deserialize(String.valueOf(raw),Map.class);
++        Plan planned=requirePlan(map);
++        if(planned.epoch!=pinned.epoch
++                || planned.configVersion!=pinned.configurationVersion
++                || !planned.primary.equals(pinned.primary)
++                || !pinned.members.keySet().equals(
++                        new java.util.TreeSet<>(Arrays.asList("CommonHaDemoA","CommonHaDemoB")))
++                || !zk.isConnected())
++            throw new IOException("dynamic membership no longer current");
++        return planned;
++    }
++
++    ReplicationControlResponse handle(ReplicationControlRequest req) {
++        try {
++            if(req==null || !OPERATION.equals(req.getOperation())
++                    || !"CommonHaDemo".equals(req.getServiceName())
++                    || !"P000".equals(req.getPartitionId())
++                    || req.getPayload()==null || req.getPayload().length!=28)
++                throw new IOException("invalid bounded dynamic WAL receipt");
++            ByteBuffer payload=ByteBuffer.wrap(req.getPayload());
++            if(payload.getInt()!=1)throw new IOException("unsupported receipt version");
++            long config=payload.getLong(),epoch=payload.getLong(),seq=payload.getLong();
++            if(seq<=0)throw new IOException("invalid requested durable sequence");
++            if(!zk.isConnected())throw new IOException("ZooKeeper quorum disconnected");
++            Stat stat=new Stat();Object raw=zk.readData(PATH,stat);
++            if(raw==null)throw new IOException("no strict ZK assignment");
++            @SuppressWarnings("unchecked") Map<String,Object> values=
++                    JsonUtils.Deserialize(String.valueOf(raw),Map.class);
++            Plan planned=requirePlan(values);
++            if(epoch!=planned.epoch || config!=planned.configVersion)
++                throw new IOException("stale strict membership/epoch");
++            if(planned.preparing && seq!=planned.genesisSeq)
++                throw new IOException("unpublished epoch can sign ONLY frozen Genesis");
++            if(seq<planned.genesisSeq)
++                throw new IOException("cannot promote a prior uncertified tail");
++            DurableWalCommitQuorum.Membership membership=new DurableWalCommitQuorum.Membership(
++                    "CommonHaDemo","P000",planned.primary,epoch,config,configured);
++            // Common validates cryptographic receipt, local fsynced WAL and
++            // checks authority on BOTH sides of the signature boundary.
++            DurableWalReceiptControlHandler signer=new DurableWalReceiptControlHandler(
++                    membership,node,privateKey,(requestedEpoch,requestedSeq)->{
++                        Plan still=current(stat.getVersion(),membership);
++                        DemoDurableJournal wal=journals.journal("P000");
++                        synchronized(wal) {
++                            if(!wal.isReadyForWrites() || wal.committedSeq()<requestedSeq
++                                    || wal.lastEpoch()>requestedEpoch
++                                    || wal.committedSeq()<still.oldCertifiedSeq
++                                    || !still.oldCertifiedSha.equals(
++                                         wal.committedPrefixSha256Through(still.oldCertifiedSeq))
++                                    || (still.preparing && requestedSeq!=still.genesisSeq)
++                                    || (!still.preparing && requestedSeq>still.genesisSeq
++                                            && wal.lastEpoch()!=requestedEpoch))
++                                throw new IOException("no clean local WAL for strict epoch");
++                            String hash=wal.committedPrefixSha256Through(requestedSeq);
++                            if(requestedSeq==still.genesisSeq
++                                    && !still.genesisSha.equals(hash))
++                                throw new IOException("local strict Genesis does not match ZK hash");
++                            return hash;
++                        }
++                    },ignored->current(stat.getVersion(),membership));
++            return signer.handle(new ReplicationControlRequest(
++                    "CommonHaDemo",DurableWalReceiptControlHandler.OPERATION,
++                    "P000",req.getPayload()));
++        }catch(Exception denied) {
++            return ReplicationControlResponse.error("RF2_DYNAMIC_RECEIPT_DENIED",
++                    denied.getClass().getSimpleName()+": "+denied.getMessage());
++        }
++    }
++}
+--- /dev/null
++++ b/src/test/java/com/opentradingcore/demo/DemoV19Rf2DynamicReceiptServiceTest.java
+@@ -0,0 +1,81 @@
++package com.opentradingcore.demo;
++
++import org.junit.Test;
++import java.io.IOException;
++import java.util.*;
++import static org.junit.Assert.*;
++
++public class DemoV19Rf2DynamicReceiptServiceTest {
++    private static final String SHA="0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef";
++    private static Map<String,Object> preparing() {
++        Map<String,Object> a=new LinkedHashMap<>();
++        a.put("partitionId","P000");
++        a.put("epoch",6);a.put("strictConfigurationVersion",10);
++        a.put("strictGenesisSeq",16);
++        a.put("strictGenesisSha256",SHA);
++        a.put("strictOldCertifiedSeq",8);
++        a.put("strictOldCertifiedSha256",SHA);
++        a.put("primary","CommonHaDemoA");
++        a.put("replicas",Collections.singletonList("CommonHaDemoB"));
++        a.put("learners",Collections.emptyList());
++        a.put("state","RECOVERING");
++        a.put("durabilityPolicy","STRICT_REJOIN_GENESIS_PREPARE");
++        a.put("strictTransition","GENESIS_PENDING");
++        a.put("quorumDurable",false);
++        return a;
++    }
++    private static void denied(Map<String,Object> map) {
++        try {
++            DemoV19Rf2DynamicReceiptService.requirePlan(map);
++            fail("unverified RF2 plan admitted");
++        } catch(IOException expected) { }
++    }
++    @Test public void noUnfrozenSingleNodeLocalAckMaySignStrictReceipt() {
++        Map<String,Object> p=preparing();
++        p.put("state","READY");p.put("durabilityPolicy","AUTO_DEGRADED_LOCAL_DURABLE");
++        denied(p);
++    }
++    @Test public void onlyExactTwoMemberGenesisPreparationIsAccepted()throws Exception {
++        DemoV19Rf2DynamicReceiptService.Plan p=
++                DemoV19Rf2DynamicReceiptService.requirePlan(preparing());
++        assertEquals(6,p.epoch);assertEquals(10,p.configVersion);
++        assertEquals(16,p.genesisSeq);assertEquals(SHA,p.genesisSha);
++        assertEquals(8,p.oldCertifiedSeq);assertEquals(SHA,p.oldCertifiedSha);
++        assertEquals("CommonHaDemoA",p.primary);
++        assertEquals("CommonHaDemoB",p.replica);assertTrue(p.preparing);
++    }
++    @Test public void afterVerifiedCutoverActiveMembershipCouldSign()throws Exception {
++        Map<String,Object> p=preparing();p.put("state","READY");
++        p.put("durabilityPolicy","QUORUM_DURABLE");
++        p.put("quorumDurable",true);p.put("strictTransition","GENESIS_CERTIFIED");
++        assertFalse(DemoV19Rf2DynamicReceiptService.requirePlan(p).preparing);
++    }
++    @Test public void rejectMemberAliasAndExtraPeers() {
++        Map<String,Object> p=preparing();p.put("replicas",Collections.emptyList());denied(p);
++        p=preparing();p.put("replicas",Arrays.asList("CommonHaDemoB","CommonHaDemoC"));denied(p);
++        p=preparing();p.put("learners",Collections.singletonList("CommonHaDemoB"));denied(p);
++        p=preparing();p.put("primary","CommonHaDemoC");denied(p);
++    }
++    @Test public void noFutureOrAmbiguousEpochOrGenesis() {
++        Map<String,Object> p=preparing();p.put("epoch",0);denied(p);
++        p=preparing();p.put("strictConfigurationVersion",0);denied(p);
++        p=preparing();p.put("strictGenesisSeq",0);denied(p);
++        p=preparing();p.put("strictGenesisSha256","bad");denied(p);
++        p=preparing();p.remove("strictGenesisSha256");denied(p);
++        p=preparing();p.put("strictOldCertifiedSeq",17);denied(p);
++        p=preparing();p.put("strictOldCertifiedSha256","untrusted");denied(p);
++        p=preparing();p.remove("strictOldCertifiedSha256");denied(p);
++    }
++    @Test public void noPrematureQuorumDurableDuringGenesis() {
++        Map<String,Object> p=preparing();p.put("quorumDurable",true);denied(p);
++        p=preparing();p.put("state","READY");denied(p);
++        p=preparing();p.put("strictTransition","GENESIS_CERTIFIED");denied(p);
++        p=preparing();p.put("durabilityPolicy","QUORUM_DURABLE");denied(p);
++    }
++    @Test public void rejectsOtherServiceOrIncompleteStrictActiveContract() {
++        Map<String,Object> p=preparing();p.put("partitionId","P001");denied(p);
++        p=preparing();p.put("state","READY");
++        p.put("durabilityPolicy","QUORUM_DURABLE");
++        p.put("strictTransition","GENESIS_CERTIFIED");denied(p);
++    }
++}

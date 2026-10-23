@@ -219,3 +219,15 @@
 - 下一项不可跳过的真正集成：**原 Primary 单机 ACK 业务屏障（锁定最高已 ACK WAL） → 两节点独立确认完整前缀 → 创建下一 Epoch 的新主/备配置与双独立签名器 → 原子 ZK 配置发布及 fencing → 开启新 Epoch 数据 WAL 定向复制 → 首份新 Epoch 2/2 持久 Genesis 和真实每笔 ACK → 旧主/failover/崩溃重启多轮验收**。旧严格签名服务仍固定 Primary A/Epoch1；预检仅意味着“具备进入切换事务的候选条件”，不能把它作为 READY/2of2 证书。
 - 预检是低频控制面任务，正常下单不额外读取 ZooKeeper/证书；为避免 256 分区下大量控制调用，规模化时应以分区水位变化和批量控制事件触发，不可简单把 P000 的 12 秒轮询复制 256 份。
 - 以上均为隔离 Demo Mac 单物理宿主的独立进程测试，不代表 RF2 多物理 AZ 无损、Order/Trade 资金持仓一致性或 200 租户压测完成。整体严格 2/2 恢复仍 NO-GO。
+
+## 16. 2026-10-23：动态 Epoch WAL RSA 签名 Netty 服务接线（仍未切回严格 2/2）
+
+接续第 15 节的两节点只读 preflight 和 Common 双签名 Genesis 单元回归，本轮实现了新的 **DemoV19Rf2DynamicReceiptService**（独立开关 DEMO_V19_RF2_DYNAMIC_RECEIPT_PILOT=1），在原 v19 独立 Common Netty socket 内增加 V19_RF2_DYNAMIC_DURABLE_RECEIPT_V1。它只签**一个物理节点已 fsync WAL 前缀**，绝不单凭一个响应授权新 Primary、发布 READY 或承诺客户端双副本 ACK。
+
+- 成员/epoch/配置权威只能来自真实 ZooKeeper majority session + 带 stat version 的 P000 Assignment。调用方提供的 28 字节原有 Common Receipt 二进制负载（版本、配置版本、Epoch、序列）只能进行**相等性核验**，不能指定任意 Primary 或 signer。服务端构造带两个不同 RSA 公钥、不同故障域标签（Mac 单宿主模拟）的 Common DurableWalCommitQuorum.Membership，通过 DurableWalReceiptControlHandler 真正签名；签名前后分别核对 ZooKeeper 的 Assignment 版本和成员身份，若变化拒绝。每次从当前 JournalCatalog 获取 WAL，避免 Learner 替换后引用旧已关闭文件。
+- 可接受配置只有：① state=RECOVERING，durabilityPolicy=STRICT_REJOIN_GENESIS_PREPARE，strictTransition=GENESIS_PENDING，quorumDurable=false，此时**只能签**冻结的 strictGenesisSeq；② state=READY，durabilityPolicy=QUORUM_DURABLE，strictTransition=GENESIS_CERTIFIED，quorumDurable=true，并拥有单一指定 Replica，此时才可能为本 Epoch 新数据签名。
+- 两种情况还必须具备明确 strictConfigurationVersion、严格 Genesis seq/hash、历史已认证 strictOldCertifiedSeq/hash；所有物理 WAL 必须 clean、fsynced、覆盖历史 old ACK 哈希，并和当前 Genesis 匹配。后续普通严格数据必须在新 Epoch 写入。服务端不信任请求中的配置，不承认额外节点/旧主过期凭证/不一致历史。
+- 接入代码：DemoV19TcpService、DemoV19ClusterHarness、DemoV19TcpClient；增量补丁保存在 tests/patches/common-v19-rf2-dynamic-epoch-receipt-20261023.patch，已在独立重建目录通过 git apply --check、apply、6 文件逐字节比对。新增 DemoV19Rf2DynamicReceiptServiceTest **7/7 PASS**，涵盖准备态、严格激活态及错版本/别名/缺失/额外成员/伪造哈希/单节点提前认证等拒绝条件。
+- **真实 Docker 反向测试**：原隔离项目 ZooKeeper 仍为 A/Epoch5/READY/AUTO_DEGRADED_LOCAL_DURABLE、B Learner，调用新 TCP 动态签名 opcode（提出 Epoch6/config10/seq16）被 B 正确拒绝：missing numeric strictConfigurationVersion。证明新 RPC 不会从单节点降级态擅自发放严格持久证明。恢复当前业务单机 WAL 模式继续真实写入 seq17，code=0/appliedCount=1/quorumDurable=false；B 自动追平 seq17，A/B 完整 WAL SHA=b851cc2a0a7c986fcb2ad1af85f80b97a908045f166b27fd0eedc1aad18c640b。
+- 本轮 Demo 全量 Maven **39 suites /160 tests，159 通过、1 跳过、0 失败/错误**。Common 源自上一轮的全量 419 PASS，本轮未修改 Common 工厂主代码。
+- **下一关仍未完成**：有界写屏障阻止单节点本地 ACK、冻结最高已确认 Seq、原子 ZooKeeper 进入新 Epoch RECOVERING/strict GENESIS_PREPARE、收齐 2 个独立 Netty Receipt、落盘 Common CommitIndex + 将证书保管到第二节点、原子发布严格 Ready 并切换真实订单写入 ACK/恢复正式复制。每个条件未成立不得报 QUORUM_DURABLE，也不能长期牺牲 A/B 正常单节点可用性。此协议暂不启用自动切换，仅可显式隔离试验；正式 Order/Trade/MD 集成、256 分区、多物理节点故障以及 200 租户压测仍为 NO-GO。
