@@ -1,5 +1,7 @@
 """Fail-closed checks for local research inputs."""
 
+import hashlib
+import json
 import tempfile
 import unittest
 from pathlib import Path
@@ -7,12 +9,63 @@ from pathlib import Path
 from recovery.convert_research_bars_for_scene_snapshot import convert
 from recovery.export_strategy_research_data import assert_unique_bar_times as check_export
 from recovery.run_local_strategy_validation import (
+    assert_research_protocol,
     assert_scene_coverage,
     assert_unique_bar_times as check_validation,
 )
+from recovery.local_strategy_backtest import verify_local_research_input
 
 
 class UniqueBarTimesTest(unittest.TestCase):
+    def test_local_formal_replay_requires_ready_and_exact_hashes(self):
+        protocol = Path(__file__).with_name('strategy_research_older_protocol_20261016.json')
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            files = {}
+            for suffix, field in (('-15m.tsv', 'bars_sha256'),
+                                  ('-scenes.tsv', 'scenes_sha256')):
+                path = root / ('SOLUSDT' + suffix)
+                path.write_text('fixture\n', encoding='utf-8')
+                files[field] = hashlib.sha256(path.read_bytes()).hexdigest()
+            ready = {'begin': '2024-12-15', 'end': '2025-10-12',
+                     'model': 'gpt-5.6-sol', 'clock': 'UTC',
+                     'files': {'SOLUSDT': files}}
+            (root / 'READY.json').write_text(json.dumps(ready), encoding='utf-8')
+            item = {'symbol': 'SOLUSDT', 'text': '15m'}
+            self.assertEqual(files, verify_local_research_input(
+                root, protocol, item, '2024-12-15', '2025-10-12'))
+            with self.assertRaisesRegex(ValueError, 'contract mismatch'):
+                verify_local_research_input(root, protocol, item,
+                                            '2024-12-15', '2025-10-11')
+            (root / 'SOLUSDT-scenes.tsv').write_text('changed\n', encoding='utf-8')
+            with self.assertRaisesRegex(ValueError, 'hash mismatch'):
+                verify_local_research_input(root, protocol, item,
+                                            '2024-12-15', '2025-10-12')
+
+    def test_older_protocol_withholds_holdout_and_checks_ready_hashes(self):
+        protocol = Path(__file__).with_name('strategy_research_older_protocol_20261016.json')
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            files = {}
+            for suffix, field in (('-15m.tsv', 'bars_sha256'),
+                                  ('-scenes.tsv', 'scenes_sha256')):
+                path = root / ('SOLUSDT' + suffix)
+                path.write_text('test data\n', encoding='utf-8')
+                files[field] = hashlib.sha256(path.read_bytes()).hexdigest()
+            ready = {'begin': '2024-12-15', 'end': '2025-10-12',
+                     'model': 'gpt-5.6-sol', 'clock': 'UTC',
+                     'files': {'SOLUSDT': files}}
+            (root / 'READY.json').write_text(json.dumps(ready), encoding='utf-8')
+            self.assertEqual(len(assert_research_protocol(
+                protocol, root, '2024-12-15', '2025-08-11', ['SOLUSDT'])), 64)
+            with self.assertRaisesRegex(ValueError, 'holdout'):
+                assert_research_protocol(protocol, root, '2024-12-15',
+                                         '2025-08-12', ['SOLUSDT'])
+            (root / 'SOLUSDT-scenes.tsv').write_text('changed\n', encoding='utf-8')
+            with self.assertRaisesRegex(ValueError, 'hash mismatch'):
+                assert_research_protocol(protocol, root, '2024-12-15',
+                                         '2025-08-11', ['SOLUSDT'])
+
     def check_both(self, content, should_pass):
         with tempfile.TemporaryDirectory() as directory:
             path = Path(directory) / 'SOLUSDT-15m.tsv'

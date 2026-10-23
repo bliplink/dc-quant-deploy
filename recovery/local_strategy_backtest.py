@@ -91,6 +91,33 @@ def load_seed_strategy(seed_path, strategy_name):
     raise ValueError("strategy is not present in seed: %s" % strategy_name)
 
 
+def verify_local_research_input(input_dir, protocol_path, item, begin_date, end_date):
+    """Fail closed unless the formal replay uses the frozen, complete local cohort."""
+    protocol = json.loads(protocol_path.read_text(encoding="utf-8"))
+    ready = json.loads((input_dir / "READY.json").read_text(encoding="utf-8"))
+    if (protocol.get("protocol_version") != "older_direct_scene_research_v1"
+            or protocol.get("holdout_use") != "one_frozen_candidate_formal_backtest_only"
+            or protocol.get("production_write") is not False
+            or begin_date != protocol.get("required_ready_begin")
+            or end_date != protocol.get("holdout_end_inclusive")
+            or ready.get("begin") != begin_date or ready.get("end") != end_date
+            or ready.get("clock") != "UTC"
+            or ready.get("model") != protocol.get("required_scene_model")):
+        raise ValueError("local formal replay protocol or READY contract mismatch")
+    symbol = item["symbol"]
+    files = ready.get("files", {}).get(symbol)
+    if not files or item.get("text", "15m").lower() != "15m":
+        raise ValueError("local formal replay symbol/text is not in READY")
+    hashes = {}
+    for suffix, key in (("-15m.tsv", "bars_sha256"),
+                        ("-scenes.tsv", "scenes_sha256")):
+        actual = hashlib.sha256((input_dir / (symbol + suffix)).read_bytes()).hexdigest()
+        if actual != files.get(key):
+            raise ValueError("local formal replay input hash mismatch: " + symbol + suffix)
+        hashes[key] = actual
+    return hashes
+
+
 def source_identity(source):
     package_match = re.search(r"\bpackage\s+([A-Za-z0-9_.]+)\s*;", source)
     class_match = re.search(r"\bpublic\s+class\s+([A-Za-z0-9_]+)\b", source)
@@ -273,6 +300,13 @@ def run_local_backtest(args, item, artifact, entry_class, work_dir, local_port, 
         "--debug=false",
         "--logging.level.root=WARN",
     ]
+    if args.local_research_input_dir:
+        java[1:1] = [
+            "-Duser.timezone=UTC",
+            "-Dtrainer.backtest.localResearchInputDir=" + str(args.local_research_input_dir),
+            "-Dtrainer.backtest.localBarsSha256=" + args.local_input_hashes["bars_sha256"],
+            "-Dtrainer.backtest.localScenesSha256=" + args.local_input_hashes["scenes_sha256"],
+        ]
     process = subprocess.run(java, cwd=str(work_dir), text=True)
     if process.returncode != 0:
         raise RuntimeError("local Java backtest failed with exit code %d" % process.returncode)
@@ -289,6 +323,10 @@ def main():
     parser.add_argument("--sim-repo", type=Path, default=Path(DEFAULT_SIM_REPO))
     parser.add_argument("--source", type=Path,
                         help="Use a Codex-repaired Java source instead of the embedded seed source")
+    parser.add_argument("--local-research-input-dir", type=Path,
+                        help="Complete READY-marked local bars and scenes for formal replay")
+    parser.add_argument("--older-protocol", type=Path,
+                        help="Frozen older-data research protocol; required with local input")
     parser.add_argument("--output-dir", type=Path,
                         default=Path(__file__).resolve().parent / "local-backtest-work")
     parser.add_argument("--host", default=DEFAULT_HOST)
@@ -324,6 +362,15 @@ def main():
     if not args.db_config and not passphrase:
         raise SystemExit("STC_PROD_KEY_PASSPHRASE is required")
     item = load_seed_strategy(args.seed, args.strategy)
+    if bool(args.local_research_input_dir) != bool(args.older_protocol):
+        raise SystemExit("--local-research-input-dir and --older-protocol are required together")
+    if args.local_research_input_dir:
+        if not args.source:
+            raise SystemExit("local formal replay requires an explicitly frozen --source")
+        args.local_research_input_dir = args.local_research_input_dir.resolve()
+        args.local_input_hashes = verify_local_research_input(
+            args.local_research_input_dir, args.older_protocol.resolve(), item,
+            args.begin_date, args.end_date)
     if args.source:
         source = args.source.resolve().read_text(encoding="utf-8")
     else:

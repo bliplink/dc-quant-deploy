@@ -1,0 +1,13 @@
+{
+  "protocol_version": "older_direct_scene_research_v1",
+  "screen_begin": "2024-12-15",
+  "screen_end_inclusive": "2025-08-11",
+  "holdout_begin": "2025-08-12",
+  "holdout_end_inclusive": "2025-10-12",
+  "required_ready_begin": "2024-12-15",
+  "required_ready_end": "2025-10-12",
+  "required_scene_model": "gpt-5.6-sol",
+  "selection_mode": "validation_only_forward_withheld",
+  "holdout_use": "one_frozen_candidate_formal_backtest_only",
+  "production_write": false
+}
