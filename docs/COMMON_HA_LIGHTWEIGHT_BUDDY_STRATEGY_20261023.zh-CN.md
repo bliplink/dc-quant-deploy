@@ -321,3 +321,16 @@ A 控制线程随后自动执行 Epoch9 / FREEZE → GENESIS_PREPARE(seq16) → 
 本轮Demo Maven全量回归：45 suites / 189 tests，188 PASS、1 SKIPPED、0 FAIL/ERROR。精确5文件Java/Compose源码阶段快照：tests/patches/common-v19-256-partition-four-node-zk-wal-catalog-20261023.tar.gz，并附同前缀SHA256 manifest，经独立临时目录安全解压逐文件字节验证。源码快照不是独立增量Git补丁，后续应审核差异再合入正式服务。
 
 **当前只验收了真实4个独立JVM的metadata+WAL slot准备，不是4个持续交易数据节点。** v19主交易Harness/HA控制器仍硬编码P000、A/B与部分端点，未来须抽象分区级ZK租约、动态四节点Netty路由、RF2证书、CommitIndex/Custody和WAL复制，再让A/B、C/D两组真实逐分区签名Genesis→CAS READY→同时交易/故障。256并行分区TPS、10/50/200 tenants以及Order/Trade/MD/Projection最终对账均未验收。Mac剩余约12GiB、98%磁盘利用率，尚不适合直接进行200租户高压。
+
+## 23. 2026-10-23：四个持续 Netty JVM 的256分区实测与失联门禁
+
+承接第22节独立3 ZK/4 JVM/256条PREPARING记录和四个独立WAL卷，本轮新增 DemoV19FourNodeLiveRuntime：A/B/C/D四个实际持续运行的Netty监听进程（35411–35414），每个节点拥有64主/64备、128份独占的物理WAL FileLock，并对每个STATUS RPC重新校验所在分区、角色、ZK原始记录与stat.version0、WAL清洁状态。使用现有Common DirectNettyReplicationServer/Transport框架，保留精确节点路由和长连接。原DemoNettyBridge.endpoint/server和DemoJournalCatalog也支持合法节点D，拒绝非法第五节点。
+
+在单台Mac的独立Docker项目中实际运行三个ZK进程、四个常驻数据Netty进程，第五个独立JVM针对256分区向所属主/备发送共512个Netty STATUS RPC，每个节点恰收128次。每个分区的主备WAL都为空、SHA256一致，状态全部PREPARING，ready=false、quorumDurable=false。额外发送真正的二进制WAL ReplicationBatch到四个节点、尝试COMMIT控制消息：所有请求都被拒绝，0个READY、0个订单成功，未错误开放未经认证的空WAL。对应实际输出：
+FOUR_NODE_LIVE_NETTY_PROBE_PASS partitions=256 physicalStatusRPCs=512 perNode=128 a_b_c_d_exactRoutes=true crossBuddyHashesEqual=true writeRequestDenied=true allFourWalBatchRequestsDenied=true clientReady=0 realTrades=0。
+
+实际SIGKILL C之后，A/B/D继续运行，但全量512-RPC探测正确在等待C的有界窗口后失败，而不是把缺少双副本的分区冒充READY。重启C并重新独占原128份WAL文件锁，全部512 RPC重新通过。补充Netty节点尚未bind时的有界重试，以避免Docker service_started和实际TCP ready的竞态；缺少节点绝不跳过或算成功。
+
+Demo本地Maven全量回归：46 suites/193 tests，192 PASS、1 SKIPPED、0 FAIL/ERROR。十文件源码+Compose精确阶段快照：tests/patches/common-v19-four-live-netty-256-shard-routing-20261023.tar.gz，配套同前缀SHA256清单；独立临时目录安全解压后逐文件字节相等验证。仅作本地源码阶段记录，非直接可覆盖生产的补丁。实验容器已停止，3 ZK卷/4 WAL卷和先前Epoch9八份证据卷保留；正式Order/Trade/MD容器未改、没有GitHub Actions。Mac剩余约13GiB，磁盘使用率98%。
+
+**判定：四节点持续Netty、256分区真实定向只读RPC、安全拒绝和C失联后恢复PASS；不是四数据节点交易HA通过。** 仍未实现该项目真实分区级签名Genesis、动态认证READY、双持久化WAL、CommitIndex及双保管、连续订单ACK、C→D自动接管交易。下一步应在A/B和C/D分别选一个独立分区，以现有Common状态机完成可信Genesis→READY→真实2/2 ACK→故障注入与恢复后，再安全扩展至256分区和10/50/200租户。PREPARING不可做真实交易。

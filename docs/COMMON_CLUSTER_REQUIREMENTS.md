@@ -134,3 +134,6 @@
 
 - **T37（2026-10-23：真实3ZK+4JVM的256分区catalog/WAL准备PASS）** 独立Docker 3 ZK、4独立JVM审计，共256 ZK PREPARING、epoch1、version0 assignments；A/B、C/D两组buddy，每节点64主+64备；四个独立WAL卷，每节点128个干净、未提交、无READY授权的WAL；停止重启全ZK后幂等bootstrap及四JVM重新审计通过。Demo189项测试188通过、1跳过、0失败；未运行实际复制或订单。
 - **T38（尚未通过）** 去掉v19交易Harness/P000/A-B静态限制，接通动态(分区/节点/epoch)Netty WAL、认证Genesis/CommitIndex及A/B-C/D双custody，分区级ZK版本CAS授权READY；进行真正256分区同步持久ACK、4数据节点主切和恢复、10/50/200租户稳态/burst的真实TPS/p99及资金持仓委托成交Projection权威一致性。磁盘仅约12GiB，200租户高压前应清出真实宿主空间，不能删生产或Epoch9证据卷。
+
+- **T39（2026-10-23：真实四个持续Netty数据JVM与512 RPC PASS）** 隔离3ZK+4JVM，A/B/C/D精确端口35411至35414各独占128本地WAL，实际256分区双目标共512 STATUS RPC，每节点128命中，物理空WAL前缀一致、ZK成员及version0、PREPARING/ready=false校验通过。真实二进制WAL ReplicationBatch到四节点以及COMMIT控制均拒绝。SIGKILL C导致全量探测安全失败，恢复C并重获本地文件锁后512 RPC全部恢复；当前0笔订单、0 READY。Demo193项测试192通过、1跳过、0失败。
+- **T40（NO-GO：4节点真实交易HA与容量）** 必须抽象动态分区上下文，接入A/B、C/D各自认证Genesis、持久签名CommitIndex/Custody、ZooKeeper分区级CAS READY与旧主隔离、单分区真正双fsync交易ACK及失效后单节点自动续写，再扩展256分区、10/50/200租户持续下单撤单成交TPS/p99与资金持仓委托成交Projection权威对账。PREPARING不可对外发交易ACK；Mac当前磁盘98%应先保证压测空间。
