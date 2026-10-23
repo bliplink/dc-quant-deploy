@@ -143,3 +143,6 @@
 
 - **T43（2026-10-23：P000/P128两组独立物理Genesis WAL和bootstrap双保管PASS）** A/B与C/D各自fsync 108字节非业务Genesis控制帧（epoch1、seq0、分区+成员摘要）；每组两个独立RSA签名及原始ZK证据create-only、各自WAL物理哈希相同。又在四个独立WAL卷fsync不可覆盖的bootstrap custody head.bin，两伙伴hash一致。完整ZK+JVM重启仍可验签和恢复；SIGKILL C期间拒绝，恢复C后通过；256分区512Netty请求仍PREPARING、未授权写拒绝。Demo205测试204通过、1跳过、0失败。
 - **T44（NO-GO：Common真实双fsync交易ACK/4节点HA仍待验收）** seq0 Genesis metadata和其bootstrap custody并不等于Common seq>=1 DurableWalCommitIndex业务证书/两节点真正证书保管。须实现安全真实业务seq1、分区授权和旧主fencing、Common签名2/2 commit证书与独立双Custody、ZK CAS READY和客户端严格ACK，并真实杀主恢复及权威业务对账，方可扩至256分区/10-50-200租户TPS/p99/burst；本机剩约11GiB、98%磁盘占用，禁止损坏正式业务或Epoch9证据卷。
+
+- **T45（2026-10-23：双buddy Common正式seq1证书接口本地集成PASS）** P000(A/B)、P128(C/D)读取真实3ZK PREPARING签名RSA成员映射，取得各自2/2 Common Membership，均为同一Mac内JVM而非真实独立物理机。在两个本地独立临时WAL文件fsync相同Demo业务seq1，调用Common DurableWalCommitQuorum签名、DurableWalCommitIndex fsync证书、双Common DurableWalCertificateCustody独立持久化，并在释放/重新获取WAL锁后重新校验通过；缺失副本、WAL分叉和授权撤销拒绝。Demo209项测试208通过、1跳过、0失败。尚非四Docker实际业务复制或订单。
+- **T46（仍NO-GO：真实Netty写入、严格ACK、4节点故障与性能）** 必须把已有Common正式双WAL/证书/双Custody机制接入两组四个真实常驻Netty数据容器和分区级真实ZooKeeper授权，验证签名Genesis后的同一seq1数据在两节点分别真实fsync，收齐RSA receipts、CommitIndex和两份真正Common Custody并在当前ZK水位/fencing复核后CAS READY、返回客户端严格2/2 ACK。随后SIGKILL主备、自动恢复以及256分区/10–50–200租户实测TPS/p99与Order/Trade/MD/Projection资金持仓委托成交权威一致性。现有全部真实Docker分区依然PREPARING，禁止把JUnit模拟交易认证当作已上线。

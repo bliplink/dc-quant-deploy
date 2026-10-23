@@ -369,3 +369,15 @@ Demo本地Maven全量回归：46 suites/193 tests，192 PASS、1 SKIPPED、0 FAI
 本轮仍复测了原256分区/512次真实Netty状态RPC：全部PREPARING/ready=false/clientReady=0/realTrades=0，四个节点的未经授权真实WAL Batch与COMMIT控制继续拒绝。Demo Maven全量回归50 suites、205 tests、204通过、1跳过、0失败/错误。精确9源码/测试/Compose文件快照 tests/patches/common-v19-two-buddy-fsynced-genesis-double-custody-20261023.tar.gz，sha256清单同前缀，已在临时目录安全解压逐文件字节比较。未归档任何私钥。隔离容器已停止，原有ZK/WAL证据卷和旧严格Epoch9另8卷保留；正式Order/Trade/MD未变更、不执行GitHub Actions。Mac约11GiB空闲、98%磁盘使用率。
 
 **严格边界**：新的seq0 Genesis和双签名bootstrap custody，均不是Common seq>=1的RSA DurableWalCommitIndex业务提交证书，也不是该证书的两节点Common Custody；没有ZK CAS READY，也没有真实订单ACK、自动主切或256分区并行交易通过。下一步必须对分区级fencing、授权多数、安全写入seq1、两个WAL fsync、Common commit证书和两物理Common Custody做完整闭环，然后才可发布READY、向客户端返回严格2/2 ACK以及进行业务故障/压力验收。当前属于初始化安全机制PASS、完整四节点业务HA仍NO-GO。
+
+## 26. 2026-10-23：四节点双buddy Common seq1签名证书——独立本地WAL集成及ZK成员绑定
+
+承接第25节 P000(A/B)、P128(C/D)的非业务seq0 Genesis和双bootstrap custody，开始对接真实Common严格提交证书接口，而不是再次设计一套证书。新增DemoV19FourNodeCommonMembership，从独立真实三ZK的PREPARING assignment、已验签preflight证明和固定的A/B/C/D RSA公钥建立Common DurableWalCommitQuorum.Membership；实际隔离Docker仅启动3ZK及一次性客户端读取两个分区，P000为A/B、P128为C/D，两组均为严格2/2签名要求，成员digest独立，保持ZK版本0/PREPARING、READY=false。注意四JVM仍在同一台Mac上：成员physicalHost参数使用实验级区分JVM标签，不代表真正不同物理故障域，不能以此对外声称可靠物理多数签名。
+
+新增DemoV19FourNodeCommonSeq1CertificateTest在临时文件系统的两套独立真实WAL文件中分别安装非业务Genesis控制帧、以一条隔离DemoStateMachine命令写入seq1，各自force fsync并确认物理SHA完全一致。使用两个不同的RSA私钥和Common DurableWalCommitQuorum.sign产生独立证书收据；再通过Common DurableWalCommitIndex.certifyAndPersist(seq1)写入确实落盘的业务提交证书，并在两个独立目录用真正Common DurableWalCertificateCustody.install各自刷盘保存证书，signInstalled与最高认证水位检验通过。关闭两WAL文件锁后重新打开物理文件、CommitIndex和两个Common custody进行恢复复核，确认seq1、双方相同业务状态与所有认证水位一致。给DemoDurableJournal新增只读hasPhysicalGenesis校验，允许seq1之后验证原始Genesis分区/成员绑定。缺少副本、相同序列分叉、授权撤销等案例均拒绝证书或保管。
+
+必须区别：以上是**本地JUnit双物理临时文件**的真实fsync和Common证书接口完整集成，不是四个Docker数据节点实时Netty序列复制。测试的业务是Demo模拟操作，不是Order/Trade真实交易，且单元测试的授权布尔令牌不能代替ZooKeeper fencing。因此这轮没有写动四个真实Docker数据节点的seq1，也没有ZooKeeper分区CAS READY或给真实客户端发严格ACK。隔离三ZK在只读成员检查后已停止，原四节点保留的WAL、Genesis证据、严格Epoch9另8份卷及正式Order/Trade/MD不动。未运行GitHub Actions。
+
+Demo Maven全量回归 **51 suites /209 tests，208 PASS、1 SKIPPED、0 errors/failures**。精确四文件源码阶段快照 tests/patches/common-v19-4node-common-seq1-local-commit-custody-20261023.tar.gz，配套同前缀.sha256清单，临时目录安全解压逐文件字节核对通过。下一步须在真实A/B、C/D Netty数据平面写相同seq1，并使用ZK当前授权及主节点fencing门禁收两节点Common fsync RSA Receipts、强制落盘CommitIndex、两节点真实Common custody，签名证书与水位完整核验后才可发布READY及严格ACK。之后做真实故障注入、256分区10/50/200租户TPS/p99及业务权威对账。Mac磁盘约11GiB空闲，不可直接做大规模压力测试。
+
+**分级结论：双buddy Common证书本地集成PASS；四节点真正网络业务提交、READY和ACK仍NO-GO。**
