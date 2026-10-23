@@ -1,0 +1,306 @@
+--- a/src/main/java/com/opentradingcore/demo/DemoV19DurableRuntime.java
++++ b/src/main/java/com/opentradingcore/demo/DemoV19DurableRuntime.java
+@@ -521,6 +521,27 @@
+                 (partition,currentEpoch)->requireGrant(membership));
+     }
+ 
++    /** Old RF2 survivor proof for non-routable new-epoch staging only. */
++    void requireCertifiedOldRf2Survivor(PartitionAssignment old) throws Exception {
++        if (!custodyEnabled || certificateCustody==null || old==null
++                || !node.equals(old.getReplica())
++                || !membership.primary.equals(old.getPrimary())
++                || old.getEpoch()!=membership.epoch || old.replicaNodes().size()!=1)
++            throw new IOException("not the exact old RF2 custodian");
++        DurableWalCommitQuorum.Certificate proof=certificateCustody.highestVerified();
++        if (proof==null || proof.committedSequence<1)
++            throw new IOException("missing authenticated old ACK certificate");
++        DemoDurableJournal journal=journals.journal(old.getPartitionId());
++        synchronized(journal) {
++            if (!journal.isReadyForWrites() || journal.lastEpoch()!=old.getEpoch()
++                    || journal.committedSeq()<proof.committedSequence)
++                throw new IOException("survivor WAL missing certified ACK prefix");
++            if (!proof.commitPrefixSha256.equals(
++                    journal.committedPrefixSha256Through(proof.committedSequence)))
++                throw new IOException("survivor WAL differs from certified old ACK prefix");
++        }
++    }
++
+     @Override public void close() throws Exception {
+         try {transport.close();}
+         finally {
+--- a/src/main/java/com/opentradingcore/demo/DemoV19ClusterHarness.java
++++ b/src/main/java/com/opentradingcore/demo/DemoV19ClusterHarness.java
+@@ -53,6 +53,8 @@
+             writer.useExperimentalQuorum(durable);
+             async.useSignedBatchProofs(durable);
+         }
++        final DemoV19Rf2AutoStage autoStage=DemoV19Rf2AutoStage.enabled()
++                ? new DemoV19Rf2AutoStage(zk,node,durable) : null;
+         DemoV19TcpService v19Tcp = new DemoV19TcpService(node, catalog,
+                 writer, async, controller,durable);
+         com.app.common.replication.DirectNettyReplicationServer replica =
+@@ -69,6 +71,7 @@
+             System.setProperty("demo.ack.fullDigest", "false");
+             replica.start();
+             controller.start();
++            if (autoStage!=null) autoStage.start();
+             retry.scheduleWithFixedDelay(() -> {
+                 try {
+                     if (controller.permits(P, 1) || controller.permits(P, 2))
+@@ -82,10 +85,16 @@
+             Thread ready = new Thread(() -> {
+                 while (!Thread.currentThread().isInterrupted()) {
+                     try {
++                        boolean writableGrant=false;
+                         for (long epoch = 1; epoch <= 2; epoch++) {
+-                            if (controller.permits(P, epoch) && catalog.journal(P).isReadyForWrites())
++                            if (controller.permits(P, epoch) && catalog.journal(P).isReadyForWrites()) {
+                                 PartitionReadinessGuard.markReady(node, P, epoch);
++                                writableGrant=true;
++                            }
+                         }
++                        // Expired/revoked ZK grants must immediately clear any
++                        // previous READY bit, even without an exception.
++                        if (!writableGrant) PartitionReadinessGuard.revoke(node, P);
+                         Thread.sleep(35L);
+                     } catch (InterruptedException stop) {
+                         Thread.currentThread().interrupt();
+@@ -102,14 +111,18 @@
+                     + " wal=/srv/v19/wal root=" + ROOT);
+             Runtime.getRuntime().addShutdownHook(new Thread(() -> {
+                 ready.interrupt();
+-                retry.shutdownNow(); async.close(); controller.close(); zk.close();
++                retry.shutdownNow(); async.close();
++                if(autoStage!=null)autoStage.close();
++                controller.close(); zk.close();
+                 replica.close();
+                 try {if(durable!=null)durable.close();}catch(Exception e){e.printStackTrace();}
+                 try { catalog.close(); } catch (Exception e) { e.printStackTrace(); }
+             }));
+             new java.util.concurrent.CountDownLatch(1).await();
+         } catch (Throwable failure) {
+-            retry.shutdownNow(); async.close(); controller.close(); zk.close();
++            retry.shutdownNow(); async.close();
++            if(autoStage!=null)autoStage.close();
++            controller.close(); zk.close();
+             replica.close(); catalog.close();
+             try {if(durable!=null)durable.close();}catch(Exception close) {failure.addSuppressed(close);}
+             throw failure;
+--- /dev/null
++++ b/src/main/java/com/opentradingcore/demo/DemoV19Rf2AutoStage.java
+@@ -0,0 +1,88 @@
++package com.opentradingcore.demo;
++
++import com.app.common.partition.PartitionAssignment;
++import com.app.common.partition.PartitionFailoverController;
++import com.app.common.partition.ZkPartitionFailoverControlPlane;
++import com.app.common.partition.ZkPartitionFailoverRuntime;
++import com.app.common.zk.ZookeeperClient;
++import org.apache.zookeeper.CreateMode;
++import org.I0Itec.zkclient.exception.ZkNodeExistsException;
++import java.util.Arrays;
++
++/**
++ * Isolated v19 RF2 automatic failover STAGING ONLY. This can CAS a new
++ * non-routable RECOVERING epoch but NEVER reconfigure strict 2/2 ACK or grant
++ * data-plane READY. This is deliberately disabled without explicit opt-in.
++ */
++final class DemoV19Rf2AutoStage implements AutoCloseable {
++    private static final String ROOT=DemoZkFenceSource.ISOLATED_ROOT+"/harness";
++    private static final String MEMBERS=ROOT+"/members";
++    private static final String ASSIGN=ROOT+"/assignments";
++    private static final String LEASE=ROOT+"/rf2-auto-stage-controller";
++    private final String node;
++    private final ZkPartitionFailoverControlPlane plane;
++    private final ZkPartitionFailoverRuntime runtime;
++
++    static boolean enabled() {
++        return "1".equals(System.getenv("DEMO_V19_RF2_AUTO_STAGE"))
++                && "1".equals(System.getenv("DEMO_V19_RF2_SHARD_PILOT"))
++                && "0".equals(System.getenv("DEMO_V19_THREE_DATA_NODES"))
++                && "1".equals(System.getenv("DEMO_V19_CUSTODY_ACK_PILOT"));
++    }
++
++    DemoV19Rf2AutoStage(ZookeeperClient zk, String node,
++            DemoV19DurableRuntime durable) {
++        if (!enabled() || zk==null || durable==null
++                || (!"CommonHaDemoA".equals(node) && !"CommonHaDemoB".equals(node)))
++            throw new IllegalArgumentException("isolated RF2 auto-stage requires live custody quorum");
++        this.node=node;
++        // ZK ephemeral node is session-owned by the actual DATA JVM, not an
++        // external script or a TCP health probe that might misclassify a pause.
++        ensureRoot(zk,MEMBERS);
++        for (String member : Arrays.asList("CommonHaDemoA","CommonHaDemoB"))
++            ensureRoot(zk,MEMBERS+"/"+member);
++        String presence=MEMBERS+"/"+node+"/"+node;
++        try { zk.create(presence,node,CreateMode.EPHEMERAL); }
++        catch (ZkNodeExistsException alreadyExists) {
++            throw new IllegalStateException("duplicate live data identity: "+node,alreadyExists);
++        }
++        plane=new ZkPartitionFailoverControlPlane(zk,ASSIGN,MEMBERS,LEASE,node);
++        runtime=new ZkPartitionFailoverRuntime(plane,
++                (current,candidate,replicas)->{
++                    if (!node.equals(candidate)
++                            || !"P000".equals(current.getPartitionId())
++                            || current.replicaNodes().size()!=1
++                            || current.getEpoch()!=1
++                            || replicas.size()!=1 || !node.equals(replicas.get(0)))
++                        throw new IllegalStateException("unsupported RF2 candidate or old membership");
++                    try { durable.requireCertifiedOldRf2Survivor(current); }
++                    catch (Exception denied) {
++                        throw new IllegalStateException("old ACK frontier not certified",denied);
++                    }
++                },Arrays.asList("CommonHaDemoA","CommonHaDemoB"),
++                1,500L,new ZkPartitionFailoverRuntime.Listener() {
++                    @Override public void onResult(PartitionFailoverController.Result r) {
++                        if (r.getOutcome()==PartitionFailoverController.Outcome.APPLIED_NOT_READY)
++                            System.out.println("V19_RF2_AUTO_STAGED partition="+r.getPartitionId()
++                                +" old="+r.getPreviousPrimary()
++                                +" candidate="+r.getNewPrimary()
++                                +" newEpoch="+r.getNewEpoch()
++                                +" state=RECOVERING writeAdmission=DENIED");
++                    }
++                    @Override public void onFailure(String partition,RuntimeException failure) {
++                        System.err.println("V19_RF2_AUTO_STAGE_FAILED partition="+partition
++                                +" type="+failure.getClass().getSimpleName());
++                    }
++                });
++    }
++
++    void start() { runtime.start(); }
++    private static void ensureRoot(ZookeeperClient zk,String path) {
++        if (zk.exists(path)) return;
++        try {zk.create(path,"",CreateMode.PERSISTENT);}
++        catch(ZkNodeExistsException concurrent) {
++            if (!zk.exists(path)) throw concurrent;
++        }
++    }
++    @Override public void close() {runtime.close();}
++}
+--- /dev/null
++++ b/compose.v19-rf2-auto-stage.yaml
+@@ -0,0 +1,124 @@
++name: otc-common-ha-v19-rf2-auto-stage
++
++# Physically separate Docker processes + WAL volumes, but still on the SAME
++# Mac/Docker VM: not three independent hardware failure domains.
++x-zk: &zk
++  image: docker.m.daocloud.io/library/zookeeper:3.8.4
++  restart: "no"
++  environment: &zk-env
++    ZOO_SERVERS: "server.1=otc-ha-zk1:2888:3888;2181 server.2=otc-ha-zk2:2888:3888;2181 server.3=otc-ha-zk3:2888:3888;2181"
++    ZOO_4LW_COMMANDS_WHITELIST: "ruok,stat,mntr"
++    JVMFLAGS: "-Xms64m -Xmx128m"
++  networks: [isolated]
++
++x-node: &node
++  image: dc-saas/gw:cluster-dev-fenced-transport-20261016
++  restart: "no"
++  environment: &node-env
++    JAVA_TOOL_OPTIONS: "-Dzookeeper.sasl.client=false -Xms96m -Xmx256m"
++    DC_ZOOKEEPER_SESSION_TIMEOUT_MS: "12000"
++    DC_ZOOKEEPER_CONNECTION_TIMEOUT_MS: "6000"
++    DEMO_REPLICATION_TRANSPORT: netty
++    DEMO_ASYNC_REPLICATION: "1"
++    # Legacy toggle selects async WAL pathway; the independent topology
++    # flag below controls whether P000 includes BOTH B and C replicas.
++    DEMO_TWO_NODE_ASYNC: "1"
++    DEMO_V19_THREE_DATA_NODES: "0"
++    DEMO_V19_RF2_SHARD_PILOT: "1"
++    DEMO_V19_DEDICATED_ENSEMBLE: "1"
++    DEMO_V19_SINGLE_FORCE_PILOT: "0"
++    DEMO_V19_COMMON_QUORUM_TEST: "1"
++    DEMO_V19_SINGLE_HOST_QUORUM_TEST: "1"
++    # Isolated single-Mac three-JVM GROUP fsync pilot only. Never production.
++    DEMO_V19_GROUP_FORCE_PILOT: "1"
++    # Carries pinned RSA/fysnced prefix receipts on legacy-compatible ACK messages.
++    DEMO_V19_SIGNED_BATCH_ACK_PILOT: "1"
++    DEMO_V19_CUSTODY_ACK_PILOT: "1"
++    DEMO_V19_RF2_AUTO_STAGE: "1"
++  volumes:
++    - ./target-v19-auto-stage-compiled:/tmp/v19:ro
++    - ./common-upstream-review-20261022/target/com.app.common-3.0.22-SNAPSHOT.jar:/tmp/common.jar:ro
++    - ./v19-quorum-secrets/public:/srv/v19/identities:ro
++  networks: [isolated]
++  depends_on:
++    otc-ha-bootstrap: {condition: service_completed_successfully}
++
++services:
++  otc-ha-zk1:
++    <<: *zk
++    hostname: otc-ha-zk1
++    environment:
++      <<: *zk-env
++      ZOO_MY_ID: "1"
++    volumes:
++      - zk1-data:/data
++      - zk1-log:/datalog
++  otc-ha-zk2:
++    <<: *zk
++    hostname: otc-ha-zk2
++    environment:
++      <<: *zk-env
++      ZOO_MY_ID: "2"
++    volumes:
++      - zk2-data:/data
++      - zk2-log:/datalog
++  otc-ha-zk3:
++    <<: *zk
++    hostname: otc-ha-zk3
++    environment:
++      <<: *zk-env
++      ZOO_MY_ID: "3"
++    volumes:
++      - zk3-data:/data
++      - zk3-log:/datalog
++
++  otc-ha-bootstrap:
++    <<: *node
++    hostname: triple-bootstrap
++    entrypoint: ["java", "-cp", "/tmp/common.jar:/tmp/v19:/srv/dc/dc/GW/lib/*",
++      "com.opentradingcore.demo.DemoV19ClusterHarness", "--bootstrap"]
++    depends_on:
++      otc-ha-zk1: {condition: service_started}
++      otc-ha-zk2: {condition: service_started}
++      otc-ha-zk3: {condition: service_started}
++    environment:
++      <<: *node-env
++      JAVA_TOOL_OPTIONS: "-Dzookeeper.sasl.client=false -Xmx128m"
++
++  otc-ha-demo-a:
++    <<: *node
++    hostname: otc-ha-demo-a
++    entrypoint: ["java", "-cp", "/tmp/common.jar:/tmp/v19:/srv/dc/dc/GW/lib/*",
++      "com.opentradingcore.demo.DemoV19ClusterHarness", "--node=A"]
++    volumes:
++      - ./target-v19-auto-stage-compiled:/tmp/v19:ro
++      - wal-a:/srv/v19/wal
++      - ./common-upstream-review-20261022/target/com.app.common-3.0.22-SNAPSHOT.jar:/tmp/common.jar:ro
++      - ./v19-quorum-secrets/public:/srv/v19/identities:ro
++      - ./v19-quorum-secrets/a:/srv/v19/local-identity:ro
++  otc-ha-demo-b:
++    <<: *node
++    hostname: otc-ha-demo-b
++    entrypoint: ["java", "-cp", "/tmp/common.jar:/tmp/v19:/srv/dc/dc/GW/lib/*",
++      "com.opentradingcore.demo.DemoV19ClusterHarness", "--node=B"]
++    volumes:
++      - ./target-v19-auto-stage-compiled:/tmp/v19:ro
++      - wal-b:/srv/v19/wal
++      - ./common-upstream-review-20261022/target/com.app.common-3.0.22-SNAPSHOT.jar:/tmp/common.jar:ro
++      - ./v19-quorum-secrets/public:/srv/v19/identities:ro
++      - ./v19-quorum-secrets/b:/srv/v19/local-identity:ro
++networks:
++  isolated:
++    name: otc-common-ha-v19-rf2-auto-stage-net
++    driver: bridge
++
++volumes:
++  zk1-data:
++  zk1-log:
++  zk2-data:
++  zk2-log:
++  zk3-data:
++  zk3-log:
++  wal-a:
++  wal-b:
++  wal-c:

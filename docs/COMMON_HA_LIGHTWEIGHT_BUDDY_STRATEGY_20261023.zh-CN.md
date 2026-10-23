@@ -106,3 +106,18 @@
 - RF2 严格 2/2 下：A 故障后 B 可获得新的非路由 `RECOVERING` Epoch，但只有 A 恢复并持久追平、恢复为有效同步 Replica 后才可按严格 2/2 重新 READY；故障期间如果希望 B 单节点持续交易，须走**显式 LOCAL_DURABLE_ASYNC/降级合同**及其独立认证门禁，不得自动从严格多数降级。
 - 测试：`PartitionRf2StrictReadyControllerTest` 14/14 通过；Common 全量 **96 suites / 418 tests / 0 failures / 0 errors / 0 skipped**；重新本地安装 Common 后独立 Demo **35 suites / 132 tests / 0 failures / 0 errors / 1 skipped**（131 项通过）。都不构成真实 A→B 自动交易继续的证明。
 - 下一阶段必须接入真实 ZooKeeper 的独立 Controller/Assignment 事务和真实 Common WAL/提交边界验证；然后运行 Docker 多 JVM A SIGKILL→B 无双主接管、A 回归追平、READY、持续业务写入和错误路径故障注入。
+
+## 11. 2026-10-23：v19 真实 Docker 自动 RF2 Epoch 接管准备 PASS
+
+**本轮真实实验**：在原 v19 custody 试验之外另建 `compose.v19-rf2-auto-stage.yaml`（独立 3 ZooKeeper、A/B JVM、WAL 与专用网络），明确配置 `DEMO_V19_RF2_AUTO_STAGE=1`。实验运行在同一 Mac/Docker VM，只证明 JVM、卷与 ZooKeeper 的独立模拟，**不是多物理节点故障域验收**。
+
+- 新增 `DemoV19Rf2AutoStage`：真实数据 JVM 通过自己 ZK Session 注册 EPHEMERAL 成员；Common `ZkPartitionFailoverRuntime` 自动申请控制租约、监听成员消失并运行 `PartitionFailoverController`。每个故障分区先严格核验候选旧 Epoch 的已 fsync WAL 和 `DurableWalCertificateCustody.highestVerified()` 的可信 2-voter 签名证书；独立控制面 CAS 之后只产生 `RECOVERING`，不允许写入。旧 ZK 会话失效后才有资格接管，**不是脚本直接切主**。
+- 额外修复 v19 就绪线程：ZooKeeper grant 失效时主动 `PartitionReadinessGuard.revoke()`，不再保留旧 epoch 本地 READY bit。每笔严格 ACK 合同仍不变。
+- 在新隔离实例中真实 Netty 请求 `rf2-auto-stage-before-kill-{1..8}` **8/8 成功，appliedCount=1**，A Epoch 1 CommitIndex=8；B 证书验证旧 epoch=1，`certifiedSeq=8`，有 2 个旧 WAL 投票，提交 SHA256=`446b1b495224af34023a4d551ca38a4243a7199b0e8bea19e26027edf401f699`。
+- **SIGKILL A 后未运行升主脚本**。等待约 18 秒跨过 ZK 会话检测后，B 日志自动输出 `V19_RF2_AUTO_STAGED partition=P000 old=CommonHaDemoA candidate=CommonHaDemoB newEpoch=2 state=RECOVERING writeAdmission=DENIED`。
+- 直接从 ZooKeeper `harness/assignments/P000` 读取真实持久状态：`primary=CommonHaDemoB,epoch=2,assignmentVersion=2,state=RECOVERING,replicas=[],learners=[CommonHaDemoA]`；B 写入 `rf2-no-strict-after-auto-stage` 得到 503，**没有违规确认单份数据为 2/2 成功**。
+- 用 Docker 原生启动原 A 容器（保留其原 WAL）后，A/B `committedSeq=8`，已确认 SHA 相同，均 `clean=true`，A/B 都没有 Epoch 1 或 Epoch 2 可写 grant；A 旧 Epoch 写入得到 503。ZK 仍保持 B/Epoch 2/RECOVERING，自动接管事件只发生 1 次，没有旧主自动抢回。
+- Demo 全量 Maven：**35 suites / 132 tests / 0 failures / 0 errors / 1 skipped**（131 项通过）；真实验证在新 Compose 上完成，无正式 Order/Trade/MD 容器替换，没有使用 GitHub Actions。
+- 本轮 v19 源码及 Compose 变更保存在 `tests/patches/common-v19-rf2-auto-stage-real-zk-20261023.patch`，已通过目标 v19 工作树 `git apply --reverse --check` 校验；Common 控制核心来自本地 `ca6f1d5`。
+
+**放行边界**：本轮实现和验证的是 **自动选主 + 旧主 Fencing + 非路由恢复状态**，不是自动 `RECOVERING → READY` 或双向连续交易。v19 的 `DemoV19DurableRuntime` 仍把签名数据成员固定到 A/Epoch1，尚未有 Epoch2 动态成员与恢复证明安装；A 重启后虽然 WAL 与 B 一致，但不能自动成为 B 的严格 Epoch2 Replica，也不能恢复写入。下一步集中解决这条真实链路：动态持久成员 Epoch、Learner 追平/原始尾部隔离、新配置 2/2 可信提交边界、READY 原子发布、A/B 角色轮换多次故障；然后再做 256 分区和性能压测。当前仍 **NO-GO**。
