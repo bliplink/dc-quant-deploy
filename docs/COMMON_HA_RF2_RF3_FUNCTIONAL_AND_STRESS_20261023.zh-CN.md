@@ -102,3 +102,15 @@ SHA256=`57ff996c5ba0f6ed2509c27abab154d53f596ded80c2cbbe67dbed73df7eb546`。未�
 5. **资源**：Mac宿主盘约95%使用、余22GiB。不要触碰正式Demo卷/正在运行的实验WAL/证书；下一次长压前先核对旧无引用工件并做安全回收。
 
 **本轮判定：Common RF2/3分区规划、实际签名证据和单JVM双WAL回环功能PASS；规划层压力和小规模RF2 TCP/WAL基准PASS；真实多JVM动态成员配置、自动故障主切、正式性能及业务一致性总体验收仍NO-GO。**
+
+
+## 2026-10-23 追加现场：RF2 实验重启、A/B 故障与严格证书性能定位
+
+- 验收基线仍以 `docs/COMMON_CLUSTER_REQUIREMENTS.md` C01–C44 / T01–T15 为准。此轮仅实验 `compose.v19-rf2-custody-pilot.yaml`，独立三 ZK + A/B 两份 WAL，物理故障域都在同一 Mac，不属于物理多机证明。
+- 清理确认零容器挂载/未发现打开文件的历史恢复备份 `~/.opentradingcore/order-clean-reset-20261019-1757`（约 13 GiB），Mac 可用空间由约 13 GiB 上升到 26 GiB；`docker image prune -a -f` 报告 Docker 回收约 3.458 GB，未删除容器数据卷或正式运行目录。Docker 镜像空间回收不等于 Mac 的 df 同步增加。
+- 实验首次发起 8 条真实 TCP 批次，8/8 `code=0, appliedCount=1`，A/B WAL、状态摘要、已确认 SHA 一致。真实 SIGKILL B 时 A 新写请求得到 `503 DEMO_GROUP_NOT_DURABLE`，未把本地未认证尾部误报成功；恢复 B、复用原 8 个 requestId 后 8/8 成功且只应用一次，B 自动追平。最终 A/B 各 seq=16、`clean=true`、同一 SHA。
+- 真实 SIGKILL A 后 B 的写请求返回 `503 DEMO_UNCERTIFIED_BACKLOG: missing trusted Common CommitIndex`；恢复 A 后双方 seq=16，SHA 一致，`epoch=1`。**安全拒绝 PASS，自动跨 Epoch 主切 FAIL**。当前固定 `P000/A/B/Epoch1` 的实验运行时不能声称实现合法自动提升。
+- 严格证书托管 10 个模拟客户端 ×1 组 ×8 条，2 组并发：80/80 成功、11.07 ACK records/s、组 P99 3970.99 ms（FAIL）。这是单分区 P000 的模拟客户端，并非十个真实注册租户。
+- 本地独立 Demo 增加*只观测、不参与 ACK/选主*的 `custodyLocalFsyncAndSign` 与 `custodyRemoteReceipt` 指标后，Maven 编译及 `DemoV19SignedBatchAckTcpTest` 返回 PASS，实验 A/B 保留 WAL 重启，再测 80/80 成功、11.60 records/s、组 P99 3629.28 ms（FAIL）；结果是新采样，不能视为性能优化成功。
+- 第二次样本：主节点 local custody install/fsync/sign 平均约 32.9ms（10 次）；远端证书托管回执平均约 46.1ms（10 次）；复制 batch RPC 平均约 61.1ms（10 次）；status RPC 平均约 505ms（仅 3 次）。客户端组 P99 同时包含前置排队等待，和单次 Netty handler 局部耗时不能混用。
+- **后续硬关口**：Common 实现旧 Epoch 已 ACK 证书可信水位发现及多数保管证明、新 Epoch ZK 授权与旧主 fencing、独立 Demo 无脚本自动 A→B/B→A 接管，并在安全约束不降低的前提下消除高延迟队列/状态 RPC 等待；最后完成 10/50/200 各 >=5 分钟、2–3x Burst 5–10 分钟和故障中压力验收。此刻仍 NO-GO for Trade/Order/MD。
