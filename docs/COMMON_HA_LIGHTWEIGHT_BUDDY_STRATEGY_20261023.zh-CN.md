@@ -75,6 +75,9 @@
 - 实验需多 JVM、多 WAL 卷、真实 ZK；同一 Mac 不是独立物理故障域。正式生产可靠性仍需多物理节点故障测试。
 - 本地提交/本地构建优先，不触发 GitHub Actions，不擅自清理在用数据或更新正式 Docker。
 
+- 从更新后的 Common 本地 Maven 产物重新运行独立 Demo 全量回归：**35 suites / 132 tests / 0 failures / 0 errors / 1 skipped**（131 项实际通过），Maven 退出码 0；验证规划器的新增代码没有破坏现有 Demo 编译/WAL/Netty 回归，但不能推导 HA/性能已通过。
+- 可独立重放的 Common 改动补丁已保存到 `tests/patches/common-rf2-buddy-planner-20261023.patch`；从 `06c650e` 导出，并对当前 Common 树通过反向应用校验，便于后续会话在统一源码上复现。
+
 **放行状态：目前仍 NO-GO。纯初始规划测试 ≠ 真实主切通过；两节点成对放置的性能优化必须单独测量。**
 
 

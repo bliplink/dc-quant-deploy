@@ -1,0 +1,197 @@
+diff --git a/src/main/java/com/app/common/partition/PartitionBuddyPlacementPlanner.java b/src/main/java/com/app/common/partition/PartitionBuddyPlacementPlanner.java
+new file mode 100644
+index 0000000..cf236d9
+--- /dev/null
++++ b/src/main/java/com/app/common/partition/PartitionBuddyPlacementPlanner.java
+@@ -0,0 +1,82 @@
++package com.app.common.partition;
++
++import java.util.ArrayList;
++import java.util.Collection;
++import java.util.Collections;
++import java.util.Comparator;
++import java.util.HashSet;
++import java.util.List;
++import java.util.Locale;
++import java.util.Set;
++
++/**
++ * Deterministic RF2 buddy-pair INITIAL placement only. Each node is primary
++ * for about 1/N of the partitions and standby for its paired neighbor.
++ *
++ * It deliberately does not mutate ZooKeeper, migrate existing assignments,
++ * install a recovery image or grant READY. An operator must run the normal
++ * authenticated membership and genesis/learner transition protocol.
++ */
++public final class PartitionBuddyPlacementPlanner {
++    private PartitionBuddyPlacementPlanner() {}
++
++    public static List<PartitionAssignment> proposeNew(int partitionCount, long initialEpoch,
++            Collection<ClusterNodeDescriptor> available,
++            Collection<PartitionAssignment> existing) {
++        if (partitionCount < 1 || partitionCount > 999 || initialEpoch <= 0
++                || available == null || existing == null)
++            throw new IllegalArgumentException("bounded partitions, epoch, nodes and existing required");
++        List<ClusterNodeDescriptor> nodes = new ArrayList<ClusterNodeDescriptor>();
++        Set<String> identifiers = new HashSet<String>();
++        String service = null;
++        for (ClusterNodeDescriptor node : available) {
++            if (node == null || !node.isEligiblePrimary()
++                    || blank(node.getNodeName()) || blank(node.getHost())
++                    || blank(node.getServiceName()))
++                throw new IllegalArgumentException("pair nodes must be active with service/host identity");
++            String id = norm(node.getNodeName());
++            if (!identifiers.add(id)) throw new IllegalArgumentException("duplicate physical node identity");
++            if (service == null) service = norm(node.getServiceName());
++            else if (!service.equals(norm(node.getServiceName())))
++                throw new IllegalArgumentException("cannot mix service namespaces in a shard plan");
++            nodes.add(node);
++        }
++        if (nodes.size() < 2 || nodes.size() % 2 != 0 || nodes.size() > partitionCount)
++            throw new IllegalArgumentException("even number of nodes (>=2) and >=one partition per primary required");
++        nodes.sort(Comparator.comparing(n -> norm(n.getNodeName())));
++        // A/B, C/D, ... are separate replication groups, never one all-to-all quorum.
++        for (int i=0; i<nodes.size(); i+=2) {
++            if (norm(nodes.get(i).getHost()).equals(norm(nodes.get(i+1).getHost())))
++                throw new IllegalArgumentException("buddy nodes must not share a physical host");
++        }
++        Set<String> occupied = new HashSet<String>();
++        for (PartitionAssignment a : existing) {
++            if (a != null && !blank(a.getPartitionId())) occupied.add(norm(a.getPartitionId()));
++        }
++        List<PartitionAssignment> planned = new ArrayList<PartitionAssignment>(partitionCount);
++        for (int index=0; index<partitionCount; index++) {
++            String partition = String.format(Locale.ROOT, "P%03d", index);
++            if (occupied.contains(norm(partition)))
++                throw new IllegalArgumentException("existing partition requires certified learner migration: " + partition);
++            // Equal contiguous ranges if divisible (2=>128,4=>64).
++            // The monotonic floor formulation also balances uneven counts within one.
++            int primaryIndex = (int)(((long)index * nodes.size()) / partitionCount);
++            ClusterNodeDescriptor primary = nodes.get(primaryIndex);
++            ClusterNodeDescriptor standby = nodes.get(primaryIndex ^ 1);
++            PartitionAssignment a = new PartitionAssignment();
++            a.setPartitionId(partition);
++            a.setProtocolVersion(2);
++            a.setEpoch(initialEpoch);
++            a.setAssignmentVersion(0);
++            a.setPrimary(primary.getNodeName());
++            a.setReplicas(Collections.singletonList(standby.getNodeName()));
++            a.setState("PREPARING");
++            PartitionAssignmentValidator.requireValid(a);
++            planned.add(a);
++        }
++        return Collections.unmodifiableList(planned);
++    }
++
++    private static String norm(String s) { return s == null ? "" : s.trim().toLowerCase(Locale.ROOT); }
++    private static boolean blank(String s) { return s == null || s.trim().isEmpty(); }
++}
+diff --git a/src/test/java/com/app/common/partition/PartitionBuddyPlacementPlannerTest.java b/src/test/java/com/app/common/partition/PartitionBuddyPlacementPlannerTest.java
+new file mode 100644
+index 0000000..dc472fb
+--- /dev/null
++++ b/src/test/java/com/app/common/partition/PartitionBuddyPlacementPlannerTest.java
+@@ -0,0 +1,103 @@
++package com.app.common.partition;
++
++import org.junit.Test;
++import java.util.*;
++import static org.junit.Assert.*;
++
++public class PartitionBuddyPlacementPlannerTest {
++    private static List<ClusterNodeDescriptor> nodes(String... names) {
++        List<ClusterNodeDescriptor> result = new ArrayList<ClusterNodeDescriptor>();
++        for (String id : names) {
++            ClusterNodeDescriptor d = new ClusterNodeDescriptor();
++            d.setNodeName(id); d.setHost("physical-"+id);
++            d.setServiceName("OrderSvr");
++            d.setState(ClusterNodeLifecycleState.ACTIVE);
++            result.add(d);
++        }
++        return result;
++    }
++    private static List<PartitionAssignment> plan(String... ids) {
++        return PartitionBuddyPlacementPlanner.proposeNew(
++                256,1,nodes(ids),Collections.<PartitionAssignment>emptyList());
++    }
++    private static void verify(List<PartitionAssignment> plan, String[][] ranges) {
++        assertEquals(256,plan.size());
++        Map<String,Integer> primary = new HashMap<String,Integer>();
++        Map<String,Integer> replica = new HashMap<String,Integer>();
++        for (int i=0;i<256;i++) {
++            PartitionAssignment a = plan.get(i);
++            assertEquals(String.format(Locale.ROOT,"P%03d",i),a.getPartitionId());
++            assertEquals("PREPARING",a.getState());
++            assertFalse(a.isRoutable());
++            assertEquals(1,a.getEpoch());
++            assertEquals(0,a.getAssignmentVersion());
++            assertEquals(1,a.replicaNodes().size());
++            assertNotEquals(a.getPrimary(),a.getReplica());
++            primary.put(a.getPrimary(),primary.getOrDefault(a.getPrimary(),0)+1);
++            replica.put(a.getReplica(),replica.getOrDefault(a.getReplica(),0)+1);
++            String[] pair = ranges[i/(256/ranges.length)];
++            assertEquals(pair[0],a.getPrimary());
++            assertEquals(pair[1],a.getReplica());
++        }
++        for(String[] group:ranges) {
++            assertEquals(Integer.valueOf(256/ranges.length),primary.get(group[0]));
++            assertEquals(Integer.valueOf(256/ranges.length),replica.get(group[1]));
++        }
++    }
++    @Test public void twoNodesSplit128PrimaryEachAndOppositeStandby() {
++        verify(plan("B","A"),new String[][]{{"A","B"},{"B","A"}});
++    }
++    @Test public void fourNodesSplit64PrimaryEachIntoTwoIndependentPairs() {
++        verify(plan("D","A","C","B"),
++                new String[][]{{"A","B"},{"B","A"},{"C","D"},{"D","C"}});
++    }
++    @Test public void sixNodesRemainEvenAndNeverReplicateAllToAll() {
++        List<PartitionAssignment> plan=plan("A","B","C","D","E","F");
++        int[] primaries=new int[6],replicas=new int[6];
++        for(PartitionAssignment a:plan) {
++            int p=a.getPrimary().charAt(0)-'A';
++            int r=a.getReplica().charAt(0)-'A';
++            assertEquals(p^1,r);
++            primaries[p]++; replicas[r]++;
++        }
++        for(int i=0;i<6;i++) {
++            assertTrue(primaries[i]>=42 && primaries[i]<=43);
++            assertTrue(replicas[i]>=42 && replicas[i]<=43);
++        }
++    }
++    @Test public void failClosedForOddNodesAndColocatedPair() {
++        denied(()->plan("A","B","C"));
++        List<ClusterNodeDescriptor> ds=nodes("A","B");
++        ds.get(1).setHost("physical-A");
++        denied(()->PartitionBuddyPlacementPlanner.proposeNew(256,1,ds,
++                Collections.<PartitionAssignment>emptyList()));
++    }
++    @Test public void failClosedForDuplicateNodeAndInactiveMember() {
++        denied(()->plan("A","A"));
++        List<ClusterNodeDescriptor> ds=nodes("A","B");
++        ds.get(1).setState(ClusterNodeLifecycleState.REPLICA_READY);
++        denied(()->PartitionBuddyPlacementPlanner.proposeNew(256,1,ds,
++                Collections.<PartitionAssignment>emptyList()));
++    }
++    @Test public void rejectExistingAssignmentRatherThanSilentlyMoveIt() {
++        List<PartitionAssignment> before=plan("A","B");
++        denied(()->PartitionBuddyPlacementPlanner.proposeNew(256,2,nodes("A","B","C","D"),
++                Collections.singletonList(before.get(127))));
++        assertEquals("A",before.get(127).getPrimary());
++        assertEquals(1,before.get(127).getEpoch());
++    }
++    @Test public void rejectInvalidScaleAndServiceMix() {
++        denied(()->PartitionBuddyPlacementPlanner.proposeNew(1,1,nodes("A","B"),
++                Collections.<PartitionAssignment>emptyList()));
++        denied(()->PartitionBuddyPlacementPlanner.proposeNew(256,0,nodes("A","B"),
++                Collections.<PartitionAssignment>emptyList()));
++        List<ClusterNodeDescriptor> ds=nodes("A","B");
++        ds.get(1).setServiceName("TradeSvr");
++        denied(()->PartitionBuddyPlacementPlanner.proposeNew(256,1,ds,
++                Collections.<PartitionAssignment>emptyList()));
++    }
++    private static void denied(Runnable command) {
++        try { command.run(); fail("unsafe placement accepted"); }
++        catch (IllegalArgumentException expected) { /* must fail closed */ }
++    }
++}
