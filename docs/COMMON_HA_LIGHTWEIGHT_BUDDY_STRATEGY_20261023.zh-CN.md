@@ -260,3 +260,19 @@
 5. Demo Maven 全量回归 41 suites /171 tests：170 PASS、1 SKIPPED、0 FAIL/ERROR。新 11 文件源码与隔离 Compose 快照保存在 tests/patches/common-v19-rf2-epoch3-dual-custody-restart-20261023.tar.gz，SHA256 清单 tests/patches/common-v19-rf2-epoch3-dual-custody-restart-20261023.sha256，已安全解压逐文件字节验证。此为源码快照而非独立增量补丁，不能直接覆盖其它尚未合并工作树。
 
 **剩余不可省略：** 仍未把新 Epoch 的正式 PrimaryWriter 接到同步 B→A WAL 复制/逐笔双 fsync 收据、Common CommitIndex 与双保管持续更新。必须先证明这些真正交易链路能工作，再通过 ZK CAS 发布 READY/QUORUM_DURABLE，最后实测 A/B 故障自动降级单节点继续交易、恢复后重新严格 2/2。单机 Mac/Docker 进程分离不是多物理机验收；256 分区、200 租户负载及 Order/Trade/MD 一致性未执行。当前仅 Genesis 证书双保管与重启复验 PASS，整体严格双副本自动恢复 NO-GO；不能把自动 FREEZE 实验开关用于正式 Demo。
+
+## 19. 2026-10-23：Epoch 5→6→7 严格双副本/单节点/严格双副本业务闭环实测
+
+本节为第18节后的增量。所有结果只代表 Mac/Docker 单物理宿主、P000、A/B 独立 JVM/WAL、3 个 ZK 容器。未修改正式 Order/Trade/MD 服务，未触发 GitHub Actions。
+
+**Epoch 5 严格交易**：初次新 Epoch3 seq10 写入仅完成 B 本地 fsync，客户端无严格成功 ACK；纠正 Epoch1/2-only 的后台复制重试条件与旧 signed-batch receipt 配置后，A 自动追平。随后 A 故障，B 自动切为 Epoch4 单节点。A 恢复，系统执行 Epoch5/config10 的 FREEZE、双物理 RSA Genesis seq12、Common CommitIndex fsync、A/B 证书双保管和严格 ZK READY。B 收到新业务 rf2-epoch5-real-strict-13，结果 code=0、appliedCount=1、seq13、quorumDurable=true、QUORUM_DURABLE；A/B WAL Epoch5 seq13 SHA256 同为 28939f654ff41a389382959b970d647f566c81ad6ceceb200241f99bc7632654。CommitIndex 证书 commit-00000000000000000013.bin（1092B）落盘，A/B head.bin（各1018B）的 SHA256 同为 6766ee70725e09cb0a8529704214eb258a75f6e68c1d8270406d705108fd6ce4。对相同 requestId+delta 再次调用仍返回同一 seq13、appliedCount=1，不重复应用。
+
+**真实 A 故障后继续交易**：直接 SIGKILL A，B 自动通过 ZK CAS 切换至 Epoch6 / READY / AUTO_DEGRADED_LOCAL_DURABLE / quorumDurable=false，明确保留旧签名最高 ACK seq13。B 在缺少 A 的条件下接收 rf2-epoch6-degraded-solo-14，返回 code0、appliedCount1、seq14，明确 possibleDataLossIfPrimaryPermanentlyLost=true。A 重启后作为 Learner 自动追平 seq14（WAL 数据 Epoch6），A/B SHA256 同为 ac5a08169735ac4e9112bcd305578774ea7aac5fae4383e1b2d1eda26291dcf6。这种本地 ACK 合同在单机永久损坏时仍有非零 RPO 风险，不能称零丢失。
+
+**再恢复 Epoch7 严格复制**：发现原试验控制器完成一次严格升级后停在 strictCutoverPhase=6，不能自动继续下一轮。新增 mayRearmStrictCycle 的版本/身份/状态/唯一 Learner 门禁，旧同 Epoch、旧主、双成员 READY、RECOVERING 等条件必须拒绝；5 项专项单测全部 PASS。本次为了载入修复后的字节码，先停止 A、重建 B 测试 JVM、再恢复 A，原 ZK/WAL 均保留。随后系统自动 Epoch7 FREEZE→GENESIS_PREPARE(seq14)→双签名、CommitIndex与 A/B 独立 Custody→ZK 严格 READY。再次向 B 发送 rf2-epoch7-strict-after-second-rejoin-15：code0、seq15、appliedCount1、QUORUM_DURABLE、quorumDurable=true。A/B WAL seq15、最后数据 Epoch7、SHA256 同为 6fbad707173967a89be802ecd9d0a5130fb9faa49459ab191448d4c2955bd145。Epoch7/config15 CommitIndex commit-00000000000000000015.bin（1092B）落盘；A/B 的独立 head.bin SHA256 均为 2b4fcc5d91486c2d0fb33f0af0f26d10d32da0943083a452f02d9f51b00f30bf。
+
+**严格 ACK 代码**：DemoV19Rf2StrictAckRuntime 在每笔新 Epoch 成功响应前串行检查旧持久证书水位、Primary 本地 WAL fsync、Replica 真实同序列 WAL fsync/hash、两独立 RSA 收据、Common CommitIndex 签名证书 fsync、A/B 各自原子证书保管 fsync 和当前 ZooKeeper Assignment/fencing。任何错误不得返回成功。隔离 Demo 原先 Epoch1/2-only 的复制 retry 已修改，旧 batch hint 在动态签名路径中停用。客户端 ACK 仍含 ackProofMode=SEQUENCE_ONLY_FULL_AUDIT_REQUIRED，不代表生产资金/委托/成交/Projection 权威最终对账完成。
+
+**测试与源码**：本轮 Demo 全量 Maven 为 43 suites / 181 tests，180 PASS、1 SKIPPED、0 failures/errors；新增重复重启恢复准入 5/5 PASS。精确 18 个 Java/Compose 文件源代码阶段快照：tests/patches/common-v19-rf2-dynamic-strict-recovery-epoch7-20261023.tar.gz，配套同前缀 .sha256 清单；已安全解压到临时目录进行逐文件字节核对。源文件快照不是独立增量 patch，不应未经差异审核覆盖其他工作树的修改。
+
+**未完成**：这次 Epoch7 是重建 B JVM 后恢复，不能声称不重启 JVM 的反复自动 rearm 已完成。当前实验仍有 Epoch2-8 上界和固定 P000，未进行本轮严格 READY 下 B 主被杀后 A 接管的独立链路验收、多物理故障域、256 分区/4节点、10/50/200 租户持续及 burst 压测、p99、Order/Trade/MD 金额持仓委托成交及 Projection 权威对账。结论应分级：隔离 P000 严格2/2 ACK→单节点继续交易→再次严格2/2 ACK 业务闭环 PASS；完整生产 Common HA 仍 NO-GO。

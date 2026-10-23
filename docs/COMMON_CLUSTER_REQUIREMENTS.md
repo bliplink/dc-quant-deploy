@@ -122,3 +122,6 @@
 
 - **T29（2026-10-23：独立 P000 新 Epoch3 双物理数据节点证书 Custody PASS）** B 的 Common CommitIndex 已 fsync Genesis seq9，经真实 Netty 发送给 A/B；两份独立真实 WAL 重新验签并执行本地 certificate fsync/原子安装，各节点 signed custody receipt 由 Common 验证双保管；A/B JVM 全部重启后，通过各自 Netty HEAD_READ 再次验证真实 head.bin（各 1018 B）的一致签名、Seq 和 membership。该过程不发布客户端 READY，实验期写入 503 正确。
 - **T30（未完成）** 接入新 Epoch 动态严格写入、同 Epoch B→A 的持久 WAL 复制、每笔客户端 2/2 ACK 与双保管证书更新，成功后原子 ZK READY；随后 SIGKILL 单数据节点自动降级继续交易、恢复节点自动追平并切回严格 2/2，才算完整 Common HA。生产和正式 Demo 禁止启用停在 RECOVERING 的严格切换实验。
+
+- **T31（2026-10-23：隔离 P000 动态 Epoch 严格 ACK→单节点→严格 ACK 闭环 PASS）** 真实 Epoch5 B/A seq13 新交易 code0/appliedCount1/QUORUM_DURABLE，A/B 两独立 WAL hash、CommitIndex 证书与 2 个 Custody head.bin 对齐，重复 requestId 不重复执行；SIGKILL A，B 自动 Epoch6 单节点续写 seq14 code0/quorumDurable=false，A 自动追平；随后 Epoch7 自动 ZK Freeze/双签名 Genesis/双保管/READY，seq15 新交易 code0/quorumDurable=true，A/B 同 WAL hash 和 custody。Demo 181 项测试：180 pass、1 skipped、0 fail。
+- **T32（未完成）** 仍需实际不重启 JVM 的多轮重复重新武装测试、Epoch7 严格 B Primary 故障时 A 自动接管和恢复、移除隔离 Demo Epoch8 上界并在更长 Epoch 链持续故障注入、多物理机器故障域、256分区与4节点扩展、10/50/200 租户长期负载 TPS/p99/2-3倍 burst、Order/Trade/MD/Projection 权威资金与成交一致性。未通过前禁止标记完整 Common 生产 HA 完成。
