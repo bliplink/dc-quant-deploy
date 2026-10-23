@@ -1,0 +1,480 @@
+--- a/src/main/java/com/opentradingcore/demo/DemoV19Rf2AutoStage.java
++++ b/src/main/java/com/opentradingcore/demo/DemoV19Rf2AutoStage.java
+@@ -8,6 +8,13 @@
+ import org.apache.zookeeper.CreateMode;
+ import org.I0Itec.zkclient.exception.ZkNodeExistsException;
+ import java.util.Arrays;
++import java.util.Map;
++import java.util.concurrent.Executors;
++import java.util.concurrent.ScheduledExecutorService;
++import java.util.concurrent.TimeUnit;
++import java.util.concurrent.atomic.AtomicLong;
++import org.apache.zookeeper.data.Stat;
++import com.gateway.connector.utils.JsonUtils;
+ 
+ /**
+  * Isolated v19 RF2 automatic failover STAGING ONLY. This can CAS a new
+@@ -22,6 +29,13 @@
+     private final String node;
+     private final ZkPartitionFailoverControlPlane plane;
+     private final ZkPartitionFailoverRuntime runtime;
++    private final ZookeeperClient zk;
++    private final DemoV19DurableRuntime durable;
++    private final ScheduledExecutorService autoDegrade=Executors.newSingleThreadScheduledExecutor(r->{
++        Thread t=new Thread(r,"v19-rf2-auto-degrade"); t.setDaemon(true); return t;
++    });
++    private final AtomicLong earliestActivationNs=new AtomicLong(
++            System.nanoTime()+TimeUnit.SECONDS.toNanos(5));
+ 
+     static boolean enabled() {
+         return "1".equals(System.getenv("DEMO_V19_RF2_AUTO_STAGE"))
+@@ -36,6 +50,8 @@
+                 || (!"CommonHaDemoA".equals(node) && !"CommonHaDemoB".equals(node)))
+             throw new IllegalArgumentException("isolated RF2 auto-stage requires live custody quorum");
+         this.node=node;
++        this.zk=zk;
++        this.durable=durable;
+         // ZK ephemeral node is session-owned by the actual DATA JVM, not an
+         // external script or a TCP health probe that might misclassify a pause.
+         ensureRoot(zk,MEMBERS);
+@@ -62,12 +78,14 @@
+                 },Arrays.asList("CommonHaDemoA","CommonHaDemoB"),
+                 1,500L,new ZkPartitionFailoverRuntime.Listener() {
+                     @Override public void onResult(PartitionFailoverController.Result r) {
+-                        if (r.getOutcome()==PartitionFailoverController.Outcome.APPLIED_NOT_READY)
++                        if (r.getOutcome()==PartitionFailoverController.Outcome.APPLIED_NOT_READY) {
++                            earliestActivationNs.set(System.nanoTime()+TimeUnit.SECONDS.toNanos(5));
+                             System.out.println("V19_RF2_AUTO_STAGED partition="+r.getPartitionId()
+                                 +" old="+r.getPreviousPrimary()
+                                 +" candidate="+r.getNewPrimary()
+                                 +" newEpoch="+r.getNewEpoch()
+                                 +" state=RECOVERING writeAdmission=DENIED");
++                        }
+                     }
+                     @Override public void onFailure(String partition,RuntimeException failure) {
+                         System.err.println("V19_RF2_AUTO_STAGE_FAILED partition="+partition
+@@ -76,7 +94,53 @@
+                 });
+     }
+ 
+-    void start() { runtime.start(); }
++    void start() {
++        runtime.start();
++        if ("1".equals(System.getenv("DEMO_V19_RF2_AUTO_DEGRADE"))) {
++            autoDegrade.scheduleWithFixedDelay(()->{
++                try { tryPublishDegradedReady(); }
++                catch (Exception unsafe) {
++                    System.err.println("V19_RF2_DEGRADE_NOT_READY reason="
++                            +unsafe.getClass().getSimpleName());
++                }
++            }, 1,1,TimeUnit.SECONDS);
++        }
++    }
++
++    private void tryPublishDegradedReady() throws Exception {
++        if (System.nanoTime()<earliestActivationNs.get()
++                || !plane.isConnected() || !plane.hasLease() || !plane.isLive(node)) return;
++        PartitionFailoverController.VersionedAssignment versioned=plane.read("P000");
++        if (versioned==null) return;
++        PartitionAssignment current=versioned.getAssignment();
++        if (!"P000".equals(current.getPartitionId()) || current.getEpoch()!=2
++                || !node.equals(current.getPrimary())
++                || !"RECOVERING".equals(current.getState())) return;
++        long head=durable.requireSafeDegradedEpoch2Genesis(current);
++        if (!plane.isConnected() || !plane.hasLease() || !plane.isLive(node)) return;
++        String path=ASSIGN+"/P000";
++        Stat stat=new Stat();
++        Object raw=zk.readData(path,stat);
++        if (raw==null || stat.getVersion()!=versioned.getVersion()) return;
++        @SuppressWarnings("unchecked") Map<String,Object> record=
++                JsonUtils.Deserialize(String.valueOf(raw),Map.class);
++        if (record==null || !node.equals(record.get("primary"))
++                || !"RECOVERING".equals(record.get("state"))
++                || !(record.get("epoch") instanceof Number)
++                || ((Number)record.get("epoch")).longValue()!=2L) return;
++        record.put("state","READY");
++        record.put("assignmentVersion",current.getAssignmentVersion()+1);
++        record.put("durabilityPolicy","AUTO_DEGRADED_LOCAL_DURABLE");
++        record.put("quorumDurable",false);
++        record.put("degradedFromCertifiedOldEpoch",1);
++        record.put("degradedFromCertifiedSeq",head);
++        if (!plane.isConnected() || !plane.hasLease()) return;
++        try { zk.writeDataReturnStat(path,JsonUtils.Serializer(record),stat.getVersion()); }
++        catch (org.I0Itec.zkclient.exception.ZkBadVersionException conflict) { return; }
++        System.out.println("V19_RF2_AUTO_DEGRADED_READY partition=P000 primary="+node
++                +" epoch=2 oldCertifiedSeq="+head
++                +" durability=AUTO_DEGRADED_LOCAL_DURABLE quorumDurable=false");
++    }
+     private static void ensureRoot(ZookeeperClient zk,String path) {
+         if (zk.exists(path)) return;
+         try {zk.create(path,"",CreateMode.PERSISTENT);}
+@@ -84,5 +148,5 @@
+             if (!zk.exists(path)) throw concurrent;
+         }
+     }
+-    @Override public void close() {runtime.close();}
++    @Override public void close() {autoDegrade.shutdownNow();runtime.close();}
+ }
+--- a/compose.v19-rf2-auto-stage.yaml
++++ b/compose.v19-rf2-auto-stage.yaml
+@@ -35,6 +35,8 @@
+     DEMO_V19_SIGNED_BATCH_ACK_PILOT: "1"
+     DEMO_V19_CUSTODY_ACK_PILOT: "1"
+     DEMO_V19_RF2_AUTO_STAGE: "1"
++    # Explicit test-only agreement: after fencing, single WAL ACK may risk RPO > 0.
++    DEMO_V19_RF2_AUTO_DEGRADE: "1"
+   volumes:
+     - ./target-v19-auto-stage-compiled:/tmp/v19:ro
+     - ./common-upstream-review-20261022/target/com.app.common-3.0.22-SNAPSHOT.jar:/tmp/common.jar:ro
+--- a/src/main/java/com/opentradingcore/demo/DemoV19DurableRuntime.java
++++ b/src/main/java/com/opentradingcore/demo/DemoV19DurableRuntime.java
+@@ -93,9 +93,15 @@
+                     Paths.get("/srv/v19/wal/.cert-custody"),membership,
+                     (askedEpoch,askedSeq)->{
+                         synchronized(wal){
+-                            if(!wal.isReadyForWrites() || wal.lastEpoch()!=askedEpoch
++                            // Historical signed head remains readable when a
++                            // safely fenced NEW epoch has appended more WAL.
++                            // The exact historical SHA binds askedSeq to the
++                            // old certificate. Installation still needs its
++                            // old membership authorization, so this DOES NOT
++                            // permit signing new records under the old epoch.
++                            if(!wal.isReadyForWrites() || wal.lastEpoch()<askedEpoch
+                                     || wal.committedSeq()<askedSeq)
+-                                throw new IOException("local custody WAL not fsynced");
++                                throw new IOException("local custody WAL prefix not fsynced");
+                             return wal.committedPrefixSha256Through(askedSeq);
+                         }
+                     },this::requireGrant);
+@@ -542,6 +548,33 @@
+         }
+     }
+ 
++    /** The old 2/2 ACK frontier becomes the local-durable degraded genesis.
++     * Exact WAL equality rejects uncertified tails instead of inventing ACKs.
++     */
++    long requireSafeDegradedEpoch2Genesis(PartitionAssignment recovering) throws Exception {
++        if (!custodyEnabled || certificateCustody==null || recovering==null
++                || !node.equals(recovering.getPrimary())
++                || recovering.getEpoch()!=membership.epoch+1
++                || !"RECOVERING".equals(recovering.getState())
++                || !recovering.replicaNodes().isEmpty()
++                || recovering.getLearners().size()!=1
++                || !membership.primary.equals(recovering.getLearners().get(0)))
++            throw new IOException("not certified old RF2 survivor in new epoch");
++        DurableWalCommitQuorum.Certificate head=certificateCustody.highestVerified();
++        if (head==null || head.committedSequence<1)
++            throw new IOException("missing authenticated old 2/2 ACK head");
++        DemoDurableJournal journal=journals.journal("P000");
++        synchronized(journal) {
++            if (!journal.isReadyForWrites() || journal.lastEpoch()!=membership.epoch
++                    || journal.committedSeq()!=head.committedSequence)
++                throw new IOException("uncertified physical WAL tail or epoch mismatch");
++            String actual=journal.committedPrefixSha256Through(head.committedSequence);
++            if (!head.commitPrefixSha256.equals(actual))
++                throw new IOException("old quorum certificate not covered by survivor WAL");
++        }
++        return head.committedSequence;
++    }
++
+     @Override public void close() throws Exception {
+         try {transport.close();}
+         finally {
+--- a/src/main/java/com/opentradingcore/demo/DemoPrimaryWriter.java
++++ b/src/main/java/com/opentradingcore/demo/DemoPrimaryWriter.java
+@@ -52,7 +52,7 @@
+ 
+     public Map<String,Object> append(String content) {
+         DemoV19DurableRuntime quorum=experimentalQuorum;
+-        if(localStreamPilot())return appendLocalStream(content);
++        if(localStreamPilot() || degradedLocalPilot())return appendLocalStream(content);
+         if(quorum==null)return appendLocally(content);
+         // Serialize acknowledgement ordering without holding the WAL monitor
+         // while background replica copy works on its fsynced backlog.
+@@ -111,6 +111,18 @@
+                 && "1".equals(System.getenv("DEMO_V19_LOCAL_ACK_STREAM_PILOT"));
+     }
+ 
++    /** Old 2/2 was certified before the controller switched to an explicit
++     * single-writer, single-WAL epoch. Grant cache contains a ZK-authenticated
++     * READY owner; no per-order ZK RPC or fake quorum ACK here.
++     */
++    private boolean degradedLocalPilot() {
++        if (async==null || experimentalQuorum==null
++                || !"1".equals(System.getenv("DEMO_V19_RF2_AUTO_DEGRADE"))) return false;
++        try {
++            PartitionAssignment grant=DemoHotpathControl.read("P000");
++            return DemoV19Rf2DegradedPolicy.mayUseLocalAck(true,true,grant,node);
++        } catch (RuntimeException noGrant) { return false; }
++    }
+ 
+     /**
+      * Explicit local-durable ACK, independent of the B/C data-node status.
+@@ -119,7 +131,8 @@
+      */
+     private Map<String,Object> appendLocalStream(String content) {
+         synchronized(reliableAckOrder) {
+-            if(experimentalQuorum!=null) {
++            boolean degraded=degradedLocalPilot();
++            if(experimentalQuorum!=null && !degraded) {
+                 Map<String,Object> denied=new LinkedHashMap<String,Object>();
+                 denied.put("code",503);
+                 denied.put("msg","local and quorum durability policies cannot be combined");
+@@ -143,8 +156,10 @@
+                                 partition,epoch,seq,
+                                 (e,s)->wal.requireForcedCommitted(e,s,requestId,delta),
+                                 (p,e)->DemoHotpathControl.requireCurrent(p,e,node,null));
+-                result.put("durabilityMode",ack.durabilityMode);
+-                result.put("quorumDurable",ack.quorumDurable);
++                result.put("durabilityMode",degraded
++                        ? "AUTO_DEGRADED_LOCAL_DURABLE" : ack.durabilityMode);
++                result.put("quorumDurable",false);
++                result.put("autoDegradedRf2",degraded);
+                 result.put("replicationPolicy","ONE_WAY_ASYNC_WAL_STREAM");
+                 Object remote=result.get("lastReplicatedSeq");
+                 long confirmedRemote=remote instanceof Number
+--- a/src/main/java/com/opentradingcore/demo/DemoZkFenceSource.java
++++ b/src/main/java/com/opentradingcore/demo/DemoZkFenceSource.java
+@@ -65,12 +65,27 @@
+                 throw new IllegalStateException("invalid replica membership");
+             replicas.add(replica);
+         }
++        requireValidDurabilityPolicy(values,epoch,state,replicas);
+         if (!zk.isConnected()) throw new IllegalStateException("disconnected after assignment read");
+         // Both ZK stat version and application assignmentVersion are preserved,
+         // so the before/after recheck fences either kind of transition.
+         return new DemoEpochFenceArbiter.Assignment(
+                 epoch, (((long) stat.getVersion()) << 32) | (appVersion & 0xffffffffL),
+                 primary, replicas, "READY".equals(state));
++    }
++
++    /** A singleton READY requires an explicit persisted, auditable downgrade.
++     * Never infer one-data-voter permission solely from the replica list.
++     */
++    static void requireValidDurabilityPolicy(Map<String,Object> values,long epoch,
++            String state,Set<String> replicas) {
++        if ("READY".equals(state) && replicas.isEmpty()) {
++            if (epoch!=2L
++                    || !"1".equals(System.getenv("DEMO_V19_RF2_AUTO_DEGRADE"))
++                    || !"AUTO_DEGRADED_LOCAL_DURABLE".equals(values.get("durabilityPolicy"))
++                    || !Boolean.FALSE.equals(values.get("quorumDurable")))
++                throw new IllegalStateException("unapproved singleton write durability policy");
++        }
+     }
+ 
+     /**
+--- a/src/test/java/com/opentradingcore/demo/DemoZkFenceSourceTest.java
++++ b/src/test/java/com/opentradingcore/demo/DemoZkFenceSourceTest.java
+@@ -13,6 +13,19 @@
+         assertFalse(g.frozen);
+         assertTrue(DemoZkFenceSource.decode(
+                 DemoZkFenceSource.encode(19, "CommonHaDemoB", true), 9).frozen);
++    }
++
++    @Test public void rejectUnmarkedReadyWithZeroReplicas() {
++        java.util.Map<String,Object> f=new java.util.HashMap<String,Object>();
++        denied(()->DemoZkFenceSource.requireValidDurabilityPolicy(f,2,"READY",
++                java.util.Collections.<String>emptySet()));
++        f.put("durabilityPolicy","AUTO_DEGRADED_LOCAL_DURABLE");
++        f.put("quorumDurable",Boolean.TRUE);
++        denied(()->DemoZkFenceSource.requireValidDurabilityPolicy(f,2,"READY",
++                java.util.Collections.<String>emptySet()));
++        // Non-ready recovery metadata is never a grant even without policy.
++        DemoZkFenceSource.requireValidDurabilityPolicy(f,2,"RECOVERING",
++                java.util.Collections.<String>emptySet());
+     }
+ 
+     @Test public void emptyBootstrapIsNotAWriteGrant() {
+--- /dev/null
++++ b/src/main/java/com/opentradingcore/demo/DemoV19Rf2DegradedPolicy.java
+@@ -0,0 +1,18 @@
++package com.opentradingcore.demo;
++
++import com.app.common.partition.PartitionAssignment;
++
++/** Pure additional guard. ZK grants, process readiness, local WAL fsync and
++ * fencing checks remain mandatory in their original service boundaries. */
++final class DemoV19Rf2DegradedPolicy {
++    private DemoV19Rf2DegradedPolicy() {}
++
++    static boolean mayUseLocalAck(boolean optedIn, boolean quorumRuntimePresent,
++            PartitionAssignment grant, String localNode) {
++        return optedIn && quorumRuntimePresent && grant!=null
++                && "P000".equals(grant.getPartitionId())
++                && grant.isRoutable() && grant.getEpoch()==2L
++                && localNode!=null && localNode.equals(grant.getPrimary())
++                && grant.replicaNodes().isEmpty();
++    }
++}
+--- /dev/null
++++ b/src/test/java/com/opentradingcore/demo/DemoV19Rf2DegradedPolicyTest.java
+@@ -0,0 +1,40 @@
++package com.opentradingcore.demo;
++
++import com.app.common.partition.PartitionAssignment;
++import java.util.Collections;
++import org.junit.Test;
++import static org.junit.Assert.*;
++
++public final class DemoV19Rf2DegradedPolicyTest {
++    private static PartitionAssignment assignment(String state,long epoch,String primary,
++            boolean hasReplica) {
++        PartitionAssignment a=new PartitionAssignment();
++        a.setPartitionId("P000"); a.setPrimary(primary); a.setEpoch(epoch);
++        a.setState(state);
++        a.setReplicas(hasReplica?Collections.singletonList("CommonHaDemoA"):
++                Collections.<String>emptyList());
++        return a;
++    }
++    @Test public void soleEpoch2OwnerCanUseLocalContractWhenOptedIn() {
++        assertTrue(DemoV19Rf2DegradedPolicy.mayUseLocalAck(true,true,
++                assignment("READY",2,"CommonHaDemoB",false),"CommonHaDemoB"));
++    }
++    @Test public void noImplicitFallbackInOriginalStrictEpoch() {
++        assertFalse(DemoV19Rf2DegradedPolicy.mayUseLocalAck(true,true,
++                assignment("READY",1,"CommonHaDemoB",false),"CommonHaDemoB"));
++    }
++    @Test public void recoveringIsNotClientWritable() {
++        assertFalse(DemoV19Rf2DegradedPolicy.mayUseLocalAck(true,true,
++                assignment("RECOVERING",2,"CommonHaDemoB",false),"CommonHaDemoB"));
++    }
++    @Test public void replicasPresentForbidLocalDowngrade() {
++        assertFalse(DemoV19Rf2DegradedPolicy.mayUseLocalAck(true,true,
++                assignment("READY",2,"CommonHaDemoB",true),"CommonHaDemoB"));
++    }
++    @Test public void noOptInNoQuorumRuntimeOrWrongOwnerForbid() {
++        PartitionAssignment a=assignment("READY",2,"CommonHaDemoB",false);
++        assertFalse(DemoV19Rf2DegradedPolicy.mayUseLocalAck(false,true,a,"CommonHaDemoB"));
++        assertFalse(DemoV19Rf2DegradedPolicy.mayUseLocalAck(true,false,a,"CommonHaDemoB"));
++        assertFalse(DemoV19Rf2DegradedPolicy.mayUseLocalAck(true,true,a,"CommonHaDemoA"));
++    }
++}
+--- /dev/null
++++ b/compose.v19-rf2-auto-degrade-e2e.yaml
+@@ -0,0 +1,126 @@
++name: otc-common-ha-v19-rf2-degrade-e2e
++
++# Physically separate Docker processes + WAL volumes, but still on the SAME
++# Mac/Docker VM: not three independent hardware failure domains.
++x-zk: &zk
++  image: docker.m.daocloud.io/library/zookeeper:3.8.4
++  restart: "no"
++  environment: &zk-env
++    ZOO_SERVERS: "server.1=otc-ha-zk1:2888:3888;2181 server.2=otc-ha-zk2:2888:3888;2181 server.3=otc-ha-zk3:2888:3888;2181"
++    ZOO_4LW_COMMANDS_WHITELIST: "ruok,stat,mntr"
++    JVMFLAGS: "-Xms64m -Xmx128m"
++  networks: [isolated]
++
++x-node: &node
++  image: dc-saas/gw:cluster-dev-fenced-transport-20261016
++  restart: "no"
++  environment: &node-env
++    JAVA_TOOL_OPTIONS: "-Dzookeeper.sasl.client=false -Xms96m -Xmx256m"
++    DC_ZOOKEEPER_SESSION_TIMEOUT_MS: "12000"
++    DC_ZOOKEEPER_CONNECTION_TIMEOUT_MS: "6000"
++    DEMO_REPLICATION_TRANSPORT: netty
++    DEMO_ASYNC_REPLICATION: "1"
++    # Legacy toggle selects async WAL pathway; the independent topology
++    # flag below controls whether P000 includes BOTH B and C replicas.
++    DEMO_TWO_NODE_ASYNC: "1"
++    DEMO_V19_THREE_DATA_NODES: "0"
++    DEMO_V19_RF2_SHARD_PILOT: "1"
++    DEMO_V19_DEDICATED_ENSEMBLE: "1"
++    DEMO_V19_SINGLE_FORCE_PILOT: "0"
++    DEMO_V19_COMMON_QUORUM_TEST: "1"
++    DEMO_V19_SINGLE_HOST_QUORUM_TEST: "1"
++    # Isolated single-Mac three-JVM GROUP fsync pilot only. Never production.
++    DEMO_V19_GROUP_FORCE_PILOT: "1"
++    # Carries pinned RSA/fysnced prefix receipts on legacy-compatible ACK messages.
++    DEMO_V19_SIGNED_BATCH_ACK_PILOT: "1"
++    DEMO_V19_CUSTODY_ACK_PILOT: "1"
++    DEMO_V19_RF2_AUTO_STAGE: "1"
++    # Explicit test-only agreement: after fencing, single WAL ACK may risk RPO > 0.
++    DEMO_V19_RF2_AUTO_DEGRADE: "1"
++  volumes:
++    - ./target-v19-auto-degrade-compiled:/tmp/v19:ro
++    - ./common-upstream-review-20261022/target/com.app.common-3.0.22-SNAPSHOT.jar:/tmp/common.jar:ro
++    - ./v19-quorum-secrets/public:/srv/v19/identities:ro
++  networks: [isolated]
++  depends_on:
++    otc-ha-bootstrap: {condition: service_completed_successfully}
++
++services:
++  otc-ha-zk1:
++    <<: *zk
++    hostname: otc-ha-zk1
++    environment:
++      <<: *zk-env
++      ZOO_MY_ID: "1"
++    volumes:
++      - zk1-data:/data
++      - zk1-log:/datalog
++  otc-ha-zk2:
++    <<: *zk
++    hostname: otc-ha-zk2
++    environment:
++      <<: *zk-env
++      ZOO_MY_ID: "2"
++    volumes:
++      - zk2-data:/data
++      - zk2-log:/datalog
++  otc-ha-zk3:
++    <<: *zk
++    hostname: otc-ha-zk3
++    environment:
++      <<: *zk-env
++      ZOO_MY_ID: "3"
++    volumes:
++      - zk3-data:/data
++      - zk3-log:/datalog
++
++  otc-ha-bootstrap:
++    <<: *node
++    hostname: triple-bootstrap
++    entrypoint: ["java", "-cp", "/tmp/common.jar:/tmp/v19:/srv/dc/dc/GW/lib/*",
++      "com.opentradingcore.demo.DemoV19ClusterHarness", "--bootstrap"]
++    depends_on:
++      otc-ha-zk1: {condition: service_started}
++      otc-ha-zk2: {condition: service_started}
++      otc-ha-zk3: {condition: service_started}
++    environment:
++      <<: *node-env
++      JAVA_TOOL_OPTIONS: "-Dzookeeper.sasl.client=false -Xmx128m"
++
++  otc-ha-demo-a:
++    <<: *node
++    hostname: otc-ha-demo-a
++    entrypoint: ["java", "-cp", "/tmp/common.jar:/tmp/v19:/srv/dc/dc/GW/lib/*",
++      "com.opentradingcore.demo.DemoV19ClusterHarness", "--node=A"]
++    volumes:
++      - ./target-v19-auto-degrade-compiled:/tmp/v19:ro
++      - wal-a:/srv/v19/wal
++      - ./common-upstream-review-20261022/target/com.app.common-3.0.22-SNAPSHOT.jar:/tmp/common.jar:ro
++      - ./v19-quorum-secrets/public:/srv/v19/identities:ro
++      - ./v19-quorum-secrets/a:/srv/v19/local-identity:ro
++  otc-ha-demo-b:
++    <<: *node
++    hostname: otc-ha-demo-b
++    entrypoint: ["java", "-cp", "/tmp/common.jar:/tmp/v19:/srv/dc/dc/GW/lib/*",
++      "com.opentradingcore.demo.DemoV19ClusterHarness", "--node=B"]
++    volumes:
++      - ./target-v19-auto-degrade-compiled:/tmp/v19:ro
++      - wal-b:/srv/v19/wal
++      - ./common-upstream-review-20261022/target/com.app.common-3.0.22-SNAPSHOT.jar:/tmp/common.jar:ro
++      - ./v19-quorum-secrets/public:/srv/v19/identities:ro
++      - ./v19-quorum-secrets/b:/srv/v19/local-identity:ro
++networks:
++  isolated:
++    name: otc-common-ha-v19-rf2-degrade-e2e-net
++    driver: bridge
++
++volumes:
++  zk1-data:
++  zk1-log:
++  zk2-data:
++  zk2-log:
++  zk3-data:
++  zk3-log:
++  wal-a:
++  wal-b:
++  wal-c:

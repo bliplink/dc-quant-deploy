@@ -4,6 +4,8 @@
 范围：Common 共用集群基础设施 + 隔离 Demo；通过后才适配 Order、Trade、MD。
 权威验收清单：`docs/COMMON_CLUSTER_REQUIREMENTS.md`；详细历史：`docs/COMMON_HA_SHARD_PLACEMENT_REPLICATION_DESIGN_20261023.zh-CN.md`。
 
+> **2026-10-23 最新产品可用性决定（覆盖本文以下早期 NO-GO/严格 2/2 仅等待备机的历史描述）**：A/B 任一节点故障后，另一节点不仅要自动取得合法新 Epoch，还必须在旧主被隔离、旧已 ACK 前缀可验证、ZooKeeper 多数可用、本地 WAL 正常时，**自动以 `AUTO_DEGRADED_LOCAL_DURABLE` 单节点持久化方式继续下单、撤单与撮合**。它对新写入只承诺本地 fsync，不能承诺两份数据/零 RPO；正常双节点运行仍使用严格复制模式。该自动降级为明确配置并在 ZooKeeper Assignment 与客户端 ACK 标记的合同，不是默默降低原 2/2 的安全承诺。独立 Demo 已验证单分区 P000，尚未进入 Order/Trade/MD。
+
 ## 1. 架构决定：统一协议，两两互备只是默认放置策略
 
 - **只实现一套按分区的成员、Epoch、租约、WAL、Snapshot/Diff、恢复协议**；`PartitionBuddyPlacementPlanner` 只是 RF2 的初始放置策略，不能作为第二套复制/选主框架。
@@ -124,3 +126,31 @@
 
 - 证据保存完成后为避免占用同一台 Demo Mac 的 CPU/RAM，**仅停止** `otc-common-ha-v19-rf2-auto-stage` 隔离测试 Compose 的 A/B/ZK 容器；全部独立 ZooKeeper/WAL 卷及原容器仍在，没有执行 `down -v`。后续保留现有 `B/Epoch2/RECOVERING` 状态重启时使用 `docker compose -f compose.v19-rf2-auto-stage.yaml start`，不要重新运行只接受初始 Epoch1 的 bootstrap；如需全新验收，先有意识地保存证据再只重置该隔离项目。
 - 停止实验后的正式 `dc-saas-ordersvr`、`dc-saas-tradesvr` 仍正常运行；原 `otc-common-ha-v19-rf2-custody-pilot` A/B 原实验容器未停止。Mac 磁盘剩余约 22 GiB（95% 使用），不宜无约束启动重复压测容器。
+
+
+## 12. RF2 自动降级单节点继续交易（产品方向修订与真实验收）
+
+**业务目标**：故障切换后必须继续正常交易，不能因为备机缺失长期 503。此项修正覆盖本文件早期“B 需等 A 追平才可写”的历史实现判断：旧严格 2/2 合同不能单机继续，但要通过**显式改为新的持久化合同**达到高可用目标。
+
+- 正常期：A/B 两副本确认（旧 Epoch1 `QUORUM_DURABLE_SINGLE_HOST_TEST`）；A 被强杀、ZooKeeper 确认旧成员失效后，B 独立核验 `DurableWalCertificateCustody` 已 fsync 的旧 2/2 certificate、WAL 完整历史 SHA 与最大 ACK 序号，拒绝未经认证尾部；Common 通过 ZK CAS 进入 B/Epoch2/RECOVERING。
+- **自动继续服务**：明确配置 `DEMO_V19_RF2_AUTO_DEGRADE=1`，隔离旧租约的保护窗口后，再以 ZK Assignment 版本 CAS 原子发布 `state=READY, primary=B, epoch=2, replicas=[], durabilityPolicy=AUTO_DEGRADED_LOCAL_DURABLE, quorumDurable=false, degradedFromCertifiedSeq=8`。数据平面必须再次持有当前 Epoch2 的可撤销短 TTL grant 才能写；每次 ACK 用 Common `DurableWalLocalAckGate.requireLocalDurable()` 校验 B 本地 forced WAL 及当前授权。
+- 降级期间客户端 ACK 返回 `durabilityMode=AUTO_DEGRADED_LOCAL_DURABLE`, `quorumDurable=false`, `autoDegradedRf2=true`, `possibleDataLossIfPrimaryPermanentlyLost=true`。业务继续执行，**B 若永久损坏且旧 A 未追上，Epoch2 期间已 ACK 的 WAL 可能丢失**，不可标识为 2/2 零丢失。
+- ZooKeeper 多数失联、grant 超时、旧主 fencing 尚未成立、旧可信 WAL 头与当前前缀不一致或存在未经认证脏尾时，必须 503；这是防双主/防丢已确认数据的真正安全边界。ZK 多数恢复后同一 Epoch 被撤权的本地 grant 仍不应直接复活，下一项任务是通过合法新 Epoch 自动重新授权。
+- 当 A 返回时，它只能先成为 Learner：先追平 B 降级期间的所有已 ACK WAL、校验快照/原始尾部/请求去重，再将 A 升为 B 的 Replica 并恢复双副本确认。**这一步尚未实现**，因此现在不能承诺第二次 B 故障能无损切给仍落后的 A。
+
+### 2026-10-23 两轮 Docker 真实观测
+
+| 验证 | 结果 |
+|---|---|
+| 原隔离试验原有 seq 8、B 自动 Epoch2 READY 后本地写入 | seq9 ACK 成功；重复 requestId 仍 seq9，appliedCount=1；后续 seq10；重启 B 从 WAL 恢复 seq10 后继续 ACK seq11 |
+| 丢失 3 ZK 中 2 台节点的多数 | B 在 grant 失效后返回 503，PASS（不允许同 Epoch 无仲裁持续写） |
+| ZK 恢复多数后的原进程同 Epoch 自动重授 | **FAIL/未实现**，旧 revoked grant 不允许凭网络恢复偷偷续发，需要显式新 Epoch 机制 |
+| 新建 `compose.v19-rf2-auto-degrade-e2e.yaml` 独立实例 | A/B+3 ZK 与原试验完全分离，原双节点 8/8 严格 ACK，全部 appliedCount=1 |
+| 新实例真实 SIGKILL A，无人工改 ZK | B 自动发布 Epoch2/RECOVERING，再自动发布 Epoch2/READY 单节点本地持久化模式 |
+| 新实例故障后首轮 TCP ACK | 在故障检测+安全隔离窗口约 17 秒时曾返回 503；数秒后重试成功，seq9，Epoch2，`quorumDurable=false`。切换中短暂拒绝可以接受，但**不能长期拒绝**；故障恢复耗时尚未达到低延迟目标 |
+| 新实例 A 重启后旧主写入 | 503 拒绝，A seq8，B seq9；没有双主，**A 自动追平仍未通过** |
+| Demo 全量 Maven | 36 suites / 138 tests：**137 通过，1 跳过，0 失败，0 错误**；包含新的 RF2 降级策略校验单测 |
+
+**代码与配置复现**：之前自动 Epoch staging 基础补丁 `tests/patches/common-v19-rf2-auto-stage-real-zk-20261023.patch`；本轮后续代码和 Compose 增量补丁 `tests/patches/common-v19-rf2-auto-degrade-local-20261023.patch`（经 `git apply --check` 与应用内容逐文件验证）。本轮只更新了独立 Demo，尚未将新的持久化模式正式抽成 Common 的统一可配置策略；正式 RF2/Order/Trade/MD 以及多物理节点验收保持 NO-GO。
+
+**下一关（按顺序）**：A Learner 从 B 的 Epoch2 ACK 尾部自动追平 → ZK 恢复 2/2 的新配置与 READY → A/B 双向多次 SIGKILL 仍能继续交易 → ZooKeeper 仲裁恢复后的合法新 Epoch 自动重授权 → 256 分区 / 4 节点 / 压力测试。性能重点是降低当前十余秒的故障检测和旧授权等待，而不能缩短到双主的风险窗口以下。
