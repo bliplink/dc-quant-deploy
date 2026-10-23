@@ -1,0 +1,3 @@
+b94dd4fb6888eb16d93f6871fb2815fcedf2d8ceffb3fc5f178acdd6cf84ced9  src/main/java/com/opentradingcore/demo/DemoV19FourNodeStrictWriterGate.java
+5ff303a33fd2b61c5b05e2a618ef8ba088816d3a90f1e4c53764c720a8d60d9e  src/main/java/com/opentradingcore/demo/DemoV19FourNodeLiveRuntime.java
+5dcb5296686c945e17897b7de21d25a2038f99edca0dc495cc2b1688956a37c2  src/test/java/com/opentradingcore/demo/DemoV19FourNodeStrictWriterGateTest.java
