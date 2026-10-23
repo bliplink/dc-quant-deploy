@@ -166,3 +166,6 @@
 - 性能边界：仅 P000 且每次最多 16MiB WAL 镜像；全量复制、每轮封存原始 WAL 属于阶段性可靠性试验，不可直接推广到 256 分区。生产仍需 Common 的原始 WAL 区间增量续传、差量 Snapshot/Diff、自动归档删除与 CPU/IO 压测。
 
 **剩余 NO-GO**：A 只是 Learner，还未通过 ZK 原子配置变更成为 B 的有效同步 Replica；B 当前 ACK 仍标记 AUTO_DEGRADED_LOCAL_DURABLE，不能声称恢复 RF2 2/2。下一步要建立写入屏障/最高已 ACK 边界/新 Epoch 与配置 CAS 的切换事务，将 A 转为 Replica、恢复定向 WAL 复制与累计持久 ACK，再 SIGKILL B 验证 A 自动接管及继续交易。ZK 仲裁恢复后的自动新 Epoch 重授权、256 分区及真实多物理节点压力测试亦未验收。
+
+- 故障测试结束后核对 A 的持久恢复证据：.rf2-learner-evidence 下实际存在 **2 份旧原始 WAL 归档和 2 份 receipt**，对应 seq10 与 seq11 两轮自动追平，未直接删除/覆盖无法审计的原始尾部。为降低同一 Mac 压力，本轮仅将 otc-common-ha-v19-rf2-degrade-e2e 隔离项目容器 stop，保留原 ZooKeeper/WAL 卷，正式 Order/Trade 容器未动，磁盘剩余约 21GiB。
+- **恢复操作注意**：此隔离项目已处于 B/Epoch2 配置，不能再次运行仅接受全新 Epoch1 的 bootstrap；它会因 Assignment 不符安全退出，属于预期行为。继续验证时直接 start 三个 ZooKeeper 与现有 A/B（或以 --no-deps 重建独立节点），不要用普通 up 强制重复 bootstrap，更不要 down -v。上线前应补可重入的“只读校验当前配置”启动路径。
