@@ -121,3 +121,6 @@
 - 本轮 v19 源码及 Compose 变更保存在 `tests/patches/common-v19-rf2-auto-stage-real-zk-20261023.patch`，已通过目标 v19 工作树 `git apply --reverse --check` 校验；Common 控制核心来自本地 `ca6f1d5`。
 
 **放行边界**：本轮实现和验证的是 **自动选主 + 旧主 Fencing + 非路由恢复状态**，不是自动 `RECOVERING → READY` 或双向连续交易。v19 的 `DemoV19DurableRuntime` 仍把签名数据成员固定到 A/Epoch1，尚未有 Epoch2 动态成员与恢复证明安装；A 重启后虽然 WAL 与 B 一致，但不能自动成为 B 的严格 Epoch2 Replica，也不能恢复写入。下一步集中解决这条真实链路：动态持久成员 Epoch、Learner 追平/原始尾部隔离、新配置 2/2 可信提交边界、READY 原子发布、A/B 角色轮换多次故障；然后再做 256 分区和性能压测。当前仍 **NO-GO**。
+
+- 证据保存完成后为避免占用同一台 Demo Mac 的 CPU/RAM，**仅停止** `otc-common-ha-v19-rf2-auto-stage` 隔离测试 Compose 的 A/B/ZK 容器；全部独立 ZooKeeper/WAL 卷及原容器仍在，没有执行 `down -v`。后续保留现有 `B/Epoch2/RECOVERING` 状态重启时使用 `docker compose -f compose.v19-rf2-auto-stage.yaml start`，不要重新运行只接受初始 Epoch1 的 bootstrap；如需全新验收，先有意识地保存证据再只重置该隔离项目。
+- 停止实验后的正式 `dc-saas-ordersvr`、`dc-saas-tradesvr` 仍正常运行；原 `otc-common-ha-v19-rf2-custody-pilot` A/B 原实验容器未停止。Mac 磁盘剩余约 22 GiB（95% 使用），不宜无约束启动重复压测容器。
