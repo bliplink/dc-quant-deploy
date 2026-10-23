@@ -140,3 +140,6 @@
 
 - **T41（2026-10-23：P000 A/B和P128 C/D启动前RSA双节点证明PASS）** 4个持续Netty JVM各自持久存储2048bit RSA私钥、公钥只在独立ZK create-once绑定；两组真实分区分别以32B随机挑战和当前ZK assignment version0、节点/主备身份及各自clean/空WAL seq0 SHA独立签名并验证，两份证据写入不可覆盖的preflight-evidence ZK节点（读取还须version0），持久ZK重启、4节点重启后原签名重新验证通过。SIGKILL C时当前证明拒绝，恢复C再次通过。全Demo197项测试196通过、1跳过、0失败。真实Common WAL seq1/CommitIndex/双Custody和客户严格ACK尚不存在，不得发布READY。
 - **T42（仍未完成）** 在上述A/B、C/D双签名PRECHECK上，接入真正分区级Epoch写入授权与可信空集群Genesis（不能用虚构订单或seq0冒充已提交证书），按旧主fencing与ZK CAS恢复事务写入真实fsync WAL seq1，产生Common验证过的2/2 WAL RSA quorum证书并在两节点独立fsync Custody；之后接入动态 PrimaryWriter+Netty持续复制/严格ACK，真实主切和恢复，最后扩大256分区/10–50–200租户、TPS/p99与资金持仓订单成交及Projection权威一致性。Mac约12GiB剩余，压力测试前需安全释放空间，禁止删正式业务及严格Epoch9证据卷。
+
+- **T43（2026-10-23：P000/P128两组独立物理Genesis WAL和bootstrap双保管PASS）** A/B与C/D各自fsync 108字节非业务Genesis控制帧（epoch1、seq0、分区+成员摘要）；每组两个独立RSA签名及原始ZK证据create-only、各自WAL物理哈希相同。又在四个独立WAL卷fsync不可覆盖的bootstrap custody head.bin，两伙伴hash一致。完整ZK+JVM重启仍可验签和恢复；SIGKILL C期间拒绝，恢复C后通过；256分区512Netty请求仍PREPARING、未授权写拒绝。Demo205测试204通过、1跳过、0失败。
+- **T44（NO-GO：Common真实双fsync交易ACK/4节点HA仍待验收）** seq0 Genesis metadata和其bootstrap custody并不等于Common seq>=1 DurableWalCommitIndex业务证书/两节点真正证书保管。须实现安全真实业务seq1、分区授权和旧主fencing、Common签名2/2 commit证书与独立双Custody、ZK CAS READY和客户端严格ACK，并真实杀主恢复及权威业务对账，方可扩至256分区/10-50-200租户TPS/p99/burst；本机剩约11GiB、98%磁盘占用，禁止损坏正式业务或Epoch9证据卷。

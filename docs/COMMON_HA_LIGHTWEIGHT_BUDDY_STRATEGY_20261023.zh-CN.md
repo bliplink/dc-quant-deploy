@@ -355,3 +355,17 @@ Demo本地Maven全量回归：46 suites/193 tests，192 PASS、1 SKIPPED、0 FAI
 源码4文件精确快照 tests/patches/common-v19-four-node-dual-rsa-empty-wal-preflight-20261023.tar.gz 和同前缀 .sha256 文件，已安全解压在独立临时目录逐字节核对；**不会随源码归档用户/节点私钥**，私钥只保留在隔离测试 WAL 卷。试验容器现已停止，原三ZK及四独立WAL（该项目共10个卷）和上一轮严格Epoch9另8个证据卷均保留；正式Order/Trade/MD未变更、不用GitHub Actions。Mac仍419–420/460GiB已用、剩余约12GiB、98%，200租户高压仍暂缓。
 
 **当前的准确边界**：两个分区已经完成分区级密钥持久化和双独立 RSA 空WAL签名 preflight，并有ZK可信重启审计证据；尚**没有**完成真正 Common RF2 提交型WAL Genesis、CommitIndex链、双证书Custody、分区ZK READY、A/B或C/D真实新订单2/2 ACK或故障后自动续写。下一步要先在明确独立旧/新Epoch授权、分区级写入隔离的前提下生成真实fsync seq1（且不能把模拟业务写入混作系统Genesis），再收两节点Common DurableWalCommitQuorum收据、双保管后CAS READY，方可扩到256并发交易。此阶段归类为PRECHECK PASS、交易HA仍NO-GO。
+
+## 25. 2026-10-23：P000/P128 真正物理 WAL Genesis 元数据帧 + 双节点独立 Genesis 保管
+
+承接第24节四节点 RSA 空 WAL preflight，本轮新增真正刷盘的非业务物理 WAL Genesis 控制帧。DemoDurableJournal 新增 GENESIS=4 格式，包含 version、partitionId、原始 assignment SHA256、epoch1和seq0，通过 FileChannel.force(true) 强制持久化；重启时独立校验帧格式和 CRC。它不制造虚假订单、成交或资金变化，业务 committedSeq 仍为0，首次真实业务从seq1开始。损坏、分区/成员不一致、非空历史、重复冲突全部 fail closed。注意这尚非Common生产持久提交协议。
+
+只选择 P000(A主/B备)、P128(C主/D备) 两个分区，各自节点通过真实Netty请求，校验此前独立RSA preflight 的不可覆盖ZK证明与 assignment/version0、本地 WAL 独占文件锁后执行fsync Genesis。两个节点分别对真实物理 WAL hash、成员身份、epoch、分区和新32字节随机挑战做RSA签名，协调者校验两份独立签名与两份WAL哈希完全相同，并在该隔离ZK的 genesis-record-evidence 路径create-only保存完整证明。重复运行重验原始证据和两节点现存WAL，不覆盖旧记录。
+
+真实Docker实测：P000的A/B两个物理WAL文件均108B，SHA256为 611a6c2bda166a73784a5c2d0add1d0722d11d7ef53e68760637501f0a2b23cb；P128的C/D均108B，SHA256为 8c0a71d737218ffdaa8ddd179024fd6ed84df443b0f0fe0a25db9b57eb76b00d。重复运行、全部3个ZooKeeper与4数据JVM停止再重启后，WAL重放与两RSA签名再次通过。SIGKILL C 时核验拒绝，C恢复再通过。
+
+又新增独立的 Genesis BOOTSTRAP CUSTODY（注意不是Common DurableWalCertificateCustody业务提交证书）：A/B、C/D各自将分区、primary/replica、成员摘要、持久签名证明hash、真实WAL Genesis hash的规范化文件原子fsync到自己的WAL卷 .genesis-bootstrap-custody/Pxxx/head.bin，文件内容不许覆盖、伪造或回滚，残留pending或损坏即拒绝。再用各节点自己的RSA签名响应新随机挑战，两份物理文件hash需相同。实测A/B独立文件SHA256均为 1f759c668d8fac8c5c5633dd8816fd1266100b0d15f7def36b2a9e4939ae738c；C/D均为 58513d9de51a6d0804787affcc2c9f62f58e3615314bf24692c9bbc917ee1cce。SIGKILL C时证明拒绝，恢复C后通过。再停止重启全部ZK和4数据JVM之后，两个分区各自的双本地文件仍可复核。
+
+本轮仍复测了原256分区/512次真实Netty状态RPC：全部PREPARING/ready=false/clientReady=0/realTrades=0，四个节点的未经授权真实WAL Batch与COMMIT控制继续拒绝。Demo Maven全量回归50 suites、205 tests、204通过、1跳过、0失败/错误。精确9源码/测试/Compose文件快照 tests/patches/common-v19-two-buddy-fsynced-genesis-double-custody-20261023.tar.gz，sha256清单同前缀，已在临时目录安全解压逐文件字节比较。未归档任何私钥。隔离容器已停止，原有ZK/WAL证据卷和旧严格Epoch9另8卷保留；正式Order/Trade/MD未变更、不执行GitHub Actions。Mac约11GiB空闲、98%磁盘使用率。
+
+**严格边界**：新的seq0 Genesis和双签名bootstrap custody，均不是Common seq>=1的RSA DurableWalCommitIndex业务提交证书，也不是该证书的两节点Common Custody；没有ZK CAS READY，也没有真实订单ACK、自动主切或256分区并行交易通过。下一步必须对分区级fencing、授权多数、安全写入seq1、两个WAL fsync、Common commit证书和两物理Common Custody做完整闭环，然后才可发布READY、向客户端返回严格2/2 ACK以及进行业务故障/压力验收。当前属于初始化安全机制PASS、完整四节点业务HA仍NO-GO。
