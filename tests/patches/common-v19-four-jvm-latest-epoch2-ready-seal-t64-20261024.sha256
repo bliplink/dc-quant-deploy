@@ -1,0 +1,3 @@
+05bb03277a0d5a078a1765571a78ed1ea833316c628714154101f21e47647141  src/main/java/com/opentradingcore/demo/DemoV19FourNodeEpoch2ReadySeal.java
+f7d71b3638e8259496a2ed0d3a9b6de1af61295a3141a8393161704ec4a0591f  src/main/java/com/opentradingcore/demo/DemoV19FourNodeLiveRuntime.java
+5e115237aca641551fbb9073138bc9ce0af06aafd2b262782b59943bcff0df03  src/test/java/com/opentradingcore/demo/DemoV19FourNodeEpoch2ReadySealTest.java
