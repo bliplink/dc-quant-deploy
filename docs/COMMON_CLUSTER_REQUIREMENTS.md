@@ -131,3 +131,6 @@
 
 - **T35（2026-10-23：RF2 buddy 256分区本地规划合成基准 PASS）** Common现有PartitionBuddyPlacementPlanner按2节点每个128主、4节点A/B与C/D每个64主、8节点每个32主做单buddy复制；新规划只能PREPARING、不能自行READY；新增本地PartitionBuddyPlacementLoadProbe/ScaleTest，Common commit 786bdbc，40次256分区规划4节点median1.179ms/p99 4.867ms（仅Java规划CPU，不是交易p99/TPS）；Common本地全量423单测全部通过。
 - **T36（未完成）** 实际4独立数据JVM、256分区ZK PREPARING和认证READY、两组buddy持续WAL、自动故障注入、10/50/200租户真实负载TPS与p99、2–3倍burst、最终资金/持仓/委托/成交/Projection一致性均需验收。目前Mac磁盘仅剩12–13GiB，虽已安全清理两个停止的旧实验Compose及未引用镜像，宿主空间未显著增加；高压前必须定量处理磁盘资源，不允许删除正式容器卷/当前严格Epoch9证据。
+
+- **T37（2026-10-23：真实3ZK+4JVM的256分区catalog/WAL准备PASS）** 独立Docker 3 ZK、4独立JVM审计，共256 ZK PREPARING、epoch1、version0 assignments；A/B、C/D两组buddy，每节点64主+64备；四个独立WAL卷，每节点128个干净、未提交、无READY授权的WAL；停止重启全ZK后幂等bootstrap及四JVM重新审计通过。Demo189项测试188通过、1跳过、0失败；未运行实际复制或订单。
+- **T38（尚未通过）** 去掉v19交易Harness/P000/A-B静态限制，接通动态(分区/节点/epoch)Netty WAL、认证Genesis/CommitIndex及A/B-C/D双custody，分区级ZK版本CAS授权READY；进行真正256分区同步持久ACK、4数据节点主切和恢复、10/50/200租户稳态/burst的真实TPS/p99及资金持仓委托成交Projection权威一致性。磁盘仅约12GiB，200租户高压前应清出真实宿主空间，不能删生产或Epoch9证据卷。

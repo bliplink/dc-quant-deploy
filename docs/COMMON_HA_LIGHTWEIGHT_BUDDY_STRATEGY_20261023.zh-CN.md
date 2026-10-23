@@ -307,3 +307,17 @@ A 控制线程随后自动执行 Epoch9 / FREEZE → GENESIS_PREPARE(seq16) → 
 下一阶段应先为4个独立数据JVM准备各自WAL目录及相互独立数据身份，在隔离ZK下创建P000–P255 PREPARING并验证2组buddy的认证Genesis/READY；随后真实持续下单/撤单/撮合测试256分区、SIGKILL四节点中的任一主/备，以及租户10→50→200每档稳态不少于5分钟、p50/p95/p99、TPS、CPU/RSS/磁盘IO/网络、2–3倍burst；最终做资金/持仓/委托/成交及Projection权威一致性检查。性能上始终只有一个buddy副本目标，严格模式的双签名与保管仍需测量实际CPU和耗时。
 
 **结论：Common RF2 256分区规划层PASS；4物理数据进程、256分区并发交易、200租户和生产级HA均未验收。**
+
+## 22. 2026-10-23：3 ZK + 4 独立 JVM 的 256 分区 PREPARING 和 WAL 初始化验收
+
+接续第21节 Common 初始 RF2 buddy 纯Java规划，本轮独立 Compose 文件为 compose.v19-rf2-256-catalog.yaml（项目 otc-common-ha-v19-256-catalog），真正启动三个独立ZooKeeper容器和A、B、C、D四个独立JVM元数据审计进程，并为四个JVM分别挂载wal-a/b/c/d独立Docker卷；依然全部位于同一台Mac Docker VM，非四物理故障域。
+
+新增 DemoV19FourNodeShardCatalog 直接调用Common PartitionBuddyPlacementPlanner.proposeNew(256,1,...)。在专属ZooKeeper路径 /dc/cluster/commonhademo/v19-four-node-placement-pilot/assignments 真实写入256个P000–P255 assignment，epoch1、assignmentVersion0、全部PREPARING，0个可路由READY。首次bootstrap成功；四个JVM分别独立读取和校验全部256条ZK数据，每节点持有64 primary+64 standby、其余128不属于该节点。ZK的stat.version必须为0，内容必须与初始提案严格相同；缺失/额外成员、主备混淆、READY提前发布和已有数据被修改都会拒绝，绝不覆盖既有分配和证据。
+
+新增 DemoV19FourNodeWalSlots：基于每个节点被规划分配的64主+64备，在该节点专属持久Docker卷打开、FileLock、检查各128个Pddd.wal文件，四节点共512份局部空WAL；未写入任何交易，也未授予Epoch授权。它会拒绝共享外组WAL目录、未认证的数据记录、脏尾部和符号链接，不删除原有数据。新增8项JUnit测试（catalog 5项、WAL slot 3项）全PASS。
+
+为了验证恢复持久性，全部三台ZK进程实际停止并重启；原卷保留，重复运行bootstrap，幂等成功且不篡改旧256条记录；四个JVM再次启动，独立读回256个分区及各自128份局部WAL，四项 audit 结果均PASS、退出码0。隔离项目容器已停止，持久卷仍保存。旧严格Epoch9的8份证据卷未动；正式Order/Trade/MD保持运行，不执行GitHub Actions。
+
+本轮Demo Maven全量回归：45 suites / 189 tests，188 PASS、1 SKIPPED、0 FAIL/ERROR。精确5文件Java/Compose源码阶段快照：tests/patches/common-v19-256-partition-four-node-zk-wal-catalog-20261023.tar.gz，并附同前缀SHA256 manifest，经独立临时目录安全解压逐文件字节验证。源码快照不是独立增量Git补丁，后续应审核差异再合入正式服务。
+
+**当前只验收了真实4个独立JVM的metadata+WAL slot准备，不是4个持续交易数据节点。** v19主交易Harness/HA控制器仍硬编码P000、A/B与部分端点，未来须抽象分区级ZK租约、动态四节点Netty路由、RF2证书、CommitIndex/Custody和WAL复制，再让A/B、C/D两组真实逐分区签名Genesis→CAS READY→同时交易/故障。256并行分区TPS、10/50/200 tenants以及Order/Trade/MD/Projection最终对账均未验收。Mac剩余约12GiB、98%磁盘利用率，尚不适合直接进行200租户高压。
