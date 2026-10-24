@@ -1,0 +1,7 @@
+49b1592d5653ca55a85b280dca2775bcc75c23f88027e92a251945b4d7426a58  common-upstream-review-20261022/src/main/java/com/app/common/replication/DurableWalAckPolicy.java
+3329f5efd0df229a9f2388223f6f479f2e8a1292d9364355a04c4840d288e5d5  common-upstream-review-20261022/src/main/java/com/app/common/replication/DurableWalAckPolicyBinding.java
+fe7cc02b99a4e092c39369e2445c7975fc0bcf9447bb1d0062b85c27cac59a04  common-upstream-review-20261022/src/test/java/com/app/common/replication/DurableWalAckPolicyTest.java
+77ddaa1e11c98d2527169a28007dbc546187bc1d4a6d4d68e61234f9da3efe20  common-upstream-review-20261022/src/test/java/com/app/common/replication/DurableWalAckPolicyBindingTest.java
+7d3d89a08ebde378416a6eceb4434ff9f6157290f2d7f37959d4bc4e8b0f7357  src/main/java/com/opentradingcore/demo/DemoV19AckPolicy.java
+58437a111a20cc0bfe1f0d91e468f591417b097a4d0952c79ad23f81aba155a3  src/main/java/com/opentradingcore/demo/DemoPrimaryWriter.java
+6d301cf315ad6c5974fd7053d7897ec978281e96da126dcbc8083066b384332e  compose.t71-fresh-ack.yaml
