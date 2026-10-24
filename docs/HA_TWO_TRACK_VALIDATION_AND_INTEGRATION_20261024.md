@@ -19,3 +19,8 @@
 - T84 新集成 Jar 初次启动暴露旧 V19 缺 `DurableWalGroupCommit$Writer`，以及 RF2 单活恢复必须先 `RECOVERING` 非 READY 的兼容性差异；正在隔离分支补齐并复测。不能宣称 T84 故障切换 PASS。
 
 最新 T84 实测见 [COMMON_HA_T84_VERIFICATION_20261024.md](COMMON_HA_T84_VERIFICATION_20261024.md)。Common 集成 439/439 PASS，T84 隔离双向自动主切局部 PASS，端到端性能与正式业务 HA 仍 NO-GO。
+
+## Order/Trade 最新远端依赖预检（2026-10-24）
+- 已拉取/检查远端：`com.app.dc` `saas-crypto` HEAD `e85100e` 对 `com.app.common` 依赖为 `3.0.22-SNAPSHOT`；Order `7871ab6`、Trade `9ddae7d` 都依赖 `com.app.dc:0.0.5-SNAPSHOT`。此处应以**远端最新**而非本机陈旧 `.work` checkout 的版本为准。
+- 因当前 T84 认证源码只在 Common 独立分支，远端 `3.0.22-SNAPSHOT` 与本地验证的同名 SNAPSHOT **不得视为同一字节内容**。业务集成第一关须锁定集成源码提交 SHA/JAR hash，并构建与 `com.app.dc` 匹配的候选二进制，不能悄悄使用 Maven 缓存的另一份 SNAPSHOT。
+- 可立即推进 Order/Trade 源码级 API 接入及非主节点构建回归；但严格双 Custody 客户端 ACK、安全自动选主和资金/持仓/委托/成交一致性尚未在这两个**实际业务服务**验证，正式 Demo 业务替换仍 NO-GO。
