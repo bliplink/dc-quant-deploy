@@ -43,9 +43,11 @@
 
 ### 持久化最终一致性
 
-- T83 Epoch 5 恢复并完成全部 24 次严格 ACK 后，A/B `P000.wal` 均 **3388 bytes**，SHA256 均为 `b0693434d8db185c3f9e81b52f9d2ccf0e1f4faf2ec571dd5e80313c4457ea38`，已提交末端为 seq 32。
+- T83 Epoch 5 恢复并完成 24 次单条严格 ACK 后，A/B `P000.wal` 均 **3388 bytes**，SHA256 均为 `b0693434d8db185c3f9e81b52f9d2ccf0e1f4faf2ec571dd5e80313c4457ea38`，已提交末端 seq32。
+- 随后追加两个严格 Netty GROUP 压测：**8 组 ×32 WAL ×单 worker**，成功 256/256，0 失败，68.780 WAL ACK/s，单组 p50 334.889ms，p95/p99 748.593ms，seq32→288；**8组×32 WAL ×4 workers**，成功256/256，0失败，95.098 WAL ACK/s，单组 p50 1099.927ms，p95/p99 1692.150ms，seq288→544。分组客户端耗时和 TPS 均为真 RPC，不是模拟请求。
+- 因此 **最终 WAL 已提交末端 seq544**；A/B `P000.wal` 均 **55964 bytes**，SHA256 都是 `f7380c0a4604e1dad6e222f8326c27941afea4bbc8b221747eb673727a0a0c31`。
 - Epoch 3 `receipt-quorum.bin` A/B 一致：`cae990f0c331568ab82c5e95acabd78e3cc9dad76598ff8603848d5bf68b470c`。
-- Epoch 5 `receipt-quorum.bin` A/B 一致：`a7ffd0b0d92d53b778b491ad41e9627f261289b74d4468f6dd5c12e6e30e50fa`。
+- 最终 Epoch 5 `receipt-quorum.bin` A/B 一致：`add6943b1fa3dadce444cd26486328e4a913e7bff26d5647938c829b2144c7bc`；账本随随后提交继续前进，不应再以 seq32 的旧哈希作为最终值。
 - 最终 ZK `P000`: Epoch 5、Primary=A、Replica=B、state=READY、`QUORUM_DURABLE`、`quorumDurable=true`。
 - T83 测试保留自身 Docker evidence volumes；生产 Demo Order / Trade / MySQL / MD 未作更改。
 
@@ -54,10 +56,10 @@
 | 项目 | 目标 | 当前可审计结论 |
 |---|---|---|
 | 单条本地 WAL / 网络严格 ACK | 端到端 < 5–10ms | **未达标**；T83 严格客户端 ACK p50 174–293ms，p95 615–1087ms。纯 WAL fsync 与严格 ACK 不应混同，纯 WAL 单测指标还缺 |
-| 批量分摊 | <1ms/条 | 本轮未完成可靠的 8/32 批次客户端分摊统计 |
+| 批量分摊 | <1ms/条 | **未达标**；32 条/组单 worker 实测 68.78 WAL/s、即约 14.54ms/条的端到端吞吐摊销；4 workers 95.10 WAL/s、约 10.52ms/条的端到端吞吐摊销；不是每条独立等待时延 |
 | SIGKILL → 可写故障切换 | <1s | **未达标**，约 20s 才得到风险标记正确的单节点 `READY` |
 | 严格 2/2 恢复冻结→READY | 越短越好 | T82 约 33–35s，T83 22.256s / 23.461s；条件不完全相同，不能当严格对照实验 |
-| 单分区 1–2k msg/s、256 分区线性扩展 | 目标 | 单 worker 严格写仅 2.84–3.74 ACK/s；未做全并发、256 分区合规压测 |
+| 单分区 1–2k msg/s、256 分区线性扩展 | 目标 | **未达标**；单 worker 严格单条写仅 2.84–3.74 ACK/s；32/group 4 workers 最大只达到 95.10 WAL/s，距离 1–2k 很远；尚未测 256 分区 |
 | 10 / 50 / 200 租户、2–3x burst | 稳态/突发 | 本轮未开始 |
 | Order/Trade/MD 真实资金/持仓/委托/成交/Projection 账本对账 | 严格一致 | 本轮未开始 |
 
