@@ -36,12 +36,24 @@ for item in (
     check('Common owns ' + item, (shared / item).is_file())
 for name, relative in (
     ('demo', 'com/opentradingcore/demo/DemoStateMachine.java'),
-    ('order', 'com/app/dc/service/cluster/OrderRecoveryStateMachine.java'),
-    ('trade', 'com/app/dc/service/cluster/TradeRecoveryStateMachine.java'),
+    ('order', 'com/app/dc/service/state/OrderRecoveryStateMachine.java'),
+    ('trade', 'com/app/dc/service/state/TradeRecoveryStateMachine.java'),
 ):
     file = roots[name] / ('src/main/java/' + relative)
     check(name + ' implements Common ReplicatedStateMachine',
           file.is_file() and 'implements ReplicatedStateMachine' in file.read_text())
+
+# Removing legacy service owners is not proof that the business runtime has
+# installed Common's physical WAL/ACK/custody and certified snapshot source.
+# Explicit fail-closed sentinels MUST block the live release.
+for service, cls, needle in (
+    ('order','OrderClusterAdapter.java','ORDER_COMMON_WAL_ACK_CUSTODY_NOT_CONNECTED'),
+    ('order','OrderSnapshotManager.java','ORDER_COMMON_CERTIFIED_SNAPSHOT_HEAD_NOT_CONNECTED'),
+    ('trade','TradeClusterAdapter.java','TRADE_COMMON_WAL_AND_CUSTODY_ADAPTER_NOT_INSTALLED'),
+    ('trade','TradeRecoveryStateMachine.java','Trade snapshots are captured under TradeSnapshotManager'),
+):
+    code = roots[service] / ('src/main/java/com/app/dc/service/state/'+cls)
+    check(service+' Common production '+cls+' connected',code.is_file() and needle not in code.read_text())
 
 # All these are still service-/Demo-owned cluster authority, not business state.
 # Do not suppress this release gate by renaming; remove the reachable logic.
