@@ -14,7 +14,9 @@ EXPECTED_COMMON = 'cf309a09d10db3486b700517e0a5e62d3f5b86f03e41ca11cc0a9151b38c6
 SERVICES = {
     'order': {
         'directory': 'OrderSvr',
-        'expected_deleted': ['OrderReplicaRepairCoordinator'],
+        'expected_deleted': ['OrderReplicaRepairCoordinator',
+                             'OrderFailoverProofControlHandler',
+                             'OrderFailoverProofProvider'],
         'not_yet_migrated': [
             'OrderReplicationManager', 'OrderPartitionRecoveryManager',
             'OrderSnapshotReplicationManager', 'OrderFailoverProofControlHandler'],
@@ -70,8 +72,8 @@ def audit_image(service, image):
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument('--order-image', default='local/otc-t90-ordersvr:common-t87-7dcccf6')
-    parser.add_argument('--trade-image', default='local/otc-t90-tradesvr:common-t87-47644f4')
+    parser.add_argument('--order-image', default='local/otc-t91-ordersvr:common-t87-6de3daf')
+    parser.add_argument('--trade-image', default='local/otc-t91-tradesvr:common-t87-47644f4')
     parser.add_argument('--strict-release', action='store_true', help='Fail closed until all private owners are gone')
     args = parser.parse_args()
     reports = [audit_image('order', args.order_image), audit_image('trade', args.trade_image)]
