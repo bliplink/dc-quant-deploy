@@ -12,16 +12,20 @@ import sys
 
 COMMON_SHA = 'cf309a09d10db3486b700517e0a5e62d3f5b86f03e41ca11cc0a9151b38c67e3'
 IMAGES = {
-    'order': {'root':'OrderSvr', 'source':'6a98fd9',
-              'image':'local/otc-t94-ordersvr:common-only-6a98fd9',
+    'order': {'root':'OrderSvr', 'source':'422de4e',
+              'image':'local/otc-t96-ordersvr:common-only-422de4e',
               'state':'OrderRecoveryStateMachine', 'adapter':'OrderClusterAdapter',
+              'business_recovery':'OrderCommonRecoveryBinding',
+              'business_snapshot':'OrderSnapshotManager',
               'missing_wal':'ORDER_COMMON_WAL_ACK_CUSTODY_NOT_CONNECTED',
               'missing_snapshot':'ORDER_COMMON_CERTIFIED_SNAPSHOT_HEAD_NOT_CONNECTED'},
-    'trade': {'root':'TradeSvr', 'source':'7a319da',
-              'image':'local/otc-t94-tradesvr:common-only-7a319da',
+    'trade': {'root':'TradeSvr', 'source':'9bff3b4',
+              'image':'local/otc-t96-tradesvr:common-only-9bff3b4',
               'state':'TradeRecoveryStateMachine', 'adapter':'TradeClusterAdapter',
+              'business_recovery':'TradeCommonRecoveryBinding',
+              'business_snapshot':'TradeBusinessSnapshotCapture',
               'missing_wal':'TRADE_COMMON_WAL_AND_CUSTODY_ADAPTER_NOT_INSTALLED',
-              'missing_snapshot':'Trade snapshots are captured under TradeSnapshotManager'},
+              'missing_snapshot':'TRADE_COMMON_CERTIFIED_SNAPSHOT_TRANSACTION_NOT_INSTALLED'},
 }
 
 def shell(args):
@@ -44,6 +48,8 @@ def verify(service, image):
         'test ! -d '+root+'/classes/com/app/dc/service/cluster',
         'test -f '+cls+fields['state']+'.class',
         'test -f '+cls+fields['adapter']+'.class',
+        'test -f '+cls+fields['business_recovery']+'.class',
+        'test -f '+cls+fields['business_snapshot']+'.class',
         'test "$(find '+root+'/lib -maxdepth 1 -name \'com.app.common*.jar\' | wc -l)" -eq 1',
         'test "$(find '+root+'/lib -maxdepth 1 -name \'com.app.dc-*.jar\' | wc -l)" -eq 1',
         'sha256sum '+root+'/lib/com.app.common-*.jar | cut -d " " -f1',

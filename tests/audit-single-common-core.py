@@ -50,7 +50,7 @@ for service, cls, needle in (
     ('order','OrderClusterAdapter.java','ORDER_COMMON_WAL_ACK_CUSTODY_NOT_CONNECTED'),
     ('order','OrderSnapshotManager.java','ORDER_COMMON_CERTIFIED_SNAPSHOT_HEAD_NOT_CONNECTED'),
     ('trade','TradeClusterAdapter.java','TRADE_COMMON_WAL_AND_CUSTODY_ADAPTER_NOT_INSTALLED'),
-    ('trade','TradeRecoveryStateMachine.java','Trade snapshots are captured under TradeSnapshotManager'),
+    ('trade','TradeRecoveryStateMachine.java','TRADE_COMMON_CERTIFIED_SNAPSHOT_TRANSACTION_NOT_INSTALLED'),
 ):
     code = roots[service] / ('src/main/java/com/app/dc/service/state/'+cls)
     check(service+' Common production '+cls+' connected',code.is_file() and needle not in code.read_text())
