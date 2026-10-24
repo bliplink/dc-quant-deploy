@@ -1,0 +1,5 @@
+d714df05f6855dc1fbaee0fb2c3844486d7a576bf28d786b979579b47b5dfcad  src/main/java/com/opentradingcore/demo/DemoV19AckPolicy.java
+e0d6357187b83e98754ebb220a2bb07120feaba594a4109f9599563167ce881d  src/main/java/com/opentradingcore/demo/DemoV19ClusterHarness.java
+81cd4bd96ca392dc8afde1b9be87f2b5aef3d22643de7a7332cc363177eb1adb  src/main/java/com/opentradingcore/demo/DemoPrimaryWriter.java
+1d99cfba70dd8bb62c47f790b24a2a0d8f6f8f48be69085e2cdf5de91cbe8821  src/main/java/com/opentradingcore/demo/DemoV19Rf2StressDriver.java
+b0e6dee155f542967e838d39e7ab023a1a200d80aa5437ca6daa7ec236d9e9e6  compose.t70-ack-policy.yaml
