@@ -17,3 +17,5 @@
 ## 2026-10-24 当前门禁
 - Common 最新远端 saas-crypto 510aaee 上的 9 项 HA 提交已推至独立 `feat/common-t82-certified-custody-20261024`，首轮 84 suites / 386 tests PASS；未合并生产分支。
 - T84 新集成 Jar 初次启动暴露旧 V19 缺 `DurableWalGroupCommit$Writer`，以及 RF2 单活恢复必须先 `RECOVERING` 非 READY 的兼容性差异；正在隔离分支补齐并复测。不能宣称 T84 故障切换 PASS。
+
+最新 T84 实测见 [COMMON_HA_T84_VERIFICATION_20261024.md](COMMON_HA_T84_VERIFICATION_20261024.md)。Common 集成 439/439 PASS，T84 隔离双向自动主切局部 PASS，端到端性能与正式业务 HA 仍 NO-GO。
