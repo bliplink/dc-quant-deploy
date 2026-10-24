@@ -1,0 +1,17 @@
+AUTO_HA_WITNESS A/B network ready
+AUTO_HA_REAL_ACK {"appliedCount": 1, "committedSeq": 1, "durabilityMode": "QUORUM_DURABLE_SINGLE_HOST_TEST", "epoch": 1, "node": "CommonHaDemoA", "quorumDurable": null, "requestId": "t66-accept-01"}
+AUTO_HA_WITNESS b V19_RF2_AUTO_DEGRADED_READY epoch=2
+AUTO_HA_REAL_ACK {"appliedCount": 1, "committedSeq": 2, "durabilityMode": "AUTO_DEGRADED_LOCAL_DURABLE", "epoch": 2, "node": "CommonHaDemoB", "quorumDurable": false, "requestId": "t66-accept-02"}
+AUTO_HA_WITNESS b V19_RF2_STRICT_READY_ACTIVATED epoch=3
+AUTO_HA_REAL_ACK {"appliedCount": 1, "committedSeq": 3, "durabilityMode": "QUORUM_DURABLE", "epoch": 3, "node": "CommonHaDemoB", "quorumDurable": true, "requestId": "t66-accept-03"}
+AUTO_HA_FINAL_STATE_IDENTICAL {"committedPrefixSha256": "b4209c47318aad0def625feefd7f5cfed6f13e1bef6d31fe6ee50187aa366c37", "committedSeq": 3, "distinctRequests": 3, "lastEpoch": 3, "stateDigest": "cb80da88c2d2a4b4c0a592ba31fbd423195954eac6f4877a2c48e49267c5b66f"}
+AUTO_HA_WITNESS a V19_RF2_AUTO_DEGRADED_READY epoch=4
+AUTO_HA_REAL_ACK {"appliedCount": 1, "committedSeq": 4, "durabilityMode": "AUTO_DEGRADED_LOCAL_DURABLE", "epoch": 4, "node": "CommonHaDemoA", "quorumDurable": false, "requestId": "t66-accept-04"}
+AUTO_HA_WITNESS a V19_RF2_STRICT_READY_ACTIVATED epoch=5
+AUTO_HA_REAL_ACK {"appliedCount": 1, "committedSeq": 5, "durabilityMode": "QUORUM_DURABLE", "epoch": 5, "node": "CommonHaDemoA", "quorumDurable": true, "requestId": "t66-accept-05"}
+AUTO_HA_FINAL_STATE_IDENTICAL {"committedPrefixSha256": "cacb27b7a2876580fb4e7e34753730262ecde383d48ab0be18f1518055257d26", "committedSeq": 5, "distinctRequests": 5, "lastEpoch": 5, "stateDigest": "be51ddfa77cf58a507e68d3bcedd694928401682258abc3e980fce78313cdc49"}
+AUTO_HA_WITNESS a V19_RF2_STRICT_READY_ACTIVATED epoch=5
+AUTO_HA_REAL_ACK {"appliedCount": 1, "committedSeq": 6, "durabilityMode": "QUORUM_DURABLE", "epoch": 5, "node": "CommonHaDemoA", "quorumDurable": true, "requestId": "t66-accept-06"}
+AUTO_HA_FINAL_STATE_IDENTICAL {"committedPrefixSha256": "8e42fa6ba5dcd301f2abc2602134fc992143738c0f0fcb7e63f9b8e7341544eb", "committedSeq": 6, "distinctRequests": 6, "lastEpoch": 5, "stateDigest": "9ea74e3c9377861314fc61ea19ed68e8735babe3b849038aba10718e7e156e56"}
+AUTO_HA_T66_RF2_TWO_WAY_PASS strictEpochs=1,3,5 soloEpochs=2,4 physicalJVMs=2 faultDomain=ONE_MAC productionTradeOrders=NOT_TESTED localAckPossibleRpo=true
+AUTO_HA_STOPPED evidenceVolumesPreserved=true project=otc-t66-bc7f523df

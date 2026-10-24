@@ -1,0 +1,4 @@
+d028fa85728401ef97aab9dfec7d4bc755bb621c4374929a154ea1f7fe96b2eb  src/main/java/com/opentradingcore/demo/DemoV19Rf2AutoStage.java
+0e50bfb7f23a46ad9500e47d626d4fcee4c3a6161eca6924ac8064101efd46b4  src/main/java/com/opentradingcore/demo/DemoV19Rf2StrictAckRuntime.java
+127ce937aa98811bcce0c5508684bf53caa32dd2fc83663bd12c9eb64df7614e  src/main/java/com/opentradingcore/demo/DemoV19Rf2StrictCutoverCoordinator.java
+6caa0f61561084378b1d951154836808740ba94b9a439144f2fb8474cf93e9ad  compose.v19-rf2-strict-cutover.yaml
