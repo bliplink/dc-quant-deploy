@@ -1,0 +1,31 @@
+# T140 — Common dual-phase recovery runtime and signed custody integration
+
+Date: 2026-10-26. Scope: unified Common, Demo, Order and Trade on `saas-crypto`; original Demo RSA used. Robot not modified.
+
+## Architecture: same Common engine for every business
+
+- Common owns the ZooKeeper 3-member CAS, lease, Epoch election/fence policy, real Netty replication, local WAL fsync, quorum commit index, independent custody receipts, snapshot/WAL replay validation and READY authority.
+- Order and Trade provide **only** business state-machine replay callbacks, their deterministic prepared-state (opaque bytes), and service-specific endpoints, RSA aliases, partition layouts and journal roots. Both bind the **same** Common Maven binary.
+- `*.common.nodeRuntime.phase=RECOVERING` is mutually exclusive with `phase=READY` in the real Spring context for Order/Trade. RECOVERING instantiates `CommonRecoveringNodeRuntime` with the actual Common ZK client/lease/CAS and pinned existing RSA; it opens only a recovery Netty listener that rejects ALL business replication, never a Primary writer or customer ACK. READY requires authenticated Common business replay and existing physical custody/READY proof. No phase typo may silently disable both.
+- The Common physical evidence registry now has `installSignedSurvivor(...)`: it opens actual **original old-Epoch** read-only WAL, cert-custody and two signed receipt files after authenticating the RECOVERING ZK stage and independently signed predecessor ledger. The registry verifies pinned RSA membership and old-owner fence, rejects duplicate Epoch claims, owns the immutable reader lifetime, and refuses all proofs if no signed source is installed.
+- The **real Demo** `DemoCommonLiveZkProcess` was modified to use this exact Common `CommonCertifiedPhysicalEvidenceRegistry` in both recovery/certification phases instead of a Demo-only source. The external fault-injection script now requires a log marker from the real surviving B JVM, `T140_COMMON_REAL_B_SURVIVOR_E1_SIGNED_PHYSICAL_REGISTRY=PASS`, before accepting replay. The full 3-ZK, long-lived C, A SIGKILL → B continues → A rejoins → B SIGKILL → A resumes test passed (real run evidence `/Users/kong/.opentradingcore/t124-live-kill-runs/20261026072615`). No externally fake READY or unsigned genesis.
+
+## Current known limits, do not declare full Order/Trade HA
+
+- Both real business containers still need the authenticated recovery coordinator to **invoke** `installSignedSurvivor` with their own pinned original voter group, signed stage and independent fence. Spring creating an empty physical registry is not itself proof.
+- Initial fresh E1 Genesis must be certified from original physical member signatures, not simply `touch` an empty WAL or create a local assignment. A service must recover certified snapshot and state bytes before READY.
+- The current phase is a deployment-time startup selection: RECOVERING recovery service is safe to start, but **the automatic lifecycle phase transition** from authenticated replay → signed external READY → live certified physical writer still needs to be implemented in Common and tested with live Order/Trade traffic. Do not claim automatic full service restart/promotion yet.
+- Order/Trade older business paths `OrderStateJournal.requireStagedBeforeMutation`, `TradeStateCoordinator.requireWritable` still intentionally fail closed; the new prepared-state Common WAL commitThenApply adapters are not yet installed in every mutating handler. Verify real match, cancel, fill, balance and positions end-to-end before replacing formal containers.
+- The pilot A/B/C JVM software fault tests run on one Mac and simulate node-level kill, not physically independent hosts. RF2 degraded ACK explicitly `LOCAL_DURABLE_ASYNC`, with nonzero RPO; it is NOT a 2-of-2 durable quorum. Physical host failover, 256 shards and 10→50→200 tenants require separate tests.
+
+## Execution policy
+
+Use local Maven builds and ARM64 Docker images; no GitHub Actions. Do not modify Gateway message forwarding. Do not touch Robot. Keep old T84 Demo running while testing; formal five Order/Trade containers remain stopped until real trading, physical custody and reconciliation pass. Commit/push only isolated review branches, no unapproved mainline merge or live route change.
+
+## T140 verified exact release (2026-10-26)
+
+- Common Maven full suite: **544 tests, 0 failures/errors/skips**, original RSA/Netty test keys retained, PASS. Order full suite: **170 total, 0 failures/errors, 4 skips**. Trade full suite: **194 total, 0 failures/errors, 2 skips**.
+- **Real 3-ZK automatic HA test**: continuous independently signed C witness, A SIGKILL then B RECOVERING and signed original E1 physical source registry installed, B continues local-mode trades; A rejoin physically catches up; B SIGKILL then A independently recovers and continues, **PASS / exit 0**, evidence `/Users/kong/.opentradingcore/t124-live-kill-runs/20261026072615`. T140 script explicitly requires **actual B log** `T140_COMMON_REAL_B_SURVIVOR_E1_SIGNED_PHYSICAL_REGISTRY=PASS`, not a stub acceptance.
+- ARM64 `local/otc-t140-ordersvr:unified-common` and `local/otc-t140-tradesvr:unified-common` built from official Dockerfiles with `mvn clean package`. Exact one common JAR `3.0.22-t140-shared-signed-evidence-recovery-20261026-SNAPSHOT`, SHA256 `ea2a19af6cc68c9a61d1a96468ae040c4eeea7680722669a95c7bef319368823` verified independently inside each Docker container.
+- Real Docker no-network negative tests: both Order and Trade `nodeRuntime.phase=MISSPELLED_RECOVERING` **exit 1 with `COMMON_ONLY_INVALID_RUNTIME_PHASE` before Spring/Gateway old ZK cluster**. Real Spring conditional tests assert no Common business writer in RECOVERING; CommonRecoveringNodeRuntime itself rejects business replication even with a valid existing RSA and RECOVERING ZK manifest.
+- **NO-GO for actual live Order/Trade**: isolated Demo passed, business services still need physically original voter-certified Genesis, application-specific deterministic *precommitted* state installation, new Common phase control that automatically rotates from recovery-only to certified READY, real gateway route publication only after READY, and authoritative reconciliation. Do not confuse `RECOVERING` TCP listener with trading readiness.
