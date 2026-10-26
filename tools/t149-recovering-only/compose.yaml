@@ -1,0 +1,134 @@
+# T149 deliberately test-only, no published port, no Gateway.
+name: otc-t149-ha-intake
+services:
+  zk1:
+    image: docker.m.daocloud.io/library/zookeeper:3.8.4
+    restart: "no"
+    networks: [test-isolated]
+    mem_limit: 320m
+    cpus: 0.35
+    environment:
+      ZOO_MY_ID: "1"
+      ZOO_SERVERS: "server.1=zk1:2888:3888;2181 server.2=zk2:2888:3888;2181 server.3=zk3:2888:3888;2181"
+      ZOO_4LW_COMMANDS_WHITELIST: "ruok,stat,mntr"
+      JVMFLAGS: "-Xms64m -Xmx128m"
+  zk2:
+    image: docker.m.daocloud.io/library/zookeeper:3.8.4
+    restart: "no"
+    networks: [test-isolated]
+    mem_limit: 320m
+    cpus: 0.35
+    environment:
+      ZOO_MY_ID: "2"
+      ZOO_SERVERS: "server.1=zk1:2888:3888;2181 server.2=zk2:2888:3888;2181 server.3=zk3:2888:3888;2181"
+      ZOO_4LW_COMMANDS_WHITELIST: "ruok,stat,mntr"
+      JVMFLAGS: "-Xms64m -Xmx128m"
+  zk3:
+    image: docker.m.daocloud.io/library/zookeeper:3.8.4
+    restart: "no"
+    networks: [test-isolated]
+    mem_limit: 320m
+    cpus: 0.35
+    environment:
+      ZOO_MY_ID: "3"
+      ZOO_SERVERS: "server.1=zk1:2888:3888;2181 server.2=zk2:2888:3888;2181 server.3=zk3:2888:3888;2181"
+      ZOO_4LW_COMMANDS_WHITELIST: "ruok,stat,mntr"
+      JVMFLAGS: "-Xms64m -Xmx128m"
+  ordersvr-a:
+    image: local/otc-t145-ordersvr:certified-pending-newing
+    profiles: ["business"]
+    depends_on:
+      - zk1
+      - zk2
+      - zk3
+    restart: "no"
+    networks: [test-isolated]
+    mem_limit: 800m
+    cpus: 0.7
+    environment:
+      JAVA_OPTS: "-server -Xms64m -Xmx384m -Xmn96m -XX:+UseSerialGC"
+    volumes:
+      - ./config/ordersvr-a/application.properties:/srv/dc/dc/OrderSvr/config/application.properties:ro
+      - ${EXISTING_RSA_ROOT}/a:/read-only-original-rsa/a:ro
+      - ${EXISTING_RSA_ROOT}/public:/read-only-original-rsa/public:ro
+      - ./logs/ordersvr-a:/srv/dc/log
+      - ./data/ordersvr-a:/srv/dc/data
+  ordersvr-b:
+    image: local/otc-t145-ordersvr:certified-pending-newing
+    profiles: ["business"]
+    depends_on:
+      - zk1
+      - zk2
+      - zk3
+    restart: "no"
+    networks: [test-isolated]
+    mem_limit: 800m
+    cpus: 0.7
+    environment:
+      JAVA_OPTS: "-server -Xms64m -Xmx384m -Xmn96m -XX:+UseSerialGC"
+    volumes:
+      - ./config/ordersvr-b/application.properties:/srv/dc/dc/OrderSvr/config/application.properties:ro
+      - ${EXISTING_RSA_ROOT}/b:/read-only-original-rsa/b:ro
+      - ${EXISTING_RSA_ROOT}/public:/read-only-original-rsa/public:ro
+      - ./logs/ordersvr-b:/srv/dc/log
+      - ./data/ordersvr-b:/srv/dc/data
+  ordersvr-c:
+    image: local/otc-t145-ordersvr:certified-pending-newing
+    profiles: ["business"]
+    depends_on:
+      - zk1
+      - zk2
+      - zk3
+    restart: "no"
+    networks: [test-isolated]
+    mem_limit: 800m
+    cpus: 0.7
+    environment:
+      JAVA_OPTS: "-server -Xms64m -Xmx384m -Xmn96m -XX:+UseSerialGC"
+    volumes:
+      - ./config/ordersvr-c/application.properties:/srv/dc/dc/OrderSvr/config/application.properties:ro
+      - ${EXISTING_RSA_ROOT}/c:/read-only-original-rsa/c:ro
+      - ${EXISTING_RSA_ROOT}/public:/read-only-original-rsa/public:ro
+      - ./logs/ordersvr-c:/srv/dc/log
+      - ./data/ordersvr-c:/srv/dc/data
+  tradesvr-a:
+    image: local/otc-t148-tradesvr:real-certified-newing-netty
+    profiles: ["business"]
+    depends_on:
+      - zk1
+      - zk2
+      - zk3
+    restart: "no"
+    networks: [test-isolated]
+    mem_limit: 800m
+    cpus: 0.7
+    environment:
+      JAVA_OPTS: "-server -Xms64m -Xmx384m -Xmn96m -XX:+UseSerialGC"
+    volumes:
+      - ./config/tradesvr-a/application.properties:/srv/dc/dc/TradeSvr/config/application.properties:ro
+      - ${EXISTING_RSA_ROOT}/a:/read-only-original-rsa/a:ro
+      - ${EXISTING_RSA_ROOT}/public:/read-only-original-rsa/public:ro
+      - ./logs/tradesvr-a:/srv/dc/log
+      - ./data/tradesvr-a:/srv/dc/data
+  tradesvr-b:
+    image: local/otc-t148-tradesvr:real-certified-newing-netty
+    profiles: ["business"]
+    depends_on:
+      - zk1
+      - zk2
+      - zk3
+    restart: "no"
+    networks: [test-isolated]
+    mem_limit: 800m
+    cpus: 0.7
+    environment:
+      JAVA_OPTS: "-server -Xms64m -Xmx384m -Xmn96m -XX:+UseSerialGC"
+    volumes:
+      - ./config/tradesvr-b/application.properties:/srv/dc/dc/TradeSvr/config/application.properties:ro
+      - ${EXISTING_RSA_ROOT}/b:/read-only-original-rsa/b:ro
+      - ${EXISTING_RSA_ROOT}/public:/read-only-original-rsa/public:ro
+      - ./logs/tradesvr-b:/srv/dc/log
+      - ./data/tradesvr-b:/srv/dc/data
+networks:
+  test-isolated:
+    internal: true

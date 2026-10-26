@@ -1,0 +1,6 @@
+.env
+config/
+data/
+logs/
+bootstrap/*.class
+*.log
