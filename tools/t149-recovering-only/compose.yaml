@@ -46,7 +46,7 @@ services:
     mem_limit: 800m
     cpus: 0.7
     environment:
-      JAVA_OPTS: "-server -Xms64m -Xmx384m -Xmn96m -XX:+UseSerialGC"
+      JAVA_OPTS: "-server -Xms64m -Xmx384m -Xmn96m -XX:+UseSerialGC -Ddc.zookeeper.sessionTimeoutMs=8000"
     volumes:
       - ./config/ordersvr-a/application.properties:/srv/dc/dc/OrderSvr/config/application.properties:ro
       - ${EXISTING_RSA_ROOT}/a:/read-only-original-rsa/a:ro
@@ -65,7 +65,7 @@ services:
     mem_limit: 800m
     cpus: 0.7
     environment:
-      JAVA_OPTS: "-server -Xms64m -Xmx384m -Xmn96m -XX:+UseSerialGC"
+      JAVA_OPTS: "-server -Xms64m -Xmx384m -Xmn96m -XX:+UseSerialGC -Ddc.zookeeper.sessionTimeoutMs=8000"
     volumes:
       - ./config/ordersvr-b/application.properties:/srv/dc/dc/OrderSvr/config/application.properties:ro
       - ${EXISTING_RSA_ROOT}/b:/read-only-original-rsa/b:ro
@@ -84,7 +84,7 @@ services:
     mem_limit: 800m
     cpus: 0.7
     environment:
-      JAVA_OPTS: "-server -Xms64m -Xmx384m -Xmn96m -XX:+UseSerialGC"
+      JAVA_OPTS: "-server -Xms64m -Xmx384m -Xmn96m -XX:+UseSerialGC -Ddc.zookeeper.sessionTimeoutMs=8000"
     volumes:
       - ./config/ordersvr-c/application.properties:/srv/dc/dc/OrderSvr/config/application.properties:ro
       - ${EXISTING_RSA_ROOT}/c:/read-only-original-rsa/c:ro
@@ -103,7 +103,7 @@ services:
     mem_limit: 800m
     cpus: 0.7
     environment:
-      JAVA_OPTS: "-server -Xms64m -Xmx384m -Xmn96m -XX:+UseSerialGC"
+      JAVA_OPTS: "-server -Xms64m -Xmx384m -Xmn96m -XX:+UseSerialGC -Ddc.zookeeper.sessionTimeoutMs=8000"
     volumes:
       - ./config/tradesvr-a/application.properties:/srv/dc/dc/TradeSvr/config/application.properties:ro
       - ${EXISTING_RSA_ROOT}/a:/read-only-original-rsa/a:ro
@@ -122,7 +122,7 @@ services:
     mem_limit: 800m
     cpus: 0.7
     environment:
-      JAVA_OPTS: "-server -Xms64m -Xmx384m -Xmn96m -XX:+UseSerialGC"
+      JAVA_OPTS: "-server -Xms64m -Xmx384m -Xmn96m -XX:+UseSerialGC -Ddc.zookeeper.sessionTimeoutMs=8000"
     volumes:
       - ./config/tradesvr-b/application.properties:/srv/dc/dc/TradeSvr/config/application.properties:ro
       - ${EXISTING_RSA_ROOT}/b:/read-only-original-rsa/b:ro
