@@ -25,20 +25,26 @@ T150_POST_GENESIS_6_RSA_REOPEN_5_FENCED_PASS
 T150_NO_GO: one-Mac volumes are NOT independent physical hosts. No certified business replay, READY or HA promotion.
 ```
 
-Reproduce on the exact isolated T149 Mac stack **after** the T150 helper and class files are present:
+Reproduce on the exact isolated T149 Mac stack **after** the T150 helper class has been compiled and staged in the candidate containers. The previously Mac-only prototype source is now also checked in as `tools/t149-recovering-only/bootstrap/T150RealEmptyBusinessGenesis.java` (lab utility, not an authoritative snapshot writer):
 
 ```bash
 bash -n tools/t149-recovering-only/verify-t150-post-genesis.sh
 bash tools/t149-recovering-only/verify-t150-post-genesis.sh
 ```
 
-The script inspects real node config paths for node identity and Common manifest/lease/port only; it does not output config secrets or read the RSA private bytes itself. It performs read-only signed Genesis reopens and negative Netty RPC probes. **It does not bootstrap, sign, install, grant READY, switch primary, alter any ZK node, or change T84 Demo.** The T150 helper is an isolated Mac runtime fixture that the script expects to have been compiled and copied into each candidate container; its production suitability is not established by this regression test.
+Build the lab helper for each service with the exact Common T143 jar (SHA256 `9197029483a8d18032de0a8ca2f8888a9e62d8933b8cf8d4604206e246ca60ea`): `bash tools/t149-recovering-only/compile-t150-genesis.sh order <T145-target/dependency> <output-dir>` and the same command using `trade` + T148 dependencies. Both compiled as Java 8 bytecode (major version 52) on the local Mac, PASS. This does **not** stage/execute a new signing operation. Existing T149 containers already have the prior isolated compiled helper in `/tmp`.
+
+The read-only verification script inspects real node config paths for node identity and Common manifest/lease/port only; it does not output config secrets or read the RSA private bytes itself. It performs read-only signed Genesis reopens and negative Netty RPC probes. **It does not bootstrap, sign, install, grant READY, switch primary, alter any ZK node, or change T84 Demo.** The lab helper is not an authoritative snapshot source and MUST NOT be used to sign a nonempty or production domain image.
+
+## Signed Genesis corruption rejections (additional live lab check)
+
+The source helper's `--negative` mode was executed in the three **original primary** candidate containers: Order-A/P090, Order-C/P091 and Trade-A/P090. Each tampered a *temporary quarantine copy* of an RSA voter signature and a sealed `.quorum`, required `CommonCertifiedGenesisQuorum` rejection, removed the quarantine copy, and successfully reopened the unchanged original durable certificate: **3/3 PASS**. This is not a test of real business recovery, READY or cross-host quorum.
 
 ## Remaining release blockers — explicit NO-GO
 
 1. **Physical fault domains are not independent.** All service and ZK containers are on one Mac. The development membership's node/volume names are labels, not evidence of independent hardware. Local RSA proofs must not be marketed as cross-host quorum.
 2. **Empty business snapshot versus authoritative live state:** The T150 local helper builds fresh `OrderPartitionSnapshot`/`TradePartitionSnapshot` objects and checks their empty schema. This is **not** yet proof that all authoritative Order/Trade state stores, concurrent writers, WALs and service business managers are consistently empty. Validate the canonical application snapshot-producing/rehydrating paths before promoting any business workload.
-3. `CommonRecoveryOnlyProcess` currently supplies `Collections.emptyMap()` as signed source handlers. There is no certified Common HEAD/MANIFEST/DATA/DURABLE_PREFIX service, or authenticated Snapshot/WAL transfer source for current T149 real containers.
+3. The currently deployed T149 `CommonRecoveryOnlyProcess` still supplies `Collections.emptyMap()` as signed source handlers. A separate Common T150 source branch adds an opt-in typed factory, but **that candidate binary is not deployed**, and there is no certified Common HEAD/MANIFEST/DATA/DURABLE_PREFIX service or authenticated Snapshot/WAL source for these real containers.
 4. A signed Genesis alone cannot satisfy `CommonDurableBusinessReplayHandoff`, restored business-in-memory state proof, fresh ZK assignment/epoch checks and new business writer process. No READY has been published, and the existing recovery Netty listeners correctly refuse writes.
 5. The full Order pending NEWING → Trade reserved margin → Order active NEW saga, cancel/match/fill/Projection replay, actual SIGKILL A→B→A, 256 shards and 10/50/200 tenant load remain unverified.
 
