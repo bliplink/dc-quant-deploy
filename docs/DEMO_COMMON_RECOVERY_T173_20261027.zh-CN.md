@@ -28,3 +28,11 @@
 - 只读检查命令：python3 tests/check-demo-common-readiness.py；结果：docs/evidence/T174_demo_common_original_e1_census_20261027.json。Order 512 原始 voter RSA 票据只有 1 份，Trade 0；全部两个 256 分区都是不可路由 E1，无业务 READY。文件计数仅存在性，非验签或数据恢复证明。
 - 此外，Order/Trade 当前 CommonPhysicalProofWiring 仅初始化 EMPTY CommonCertifiedPhysicalEvidenceRegistry，尚未打开真实 WAL/CommitIndex/双 Custody 证明；CommonRecoveredDomainWiring 仍只能校验 zero-ACK E1 Genesis，E2 CAS 后还必须实现可信历史 E1/E2 新服务加载和历史写主撤权交接。没有这两个缺口的修复，不能把 RECOVERING 升为业务 READY。
 - 当前实际 Order/Trade A/B 四节点仅为受限恢复进程；DNN8Q9 仍资金结果未知、禁止自动重试；真正交易和 Robot 盘口仍 NO-GO。
+
+## T175 交易 E2E 前置真实检查（2026-10-27 13:xx CST）
+
+- 真正 Order/Trade 业务 Gateway TCP 端口 `33036`/`33037` 当前均 `NO_LISTENER`；Common RECOVERING-only TCP `44122`/`44222` 可连通。容器 `Up` ≠ 交易服务已恢复。
+- 主 Demo manifests（Order 和 Trade 各 256 分区）`READY=0`，业务请求不可路由。通过公共 Gateway 无 session 调用旧 `__e2e_readiness__` 只能得到 `AUTHENTICATED_SESSION_REQUIRED`；**不能把该结果当成 Order/Trade 已注册**。
+- `validate-saas.sh` 原逻辑仅先检查 Docker running，旧 OrderC 容器故障会报大量历史日志而掩盖当前 Common RECOVERING 的主因；现新增前置门禁，实际运行输出 `dc-saas-ordersvr is Common RECOVERING only; cannot serve customer orders, trades or Robot (not business READY).` 并立即非零退出，不会误宣验收成功。
+- 本地 JUnit：Order 匹配安全/幂等/启动门禁 9/9 PASS；Trade 成交去重/资金/启动门禁 13/13 PASS；Common 真实双节点原始 E1/出生证明/恢复门禁与 256 舰队计划 21/21 PASS。此为**离线单元测试**，不能代替真实 Gateway、资金/订单/成交/机器人 E2E。
+- 阻塞仍是原始独立 RSA 证据未齐全、Common E1->E2 恢复后业务物理 WAL/Custody 状态与 serving Spring JVM 的可信接线未接通，四个 Demo 仍 RECOVERING。代码候选尚未切换主镜像，禁止用 `READY=true` 配置假装验收成功。

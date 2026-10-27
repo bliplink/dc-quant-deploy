@@ -148,6 +148,17 @@ if [[ "${ORDER_CLUSTER_ENABLED:-false}" == "true" || "${TRADE_CLUSTER_ENABLED:-f
   expected_containers+=(dc-saas-projectionsvr)
 fi
 
+# A Common RECOVERING process is a healthy control-plane node but has NO
+# business/Gateway writer. Container running alone must NEVER satisfy SaaS
+# trading acceptance or mask an outage as an online trading service.
+for spec in 'dc-saas-ordersvr order OrderSvr' 'dc-saas-tradesvr trade TradeSvr'; do
+  read -r container prefix service <<< "${spec}"
+  phase="$(docker exec "${container}" sh -c     "grep -E '^${prefix}\.common\.nodeRuntime\.phase='        '/srv/dc/dc/${service}/config/application.properties' 2>/dev/null"     | tail -1 | cut -d= -f2- || true)"
+  if [[ "${phase}" == "RECOVERING" ]]; then
+    die "${container} is Common RECOVERING only; cannot serve customer orders, trades or Robot (not business READY)."
+  fi
+done
+
 for container in "${expected_containers[@]}"; do
   state="$(docker inspect --format '{{.State.Status}}' "${container}" 2>/dev/null || true)"
   [[ "${state}" == "running" ]] || {
