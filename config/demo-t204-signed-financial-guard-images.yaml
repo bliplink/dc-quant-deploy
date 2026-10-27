@@ -1,0 +1,11 @@
+# Mac Demo current local certified image overrides, not a standalone stack.
+# Combine with original pinned RSA, Common lease, authentic ZK and data mounts.
+services:
+  ordersvr:
+    image: local/otc-t201d-ordersvr:certified-cancel-saga
+  ordersvr-b:
+    image: local/otc-t201d-ordersvr:certified-cancel-saga
+  tradesvr:
+    image: local/otc-t204-tradesvr:certified-reserve-check
+  tradesvr-b:
+    image: local/otc-t204-tradesvr:certified-reserve-check
