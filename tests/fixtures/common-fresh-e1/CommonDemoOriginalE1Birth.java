@@ -39,7 +39,7 @@ public final class CommonDemoOriginalE1Birth {
                 publicFor(replica))));
     }
     private static void validateLiveCensus(String service,String partition,
-            String primary,String replica,String me)throws Exception{
+            String primary,String replica,String me,boolean signOriginal)throws Exception{
         String kind="OrderSvr".equals(service)?"order":"trade";
         ZookeeperClient z=new ZookeeperClient(ZK,null,null);
         try{
@@ -56,6 +56,15 @@ public final class CommonDemoOriginalE1Birth {
             Stat leaseStat=new Stat();z.readData(path+"/leases/"+me,leaseStat);
             if(leaseStat.getEphemeralOwner()<=0)
                 throw new IllegalStateException("original node does not hold its actual Common ephemeral ZK lease");
+            // This standalone diagnostic tool opens its OWN session. The
+            // original RECOVERING JVM holds the production session/lease.
+            // Possession of its RSA file alone is not authority to sign a
+            // birth certificate for that other session. Actual issuance
+            // must happen inside the owner JVM via Common's original
+            // same-session authenticated birth protocol.
+            if(signOriginal && leaseStat.getEphemeralOwner()!=z.activeSessionId())
+                throw new IllegalStateException(
+                    "COMMON_ORIGINAL_BIRTH_MUST_USE_REAL_LEASE_OWNER_JVM_SESSION");
         }finally{z.close();}
     }
     private static byte[] freshDomainImage(String service,String partition)throws Exception{
@@ -105,7 +114,7 @@ public final class CommonDemoOriginalE1Birth {
         if(!Arrays.asList("OrderSvr","TradeSvr").contains(service) || !p.matches("P[0-9]{3}")
                 || !me.equals(primary) && !me.equals(replica))
             throw new IllegalArgumentException("invalid original service partition or local physical node");
-        validateLiveCensus(service,p,primary,replica,me);
+        validateLiveCensus(service,p,primary,replica,me,"--sign".equals(operation));
         DurableWalCommitQuorum.Membership m=membership(service,p,primary,replica);
         byte[] image=freshDomainImage(service,p);
         Path root=Paths.get("/srv/dc/data/common-demo-original-e1",service,me,p);
