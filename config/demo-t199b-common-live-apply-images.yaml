@@ -1,0 +1,11 @@
+# Offline Mac Demo T199b, exact four service names / one same Common JAR.
+# MUST compose with existing authenticated ZK/RSA/physical data-volume overrides.
+services:
+  ordersvr:
+    image: local/otc-t199b-ordersvr:certified-live-apply
+  ordersvr-b:
+    image: local/otc-t199b-ordersvr:certified-live-apply
+  tradesvr:
+    image: local/otc-t199b-tradesvr:certified-live-apply
+  tradesvr-b:
+    image: local/otc-t199b-tradesvr:certified-live-apply
