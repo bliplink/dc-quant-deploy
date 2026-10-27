@@ -28,6 +28,43 @@ class ManifestSafetyTest(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "non-independent"):
             module.parsed_manifest(row)
 
+    def test_signed_quorum_census_uses_original_shared_service_root(self):
+        import tempfile
+        with tempfile.TemporaryDirectory() as directory:
+            base = pathlib.Path(directory)
+            common = base / "common-demo-original-e1" / "OrderSvr"
+            q = common / "sealed" / "P000"
+            q.mkdir(parents=True)
+            (q / "genesis-e1.quorum").write_bytes(b"for filesystem-only census")
+            (q / "genesis-e1.snapshot").write_bytes(b"for filesystem-only census")
+            rows = {"P000": {"primary": "OrderSvrA", "replica": "OrderSvrB"}}
+            counts = module.count_original("OrderSvr", rows, base)
+            self.assertEqual(1, counts["sealed_quorum_present"])
+            self.assertEqual(0, counts["rsa_receipts_present"])
+
+    def test_source_config_only_counts_complete_real_partition_keys(self):
+        import tempfile
+        with tempfile.TemporaryDirectory() as directory:
+            root = pathlib.Path(directory)
+            p = "order.common.nodeRuntime.freshE1."
+            required = (
+                "primary", "replica", "primaryRsaAlias", "replicaRsaAlias",
+                "primaryPhysicalHost", "replicaPhysicalHost", "originalSignedQuorum",
+                "localDurableGenesis", "durableTransactionRoot",
+                "primaryOriginalWalRoot", "replicaOriginalWalRoot",
+            )
+            for node in ("A", "B"):
+                file = root / f"OrderSvr{node}.properties"
+                file.write_text("\n".join(
+                    f"{p}P000.{key}=physical-test-value" for key in required
+                ) + "\n")
+            count = module.count_original_source_config("OrderSvr", root)
+            self.assertEqual(1, count["OrderSvrA"]["complete_partition_sources"])
+            self.assertEqual(1, count["OrderSvrB"]["complete_partition_sources"])
+            (root / "OrderSvrB.properties").write_text("")
+            count = module.count_original_source_config("OrderSvr", root)
+            self.assertEqual(0, count["OrderSvrB"]["complete_partition_sources"])
+
     def test_nonmatching_text_not_accepted(self):
         self.assertEqual({}, module.parsed_manifest("P000|1|OrderSvrA|OrderSvrB|ASYNC|READY"))
 

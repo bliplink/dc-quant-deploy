@@ -67,13 +67,50 @@ def count_original(service, members, root):
             birth += (root / "common-demo-original-e1" / service / voter /
                       "original-wal" / partition /
                       "original-e1-zero-ack.birth").is_file()
-        primary_root = (root / "common-demo-original-e1" / service /
-                        r["primary"] / partition / "sealed")
-        sealed += ((primary_root / "genesis-e1.quorum").is_file()
-                   and (primary_root / "genesis-e1.snapshot").is_file())
+        # Original E1 helper seals the two-voter quorum in the canonical
+        # service-level namespace. It is NOT below the primary voter root.
+        quorum_root = root / "common-demo-original-e1" / service / "sealed" / partition
+        sealed += ((quorum_root / "genesis-e1.quorum").is_file()
+                   and (quorum_root / "genesis-e1.snapshot").is_file())
     return dict(expected_voter_records=512, rsa_receipts_present=signed,
                 original_images_present=genesis, zero_ack_births_present=birth,
                 sealed_quorum_present=sealed, expected_quorums=256)
+
+
+def count_original_source_config(service, config_root):
+    """Configuration completeness only; never grants signed membership."""
+    prefix = "order" if service == "OrderSvr" else "trade"
+    count = {}
+    for node in ("A", "B"):
+        file = config_root / f"{service}{node}.properties"
+        properties = {}
+        for line in file.read_text(encoding="utf-8").splitlines():
+            if not line or line.startswith("#") or "=" not in line:
+                continue
+            key, value = line.split("=", 1)
+            properties[key.strip()] = value.strip()
+        required = (
+            "primary", "replica", "primaryRsaAlias", "replicaRsaAlias",
+            "primaryPhysicalHost", "replicaPhysicalHost", "originalSignedQuorum",
+            "localDurableGenesis", "durableTransactionRoot",
+            "primaryOriginalWalRoot", "replicaOriginalWalRoot",
+        )
+        base = f"{prefix}.common.nodeRuntime.freshE1."
+        present = sum(
+            all(properties.get(f"{base}P{i:03d}.{k}") for k in required)
+            for i in range(256)
+        )
+        count[f"{service}{node}"] = dict(
+            complete_partition_sources=present,
+            expected_partition_sources=256,
+            real_business_inspection_opt_in=(
+                properties.get(f"{prefix}.common.nodeRuntime.inspectFencedBusiness") == "true"),
+            certified_genesis_install_opt_in=(
+                properties.get(f"{prefix}.common.nodeRuntime.installFencedFreshGenesis") == "true"),
+            complete_first_activation_opt_in=(
+                properties.get(f"{prefix}.common.nodeRuntime.stageOriginalFleet") == "true"),
+        )
+    return count
 
 
 def current_processes():
@@ -85,7 +122,9 @@ def current_processes():
     return {node: name in names for node, name in DOCKER_NAMES.items()}
 
 
-def run(root):
+def run(root, config_root=None):
+    if config_root is None:
+        config_root = root.parent / "control" / "common-t167-direct-live"
     services = {}
     for service in ("order", "trade"):
         records = zk_manifest(service)
@@ -97,7 +136,8 @@ def run(root):
             manifest_partitions=len(records),
             ready_partitions=sum(r["phase"] == "READY" for r in records.values()),
             untrusted_or_non_e1=mismatches,
-            original_files=count_original(srv, records, root))
+            original_files=count_original(srv, records, root),
+            recovery_source_config=count_original_source_config(srv, config_root))
     runtime = current_processes()
     files_complete = all(runtime.values()) and all(
         v["original_files"]["original_images_present"] == 512
@@ -117,9 +157,10 @@ def run(root):
 if __name__ == "__main__":
     cli = argparse.ArgumentParser()
     cli.add_argument("--data-root", type=pathlib.Path, default=ROOT)
+    cli.add_argument("--config-root", type=pathlib.Path)
     options = cli.parse_args()
     try:
-        result = run(options.data_root)
+        result = run(options.data_root, options.config_root)
     except (RuntimeError, ValueError, OSError, subprocess.SubprocessError) as error:
         print("COMMON_DEMO_PREFLIGHT_BLOCKED:", error, file=sys.stderr)
         sys.exit(2)
