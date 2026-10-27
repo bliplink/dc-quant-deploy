@@ -1,0 +1,39 @@
+{
+  "business_ready_confirmed_by_this_check": false,
+  "containers": {
+    "OrderSvrA": true,
+    "OrderSvrB": true,
+    "TradeSvrA": true,
+    "TradeSvrB": true
+  },
+  "filesystem_census_only": true,
+  "original_file_prerequisites_complete": false,
+  "services": {
+    "order": {
+      "manifest_partitions": 256,
+      "original_files": {
+        "expected_quorums": 256,
+        "expected_voter_records": 512,
+        "original_images_present": 1,
+        "rsa_receipts_present": 1,
+        "sealed_quorum_present": 0,
+        "zero_ack_births_present": 1
+      },
+      "ready_partitions": 0,
+      "untrusted_or_non_e1": []
+    },
+    "trade": {
+      "manifest_partitions": 256,
+      "original_files": {
+        "expected_quorums": 256,
+        "expected_voter_records": 512,
+        "original_images_present": 0,
+        "rsa_receipts_present": 0,
+        "sealed_quorum_present": 0,
+        "zero_ack_births_present": 0
+      },
+      "ready_partitions": 0,
+      "untrusted_or_non_e1": []
+    }
+  }
+}

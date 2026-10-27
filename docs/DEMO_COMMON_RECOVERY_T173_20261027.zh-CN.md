@@ -18,3 +18,13 @@
 5. **HA 实测**：Order/Trade A/B 真实自动连续互切、恢复追平、无重复成交/双主，MD Image/Diff 与旧发布者隔离。现在不得执行会误导业务可用性的主切宣称。
 
 统一 `saas-crypto`，只做 Mac 本地编译部署；GitHub Actions 不使用。所有运行/测试证据须区分 `RECOVERING` 与真正可交易 `READY`。
+
+## T174 续验：256 分区真正的阻塞与代码修复（2026-10-27）
+
+- Common 原单分区首次阶段仅允许 1 分区清单；主 Demo 的 E1 manifest 各 256 分区，且 CommonRecoveringNodeRuntime 锁定整份 manifest version。逐分区循环 CAS 会撤销其它旧 E1 recovery listener，不能只去掉单分区判断。
+- 新增 CommonOriginalE1FleetFirstActivationStage：全部 256 分区真正双 RSA Genesis、零 ACK WAL、双方 REPLAY_COMPLETE 后，整份 Manifest 一次性 E1/RECOVERING -> E2/RECOVERING；CAS 前签名/fsync 旧新 Manifest、512 原始成员证明摘要并二次重查。绝不产生 READY、ACK 或可交易端口。
+- CommonOriginalE1SignedMembersSource 的新工厂坚持实际同一 ZK session 和原始成员 RSA；CommonRecoveryOnlyProcess 新开关 stageOriginalFleet 需要此前完成实际业务加载、原始 Genesis 安装和认证 stager 回调。OrderSvr/TradeSvr 仅注入恢复状态及凭据，由 Common 统一控制 CAS。
+- 本地候选 Common commit 9d446b6、Order 9f7594e、Trade 196ab78，当前在各自 codex/t157 工作分支；Java 8 编译成功，Common 13 项相关 JUnit PASS；尚未移入服务主 saas-crypto，也未上线到主 Demo。
+- 只读检查命令：python3 tests/check-demo-common-readiness.py；结果：docs/evidence/T174_demo_common_original_e1_census_20261027.json。Order 512 原始 voter RSA 票据只有 1 份，Trade 0；全部两个 256 分区都是不可路由 E1，无业务 READY。文件计数仅存在性，非验签或数据恢复证明。
+- 此外，Order/Trade 当前 CommonPhysicalProofWiring 仅初始化 EMPTY CommonCertifiedPhysicalEvidenceRegistry，尚未打开真实 WAL/CommitIndex/双 Custody 证明；CommonRecoveredDomainWiring 仍只能校验 zero-ACK E1 Genesis，E2 CAS 后还必须实现可信历史 E1/E2 新服务加载和历史写主撤权交接。没有这两个缺口的修复，不能把 RECOVERING 升为业务 READY。
+- 当前实际 Order/Trade A/B 四节点仅为受限恢复进程；DNN8Q9 仍资金结果未知、禁止自动重试；真正交易和 Robot 盘口仍 NO-GO。
