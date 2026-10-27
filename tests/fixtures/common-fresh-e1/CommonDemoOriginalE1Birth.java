@@ -110,7 +110,8 @@ public final class CommonDemoOriginalE1Birth {
         byte[] image=freshDomainImage(service,p);
         Path root=Paths.get("/srv/dc/data/common-demo-original-e1",service,me,p);
         Path signed=root.resolve("node-voter");Path votes=root.resolve("receipts");
-        Path sealed=root.resolve("sealed");
+        Path sealed=Paths.get("/srv/dc/data/common-demo-original-e1",
+                service,"sealed",p);
         if("--sign".equals(operation)){
             // Independent Original A/B/C business containers each have only
             // their own original private key and their own durable data root.

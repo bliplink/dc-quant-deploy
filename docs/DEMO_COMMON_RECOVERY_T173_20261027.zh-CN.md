@@ -36,3 +36,11 @@
 - `validate-saas.sh` 原逻辑仅先检查 Docker running，旧 OrderC 容器故障会报大量历史日志而掩盖当前 Common RECOVERING 的主因；现新增前置门禁，实际运行输出 `dc-saas-ordersvr is Common RECOVERING only; cannot serve customer orders, trades or Robot (not business READY).` 并立即非零退出，不会误宣验收成功。
 - 本地 JUnit：Order 匹配安全/幂等/启动门禁 9/9 PASS；Trade 成交去重/资金/启动门禁 13/13 PASS；Common 真实双节点原始 E1/出生证明/恢复门禁与 256 舰队计划 21/21 PASS。此为**离线单元测试**，不能代替真实 Gateway、资金/订单/成交/机器人 E2E。
 - 阻塞仍是原始独立 RSA 证据未齐全、Common E1->E2 恢复后业务物理 WAL/Custody 状态与 serving Spring JVM 的可信接线未接通，四个 Demo 仍 RECOVERING。代码候选尚未切换主镜像，禁止用 `READY=true` 配置假装验收成功。
+
+## T176 真实交易前置验证和兼容修复（2026-10-27）
+
+- 在主 Demo 4 个真实 RECOVERING Docker JVM 上进行了只读 256 分区 Order/Trade 初始业务快照序列化探测：Order A/B 各 256 份、每份 213 字节，累计 SHA-256 一致：4353d3cb40f2a019071562435ea8879210504d8c300bfcc56e33d56d1e9c89c1；Trade A/B 各 256 份、每份 303 字节，累计 SHA-256 一致：86a183ffff67c36a4c8edfd1ac5033274c70e0d2d556358c41cff9261f34ec46。只验证 DTO 生成/编码，不能代表已加载真实 WAL 账户状态。
+- 新增只读测试程序：tests/fixtures/common-fresh-e1/CommonDemoE1ImageCensus.java（Java 8 编译，通过四 JVM），不写快照文件、不触碰密钥、不会发布 READY。
+- 发现 Order/Trade 的 FencedRecoveringBusinessState.inspect 原代码都写死从 /srv/dc/data/t150-original-genesis 读取 Pnnn/sealed/genesis-e1.snapshot（过时隔离测试目录）；主 Demo 实际是独立的新 E1 namespace，改开关会报 ORIGINAL_BUSINESS_IMAGE_MISSING。已在 Common Config 加入必填、绝对路径、非 symlink 的 originalSealedImageDir，并把它与原签名源 originalSignedQuorum 的路径强制对齐。Order/Trade 从该 Common 配置目录加载真实业务空镜像而不是 T150 固定旧地址，且对应 Demo 原始合证工具的 sealed 路径统一到 <data>/common-demo-original-e1/<service>/sealed/Pnnn。该修复仍没有跳过真实 RSA 或独立业务恢复检查。
+- 开发分支本地新提交：Common ea91ec5、Order f30df63、Trade 05e8c53。Common 22 项 replay、birth、census、restore 相关 JUnit PASS；Order/Trade 原始业务 Snapshot 单元测试 4/4 和 3/3 PASS。未部署此开发版到主 Demo，不能宣称真实成交。
+- 业务交易端口 33036/33037 仍未监听；Common RECOVERING 控制端口 44122/44222 在监听。主 Demo 不具备入金、机器人下单、撮合及成交查询的业务入口，不能运行会修改资金的 E2E。完全真实交易回归需原始 E1 双节点持久签名、256 分区真实恢复、E2 认证 READY 新 JVM 与 Gateway 路由检查通过后才允许执行。
