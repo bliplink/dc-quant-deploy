@@ -1,0 +1,6 @@
+# Always overlay real original RSA/Common ZooKeeper mounts and current ready properties.
+services:
+  tradesvr:
+    image: local/otc-t205-tradesvr:exact-signed-reconcile
+  tradesvr-b:
+    image: local/otc-t205-tradesvr:exact-signed-reconcile
