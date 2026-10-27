@@ -1048,6 +1048,11 @@ if [[ -n "${SAAS_FRESH_TEST_RESET_PROOF:-}" ]]; then
     --zk-port "${ZOOKEEPER_PORT}"
 fi
 apply_mysql_migrations
+# A brand-new schema must expose the same tenant/product/Robot columns as
+# incremental upgrades. Fail fast rather than leave auto-approval silently
+# PENDING after an otherwise green fresh install.
+python3 "${SCRIPT_DIR}/tests/check-fresh-tenant-schema.py" ||
+  die "Fresh MySQL schema is missing required tenant auto-approval/Robot tables."
 provision_platform_admin
 provision_robot_runtime_identity
 

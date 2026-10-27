@@ -1,0 +1,13 @@
+# T153 isolated Order/Trade Common E1 candidate ONLY; never official Compose.
+# Apply only as a second -f file to the existing exact T149 runtime project.
+services:
+  ordersvr-a:
+    image: local/otc-t153-ordersvr:common-e1-candidate
+  ordersvr-b:
+    image: local/otc-t153-ordersvr:common-e1-candidate
+  ordersvr-c:
+    image: local/otc-t153-ordersvr:common-e1-candidate
+  tradesvr-a:
+    image: local/otc-t153-tradesvr:common-e1-candidate
+  tradesvr-b:
+    image: local/otc-t153-tradesvr:common-e1-candidate
