@@ -54,3 +54,13 @@
 - **不可误报 READY：**Order/Trade 的 256 分区均为 0 READY；业务端口 33036、33037 关闭；Common 恢复控制端口 44122、44222 在监听，Robot、真实下单、成交及 A/B 业务主切尚未验收成功。实时证据：docs/evidence/T178_real_demo_common_redeployment_20261027.json。
 - 最后剩余是机制闭环：每个分区实际双原始 RSA Genesis+零 ACK WAL 证明及 A/B 业务 REPLAY_COMPLETE、批量 E1 交接与 E2 READY 签名物理证据注册、新 serving JVM 正确恢复并授权 Gateway。只有本机真实通过该完整环节，才能运行新租户开户、Robot 20+20 挂价、真实买卖成交、撤单及 Order/Trade 自动连续互切与资金/委托/成交/持仓/Projection 一致性验收。
 - 未清理 Main Demo 数据/未知资金请求，也未使用 GitHub Actions。旧业务运行许可不得通过修改 READY 标志或删除 lease 获得。
+
+## T179｜恢复阻塞的直接证据和同会话原始 Birth 修复（2026-10-27）
+
+- 主 Demo T178 四个 Order/Trade A/B 节点仍正常运行，但共 512 个 Order、512 个 Trade 原始本地签名/零 WAL 出生证明文件尚不完整，双签 Genesis 0/256，且两份 Manifest 各 0/256 READY。
+- 已检查真实四份 application.properties：每个节点完整的 E1 原始签名源配置均 0/256；inspectFencedBusiness、installFencedFreshGenesis、stageOriginalFleet 未启用。因此光更换镜像或直接开启 REST/Netty 业务监听不会出现可交易 READY。
+- 部署仓库 tests/check-demo-common-readiness.py 修正了真正的封存 Genesis 目录 common-demo-original-e1/<Service>/sealed/Pnnn/，与 Common 源实现一致，并统计每份真实应用配置 256 分区签名来源/首次激活开关。对应离线单元测试 6/6 通过，证据 docs/evidence/T179_e1_original_provisioning_and_source_config_20261027.json。
+- 发现此前 standalone CommonDemoOriginalE1Birth.java 虽读取活动租约，却自行创建了另一 ZK session，不足以证明签发者拥有原节点会话；修改为签名要求 exact session owner，不能借用其他 JVM 的 ZK Lease。源演示回执的文件存在性不表示同会话认证通过。
+- Common 的 saas-crypto 源码新增 CommonOriginalE1LeaseBoundBirth：仅原始 ZK 租约真实 owner 能为全新 E1/256 manifest 中属于自己的分区，使用现有被 pin 的 RSA、不可重复的全新原始磁盘根签署并 fsync 业务 Genesis、零 ACK birth 和签名票据；整个过程不开放 Gateway、不发行 READY、拒绝旧目录/别人的会话及重复初始化。Common 本地 commit 8eda30f，Java 8 源码整体编译；3 项该生产入口正反向测试，相关原始恢复总计 25/25 PASS。
+- **当前不能标注完成**：生产首次启动的业务 Snapshot 提供方和 256 分区签发调度尚未接入同一个持有 Lease 的 original Order/Trade JVM；跨节点真实签名证书和持久事务未生成，也没有 E2/E3 真正业务 READY 授权发布。T178 运行镜像仍是之前版本；严禁无认证开关或不可信签名冒充完成。
+- 用户期望的新租户自动审批/Robot 挂价/真实成交/Order Trade A/B 自动切换/资金一致性均在上述 Common 真正授权完成前无法执行；DNN8Q9 CASH_OUTCOME_UNKNOWN 不能重复 cashIn。
