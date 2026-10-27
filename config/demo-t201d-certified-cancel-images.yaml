@@ -1,0 +1,11 @@
+# T201d verified Mac Demo image overrides ONLY.
+# Always combine with existing Common RSA/ZK physical node and data mounts.
+services:
+  ordersvr:
+    image: local/otc-t201d-ordersvr:certified-cancel-saga
+  ordersvr-b:
+    image: local/otc-t201d-ordersvr:certified-cancel-saga
+  tradesvr:
+    image: local/otc-t201b-tradesvr:certified-cancel-index
+  tradesvr-b:
+    image: local/otc-t201b-tradesvr:certified-cancel-index
