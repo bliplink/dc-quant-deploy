@@ -4,7 +4,7 @@ import org.apache.zookeeper.CreateMode;
 import java.util.*;
 
 public final class CommonDemoFreshE1RecoveringManifest {
-  private static final String ROOT="/otc/demo-real-common";
+  private static String ROOT="/otc/demo-real-common";
   private static void ensure(ZookeeperClient zk,String p)throws Exception {
     if(!zk.exists(p)) zk.create(p,"",CreateMode.PERSISTENT);
   }
@@ -32,6 +32,10 @@ public final class CommonDemoFreshE1RecoveringManifest {
   public static void main(String[] args)throws Exception{
     if(args.length!=2 || (!"--dry-run".equals(args[0]) && !"--apply".equals(args[0])))
       throw new IllegalArgumentException("--dry-run|--apply ZK_HOSTS");
+    String specified=System.getProperty("otc.fresh.root",ROOT);
+    if(!specified.matches("/otc/[A-Za-z0-9_-]{4,64}"))
+      throw new IllegalArgumentException("explicit new Common Demo namespace required");
+    ROOT=specified;
     String order=manifest("order"),trade=manifest("trade");
     if("--dry-run".equals(args[0])){
       System.out.println("COMMON_DEMO_FRESH_E1_PLAN partitions=256 per_service strictRF2=true ready=false");
