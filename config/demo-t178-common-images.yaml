@@ -1,0 +1,9 @@
+services:
+  ordersvr:
+    image: local/otc-t178-ordersvr:saas-common-merged
+  ordersvr-b:
+    image: local/otc-t178-ordersvr:saas-common-merged
+  tradesvr:
+    image: local/otc-t178-tradesvr:saas-common-merged
+  tradesvr-b:
+    image: local/otc-t178-tradesvr:saas-common-merged

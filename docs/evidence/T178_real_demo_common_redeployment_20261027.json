@@ -1,0 +1,77 @@
+{
+  "common_business_ready": false,
+  "genesis_file_census": {
+    "business_ready_confirmed_by_this_check": false,
+    "containers": {
+      "OrderSvrA": true,
+      "OrderSvrB": true,
+      "TradeSvrA": true,
+      "TradeSvrB": true
+    },
+    "filesystem_census_only": true,
+    "original_file_prerequisites_complete": false,
+    "services": {
+      "order": {
+        "manifest_partitions": 256,
+        "original_files": {
+          "expected_quorums": 256,
+          "expected_voter_records": 512,
+          "original_images_present": 1,
+          "rsa_receipts_present": 1,
+          "sealed_quorum_present": 0,
+          "zero_ack_births_present": 1
+        },
+        "ready_partitions": 0,
+        "untrusted_or_non_e1": []
+      },
+      "trade": {
+        "manifest_partitions": 256,
+        "original_files": {
+          "expected_quorums": 256,
+          "expected_voter_records": 512,
+          "original_images_present": 0,
+          "rsa_receipts_present": 0,
+          "sealed_quorum_present": 0,
+          "zero_ack_births_present": 0
+        },
+        "ready_partitions": 0,
+        "untrusted_or_non_e1": []
+      }
+    }
+  },
+  "live_containers": {
+    "dc-saas-ordersvr": {
+      "image": "local/otc-t178-ordersvr:saas-common-merged",
+      "state": "running"
+    },
+    "dc-saas-ordersvr-b": {
+      "image": "local/otc-t178-ordersvr:saas-common-merged",
+      "state": "running"
+    },
+    "dc-saas-tradesvr": {
+      "image": "local/otc-t178-tradesvr:saas-common-merged",
+      "state": "running"
+    },
+    "dc-saas-tradesvr-b": {
+      "image": "local/otc-t178-tradesvr:saas-common-merged",
+      "state": "running"
+    }
+  },
+  "observed_at_local": "2026-10-27 14:13:45 CST",
+  "phase": "RECOVERING_ONLY_NO_TRADING_ACK",
+  "proof_limit": "Only filesystem existence audited; exact RSA/zero-WAL/independent business replay still require Common validation.",
+  "source_branches": {
+    "common": {
+      "branch": "saas-crypto",
+      "commit": "67bed56"
+    },
+    "order": {
+      "branch": "saas-crypto",
+      "commit": "113af17"
+    },
+    "trade": {
+      "branch": "saas-crypto",
+      "commit": "2fac239"
+    }
+  }
+}

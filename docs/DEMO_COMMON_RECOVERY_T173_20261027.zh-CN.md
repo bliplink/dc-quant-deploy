@@ -44,3 +44,13 @@
 - 发现 Order/Trade 的 FencedRecoveringBusinessState.inspect 原代码都写死从 /srv/dc/data/t150-original-genesis 读取 Pnnn/sealed/genesis-e1.snapshot（过时隔离测试目录）；主 Demo 实际是独立的新 E1 namespace，改开关会报 ORIGINAL_BUSINESS_IMAGE_MISSING。已在 Common Config 加入必填、绝对路径、非 symlink 的 originalSealedImageDir，并把它与原签名源 originalSignedQuorum 的路径强制对齐。Order/Trade 从该 Common 配置目录加载真实业务空镜像而不是 T150 固定旧地址，且对应 Demo 原始合证工具的 sealed 路径统一到 <data>/common-demo-original-e1/<service>/sealed/Pnnn。该修复仍没有跳过真实 RSA 或独立业务恢复检查。
 - 开发分支本地新提交：Common ea91ec5、Order f30df63、Trade 05e8c53。Common 22 项 replay、birth、census、restore 相关 JUnit PASS；Order/Trade 原始业务 Snapshot 单元测试 4/4 和 3/3 PASS。未部署此开发版到主 Demo，不能宣称真实成交。
 - 业务交易端口 33036/33037 仍未监听；Common RECOVERING 控制端口 44122/44222 在监听。主 Demo 不具备入金、机器人下单、撮合及成交查询的业务入口，不能运行会修改资金的 E2E。完全真实交易回归需原始 E1 双节点持久签名、256 分区真实恢复、E2 认证 READY 新 JVM 与 Gateway 路由检查通过后才允许执行。
+
+## T178｜主 Demo 四节点统一 Common 镜像已上线，但交易仍 NO-GO（2026-10-27）
+
+- Common 源分支 saas-crypto：67bed56；真实 297 生产 Java 类、137 测试源码全编译；Common 首次 Genesis/恢复相关 22 项 JUnit 通过。
+- Order saas-crypto：113af17；Trade saas-crypto：2fac239；删除各自原 cluster 目录 32/38 个 Java 文件，统一 Common 状态机与控制。候选完整 Java 8 clean compile 通过；Order 42 项业务+集群回归，Trade 33 项回归通过。保留 Order 原有成交回调诊断/缺委托时拒绝静默丢失。
+- 离线 Docker 镜像：local/otc-t178-ordersvr:saas-common-merged 和 local/otc-t178-tradesvr:saas-common-merged，内含唯一且完全一致的 Common Jar SHA256：87bdcb4d59cd71a19c5682dcac43317d6eded231e0c0bdeb6010b6adb3f24ac3。服务旧 cluster class 目录不存在。
+- A/B 四节点在主 Demo 已替换为 T178 并持续启动、重新取得分别独立的 Common ZK ephemeral leases。旧 ZooKeeper 会话退役前新 A 曾因 recovering node lease owned by another ZK session 被正确拒绝；未手动删除 lease，待其自然退役后启动成功。
+- **不可误报 READY：**Order/Trade 的 256 分区均为 0 READY；业务端口 33036、33037 关闭；Common 恢复控制端口 44122、44222 在监听，Robot、真实下单、成交及 A/B 业务主切尚未验收成功。实时证据：docs/evidence/T178_real_demo_common_redeployment_20261027.json。
+- 最后剩余是机制闭环：每个分区实际双原始 RSA Genesis+零 ACK WAL 证明及 A/B 业务 REPLAY_COMPLETE、批量 E1 交接与 E2 READY 签名物理证据注册、新 serving JVM 正确恢复并授权 Gateway。只有本机真实通过该完整环节，才能运行新租户开户、Robot 20+20 挂价、真实买卖成交、撤单及 Order/Trade 自动连续互切与资金/委托/成交/持仓/Projection 一致性验收。
+- 未清理 Main Demo 数据/未知资金请求，也未使用 GitHub Actions。旧业务运行许可不得通过修改 READY 标志或删除 lease 获得。
