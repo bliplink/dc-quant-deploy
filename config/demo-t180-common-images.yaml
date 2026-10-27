@@ -1,0 +1,9 @@
+services:
+  ordersvr:
+    image: local/otc-t180-ordersvr:common-owner-genesis
+  ordersvr-b:
+    image: local/otc-t180-ordersvr:common-owner-genesis
+  tradesvr:
+    image: local/otc-t180-tradesvr:common-owner-genesis
+  tradesvr-b:
+    image: local/otc-t180-tradesvr:common-owner-genesis

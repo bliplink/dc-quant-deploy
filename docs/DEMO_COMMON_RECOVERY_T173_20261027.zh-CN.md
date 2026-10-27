@@ -64,3 +64,12 @@
 - Common 的 saas-crypto 源码新增 CommonOriginalE1LeaseBoundBirth：仅原始 ZK 租约真实 owner 能为全新 E1/256 manifest 中属于自己的分区，使用现有被 pin 的 RSA、不可重复的全新原始磁盘根签署并 fsync 业务 Genesis、零 ACK birth 和签名票据；整个过程不开放 Gateway、不发行 READY、拒绝旧目录/别人的会话及重复初始化。Common 本地 commit 8eda30f，Java 8 源码整体编译；3 项该生产入口正反向测试，相关原始恢复总计 25/25 PASS。
 - **当前不能标注完成**：生产首次启动的业务 Snapshot 提供方和 256 分区签发调度尚未接入同一个持有 Lease 的 original Order/Trade JVM；跨节点真实签名证书和持久事务未生成，也没有 E2/E3 真正业务 READY 授权发布。T178 运行镜像仍是之前版本；严禁无认证开关或不可信签名冒充完成。
 - 用户期望的新租户自动审批/Robot 挂价/真实成交/Order Trade A/B 自动切换/资金一致性均在上述 Common 真正授权完成前无法执行；DNN8Q9 CASH_OUTCOME_UNKNOWN 不能重复 cashIn。
+
+## T180｜Common 首次 Genesis 同会话入口已三仓集成并滚动上线（2026-10-27）
+
+1. Common saas-crypto commit 8539b91。CommonRecoveryOnlyProcess 新增 provisionOriginalBirth=true 时才调用的同 JVM 原始出生回调：必须先获得原 ZooKeeper 真实 ephemeral lease（而非另开 session），校验原始 256 分区全部为 E1 RECOVERING、原始 A/B RSA pin、完整 256 原始业务初始快照、独立未用原始磁盘根，然后由 Common 批量 fsync 本节点 Genesis、签名回执和零 ACK 原始 WAL 出生证明；不会做 ZK READY CAS。默认关闭；配置错误/回调缺失均在访问 RSA/ZK 前拒绝。原始两节点证明需来自各自真实 lease owner。
+2. Order saas-crypto commit 7f6f2d4，Trade saas-crypto commit 8d2b4ee：在运行入口接入原 Common birth callback，两个业务服务只负责根据真实业务 Snapshot DTO 构造 256 分区 E1 零状态字节；签名、ZK、证书和 WAL 均在 Common 中。与原始 T150 Genesis snapshot bytes 比对，Order 256/256、Trade 256/256 完全一致。
+3. Common 全量生产源码 Java 8 编译通过；首次启动和认证恢复相关 26/26 JUnit PASS；Order/Trade 三仓生产源码 Java 8 全编译。使用同一 Common Jar SHA-256 0fa32270a6db5ae5280cde6c6b848fbcad313f9801f28a4021b8f4a08904c27c 构建 ARM64 离线镜像 local/otc-t180-ordersvr:common-owner-genesis 和 local/otc-t180-tradesvr:common-owner-genesis，镜像不包含旧 service/cluster 字节码。
+4. **实际主 Demo 部署**：A 节点旧租约自然失效后先启动 T180 Order A/Trade A；确认租约，再停 B，等待其旧租约自然失效，启动 T180 Order B/Trade B。四个容器均 Up，并分别在 ZK 正常持有临时租约。没有清理旧数据、手动删除 lease、运行 GitHub Actions 或重复发起未知 cashIn。
+5. **真实交易仍然 NO-GO**：原配置中的 provisionOriginalBirth 尚未启用，因为运行的 T167 Demo 是旧 E1 namespace 且出现不完整原始 Order A P090 证明，不能拿它伪装全新未曾 ACK 的环境；真实 256 分区原始双签/合证/全量业务 Replay ledger/E2 READY 尚未产生。完整 E1 原始来源配置仍为四 JVM 均 0/256，Order/Trade READY 均 0/256，交易入口未恢复。证据：docs/evidence/T180_demo_common_owner_genesis_rollout_20261027.json。
+6. 下一实际集成必须首先在全新的干净 Demo 命名空间和数据目录执行原始 A/B 自身同会话初始化（仅当真实无历史交易状态时），安全完成原始双节点 quorum sealed Genesis + 双独立业务 replay 和 E1->E2 认证；再接 E2 READY/业务物理 Evidence Registry 并跑新租户入金→Robot 报价→真实撮合→Order/Trade 自动主切→全量资金/委托/持仓一致性。任何缺证据、空 registry 或没有业务端口的情况保持 NO-GO。

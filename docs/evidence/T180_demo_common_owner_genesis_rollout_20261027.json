@@ -1,0 +1,71 @@
+{
+  "business_ready_confirmed_by_this_check": false,
+  "containers": {
+    "OrderSvrA": true,
+    "OrderSvrB": true,
+    "TradeSvrA": true,
+    "TradeSvrB": true
+  },
+  "filesystem_census_only": true,
+  "original_file_prerequisites_complete": false,
+  "services": {
+    "order": {
+      "manifest_partitions": 256,
+      "original_files": {
+        "expected_quorums": 256,
+        "expected_voter_records": 512,
+        "original_images_present": 1,
+        "rsa_receipts_present": 1,
+        "sealed_quorum_present": 0,
+        "zero_ack_births_present": 1
+      },
+      "ready_partitions": 0,
+      "recovery_source_config": {
+        "OrderSvrA": {
+          "certified_genesis_install_opt_in": false,
+          "complete_first_activation_opt_in": false,
+          "complete_partition_sources": 0,
+          "expected_partition_sources": 256,
+          "real_business_inspection_opt_in": false
+        },
+        "OrderSvrB": {
+          "certified_genesis_install_opt_in": false,
+          "complete_first_activation_opt_in": false,
+          "complete_partition_sources": 0,
+          "expected_partition_sources": 256,
+          "real_business_inspection_opt_in": false
+        }
+      },
+      "untrusted_or_non_e1": []
+    },
+    "trade": {
+      "manifest_partitions": 256,
+      "original_files": {
+        "expected_quorums": 256,
+        "expected_voter_records": 512,
+        "original_images_present": 0,
+        "rsa_receipts_present": 0,
+        "sealed_quorum_present": 0,
+        "zero_ack_births_present": 0
+      },
+      "ready_partitions": 0,
+      "recovery_source_config": {
+        "TradeSvrA": {
+          "certified_genesis_install_opt_in": false,
+          "complete_first_activation_opt_in": false,
+          "complete_partition_sources": 0,
+          "expected_partition_sources": 256,
+          "real_business_inspection_opt_in": false
+        },
+        "TradeSvrB": {
+          "certified_genesis_install_opt_in": false,
+          "complete_first_activation_opt_in": false,
+          "complete_partition_sources": 0,
+          "expected_partition_sources": 256,
+          "real_business_inspection_opt_in": false
+        }
+      },
+      "untrusted_or_non_e1": []
+    }
+  }
+}
