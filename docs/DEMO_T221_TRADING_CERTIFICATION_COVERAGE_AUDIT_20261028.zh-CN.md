@@ -75,3 +75,12 @@ Trade 在 Common nodeRuntime READY 时严格禁止旧 mutate-first WAL 路径，
 - 全量 Trade Java 源码经本机 JDK8 javac 编译 PASS；JUnit 4.13.2 相关回归 **24/24 PASS**（新适配及已有 CashIn/OpenCancel/Reserve 相关测试）。由于本机系统 Maven 不在 PATH，直接复用项目已构建的 classpath/JAR 和 javac，不使用 GitHub Actions。
 - **未完成/NO-GO**：真正 ExecType=Trade 成交资金和持仓结算，部分成交/重复回调、平仓实际成交、提现和账户/持仓模式写入，以及已有持仓情况下杠杆和保证金同步重算；Common Writer 故障后的自动授权恢复、A/B 双向主切也未通过。
 - **未部署、不计真实通过**：上述最新 Java 源码只在本地编译、测试、提交；现有 Trade A/B 仍运行 T220 镜像，OpenTradingCore Demo 的真实新委托与 Robot 稳态保持不变。待完整成交结算认证通过后统一部署验证，避免用功能不完整镜像替换已稳定的 Demo。
+
+## 最新运行故障追加（12:03 现场，覆盖上述运行状态）
+
+- **四个此前 RUNNING 的测试 Robot 均变为 ERROR / RUNTIME_FAILURE，活动委托 0；Demo 当前 NO-GO**。现有容器虽仍 running 且 restartCount=0，但不能以容器运行推断服务可交易。WSI1WX 的公开 MD 仍有旧盘口 Image（20 条），不代表有持续有效报价；其它新租户盘口已清空。
+- 独立日志一致证明：真实 Order RPC 返回 ORDER_COMMON_CERTIFIED_BUSINESS_STARTUP_DENIED，根因 Common certified replica domain Apply failed；下层 IOException 为 Common survivor WAL request lacks exact signed bounded head。部分撤单又被 Common physically certified partition writer unavailable: P119 拒绝，绝不能通过修改 Robot 绕过。
+- **确定性根因：硬编码 4096 帧限制耗尽。** 运行中 CommonCertifiedPartitionRuntime.pollCertifiedReplicaApply() 对 P119 调用 readCertifiedFrames(...,4096,64MiB)，且 CommonFileBusinessWal.readCertifiedFrames 同时要求 maxSlots 不得大于 4096、signedHeadSeq 不得超过 maxSlots。该调用还每次读取从第 1 帧到认证水位的完整历史，因此不仅会在第 4097 帧之后拒绝，长期成本也随 WAL 增长持续变高。
+- 12:03 只读取证：Order P119/epoch-2 副本 A 的 WAL **4104 帧 / 5,365,341 字节**，Primary B **4105 帧 / 5,366,777 字节**。B 第 4105 帧属于未认证尾部；B CommitIndex 只到 4104；A 是 B 的完整 4104 帧前缀。双方 custody/head.bin 和 custody-ledger/receipt-quorum.bin **逐字节一致**。Trade 256 分区 WAL A/B 一致，Order 的其它 255 分区 WAL 相同。
+- **禁止把 B 的第 4105 帧当成已提交订单，禁止在进程存活时复制/截断；也不能简单把 4096 改到 65536 当作集群完成**。真正修复只应发生在 Common：以已 RSA 验证的提交 Head 和持久化索引为边界，增量有界读取、只 Apply 未应用的连续 WAL 窗口，完成可重启的 snapshot/WAL 归档，再做已提交前缀+未认证尾部封存、安全恢复与 A/B 故障注入。保留 Common 与业务状态机分层，Order/Trade 不得自建 HA。
+- 此次审计**没有**再次恢复 P119 或重启 Order/Trade，没有部署新 Trade 源码，未覆盖原始 WAL；当前 Robot 故障仍未修复，严禁声明 Demo 已完成验收。
