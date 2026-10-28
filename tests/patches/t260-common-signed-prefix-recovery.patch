@@ -1,0 +1,574 @@
+From 4e35e582fe806c66e965ced38cabf0de50a24454 Mon Sep 17 00:00:00 2001
+From: OpenTradingCore Demo <demo-ci@opentradingcore.com>
+Date: Thu, 29 Oct 2026 00:40:33 +0800
+Subject: [PATCH 1/2] fix(common): replay signed historical prefix while
+ preserving uncertified WAL tail
+
+---
+ .../replication/CommonFileBusinessWal.java    | 105 ++++++++++++------
+ ...HistoricalCertifiedPrefixWithTailTest.java |  82 ++++++++++++++
+ .../CommonHistoricalPrefixPhysicalProbe.java  |  22 ++++
+ 3 files changed, 177 insertions(+), 32 deletions(-)
+ create mode 100644 src/test/java/com/app/common/replication/CommonHistoricalCertifiedPrefixWithTailTest.java
+ create mode 100644 src/test/java/com/app/common/replication/CommonHistoricalPrefixPhysicalProbe.java
+
+diff --git a/src/main/java/com/app/common/replication/CommonFileBusinessWal.java b/src/main/java/com/app/common/replication/CommonFileBusinessWal.java
+index eb47236..0382fe9 100644
+--- a/src/main/java/com/app/common/replication/CommonFileBusinessWal.java
++++ b/src/main/java/com/app/common/replication/CommonFileBusinessWal.java
+@@ -178,15 +178,55 @@ public final class CommonFileBusinessWal
+         if(e!=epoch || committed!=forcedSequence || pending!=null)
+             throw new IOException("Common WAL dirty tail or unreconciled certified head");
+     }
+-    /** Historical signed E1 evidence only: original WAL is opened READ-only.
+-     * This verifies the bytes against an independently RSA-certified HEAD;
+-     * it can NEVER furnish a new customer ACK or claim a new fsync. */
++    /** Only historical evidence readers may use a certified prefix of a
++     * longer physical WAL. The extra, potentially uncommitted suffix remains
++     * byte-for-byte untouched on the original disk. This method cannot grant
++     * any new ACK, custody proof or writable Common head; the caller MUST
++     * independently verify the original RSA certificate and custody ledger. */
+     synchronized void requireHistoricalSignedPrefix(long e,long seq,String signedSha)
+             throws Exception {
+-        if(!historicalReadOnly || closed || poisoned || e!=epoch || seq<=0
+-                || seq!=forcedSequence || forcedHash==null || signedSha==null
+-                || !signedSha.equals(forcedHash))
+-            throw new IOException("historical read-only WAL does not match RSA-certified HEAD");
++        historicalCertifiedPrefixEnd(e,seq,signedSha);
++    }
++
++    private long historicalCertifiedPrefixEnd(long e,long seq,String signedSha)
++            throws Exception {
++        if(!historicalReadOnly ||closed ||poisoned ||e!=epoch ||seq<=0
++                ||seq>forcedSequence ||signedSha==null
++                ||!signedSha.matches("[a-f0-9]{64}"))
++            throw new IOException("historical read-only WAL lacks certified HEAD");
++        final long length=file.size();
++        if(seq==forcedSequence) {
++            if(!signedSha.equals(forcedHash))
++                throw new IOException("historical read-only WAL HEAD signature mismatch");
++            return length;
++        }
++        // Constructor already checks full-file sequence, CRC and framing,
++        // including the uncertified suffix. Seek to the exact frame boundary
++        // and hash only the independent certificate's committed prefix.
++        long offset=0;
++        for(long n=1;n<=seq;n++){
++            if(length-offset<HEADER)
++                throw new IOException("certified prefix missing physical WAL header");
++            ByteBuffer h=ByteBuffer.allocate(HEADER);
++            readExactly(h,offset);h.flip();
++            int magic=h.getInt();long originalEpoch=h.getLong(),originalSeq=h.getLong();
++            int size=h.getInt();h.getInt();
++            if(magic!=MAGIC ||originalEpoch!=e ||originalSeq!=n
++                    ||size<=0 ||size>MAX ||length-offset-HEADER<size)
++                throw new IOException("certified prefix invalid original WAL frame");
++            offset+=HEADER+size;
++        }
++        MessageDigest hash=MessageDigest.getInstance("SHA-256");
++        ByteBuffer window=ByteBuffer.allocate(32768);
++        for(long pos=0;pos<offset;){
++            window.clear();window.limit((int)Math.min(window.capacity(),offset-pos));
++            int read=file.read(window,pos);
++            if(read<=0)throw new IOException("short certified prefix read");
++            hash.update(window.array(),0,read);pos+=read;
++        }
++        if(file.size()!=length ||!signedSha.equals(hex(hash.digest())))
++            throw new IOException("historical original WAL certified prefix SHA mismatch");
++        return offset;
+     }
+ 
+     @Override public synchronized String requireFsyncedPrefix(long e,long seq)throws Exception {
+@@ -264,26 +304,27 @@ public final class CommonFileBusinessWal
+      */
+     synchronized java.util.List<CommittedWalFrame> readCertifiedFrames(long oldEpoch,
+             long signedHeadSeq,String signedHeadSha,int maxSlots,long maxBytes) throws Exception {
+-        if(historicalReadOnly){
+-            if(closed || poisoned || oldEpoch!=epoch || signedHeadSeq!=forcedSequence
+-                    || forcedHash==null || !forcedHash.equals(signedHeadSha))
+-                throw new IOException("read-only physical historical WAL mismatches original signed SHA");
+-        }else requireFsyncedPrefix(oldEpoch,signedHeadSeq);
++        final long certifiedEnd;
++        if(historicalReadOnly)
++            certifiedEnd=historicalCertifiedPrefixEnd(oldEpoch,signedHeadSeq,signedHeadSha);
++        else {
++            requireFsyncedPrefix(oldEpoch,signedHeadSeq);
++            certifiedEnd=file.size();
++        }
+         if(maxSlots<1 || maxSlots>4096 || maxBytes<=0 || maxBytes>256L*1024L*1024L
+-                || signedHeadSeq>maxSlots || signedHeadSeq>Integer.MAX_VALUE
+-                || !forcedHash.equals(signedHeadSha))
+-            throw new IOException("Common survivor WAL request lacks exact signed bounded head");
++                || signedHeadSeq>maxSlots || signedHeadSeq>Integer.MAX_VALUE)
++            throw new IOException("Common survivor WAL request lacks signed bounded prefix");
+         java.util.List<CommittedWalFrame> all=new java.util.ArrayList<CommittedWalFrame>();
+         MessageDigest actualDiskSha=MessageDigest.getInstance("SHA-256");
+         long offset=0,total=0,sequence=0,bytes=file.size();
+-        while(offset<bytes){
+-            if(bytes-offset<HEADER)throw new IOException("truncated historical committed WAL header");
++        while(offset<certifiedEnd){
++            if(certifiedEnd-offset<HEADER)throw new IOException("truncated historical committed WAL header");
+             ByteBuffer header=ByteBuffer.allocate(HEADER);
+             readExactly(header,offset);header.flip();
+             int magic=header.getInt();long e=header.getLong(),seq=header.getLong();
+             int size=header.getInt(),checksum=header.getInt();
+             if(magic!=MAGIC || e!=oldEpoch || seq!=sequence+1
+-                    || size<=0 || size>MAX || bytes-offset-HEADER<size
++                    || size<=0 || size>MAX || certifiedEnd-offset-HEADER<size
+                     || seq>signedHeadSeq || seq>maxSlots || total>maxBytes-size)
+                 throw new IOException("invalid or uncommitted Common survivor WAL frame");
+             ByteBuffer payload=ByteBuffer.allocate(size);
+@@ -298,9 +339,9 @@ public final class CommonFileBusinessWal
+             offset+=HEADER+size;total+=size;sequence=seq;
+         }
+         if(sequence!=signedHeadSeq || all.size()!=signedHeadSeq
+-                || file.size()!=bytes || !hex(actualDiskSha.digest()).equals(signedHeadSha)
+-                || !forcedHash.equals(signedHeadSha))
+-            throw new IOException("survivor WAL no longer matches certified complete HEAD");
++                || offset!=certifiedEnd ||file.size()!=bytes
++                || !hex(actualDiskSha.digest()).equals(signedHeadSha))
++            throw new IOException("survivor WAL no longer matches signed certified prefix");
+         return java.util.Collections.unmodifiableList(all);
+     }
+ 
+@@ -308,16 +349,17 @@ public final class CommonFileBusinessWal
+     synchronized java.util.List<CommittedWalFrame> readCertifiedWindow(long signedEpoch,
+             long signedHeadSeq,String signedHeadSha,long afterExclusive,
+             int maxSlots,long maxBytes)throws Exception {
+-        if(historicalReadOnly){
+-            if(closed || poisoned ||signedEpoch!=epoch
+-                    ||signedHeadSeq!=forcedSequence ||forcedHash==null
+-                    ||!forcedHash.equals(signedHeadSha))
+-                throw new IOException("historical signed WAL window has no exact HEAD");
+-        }else requireFsyncedPrefix(signedEpoch,signedHeadSeq);
++        if(historicalReadOnly)
++            historicalCertifiedPrefixEnd(signedEpoch,signedHeadSeq,signedHeadSha);
++        else {
++            requireFsyncedPrefix(signedEpoch,signedHeadSeq);
++            if(!forcedHash.equals(signedHeadSha))
++                throw new IOException("writable Common replica HEAD mismatch");
++        }
+         if(afterExclusive<0 || afterExclusive>=signedHeadSeq || signedHeadSeq<=0
+                 ||maxSlots<1 ||maxSlots>4096 ||maxBytes<MAX
+-                ||maxBytes>256L*1024L*1024L ||!forcedHash.equals(signedHeadSha))
+-            throw new IOException("Common replica window requires exact signed HEAD and bounded delta");
++                ||maxBytes>256L*1024L*1024L)
++            throw new IOException("Common replica window requires signed HEAD and bounded delta");
+         long length=file.size(),offset=0,seq=0;
+         if(liveWindowAfterSeq==afterExclusive && liveWindowAfterOffset<=length){
+             seq=afterExclusive;offset=liveWindowAfterOffset;
+@@ -361,9 +403,8 @@ public final class CommonFileBusinessWal
+             nextFrames.add(new CommittedWalFrame(e,next,payload.array(),wire));
+             offset+=HEADER+size;total+=size;seq=next;
+         }
+-        if(nextFrames.isEmpty()||file.size()!=length
+-                ||!forcedHash.equals(signedHeadSha))
+-            throw new IOException("certified WAL window not backed by stable HEAD");
++        if(nextFrames.isEmpty()||file.size()!=length)
++            throw new IOException("certified WAL window not backed by stable original");
+         liveWindowAfterSeq=seq;liveWindowAfterOffset=offset;
+         return java.util.Collections.unmodifiableList(nextFrames);
+     }
+diff --git a/src/test/java/com/app/common/replication/CommonHistoricalCertifiedPrefixWithTailTest.java b/src/test/java/com/app/common/replication/CommonHistoricalCertifiedPrefixWithTailTest.java
+new file mode 100644
+index 0000000..13de053
+--- /dev/null
++++ b/src/test/java/com/app/common/replication/CommonHistoricalCertifiedPrefixWithTailTest.java
+@@ -0,0 +1,82 @@
++package com.app.common.replication;
++
++import static org.junit.Assert.*;
++import java.io.IOException;
++import java.nio.file.*;
++import java.util.*;
++import org.junit.Rule;
++import org.junit.Test;
++import org.junit.rules.TemporaryFolder;
++
++/** Signed survivor recovery consumes only the authenticated prefix, never dirty suffix. */
++public final class CommonHistoricalCertifiedPrefixWithTailTest {
++    @Rule public TemporaryFolder dir=new TemporaryFolder();
++
++    @Test public void historicalReadOnlyCanReplayTwoCertifiedRecordsButNeverAdoptTail() throws Exception {
++        Path walFile=dir.getRoot().toPath().resolve("P002/E2/business.wal");
++        byte[] a="any-business-state-one".getBytes("UTF-8");
++        byte[] b="any-business-state-two".getBytes("UTF-8");
++        byte[] extra="not-committed-after-custody".getBytes("UTF-8");
++        String signed;
++        try(CommonFileBusinessWal owner=new CommonFileBusinessWal(walFile,2)){
++            DurableWalGroupCommit.forceThenPublish(2,1,Collections.singletonList(a),owner.writer());
++            DurableWalGroupCommit.forceThenPublish(2,2,Collections.singletonList(b),owner.writer());
++            signed=owner.requireFsyncedPrefix(2,2);
++            DurableWalGroupCommit.forceThenPublish(2,3,Collections.singletonList(extra),owner.writer());
++            assertEquals(3,owner.forcedSequence());
++            try{owner.requireCleanCertifiedHead(2,2);fail("dirty tail adopted for writable ACK");}
++            catch(IOException expected){}
++        }
++        byte[] original=Files.readAllBytes(walFile);
++        try(CommonFileBusinessWal viewer=CommonFileBusinessWal.openExistingReadOnly(walFile,2)){
++            viewer.requireHistoricalSignedPrefix(2,2,signed);
++            List<CommonFileBusinessWal.CommittedWalFrame> certified=
++                viewer.readCertifiedFrames(2,2,signed,8,65536);
++            assertEquals(2,certified.size());
++            assertArrayEquals(a,certified.get(0).bytes());
++            assertArrayEquals(b,certified.get(1).bytes());
++            List<CommonFileBusinessWal.CommittedWalFrame> window=
++                viewer.readCertifiedWindow(2,2,signed,0,2,64L*1024L*1024L);
++            assertEquals(2,window.size());
++            assertEquals(2,window.get(1).sequence);
++            try{viewer.readCertifiedFrames(2,3,signed,8,65536);
++                fail("unsigned tail replayed as authenticated");}
++            catch(IOException expected){}
++            try{viewer.requireFsyncedPrefix(2,2);
++                fail("historical observer issued new ACK");}
++            catch(IOException expected){}
++            try{viewer.requireHistoricalSignedPrefix(2,2,
++                 "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa");
++                fail("wrong RSA-certified SHA accepted");}
++            catch(IOException expected){}
++        }
++        assertArrayEquals("Original WAL including extra tail must remain untouched",
++                original,Files.readAllBytes(walFile));
++    }
++
++    @Test public void corruptedCommittedPrefixCannotBeAuthenticatedByValidUnsignedTail()throws Exception{
++        Path walFile=dir.getRoot().toPath().resolve("P003/E2/business.wal");
++        String signed;
++        try(CommonFileBusinessWal owner=new CommonFileBusinessWal(walFile,2)){
++            DurableWalGroupCommit.forceThenPublish(2,1,
++                Collections.singletonList("trusted".getBytes("UTF-8")),owner.writer());
++            signed=owner.requireFsyncedPrefix(2,1);
++            DurableWalGroupCommit.forceThenPublish(2,2,
++                Collections.singletonList("extra".getBytes("UTF-8")),owner.writer());
++        }
++        byte[] original=Files.readAllBytes(walFile);
++        // Physical bytes have valid CRC/framing; a different purported HEAD is
++        // still rejected because caller must carry exact independently signed SHA.
++        try(CommonFileBusinessWal viewer=CommonFileBusinessWal.openExistingReadOnly(walFile,2)){
++            try{viewer.requireHistoricalSignedPrefix(2,1,
++                    "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb");
++                fail("forged certified prefix accepted");}
++            catch(IOException expected){}
++            viewer.requireHistoricalSignedPrefix(2,1,signed);
++            try{viewer.readCertifiedWindow(2,2,signed,0,2,64L*1024L*1024L);
++                fail("unverified unsigned terminal seq accepted");}
++            catch(IOException expected){}
++        }
++        assertArrayEquals(original,Files.readAllBytes(walFile));
++    }
++}
+diff --git a/src/test/java/com/app/common/replication/CommonHistoricalPrefixPhysicalProbe.java b/src/test/java/com/app/common/replication/CommonHistoricalPrefixPhysicalProbe.java
+new file mode 100644
+index 0000000..b7dea1f
+--- /dev/null
++++ b/src/test/java/com/app/common/replication/CommonHistoricalPrefixPhysicalProbe.java
+@@ -0,0 +1,22 @@
++package com.app.common.replication;
++import java.nio.file.Path;
++import java.nio.file.Paths;
++
++/** Read-only on-disk operator diagnostic; cannot make certificates or write WAL. */
++public final class CommonHistoricalPrefixPhysicalProbe {
++    public static void main(String[] args)throws Exception{
++        if(args.length!=4)throw new IllegalArgumentException("walPath epoch signedSeq signedSha");
++        Path original=Paths.get(args[0]);
++        long e=Long.parseLong(args[1]),seq=Long.parseLong(args[2]);
++        try(CommonFileBusinessWal reader=CommonFileBusinessWal.openExistingReadOnly(original,e)){
++            reader.requireHistoricalSignedPrefix(e,seq,args[3]);
++            java.util.List<CommonFileBusinessWal.CommittedWalFrame> window=
++                reader.readCertifiedWindow(e,seq,args[3],0,4,64L*1024L*1024L);
++            if(window.isEmpty() || window.get(0).sequence!=1)
++                throw new IllegalStateException("verified signed WAL prefix not contiguous");
++            System.out.println("ORIGINAL_WAL_CERTIFIED_PREFIX_READ_ONLY_PASS signed="+seq
++                    +" extraUncertified="+(reader.forcedSequence()-seq)
++                    +" windowFrames="+window.size());
++        }
++    }
++}
+-- 
+2.50.1 (Apple Git-155)
+
+
+From 83f16012489e9521bed9ab81e3f742a4c51f7b6d Mon Sep 17 00:00:00 2001
+From: OpenTradingCore Demo <demo-ci@opentradingcore.com>
+Date: Thu, 29 Oct 2026 00:45:01 +0800
+Subject: [PATCH 2/2] fix(common): cold E2 accept certified WAL prefix without
+ adopting unsigned tail
+
+---
+ .../CommonCertifiedE2ReplicaHistory.java      | 135 ++++++++++++++++++
+ ...CommonCertifiedE2LargeColdHistoryTest.java | 121 ++++++++++++++++
+ 2 files changed, 256 insertions(+)
+ create mode 100644 src/main/java/com/app/common/replication/CommonCertifiedE2ReplicaHistory.java
+ create mode 100644 src/test/java/com/app/common/replication/CommonCertifiedE2LargeColdHistoryTest.java
+
+diff --git a/src/main/java/com/app/common/replication/CommonCertifiedE2ReplicaHistory.java b/src/main/java/com/app/common/replication/CommonCertifiedE2ReplicaHistory.java
+new file mode 100644
+index 0000000..b3ae1a5
+--- /dev/null
++++ b/src/main/java/com/app/common/replication/CommonCertifiedE2ReplicaHistory.java
+@@ -0,0 +1,135 @@
++package com.app.common.replication;
++
++import java.io.IOException;
++import java.nio.file.Files;
++import java.nio.file.LinkOption;
++import java.nio.file.Path;
++import java.security.MessageDigest;
++import java.util.ArrayList;
++import java.util.Collections;
++import java.util.HashSet;
++import java.util.List;
++import java.util.Set;
++
++/**
++ * E2+ cold member HISTORY INPUT ONLY. The signed WAL/custody is immutable
++ * original evidence; validating it cannot authorize service READY, leader,
++ * a client ACK or skip a business state-machine replay.
++ *
++ * At an E2 member restart, business state MUST replay these frames and
++ * reconcile its exact state / external projection before any serving grant.
++ * Current live ZK grants / old-owner fencing are independent prerequisites.
++ */
++public final class CommonCertifiedE2ReplicaHistory {
++    private CommonCertifiedE2ReplicaHistory() {}
++
++    public static final class Frame {
++        public final long epoch, sequence;
++        private final byte[] payload;
++        Frame(long epoch,long sequence,byte[] payload) {
++            this.epoch=epoch;
++            this.sequence=sequence;
++            this.payload=payload.clone();
++        }
++        public byte[] payload(){return payload.clone();}
++    }
++    public static final class Verified {
++        public final String service,partition,sourceReplica,sha256;
++        public final long epoch,committedSequence;
++        public final List<Frame> frames;
++        Verified(DurableWalCommitQuorum.Membership membership,String replica,
++                 DurableWalCommitQuorum.Certificate cert,List<Frame> raw) {
++            service=membership.service;
++            partition=membership.partition;
++            sourceReplica=replica;
++            epoch=membership.epoch;
++            committedSequence=cert.committedSequence;
++            sha256=cert.commitPrefixSha256;
++            frames=Collections.unmodifiableList(new ArrayList<Frame>(raw));
++        }
++        /** Deliberately never grants serving/ACK. */
++        public boolean authorizesReady(){return false;}
++    }
++
++    public static Verified openExistingReadOnly(Path physicalReplicaEpochRoot,
++            DurableWalCommitQuorum.Membership pinnedCurrentZkMembership,
++            String originalPhysicalReplica,int maxRecords,long maxPayloadBytes)
++            throws Exception {
++        if(physicalReplicaEpochRoot==null || !physicalReplicaEpochRoot.isAbsolute()
++                ||Files.isSymbolicLink(physicalReplicaEpochRoot)
++                ||!Files.isDirectory(physicalReplicaEpochRoot,LinkOption.NOFOLLOW_LINKS)
++                ||pinnedCurrentZkMembership==null
++                ||pinnedCurrentZkMembership.epoch<2
++                ||pinnedCurrentZkMembership.members.size()!=2
++                ||originalPhysicalReplica==null
++                ||!pinnedCurrentZkMembership.members.containsKey(originalPhysicalReplica)
++                ||maxRecords<1 ||maxRecords>4096
++                ||maxPayloadBytes<1 ||maxPayloadBytes>64L*1024*1024)
++            throw new IOException("cold E2 replay requires a physically pinned A/B member and bounded current quorum");
++        Path originalWal=physicalReplicaEpochRoot.resolve("business.wal");
++        Path originalCustody=physicalReplicaEpochRoot.resolve("custody");
++        if(Files.isSymbolicLink(originalWal)||Files.isSymbolicLink(originalCustody)
++                ||!Files.isRegularFile(originalWal,LinkOption.NOFOLLOW_LINKS)
++                ||!Files.isDirectory(originalCustody,LinkOption.NOFOLLOW_LINKS))
++            throw new IOException("missing original physical replica E2 WAL/custody");
++        try(CommonFileBusinessWal wal=CommonFileBusinessWal.openExistingReadOnly(
++                    originalWal,pinnedCurrentZkMembership.epoch);
++            DurableWalCertificateCustody custody=
++                    DurableWalCertificateCustody.openExistingReadOnly(
++                        originalCustody,pinnedCurrentZkMembership,wal)) {
++            DurableWalCommitQuorum.Certificate certified=custody.highestVerified();
++            if(certified==null||certified.committedSequence<1
++                    ||certified.committedSequence>wal.forcedSequence()
++                    ||certified.epoch!=pinnedCurrentZkMembership.epoch
++                    ||certified.votes.size()!=2
++                    ||!pinnedCurrentZkMembership.digest.equals(certified.membershipSha256))
++                throw new IOException("cold E2 replay original signed committed HEAD missing");
++            // A complete original WAL can include a physically fsynced frame
++            // that never achieved the dual-signed Common committed HEAD.
++            // It remains immutable evidence, not a candidate for recovery.
++            // The custody reader verifies the signed prefix SHA exactly;
++            // only [1..certified.committedSequence] can enter domain replay.
++            wal.requireHistoricalSignedPrefix(certified.epoch,
++                    certified.committedSequence,certified.commitPrefixSha256);
++            Set<String> independent=new HashSet<String>();
++            for(DurableWalCommitQuorum.Receipt receipt:certified.votes)
++                if(!independent.add(receipt.node)
++                        ||!pinnedCurrentZkMembership.members.containsKey(receipt.node))
++                    throw new IOException("cold E2 replay original dual independent physical votes absent");
++            if(independent.size()!=2)
++                throw new IOException("cold E2 replay required both independently signed voters");
++            // maxRecords caps each independently checked window, NOT the
++            // total lifetime commit index. The authoritative HEAD remains
++            // the same RSA quorum certificate for *every* window.
++            if(certified.committedSequence>Integer.MAX_VALUE)
++                throw new IOException("cold E2 requires a certified snapshot for giant history");
++            long maxSlotsByMemory=Math.max(1L,maxPayloadBytes/64L);
++            if(certified.committedSequence>maxSlotsByMemory)
++                throw new IOException("cold E2 state history exceeds safe in-memory cap; certified snapshot required");
++            List<Frame> frames=new ArrayList<Frame>();
++            long cursor=0,retainedBytes=0;
++            while(cursor<certified.committedSequence){
++                List<CommonFileBusinessWal.CommittedWalFrame> chunk=
++                        wal.readCertifiedWindow(pinnedCurrentZkMembership.epoch,
++                                certified.committedSequence,certified.commitPrefixSha256,
++                                cursor,maxRecords,maxPayloadBytes);
++                if(chunk.isEmpty()||chunk.size()>maxRecords)
++                    throw new IOException("cold E2 authenticated window missing");
++                for(CommonFileBusinessWal.CommittedWalFrame record:chunk){
++                    if(record.epoch!=pinnedCurrentZkMembership.epoch
++                            ||record.sequence!=cursor+1)
++                        throw new IOException("cold E2 authenticated WAL sequence gap");
++                    byte[] payload=record.bytes();
++                    if(retainedBytes>maxPayloadBytes-payload.length)
++                        throw new IOException("cold E2 history exceeds bounded payload; snapshot required");
++                    retainedBytes+=payload.length;
++                    frames.add(new Frame(record.epoch,record.sequence,payload));
++                    cursor++;
++                }
++            }
++            if(cursor!=certified.committedSequence)
++                throw new IOException("cold E2 authenticated history is not contiguous");
++            return new Verified(pinnedCurrentZkMembership,originalPhysicalReplica,certified,frames);
++        }
++    }
++}
+diff --git a/src/test/java/com/app/common/replication/CommonCertifiedE2LargeColdHistoryTest.java b/src/test/java/com/app/common/replication/CommonCertifiedE2LargeColdHistoryTest.java
+new file mode 100644
+index 0000000..d37c36b
+--- /dev/null
++++ b/src/test/java/com/app/common/replication/CommonCertifiedE2LargeColdHistoryTest.java
+@@ -0,0 +1,121 @@
++package com.app.common.replication;
++
++import java.io.ByteArrayOutputStream;
++import java.nio.ByteBuffer;
++import java.nio.file.Files;
++import java.nio.file.Path;
++import java.security.KeyPair;
++import java.security.KeyPairGenerator;
++import java.util.Arrays;
++import java.util.zip.CRC32;
++import org.junit.Test;
++import static org.junit.Assert.*;
++
++/** Authenticated historical cold E2, not merely unsigned incremental WAL. */
++public final class CommonCertifiedE2LargeColdHistoryTest {
++    private static byte[] wal(int length)throws Exception{
++        ByteArrayOutputStream output=new ByteArrayOutputStream();
++        for(int i=1;i<=length;i++){
++            byte[] payload=("test-order-after-"+i).getBytes("UTF-8");
++            ByteBuffer check=ByteBuffer.allocate(16+payload.length);
++            check.putLong(2).putLong(i).put(payload);
++            CRC32 crc=new CRC32();crc.update(check.array());
++            ByteBuffer wire=ByteBuffer.allocate(28+payload.length);
++            wire.putInt(0x43425731).putLong(2).putLong(i)
++                    .putInt(payload.length).putInt((int)crc.getValue()).put(payload);
++            output.write(wire.array());
++        }
++        return output.toByteArray();
++    }
++    @Test public void historicalCertifiedColdReplays4105FramesAcrossWindowBoundary()
++            throws Exception{
++        Path root=Files.createTempDirectory("certified-cold-4105");
++        Path path=root.resolve("business.wal");
++        Files.write(path,wal(4105));
++        KeyPairGenerator generator=KeyPairGenerator.getInstance("RSA");
++        generator.initialize(2048);
++        KeyPair a=generator.generateKeyPair(),b=generator.generateKeyPair();
++        DurableWalCommitQuorum.Membership members=new DurableWalCommitQuorum.Membership(
++                "OrderSvr","P119","OrderSvrB",2,2,Arrays.asList(
++                new DurableWalCommitQuorum.Member("OrderSvrA","test-host-A",a.getPublic()),
++                new DurableWalCommitQuorum.Member("OrderSvrB","test-host-B",b.getPublic())));
++        try(CommonFileBusinessWal disk=new CommonFileBusinessWal(path,2);
++            DurableWalCertificateCustody custody=new DurableWalCertificateCustody(
++                    root.resolve("custody"),members,disk,old->{})){
++            String sha=disk.requireFsyncedPrefix(2,4105);
++            DurableWalCommitQuorum.Certificate cert=DurableWalCommitQuorum.verify(
++                    members,4105,sha,Arrays.asList(
++                        DurableWalCommitQuorum.sign(members,"OrderSvrA",4105,disk,a.getPrivate()),
++                        DurableWalCommitQuorum.sign(members,"OrderSvrB",4105,disk,b.getPrivate())));
++            assertEquals(4105,custody.install(cert));
++        }
++        CommonCertifiedE2ReplicaHistory.Verified verified=
++                CommonCertifiedE2ReplicaHistory.openExistingReadOnly(
++                        root,members,"OrderSvrA",256,64L*1024*1024);
++        assertEquals(4105,verified.committedSequence);
++        assertEquals(4105,verified.frames.size());
++        assertEquals(4097,verified.frames.get(4096).sequence);
++        assertEquals("test-order-after-4105",
++                new String(verified.frames.get(4104).payload(),"UTF-8"));
++        assertFalse(verified.authorizesReady());
++    }
++    @Test public void oldSingleFrameBoundCanNoLongerAuthorizeUnboundedWindow()
++            throws Exception{
++        Path root=Files.createTempDirectory("certified-cold-oversize");
++        byte[] bytes=wal(4105);
++        Files.write(root.resolve("business.wal"),bytes);
++        try(CommonFileBusinessWal wal=CommonFileBusinessWal.openExistingReadOnly(
++                    root.resolve("business.wal"),2)){
++            try{
++                byte[] digest=java.security.MessageDigest.getInstance("SHA-256").digest(bytes);
++                StringBuilder sha=new StringBuilder();
++                for(byte b:digest)sha.append(String.format("%02x",b&255));
++                wal.readCertifiedWindow(2,4105,sha.toString(),
++                        4096,4097,64L*1024*1024);
++                fail("single cold batch must stay bounded");
++            }catch(java.io.IOException expected){
++                assertTrue(expected.getMessage().contains("bounded"));
++            }
++        }
++    }
++    @Test public void signedDualCustodyHeadPermitsImmutableUncertifiedSuffixOnlyDuringRecovery()
++            throws Exception {
++        Path root=Files.createTempDirectory("certified-e2-physical-tail");
++        KeyPairGenerator generator=KeyPairGenerator.getInstance("RSA");
++        generator.initialize(2048);
++        KeyPair a=generator.generateKeyPair(),b=generator.generateKeyPair();
++        DurableWalCommitQuorum.Membership members=new DurableWalCommitQuorum.Membership(
++                "OrderSvr","P045","OrderSvrB",2,2,Arrays.asList(
++                new DurableWalCommitQuorum.Member("OrderSvrA","test-host-A",a.getPublic()),
++                new DurableWalCommitQuorum.Member("OrderSvrB","test-host-B",b.getPublic())));
++        try(CommonFileBusinessWal disk=new CommonFileBusinessWal(root.resolve("business.wal"),2);
++            DurableWalCertificateCustody custody=new DurableWalCertificateCustody(
++                    root.resolve("custody"),members,disk,old->{})){
++            DurableWalGroupCommit.forceThenPublish(2,1,
++                    java.util.Collections.singletonList("opaque-state-1".getBytes("UTF-8")),disk.writer());
++            DurableWalGroupCommit.forceThenPublish(2,2,
++                    java.util.Collections.singletonList("opaque-state-2".getBytes("UTF-8")),disk.writer());
++            String sha=disk.requireFsyncedPrefix(2,2);
++            DurableWalCommitQuorum.Certificate cert=DurableWalCommitQuorum.verify(
++                    members,2,sha,Arrays.asList(
++                    DurableWalCommitQuorum.sign(members,"OrderSvrA",2,disk,a.getPrivate()),
++                    DurableWalCommitQuorum.sign(members,"OrderSvrB",2,disk,b.getPrivate())));
++            assertEquals(2,custody.install(cert));
++            DurableWalGroupCommit.forceThenPublish(2,3,
++                    java.util.Collections.singletonList("not-certified".getBytes("UTF-8")),disk.writer());
++            assertEquals(3,disk.forcedSequence());
++            try{disk.requireCleanCertifiedHead(2,2);fail("writable old Epoch adopted dirty tail");}
++            catch(java.io.IOException expected){}
++        }
++        byte[] original=Files.readAllBytes(root.resolve("business.wal"));
++        CommonCertifiedE2ReplicaHistory.Verified verified=
++                CommonCertifiedE2ReplicaHistory.openExistingReadOnly(
++                        root,members,"OrderSvrA",256,64L*1024*1024);
++        assertEquals(2,verified.committedSequence);
++        assertEquals(2,verified.frames.size());
++        assertEquals("opaque-state-2",new String(verified.frames.get(1).payload(),"UTF-8"));
++        assertFalse(verified.authorizesReady());
++        assertArrayEquals("No original WAL evidence may be modified",
++                original,Files.readAllBytes(root.resolve("business.wal")));
++    }
++}
+-- 
+2.50.1 (Apple Git-155)
