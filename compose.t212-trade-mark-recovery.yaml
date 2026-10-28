@@ -1,0 +1,11 @@
+services:
+  tradesvr:
+    image: local/otc-t212-tradesvr:mark-price-retry
+    volumes:
+      - ${T212_RSA_A_DIR:?T212_RSA_A_DIR required}:/read-only-original-rsa/a:ro
+      - ${T212_RSA_PUBLIC_DIR:?T212_RSA_PUBLIC_DIR required}:/read-only-original-rsa/public:ro
+  tradesvr-b:
+    image: local/otc-t212-tradesvr:mark-price-retry
+    volumes:
+      - ${T212_RSA_B_DIR:?T212_RSA_B_DIR required}:/read-only-original-rsa/b:ro
+      - ${T212_RSA_PUBLIC_DIR:?T212_RSA_PUBLIC_DIR required}:/read-only-original-rsa/public:ro
