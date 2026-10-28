@@ -1,0 +1,481 @@
+diff --git a/src/main/java/com/app/common/replication/CommonCertifiedPartitionRuntime.java b/src/main/java/com/app/common/replication/CommonCertifiedPartitionRuntime.java
+index 0ce6af7..077ed83 100644
+--- a/src/main/java/com/app/common/replication/CommonCertifiedPartitionRuntime.java
++++ b/src/main/java/com/app/common/replication/CommonCertifiedPartitionRuntime.java
+@@ -183,15 +183,27 @@ public final class CommonCertifiedPartitionRuntime implements AutoCloseable,
+     @Override public ReplicationAck handle(ReplicationBatch batch){
+         try {
+             if(closed || primary)throw new IOException("non-replica physical WAL RPC");
++            // Check BEFORE touching the replica WAL. A revoked/late ZK
++            // certificate denies this RPC, but must not permanently mark
++            // a clean physical WAL as corrupted.
+             checkAuthority();
+-            ReplicationAck signed=wal.receiveReplicated(batch,membership,localNode,identity);
++        } catch(Exception preflightDenied) {
++            return new ReplicationAck(ReplicationStatus.ERROR,membership.partition,
++                    membership.epoch,wal.forcedSequence(),wal.forcedSequence()+1,
++                    "COMMON_PHYSICAL_REPLICA_NOT_AUTHORIZED");
++        }
++        ReplicationAck signed=wal.receiveReplicated(batch,membership,localNode,identity);
++        if(signed==null || !signed.isSuccess())return signed;
++        try {
++            // After a successful physical fsync, an expired grant is an
++            // ambiguous write outcome. Fence until signed recovery.
+             checkAuthority();
+             return signed;
+-        } catch(Exception failed) {
+-            wal.poison(failed);
++        }catch(Exception afterFsync){
++            wal.poison(afterFsync);
+             return new ReplicationAck(ReplicationStatus.ERROR,membership.partition,
+                     membership.epoch,wal.forcedSequence(),wal.forcedSequence()+1,
+-                    "COMMON_PHYSICAL_REPLICA_FENCED");
++                    "COMMON_PHYSICAL_REPLICA_FENCED_AFTER_FSYNC");
+         }
+     }
+     @Override public ReplicationControlResponse handle(ReplicationControlRequest request){
+diff --git a/src/main/java/com/app/common/replication/CommonFileBusinessWal.java b/src/main/java/com/app/common/replication/CommonFileBusinessWal.java
+index dda2e58..637006e 100644
+--- a/src/main/java/com/app/common/replication/CommonFileBusinessWal.java
++++ b/src/main/java/com/app/common/replication/CommonFileBusinessWal.java
+@@ -206,6 +206,7 @@ public final class CommonFileBusinessWal
+      * No state-machine apply here: only A/C after certified replay may apply. */
+     public synchronized ReplicationAck receiveReplicated(ReplicationBatch batch,
+             DurableWalCommitQuorum.Membership pinned,String node,PrivateKey identity) {
++        boolean touchedWal=false;
+         try {
+             writable();
+             if(batch==null || batch.size()!=1 || pinned==null || identity==null
+@@ -215,11 +216,20 @@ public final class CommonFileBusinessWal
+                     || pinned.epoch!=epoch || batch.getEpoch()!=epoch)
+                 throw new IOException("wrong Common physical replica frame or signer");
+             ReplicationRecord record=batch.getRecords().get(0);
++            if(record==null || (record.getSeq()!=forcedSequence+1
++                    && !(forcedSequence>0 && record.getSeq()==forcedSequence)))
++                throw new IOException("out-of-order or null replicated frame; WAL untouched");
+             if(record.getSeq()==forcedSequence && forcedSequence>0){
++                // A divergent duplicate could indicate a real historical
++                // fork. Such exact-head mismatch must permanently fence.
++                touchedWal=true;
+                 // Lost TCP response: exact already-fsynced HEAD replay is safe.
+                 // Never append the same command twice or reapply business state.
+                 requireFsyncedRecord(epoch,record.getSeq(),record.getPayload());
+             }else{
++                // Mark BEFORE invoking file writer: a failed append may have
++                // left an unforced partial frame on disk.
++                touchedWal=true;
+                 appendUnforced(epoch,record.getSeq(),record.getPayload());forcePending();
+             }
+             DurableWalCommitQuorum.Receipt receipt=DurableWalCommitQuorum.sign(
+@@ -227,10 +237,19 @@ public final class CommonFileBusinessWal
+             return DurableWalBatchAckProof.attach(
+                     ReplicationAck.ok(pinned.partition,epoch,record.getSeq()),receipt);
+         }catch(Exception error){
+-            poisoned=true;
++            // Wrong TCP service/partition, stale grant or bad sequence did
++            // not touch physical WAL and must not disable the healthy shard.
++            // Anything after entering a physical read/append/sign phase
++            // remains conservatively poisoned until independently restored.
++            if(touchedWal)poisoned=true;
+             return new ReplicationAck(ReplicationStatus.ERROR,
+                     pinned==null?"":pinned.partition,epoch,forcedSequence,
+                     forcedSequence+1,"COMMON_PHYSICAL_WAL_REPLICA_DENIED");
++        }catch(Error failure){
++            // Do not let JVM LinkageError/OOME-style failure after an append
++            // leave a replica appearing writable without a certified replay.
++            if(touchedWal)poisoned=true;
++            throw failure;
+         }
+     }
+     @Override public synchronized void poison(Throwable cause){poisoned=true;}
+diff --git a/src/main/java/com/app/common/replication/DurableWalCustodyReceiptLedger.java b/src/main/java/com/app/common/replication/DurableWalCustodyReceiptLedger.java
+index b8ce32f..f170a70 100644
+--- a/src/main/java/com/app/common/replication/DurableWalCustodyReceiptLedger.java
++++ b/src/main/java/com/app/common/replication/DurableWalCustodyReceiptLedger.java
+@@ -290,6 +290,161 @@ public final class DurableWalCustodyReceiptLedger implements AutoCloseable {
+             latest=checked;
+         }
+     }
++
++    /** Recover ONLY an already signed/fsynced receipt-quorum.pending.
++     *
++     * A crash can occur AFTER two custodians signed the installed certificate
++     * but BEFORE the atomic pending -> head rename. Ordinary constructors
++     * remain fail closed. This explicit, exclusive offline transition requires
++     * the original physical custody/WAL, current signed certificate, prior
++     * signed ledger (if any), an active old-Epoch authority and a new
++     * independently forced evidence archive. It NEVER creates a signature,
++     * authorizes a client ACK, or grants any new primary/READY privilege.
++     */
++    public static long completePreparedSignedQuorum(
++            Path path,DurableWalCommitQuorum.Membership members,
++            DurableWalCertificateCustody physical,
++            DurableWalCommitQuorum.Certificate proposed,
++            DurableWalCommitQuorum.Certificate previousCertificate,
++            DurableWalCertificateCustody.Authority authority,
++            Path independentArchiveDir)throws Exception {
++        if(path==null || members==null || physical==null
++                || proposed==null || authority==null || independentArchiveDir==null)
++            throw new IOException("complete pending receipt quorum requires pinned evidence");
++        Path canonical=path.toAbsolutePath().normalize();
++        Path archived=independentArchiveDir.toAbsolutePath().normalize();
++        if(!path.isAbsolute() || !independentArchiveDir.isAbsolute()
++                || archived.startsWith(canonical) || canonical.startsWith(archived)
++                || !Files.isDirectory(path,LinkOption.NOFOLLOW_LINKS)
++                || Files.isSymbolicLink(path)
++                || Files.exists(independentArchiveDir,LinkOption.NOFOLLOW_LINKS))
++            throw new IOException("independent new evidence directory outside receipt ledger required");
++        Path pending=path.resolve(PENDING),head=path.resolve(HEAD),lockFile=path.resolve(LOCK);
++        if(!Files.isRegularFile(pending,LinkOption.NOFOLLOW_LINKS)
++                || Files.isSymbolicLink(pending)
++                || Files.isSymbolicLink(head) || Files.isSymbolicLink(lockFile))
++            throw new IOException("no trustworthy incomplete pending receipt");
++        try(FileChannel channel=FileChannel.open(lockFile,StandardOpenOption.CREATE,
++                    StandardOpenOption.WRITE);
++            FileLock exclusive=channel.tryLock()) {
++            if(exclusive==null)throw new IOException("receipt quorum active writer cannot be recovered");
++            try(DirectoryStream<Path> listing=Files.newDirectoryStream(path)){
++                for(Path file:listing){
++                    String name=file.getFileName().toString();
++                    if((!LOCK.equals(name) && !HEAD.equals(name) && !PENDING.equals(name))
++                            || Files.isSymbolicLink(file)
++                            || !Files.isRegularFile(file,LinkOption.NOFOLLOW_LINKS))
++                        throw new IOException("unknown physical receipt recovery artifact");
++                }
++            }
++            // Validate both current and historical signatures BEFORE changing
++            // any ledger byte. The installed physical HEAD is not by itself a
++            // custody receipt quorum.
++            DurableWalCommitQuorum.Certificate current=physical.highestVerified();
++            DurableWalCommitQuorum.Certificate trusted=DurableWalCommitQuorum.verify(
++                    members,proposed.committedSequence,proposed.commitPrefixSha256,
++                    proposed.votes);
++            if(current==null || current.committedSequence!=trusted.committedSequence
++                    || !current.commitPrefixSha256.equals(trusted.commitPrefixSha256)
++                    || !current.membershipSha256.equals(trusted.membershipSha256))
++                throw new IOException("prepared quorum does not match physical custody/WAL");
++            byte[] pendingBytes=readBoundedReceiptFile(pending);
++            Record next=decodeRecord(members,pendingBytes);
++            DurableWalCustodyQuorum.CustodiedCertificate checked=
++                    DurableWalCustodyQuorum.verify(members,trusted,next.receipts);
++            if(next.seq!=trusted.committedSequence
++                    || !next.sha.equals(trusted.commitPrefixSha256)
++                    || checked.physicalCustodians!=members.majority())
++                throw new IOException("prepared quorum lacks exact independently signed custody");
++            byte[] oldBytes=null;
++            if(Files.exists(head,LinkOption.NOFOLLOW_LINKS)){
++                oldBytes=readBoundedReceiptFile(head);
++                Record old=decodeRecord(members,oldBytes);
++                if(previousCertificate==null)
++                    throw new IOException("missing previous signed receipt certificate");
++                DurableWalCommitQuorum.Certificate previous=DurableWalCommitQuorum.verify(
++                        members,previousCertificate.committedSequence,
++                        previousCertificate.commitPrefixSha256,previousCertificate.votes);
++                DurableWalCustodyQuorum.CustodiedCertificate oldSigned=
++                        DurableWalCustodyQuorum.verify(members,previous,old.receipts);
++                if(old.seq<=0 || old.seq>=next.seq
++                        || old.seq!=previous.committedSequence
++                        || !old.sha.equals(previous.commitPrefixSha256)
++                        || oldSigned.physicalCustodians!=members.majority())
++                    throw new IOException("old signed receipt ledger malformed or rolled back");
++            }else if(previousCertificate!=null || trusted.committedSequence!=1L)
++                throw new IOException("missing previous signed receipt ledger for non-genesis pending");
++            authority.requireOldEpochAuthorized(members);
++            // Archives are NEW, independent and fsynced before any move.
++            Files.createDirectory(independentArchiveDir);
++            forceImmutableEvidence(independentArchiveDir.resolve("signed-pending.bin"),pendingBytes);
++            if(oldBytes!=null)
++                forceImmutableEvidence(independentArchiveDir.resolve("previous-ledger.bin"),oldBytes);
++            forceEvidenceDirectory(independentArchiveDir);
++            forceEvidenceDirectory(independentArchiveDir.getParent());
++            authority.requireOldEpochAuthorized(members);
++            DurableWalCommitQuorum.Certificate stillInstalled=physical.highestVerified();
++            if(stillInstalled==null
++                    || stillInstalled.committedSequence!=trusted.committedSequence
++                    || !stillInstalled.commitPrefixSha256.equals(trusted.commitPrefixSha256)
++                    || !Arrays.equals(pendingBytes,readBoundedReceiptFile(pending))
++                    || (oldBytes!=null && !Arrays.equals(oldBytes,readBoundedReceiptFile(head))))
++                throw new IOException("signed pending evidence changed during authorized recovery");
++            Files.move(pending,head,StandardCopyOption.ATOMIC_MOVE,
++                    StandardCopyOption.REPLACE_EXISTING);
++            forceEvidenceDirectory(path);
++            // Does not publish READY. Only a subsequent ordinary Common
++            // runtime restart under a currently valid grant can do that.
++            return trusted.committedSequence;
++        }
++    }
++    private static byte[] readBoundedReceiptFile(Path file)throws IOException {
++        if(!Files.isRegularFile(file,LinkOption.NOFOLLOW_LINKS)
++                || Files.isSymbolicLink(file) || Files.size(file)<=0
++                || Files.size(file)>MAX_BYTES)
++            throw new IOException("untrusted receipt quorum file size/type");
++        return Files.readAllBytes(file);
++    }
++    private static Record decodeRecord(DurableWalCommitQuorum.Membership members,
++            byte[] source)throws Exception {
++        try(DataInputStream in=new DataInputStream(new ByteArrayInputStream(source))){
++            if(in.readInt()!=MAGIC || in.readInt()!=VERSION
++                    || !members.digest.equals(in.readUTF())
++                    || in.readLong()!=members.epoch)
++                throw new IOException("cross-membership custody receipt ledger");
++            long seq=in.readLong();String sha=in.readUTF();
++            int count=in.readInt();
++            if(seq<=0 || !sha.matches("[0-9a-f]{64}")
++                    || count!=members.majority())
++                throw new IOException("malformed custody receipt ledger header");
++            List<DurableWalCustodyQuorum.Receipt> receipts=new ArrayList<>();
++            for(int i=0;i<count;i++){
++                String node=in.readUTF(),part=in.readUTF(),m=in.readUTF(),hash=in.readUTF();
++                long epoch=in.readLong(),sequence=in.readLong();
++                int n=in.readInt();
++                if(n<=0 || n>1024)throw new IOException("unbounded physical signature");
++                byte[] signature=new byte[n];in.readFully(signature);
++                receipts.add(DurableWalCustodyQuorum.Receipt.fromWire(
++                        node,part,m,hash,epoch,sequence,signature));
++            }
++            if(in.read()!=-1)throw new IOException("trailing signed receipt ledger bytes");
++            return new Record(seq,sha,receipts);
++        }
++    }
++    private static void forceImmutableEvidence(Path file,byte[] raw)throws IOException {
++        try(FileChannel output=FileChannel.open(file,StandardOpenOption.CREATE_NEW,
++                StandardOpenOption.WRITE)){
++            ByteBuffer buffer=ByteBuffer.wrap(raw);
++            while(buffer.hasRemaining())output.write(buffer);
++            output.force(true);
++        }
++    }
++    private static void forceEvidenceDirectory(Path folder)throws IOException {
++        try(FileChannel dir=FileChannel.open(folder,StandardOpenOption.READ)){
++            dir.force(true);
++        }
++    }
++
+     private void requireOpen()throws IOException {
+         if(closed || !lock.isValid())throw new IOException("receipt ledger closed");
+     }
+diff --git a/src/test/java/com/app/common/replication/CommonReplicaPreflightFailureTest.java b/src/test/java/com/app/common/replication/CommonReplicaPreflightFailureTest.java
+new file mode 100644
+index 0000000..0b1beb8
+--- /dev/null
++++ b/src/test/java/com/app/common/replication/CommonReplicaPreflightFailureTest.java
+@@ -0,0 +1,101 @@
++package com.app.common.replication;
++
++import java.io.IOException;
++import java.nio.file.Path;
++import java.security.KeyPair;
++import java.security.KeyPairGenerator;
++import java.util.Arrays;
++import java.util.Collections;
++import java.util.concurrent.atomic.AtomicBoolean;
++import org.junit.Rule;
++import org.junit.Test;
++import org.junit.rules.TemporaryFolder;
++import static org.junit.Assert.*;
++
++/** T251: bad TCP or missing grant before WAL must never poison the replica. */
++public final class CommonReplicaPreflightFailureTest {
++    @Rule public TemporaryFolder temp=new TemporaryFolder();
++    private static final String A="NodeA", B="NodeB";
++    private static final class Keys {
++        final KeyPair a,b;
++        final DurableWalCommitQuorum.Membership m;
++        Keys()throws Exception {
++            KeyPairGenerator gen=KeyPairGenerator.getInstance("RSA");
++            gen.initialize(2048);
++            a=gen.generateKeyPair(); b=gen.generateKeyPair();
++            m=new DurableWalCommitQuorum.Membership("OrderSvr","P210",A,1,2,
++                Arrays.asList(new DurableWalCommitQuorum.Member(A,"hostA",a.getPublic()),
++                    new DurableWalCommitQuorum.Member(B,"hostB",b.getPublic())));
++        }
++    }
++    private ReplicationBatch message(Keys keys,String service,String partition,
++            long epoch,long sequence,String payload)throws Exception {
++        ReplicationRecord record=new ReplicationRecord(sequence,
++            "COMMON_BUSINESS_COMMAND","",System.currentTimeMillis(),payload.getBytes("UTF-8"));
++        return new ReplicationBatch(service,partition,epoch,Collections.singletonList(record));
++    }
++    @Test public void crossPartitionOutOfOrderAndStaleEpochDoNotPoisonDisk()
++            throws Exception {
++        Keys keys=new Keys();
++        Path walFile=temp.newFolder("wal-valid-after-invalid").toPath().resolve("business.wal");
++        try(CommonFileBusinessWal wal=new CommonFileBusinessWal(walFile,1)){
++            ReplicationBatch badService=message(keys,"OtherService","P210",1,1,"BAD");
++            ReplicationBatch wrongEpoch=message(keys,"OrderSvr","P210",2,1,"BAD");
++            ReplicationBatch wrongSequence=message(keys,"OrderSvr","P210",1,3,"BAD");
++            ReplicationBatch good=message(keys,"OrderSvr","P210",1,1,"ORIGINAL");
++            assertFalse(wal.receiveReplicated(badService,keys.m,B,keys.b.getPrivate()).isSuccess());
++            assertFalse(wal.receiveReplicated(wrongEpoch,keys.m,B,keys.b.getPrivate()).isSuccess());
++            assertFalse(wal.receiveReplicated(wrongSequence,keys.m,B,keys.b.getPrivate()).isSuccess());
++            assertEquals(0,wal.forcedSequence());
++            assertTrue("valid request must still work after malformed preflight",
++                wal.receiveReplicated(good,keys.m,B,keys.b.getPrivate()).isSuccess());
++            assertEquals(1,wal.forcedSequence());
++            assertTrue("identical retransmission remains idempotent",
++                wal.receiveReplicated(good,keys.m,B,keys.b.getPrivate()).isSuccess());
++            assertEquals(1,wal.forcedSequence());
++        }
++    }
++    @Test public void changedDuplicateIsFencedAfterFsyncHeadComparison()
++            throws Exception {
++        Keys keys=new Keys();
++        Path walFile=temp.newFolder("duplicate-conflict").toPath().resolve("business.wal");
++        try(CommonFileBusinessWal wal=new CommonFileBusinessWal(walFile,1)){
++            ReplicationBatch good=message(keys,"OrderSvr","P210",1,1,"ORIGINAL");
++            assertTrue(wal.receiveReplicated(good,keys.m,B,keys.b.getPrivate()).isSuccess());
++            ReplicationBatch forged=message(keys,"OrderSvr","P210",1,1,"DIVERGED");
++            assertFalse(wal.receiveReplicated(forged,keys.m,B,keys.b.getPrivate()).isSuccess());
++            assertFalse("divergent same-sequence WAL cannot be reauthorized",
++                wal.receiveReplicated(good,keys.m,B,keys.b.getPrivate()).isSuccess());
++            assertEquals(1,wal.forcedSequence());
++        }
++    }
++    @Test public void replicaExpiredGrantBeforeWalDoesNotPoisonOrBlockLaterValidWrite()
++            throws Exception {
++        Keys keys=new Keys();
++        Path root=temp.newFolder("replica-lease-first-revoked").toPath();
++        AtomicBoolean grant=new AtomicBoolean(true);
++        CommonCertifiedPartitionRuntime.CurrentGrant required=
++            new CommonCertifiedPartitionRuntime.CurrentGrant(){
++                public void primary()throws Exception{throw new IOException("wrong primary");}
++                public void replica()throws Exception {
++                    if(!grant.get())throw new IOException("temporarily expired certified replica lease");
++                }
++            };
++        DurableWalCertificateCustody.Authority authority=m->{
++            if(!grant.get())throw new IOException("old epoch grant unavailable");
++        };
++        try(CommonCertifiedPartitionRuntime replica=new CommonCertifiedPartitionRuntime(
++                root,keys.m,B,keys.b.getPrivate(),false,required,authority,
++                null,Collections.emptyMap(),500L)){
++            grant.set(false);
++            ReplicationBatch good=message(keys,"OrderSvr","P210",1,1,"REAL");
++            ReplicationAck blocked=replica.handle(good);
++            assertFalse(blocked.isSuccess());
++            assertEquals(0,replica.forcedSequence());
++            grant.set(true);
++            ReplicationAck committed=replica.handle(good);
++            assertTrue("refused preflight must not leave poisoned physical WAL",committed.isSuccess());
++            assertEquals(1,replica.forcedSequence());
++        }
++    }
++}
+diff --git a/src/test/java/com/app/common/replication/DurableWalCustodyReceiptCrashCompletionTest.java b/src/test/java/com/app/common/replication/DurableWalCustodyReceiptCrashCompletionTest.java
+index 537e8dc..e15e03d 100644
+--- a/src/test/java/com/app/common/replication/DurableWalCustodyReceiptCrashCompletionTest.java
++++ b/src/test/java/com/app/common/replication/DurableWalCustodyReceiptCrashCompletionTest.java
+@@ -121,6 +121,113 @@ public final class DurableWalCustodyReceiptCrashCompletionTest {
+         }
+     }
+ 
++
++    private static byte[] simulateCrashAfterFsyncedPending(Fixture f)throws Exception {
++        try(DurableWalCustodyReceiptLedger first=
++                DurableWalCustodyReceiptLedger.openForCertifiedCrashCompletion(
++                    f.ledgerPath,f.membership,f.b,f.oldCert,f.archivePath)){
++            assertEquals(42L,first.persist(f.newCert,f.newReceipts));
++        }
++        Path committed=f.ledgerPath.resolve("receipt-quorum.bin");
++        byte[] fullNew=Files.readAllBytes(committed);
++        // The old signed Ledger is retained while new dual-signed bytes have
++        // been fully fsynced to the pending file, immediately before rename.
++        Files.copy(f.archivePath,committed,StandardCopyOption.REPLACE_EXISTING);
++        Path pending=f.ledgerPath.resolve("receipt-quorum.pending");
++        try(java.nio.channels.FileChannel file=java.nio.channels.FileChannel.open(pending,
++                StandardOpenOption.CREATE_NEW,StandardOpenOption.WRITE)){
++            java.nio.ByteBuffer buf=java.nio.ByteBuffer.wrap(fullNew);
++            while(buf.hasRemaining())file.write(buf);
++            file.force(true);
++        }
++        return fullNew;
++    }
++
++    @Test public void signedPendingCanFinishWithOldEpochGrantAndArchivalProof()
++            throws Exception {
++        try(Fixture f=new Fixture(temp)){
++            byte[] newBytes=simulateCrashAfterFsyncedPending(f);
++            byte[] oldBytes=Files.readAllBytes(f.ledgerPath.resolve("receipt-quorum.bin"));
++            try{
++                new DurableWalCustodyReceiptLedger(f.ledgerPath,f.membership,f.b);
++                fail("ordinary startup must not silently promote pending file");
++            }catch(IOException expected){
++                assertTrue(expected.getMessage().contains("unknown"));
++            }
++            Path archive=temp.newFolder("evidence-parent").toPath().resolve("recovery-001");
++            assertEquals(42L,DurableWalCustodyReceiptLedger.completePreparedSignedQuorum(
++                f.ledgerPath,f.membership,f.b,f.newCert,f.oldCert,m->{},archive));
++            assertArrayEquals(newBytes,Files.readAllBytes(
++                f.ledgerPath.resolve("receipt-quorum.bin")));
++            assertArrayEquals(newBytes,Files.readAllBytes(
++                archive.resolve("signed-pending.bin")));
++            assertArrayEquals(oldBytes,Files.readAllBytes(
++                archive.resolve("previous-ledger.bin")));
++            assertFalse(Files.exists(f.ledgerPath.resolve("receipt-quorum.pending")));
++            try(DurableWalCustodyReceiptLedger verified=
++                    new DurableWalCustodyReceiptLedger(f.ledgerPath,f.membership,f.b)){
++                assertEquals(2,verified.requireRecovered(f.newCert).size());
++            }
++        }
++    }
++    @Test public void pendingRecoveryRejectsTamperedRsaOrExpiredEpochWithoutChanges()
++            throws Exception {
++        try(Fixture f=new Fixture(temp)){
++            byte[] newBytes=simulateCrashAfterFsyncedPending(f);
++            byte[] old=Files.readAllBytes(f.ledgerPath.resolve("receipt-quorum.bin"));
++            Path pending=f.ledgerPath.resolve("receipt-quorum.pending");
++            Path archive=temp.newFolder("unsafe-archive-parent").toPath().resolve("recovery-002");
++            try{
++                DurableWalCustodyReceiptLedger.completePreparedSignedQuorum(
++                    f.ledgerPath,f.membership,f.b,f.newCert,f.oldCert,
++                    m->{throw new IOException("old Epoch session revoked");},archive);
++                fail("revoked old Epoch authorized a file mutation");
++            }catch(IOException expected) {
++                assertTrue(expected.getMessage().contains("revoked"));
++            }
++            assertFalse(Files.exists(archive));
++            assertArrayEquals(newBytes,Files.readAllBytes(pending));
++            assertArrayEquals(old,Files.readAllBytes(
++                f.ledgerPath.resolve("receipt-quorum.bin")));
++            byte[] tampered=newBytes.clone();tampered[tampered.length-12]^=0x40;
++            Files.write(pending,tampered,StandardOpenOption.TRUNCATE_EXISTING);
++            try{
++                DurableWalCustodyReceiptLedger.completePreparedSignedQuorum(
++                    f.ledgerPath,f.membership,f.b,f.newCert,f.oldCert,m->{},archive);
++                fail("RSA-tampered signed pending completed");
++            }catch(Exception expected){}
++            assertFalse(Files.exists(archive));
++            assertArrayEquals(tampered,Files.readAllBytes(pending));
++            assertArrayEquals(old,Files.readAllBytes(
++                f.ledgerPath.resolve("receipt-quorum.bin")));
++        }
++    }
++    @Test public void mismatchedPriorAndNonGenesisMissingLedgerAreNotRepairable()
++            throws Exception {
++        try(Fixture f=new Fixture(temp)){
++            simulateCrashAfterFsyncedPending(f);
++            byte[] old=Files.readAllBytes(f.ledgerPath.resolve("receipt-quorum.bin"));
++            Path parent=temp.newFolder("old-proof-parent").toPath();
++            try{
++                DurableWalCustodyReceiptLedger.completePreparedSignedQuorum(
++                    f.ledgerPath,f.membership,f.b,f.newCert,f.newCert,m->{},
++                    parent.resolve("bad-previous"));
++                fail("unverified previous signed ledger accepted");
++            }catch(Exception expected){}
++            assertArrayEquals(old,Files.readAllBytes(
++                f.ledgerPath.resolve("receipt-quorum.bin")));
++            Files.delete(f.ledgerPath.resolve("receipt-quorum.bin"));
++            try{
++                DurableWalCustodyReceiptLedger.completePreparedSignedQuorum(
++                    f.ledgerPath,f.membership,f.b,f.newCert,null,m->{},
++                    parent.resolve("missing-previous"));
++                fail("missing non-genesis Ledger was silently accepted");
++            }catch(IOException expected){
++                assertTrue(expected.getMessage().contains("non-genesis"));
++            }
++        }
++    }
++
+     @Test public void mismatchedPriorCertificateIsNotRecoveryAuthority()
+             throws Exception {
+         try(Fixture f=new Fixture(temp)){
