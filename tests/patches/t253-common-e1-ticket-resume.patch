@@ -1,0 +1,350 @@
+From c76a6e92e44522522241dac39eb497cfaa85076f Mon Sep 17 00:00:00 2001
+From: OpenTradingCore Demo <demo-ci@opentradingcore.com>
+Date: Wed, 28 Oct 2026 22:06:16 +0800
+Subject: [PATCH] fix(common): verify and resume fsynced first E2 signed ticket
+ after CAS interruption
+
+---
+ .../CommonOriginalE1FirstReadyActivation.java | 243 ++++++++++++++++++
+ ...nOriginalE1FirstReadyTicketResumeTest.java |  80 ++++++
+ 2 files changed, 323 insertions(+)
+ create mode 100644 src/main/java/com/app/common/replication/CommonOriginalE1FirstReadyActivation.java
+ create mode 100644 src/test/java/com/app/common/replication/CommonOriginalE1FirstReadyTicketResumeTest.java
+
+diff --git a/src/main/java/com/app/common/replication/CommonOriginalE1FirstReadyActivation.java b/src/main/java/com/app/common/replication/CommonOriginalE1FirstReadyActivation.java
+new file mode 100644
+index 0000000..ec35234
+--- /dev/null
++++ b/src/main/java/com/app/common/replication/CommonOriginalE1FirstReadyActivation.java
+@@ -0,0 +1,243 @@
++package com.app.common.replication;
++
++import com.app.common.zk.ZookeeperClient;
++import java.io.IOException;
++import java.nio.ByteBuffer;
++import java.nio.channels.FileChannel;
++import java.nio.charset.StandardCharsets;
++import java.nio.file.*;
++import java.security.*;
++import java.security.spec.X509EncodedKeySpec;
++import java.util.*;
++
++/**
++ * T182: virgin Common E1 (no historic ACK) -> first E2 READY.
++ * Requires 256 fsynced RSA dual Genesis quorums, original A/B physical
++ * zero-ACK birth certs, both original unchanged images, two still-owned
++ * independent ZK leases and original ZK manifest version zero.
++ * Separate from all later historic WAL/Custody/Epoch failover transitions.
++ * This class does not start business servers or write trading data.
++ */
++public final class CommonOriginalE1FirstReadyActivation {
++    private CommonOriginalE1FirstReadyActivation(){}
++    private static final int SHARDS=256;
++    private static String required(Properties p,String key)throws IOException {
++        String s=p.getProperty(key,"").trim();
++        if(s.isEmpty())throw new IOException("COMMON_FRESH_READY_CONFIG_MISSING:"+key);
++        return s;
++    }
++    private static PublicKey key(Path root,String alias)throws Exception {
++        if(!alias.matches("[A-Za-z0-9_.-]{1,64}"))throw new IOException("invalid RSA pin alias");
++        Path file=root.resolve(alias+".pub.der");
++        if(!Files.isRegularFile(file,LinkOption.NOFOLLOW_LINKS)||Files.isSymbolicLink(file))
++            throw new IOException("fresh ready original public pin absent");
++        PublicKey key=KeyFactory.getInstance("RSA").generatePublic(
++            new X509EncodedKeySpec(Files.readAllBytes(file)));
++        if(!(key instanceof java.security.interfaces.RSAPublicKey)
++          ||((java.security.interfaces.RSAPublicKey)key).getModulus().bitLength()!=2048)
++            throw new IOException("original ready requires RSA2048 pin");
++        return key;
++    }
++    private static void validateLease(ZkNodeScopedControlPlane.Ops zk,String path,boolean local)throws Exception{
++        if(!zk.connected()||zk.sessionId()<=0)throw new IOException("Common first-READY ZK quorum not connected");
++        ZkNodeScopedControlPlane.Value lease=zk.read(path);
++        if(lease==null ||lease.ephemeralOwner<=0 ||lease.data==null ||lease.data.isEmpty()
++                || (local && lease.ephemeralOwner!=zk.sessionId())
++                || (!local && lease.ephemeralOwner==zk.sessionId()))
++            throw new IOException("Common original first-READY live owner ZK lease missing:"+path);
++    }
++    private static final class Prepared {
++        final ZkNodeScopedControlPlane.Value prior;
++        final ZkNodeScopedControlPlane.Manifest ready;
++        final String genesisDigest;
++        Prepared(ZkNodeScopedControlPlane.Value v,ZkNodeScopedControlPlane.Manifest r,String digest){
++            prior=v;ready=r;genesisDigest=digest;
++        }
++    }
++    private static Prepared verifyAll(String service,String ns,Path genesisRoot,
++            String a,String b,String hostA,String hostB,
++            PublicKey pubA,PublicKey pubB,ZkNodeScopedControlPlane.Ops zk)
++            throws Exception {
++        ZkNodeScopedControlPlane.Value prev=zk.read(ns+"/manifest");
++        if(prev==null ||prev.version!=0)throw new IOException("first READY requires virgin ZK manifest");
++        ZkNodeScopedControlPlane.Manifest manifest=
++                ZkNodeScopedControlPlane.Manifest.parse(prev.data);
++        if(manifest.generation!=1 || manifest.assignments.size()!=SHARDS)
++            throw new IOException("first READY requires ALL 256 original E1 RECOVERING");
++        MessageDigest audit=MessageDigest.getInstance("SHA-256");
++        Map<String,ZkNodeScopedControlPlane.Assignment> next=new LinkedHashMap<>();
++        Path top=genesisRoot.resolve(service);
++        for(int i=0;i<SHARDS;i++){
++            String part=String.format(Locale.ROOT,"P%03d",i);
++            ZkNodeScopedControlPlane.Assignment r=manifest.assignments.get(part);
++            if(r==null ||r.ready||r.partition.epoch!=1
++                    ||r.partition.policy!=DurableWalAckPolicy.STRICT_QUORUM
++                    ||!new HashSet<>(Arrays.asList(a,b)).equals(
++                        new HashSet<>(Arrays.asList(r.partition.primary,r.partition.replica))))
++                throw new IOException("first READY unsafe original shard:"+part);
++            DurableWalCommitQuorum.Membership m=new DurableWalCommitQuorum.Membership(
++                service,part,r.partition.primary,1,1,Arrays.asList(
++                    new DurableWalCommitQuorum.Member(a,hostA,pubA),
++                    new DurableWalCommitQuorum.Member(b,hostB,pubB)));
++            Path sealed=top.resolve("sealed").resolve(part);
++            CommonCertifiedGenesisQuorum.Verified quorum=CommonCertifiedGenesisQuorum.reopen(sealed,m);
++            byte[] expected=quorum.originalImage();
++            String digest=quorum.originalSha256;
++            for(String node:Arrays.asList(a,b)){
++                Path local=top.resolve(node).resolve(part).resolve("node-voter");
++                byte[] onDisk=new CommonDurableGenesisVoterImage(local,m,node)
++                        .readCertifiedLocalImage();
++                if(!MessageDigest.isEqual(expected,onDisk))
++                    throw new IOException("first READY original image differs:"+part+":"+node);
++            }
++            Map<String,Path> roots=new LinkedHashMap<>();
++            roots.put(a,top.resolve(a).resolve("original-wal").resolve(part));
++            roots.put(b,top.resolve(b).resolve("original-wal").resolve(part));
++            CommonOriginalE1ZeroAckBirthEvidence zero=
++                new CommonOriginalE1ZeroAckBirthEvidence(ns,digest,roots);
++            zero.requireOriginalPhysicalZeroAckWal(m,m.members.get(a));
++            zero.requireOriginalPhysicalZeroAckWal(m,m.members.get(b));
++            audit.update(part.getBytes(StandardCharsets.UTF_8));
++            audit.update(digest.getBytes(StandardCharsets.UTF_8));
++            next.put(part,new ZkNodeScopedControlPlane.Assignment(
++                new NodePartitionGrantTable.Partition(part,2,r.partition.primary,
++                    r.partition.replica,DurableWalAckPolicy.STRICT_QUORUM),true));
++        }
++        return new Prepared(prev,new ZkNodeScopedControlPlane.Manifest(2,next),
++                SnapshotTransferIntegrity.sha256(audit.digest()));
++    }
++    private static void sealedTicket(Path path,PrivateKey local,PublicKey pinned,
++            String service,String namespace,Prepared approved)throws Exception {
++        byte[] payload=("OTC_COMMON_VIRGIN_E1_DUAL_RSA_TO_FIRST_E2_READY_V1\n"+
++                service+"\n"+namespace+"\n"+approved.prior.version+"\n"+
++                SnapshotTransferIntegrity.sha256(approved.prior.data.getBytes(StandardCharsets.UTF_8))+"\n"+
++                SnapshotTransferIntegrity.sha256(approved.ready.encode().getBytes(StandardCharsets.UTF_8))+"\n"+
++                approved.genesisDigest+"\n").getBytes(StandardCharsets.UTF_8);
++        persistOrVerifyTicket(path,payload,local,pinned);
++    }
++    /** Durable idempotent completion of the EXACT previously authorized E1->E2
++     * ticket. This does NOT grant READY: activate() first re-verifies all 256
++     * independent original signed quorums and E1 ZK manifest v0, then checks
++     * live A/B leases again before doing the original CAS.
++     *
++     * Once a ticket was fsynced, a crash or lost B lease may prevent its CAS.
++     * A present ticket can be resumed only if its full original RSA signature
++     * verifies against the pinned A identity AND every payload byte matches
++     * what the current physical proof and ZK manifest independently compute.
++     * Never overwrite or re-sign an existing ticket. E2/non-virgin state is
++     * rejected by verifyAll() before this function is reachable.
++     */
++    static void persistOrVerifyTicket(Path path,byte[] payload,
++            PrivateKey local,PublicKey pinned)throws Exception {
++        if(path==null || payload==null || payload.length==0
++                ||payload.length>8192 ||local==null ||pinned==null)
++            throw new IOException("first READY approval inputs invalid");
++        if(Files.exists(path,LinkOption.NOFOLLOW_LINKS)){
++            if(Files.isSymbolicLink(path)
++                    ||!Files.isRegularFile(path,LinkOption.NOFOLLOW_LINKS)
++                    ||Files.size(path)!=8L+payload.length+256L)
++                throw new IOException("first READY existing approval file invalid");
++            byte[] raw;
++            try(FileChannel channel=FileChannel.open(path,
++                    new HashSet<OpenOption>(Arrays.<OpenOption>asList(
++                        StandardOpenOption.READ,LinkOption.NOFOLLOW_LINKS)))) {
++                ByteBuffer record=ByteBuffer.allocate(8+payload.length+256);
++                while(record.hasRemaining()){
++                    if(channel.read(record)<0)
++                        throw new IOException("first READY existing approval truncated");
++                }
++                if(channel.read(ByteBuffer.allocate(1))!=-1)
++                    throw new IOException("first READY existing approval grew during read");
++                raw=record.array();
++            }
++            ByteBuffer existing=ByteBuffer.wrap(raw);
++            if(existing.getInt()!=payload.length)
++                throw new IOException("first READY existing approval length differs");
++            byte[] prior=new byte[payload.length];existing.get(prior);
++            if(!MessageDigest.isEqual(payload,prior)||existing.getInt()!=256)
++                throw new IOException("first READY existing approval payload differs");
++            byte[] signature=new byte[256];existing.get(signature);
++            Signature verifier=Signature.getInstance("SHA256withRSA");
++            verifier.initVerify(pinned);verifier.update(prior);
++            if(!verifier.verify(signature))
++                throw new IOException("first READY existing approval signer invalid");
++            return;
++        }
++        Signature signer=Signature.getInstance("SHA256withRSA");
++        signer.initSign(local);signer.update(payload);
++        byte[] signed=signer.sign();
++        signer.initVerify(pinned);signer.update(payload);
++        if(signed.length!=256||!signer.verify(signed))
++            throw new IOException("first READY original RSA signer not pinned");
++        Path dir=path.getParent();
++        if(dir==null ||Files.isSymbolicLink(dir))
++            throw new IOException("first READY original approval directory invalid");
++        Files.createDirectories(dir);
++        ByteBuffer data=ByteBuffer.allocate(8+payload.length+signed.length);
++        data.putInt(payload.length).put(payload).putInt(signed.length).put(signed).flip();
++        try(FileChannel ch=FileChannel.open(path,StandardOpenOption.CREATE_NEW,StandardOpenOption.WRITE)){
++            while(data.hasRemaining())ch.write(data);
++            ch.force(true);
++        }
++        try(FileChannel folder=FileChannel.open(dir,StandardOpenOption.READ)){folder.force(true);}
++    }
++    /** Invoked only inside original Order/Trade A Common RECOVERING process. */
++    public static void activate(CommonRecoveryOnlyProcess.Config cfg,
++            CommonRecoveryOnlyProcess.Identity rsa,ZookeeperClient owner,
++            Map<String,Long> actualE1,Properties properties)throws Exception {
++        if(cfg==null||rsa==null||owner==null||actualE1==null||actualE1.size()!=SHARDS
++                ||properties==null)
++            throw new IOException("Common first READY requires original fenced 256 owned shards");
++        String service=cfg.service,logical=cfg.node,prefix="OrderSvr".equals(service)?"order":
++                ("TradeSvr".equals(service)?"trade":null);
++        if(prefix==null ||!logical.equals(service+"A"))
++            throw new IOException("first READY requires original node A explicit coordinator");
++        for(int i=0;i<SHARDS;i++)
++            if(!Long.valueOf(1L).equals(actualE1.get(String.format(Locale.ROOT,"P%03d",i))))
++                throw new IOException("first READY not original E1 zero-state");
++        String stem=prefix+".common.nodeRuntime.freshE1.";
++        String ns=required(properties,stem+"namespace");
++        if(!cfg.manifest.equals(ns+"/manifest")
++                ||!cfg.lease.equals(ns+"/leases/"+logical))
++            throw new IOException("first READY mismatched original namespace");
++        Path disk=Paths.get(required(properties,stem+"birthRoot"));
++        Path pins=Paths.get(required(properties,prefix+".common.existingRsa.trustedPublicDir"));
++        if(!disk.isAbsolute()||!Files.isDirectory(disk,LinkOption.NOFOLLOW_LINKS)
++                ||Files.isSymbolicLink(disk)
++                ||!pins.isAbsolute()||!Files.isDirectory(pins,LinkOption.NOFOLLOW_LINKS))
++            throw new IOException("first READY original physical disk not mounted");
++        String a=service+"A",b=service+"B";
++        PublicKey pubA=key(pins,required(properties,stem+"birthAliasA"));
++        PublicKey pubB=key(pins,required(properties,stem+"birthAliasB"));
++        if(MessageDigest.isEqual(pubA.getEncoded(),pubB.getEncoded())
++                ||!MessageDigest.isEqual(pubA.getEncoded(),rsa.exactPinnedPublic.getEncoded()))
++            throw new IOException("first READY independent RSA identities missing");
++        String hostA=required(properties,stem+"birthHostA"),
++               hostB=required(properties,stem+"birthHostB");
++        if(hostA.equals(hostB))
++            throw new IOException("first READY overlapping original physical aliases");
++        ZkNodeScopedControlPlane.Ops zk=ZkNodeScopedControlPlane.recoveringClientOps(owner);
++        validateLease(zk,ns+"/leases/"+a,true);
++        validateLease(zk,ns+"/leases/"+b,false);
++        Prepared ready=verifyAll(service,ns,disk,a,b,hostA,hostB,pubA,pubB,zk);
++        sealedTicket(disk.resolve(service).resolve("first-ready/e1-to-e2-A.signed"),
++                rsa.originalPrivate,pubA,service,ns,ready);
++        // The manifest, BOTH still-live original leases and ALL physical
++        // disk roots must remain certified after the ticket fsync.
++        validateLease(zk,ns+"/leases/"+a,true);
++        validateLease(zk,ns+"/leases/"+b,false);
++        Prepared now=verifyAll(service,ns,disk,a,b,hostA,hostB,pubA,pubB,zk);
++        if(now.prior.version!=ready.prior.version
++                ||!now.prior.data.equals(ready.prior.data)
++                ||!now.ready.encode().equals(ready.ready.encode())
++                ||!now.genesisDigest.equals(ready.genesisDigest))
++            throw new IOException("first READY physical evidence changed after durable approval");
++        ZkNodeScopedControlPlane.Value installed=zk.compareAndSet(ns+"/manifest",
++                ready.prior.version,ready.ready.encode());
++        if(installed==null ||installed.version!=1
++                ||!ready.ready.encode().equals(installed.data))
++            throw new IOException("first READY certified ZK CAS rejected");
++        System.out.println("COMMON_ORIGINAL_FIRST_E2_READY_CAS_PASS service="+service
++                +" partitions=256 signedGenesis=true businessServing=false");
++    }
++}
+diff --git a/src/test/java/com/app/common/replication/CommonOriginalE1FirstReadyTicketResumeTest.java b/src/test/java/com/app/common/replication/CommonOriginalE1FirstReadyTicketResumeTest.java
+new file mode 100644
+index 0000000..0ba73e1
+--- /dev/null
++++ b/src/test/java/com/app/common/replication/CommonOriginalE1FirstReadyTicketResumeTest.java
+@@ -0,0 +1,80 @@
++package com.app.common.replication;
++
++import static org.junit.Assert.*;
++import java.nio.file.*;
++import java.io.IOException;
++import java.security.*;
++import java.util.Arrays;
++import org.junit.BeforeClass;
++import org.junit.Test;
++
++/** Exact durable E1 signed approval resume: no re-signing and no ZK shortcut. */
++public final class CommonOriginalE1FirstReadyTicketResumeTest {
++    private static KeyPair a,b;
++    @BeforeClass public static void init()throws Exception {
++        KeyPairGenerator gen=KeyPairGenerator.getInstance("RSA");
++        gen.initialize(2048);a=gen.generateKeyPair();b=gen.generateKeyPair();
++    }
++    interface Operation {void run()throws Exception;}
++    static void rejected(Operation op)throws Exception {
++        try {op.run();fail("unsigned/replayed/changed ticket accepted");}
++        catch(IOException expected){}
++    }
++    static byte[] payload() {
++        return ("OTC_COMMON_VIRGIN_E1_DUAL_RSA_TO_FIRST_E2_READY_V1\n"+
++            "OrderSvr\n/otc/demo-ns/order\n0\nmanifest-hash\nready-hash\ngenesis-hash\n")
++            .getBytes(java.nio.charset.StandardCharsets.UTF_8);
++    }
++    @Test public void fsyncedFirstReadyTicketCanResumeWithoutAnyRewrite()throws Exception {
++        Path root=Files.createTempDirectory("t253-durable-ticket");
++        Path path=root.resolve("first-ready/e1-to-e2-A.signed");
++        byte[] payload=payload();
++        CommonOriginalE1FirstReadyActivation.persistOrVerifyTicket(
++            path,payload,a.getPrivate(),a.getPublic());
++        byte[] original=Files.readAllBytes(path);
++        CommonOriginalE1FirstReadyActivation.persistOrVerifyTicket(
++            path,payload,a.getPrivate(),a.getPublic());
++        assertArrayEquals(original,Files.readAllBytes(path));
++    }
++    @Test public void changedManifestOrGenesisDeniesResume()throws Exception {
++        Path p=Files.createTempDirectory("t253-mutated").resolve("ticket");
++        byte[] exact=payload();
++        CommonOriginalE1FirstReadyActivation.persistOrVerifyTicket(
++            p,exact,a.getPrivate(),a.getPublic());
++        byte[] changed=Arrays.copyOf(exact,exact.length);
++        changed[changed.length-4]^=0x01;
++        rejected(()->CommonOriginalE1FirstReadyActivation.persistOrVerifyTicket(
++            p,changed,a.getPrivate(),a.getPublic()));
++    }
++    @Test public void wrongPinnedNodeCannotResumeSignedTicket()throws Exception {
++        Path p=Files.createTempDirectory("t253-wrong-pub").resolve("ticket");
++        CommonOriginalE1FirstReadyActivation.persistOrVerifyTicket(
++            p,payload(),a.getPrivate(),a.getPublic());
++        rejected(()->CommonOriginalE1FirstReadyActivation.persistOrVerifyTicket(
++            p,payload(),a.getPrivate(),b.getPublic()));
++        rejected(()->CommonOriginalE1FirstReadyActivation.persistOrVerifyTicket(
++            p,payload(),b.getPrivate(),b.getPublic()));
++    }
++    @Test public void truncatedOrTamperedSignatureFailsClosed()throws Exception {
++        Path p=Files.createTempDirectory("t253-bad-sign").resolve("ticket");
++        CommonOriginalE1FirstReadyActivation.persistOrVerifyTicket(
++            p,payload(),a.getPrivate(),a.getPublic());
++        byte[] signed=Files.readAllBytes(p);
++        byte[] corrupt=signed.clone();corrupt[corrupt.length-1]^=0x10;
++        Files.write(p,corrupt,StandardOpenOption.TRUNCATE_EXISTING);
++        rejected(()->CommonOriginalE1FirstReadyActivation.persistOrVerifyTicket(
++            p,payload(),a.getPrivate(),a.getPublic()));
++        Files.write(p,Arrays.copyOf(signed,signed.length-1),StandardOpenOption.TRUNCATE_EXISTING);
++        rejected(()->CommonOriginalE1FirstReadyActivation.persistOrVerifyTicket(
++            p,payload(),a.getPrivate(),a.getPublic()));
++    }
++    @Test public void symlinkedExistingTicketFailsClosed()throws Exception {
++        Path d=Files.createTempDirectory("t253-symlink");
++        Path real=d.resolve("real");Path link=d.resolve("link");
++        CommonOriginalE1FirstReadyActivation.persistOrVerifyTicket(
++            real,payload(),a.getPrivate(),a.getPublic());
++        Files.createSymbolicLink(link,real);
++        rejected(()->CommonOriginalE1FirstReadyActivation.persistOrVerifyTicket(
++            link,payload(),a.getPrivate(),a.getPublic()));
++    }
++}
+-- 
+2.50.1 (Apple Git-155)
