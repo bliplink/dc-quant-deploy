@@ -84,3 +84,11 @@ Trade 在 Common nodeRuntime READY 时严格禁止旧 mutate-first WAL 路径，
 - 12:03 只读取证：Order P119/epoch-2 副本 A 的 WAL **4104 帧 / 5,365,341 字节**，Primary B **4105 帧 / 5,366,777 字节**。B 第 4105 帧属于未认证尾部；B CommitIndex 只到 4104；A 是 B 的完整 4104 帧前缀。双方 custody/head.bin 和 custody-ledger/receipt-quorum.bin **逐字节一致**。Trade 256 分区 WAL A/B 一致，Order 的其它 255 分区 WAL 相同。
 - **禁止把 B 的第 4105 帧当成已提交订单，禁止在进程存活时复制/截断；也不能简单把 4096 改到 65536 当作集群完成**。真正修复只应发生在 Common：以已 RSA 验证的提交 Head 和持久化索引为边界，增量有界读取、只 Apply 未应用的连续 WAL 窗口，完成可重启的 snapshot/WAL 归档，再做已提交前缀+未认证尾部封存、安全恢复与 A/B 故障注入。保留 Common 与业务状态机分层，Order/Trade 不得自建 HA。
 - 此次审计**没有**再次恢复 P119 或重启 Order/Trade，没有部署新 Trade 源码，未覆盖原始 WAL；当前 Robot 故障仍未修复，严禁声明 Demo 已完成验收。
+
+## Common 真实源码改造（同日，未部署）
+
+- 通过本地编译 .class 和运行中 Common JAR 的 SHA256 对比，确认精确源码是 /Users/kong/.opentradingcore/common-batch-official-release-20261013/common（saas-crypto），不是过时的 .work/app-common 或缺少实际副本 Apply 方法的 t177 源码树。
+- **本地 Common 提交 d2f98a1**：CommonFileBusinessWal.readCertifiedWindow 增量有界读取当前 RSA/Custody 认证 Head 下尚未应用的连续帧，验证 CRC 和 Head，缓存偏移避免每轮全量扫描；CommonCertifiedPartitionRuntime.pollCertifiedReplicaApply 每次只读 256 帧；CommonOriginalFirstReadyBusinessGate.applyVerifiedReplicaWindow 严格验证游标、连续序号，逐窗口执行业务 Apply；旧历史完整前缀验证入口保持不变。
+- 本机 JDK8 对上述三份 Common Java 源码独立编译 PASS，JUnit **31/31 PASS**，包括新 4105 帧边界测试和原有 WAL/节点 Runtime/业务 READY 门禁。没有使用 GitHub Actions。
+- **不可直接部署**：CommonCertifiedE2ReplicaHistory.openExistingReadOnly 冷启动入口仍要求 maxRecords<=4096 且仍调用完整 readCertifiedFrames。超过 4096 帧的 P119 冷重放仍可能失败，须补 Common 认证 Snapshot+WAL 增量恢复；B 第 4105 帧仍未认证，须独立封存与可信恢复。Writer 自动授权重建及双向自动主切仍未完成。
+- 因恢复闭环不足，没有替换任何 Demo 镜像、删除 WAL、重启 Order/Trade、清理租户或恢复 Robot；**四个 Robot ERROR 仍为最新实况**。单元测试通过不能替代真实成交和 HA 验收。
