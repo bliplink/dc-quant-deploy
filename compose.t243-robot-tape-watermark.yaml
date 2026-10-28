@@ -1,0 +1,3 @@
+services:
+  robotsvr:
+    image: local/otc-t243-robotsvr:tape-watermark-diag
