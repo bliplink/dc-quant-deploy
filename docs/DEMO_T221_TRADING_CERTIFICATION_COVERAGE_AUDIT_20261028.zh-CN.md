@@ -43,3 +43,24 @@ Trade 在 Common nodeRuntime READY 时严格禁止旧 mutate-first WAL 路径，
 ## 操作边界
 
 测试没有重建 Order/Trade/Common，没有修改真实生产密码，也没有运行 GitHub Actions。三次自动审批测试会留下独立 TRIAL 租户及其 Robot，这些是正式业务证据，清理前需先完成验收并判断是否还需要复用。Broker E2E 临时 Key 已由脚本在 finally 中撤销。禁用任何绕过授权的方式，不用空密码或改租户注册策略来造成功记录。
+## 补充：当前全部订单写路径验收门禁（P0）
+
+| 业务写操作 | 当前认证状态 | 依据/限制 |
+|---|---|---|
+| OPEN Newing | 已接入 Common，Robot 真正运行 | TradeCertifiedNewingAdmission 只接 OPEN |
+| OPEN Trade_Cancel | 已接入 Common | TradeCertifiedCancelAdmission 只接 OPEN/Cancelled |
+| CashIn | 已接入 Common | 需要 Info1 稳定、唯一的幂等请求 ID |
+| 设置杠杆 | **未接入** | SetLeverageHandler 仍走被禁止的 executeMutation |
+| OPEN/CLOSE 的实际成交回报 ExecType=Trade | **未接入** | OrderFacade 认证模式直接拒绝，影响手续费/余额/持仓与真实成交 |
+| CLOSE Newing、CLOSE Cancel | **未接入** | 当前 Newing/Cancel 认证 Admission 明确只接受 OPEN |
+| CashOut、账户配置、持仓模式 | **未接入** | CashOutHandler / SetAccountConfigHandler / SetPositionTypeHandler 仍走旧业务写入 |
+
+**不能只修 setLeverage 然后继续发布镜像**。上述所有必需写命令必须在同一轮 Common 确定性 AFTER-state + typed replay、签名双节点 ACK、幂等业务回归内闭环；否则 Demo 不具备可真实成交和安全平仓的上线资格。
+
+## 补充：多租户持续运行与真实 WAL 一致性（11:20 后）
+
+- Order A/B、Trade A/B 每节点均有 256 个 P*/epoch-2 业务 WAL 文件。
+- 第一次非原子顺序读取时，Order P210 发现 A 一条新增 WAL 正在向 B 复制，随后三轮间隔复核 P210 分别达到 A/B 1222、1224、1226 帧，全部逐字节一致；Order P089 1953/1953、Trade P246 247/247 均一致。该瞬时差异不能误判为持久分叉，也不构成 HA 故障注入验收。
+- 最近 8 分钟真实 Newing 回调（两套 Order 合并，仅为日志窗口观察）：WSI1WX 638 条中成功 597、失败 41；U6ZAMX 455/455 成功；G6IQ8E 362/362 成功；R0F6CC 22 条成功 20、失败 2。
+- WSI1WX 失败 41 条和 R0F6CC 失败 2 条全部是 APS 11:15 重启窗口的 5003；11:16 完成重启之后，四个租户在随后检查窗口中均未新增 Newing 失败。
+- 三个新租户的 Robot 当前各有 40 个活动委托，服务状态 RUNNING，最近错误码 NULL；不是仅靠 Web 盘口假数据。自动 A/B SIGKILL 主切仍 **NO-GO**。
