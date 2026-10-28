@@ -1,0 +1,5 @@
+services:
+  tradesvr:
+    image: local/otc-t220-tradesvr:push-only-md-topic
+  tradesvr-b:
+    image: local/otc-t220-tradesvr:push-only-md-topic
