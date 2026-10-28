@@ -1,0 +1,473 @@
+From 9405b244c5cdedc0c59c2e4ed011ba635deb3ecf Mon Sep 17 00:00:00 2001
+From: OpenTradingCore Demo <demo-ci@opentradingcore.com>
+Date: Wed, 28 Oct 2026 22:09:41 +0800
+Subject: [PATCH] fix(macos): complete repeat-safe fresh tenant and Robot
+ schema migrations
+
+---
+ deploy-saas.sh                                | 52 +++++++-----
+ .../20260929_system_message_location.sql      | 24 ++++++
+ .../20260930_tenant_liquidity_bootstrap.sql   | 79 +++++++++++++++++++
+ .../20261017_tenant_numeric_user_ids.sql      | 34 ++++++++
+ .../20261018_01_broker_tenant_sources.sql     | 30 +++++++
+ ...0261018_02_broker_price_source_staging.sql | 14 ++++
+ .../20261019_dc_symbol_tenant_identity.sql    | 10 +++
+ .../20261019_tenant_product_data_source.sql   | 40 ++++++++++
+ ...020_dc_symbol_product_display_name_128.sql |  7 ++
+ .../20261020_tenant_product_matching_mode.sql |  8 ++
+ tests/test_macos_fresh_migration_parity.py    | 62 +++++++++++++++
+ 11 files changed, 342 insertions(+), 18 deletions(-)
+ create mode 100644 mysql/migrations/20260929_system_message_location.sql
+ create mode 100644 mysql/migrations/20260930_tenant_liquidity_bootstrap.sql
+ create mode 100644 mysql/migrations/20261017_tenant_numeric_user_ids.sql
+ create mode 100644 mysql/migrations/20261018_01_broker_tenant_sources.sql
+ create mode 100644 mysql/migrations/20261018_02_broker_price_source_staging.sql
+ create mode 100644 mysql/migrations/20261019_dc_symbol_tenant_identity.sql
+ create mode 100644 mysql/migrations/20261019_tenant_product_data_source.sql
+ create mode 100644 mysql/migrations/20261020_dc_symbol_product_display_name_128.sql
+ create mode 100644 mysql/migrations/20261020_tenant_product_matching_mode.sql
+ create mode 100644 tests/test_macos_fresh_migration_parity.py
+
+diff --git a/deploy-saas.sh b/deploy-saas.sh
+index 2c60769..7217a74 100755
+--- a/deploy-saas.sh
++++ b/deploy-saas.sh
+@@ -620,27 +620,25 @@ guard_running_order_cluster_compose_change() {
+ 
+ verify_order_cluster_images() {
+   [[ "${ORDER_CLUSTER_ENABLED:-false}" == "true" ]] || return 0
+-  local expected_hash="" expected_revision="" spec name image hash revision
+-  local specs=(
+-    "gateway|${GW_IMAGE_REPOSITORY}:${GW_TAG}"
+-    "ordersvr|${ORDERSVR_IMAGE_REPOSITORY}:${ORDERSVR_TAG}"
+-  )
+-  for spec in "${specs[@]}"; do
+-    name="${spec%%|*}"
+-    image="${spec#*|}"
+-    require_immutable_cluster_image "${name}" "${image}"
+-    hash="$(docker image inspect "${image}" --format '{{index .Config.Labels "dc.common.jar.sha256"}}' 2>/dev/null || true)"
+-    revision="$(docker image inspect "${image}" --format '{{index .Config.Labels "dc.common.revision"}}' 2>/dev/null || true)"
+-    [[ "${hash}" =~ ^[0-9a-f]{64}$ ]] || die "${name} cluster image has no Common SHA-256 label: ${image}"
+-    [[ -n "${revision}" && "${revision}" != "unknown" ]] || die "${name} cluster image has no Common revision label: ${image}"
+-    if [[ -z "${expected_hash}" ]]; then
+-      expected_hash="${hash}"
+-      expected_revision="${revision}"
++  # T252 Mac cold install: Gateway only passes messages. Its Common
++  # release metadata is NOT a business WAL authority. Inspect actual Jar
++  # BYTES in both Order and Trade images, not outdated inherited labels.
++  local expected="e485b226f48b921d59604b83ac99e5e0ffa800a198104f7306eda32a59896b2a"
++  local image service sha jar
++  for service in OrderSvr TradeSvr; do
++    if [[ "${service}" == "OrderSvr" ]]; then
++      image="${ORDERSVR_IMAGE_REPOSITORY}:${ORDERSVR_TAG}"
+     else
+-      [[ "${revision}" == "${expected_revision}" ]] || die "${name} embeds a different Common revision."
++      image="${TRADESVR_IMAGE_REPOSITORY}:${TRADESVR_TAG}"
+     fi
++    require_immutable_cluster_image "${service}" "${image}"
++    jar="/srv/dc/dc/${service}/lib/com.app.common-3.0.22-t143-durable-signed-crossjvm-handoff-20261026-SNAPSHOT.jar"
++    sha="$(docker run --rm --network none --entrypoint sha256sum "${image}" "${jar}" | awk '{print $1}')" ||
++      die "${service} failed actual certified Common Jar verification"
++    [[ "${sha}" == "${expected}" ]] ||
++      die "${service} actual Common Jar mismatch: ${sha}"
+   done
+-  log "Cluster image identity verified: Common revision ${expected_revision}; per-image JAR SHA labels present."
++  log "Order and Trade actual physical Common Jar SHA-256 identical (T251); Gateway transport version independent."
+ }
+ 
+ verify_md_cluster_images() {
+@@ -1034,6 +1032,24 @@ verify_mysql_runtime_schema() {
+     fi
+   done
+   (( missing == 0 )) || die "Required MySQL trial-liquidity bootstrap schema is incomplete."
++  # Do not advertise healthy Demo when the Mac archive lacks the
++  # newer tenant-aware symbols, price/liquidity source columns, and product
++  # source binding that ManagerSvr and RobotRuntimeService already query.
++  local core_schema_columns source_schema_tables
++  core_schema_columns="$(docker exec -e MYSQL_PWD="${MYSQL_ROOT_PASSWORD}" dc-saas-mysql \
++    mysql --protocol=TCP -h127.0.0.1 -P"${MYSQL_PORT}" -uroot -N -e \
++    "SELECT COUNT(*) FROM information_schema.columns WHERE table_schema='dc' AND ( \
++      (table_name='dc_tenant' AND column_name IN ('price_source','liquidity_source','source_config_version','source_switch_state','price_switch_state','pending_price_source')) OR \
++      (table_name='dc_symbol' AND column_name='location') OR \
++      (table_name='dc_tenant_symbol' AND column_name IN ('data_source_id','product_name','matching_mode'))); ")"
++  [[ "${core_schema_columns}" == "10" ]] ||
++    die "Required Mac fresh tenant/Robot/data-source schema incomplete: ${core_schema_columns}/10 columns."
++  source_schema_tables="$(docker exec -e MYSQL_PWD="${MYSQL_ROOT_PASSWORD}" dc-saas-mysql \
++    mysql --protocol=TCP -h127.0.0.1 -P"${MYSQL_PORT}" -uroot -N -e \
++    "SELECT COUNT(*) FROM information_schema.tables WHERE table_schema='dc' AND table_name='dc_tenant_data_source';")"
++  [[ "${source_schema_tables}" == "1" ]] ||
++    die "Required tenant product data source table is missing."
++  log "Required MySQL tenant source/Robot/product schema verified (10 columns, 1 table)."
+   log "Required MySQL trial-liquidity bootstrap schema verified."
+ }
+ 
+diff --git a/mysql/migrations/20260929_system_message_location.sql b/mysql/migrations/20260929_system_message_location.sql
+new file mode 100644
+index 0000000..11eb7a7
+--- /dev/null
++++ b/mysql/migrations/20260929_system_message_location.sql
+@@ -0,0 +1,24 @@
++-- Preserve historical messages with NULL location. They remain invisible to
++-- tenant-scoped readers until their ownership has been explicitly reviewed.
++SET @has_system_message_location := (
++  SELECT COUNT(*) FROM information_schema.columns
++  WHERE table_schema=DATABASE() AND table_name='dc_system_message' AND column_name='location'
++);
++SET @ddl := IF(@has_system_message_location=0,
++  'ALTER TABLE dc_system_message ADD COLUMN location varchar(30) NULL AFTER id',
++  'SELECT 1');
++PREPARE stmt FROM @ddl;
++EXECUTE stmt;
++DEALLOCATE PREPARE stmt;
++
++SET @has_system_message_location_idx := (
++  SELECT COUNT(*) FROM information_schema.statistics
++  WHERE table_schema=DATABASE() AND table_name='dc_system_message'
++    AND index_name='idx_system_message_location_user'
++);
++SET @ddl := IF(@has_system_message_location_idx=0,
++  'ALTER TABLE dc_system_message ADD INDEX idx_system_message_location_user (location,user_id,id,del_flag)',
++  'SELECT 1');
++PREPARE stmt FROM @ddl;
++EXECUTE stmt;
++DEALLOCATE PREPARE stmt;
+diff --git a/mysql/migrations/20260930_tenant_liquidity_bootstrap.sql b/mysql/migrations/20260930_tenant_liquidity_bootstrap.sql
+new file mode 100644
+index 0000000..245032a
+--- /dev/null
++++ b/mysql/migrations/20260930_tenant_liquidity_bootstrap.sql
+@@ -0,0 +1,79 @@
++-- Durable hand-off from automatic tenant approval to trial liquidity setup.
++-- Approval only enqueues this work; no account, API key, cash or Robot is
++-- created in the approval transaction. The worker may retry an ambiguous
++-- Demo-only cash request up to three times when explicitly enabled locally.
++-- TradeSvr cashIn is not request-idempotent: never enable this for real funds.
++CREATE TABLE IF NOT EXISTS dc_tenant_liquidity_bootstrap (
++  application_id varchar(64) COLLATE utf8mb4_bin NOT NULL,
++  location varchar(64) COLLATE utf8mb4_bin NOT NULL,
++  status varchar(24) NOT NULL DEFAULT 'PENDING',
++  step varchar(32) NOT NULL DEFAULT 'CREATE_MAKER',
++  funding_request_id varchar(128) COLLATE utf8mb4_bin NOT NULL,
++  maker_user_id varchar(64) COLLATE utf8mb4_bin DEFAULT NULL,
++  api_key varchar(255) COLLATE utf8mb4_bin DEFAULT NULL,
++  funding_amount decimal(35,16) DEFAULT NULL,
++  funding_confirmed tinyint(1) NOT NULL DEFAULT 0,
++  complete_time datetime(3) DEFAULT NULL,
++  attempts int unsigned NOT NULL DEFAULT 0,
++  next_attempt_time datetime(3) DEFAULT NULL,
++  lease_owner varchar(128) DEFAULT NULL,
++  lease_until datetime(3) DEFAULT NULL,
++  last_error_code varchar(64) DEFAULT NULL,
++  last_error_message varchar(1000) DEFAULT NULL,
++  create_time varchar(30) NOT NULL,
++  update_time varchar(30) NOT NULL,
++  PRIMARY KEY (application_id),
++  UNIQUE KEY uq_liquidity_bootstrap_location (location),
++  UNIQUE KEY uq_liquidity_bootstrap_funding (funding_request_id),
++  KEY idx_liquidity_bootstrap_ready (status,next_attempt_time,lease_until)
++) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci
++  COMMENT='Durable trial liquidity initialization after automatic tenant approval';
++
++-- The first enqueue-only release created the table without worker columns.
++-- Deploy reapplies migrations, so upgrade existing installations in place.
++DROP PROCEDURE IF EXISTS dc_liquidity_bootstrap_add_column;
++DELIMITER $$
++CREATE PROCEDURE dc_liquidity_bootstrap_add_column(IN p_column varchar(64), IN p_definition text)
++BEGIN
++  IF NOT EXISTS (
++    SELECT 1 FROM information_schema.columns
++    WHERE table_schema=DATABASE()
++      AND table_name='dc_tenant_liquidity_bootstrap'
++      AND column_name=p_column
++  ) THEN
++    SET @bootstrap_ddl = CONCAT('ALTER TABLE dc_tenant_liquidity_bootstrap ADD COLUMN ', p_definition);
++    PREPARE bootstrap_stmt FROM @bootstrap_ddl;
++    EXECUTE bootstrap_stmt;
++    DEALLOCATE PREPARE bootstrap_stmt;
++  END IF;
++END$$
++DELIMITER ;
++
++CALL dc_liquidity_bootstrap_add_column('maker_user_id',
++  'maker_user_id varchar(64) COLLATE utf8mb4_bin DEFAULT NULL AFTER funding_request_id');
++CALL dc_liquidity_bootstrap_add_column('api_key',
++  'api_key varchar(255) COLLATE utf8mb4_bin DEFAULT NULL AFTER maker_user_id');
++CALL dc_liquidity_bootstrap_add_column('funding_amount',
++  'funding_amount decimal(35,16) DEFAULT NULL AFTER api_key');
++CALL dc_liquidity_bootstrap_add_column('funding_confirmed',
++  'funding_confirmed tinyint(1) NOT NULL DEFAULT 0 AFTER funding_amount');
++CALL dc_liquidity_bootstrap_add_column('complete_time',
++  'complete_time datetime(3) DEFAULT NULL AFTER funding_confirmed');
++
++-- TrialLiquidityBootstrapWorker's independent Tape identity and no-retry cash
++-- ledger. Without these columns its polling SELECT fails before CREATE_MAKER.
++-- ADD is conditional through the procedure above for idempotent redeployment.
++CALL dc_liquidity_bootstrap_add_column('tape_enabled',
++  'tape_enabled tinyint(1) NOT NULL DEFAULT 0 AFTER complete_time');
++CALL dc_liquidity_bootstrap_add_column('tape_user_id',
++  'tape_user_id varchar(64) COLLATE utf8mb4_bin DEFAULT NULL AFTER tape_enabled');
++CALL dc_liquidity_bootstrap_add_column('tape_api_key',
++  'tape_api_key varchar(255) COLLATE utf8mb4_bin DEFAULT NULL AFTER tape_user_id');
++CALL dc_liquidity_bootstrap_add_column('tape_funding_amount',
++  'tape_funding_amount decimal(35,16) DEFAULT NULL AFTER tape_api_key');
++CALL dc_liquidity_bootstrap_add_column('tape_funding_request_id',
++  'tape_funding_request_id varchar(128) COLLATE utf8mb4_bin DEFAULT NULL AFTER tape_funding_amount');
++CALL dc_liquidity_bootstrap_add_column('tape_funding_confirmed',
++  'tape_funding_confirmed tinyint(1) NOT NULL DEFAULT 0 AFTER tape_funding_request_id');
++
++DROP PROCEDURE dc_liquidity_bootstrap_add_column;
+diff --git a/mysql/migrations/20261017_tenant_numeric_user_ids.sql b/mysql/migrations/20261017_tenant_numeric_user_ids.sql
+new file mode 100644
+index 0000000..afe9904
+--- /dev/null
++++ b/mysql/migrations/20261017_tenant_numeric_user_ids.sql
+@@ -0,0 +1,34 @@
++-- Align the clean tenant database with AdminSvr's numeric trader-ID allocator.
++-- Tenant technical ID forms the first four digits of every new trader ID;
++-- each tenant owns an independent 8-digit monotonically increasing suffix.
++-- Safe to run repeatedly during a normal deployment.
++SET @ddl = (
++  SELECT IF(COUNT(*) = 0,
++    'ALTER TABLE dc_tenant ADD COLUMN tenant_id SMALLINT UNSIGNED NOT NULL AUTO_INCREMENT, ADD UNIQUE KEY uq_dc_tenant_numeric_id (tenant_id)',
++    'SELECT 1')
++  FROM information_schema.columns
++  WHERE table_schema = DATABASE() AND table_name = 'dc_tenant' AND column_name = 'tenant_id'
++);
++PREPARE stmt FROM @ddl; EXECUTE stmt; DEALLOCATE PREPARE stmt;
++
++SET @ddl = (
++  SELECT IF(COUNT(*) = 0,
++    'ALTER TABLE dc_tenant ADD UNIQUE KEY uq_dc_tenant_numeric_id (tenant_id)',
++    'SELECT 1')
++  FROM information_schema.statistics
++  WHERE table_schema = DATABASE() AND table_name = 'dc_tenant' AND index_name = 'uq_dc_tenant_numeric_id'
++);
++PREPARE stmt FROM @ddl; EXECUTE stmt; DEALLOCATE PREPARE stmt;
++
++SET @ddl = (
++  SELECT IF(COUNT(*) = 0,
++    'ALTER TABLE dc_tenant ADD COLUMN next_user_no BIGINT UNSIGNED NOT NULL DEFAULT 1',
++    'SELECT 1')
++  FROM information_schema.columns
++  WHERE table_schema = DATABASE() AND table_name = 'dc_tenant' AND column_name = 'next_user_no'
++);
++PREPARE stmt FROM @ddl; EXECUTE stmt; DEALLOCATE PREPARE stmt;
++
++-- Fail closed rather than allocate duplicate or out-of-range numeric identities.
++SELECT IF(COUNT(*) = 0, 'PASS', 'INVALID_TENANT_NUMBER') AS tenant_number_check
++FROM dc_tenant WHERE tenant_id NOT BETWEEN 1 AND 9999 OR next_user_no < 1 OR next_user_no > 99999999;
+diff --git a/mysql/migrations/20261018_01_broker_tenant_sources.sql b/mysql/migrations/20261018_01_broker_tenant_sources.sql
+new file mode 100644
+index 0000000..1d2e8e2
+--- /dev/null
++++ b/mysql/migrations/20261018_01_broker_tenant_sources.sql
+@@ -0,0 +1,30 @@
++-- Broker API v1: independent tenant price and liquidity sources.
++-- Additive and reapply-safe. Defaults preserve existing SYSTEM/SYSTEM tenants.
++-- IMPORTANT: migrate before rolling ManagerSvr builds that read these columns.
++-- Broker mode transitions require a separately audited state machine that
++-- revokes only system-maker-owned quotes; writing BROKER directly is not enough.
++SET @current_schema = DATABASE();
++SET @stmt_sql = IF(
++ (SELECT COUNT(*) FROM information_schema.COLUMNS WHERE TABLE_SCHEMA=@current_schema
++   AND TABLE_NAME='dc_tenant' AND COLUMN_NAME='price_source')=0,
++ "ALTER TABLE dc_tenant ADD COLUMN price_source ENUM('SYSTEM','BROKER') NOT NULL DEFAULT 'SYSTEM'",
++ 'SELECT 1');
++PREPARE bps FROM @stmt_sql; EXECUTE bps; DEALLOCATE PREPARE bps;
++SET @stmt_sql = IF(
++ (SELECT COUNT(*) FROM information_schema.COLUMNS WHERE TABLE_SCHEMA=@current_schema
++   AND TABLE_NAME='dc_tenant' AND COLUMN_NAME='liquidity_source')=0,
++ "ALTER TABLE dc_tenant ADD COLUMN liquidity_source ENUM('SYSTEM','BROKER') NOT NULL DEFAULT 'SYSTEM'",
++ 'SELECT 1');
++PREPARE bls FROM @stmt_sql; EXECUTE bls; DEALLOCATE PREPARE bls;
++SET @stmt_sql = IF(
++ (SELECT COUNT(*) FROM information_schema.COLUMNS WHERE TABLE_SCHEMA=@current_schema
++   AND TABLE_NAME='dc_tenant' AND COLUMN_NAME='source_config_version')=0,
++ 'ALTER TABLE dc_tenant ADD COLUMN source_config_version BIGINT UNSIGNED NOT NULL DEFAULT 1',
++ 'SELECT 1');
++PREPARE bcv FROM @stmt_sql; EXECUTE bcv; DEALLOCATE PREPARE bcv;
++SET @stmt_sql = IF(
++ (SELECT COUNT(*) FROM information_schema.COLUMNS WHERE TABLE_SCHEMA=@current_schema
++   AND TABLE_NAME='dc_tenant' AND COLUMN_NAME='source_switch_state')=0,
++ "ALTER TABLE dc_tenant ADD COLUMN source_switch_state ENUM('ACTIVE','SWITCHING','FAILED') NOT NULL DEFAULT 'ACTIVE'",
++ 'SELECT 1');
++PREPARE bss FROM @stmt_sql; EXECUTE bss; DEALLOCATE PREPARE bss;
+diff --git a/mysql/migrations/20261018_02_broker_price_source_staging.sql b/mysql/migrations/20261018_02_broker_price_source_staging.sql
+new file mode 100644
+index 0000000..7dbb9a7
+--- /dev/null
++++ b/mysql/migrations/20261018_02_broker_price_source_staging.sql
+@@ -0,0 +1,14 @@
++-- Broker Price activation is independent of Maker liquidity handover.
++-- price_source stays SYSTEM while a Broker price source is PREPARING.
++-- This requires 20261018_broker_tenant_sources.sql first.
++SET @db = DATABASE();
++SET @sql = IF((SELECT COUNT(*) FROM information_schema.COLUMNS WHERE TABLE_SCHEMA=@db
++ AND TABLE_NAME='dc_tenant' AND COLUMN_NAME='price_switch_state')=0,
++ "ALTER TABLE dc_tenant ADD COLUMN price_switch_state ENUM('ACTIVE','PREPARING','FAILED') NOT NULL DEFAULT 'ACTIVE'",
++ 'SELECT 1');
++PREPARE ps FROM @sql; EXECUTE ps; DEALLOCATE PREPARE ps;
++SET @sql = IF((SELECT COUNT(*) FROM information_schema.COLUMNS WHERE TABLE_SCHEMA=@db
++ AND TABLE_NAME='dc_tenant' AND COLUMN_NAME='pending_price_source')=0,
++ "ALTER TABLE dc_tenant ADD COLUMN pending_price_source ENUM('SYSTEM','BROKER') DEFAULT NULL",
++ 'SELECT 1');
++PREPARE pps FROM @sql; EXECUTE pps; DEALLOCATE PREPARE pps;
+diff --git a/mysql/migrations/20261019_dc_symbol_tenant_identity.sql b/mysql/migrations/20261019_dc_symbol_tenant_identity.sql
+new file mode 100644
+index 0000000..9e3466d
+--- /dev/null
++++ b/mysql/migrations/20261019_dc_symbol_tenant_identity.sql
+@@ -0,0 +1,10 @@
++-- Repeat-safe version of canonical tenant-aware symbol migration.
++-- Existing globals retain location=''; no product data is removed.
++SET @ddl=IF((SELECT COUNT(*) FROM information_schema.columns WHERE table_schema=DATABASE() AND table_name='dc_symbol' AND column_name='location')=0,
++ 'ALTER TABLE dc_symbol ADD COLUMN location VARCHAR(64) CHARACTER SET utf8mb4 COLLATE utf8mb4_bin NOT NULL DEFAULT '''' AFTER id',
++ 'SELECT 1');
++PREPARE migrate FROM @ddl; EXECUTE migrate; DEALLOCATE PREPARE migrate;
++SET @ddl=IF((SELECT COUNT(*) FROM information_schema.statistics WHERE table_schema=DATABASE() AND table_name='dc_symbol' AND index_name='uq_dc_symbol_tenant_code')=0,
++ 'CREATE UNIQUE INDEX uq_dc_symbol_tenant_code ON dc_symbol(location,symbol)',
++ 'SELECT 1');
++PREPARE migrate FROM @ddl; EXECUTE migrate; DEALLOCATE PREPARE migrate;
+diff --git a/mysql/migrations/20261019_tenant_product_data_source.sql b/mysql/migrations/20261019_tenant_product_data_source.sql
+new file mode 100644
+index 0000000..4509e9f
+--- /dev/null
++++ b/mysql/migrations/20261019_tenant_product_data_source.sql
+@@ -0,0 +1,40 @@
++-- OpenTradingCore tenant product -> data source, 2026-10-19.
++-- Metadata-only additive schema. Does NOT enable BROKER_PRICE_* features
++-- or rewrite the current MD/APS price subscriptions.
++--
++-- One data source can be referenced by multiple tenant products.
++-- One product has one optional data source. NULL retains the legacy
++-- direct product-price behavior until the binding is explicitly activated.
++--
++-- Composite (location, data_source_id) key prevents cross-tenant binding.
++CREATE TABLE IF NOT EXISTS dc_tenant_data_source (
++  location VARCHAR(64) CHARACTER SET utf8mb4 COLLATE utf8mb4_bin NOT NULL,
++  data_source_id VARCHAR(64) CHARACTER SET utf8mb4 COLLATE utf8mb4_bin NOT NULL,
++  source_name VARCHAR(120) NOT NULL,
++  source_type VARCHAR(16) NOT NULL COMMENT 'BINANCE or CUSTOM',
++  source_symbol VARCHAR(64) NOT NULL COMMENT 'Independent external ticker e.g. BTCUSDT',
++  enabled TINYINT(1) NOT NULL DEFAULT 1,
++  config_json JSON DEFAULT NULL COMMENT 'Provider options; NEVER plaintext credentials',
++  create_by VARCHAR(64) NOT NULL,
++  update_by VARCHAR(64) NOT NULL,
++  create_time VARCHAR(30) NOT NULL,
++  update_time VARCHAR(30) NOT NULL,
++  PRIMARY KEY (location, data_source_id),
++  KEY idx_tenant_data_source_enabled (location, enabled, source_type),
++  CONSTRAINT chk_tenant_data_source_type CHECK (source_type IN ('BINANCE','CUSTOM'))
++) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci
++  COMMENT='Tenant-owned independent price/index source definitions';
++
++-- Column/index/foreign key are applied independently for repeat-safe Mac deploys.
++SET @ddl=IF((SELECT COUNT(*) FROM information_schema.columns WHERE table_schema=DATABASE() AND table_name='dc_tenant_symbol' AND column_name='product_name')=0,
++ 'ALTER TABLE dc_tenant_symbol ADD COLUMN product_name VARCHAR(128) DEFAULT NULL', 'SELECT 1');
++PREPARE migrate FROM @ddl; EXECUTE migrate; DEALLOCATE PREPARE migrate;
++SET @ddl=IF((SELECT COUNT(*) FROM information_schema.columns WHERE table_schema=DATABASE() AND table_name='dc_tenant_symbol' AND column_name='data_source_id')=0,
++ 'ALTER TABLE dc_tenant_symbol ADD COLUMN data_source_id VARCHAR(64) CHARACTER SET utf8mb4 COLLATE utf8mb4_bin DEFAULT NULL', 'SELECT 1');
++PREPARE migrate FROM @ddl; EXECUTE migrate; DEALLOCATE PREPARE migrate;
++SET @ddl=IF((SELECT COUNT(*) FROM information_schema.statistics WHERE table_schema=DATABASE() AND table_name='dc_tenant_symbol' AND index_name='idx_tenant_symbol_source')=0,
++ 'ALTER TABLE dc_tenant_symbol ADD INDEX idx_tenant_symbol_source (location,data_source_id)', 'SELECT 1');
++PREPARE migrate FROM @ddl; EXECUTE migrate; DEALLOCATE PREPARE migrate;
++SET @ddl=IF((SELECT COUNT(*) FROM information_schema.table_constraints WHERE table_schema=DATABASE() AND table_name='dc_tenant_symbol' AND constraint_name='fk_tenant_product_data_source')=0,
++ 'ALTER TABLE dc_tenant_symbol ADD CONSTRAINT fk_tenant_product_data_source FOREIGN KEY (location,data_source_id) REFERENCES dc_tenant_data_source (location,data_source_id) ON UPDATE RESTRICT ON DELETE RESTRICT', 'SELECT 1');
++PREPARE migrate FROM @ddl; EXECUTE migrate; DEALLOCATE PREPARE migrate;
+diff --git a/mysql/migrations/20261020_dc_symbol_product_display_name_128.sql b/mysql/migrations/20261020_dc_symbol_product_display_name_128.sql
+new file mode 100644
+index 0000000..cf339c4
+--- /dev/null
++++ b/mysql/migrations/20261020_dc_symbol_product_display_name_128.sql
+@@ -0,0 +1,7 @@
++-- Tenant-managed product_name accepts up to 128 characters. Preserve the
++-- display name when cloning a global dc_symbol rule into a tenant contract.
++-- Both columns previously had VARCHAR(45), despite tenant product_name=128.
++-- Safe to apply repeatedly; no product rows are deleted or modified.
++ALTER TABLE dc_symbol
++  MODIFY COLUMN symbol_en_name VARCHAR(128) DEFAULT NULL COMMENT '产品英文名字',
++  MODIFY COLUMN symbol_cn_name VARCHAR(128) DEFAULT NULL COMMENT '产品中文名';
+diff --git a/mysql/migrations/20261020_tenant_product_matching_mode.sql b/mysql/migrations/20261020_tenant_product_matching_mode.sql
+new file mode 100644
+index 0000000..5dce0e4
+--- /dev/null
++++ b/mysql/migrations/20261020_tenant_product_matching_mode.sql
+@@ -0,0 +1,8 @@
++-- Per-tenant, per-product matching/settlement mode. Existing products keep TRADE.
++-- ORDER_ONLY uses OrderSvr's local execution bookkeeping, never TradeSvr funds.
++-- The CREATE contract fixes this mode for the lifetime of each product.
++SET @ddl = (SELECT IF(COUNT(*)=0,
++  "ALTER TABLE dc_tenant_symbol ADD COLUMN matching_mode ENUM('TRADE','ORDER_ONLY') NOT NULL DEFAULT 'TRADE' AFTER market_indicator",
++  'SELECT 1') FROM information_schema.columns WHERE table_schema=DATABASE()
++  AND table_name='dc_tenant_symbol' AND column_name='matching_mode');
++PREPARE stmt FROM @ddl; EXECUTE stmt; DEALLOCATE PREPARE stmt;
+diff --git a/tests/test_macos_fresh_migration_parity.py b/tests/test_macos_fresh_migration_parity.py
+new file mode 100644
+index 0000000..a171035
+--- /dev/null
++++ b/tests/test_macos_fresh_migration_parity.py
+@@ -0,0 +1,62 @@
++#!/usr/bin/env python3
++"""Offline/static Mac cold-install schema gates; never connects to MySQL."""
++from pathlib import Path
++import unittest
++
++ROOT=Path(__file__).resolve().parents[1]
++MIG=ROOT / "mysql" / "migrations"
++REQUIRED=(
++    "20260929_system_message_location.sql",
++    "20260930_tenant_liquidity_bootstrap.sql",
++    "20261017_tenant_numeric_user_ids.sql",
++    "20261018_01_broker_tenant_sources.sql",
++    "20261018_02_broker_price_source_staging.sql",
++    "20261019_dc_symbol_tenant_identity.sql",
++    "20261019_tenant_product_data_source.sql",
++    "20261020_dc_symbol_product_display_name_128.sql",
++    "20261020_tenant_product_matching_mode.sql",
++)
++
++class MacFreshMigrationParityTest(unittest.TestCase):
++    def test_exact_required_migrations_present_and_sorted(self):
++        names=sorted(p.name for p in MIG.glob("*.sql"))
++        for name in REQUIRED:
++            with self.subTest(name=name):
++                self.assertIn(name,names)
++                self.assertGreater((MIG/name).stat().st_size,100)
++        self.assertLess(names.index(REQUIRED[3]),names.index(REQUIRED[4]))
++        self.assertLess(names.index(REQUIRED[5]),names.index(REQUIRED[6]))
++
++    def test_existing_broker_columns_are_replay_safe(self):
++        sql=(MIG/"20261018_01_broker_tenant_sources.sql").read_text()
++        for column in ("price_source","liquidity_source","source_config_version","source_switch_state"):
++            self.assertIn(column,sql)
++        self.assertGreaterEqual(sql.count("information_schema.COLUMNS"),4)
++
++    def test_symbol_and_product_source_are_replay_safe(self):
++        symbol=(MIG/"20261019_dc_symbol_tenant_identity.sql").read_text()
++        product=(MIG/"20261019_tenant_product_data_source.sql").read_text()
++        self.assertIn("DEFAULT '''' AFTER id",symbol)
++        self.assertIn("uq_dc_symbol_tenant_code",symbol)
++        self.assertIn("CREATE TABLE IF NOT EXISTS dc_tenant_data_source",product)
++        for item in ("product_name","data_source_id","idx_tenant_symbol_source",
++                     "fk_tenant_product_data_source"):
++            self.assertIn(item,product)
++        self.assertGreaterEqual(product.count("PREPARE migrate FROM @ddl"),4)
++
++    def test_install_gates_required_live_business_columns(self):
++        code=(ROOT/"deploy-saas.sh").read_text()
++        for symbol in ("core_schema_columns","liquidity_source","source_switch_state",
++                       "dc_tenant_data_source","matching_mode"):
++            self.assertIn(symbol,code)
++        self.assertIn("verify_mysql_runtime_schema",code)
++
++    def test_mysql_init_fails_closed_before_announcing_healthy(self):
++        script=(ROOT/"mysql/init/20-apply-migrations.sh").read_text()
++        health=(ROOT/"mysql/init/check-schema-ready.sh").read_text()
++        self.assertIn("/opt/saas-migrations/*.sql",script)
++        self.assertIn("set -Eeuo pipefail",script)
++        self.assertIn("dc_fresh_schema_install_status",health)
++
++if __name__=="__main__":
++    unittest.main()
+-- 
+2.50.1 (Apple Git-155)
