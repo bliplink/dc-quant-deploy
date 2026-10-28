@@ -64,3 +64,14 @@ Trade 在 Common nodeRuntime READY 时严格禁止旧 mutate-first WAL 路径，
 - 最近 8 分钟真实 Newing 回调（两套 Order 合并，仅为日志窗口观察）：WSI1WX 638 条中成功 597、失败 41；U6ZAMX 455/455 成功；G6IQ8E 362/362 成功；R0F6CC 22 条成功 20、失败 2。
 - WSI1WX 失败 41 条和 R0F6CC 失败 2 条全部是 APS 11:15 重启窗口的 5003；11:16 完成重启之后，四个租户在随后检查窗口中均未新增 Newing 失败。
 - 三个新租户的 Robot 当前各有 40 个活动委托，服务状态 RUNNING，最近错误码 NULL；不是仅靠 Web 盘口假数据。自动 A/B SIGKILL 主切仍 **NO-GO**。
+
+## 后续源码实做（同日，未替换 Demo）
+
+- TradeSvr 本地 saas-crypto 源码已提交：
+  - edea43d：新增 TradeCertifiedLeverageAdmission，SetLeverageHandler 在 Common 模式下仅调用新认证适配；准备 SYMBOL_PARA 后状态，通过 commitPreparedState 认证提交后应用；带同值幂等、租户/产品/风险门禁。带持仓重算暂严格拒绝，不伪造完整财务认证。
+  - 7077f11：新增 TradeCertifiedCloseNewingAdmission 和 TradeCertifiedCloseCancelAdmission，分别为已有持仓的平仓订单生成 POSITION + OPEN_ORDER + DEDUPE_RESULT 的确定性后状态，以及未成交平仓撤单的 POSITION 释放 + OPEN_ORDER REMOVE + DEDUPE_RESULT；在 OrderFacade 的认证路径中挂接，仍由 Common 完成 WAL/签名/复制。
+  - 严格补齐 TradePreparedStateValidator 对 ACCOUNT_CONFIG、SYMBOL_PARA 的内部租户、用户、产品和杠杆值校验，避免仅检查实体 Key 前缀而接纳错误内嵌身份。
+- 新适配分别由 trade.common.certifiedLeverage.enabled、trade.common.certifiedCloseNewing.enabled、trade.common.certifiedCloseCancel.enabled 显式控制，**默认关闭**；不允许缺失认证 Bean 时回退旧 mutate-first 路径。
+- 全量 Trade Java 源码经本机 JDK8 javac 编译 PASS；JUnit 4.13.2 相关回归 **24/24 PASS**（新适配及已有 CashIn/OpenCancel/Reserve 相关测试）。由于本机系统 Maven 不在 PATH，直接复用项目已构建的 classpath/JAR 和 javac，不使用 GitHub Actions。
+- **未完成/NO-GO**：真正 ExecType=Trade 成交资金和持仓结算，部分成交/重复回调、平仓实际成交、提现和账户/持仓模式写入，以及已有持仓情况下杠杆和保证金同步重算；Common Writer 故障后的自动授权恢复、A/B 双向主切也未通过。
+- **未部署、不计真实通过**：上述最新 Java 源码只在本地编译、测试、提交；现有 Trade A/B 仍运行 T220 镜像，OpenTradingCore Demo 的真实新委托与 Robot 稳态保持不变。待完整成交结算认证通过后统一部署验证，避免用功能不完整镜像替换已稳定的 Demo。
