@@ -1,0 +1,5 @@
+services:
+  tradesvr:
+    image: local/otc-t228-tradesvr:certified-leverage-close
+  tradesvr-b:
+    image: local/otc-t228-tradesvr:certified-leverage-close

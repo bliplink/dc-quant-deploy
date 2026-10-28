@@ -291,20 +291,37 @@ def accept_trade_scenario(url,location,suffix,broker_session,source_id,record,
         else:
             resting=put(maker,'Sell','MAKER')
             record('maker_order_submitted',clientOrderId=resting)
-            # Place the Taker only after the Maker is actually resting.
+            # In certified mode Common's committed OrderManager is the
+            # admission authority. The MySQL dc_orders Projection may lag or
+            # be unavailable, and MUST NOT block a real signed maker probe.
+            # Do not weaken the independent *post-fill* Projection gate below.
             for wait in range(40):
-                rows=readonly_sql(
-                    "SELECT ord_status FROM dc_orders WHERE location='"+location+
-                    "' AND clord_id='"+resting+"' LIMIT 1")
-                if rows==[['New']]:
-                    time.sleep(1.5)
-                    break
-                if rows and rows[0][0] in ('Rejected','Canceled','Cancelled'):
-                    raise AssertionError('Maker order left the resting state')
+                answer=call(url,'OrderSvr','queryOpenOrder',{
+                    'location':location,'securityid':'BTC003USDT',
+                    'marketIndicator':'4','userid':maker['id'],
+                    'maxOrderCount':100},maker['session'])
+                if answer.get('code')!=0:
+                    raise RuntimeError('Authenticated Order maker readback rejected: '+
+                                       str(answer.get('code'))+' '+str(answer.get('msg'))[:95])
+                entries=answer.get('data')
+                if not isinstance(entries,list):
+                    raise AssertionError('Authenticated Order maker result is not a list')
+                own=[]
+                for entry in entries:
+                    cid=entry.get('ClOrdID') or entry.get('ClOrderID') or entry.get('clOrdID')
+                    if cid==resting:own.append(entry)
+                if len(own)>1:raise AssertionError('Duplicate certified maker client ID')
+                if own:
+                    state=own[0].get('OrdStatus') or own[0].get('orderStatus')
+                    if state=='New':
+                        record('maker_resting_confirmed',source='authenticated_order_api')
+                        time.sleep(1.5)
+                        break
+                    if state in ('Rejected','Canceled','Cancelled'):
+                        raise AssertionError('Maker order left the resting state: '+str(state))
                 time.sleep(1)
             else:
-                raise AssertionError('Maker order never became a resting New order')
-            record('maker_resting_confirmed')
+                raise AssertionError('Maker not found as New in authenticated Order state')
             buying=put(taker,'Buy','TAKER')
             record('taker_order_submitted',clientOrderId=buying)
 

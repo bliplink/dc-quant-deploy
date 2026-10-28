@@ -1,0 +1,5 @@
+services:
+  tradesvr:
+    image: local/otc-t230-tradesvr:scoped-product-recheck
+  tradesvr-b:
+    image: local/otc-t230-tradesvr:scoped-product-recheck
