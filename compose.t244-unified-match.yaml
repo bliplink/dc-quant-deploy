@@ -1,0 +1,9 @@
+services:
+  ordersvr:
+    image: local/otc-t244-ordersvr:unified-match
+  ordersvr-b:
+    image: local/otc-t244-ordersvr:unified-match
+  tradesvr:
+    image: local/otc-t244-tradesvr:unified-match
+  tradesvr-b:
+    image: local/otc-t244-tradesvr:unified-match
