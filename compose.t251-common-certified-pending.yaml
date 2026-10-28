@@ -1,0 +1,9 @@
+services:
+  ordersvr:
+    image: local/otc-t251-ordersvr:certified-pending
+  ordersvr-b:
+    image: local/otc-t251-ordersvr:certified-pending
+  tradesvr:
+    image: local/otc-t251-tradesvr:certified-pending
+  tradesvr-b:
+    image: local/otc-t251-tradesvr:certified-pending
