@@ -23,3 +23,22 @@
 ## 部署注意
 - 使用项目运行时完整 Compose 配置叠加链，保留原 A/B RSA 只读挂载。不要单独使用最基础 Compose 重建 Trade，避免丢失 RSA 挂载导致启动失败。
 - 没有使用 GitHub Actions，没有修改或清理现有 WAL。
+
+## 10:54—10:56｜Demo 受控恢复与复测（覆盖前述 NO-GO 时刻状态）
+
+**根因与独立证据**
+- Common 认证提交边界在真实 TCP fsync 失败后将 P246 标记为 poisoned；旧注册表随后拒绝写入。端口重新开放并不会自动生成新的认证 Writer。此为 Common 恢复生命周期缺口，与行情订阅无关。
+- 故障时 Trade A WAL 为 113 帧，B 为 112 帧且是 A 的完全相同前缀；A 已认证 commit-index 精确止于 112。双方 Custody Head 和回执账本相同。
+- 第 113 帧为订单 1564948443099631616:Newing，Order B 明确回执 success:false code:1003，最终 Rejected。
+- ZooKeeper P246 Epoch=2、assignmentVersion=2、Primary=TradeSvrA、Replica=TradeSvrB、state=READY。A 停机后，实际 lease 列表仅剩 TradeSvrB，未发生双主。
+
+**实际操作与结果**
+- 先暂停退化的测试 Robot，离线停止 Trade A，保留 B 运行；在只读 dry-run 通过之后，以增加的 ZooKeeper 版本、所有者及存活租约门禁执行受控人工修复。
+- 完整原 WAL、已认证副本及 Custody 证据写入并 fsync 到 /Users/kong/.opentradingcore/trade-ha-forensics/T220-P246-20261028-105400。仅将明确未提交且已拒绝的第 113 帧从在线 A WAL 移入取证档案；A/B 在线 WAL 均恢复为已认证的 112 帧前缀。
+- 未重建 Common 或 Trade 镜像；直接原配置启动 A。Trade A 签名冷恢复、Gateway 注册成功。测试 Robot t199-signed-live 重新 RUNNING，2 笔活动委托。
+- 10:56:30 真实验收：新 Newing 5/5 success:true code:0，0 失败；Trade P246 A/B 各 122 帧、488934 字节、SHA256 前缀 937e99911904a295、字节一致；Order P089 A/B 各 1669 帧、2119429 字节、字节一致；MD 公开盘口有买卖挂单；Order/Trade A/B 进程运行。
+- **这是 Demo 人工恢复，不是自动 HA 验收成功。** Maker/Taker 成交、资金持仓 Projection、10/50/200 压测、双向自动 SIGKILL 主切和自动追平均待验收。
+
+**尚未解决的 Common 问题**
+- 必须使用 Common 既有签名恢复、ZooKeeper 授权和状态机接口做成真正自动闭环：隔离旧 Writer → 验证已提交前缀与未提交尾部 → 副本追平及业务回放 → 独立凭据与 Epoch/版本重验 → 创建新的 CertifiedBusinessCommandBoundary → 恢复真实交易 ACK。
+- 禁止通过单纯清除 poisoned、绕开严格 ACK、定时重新拉 MD Image 或在 Trade/Order 自建复制实现来伪造成功。下一次 B 故障仍可能令旧 Writer 永久失效，**自动 HA 维持 NO-GO**。
