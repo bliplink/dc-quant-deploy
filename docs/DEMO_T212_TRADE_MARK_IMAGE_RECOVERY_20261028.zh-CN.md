@@ -8,6 +8,14 @@
 - Trade `MarketPriceFacade.getMPrice` 首次同步订阅 MD Image 失败时会保留空缓存，后续风险请求仅从空缓存读取，没有重新请求；默认 5000ms TTL 继续生效。
 - 因此该故障至少包含 Trade 失效缓存无法自愈的缺口；尚未证实 MD → Trade 的首次 Image 或实时 Topic 分发为何失败，不能仅靠代码静态检查认定链路完整恢复。
 
+
+## 价格源澄清与本机代理实测（08:39）
+- 默认数据源为 **BINANCE**：正式 APSSvr `enableBinanceFlag=true`、`enableMarkPriceFlag=true`，币安合约客户端日志确认 HTTP 代理 `192.168.5.2:10808`，行情 WebSocket 入口 `wss://fstream.binance.com/ws`。08:39:30 真实收到 BTCUSDT `markPriceUpdate`，不是网络无法连接。
+- 正式 Gateway `MDSvr.queryPublicMarket(R0F6CC,BTCUSDT)` 返回标记价格和指数价格；数据库 `dc_tenant_symbol` 中该产品 `data_source_id IS NULL`，表示走默认产品 Symbol 的币安源；`dc_tenant_data_source` 对该租户尚无自定义源。
+- 用户确认产品能力：APS 既可从币安收行情，也可接受租户自定义发布；数据源配置为 BINANCE/CUSTOM，绑定关系应允许来源 Symbol 与产品 Symbol 不同；未绑定数据源按币安默认处理，自定义有效期过期应停止使用过期价格，Trade 不得回退 LastPrice 或绕过风控。
+- 当前 Admin 具备数据源配置表及 BINANCE/CUSTOM 的管理接口，但本轮源码审查未找到正式 APSSvr **自定义标记/指数价格发布 Handler** 的充分证据。MD 存在仅用于集成验收的 E2E Override，不能冒充正式 Broker 发布链路。正式自定义价格能力尚待独立 E2E 验收，不能把默认币安通过记为 CUSTOM 通过。
+- 现阶段 `5003 MARKPX_NOTEXIST` 应优先在 MD→Trade 订阅/Image/缓存 TTL 一段定位，不应禁用 APS 币安连接或关闭严格风险检查。
+
 ## 本轮代码与验证
 - Trade 源码 `.work/tradesvr/src/main/java/com/app/dc/service/price/MarketPriceFacade.java` 增加市场级限频后台订阅恢复：单线程、有界 64 队列、默认 10000ms 重试间隔；只有风险价格无效才触发；仍不允许从 LastPrice 回填风险标记价格。
 - 新的 `MarketPriceFacadeTest` 模拟首次 Image 失败，检查立即拒单、异步恢复、恢复后接受 MarkPrice 与并发读不重复订阅。与旧的 FreshnessPolicy 一起 JUnit **4/4 PASS**。
