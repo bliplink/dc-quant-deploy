@@ -1,0 +1,9 @@
+services:
+  ordersvr:
+    image: local/otc-t250-ordersvr:common-auth-isolation
+  ordersvr-b:
+    image: local/otc-t250-ordersvr:common-auth-isolation
+  tradesvr:
+    image: local/otc-t250-tradesvr:common-auth-isolation
+  tradesvr-b:
+    image: local/otc-t250-tradesvr:common-auth-isolation
