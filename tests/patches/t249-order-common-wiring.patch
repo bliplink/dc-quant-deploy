@@ -1,0 +1,40 @@
+diff --git a/Dockerfile.t249-certified-recovery b/Dockerfile.t249-certified-recovery
+new file mode 100644
+index 0000000..724e3ad
+--- /dev/null
++++ b/Dockerfile.t249-certified-recovery
+@@ -0,0 +1,6 @@
++FROM local/otc-t248-ordersvr:census-await
++# The Common Jar starts from the exact original deployed image binary.
++# Only two verified Common classes differ; Order keeps domain logic separately.
++COPY target/t249-common-patched.jar /srv/dc/dc/OrderSvr/lib/com.app.common-3.0.22-t143-durable-signed-crossjvm-handoff-20261026-SNAPSHOT.jar
++COPY target/t249-census-classes/ /srv/dc/dc/OrderSvr/classes/
++LABEL otc.common.t249="bounded verified census wait plus offline witnessed crash completion; never auto-admit incomplete ledger"
+diff --git a/src/main/java/com/app/dc/service/state/OrderCommonNodeRuntimeWiring.java b/src/main/java/com/app/dc/service/state/OrderCommonNodeRuntimeWiring.java
+index 329704f..9701b7b 100644
+--- a/src/main/java/com/app/dc/service/state/OrderCommonNodeRuntimeWiring.java
++++ b/src/main/java/com/app/dc/service/state/OrderCommonNodeRuntimeWiring.java
+@@ -64,19 +64,10 @@ public class OrderCommonNodeRuntimeWiring {
+     private static java.util.List<com.app.common.partition.PartitionAssignment> awaitCertifiedAssignments(
+             OrderPartitionRuntime business, NodeClusterControlManager realZk)
+             throws IOException, InterruptedException {
+-        final long deadline = System.nanoTime() + java.util.concurrent.TimeUnit.SECONDS.toNanos(20);
+-        IOException last = null;
+-        for (;;) {
+-            try {
+-                java.util.List<com.app.common.partition.PartitionAssignment> rows = business.assignmentsSnapshot();
+-                if (!rows.isEmpty() && realZk.localPartitionCount() > 0) return rows;
+-            } catch (IllegalStateException pending) {
+-                last = new IOException("Order Common grant not yet certified", pending);
+-            }
+-            if (System.nanoTime() >= deadline)
+-                throw new IOException("ORDER_COMMON_CERTIFIED_CENSUS_AWAIT_TIMEOUT", last);
+-            Thread.sleep(100);
+-        }
++        // The authoritative grant is verified by Common's quorum/fence table.
++        // A nonempty service-local ZK snapshot is NEVER sufficient for READY.
++        realZk.awaitInitialCertifiedPartitionCensus(20_000L);
++        return com.app.common.replication.CommonCertifiedPartitionAssignments.all(realZk);
+     }
+ 
+     @Bean(name="orderCommonCertifiedNodeRuntime",destroyMethod="close")
