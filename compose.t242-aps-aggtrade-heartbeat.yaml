@@ -1,0 +1,3 @@
+services:
+  apssvr:
+    image: local/otc-t242-apssvr:aggtrade-health
