@@ -1,0 +1,9 @@
+services:
+  ordersvr:
+    image: local/otc-t225-ordersvr:certified-common-window
+  ordersvr-b:
+    image: local/otc-t225-ordersvr:certified-common-window
+  tradesvr:
+    image: local/otc-t225-tradesvr:certified-common-window
+  tradesvr-b:
+    image: local/otc-t225-tradesvr:certified-common-window
