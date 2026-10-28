@@ -1,0 +1,9 @@
+services:
+  ordersvr:
+    image: local/otc-t254-ordersvr:certified-ready-abi
+  ordersvr-b:
+    image: local/otc-t254-ordersvr:certified-ready-abi
+  tradesvr:
+    image: local/otc-t254-tradesvr:certified-ready-abi
+  tradesvr-b:
+    image: local/otc-t254-tradesvr:certified-ready-abi

@@ -1,0 +1,11 @@
+services:
+  ordersvr:
+    image: local/otc-t253-ordersvr:e1-ticket-resume
+  ordersvr-b:
+    image: local/otc-t253-ordersvr:e1-ticket-resume
+  ordersvr-c:
+    image: local/otc-t253-ordersvr:e1-ticket-resume
+  tradesvr:
+    image: local/otc-t253-tradesvr:e1-ticket-resume
+  tradesvr-b:
+    image: local/otc-t253-tradesvr:e1-ticket-resume
