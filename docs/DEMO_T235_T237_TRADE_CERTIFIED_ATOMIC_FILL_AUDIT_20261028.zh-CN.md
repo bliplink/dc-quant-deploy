@@ -24,3 +24,9 @@
 - 本次仅在开发源码中增加上述类与回归，没有开通新业务开关，没有将新的成交流程部署至运行镜像。
 - **必须继续**：① Order 的 `STATE_ATOMIC_MATCH_V1` 持久化撮合事件与已认证/待结算 Outbox，② Order -> Trade 双边 matchKey 认证投递及重试，③ Trade 成交投影 `dc_orders`/`dc_orders_execorders` 和手续费流水的确定性消费与重建，④ 真实新租户 Gateway OPEN/CLOSE/成交/资金一致性 E2E，⑤ Order/Trade A/B 双向自动主切、WAL 丢尾自动认证恢复和性能。
 - 不允许绕过 Common、打开旧撮合或将 41 项单测误宣称成真实成交。
+## T238｜Order 已认证成交转换为确定性 Trade 双边结算事件
+
+- Order 仓库 `saas-crypto` 本地 commit `8e5fc26`：新增 `OrderCertifiedMatchSettlementEnvelope`，直接从 `STATE_ATOMIC_MATCH_V1` 的双方 `Filled` 完整后状态生成 Maker、Taker 两份 `ExecutionReport`。包含 `ExecType=Trade`、`OrdStatus=Filled`、`OrderQty`、`LastQty`、`LastPx`、`OrigOrdPrice`、`LeavesQty=0`、Maker 标记、租户和用户身份；两个 ExecID 从签名 matchKey + 角色作 SHA256 派生，长度 31、跨重启保持不变。
+- 避免旧 `splitOrderToExecOrder` 路径每次重试随机生成 ExecID，及旧 `ExecOrder` 转换缺少完整 Filled 状态/原委托数量而无法通过 Trade 的财务认证入站校验。
+- Order Java8 全量 111 个源码文件编译 PASS；原子匹配、旧 Maker 门禁、原子 WAL 帧恢复和事件转换 11/11 JUnit PASS。
+- **T238 仍未交付线上**：必须由 Order 的 Common 持久化 Outbox 实际持有并恢复待结算事件，经认证 RPC 把两个完整报告送入 Trade `certifiedPairFill`，在 Trade 物理回执确认后再签名落盘 Order 的结算确认水位；随后 Projection 消费。新代码尚未触发真实 Filled，Demo 保持 T225/T230 和 fail-closed。
