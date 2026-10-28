@@ -1,4 +1,6 @@
-# OpenTradingCore｜Common 业务无关集群边界（架构约束）
+# OpenTradingCore｜Common 业务无关集群边界（历史讨论稿）
+
+> **以 [简洁集群与代码职责边界](ARCHITECTURE_SIMPLE_COMMON_BOUNDARY_20261029.zh-CN.md) 为最终强制规范。** 本文部分旧讨论（如新增业务提交层、Outbox/Inbox 或复杂恢复流程）仅供历史追溯，**不得据此新增 Common 集群机制**。新增设计须遵循最小化架构并经项目负责人明确同意。
 
 更新：2026-10-29。分支：`saas-crypto`。当前 Demo **未通过**完整成交/自动主备验收；此文不代表已部署。
 
