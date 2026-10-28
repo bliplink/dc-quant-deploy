@@ -24,3 +24,10 @@
 - 8 个已启用的 Robot 都 `RUNNING`：DK2QNB 40、G6IQ8E 40、R0F6CC 2、T6ANNM 40、U6ZAMX 40、UR4KF7 40、WSI1WX 40、Z8YPGT 40 个挂单。
 - 所有新增 Broker API Key 均由测试 finally 尝试撤销，E2E 只使用正式 Gateway，不直接写数据库。
 - **必须优先完成** Order 跨多订单认证匹配事务 + Trade 的认证 Maker/Taker 财务 AFTER-state 和 outbox/Saga 投影，否则真实交易无法 PASS，不能对外宣布 Demo 可交易。
+
+## T233–T234｜Order 双订单原子 WAL 源码实现（尚未部署）
+
+- Order 仓库 `saas-crypto` 提交 `6ca358e`：新增 `OrderCertifiedCrossPlan`，从独立已获 Trade 风控许可的两张非同用户 OPEN GTC Limit 订单准备两张确定性的 `Filled/Trade` AFTER-state，拒绝价格未交叉、部分成交、IOC、自成交、租户/产品/账户身份不符等输入；准备阶段不改变在用订单/盘口，不调用 Common Writer。
+- Order 仓库 `saas-crypto` 提交 `7d908de`：新增版本化 `STATE_ATOMIC_MATCH_V1` 业务帧，单个 Common `commitThenApply` WAL/Custody 认证边界中包装两张订单的最终移除状态。`OrderSignedStateFrameCodec` 在应用前检验帧 epoch/seq、事件 ID、两个 Order ID、同分区、成交量/价格/身份；`OrderCommonFirstReadyWiring` 冷恢复/在线副本增量回放支持此业务帧，同时继续支持旧 `STATE_UPSERT/STATE_REMOVE`。不增设单独 Order HA 或 WAL。
+- 本机 110 个 Order Java 主源码 Java8 全量编译 PASS；T233/T234 纯匹配、认证帧校验和旧 Maker 门禁共 **9/9 JUnit PASS**，含篡改/错水位拒绝。没有改动现有 Demo 的 Order 容器，它们仍使用 T225 镜像。
+- **绝不将上述半成品切入线上 `CrossStrategy.matchOrder`**：Trade 的 `ExecType=Trade` 带手续费、冻结保证金、成交数量、资金/持仓 AFTER-state 幂等认证仍未实现；还缺 Order 的撮合结果 Outbox 与 Trade 认证接收/结算 Saga 恢复、部分成交、MySQL Projection。只有这些都以真实 Common Commit/Custody 验收后，才能将 T233/T234 打包替换 Demo 和执行故障注入。单一 Order WAL 双订单原子操作不代表跨服务全流程原子交易。
