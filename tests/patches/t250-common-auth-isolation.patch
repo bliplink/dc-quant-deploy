@@ -1,0 +1,438 @@
+diff --git a/src/main/java/com/app/common/replication/CertifiedBusinessCommandBoundary.java b/src/main/java/com/app/common/replication/CertifiedBusinessCommandBoundary.java
+index 3b46fa3..1289261 100644
+--- a/src/main/java/com/app/common/replication/CertifiedBusinessCommandBoundary.java
++++ b/src/main/java/com/app/common/replication/CertifiedBusinessCommandBoundary.java
+@@ -99,47 +99,90 @@ public final class CertifiedBusinessCommandBoundary {
+         if(poisoned || duringApply)
+             throw new IOException("Common command boundary poisoned/nested; certified recovery required");
+         if(encode==null)throw new IllegalArgumentException("business WAL encoder required");
++        // A failed primary/epoch preflight has not touched any WAL or
++        // custody state. Never permanently poison a healthy partition for a
++        // temporarily unavailable lease. AFTER entering the WAL phase, an
++        // unknown outcome must remain fenced pending certified recovery.
++        boolean physicalWriteStarted=false;
++        long attemptedSeq=-1L;
++        String phase="PREFLIGHT_PRIMARY_GRANT";
+         try {
+             primaryGrant.requireCurrent(membership.partition,membership.epoch);
++            phase="PREFLIGHT_EPOCH_AUTHORITY";
+             authority.requireOldEpochAuthorized(membership);
+             long prev=index.committedSequence();
+             if(prev==Long.MAX_VALUE)throw new IOException("Common command sequence exhausted");
+             long seq=prev+1;
++            attemptedSeq=seq;
++            phase="BUSINESS_ENCODER";
+             byte[] command=encode.encode(membership.partition,membership.epoch,seq);
+             if(command==null || command.length==0 || command.length>DurableWalGroupCommit.MAX_PAYLOAD_BYTES)
+                 throw new IllegalArgumentException("invalid encoded business WAL frame");
+             byte[] stable=command.clone();
+             // Existing Common group force barrier, not a second WAL engine.
++            // Mark before invoking the writer: it may have appended bytes
++            // even if an exception is thrown before force completion.
++            physicalWriteStarted=true;
++            phase="WAL_APPEND_FSYNC";
+             DurableWalGroupCommit.forceThenPublish(membership.epoch,seq,
+                     Collections.singletonList(stable),physical.writer());
++            phase="WAL_EXACT_RECORD_VERIFY";
+             physical.requireFsyncedRecord(membership.epoch,seq,stable);
+             String prefix=localWal.requireFsyncedPrefix(membership.epoch,seq);
++            phase="INDEPENDENT_WAL_FSYNC_RECEIPTS";
+             Collection<DurableWalCommitQuorum.Receipt> witness=
+                     physical.collectSignedWalFsyncReceipts(membership.epoch,seq,prefix);
++            phase="COMMIT_INDEX_FSYNC";
+             DurableWalCommitQuorum.Certificate certified=
+                     index.certifyAndPersist(seq,prefix,witness);
++            phase="CUSTODY_INSTALL_AND_REPLICA_LEDGER";
+             Collection<DurableWalCustodyQuorum.Receipt> installed=
+                     physical.installAndReceiptPhysicalCustody(certified);
+             // Ledger persist() demands local physical installation, WAL proof,
+             // majority receipt signatures and performs directory fsync.
++            phase="PRIMARY_RECEIPT_LEDGER_FSYNC";
+             persistedReceipts.persist(certified,installed);
++            phase="REVALIDATE_CERTIFIED_RECEIPTS";
+             Collection<DurableWalCustodyQuorum.Receipt> recovered=
+                     persistedReceipts.requireRecovered(certified);
+             DurableWalCertificateCustodyAckGate.requireDurableBeforeAck(
+                     membership,certified,recovered,authority,localWal);
++            phase="DURABLE_ACK_PROOF";
+             DurableWalCommitAckGate.Confirmed result=
+                     DurableWalCommitAckGate.requireDurable(membership,index,seq,
+                             prefix,primaryGrant);
++            phase="FINAL_PRIMARY_GRANT";
+             primaryGrant.requireCurrent(membership.partition,membership.epoch);
+             return result;
+         } catch(Exception failure) {
+-            poisoned=true;
+-            try {physical.poison(failure);}
+-            catch(RuntimeException failPoison){failure.addSuppressed(failPoison);}
++            failure.addSuppressed(commitPhaseEvidence(phase,attemptedSeq,physicalWriteStarted));
++            if(physicalWriteStarted){
++                poisoned=true;
++                try {physical.poison(failure);}
++                catch(RuntimeException failPoison){failure.addSuppressed(failPoison);}
++            }
++            throw failure;
++        } catch(Error failure) {
++            failure.addSuppressed(commitPhaseEvidence(phase,attemptedSeq,physicalWriteStarted));
++            // A severe JVM error can interrupt a partly written WAL too.
++            if(physicalWriteStarted){
++                poisoned=true;
++                try {physical.poison(failure);}
++                catch(RuntimeException failPoison){failure.addSuppressed(failPoison);}
++            }
+             throw failure;
+         }
+     }
+ 
++    /** Only partition/epoch/stage and write-started, never raw business bytes,
++     * private keys, signatures or WAL contents. Printed with the original
++     * exception's suppressed diagnostics to identify the FIRST failure. */
++    private IOException commitPhaseEvidence(String phase,long seq,boolean wrote){
++        return new IOException("COMMON_COMMIT_PHASE partition="+membership.partition
++                +" epoch="+membership.epoch+" seq="+seq
++                +" phase="+phase+" walWriteStarted="+wrote);
++    }
++
+     /** Service-agnostic, ordered durable commit -> deterministic state apply.
+      * The per-partition mutex stays held during BOTH phases so no later
+      * command can overtake an earlier unapplied command. The caller MUST
+diff --git a/src/main/java/com/app/common/replication/CommonCertifiedBusinessApplyBoundary.java b/src/main/java/com/app/common/replication/CommonCertifiedBusinessApplyBoundary.java
+index 4137817..fefa1c1 100644
+--- a/src/main/java/com/app/common/replication/CommonCertifiedBusinessApplyBoundary.java
++++ b/src/main/java/com/app/common/replication/CommonCertifiedBusinessApplyBoundary.java
+@@ -52,13 +52,17 @@ public final class CommonCertifiedBusinessApplyBoundary {
+         byte[] stable=command.clone();
+         Slot slot=slot(partition);
+         slot.lock.lock();
++        CertifiedBusinessCommandBoundary physicalWriter=null;
++        boolean physicallyCommitted=false;
+         try {
+             if(slot.poisoned)throw new IOException("Common domain apply blocked pending recovery: "+partition);
+             replay.requireBusinessRecoveryReady(node.serviceName(),node.nodeId());
+-            node.requireAuthenticatedReady();
+-            // No service-specific WAL, elected owner or ACK implementation.
++            // A node-level signed census is necessary; the selected writer
++            // additionally checks its own live grant and physical WAL/HEAD.
++            physicalWriter=node.requirePrimaryRegistry().require(partition);
+             DurableWalCommitAckGate.Confirmed proof=
+-                    node.requirePrimaryRegistry().commit(partition,(p,e,s)->stable.clone());
++                    physicalWriter.commit((p,e,s)->stable.clone());
++            physicallyCommitted=true;
+             try {
+                 slot.state.apply(stable.clone());
+             }catch(Throwable applyFailure){
+@@ -66,13 +70,14 @@ public final class CommonCertifiedBusinessApplyBoundary {
+                 throw new IOException("Common domain apply failed AFTER durable commit; recovery mandatory",applyFailure);
+             }
+             // Never return a client completion until BOTH boundaries finished.
+-            node.requireAuthenticatedReady();
++            node.requirePrimaryRegistry().require(partition);
+             return proof;
+         }catch(Exception failure){
+-            // A failed physical commit may leave an uncertified WAL tail; the
+-            // underlying Common boundary already poisons itself. Conservative
+-            // local poison prevents application code from retrying blindly.
+-            slot.poisoned=true;
++            // Do not permanently poison a business partition for an expired
++            // grant BEFORE WAL append. Any uncertain physical write or
++            // post-commit business-apply failure remains fenced.
++            if(physicallyCommitted || (physicalWriter!=null && physicalWriter.isPoisoned()))
++                slot.poisoned=true;
+             throw failure;
+         } finally {slot.lock.unlock();}
+     }
+@@ -85,7 +90,7 @@ public final class CommonCertifiedBusinessApplyBoundary {
+             if(slot.poisoned)throw new IOException("Common partition image blocked pending recovery");
+             try{
+                 replay.requireBusinessRecoveryReady(node.serviceName(),node.nodeId());
+-                node.requireAuthenticatedReady();
++                node.requireAuthenticatedPartitionRole(partition);
+             }catch(Exception denied){throw new IOException("Common image not authorized",denied);}
+             ByteArrayOutputStream image=new ByteArrayOutputStream();
+             slot.state.snapshot((bytes,offset,length)->image.write(bytes,offset,length));
+diff --git a/src/main/java/com/app/common/replication/CommonCertifiedNodeRuntime.java b/src/main/java/com/app/common/replication/CommonCertifiedNodeRuntime.java
+index b062034..17789c0 100644
+--- a/src/main/java/com/app/common/replication/CommonCertifiedNodeRuntime.java
++++ b/src/main/java/com/app/common/replication/CommonCertifiedNodeRuntime.java
+@@ -91,10 +91,31 @@ public final class CommonCertifiedNodeRuntime implements AutoCloseable {
+             throw new IOException("Common local partition ownership changed");
+         for(CommonCertifiedPartitionRuntime current:partitions.values())current.requireCurrentRole();
+     }
++    /** Per-partition read/snapshot gate. A fault on an unrelated shard must
++     * not block a healthy one, but the selected shard still checks its real
++     * Common physical grant and local certified custody writer state. */
++    public void requireAuthenticatedPartitionRole(String partition)throws Exception {
++        if(closed || !started)throw new IOException("Common node unavailable");
++        java.util.Map<String,NodePartitionGrantTable.Partition> census=
++                verifiedNodeControl.requireCertifiedPartitionCensus();
++        if(census.size()!=partitions.size())
++            throw new IOException("Common certified node census incomplete");
++        CommonCertifiedPartitionRuntime selected=partitions.get(partition);
++        if(selected==null || !census.containsKey(partition))
++            throw new IOException("Common selected partition absent from signed census");
++        selected.requireCurrentRole();
++    }
++
+     public CertifiedBusinessCommandRegistry requirePrimaryRegistry() throws Exception {
+-        requireAuthenticatedReady();
+-        if(!started || primaryWrites==null)
++        if(closed || !started || primaryWrites==null)
+             throw new IOException("Common primary business writer not exposed/ready");
++        // Check real authenticated node quorum once; a poisoned unrelated
++        // partition cannot disable other 255 healthy partitions. Every target
++        // Common writer independently validates grant, WAL and custody.
++        java.util.Map<String,NodePartitionGrantTable.Partition> census=
++                verifiedNodeControl.requireCertifiedPartitionCensus();
++        if(census.size()!=partitions.size())
++            throw new IOException("Common certified node census incomplete");
+         return primaryWrites;
+     }
+     /** Exact physical service and node from verified Common membership. */
+diff --git a/src/test/java/com/app/common/replication/CertifiedBusinessCommandPreflightFailureTest.java b/src/test/java/com/app/common/replication/CertifiedBusinessCommandPreflightFailureTest.java
+new file mode 100644
+index 0000000..b2858a1
+--- /dev/null
++++ b/src/test/java/com/app/common/replication/CertifiedBusinessCommandPreflightFailureTest.java
+@@ -0,0 +1,148 @@
++package com.app.common.replication;
++
++import java.io.IOException;
++import java.nio.file.Path;
++import java.security.KeyPair;
++import java.security.KeyPairGenerator;
++import java.util.Arrays;
++import java.util.Collection;
++import java.util.Collections;
++import java.util.concurrent.atomic.AtomicBoolean;
++import java.util.concurrent.atomic.AtomicInteger;
++
++import org.junit.Rule;
++import org.junit.Test;
++import org.junit.rules.TemporaryFolder;
++import static org.junit.Assert.*;
++
++/** Regression: rejected pre-WAL grants are NOT permanent WAL poisoning. */
++public final class CertifiedBusinessCommandPreflightFailureTest {
++    @Rule public TemporaryFolder temporary=new TemporaryFolder();
++
++    private static final class Case implements AutoCloseable {
++        final AtomicBoolean grant=new AtomicBoolean(true);
++        final AtomicBoolean authority=new AtomicBoolean(true);
++        final AtomicInteger appendCount=new AtomicInteger();
++        final AtomicInteger poisonedTransport=new AtomicInteger();
++        final DurableWalCommitQuorum.Membership membership;
++        final DurableWalCommitIndex index;
++        final DurableWalCertificateCustody custody;
++        final DurableWalCustodyReceiptLedger ledger;
++        final CertifiedBusinessCommandBoundary boundary;
++        volatile boolean throwSevereError;
++        Case(Path base)throws Exception {
++            KeyPairGenerator maker=KeyPairGenerator.getInstance("RSA");
++            maker.initialize(2048);
++            KeyPair a=maker.generateKeyPair(),b=maker.generateKeyPair();
++            membership=new DurableWalCommitQuorum.Membership(
++                "OrderSvr","P210","A",2L,2L,Arrays.asList(
++                    new DurableWalCommitQuorum.Member("A","hostA",a.getPublic()),
++                    new DurableWalCommitQuorum.Member("B","hostB",b.getPublic())));
++            DurableWalCommitQuorum.LocalDurability empty=(epoch,seq)->{
++                throw new IOException("no WAL written");
++            };
++            DurableWalCertificateCustody.Authority epochAuth=old->{
++                if(!authority.get())throw new IOException("old epoch authorization temporarily missing");
++            };
++            index=new DurableWalCommitIndex(base.resolve("index"),membership);
++            custody=new DurableWalCertificateCustody(base.resolve("custody"),membership,empty,epochAuth);
++            ledger=new DurableWalCustodyReceiptLedger(base.resolve("ledger"),membership,custody);
++            CertifiedBusinessCommandBoundary.PhysicalTransport physical=
++                new CertifiedBusinessCommandBoundary.PhysicalTransport() {
++                    public DurableWalGroupCommit.Writer writer() {
++                        return new DurableWalGroupCommit.Writer(){
++                            public void appendUnforced(long epoch,long seq,byte[] bytes)throws Exception {
++                                appendCount.incrementAndGet();
++                                if(throwSevereError)throw new AssertionError("synthetic VM write failure");
++                                throw new IOException("synthetic disk append failure");
++                            }
++                            public void forceBatch()throws Exception {
++                                throw new IOException("must not force");
++                            }
++                            public void publishCommitted(long epoch,long seq,byte[] bytes){}
++                            public void poison(Throwable failure){poisonedTransport.incrementAndGet();}
++                        };
++                    }
++                    public void requireCleanCertifiedHead(long epoch,long seq)throws Exception {
++                        if(epoch!=2L || seq!=0L)throw new IOException("dirty WAL");
++                    }
++                    public void requireFsyncedRecord(long epoch,long seq,byte[] command){}
++                    public Collection<DurableWalCommitQuorum.Receipt> collectSignedWalFsyncReceipts(
++                        long epoch,long seq,String hash){return Collections.emptyList();}
++                    public Collection<DurableWalCustodyQuorum.Receipt> installAndReceiptPhysicalCustody(
++                        DurableWalCommitQuorum.Certificate head){return Collections.emptyList();}
++                    public void poison(Throwable failure){poisonedTransport.incrementAndGet();}
++                };
++            boundary=new CertifiedBusinessCommandBoundary(membership,index,ledger,empty,epochAuth,
++                (part,epoch)->{if(!grant.get())throw new IOException("certified Common primary lease expired");},
++                physical);
++        }
++        public void close()throws Exception {
++            ledger.close();custody.close();index.close();
++        }
++    }
++
++    private static void assertCommitPhase(Throwable failure,String expectedStage,boolean wrote){
++        boolean found=false;
++        for(Throwable suppressed:failure.getSuppressed()){
++            String detail=suppressed.getMessage();
++            if(detail!=null && detail.contains("phase="+expectedStage)
++                    && detail.contains("walWriteStarted="+wrote))found=true;
++        }
++        assertTrue("missing safe Common physical commit phase diagnostic",found);
++    }
++
++    @Test public void transientLeaseDenialBeforeWalDoesNotPoisonAndNextRequestRechecks()
++            throws Exception {
++        try(Case f=new Case(temporary.newFolder().toPath())) {
++            f.grant.set(false);
++            try { f.boundary.commit("ONE".getBytes("UTF-8"));fail("expired grant accepted"); }
++            catch(IOException expected){
++                assertTrue(expected.getMessage().contains("lease"));
++                assertCommitPhase(expected,"PREFLIGHT_PRIMARY_GRANT",false);
++            }
++            assertEquals(0,f.appendCount.get());
++            assertEquals(0,f.poisonedTransport.get());
++            assertFalse(f.boundary.isPoisoned());
++            f.grant.set(true);
++            try { f.boundary.commit("TWO".getBytes("UTF-8"));fail("simulated disk failure not rejected"); }
++            catch(IOException expected){
++                assertTrue(expected.getMessage().contains("append"));
++                assertCommitPhase(expected,"WAL_APPEND_FSYNC",true);
++            }
++            assertEquals(1,f.appendCount.get());
++            assertTrue(f.boundary.isPoisoned());
++            assertTrue(f.poisonedTransport.get()>0);
++        }
++    }
++
++    @Test public void revokedOldEpochBeforeWalDoesNotPoison()
++            throws Exception {
++        try(Case f=new Case(temporary.newFolder().toPath())){
++            f.authority.set(false);
++            try {f.boundary.commit("NO_WRITE".getBytes("UTF-8"));fail("old epoch accepted");}
++            catch(IOException expected){
++                assertTrue(expected.getMessage().contains("authorization"));
++                assertCommitPhase(expected,"PREFLIGHT_EPOCH_AUTHORITY",false);
++            }
++            assertFalse(f.boundary.isPoisoned());
++            assertEquals(0,f.poisonedTransport.get());
++            assertEquals(0,f.appendCount.get());
++        }
++    }
++
++    @Test public void severeErrorAfterWalEntryMustFenceWriter()
++            throws Exception {
++        try(Case f=new Case(temporary.newFolder().toPath())){
++            f.throwSevereError=true;
++            try {f.boundary.commit("VM_FAILURE".getBytes("UTF-8"));fail("post-entry failure accepted");}
++            catch(AssertionError expected){
++                assertTrue(expected.getMessage().contains("VM"));
++                assertCommitPhase(expected,"WAL_APPEND_FSYNC",true);
++            }
++            assertEquals(1,f.appendCount.get());
++            assertTrue(f.boundary.isPoisoned());
++            assertTrue(f.poisonedTransport.get()>0);
++        }
++    }
++}
+diff --git a/src/test/java/com/app/common/replication/CommonCertifiedPartitionIsolationTest.java b/src/test/java/com/app/common/replication/CommonCertifiedPartitionIsolationTest.java
+new file mode 100644
+index 0000000..773424d
+--- /dev/null
++++ b/src/test/java/com/app/common/replication/CommonCertifiedPartitionIsolationTest.java
+@@ -0,0 +1,88 @@
++package com.app.common.replication;
++
++import java.io.IOException;
++import java.nio.file.Path;
++import java.security.KeyPair;
++import java.security.KeyPairGenerator;
++import java.util.*;
++import java.util.concurrent.TimeUnit;
++import org.junit.Rule;
++import org.junit.Test;
++import org.junit.rules.TemporaryFolder;
++import static org.junit.Assert.*;
++
++/** Fault isolation: one ambiguous WAL shard must not halt all peer shards. */
++public final class CommonCertifiedPartitionIsolationTest {
++    @Rule public TemporaryFolder temporary=new TemporaryFolder();
++
++    @Test public void onePoisonedShardMustNotRevokeOtherAuthenticatedWriters()
++            throws Exception {
++        KeyPairGenerator generator=KeyPairGenerator.getInstance("RSA");
++        generator.initialize(2048);
++        KeyPair a=generator.generateKeyPair(),b=generator.generateKeyPair();
++        String service="OrderSvr",primary="NodeA",replica="NodeB";
++        Map<String,NodePartitionGrantTable.Partition> routes=new HashMap<>();
++        for(String p:Arrays.asList("P210","P211"))
++            routes.put(p,new NodePartitionGrantTable.Partition(p,2,primary,replica,
++                    DurableWalAckPolicy.STRICT_QUORUM));
++        NodePartitionGrantTable grants=new NodePartitionGrantTable(primary,
++                System::nanoTime,batch->{
++                    if(batch.quorumProof()[0]!=42)
++                        throw new IOException("untrusted Common test grant");
++                },256,TimeUnit.SECONDS.toNanos(15));
++        try(NodeClusterControlManager manager=new NodeClusterControlManager(
++                primary,identity->new NodePartitionGrantTable.Batch(
++                    primary,2,System.nanoTime(),TimeUnit.SECONDS.toNanos(15),
++                    0L,routes,new byte[]{42}),grants,1000L);
++            DirectNettyReplicationTransport tcp=new DirectNettyReplicationTransport(
++                    500,65536)) {
++            manager.refresh(); // a real verified synthetic test grant, no business I/O
++            manager.start();
++            manager.awaitInitialCertifiedPartitionCensus(1500);
++            Path storage=temporary.newFolder("isolated-physical-shards").toPath();
++            Map<String,CommonCertifiedPartitionRuntime> shards=new HashMap<>();
++            Map<String,ReplicationEndpoint> peers=Collections.singletonMap(replica,
++                    new ReplicationEndpoint(replica,"127.0.0.1",1));
++            for(String part:Arrays.asList("P210","P211")){
++                DurableWalCommitQuorum.Membership member=new DurableWalCommitQuorum.Membership(
++                    service,part,primary,2,2,Arrays.asList(
++                      new DurableWalCommitQuorum.Member(primary,"physical-A",a.getPublic()),
++                      new DurableWalCommitQuorum.Member(replica,"physical-B",b.getPublic())));
++                DurableWalCertificateCustody.Authority authority=old->{
++                    if(old.epoch!=2 || !old.partition.equals(part))
++                        throw new IOException("stale Epoch");
++                    manager.requirePrimary(part,2,DurableWalAckPolicy.STRICT_QUORUM)
++                        .requireCurrent();
++                };
++                shards.put(part,CommonCertifiedPartitionRuntime.open(storage,member,
++                    primary,a.getPrivate(),true,manager,authority,tcp,peers,500L));
++            }
++            try(CommonCertifiedNodeRuntime node=new CommonCertifiedNodeRuntime(
++                    service,primary,manager,2,shards,"127.0.0.1",0)){
++                node.start();
++                assertEquals(2,node.requirePrimaryRegistry().size());
++                // The offline B endpoint refuses physical WAL fsync. P210
++                // must be fenced, not acknowledged.
++                try{
++                    node.requirePrimaryRegistry().commit("P210",
++                            (p,e,n)->"SIMULATED_UNKNOWN_OUTCOME".getBytes("UTF-8"));
++                    fail("unreachable physical replica received client ACK");
++                }catch(Exception expected){}
++                try {shards.get("P210").requireCertifiedPrimaryWriter();
++                    fail("Common exposed poisoned physical writer");}
++                catch(IOException expected){assertTrue(expected.getMessage().contains("poisoned"));}
++                try{node.requireAuthenticatedReady();
++                    fail("full-node readiness must still detect poison");}
++                catch(IOException expected){assertTrue(expected.getMessage().contains("certified"));}
++                // This used to fail because requirePrimaryRegistry() globally
++                // called requireAuthenticatedReady() on all 256 partitions.
++                CertifiedBusinessCommandRegistry surviving=node.requirePrimaryRegistry();
++                assertNotNull(surviving.require("P211"));
++                node.requireAuthenticatedPartitionRole("P211");
++                try{surviving.require("P210");fail("poisoned P210 was re-admitted");}
++                catch(IOException expected){assertTrue(expected.getMessage().contains("P210"));}
++                assertEquals(0L,shards.get("P211").forcedSequence());
++            }
++        }
++    }
++}
