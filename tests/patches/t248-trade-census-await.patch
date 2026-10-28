@@ -1,0 +1,63 @@
+diff --git a/Dockerfile.t248-census-await b/Dockerfile.t248-census-await
+new file mode 100644
+index 0000000..068c8d4
+--- /dev/null
++++ b/Dockerfile.t248-census-await
+@@ -0,0 +1,4 @@
++FROM local/otc-t244-tradesvr:unified-match
++# Startup-only bounded wait for the Common-certified grant. No WAL/HA change.
++COPY target/t248-census-classes/ /srv/dc/dc/TradeSvr/classes/
++LABEL otc.trade.t248="wait until real Common census exists; timeout remains fail-closed"
+diff --git a/src/main/java/com/app/dc/service/state/TradeCommonNodeRuntimeWiring.java b/src/main/java/com/app/dc/service/state/TradeCommonNodeRuntimeWiring.java
+index 85dbee4..9cd0455 100644
+--- a/src/main/java/com/app/dc/service/state/TradeCommonNodeRuntimeWiring.java
++++ b/src/main/java/com/app/dc/service/state/TradeCommonNodeRuntimeWiring.java
+@@ -61,6 +61,24 @@ public class TradeCommonNodeRuntimeWiring {
+         return installed.primaryPartitionCount()==0?null:installed.requirePrimaryRegistry();
+     }
+ 
++    private static java.util.List<com.app.common.partition.PartitionAssignment> awaitCertifiedAssignments(
++            TradePartitionRuntime business, NodeClusterControlManager realZk)
++            throws IOException, InterruptedException {
++        final long deadline = System.nanoTime() + java.util.concurrent.TimeUnit.SECONDS.toNanos(20);
++        IOException last = null;
++        for (;;) {
++            try {
++                java.util.List<com.app.common.partition.PartitionAssignment> rows = business.assignmentsSnapshot();
++                if (!rows.isEmpty() && realZk.localPartitionCount() > 0) return rows;
++            } catch (IllegalStateException pending) {
++                last = new IOException("Trade Common grant not yet certified", pending);
++            }
++            if (System.nanoTime() >= deadline)
++                throw new IOException("TRADE_COMMON_CERTIFIED_CENSUS_AWAIT_TIMEOUT", last);
++            Thread.sleep(100);
++        }
++    }
++
+     @Bean(name="tradeCommonCertifiedNodeRuntime",destroyMethod="close")
+     public CommonCertifiedNodeRuntime certifiedCommonNode(
+             TradePartitionRuntime business,
+@@ -70,9 +88,12 @@ public class TradeCommonNodeRuntimeWiring {
+             CommonBusinessRecoveryReadiness attestedBusinessRecovery)
+             throws Exception {
+         business.init();
+-        if(!business.isEnabled() || business.assignmentsSnapshot().isEmpty()
+-                || realZk.localPartitionCount()<=0)
++        if (!business.isEnabled())
+             throw new IOException("Trade_COMMON_SIGNED_ZK_PARTITION_CENSUS_NOT_READY");
++        // Common installs its first certified grant on an asynchronous renewal.
++        // Await a REAL grant during boot only; do not weaken Common custody.
++        java.util.List<com.app.common.partition.PartitionAssignment> assignments =
++                awaitCertifiedAssignments(business, realZk);
+         // Prevent a physical RSA from another service/node being silently
+         // reused as an unrelated owner; it must be the exact Common ZK node.
+         String verifiedLogicalNode=business.getLocalNodeName();
+@@ -87,7 +108,7 @@ public class TradeCommonNodeRuntimeWiring {
+         // Common must reject missing business replay BEFORE its Netty/WAL
+         // listener exists. A later writer-bean check alone is insufficient.
+         return CommonCertifiedNodeBootstrap.openAndStartWithZkFencingAndReplay(root,service,
+-                verifiedLogicalNode,realRsa.privateKey(),business.assignmentsSnapshot(),
++                verifiedLogicalNode,realRsa.privateKey(),assignments,
+                 CommonConfiguredNodePeers.physicalHosts(physicalHosts),
+                 CommonConfiguredNodePeers.pinnedSignerAliases(rsaAliases,realRsa.publicMembers()),
+                 CommonConfiguredNodePeers.nettyPeers(nettyPeers),
