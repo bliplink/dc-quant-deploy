@@ -53,3 +53,12 @@ dry_run=true; topology and epoch are unchanged by the planned migration
 5. 交易成立后才执行 Order/Trade A/B 双向自动 SIGKILL 与 256 分区、余额、持仓、委托、成交流水一致性检查。当前全部 **NO-GO**。
 
 架构保持：Common 只管 opaque byte[] 的 WAL/复制/授权/快照/恢复，不加入订单类型或资金规则。
+## T246 增补：当前 Common T143 JAR 字节码确认（只读）
+
+直接从已部署依赖 `com.app.common-3.0.22-t143-durable-signed-crossjvm-handoff-20261026-SNAPSHOT.jar` 用 `javap -c -p` 检查，而非假设新旧协议校验器就是启动失败原因：
+
+- `CommonCertifiedPartitionAssignments.all()` 实际调用 `NodeClusterControlManager.requireCertifiedPartitionCensus()`，后者转交 `NodePartitionGrantTable.requireCertifiedCensus()`；只要当前批次尚未建立或被撤权，就抛 `Common authenticated node routing census not READY`，还要校验批次未过期及 hotpath fence。**这些代码路径没有直接校验 `protocolVersion >= 3`**。因此 ZK v1 与旧迁移校验器不兼容虽属待核对事项，**尚不能认定是当前 Census 异常的根因**。
+- `NodeClusterControlManager.start()` 以初始延迟 0 的 `scheduleWithFixedDelay` 异步执行首次 `refresh`，并不等待批次安装完成才返回；`refresh()` 捕获续租或安装异常后默认只增加失败计数，只有 JVM 设置 `-Dcommon.node.control.debug=true` 才输出堆栈。当前业务 Bean 初始化可能在首次授权刷新前抢先读取 Census，但持续失败还需要诊断其真实续租异常。
+- `CommonFileBusinessWal.requireHistoricalSignedPrefix(epoch,seq,hash)` 对 read-only 历史 WAL 要求节点未关闭/未 poisoned、Epoch 完全一致、被认证 seq>0 且与本地 `forcedSequence` 相等、签名 HEAD 哈希与本地 `forcedHash` 相等。任一失败都会统一报 `historical read-only WAL does not match RSA-certified HEAD`。**仅有当前异常文案不能推断到底是 Epoch、序号还是哈希不一致**，必须取得具体可审计比较结果，不能直接截断/删除日志。
+
+尝试添加仅作用于 Trade B 的 Common 续租 debug Compose overlay 时，执行器安全检查拦截了该写入，**没有部署或修改 B JVM 参数**。不要将此项记为完成。
