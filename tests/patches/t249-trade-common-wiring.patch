@@ -1,0 +1,39 @@
+diff --git a/Dockerfile.t249-certified-recovery b/Dockerfile.t249-certified-recovery
+new file mode 100644
+index 0000000..367fba5
+--- /dev/null
++++ b/Dockerfile.t249-certified-recovery
+@@ -0,0 +1,5 @@
++FROM local/otc-t248-tradesvr:census-await
++# Identical Common Jar bytes to the Order image, retaining its generic API.
++COPY target/t249-common-patched.jar /srv/dc/dc/TradeSvr/lib/com.app.common-3.0.22-t143-durable-signed-crossjvm-handoff-20261026-SNAPSHOT.jar
++COPY target/t249-census-classes/ /srv/dc/dc/TradeSvr/classes/
++LABEL otc.common.t249="bounded verified census wait plus offline witnessed crash completion; never auto-admit incomplete ledger"
+diff --git a/src/main/java/com/app/dc/service/state/TradeCommonNodeRuntimeWiring.java b/src/main/java/com/app/dc/service/state/TradeCommonNodeRuntimeWiring.java
+index 9cd0455..0c1ba1f 100644
+--- a/src/main/java/com/app/dc/service/state/TradeCommonNodeRuntimeWiring.java
++++ b/src/main/java/com/app/dc/service/state/TradeCommonNodeRuntimeWiring.java
+@@ -64,19 +64,10 @@ public class TradeCommonNodeRuntimeWiring {
+     private static java.util.List<com.app.common.partition.PartitionAssignment> awaitCertifiedAssignments(
+             TradePartitionRuntime business, NodeClusterControlManager realZk)
+             throws IOException, InterruptedException {
+-        final long deadline = System.nanoTime() + java.util.concurrent.TimeUnit.SECONDS.toNanos(20);
+-        IOException last = null;
+-        for (;;) {
+-            try {
+-                java.util.List<com.app.common.partition.PartitionAssignment> rows = business.assignmentsSnapshot();
+-                if (!rows.isEmpty() && realZk.localPartitionCount() > 0) return rows;
+-            } catch (IllegalStateException pending) {
+-                last = new IOException("Trade Common grant not yet certified", pending);
+-            }
+-            if (System.nanoTime() >= deadline)
+-                throw new IOException("TRADE_COMMON_CERTIFIED_CENSUS_AWAIT_TIMEOUT", last);
+-            Thread.sleep(100);
+-        }
++        // The authoritative grant is verified by Common's quorum/fence table.
++        // A nonempty service-local ZK snapshot is NEVER sufficient for READY.
++        realZk.awaitInitialCertifiedPartitionCensus(20_000L);
++        return com.app.common.replication.CommonCertifiedPartitionAssignments.all(realZk);
+     }
+ 
+     @Bean(name="tradeCommonCertifiedNodeRuntime",destroyMethod="close")
