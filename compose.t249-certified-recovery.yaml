@@ -1,0 +1,9 @@
+services:
+  ordersvr:
+    image: local/otc-t249-ordersvr:certified-recovery
+  ordersvr-b:
+    image: local/otc-t249-ordersvr:certified-recovery
+  tradesvr:
+    image: local/otc-t249-tradesvr:certified-recovery
+  tradesvr-b:
+    image: local/otc-t249-tradesvr:certified-recovery

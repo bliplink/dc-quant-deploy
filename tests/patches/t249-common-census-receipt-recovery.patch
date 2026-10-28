@@ -1,0 +1,325 @@
+diff --git a/src/main/java/com/app/common/replication/DurableWalCustodyReceiptLedger.java b/src/main/java/com/app/common/replication/DurableWalCustodyReceiptLedger.java
+index fc174d4..b8ce32f 100644
+--- a/src/main/java/com/app/common/replication/DurableWalCustodyReceiptLedger.java
++++ b/src/main/java/com/app/common/replication/DurableWalCustodyReceiptLedger.java
+@@ -32,6 +32,9 @@ public final class DurableWalCustodyReceiptLedger implements AutoCloseable {
+     private Record latest;
+     private boolean closed;
+     private final boolean historicalReadOnly;
++    private final DurableWalCommitQuorum.Certificate certifiedPrevious;
++    private final Path preservedPreviousLedger;
++
+ 
+     private static final class Record {
+         final long seq;
+@@ -46,18 +49,46 @@ public final class DurableWalCustodyReceiptLedger implements AutoCloseable {
+     public DurableWalCustodyReceiptLedger(Path path,
+             DurableWalCommitQuorum.Membership membership,
+             DurableWalCertificateCustody physicalCustody)throws Exception {
+-        this(path,membership,physicalCustody,false);
++        this(path,membership,physicalCustody,false,null,null);
+     }
+     /** An immutable historical signed receipt quorum may be opened by
+      * concurrent independent C and surviving B verification processes. */
+     public static DurableWalCustodyReceiptLedger openExistingReadOnly(Path path,
+             DurableWalCommitQuorum.Membership pinned,
+             DurableWalCertificateCustody historicalCustody)throws Exception {
+-        return new DurableWalCustodyReceiptLedger(path,pinned,historicalCustody,true);
++        return new DurableWalCustodyReceiptLedger(path,pinned,historicalCustody,true,null,null);
++    }
++    /**
++     * Offline completion of a crash window AFTER a newer RSA Custody HEAD was
++     * fsynced but BEFORE the independent post-install receipt ledger advanced.
++     * Never certifies or signs new receipts. The caller must obtain actual
++     * authorized A+B signInstalled receipts and persist them normally.
++     * The exact old ledger must already be preserved OUTSIDE this directory.
++     * A historical/read-only or malformed older record is never repaired.
++     */
++    public static DurableWalCustodyReceiptLedger openForCertifiedCrashCompletion(
++            Path path,DurableWalCommitQuorum.Membership membership,
++            DurableWalCertificateCustody currentPhysicalCustody,
++            DurableWalCommitQuorum.Certificate certifiedPrevious,
++            Path preservedPreviousLedger)throws Exception {
++        if(path==null || preservedPreviousLedger==null
++                || !preservedPreviousLedger.isAbsolute()
++                || Files.isSymbolicLink(preservedPreviousLedger)
++                || !Files.isRegularFile(preservedPreviousLedger,LinkOption.NOFOLLOW_LINKS)
++                || preservedPreviousLedger.normalize().startsWith(path.toAbsolutePath().normalize())
++                || !Files.isRegularFile(path.resolve(HEAD),LinkOption.NOFOLLOW_LINKS)
++                || !Arrays.equals(Files.readAllBytes(preservedPreviousLedger),
++                        Files.readAllBytes(path.resolve(HEAD))))
++            throw new IOException("independent exact prior receipt ledger evidence required");
++        return new DurableWalCustodyReceiptLedger(path,membership,
++                currentPhysicalCustody,false,certifiedPrevious,preservedPreviousLedger);
+     }
++
+     private DurableWalCustodyReceiptLedger(Path path,
+             DurableWalCommitQuorum.Membership membership,
+-            DurableWalCertificateCustody physicalCustody,boolean readOnly)throws Exception {
++            DurableWalCertificateCustody physicalCustody,boolean readOnly,
++            DurableWalCommitQuorum.Certificate certifiedPrevious,
++            Path preservedPreviousLedger)throws Exception {
+         if(path==null || membership==null || physicalCustody==null
+                 || Files.isSymbolicLink(path))
+             throw new IOException("untrusted custody receipt ledger");
+@@ -65,6 +96,9 @@ public final class DurableWalCustodyReceiptLedger implements AutoCloseable {
+         this.membership=membership;
+         this.physicalCustody=physicalCustody;
+         historicalReadOnly=readOnly;
++        this.certifiedPrevious=certifiedPrevious;
++        this.preservedPreviousLedger=preservedPreviousLedger;
++
+         if(!historicalReadOnly)Files.createDirectories(path);
+         if(!Files.isDirectory(path,LinkOption.NOFOLLOW_LINKS)
+                 || Files.isSymbolicLink(path.resolve(LOCK)))
+@@ -227,9 +261,29 @@ public final class DurableWalCustodyReceiptLedger implements AutoCloseable {
+             }
+             if(in.read()!=-1)throw new IOException("trailing receipt ledger bytes");
+             DurableWalCommitQuorum.Certificate local=physicalCustody.highestVerified();
+-            if(local==null || seq!=local.committedSequence
+-                    || !sha.equals(local.commitPrefixSha256))
++            if(local==null)
+                 throw new IOException("receipt ledger head != physical custody");
++            if(seq!=local.committedSequence || !sha.equals(local.commitPrefixSha256)){
++                if(historicalReadOnly || certifiedPrevious==null
++                        || preservedPreviousLedger==null
++                        || local.committedSequence!=seq+1L
++                        || certifiedPrevious.committedSequence!=seq
++                        || certifiedPrevious.epoch!=membership.epoch
++                        || !sha.equals(certifiedPrevious.commitPrefixSha256)
++                        || !Arrays.equals(Files.readAllBytes(preservedPreviousLedger),
++                                Files.readAllBytes(file)))
++                    throw new IOException("receipt ledger head != physical custody");
++                DurableWalCommitQuorum.Certificate previous=DurableWalCommitQuorum.verify(
++                        membership,certifiedPrevious.committedSequence,
++                        certifiedPrevious.commitPrefixSha256,certifiedPrevious.votes);
++                DurableWalCustodyQuorum.CustodiedCertificate attested=
++                        DurableWalCustodyQuorum.verify(membership,previous,receipts);
++                if(attested.physicalCustodians!=membership.majority()
++                        || attested.sequence!=seq || !sha.equals(attested.walPrefixHash))
++                    throw new IOException("unverified previous independent custody ledger");
++                latest=new Record(seq,sha,receipts);
++                return;
++            }
+             Record checked=verify(local,receipts);
+             if(checked.seq!=seq || !checked.sha.equals(sha))
+                 throw new IOException("unverified physical custody receipt head");
+diff --git a/src/main/java/com/app/common/replication/NodeClusterControlManager.java b/src/main/java/com/app/common/replication/NodeClusterControlManager.java
+index 9736a2e..2689501 100644
+--- a/src/main/java/com/app/common/replication/NodeClusterControlManager.java
++++ b/src/main/java/com/app/common/replication/NodeClusterControlManager.java
+@@ -112,6 +112,31 @@ public final class NodeClusterControlManager implements AutoCloseable {
+             requireCertifiedPartitionCensus()throws IOException {
+         return grants.requireCertifiedCensus();
+     }
++    /** Startup-only wait for a real nonempty certified node grant.
++     * Never invokes ZooKeeper from the caller or weakens an expired grant.
++     */
++    public java.util.Map<String,NodePartitionGrantTable.Partition>
++            awaitInitialCertifiedPartitionCensus(long timeoutMillis)
++            throws IOException,InterruptedException {
++        if(timeoutMillis<100L || timeoutMillis>60000L)
++            throw new IllegalArgumentException("bounded Common census startup timeout required");
++        if(!started.get())throw new IOException("Common node controller not started");
++        final long deadline=System.nanoTime()+TimeUnit.MILLISECONDS.toNanos(timeoutMillis);
++        IOException last=null;
++        for(;;){
++            if(closed.get())throw new IOException("Common node controller closed during startup",last);
++            try {
++                java.util.Map<String,NodePartitionGrantTable.Partition> census=
++                        requireCertifiedPartitionCensus();
++                if(!census.isEmpty())return census;
++            }catch(IOException pending){last=pending;}
++            long remaining=deadline-System.nanoTime();
++            if(remaining<=0L)
++                throw new IOException("COMMON_CERTIFIED_CENSUS_STARTUP_TIMEOUT",last);
++            Thread.sleep(Math.max(1L,Math.min(50L,TimeUnit.NANOSECONDS.toMillis(remaining))));
++        }
++    }
++
+     public int localPartitionCount(){return grants.partitionCount();}
+     public long successfulRenewals(){return succeeded;}
+     public long failedRenewals(){return failed;}
+diff --git a/src/test/java/com/app/common/replication/DurableWalCustodyReceiptCrashCompletionTest.java b/src/test/java/com/app/common/replication/DurableWalCustodyReceiptCrashCompletionTest.java
+new file mode 100644
+index 0000000..537e8dc
+--- /dev/null
++++ b/src/test/java/com/app/common/replication/DurableWalCustodyReceiptCrashCompletionTest.java
+@@ -0,0 +1,134 @@
++package com.app.common.replication;
++
++import java.io.IOException;
++import java.nio.file.*;
++import java.security.*;
++import java.util.*;
++import org.junit.Rule;
++import org.junit.Test;
++import org.junit.rules.TemporaryFolder;
++import static org.junit.Assert.*;
++
++/**
++ * Exercises the exact P210 crash window: quorum WAL & custody HEAD at N,
++ * independent post-install Receipt Ledger at N-1. Normal recovery must reject;
++ * explicit offline recovery demands the older TWO-RSA proof and NEW signatures.
++ */
++public final class DurableWalCustodyReceiptCrashCompletionTest {
++    @Rule public TemporaryFolder temp = new TemporaryFolder();
++    private static final String OLD_HASH =
++        "1111111111111111111111111111111111111111111111111111111111111111";
++    private static final String NEW_HASH =
++        "2222222222222222222222222222222222222222222222222222222222222222";
++
++    private static final class Fixture implements AutoCloseable {
++        final KeyPair[] keys = new KeyPair[2];
++        final DurableWalCommitQuorum.Membership membership;
++        final DurableWalCommitQuorum.Certificate oldCert, newCert;
++        final DurableWalCertificateCustody a, b;
++        final Path ledgerPath;
++        final Path archivePath;
++        final List<DurableWalCustodyQuorum.Receipt> oldReceipts, newReceipts;
++        final DurableWalCommitQuorum.LocalDurability wal = (epoch, sequence)->{
++            if(epoch!=2 || (sequence!=41 && sequence!=42))
++                throw new IOException("no physically signed WAL");
++            return sequence==41 ? OLD_HASH : NEW_HASH;
++        };
++        Fixture(TemporaryFolder temporary)throws Exception {
++            KeyPairGenerator generator=KeyPairGenerator.getInstance("RSA");
++            generator.initialize(2048);
++            keys[0]=generator.generateKeyPair();
++            keys[1]=generator.generateKeyPair();
++            membership=new DurableWalCommitQuorum.Membership("OrderSvr","P210",
++                "NodeA",2,2,Arrays.asList(
++                    new DurableWalCommitQuorum.Member("NodeA","physicalA",keys[0].getPublic()),
++                    new DurableWalCommitQuorum.Member("NodeB","physicalB",keys[1].getPublic())));
++            oldCert=cert(41);
++            newCert=cert(42);
++            a=new DurableWalCertificateCustody(temporary.newFolder("a").toPath(),
++                membership,wal,m-> {});
++            b=new DurableWalCertificateCustody(temporary.newFolder("b").toPath(),
++                membership,wal,m-> {});
++            ledgerPath=temporary.newFolder("receipt-ledger").toPath();
++            archivePath=temporary.newFolder("independent-evidence").toPath()
++                .resolve("original-old-receipts.bin");
++            a.install(oldCert);
++            b.install(oldCert);
++            oldReceipts=Arrays.asList(a.signInstalled("NodeA",keys[0].getPrivate()),
++                b.signInstalled("NodeB",keys[1].getPrivate()));
++            try(DurableWalCustodyReceiptLedger old=new DurableWalCustodyReceiptLedger(
++                    ledgerPath,membership,b)) {
++                assertEquals(41L,old.persist(oldCert,oldReceipts));
++            }
++            Files.copy(ledgerPath.resolve("receipt-quorum.bin"),archivePath);
++            a.install(newCert);
++            b.install(newCert);
++            newReceipts=Arrays.asList(a.signInstalled("NodeA",keys[0].getPrivate()),
++                b.signInstalled("NodeB",keys[1].getPrivate()));
++        }
++        DurableWalCommitQuorum.Certificate cert(long seq)throws Exception {
++            List<DurableWalCommitQuorum.Receipt> votes=new ArrayList<>();
++            votes.add(DurableWalCommitQuorum.sign(membership,"NodeA",seq,wal,keys[0].getPrivate()));
++            votes.add(DurableWalCommitQuorum.sign(membership,"NodeB",seq,wal,keys[1].getPrivate()));
++            return DurableWalCommitQuorum.verify(membership,seq,
++                seq==41 ? OLD_HASH : NEW_HASH,votes);
++        }
++        public void close()throws Exception {b.close();a.close();}
++    }
++
++    @Test public void normalRestartRejectsPartialCrashAndExplicitRealDualRsaRestores()
++            throws Exception {
++        try(Fixture f=new Fixture(temp)){
++            try {
++                new DurableWalCustodyReceiptLedger(f.ledgerPath,f.membership,f.b);
++                fail("normal Common recovery silently accepted incomplete custody");
++            }catch(IOException expected){
++                assertEquals("receipt ledger head != physical custody",expected.getMessage());
++            }
++            try(DurableWalCustodyReceiptLedger recovery=
++                    DurableWalCustodyReceiptLedger.openForCertifiedCrashCompletion(
++                        f.ledgerPath,f.membership,f.b,f.oldCert,f.archivePath)){
++                assertEquals(42L,recovery.persist(f.newCert,f.newReceipts));
++                assertEquals(2,recovery.requireRecovered(f.newCert).size());
++            }
++            try(DurableWalCustodyReceiptLedger restarted=new DurableWalCustodyReceiptLedger(
++                    f.ledgerPath,f.membership,f.b)){
++                assertEquals(2,restarted.requireRecovered(f.newCert).size());
++            }
++            assertTrue(Files.size(f.archivePath)>0L);
++        }
++    }
++
++    @Test public void singleRsaOrMissingArchivedOriginalCannotCompleteCrash()
++            throws Exception {
++        try(Fixture f=new Fixture(temp)){
++            byte[] original=Files.readAllBytes(f.ledgerPath.resolve("receipt-quorum.bin"));
++            try(DurableWalCustodyReceiptLedger recovering=
++                    DurableWalCustodyReceiptLedger.openForCertifiedCrashCompletion(
++                        f.ledgerPath,f.membership,f.b,f.oldCert,f.archivePath)){
++                try {
++                    recovering.persist(f.newCert,Collections.singletonList(f.newReceipts.get(0)));
++                    fail("single custodian must not complete physical quorum");
++                }catch(IOException|IllegalArgumentException expected){}
++            }
++            assertArrayEquals(original,Files.readAllBytes(f.ledgerPath.resolve("receipt-quorum.bin")));
++            Files.delete(f.archivePath);
++            try {
++                DurableWalCustodyReceiptLedger.openForCertifiedCrashCompletion(
++                    f.ledgerPath,f.membership,f.b,f.oldCert,f.archivePath);
++                fail("missing archived old quorum proof accepted");
++            }catch(IOException expected){}
++        }
++    }
++
++    @Test public void mismatchedPriorCertificateIsNotRecoveryAuthority()
++            throws Exception {
++        try(Fixture f=new Fixture(temp)){
++            try {
++                DurableWalCustodyReceiptLedger.openForCertifiedCrashCompletion(
++                    f.ledgerPath,f.membership,f.b,f.newCert,f.archivePath);
++                fail("wrong prior epoch/sequence accepted");
++            }catch(IOException expected){}
++        }
++    }
++}
+diff --git a/src/test/java/com/app/common/replication/NodeClusterControlManagerTest.java b/src/test/java/com/app/common/replication/NodeClusterControlManagerTest.java
+index 660a9ee..24e1b3e 100644
+--- a/src/test/java/com/app/common/replication/NodeClusterControlManagerTest.java
++++ b/src/test/java/com/app/common/replication/NodeClusterControlManagerTest.java
+@@ -142,6 +142,38 @@ public final class NodeClusterControlManagerTest {
+         manager.close();
+     }
+ 
++    @Test public void startupWaitsForRealAuthenticatedBatchAndRejectsMissingGrant()
++            throws Exception {
++        NodePartitionGrantTable grants=table();
++        final AtomicInteger attempts=new AtomicInteger();
++        NodeClusterControlManager.ControlPlane brieflyUnavailable=node->{
++            if(attempts.incrementAndGet()<3)
++                throw new IOException("original ZK lease not yet certified");
++            return new NodePartitionGrantTable.Batch(node,1,clock.get(),
++                    900000000L,0L,routes(),new byte[]{42});
++        };
++        try(NodeClusterControlManager manager=new NodeClusterControlManager(
++                "NodeA",brieflyUnavailable,grants,40L)){
++            manager.start();
++            assertEquals(256,manager.awaitInitialCertifiedPartitionCensus(2000L).size());
++            assertTrue("first failures must be observed",manager.failedRenewals()>=2);
++            assertTrue(manager.successfulRenewals()>=1);
++        }
++        NodePartitionGrantTable deniedGrants=table();
++        try(NodeClusterControlManager denied=new NodeClusterControlManager(
++                "NodeA",node->{throw new IOException("ZooKeeper quorum offline");},
++                deniedGrants,30L)){
++            denied.start();
++            try {
++                denied.awaitInitialCertifiedPartitionCensus(130L);
++                fail("missing Common quorum must not become READY");
++            }catch(IOException expected){
++                assertEquals("COMMON_CERTIFIED_CENSUS_STARTUP_TIMEOUT",expected.getMessage());
++            }
++            assertEquals(0,denied.localPartitionCount());
++        }
++    }
++
+     @Test public void controlQuorumLossCannotRenewExpiredLease()
+             throws Exception {
+         NodePartitionGrantTable state=table();
