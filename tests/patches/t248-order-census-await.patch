@@ -1,0 +1,64 @@
+diff --git a/Dockerfile.t248-census-await b/Dockerfile.t248-census-await
+new file mode 100644
+index 0000000..f2e7c40
+--- /dev/null
++++ b/Dockerfile.t248-census-await
+@@ -0,0 +1,4 @@
++FROM local/otc-t244-ordersvr:unified-match
++# Startup-only bounded wait for the Common-certified grant. No WAL/HA change.
++COPY target/t248-census-classes/ /srv/dc/dc/OrderSvr/classes/
++LABEL otc.order.t248="wait until real Common census exists; timeout remains fail-closed"
+diff --git a/src/main/java/com/app/dc/service/state/OrderCommonNodeRuntimeWiring.java b/src/main/java/com/app/dc/service/state/OrderCommonNodeRuntimeWiring.java
+index d04a2df..329704f 100644
+--- a/src/main/java/com/app/dc/service/state/OrderCommonNodeRuntimeWiring.java
++++ b/src/main/java/com/app/dc/service/state/OrderCommonNodeRuntimeWiring.java
+@@ -61,6 +61,24 @@ public class OrderCommonNodeRuntimeWiring {
+         return installed.primaryPartitionCount()==0?null:installed.requirePrimaryRegistry();
+     }
+ 
++    private static java.util.List<com.app.common.partition.PartitionAssignment> awaitCertifiedAssignments(
++            OrderPartitionRuntime business, NodeClusterControlManager realZk)
++            throws IOException, InterruptedException {
++        final long deadline = System.nanoTime() + java.util.concurrent.TimeUnit.SECONDS.toNanos(20);
++        IOException last = null;
++        for (;;) {
++            try {
++                java.util.List<com.app.common.partition.PartitionAssignment> rows = business.assignmentsSnapshot();
++                if (!rows.isEmpty() && realZk.localPartitionCount() > 0) return rows;
++            } catch (IllegalStateException pending) {
++                last = new IOException("Order Common grant not yet certified", pending);
++            }
++            if (System.nanoTime() >= deadline)
++                throw new IOException("ORDER_COMMON_CERTIFIED_CENSUS_AWAIT_TIMEOUT", last);
++            Thread.sleep(100);
++        }
++    }
++
+     @Bean(name="orderCommonCertifiedNodeRuntime",destroyMethod="close")
+     public CommonCertifiedNodeRuntime certifiedCommonNode(
+             OrderPartitionRuntime business,
+@@ -70,9 +88,13 @@ public class OrderCommonNodeRuntimeWiring {
+             CommonBusinessRecoveryReadiness attestedBusinessRecovery)
+             throws Exception {
+         business.init();
+-        if(!business.isEnabled() || business.assignmentsSnapshot().isEmpty()
+-                || realZk.localPartitionCount()<=0)
++        if (!business.isEnabled())
+             throw new IOException("Order_COMMON_SIGNED_ZK_PARTITION_CENSUS_NOT_READY");
++        // A Common node publishes its first physically certified census on an
++        // asynchronous lease refresh. Wait only during boot, never on the WAL
++        // hot path; a missing/expired grant must still fail closed.
++        java.util.List<com.app.common.partition.PartitionAssignment> assignments =
++                awaitCertifiedAssignments(business, realZk);
+         // Prevent a physical RSA from another service/node being silently
+         // reused as an unrelated owner; it must be the exact Common ZK node.
+         String verifiedLogicalNode=business.getLocalNodeName();
+@@ -87,7 +109,7 @@ public class OrderCommonNodeRuntimeWiring {
+         // Common requires business snapshot + WAL replay BEFORE any
+         // physical WAL/Netty socket opens. Do not move this to writer Bean.
+         return CommonCertifiedNodeBootstrap.openAndStartWithZkFencingAndReplay(root,service,
+-                verifiedLogicalNode,realRsa.privateKey(),business.assignmentsSnapshot(),
++                verifiedLogicalNode,realRsa.privateKey(),assignments,
+                 CommonConfiguredNodePeers.physicalHosts(physicalHosts),
+                 CommonConfiguredNodePeers.pinnedSignerAliases(rsaAliases,realRsa.publicMembers()),
+                 CommonConfiguredNodePeers.nettyPeers(nettyPeers),
