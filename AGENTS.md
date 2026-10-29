@@ -18,6 +18,16 @@ Common/Order/Trade/MD 的 HA、资金、订单一致性必须独立验收，不�
 
 统一图文 PDF 一键生成：`./scripts/generate-user-manuals.sh`，详见 `docs/USER_MANUAL_ONE_CLICK_GENERATION.zh-CN.md`。
 
+## 集群开发优先级（P0 强制门禁）
+
+**先 Demo+Common，再 Order/Trade，最后业务验收。**
+
+- **P0**：仅在 Demo+Common 修复和验证全部通用集群机制；真实 A SIGKILL → B 自动 READY/继续写 → A 自动追平 → B SIGKILL → A 自动 READY/继续写 → B 自动追平，并检查旧主隔离、WAL/快照/水位/状态一致性；脚本手工切换、只到 RECOVERING 或仅容器 UP 均不算 PASS。
+- **P1**：P0 通过才允许 Order/Trade 集成；与 Demo 使用相同 Common Jar SHA256、启动入口、常驻 Watch、复制/提交、降级写入和恢复机制，业务只提供自己的 byte[] 状态机及必要成员/路径配置。Order/Trade 禁止自建或各自修补 HA。
+- **P2**：P1 通过后验证 Robot 报价/Tape 成交、资金持仓、MD 最近成交、SQL 投影和业务 A/B 自动互切。P0 不通过时 P1/P2 保持 NO-GO。
+
+强制执行规范：`docs/ARCHITECTURE_SIMPLE_COMMON_BOUNDARY_20261029.zh-CN.md` 和 `docs/T266_DEMO_COMMON_ORDER_TRADE_PARITY_FIRST_20261029.zh-CN.md`。
+
 ## Common / Order / Trade 简洁集群架构（强制）
 
 Before changing Common, OrderSvr, TradeSvr, MDSvr, deployment or HA, read:
