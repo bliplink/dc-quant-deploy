@@ -1,0 +1,123 @@
+From 14d1b083ca52424b3ef6544a5a47278a4b98a7dd Mon Sep 17 00:00:00 2001
+From: OpenTradingCore Demo <demo-ci@opentradingcore.com>
+Date: Thu, 29 Oct 2026 09:02:02 +0800
+Subject: [PATCH] fix(common): own replica failover watch within certified node
+ runtime
+
+---
+ ...verify-real-auto-sigkill-genesis-replay.sh |  2 +-
+ .../demo/DemoCommonCertifiedService.java      |  8 ++++++
+ .../demo/DemoCommonLiveZkProcess.java         |  5 ++--
+ .../CommonCertifiedNodeRuntime.java           | 28 +++++++++++++++++++
+ 4 files changed, 39 insertions(+), 4 deletions(-)
+
+diff --git a/examples/common-only-demo/scripts/verify-real-auto-sigkill-genesis-replay.sh b/examples/common-only-demo/scripts/verify-real-auto-sigkill-genesis-replay.sh
+index bc45e9b..7a9cd1b 100755
+--- a/examples/common-only-demo/scripts/verify-real-auto-sigkill-genesis-replay.sh
++++ b/examples/common-only-demo/scripts/verify-real-auto-sigkill-genesis-replay.sh
+@@ -7,7 +7,7 @@ set -euo pipefail
+ R="$(cd "$(dirname "${BASH_SOURCE[0]}")/../../.." && pwd)"
+ EX="$R/examples/common-only-demo"
+ K="${OTC_EXISTING_DEMO_RSA_DIR:?existing original A/B RSA required}"
+-J="$R/target/com.app.common-3.0.22-t143-durable-signed-crossjvm-handoff-20261026-SNAPSHOT.jar"
++J="${OTC_T124_COMMON_JAR:-$R/target/com.app.common-3.0.22-t143-durable-signed-crossjvm-handoff-20261026-SNAPSHOT.jar}"
+ IMAGE="${OTC_T124_IMAGE:-dc-saas/gw:cluster-dev-fenced-transport-20261016}"
+ NETWORK="${OTC_T124_NETWORK:-otc-t84-source-integrated-net}"
+ RUN="$(date '+%Y%m%d%H%M%S')"
+diff --git a/examples/common-only-demo/src/main/java/com/opentradingcore/demo/DemoCommonCertifiedService.java b/examples/common-only-demo/src/main/java/com/opentradingcore/demo/DemoCommonCertifiedService.java
+index 7eaf7a4..835287a 100644
+--- a/examples/common-only-demo/src/main/java/com/opentradingcore/demo/DemoCommonCertifiedService.java
++++ b/examples/common-only-demo/src/main/java/com/opentradingcore/demo/DemoCommonCertifiedService.java
+@@ -3,6 +3,8 @@ package com.opentradingcore.demo;
+ import com.app.common.partition.PartitionAssignment;
+ import com.app.common.replication.CommonCertifiedNodeBootstrap;
+ import com.app.common.replication.CommonCertifiedNodeRuntime;
++import com.app.common.replication.CommonCertifiedFailoverCoordinator;
++import com.app.common.replication.CommonCertifiedFailoverWatch;
+ import com.app.common.replication.CommonCertifiedBusinessApplyBoundary;
+ import com.app.common.replication.CommonBusinessRecoveryReadiness;
+ import com.app.common.replication.DirectNettyReplicationTransport;
+@@ -84,6 +86,12 @@ public final class DemoCommonCertifiedService implements AutoCloseable {
+     public byte[] captureBusinessImage()throws Exception {
+         return apply.captureBusinessImage(partition);
+     }
++    /** Common-owned watcher; Demo only provides business byte[] state. */
++    public CommonCertifiedFailoverWatch armCommonAutomaticFailoverWatch(
++            CommonCertifiedFailoverCoordinator coordinator,int pollMillis,
++            CommonCertifiedFailoverCoordinator.LocalReplicaCatchupProof catchup)throws Exception {
++        return common.armAutomaticFailoverWatch(partition,coordinator,pollMillis,catchup);
++    }
+     public long total(){return domain.total();}
+     public String stateDigest(){return domain.digest();}
+     public int boundPort(){return common.boundPort();}
+diff --git a/examples/common-only-demo/src/test/java/com/opentradingcore/demo/DemoCommonLiveZkProcess.java b/examples/common-only-demo/src/test/java/com/opentradingcore/demo/DemoCommonLiveZkProcess.java
+index 6d5d800..b044434 100644
+--- a/examples/common-only-demo/src/test/java/com/opentradingcore/demo/DemoCommonLiveZkProcess.java
++++ b/examples/common-only-demo/src/test/java/com/opentradingcore/demo/DemoCommonLiveZkProcess.java
+@@ -227,9 +227,8 @@ public final class DemoCommonLiveZkProcess {
+                         if("1".equals(System.getenv("OTC_T124_KEEP_PRIMARY_ALIVE")))
+                             Thread.sleep(120000L); // SIGKILL from isolated test harness
+                     }else if(automaticB){
+-                        try(CommonCertifiedFailoverWatch auto=new CommonCertifiedFailoverWatch(
+-                                autoController,P,250)){
+-                            auto.start();
++                        try(CommonCertifiedFailoverWatch auto=runtime.armCommonAutomaticFailoverWatch(
++                                autoController,250,null)){
+                             System.out.println("T124_B_COMMON_AUTOMATIC_WATCH_ARMED=PASS");
+                             System.out.flush();
+                             staged=auto.awaitStage(160000L);
+diff --git a/src/main/java/com/app/common/replication/CommonCertifiedNodeRuntime.java b/src/main/java/com/app/common/replication/CommonCertifiedNodeRuntime.java
+index 17789c0..e7fd871 100644
+--- a/src/main/java/com/app/common/replication/CommonCertifiedNodeRuntime.java
++++ b/src/main/java/com/app/common/replication/CommonCertifiedNodeRuntime.java
+@@ -20,6 +20,8 @@ public final class CommonCertifiedNodeRuntime implements AutoCloseable {
+     private final Map<String,CommonCertifiedPartitionRuntime> partitions;
+     private final CertifiedBusinessCommandRegistry primaryWrites;
+     private final DirectNettyReplicationServer server;
++    // Common owns its automatic control loop; this never invents READY.
++    private final Map<String,CommonCertifiedFailoverWatch> failoverWatches=new HashMap<>();
+     private boolean started,closed;
+ 
+     public CommonCertifiedNodeRuntime(String service,String node,
+@@ -84,6 +86,30 @@ public final class CommonCertifiedNodeRuntime implements AutoCloseable {
+         server.start();
+         started=true;
+     }
++    /** Reuse the existing Common failover watcher for a local replica.
++     * The node owns its lifecycle; an E2 stage is NOT a READY grant.
++     * No business state or second election mechanism is introduced. */
++    public synchronized CommonCertifiedFailoverWatch armAutomaticFailoverWatch(
++            String partition,CommonCertifiedFailoverCoordinator coordinator,
++            int periodMillis,
++            CommonCertifiedFailoverCoordinator.LocalReplicaCatchupProof catchup)
++            throws Exception {
++        if(closed || !started)
++            throw new IOException("Common node must be fully started before auto failover watch");
++        CommonCertifiedPartitionRuntime selected=partitions.get(partition);
++        if(selected==null || selected.primary())
++            throw new IOException("Common automatic failover requires an installed local replica");
++        if(failoverWatches.containsKey(partition))
++            throw new IOException("Common automatic failover watch already armed for partition");
++        selected.requireCurrentRole();
++        CommonCertifiedFailoverWatch watch=new CommonCertifiedFailoverWatch(
++                Objects.requireNonNull(coordinator,"Common authenticated failover coordinator"),
++                partition,periodMillis,catchup);
++        failoverWatches.put(partition,watch);
++        try {watch.start();}
++        catch(RuntimeException failure){failoverWatches.remove(partition);watch.close();throw failure;}
++        return watch;
++    }
+     /** A real Common lease check is required before exposing any business. */
+     public synchronized void requireAuthenticatedReady()throws Exception {
+         if(closed)throw new IOException("Common certified runtime closed");
+@@ -126,6 +152,8 @@ public final class CommonCertifiedNodeRuntime implements AutoCloseable {
+     public int primaryPartitionCount(){return primaryWrites==null?0:primaryWrites.size();}
+     @Override public synchronized void close()throws Exception {
+         if(closed)return;closed=true;
++        for(CommonCertifiedFailoverWatch watch:failoverWatches.values())watch.close();
++        failoverWatches.clear();
+         server.close();
+         Exception first=null;
+         for(CommonCertifiedPartitionRuntime p:partitions.values()){
+-- 
+2.50.1 (Apple Git-155)
