@@ -27,3 +27,5 @@
 - E2/E3 故障后新增写入是 `LOCAL_DURABLE_ASYNC`，历史客户端 ACK 有 RPO 风险，B 后来落盘不能倒签或追认历史 `QUORUM_DURABLE`。
 - **还未做**：B 通过 Common 正式节点进程的常驻生命周期自动发现和自动重加入；同一主副本之间的真实持续 TCP WAL 流复制/后续新业务连续追平；重新满足严格 2/2 时未来写入的真实签名 ACK；无测试进程恢复/READY 编排的生产通用 Common 运行时自动 A/B 互切。以上全部有实测证据前，P0 不得标记 GO。
 - 通过这些之后，才允许 P1 同版 Common Jar SHA 和同一 Bootstrap/Watch/恢复生命周期替换 Order/Trade。Demo/Order/Trade 不实现自己的 HA，不按业务类型做集群存储准入。
+
+> **后续 T272（本日）**：B E3 在线回归之后，A 新增真实业务并通过 Common Netty TCP 增量复制给 B，B fsync/RSA 签名，双方总值 85、7 个请求，阶段 PASS；历史及本次本地 ACK 均不追认严格 2/2。详见 [T272](T272_DEMO_COMMON_E3_POST_REJOIN_TCP_RSA_20261029.zh-CN.md)。P0 正式全自动生命周期仍 NO-GO。
