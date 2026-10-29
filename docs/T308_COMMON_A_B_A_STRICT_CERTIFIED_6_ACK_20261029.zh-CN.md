@@ -40,3 +40,10 @@
 - Order/Trade 正式构建与完整真实业务验收尚未执行；此前 `t178` 旧源码存在 `com.app.dc` 版本不一致，而 Order B/C 原镜像有旧 Head/Cluster 配置问题。正式标准仍是新租户自动审批、Robot 自动盘口报价和 Tape 点价、正式真实下单成交、Order/Trade A/B 自动互切并核对订单/成交/余额/持仓。
 
 **结论：Common 真实两方向严格写入/认证状态正确性验证 PASS；全自动完成环和 Order/Trade E2E 仍 NO-GO。**
+
+## 追加：本轮业务部署前版本核对
+
+- 当前实际业务容器：Trade A/B 均仍运行（镜像 `local/otc-t264-tradesvr:tenant-config`）；Order A 运行（`local/otc-t260-ordersvr:certified-e2-prefix`），Order B 退出码 1（同一 t260 镜像），Order C 退出码 1（旧 t251 镜像）；Robot 容器退出码 143。没有进行任何替换或重启。
+- `docker image inspect` 的实际镜像标签均明确 `dc.release.authorized=false`、`dc.release.gate=NO-GO`，镜像基线为先前 `com.app.dc:0.0.5-SNAPSHOT`/旧 Common，**不等于**本轮新 Common b757258 + 本地 `3.0.22-t143` 的一致镜像。不能直接用新 Common Jar 随意覆盖旧镜像而声称 ABI/真实业务验收通过。
+- `.work/ordersvr`、`.work/tradesvr`、`.work/com.app.dc` 的实际 `saas-crypto` POM 仍 pin `com.app.dc:0.0.4-SNAPSHOT` 和旧 `com.app.common:3.0.17`；当前离线 Docker 候选是在老镜像上逐层替换 class/JAR 的历史 overlay，不是一次可信全源码统一编译。新版本业务镜像必须先建立统一依赖、全量本地编译和真实启动回归；部署后才进行 Robot/E2E。
+- Common 提供现有 `CommonCertifiedNodeRuntime.armAutomaticFailover(..., CertifiedRecoveryCompletion)` 回调，且实现了 RECOVERING 后的物理 Socket/WAL 退休。**Order/Trade 当前源码没有发现真实 `CertifiedRecoveryCompletion` 启动接线**。这是无人干预自动恢复到 READY 的最后集成缺口，不能靠 Demo 手动执行后声称生产自动化已完整。
