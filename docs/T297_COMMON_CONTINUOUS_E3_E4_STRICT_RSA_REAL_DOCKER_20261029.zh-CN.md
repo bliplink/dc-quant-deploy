@@ -23,3 +23,12 @@
 - **Order/Trade 第三关：** 当前正式 Docker `dc-saas-ordersvr-b` 退出码 1，日志主因：`Common physically fsynced WAL head mismatch`（不能用略过 WAL 校验来修）；`dc-saas-ordersvr-c` 退出码 1，日志主因：旧 `order.cluster.lifecycle.enabled` 仍开启，触发 `COMMON_ONLY_LEGACY_CLUSTER_STILL_ENABLED`。Trade A/B 当前运行。修复前应构建一致 Common Jar 的新镜像，在新隔离数据目录验证后再正式替换。最终标准：新租户自动审批、Robot 自动报价/Tape 点价、真实下单成交、Order/Trade A/B 自动互切并保持资金/持仓/委托/成交一致。
 
 没有使用 GitHub Actions，没有重启、覆盖或删除正式 Order/Trade 容器，没有把历史 `LOCAL_DURABLE_ASYNC` ACK 冒充严格 2/2 提交；修改限于 Common 的 Demo 验收入口和证据文档。最终 P0 **NO-GO**。
+
+## 完整回归与业务镜像预检（补充）
+
+- 本轮 Common 原始 RSA 与 T284/T285/T287/T288 历史数据一起跑完整 Maven（Java 8）测试，Maven **退出码 0**：`146 suites / 637 tests / 637 passed / 0 failures / 0 errors / 0 skipped`。老代码仍打印 `./control/ATSConfig.ini` 缺失栈，但不构成测试失败。
+- Common 新增同一身份、同一真实 3ZK 的 T293–T297 隔离 Demo 测试源码提交：`fa67874`（`codex/t177-common-saas-crypto-integration-20261027`）。这是测试代码，不是 Order/Trade 正式上线源码。
+- 对本地较旧的 `~/.opentradingcore/t178-ordersvr-common-saas-integration-20261027` 尝试执行 `mvn -q -DskipTests package` **失败**。确切原因：该工作树 `pom.xml` 仍将聚合业务模块 `com.app.dc:com.app.dc` 固定在 `0.0.4-SNAPSHOT`，与新的 Common 3.0.22 集成不匹配，编译无法找到 `CommonCertifiedNodeBootstrap`、`CommonBusinessRecoveryReadiness` 等类，以及 `com.app.dc.security.ExistingDemoRsaNodeIdentity`。当前本地另有较新的 `t85-business-com-app-dc`，但依赖版本仍较早，不能据此宣称可直接交付 Order/Trade 最新镜像。必须核对实际最新业务源码/镜像来源，锁定同一 Common JAR、对应聚合模块、业务源，并本地编译成功后再替换。
+- 该打包失败只针对**较旧的 t178 工作树**，不能证明目前已运行的 `local/otc-t260-ordersvr:certified-e2-prefix` 或 `local/otc-t264-tradesvr:tenant-config` 一定无法编译。运行容器未变更，现有 `dc-saas-ordersvr-b` / `ordersvr-c` 仍需解决之前记录的 WAL HEAD 不一致及旧集群开关冲突。
+
+最终状态仍为 **Common 第一关 PASS、第二关（故障后的节点自动恢复+真实 A↔B↔A）未完成、Order/Trade 端到端交易验收未完成**；因此整体 **NO-GO**，不应发布正式替换完成公告。
