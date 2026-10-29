@@ -27,3 +27,16 @@
 - OrderSvr：`338de8e`，旧 30 个私有集群测试删除。
 - TradeSvr：`5f2f884`，旧 27 个私有集群测试删除 + 4 处保留的业务测试兼容更新。
 - 这两个提交不会纳入各工作树先前存在的其它未提交文件（例如 OrderCertifiedCancelSaga 相关用户改动）。
+
+## T315 离线镜像完整依赖替换与隔离启动
+
+- 在执行两个服务 `mvn clean package`（均 PASS 且不跳过测试）后，重新从 Maven 精确读取 `target/dependency`：Order **95** 个 runtime jar，Trade **80** 个；两侧各只有 **一个** `com.app.common:3.0.22-t143`、**一个** `com.app.dc:0.0.6-common-t143`，MySQL 统一 `mysql-connector-j-8.0.33`。
+- Mac 无法从 Docker Hub 拉取新的 `eclipse-temurin:8-jre`（Docker DNS localhost IPv6 53 失败），因此只在本地离线使用**已有** `local/otc-t260` 基底，将服务 `classes` 和 `lib` **整个旧目录删除后**复制本次 Maven 全部目标类和运行时依赖。没有增添任何集群或业务机制，也未修改仓库正式标准 Dockerfile。
+- 构建了两个隔离镜像，均强制 `dc.release.gate=NO-GO`、`dc.release.authorized=false`：
+  - `local/otc-t315-ordersvr:offline-maven-consistent` SHA256 `5833ae85b03a9b3a9958a1568a057040dcfbcfaabc2bcdcdcc25d81235757250`。
+  - `local/otc-t315-tradesvr:offline-maven-consistent` SHA256 `c7d89e5f479aaf2c13b1f56d841d448a34f8088042bcd41eb7d1becf0585691c`。
+- 在两个真实新镜像中只读确认全部 JAR 名称（单 Common/业务 Jar + MySQL 8.0.33）且没有旧 `ReplicationManager` / `PartitionJournal` / `FailoverControlPlaneClient` 的业务 class。
+- 使用 `--network none` 禁止外部通信，挂载原 `OrderSvrB.ready.properties` 和 `TradeSvrA.ready.properties` 的**只读**副本验证启动，两边均打印 `COMMON_ONLY_CERTIFIED_BUSINESS_SPRING_NO_LEGACY_ZK_START` 并加载 Spring Boot。由于这是隔离容器没有正式控制文件、网络/DNS 和真实密钥挂载，出现预期的 `ATSConfig.ini` 缺失及 UnknownHost 异常；**不是实际 ZK 认证 READY、不是正式可用业务进程**。两个临时容器随即删除，所有 `dc-saas-*` 原有运行状态不变。
+- Git 远端跟踪分支当前和本地发生明显分叉（Order ahead 242/behind 6、Trade ahead 56/behind 68、共享业务 ahead 3/behind 6、部署 ahead 253/behind 728，依本地现有 origin tracking refs），**禁止直接强推覆盖其它提交**；本轮只完成本地 Git 记录，尚未推送。需先对齐原远端提交后才安全 Push。
+
+最终门禁仍是相同的原要求：真正经 Common 认证授权的 Order A/B/C、Trade A/B 启动，租户自动审批→Robot 持续报价/Tape 点价→真实下单成交→严格双向自动主切并证明订单、成交、资金、持仓一致。镜像标记 NO-GO 不得提前取消。
