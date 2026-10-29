@@ -1,0 +1,125 @@
+From 9d6fb6968a0001818a3e98e288379acf4dd62c02 Mon Sep 17 00:00:00 2001
+From: OpenTradingCore Demo <demo-ci@opentradingcore.com>
+Date: Thu, 29 Oct 2026 09:12:10 +0800
+Subject: [PATCH] test(common): prove E3 old B replica can catch up identical A
+ physical WAL
+
+---
+ ...monE3FormerPrimaryBReplicaCatchupTest.java | 106 ++++++++++++++++++
+ 1 file changed, 106 insertions(+)
+ create mode 100644 src/test/java/com/app/common/replication/CommonE3FormerPrimaryBReplicaCatchupTest.java
+
+diff --git a/src/test/java/com/app/common/replication/CommonE3FormerPrimaryBReplicaCatchupTest.java b/src/test/java/com/app/common/replication/CommonE3FormerPrimaryBReplicaCatchupTest.java
+new file mode 100644
+index 0000000..6075f87
+--- /dev/null
++++ b/src/test/java/com/app/common/replication/CommonE3FormerPrimaryBReplicaCatchupTest.java
+@@ -0,0 +1,106 @@
++package com.app.common.replication;
++
++import static org.junit.Assert.*;
++import com.opentradingcore.demo.DemoCommonBusinessAdapter;
++import com.opentradingcore.demo.DemoStateMachine;
++import java.nio.file.*;
++import java.security.*;
++import java.security.spec.*;
++import java.util.*;
++import org.junit.*;
++
++ /**
++  * T269 isolated verification only: the SAME Common opaque WAL catchup path
++  * must work when the former B rejoins the A E3 local writer. Does not publish
++  * READY, claim live automated rejoin, or retroactively promote LOCAL ACK.
++  */
++public final class CommonE3FormerPrimaryBReplicaCatchupTest {
++    @Rule public org.junit.rules.TemporaryFolder tmp=new org.junit.rules.TemporaryFolder();
++
++    @Test public void e3OriginalABytesCanBeInstalledOnIndependentBWithTwoRsaReceipts()
++            throws Exception {
++        String evidence=System.getProperty("otc.demo.e3.evidence");
++        String identities=System.getProperty("otc.demo.existing.keys");
++        Assume.assumeTrue("T268 real immutable Demo evidence + original RSA required",
++                evidence!=null && identities!=null);
++        Path old=Paths.get(evidence).toAbsolutePath();
++        Path keys=Paths.get(identities).toAbsolutePath();
++        Path source=old.resolve("a/CommonHaDemo/CommonHaDemoA/P090/epoch-3/local-async-business.wal");
++        Path originalE1=old.resolve("b/CommonHaDemo/CommonHaDemoB/P090/epoch-1/business.wal");
++        Path originalE2=old.resolve("b/CommonHaDemo/CommonHaDemoB/P090/epoch-2/local-async-business.wal");
++        assertTrue(Files.isRegularFile(source));
++        assertTrue(Files.isRegularFile(originalE1));
++        assertTrue(Files.isRegularFile(originalE2));
++        KeyFactory rsa=KeyFactory.getInstance("RSA");
++        PrivateKey privateA=rsa.generatePrivate(new PKCS8EncodedKeySpec(
++                Files.readAllBytes(keys.resolve("a/node.pk8"))));
++        PrivateKey privateB=rsa.generatePrivate(new PKCS8EncodedKeySpec(
++                Files.readAllBytes(keys.resolve("b/node.pk8"))));
++        PublicKey publicA=rsa.generatePublic(new X509EncodedKeySpec(
++                Files.readAllBytes(keys.resolve("public/CommonHaDemoA.pub.der"))));
++        PublicKey publicB=rsa.generatePublic(new X509EncodedKeySpec(
++                Files.readAllBytes(keys.resolve("public/CommonHaDemoB.pub.der"))));
++        DurableWalCommitQuorum.Membership e3=new DurableWalCommitQuorum.Membership(
++                "CommonHaDemo","P090","CommonHaDemoA",3,3,Arrays.asList(
++                new DurableWalCommitQuorum.Member("CommonHaDemoA","original-A",publicA),
++                new DurableWalCommitQuorum.Member("CommonHaDemoB","original-B",publicB)));
++        Path returned=tmp.newFolder("B-caught-up-E3").toPath().resolve("business.wal");
++        DemoCommonBusinessAdapter originalBusiness=new DemoCommonBusinessAdapter();
++        DemoCommonBusinessAdapter returnedBusiness=new DemoCommonBusinessAdapter();
++        // Old B genuinely has its E1 quorum and E2 local history; replay as
++        // ordinary opaque business bytes without modifying original evidence.
++        for(int epoch=1;epoch<=2;epoch++) {
++            Path file=epoch==1?originalE1:originalE2;
++            Path copy=tmp.newFolder("offline-original-epoch-"+epoch).toPath().resolve("business.wal");
++            Files.copy(file,copy); // never write the original isolated SIGKILL evidence
++            try(CommonFileBusinessWal history=new CommonFileBusinessWal(copy,epoch)){
++                applyAll(history,epoch,originalBusiness);
++                applyAll(history,epoch,returnedBusiness);
++            }
++        }
++        assertEquals(60L,originalBusiness.total());
++        Path copiedSource=tmp.newFolder("offline-A-E3-original").toPath().resolve("business.wal");
++        Files.copy(source,copiedSource); // writable Common API only on temporary copy
++        try(CommonFileBusinessWal a=new CommonFileBusinessWal(copiedSource,3);
++            CommonFileBusinessWal b=new CommonFileBusinessWal(returned,3)){
++            long head=a.forcedSequence();
++            assertEquals(2,head);
++            String signedHead=a.requireFsyncedPrefix(3,head);
++            List<CommonFileBusinessWal.CommittedWalFrame> messages=
++                    a.readCertifiedFrames(3,head,signedHead,16,1024L*1024L);
++            for(CommonFileBusinessWal.CommittedWalFrame frame:messages) {
++                long slot=b.forcedSequence()+1;
++                b.appendUnforced(3,slot,frame.bytes());
++                b.forcePending();
++                originalBusiness.stateMachine().apply(frame.bytes());
++                returnedBusiness.stateMachine().apply(frame.bytes());
++            }
++            assertEquals(head,b.forcedSequence());
++            assertEquals(signedHead,b.requireFsyncedPrefix(3,head));
++            DurableWalCommitQuorum.Receipt signedA=DurableWalCommitQuorum.sign(
++                    e3,"CommonHaDemoA",head,a,privateA);
++            DurableWalCommitQuorum.Receipt signedB=DurableWalCommitQuorum.sign(
++                    e3,"CommonHaDemoB",head,b,privateB);
++            DurableWalCommitQuorum.Certificate physical=DurableWalCommitQuorum.verify(
++                    e3,head,signedHead,Arrays.asList(signedA,signedB));
++            assertEquals(head,physical.committedSequence);
++            assertEquals(signedHead,physical.commitPrefixSha256);
++        }
++        assertArrayEquals(Files.readAllBytes(source),Files.readAllBytes(returned));
++        assertEquals(74L,originalBusiness.total());
++        assertEquals(originalBusiness.total(),returnedBusiness.total());
++        assertEquals(originalBusiness.digest(),returnedBusiness.digest());
++        // Physical second replica copy was exercised OFFLINE; no new ZK READY,
++        // external C witness or historical QUORUM ACK can be implied here.
++    }
++
++    private static void applyAll(CommonFileBusinessWal wal,int epoch,
++                                DemoCommonBusinessAdapter state)throws Exception{
++        long seq=wal.forcedSequence();
++        assertTrue(seq>0);
++        String committed=wal.requireFsyncedPrefix(epoch,seq);
++        for(CommonFileBusinessWal.CommittedWalFrame frame:wal.readCertifiedFrames(
++                epoch,seq,committed,16,1024L*1024L))
++            state.stateMachine().apply(frame.bytes());
++    }
++}
+-- 
+2.50.1 (Apple Git-155)
