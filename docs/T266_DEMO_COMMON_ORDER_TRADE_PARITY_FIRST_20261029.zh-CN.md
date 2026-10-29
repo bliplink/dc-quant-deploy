@@ -27,7 +27,7 @@ Demo T120/T121 的显式自动 Watch 用例只验证自动 CAS 到下一 Epoch �
 
 ## 2026-10-29 当前本地重新测试结果
 
-1. 使用实际 Order/Trade 镜像中的 **相同 T260 Common jar**，直接执行 Common `CommonCertifiedFailoverCoordinatorTest`、`CommonHistoricalCertifiedPrefixWithTailTest`、`CommonCertifiedE2LargeColdHistoryTest`：**JUnit 10/10 PASS**。
+1. 使用实际 Order/Trade 镜像中的 **相同 T260 Common jar**，先执行 Common `CommonCertifiedFailoverCoordinatorTest`、`CommonHistoricalCertifiedPrefixWithTailTest`、`CommonCertifiedE2LargeColdHistoryTest`：**JUnit 10/10 PASS**。P0 继续扩大到包含 `CommonCertifiedNodeRuntimeTest` 的四套测试：**JUnit 21/21 PASS**。这属于节点启动/持久化/协调器单测，**未证明双 JVM 自动接管后 READY**。
 2. 使用相同 jar 编译并执行 Demo `DemoCommonOnlyStateMachineTest`：**JUnit 1/1 PASS**，验证业务 byte[] 状态机、幂等、Snapshot/Restore 一致。
 3. 未找到旧 Demo 集成脚本要求的 `OTC_EXISTING_DEMO_RSA_DIR` 目录，也未重演 T124–T130 的当前全流程；**Demo+Common 当前完整自动主切状态未重新证明**。
 4. 真实 Order B SIGKILL 已在 T265 观察 FAIL：租约失效却未自动取代，存活节点 `P110/P180` 不可写；Order B 重启时 `Common physically fsynced WAL head mismatch`，Robot 暂停，保留原始证据。此次不应继续干扰已失败现场。
