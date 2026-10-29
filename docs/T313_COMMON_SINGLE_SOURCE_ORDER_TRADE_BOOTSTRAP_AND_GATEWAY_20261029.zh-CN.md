@@ -47,3 +47,9 @@
 * 已将原始 Demo RSA 适配类及两份原测试在 `.work/com.app.dc` 的 `saas-crypto` 本地提交 `0af8165`；尚未 GitHub push。所有后续开发要继续遵守 Common HA 唯一权威、Order/Trade 只负责 `byte[]` 状态机及领域原子提交、无二次集群。
 
 **当前完整 Order/Trade JUnit 旧测试源码还需要按统一 Common 接口清理或迁移**；真实 Docker 认证启动（正确的 RSA/三 ZooKeeper/完整业务数据）、Robot 持续报价和 Tape 点价、真实成交以及业务 A↔B 自动切换仍未通过。两新镜像仅是 `NO-GO` 候选，不得当成生产可发布镜像。
+
+### T314 补充｜原仓库标准 Dockerfile 与资源问题
+
+已实际尝试**不新增 Dockerfile 构建机制**，直接复用两个服务仓库原来的 `Dockerfile` 与本次干净编译的 `target/classes`。`mvn dependency:copy-dependencies -DincludeScope=runtime` 对 Order/Trade 分别生成 95/80 个运行时 JAR，每套均只存在一个目标版本 `com.app.common:3.0.22-t143...` 与一个 `com.app.dc:0.0.6-common-t143...`，无不同版本的重复 Common。
+
+`docker build -f .work/ordersvr/Dockerfile ...` 触发了当前 Mac Docker 的网络环境障碍：`eclipse-temurin:8-jre` 未在本地缓存，`registry-1.docker.io` 在本机 `[::1]:53` DNS 上解析失败。此事**不是 Common API 或 Order 业务代码编译失败**，不因此添加绕过 DNS 的新架构/功能。已经成功的本地 `local/otc-t314-{ordersvr,tradesvr}:clean-common-only` 仅用于隔离验证，均 NO-GO。
