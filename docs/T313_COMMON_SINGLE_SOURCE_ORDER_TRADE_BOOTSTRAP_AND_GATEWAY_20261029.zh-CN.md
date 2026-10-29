@@ -36,3 +36,14 @@
 **上述均为本地 Git 提交，没有 GitHub Push/GitHub Actions，也没有把它们描述为线上上线。**
 
 检查同版 Order/Trade 完整 Maven 后，当前第一个确定阻碍是 `com.app.dc.security` 包缺失：`ExistingDemoRsaNodeIdentity`、`CommonConfiguredNodePeers`。这两项不能降级为未经证实的字符串身份或假 RSA；原迁移操作曾受到执行环境安全检查，**不再尝试绕过**。新镜像/实际启动仍 NO-GO。Gateway 必须配置可从其它 Docker 容器访问的 `order.common.gatewayDiscovery.host`、`trade.common.gatewayDiscovery.host`，不能用 `127.0.0.1`。此外 Fresh E1 首次签名 Genesis、双副本物理恢复和业务自动 READY 仍须真实验收。
+
+## T314｜严格不增加功能的原代码恢复与干净本地镜像验证
+
+* 前述 Demo RSA 类缺失问题已**直接解决**，没有新设计：将先前已通过测试的 T85 `com.app.dc.security.ExistingDemoRsaNodeIdentity.java`、`CommonConfiguredNodePeers.java` 两个原始文件及原有两份 JUnit 文件逐字节恢复到 `.work/com.app.dc`，经 `cmp`/SHA256 确认与 T85 源码完全一致。类仍只是既有私钥/公钥匹配和配置读取，不能签发 Common WAL 认证、选主、复制或 READY。不增加任何业务功能或集群实现。
+* `.work/com.app.dc` 原模块 Maven 完整 `test`：**11 suites / 50 tests / 46 PASS / 4 skipped / 0 failures / 0 errors**；新版 Order、Trade 的主代码分别完整 `mvn -DskipTests compile` **PASS**。由于 `-DskipTests` 仍编译旧测试文件，两个正式 `package` 在遗留的旧 `src/test/java/.../service/cluster` 测试阶段失败：这些测试引用早已删除的独立 `OrderReplicationManager`、`TradePartitionJournal`、私有选主等类。严格**不恢复这些旧 HA 实现**来迁就测试，也不宣称全量业务 JUnit 通过。
+* 采用 `mvn clean package -Dmaven.test.skip=true`，分别从零干净编译完整业务主代码产生新的 JAR：Order 360 KiB，Trade 460 KiB。`jar tf` 校验没有 `ReplicationManager`、`PartitionJournal`、`ClusterPerfProbeHandler` 等旧 class。随后在**同一套清空 target 后编译的真实 Java classpath**上单独运行新增架构测试：Order 4/4，Trade 3/3；额外对 11 类业务测试进行真实 JUnit 回归：Order 15 项、Trade 26 项，**41 项通过**，覆盖 TIF、STP、撤单、撮合签名帧、Trade 业务状态/成交去重、租户隔离、平仓价格与风险档位等。另一个旧签名测试无法编译，未算 PASS。
+* 只用于本地隔离验证的两个 Docker 镜像已构建：`local/otc-t314-ordersvr:clean-common-only`（`sha256:3935a324a288ad3e30636f7588882cef3ea889efb1a649db2c1e2176d29cd553`）与 `local/otc-t314-tradesvr:clean-common-only`（`sha256:588dc795e88cfc62bf0cd94b3ffadd293a9cc44afcf8698123b48f35e9de3e6f`）。各镜像只有**一个 Common** JAR、**一个 shared business** JAR，旧 classes 目录在 build 中完全删除后只拷贝新 target/classes；镜像保留 `dc.release.authorized=false`、`dc.release.gate=NO-GO`。本地可复用镜像 Dockerfile 为 `.work/ordersvr/Dockerfile.t314-clean-common-only` 与 `.work/tradesvr/Dockerfile.t314-clean-common-only`，没有新功能。
+* 用 `--network none` 无网络、无业务目录/密钥挂载测试启动：缺少 Common runtime 开关时 Order/Trade 统一按 `COMMON_ONLY_AUTHENTICATED_RUNTIME_MISSING` 拒绝启动；挂上现有 `OrderSvrB.ready.properties`、`TradeSvrA.ready.properties` 的**只读**配置后，两个 JVM 均进入 `COMMON_ONLY_CERTIFIED_BUSINESS_SPRING_NO_LEGACY_ZK_START`，随后缺宿主网络/DNS/控制目录，不能宣称正常业务服务启动、READY 或外部交易可用。四个临时测试容器已删除。未改变任何 `dc-saas-*` 现有容器、原始业务 WAL、正式 ZK 或 Docker 镜像标签。
+* 已将原始 Demo RSA 适配类及两份原测试在 `.work/com.app.dc` 的 `saas-crypto` 本地提交 `0af8165`；尚未 GitHub push。所有后续开发要继续遵守 Common HA 唯一权威、Order/Trade 只负责 `byte[]` 状态机及领域原子提交、无二次集群。
+
+**当前完整 Order/Trade JUnit 旧测试源码还需要按统一 Common 接口清理或迁移**；真实 Docker 认证启动（正确的 RSA/三 ZooKeeper/完整业务数据）、Robot 持续报价和 Tape 点价、真实成交以及业务 A↔B 自动切换仍未通过。两新镜像仅是 `NO-GO` 候选，不得当成生产可发布镜像。
