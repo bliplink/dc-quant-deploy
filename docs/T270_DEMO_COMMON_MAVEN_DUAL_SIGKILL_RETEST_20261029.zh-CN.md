@@ -31,3 +31,5 @@
 3. 做完整无人编排真实主备交替、故障中与故障后提交水位/哈希/ACK/去重核对，并固定唯一候选 Jar；通过后才统一替换 Order/Trade 同一 Common 运行时。业务只处理不透明 `byte[]`。
 
 参见 `docs/ARCHITECTURE_SIMPLE_COMMON_BOUNDARY_20261029.zh-CN.md`。本轮没有替换 Order/Trade、没有清空其他容器数据、没有运行 GitHub Actions，也没有上传任何私钥或原始 WAL。
+
+> **后续 T271 进展（本日）**：已新增旧 B 在存活 A E3 主节点旁启动独立 JVM、验证 Common C 见证/E3 签名 WAL、获得真实 E3 Replica 授权的阶段 PASS。详见 [T271 实测](T271_DEMO_COMMON_E3_B_ONLINE_REJOIN_20261029.zh-CN.md)。它仍未验证持续 TCP 复制或正式 Common 自动重加入，P0 仍 NO-GO。
