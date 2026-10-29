@@ -30,7 +30,8 @@ Demo T120/T121 的显式自动 Watch 用例只验证自动 CAS 到下一 Epoch �
 1. T267 曾在 T260 Common Jar 上执行节点/主切/历史 WAL **JUnit 21/21 PASS**（未提供原始 RSA 的部分用例当时跳过）。T268 找回原始 A/B/C RSA 后，在正式 Docker Netty 运行依赖和新 Common 候选 Jar 上重新执行所有四套测试：**JUnit 21/21 PASS，原始 RSA 物理节点用例实际运行**。
 2. 使用相同 jar 编译并执行 Demo `DemoCommonOnlyStateMachineTest`：**JUnit 1/1 PASS**，验证业务 byte[] 状态机、幂等、Snapshot/Restore 一致。
 3. **T268 已重新发现并只读使用原始 Demo A/B/C RSA**，完成真实隔离三节点 ZooKeeper、两次 SIGKILL、A→B→A 自动进入下一 Epoch/独立 C 签名本地 READY 并继续业务写入：**T124–T130 全扩展 PASS**。B 在 Epoch 3 下再次回归未验证，且测试进程仍串联 Common 恢复/READY API，**P0 全自动生产生命周期尚未 GO**。具体实测和候选 Jar SHA 见 [T268 真实证据](T268_DEMO_COMMON_DUAL_SIGKILL_A_B_A_REAL_EVIDENCE_20261029.zh-CN.md)。
-4. 真实 Order B SIGKILL 已在 T265 观察 FAIL：租约失效却未自动取代，存活节点 `P110/P180` 不可写；Order B 重启时 `Common physically fsynced WAL head mismatch`，Robot 暂停，保留原始证据。此次不应继续干扰已失败现场。
+4. **T269：** 从 T268 保留的真实 E1/E2/E3 原始 WAL 和 RSA 在独立测试盘恢复旧 B 的 E3 物理复制，原始字节、A/B SHA/签名及业务总值 74/状态摘要均相同：**JUnit 1/1 PASS**。这是可追平能力，**B 在线自动加入和恢复 Replica READY 仍未验证**。见 [T269 证据](T269_COMMON_E3_B_REPLICA_PHYSICAL_CATCHUP_20261029.zh-CN.md)。
+5. 真实 Order B SIGKILL 已在 T265 观察 FAIL：租约失效却未自动取代，存活节点 `P110/P180` 不可写；Order B 重启时 `Common physically fsynced WAL head mismatch`，Robot 暂停，保留原始证据。此次不应继续干扰已失败现场。
 
 ## 强制下一验收顺序（相同生产 Common 机制，不加第二套）
 
