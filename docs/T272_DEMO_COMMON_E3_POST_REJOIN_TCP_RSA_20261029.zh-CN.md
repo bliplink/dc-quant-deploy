@@ -27,3 +27,5 @@
 - 通过完整 P0 后，将**同 SHA Common Jar、相同 Bootstrap/Watch/恢复生命周期**直接装入 Order/Trade。全部业务变更以 opaque `byte[]` 走同一路径；禁止业务特殊 WAL、集群类型白名单及 Order/Trade 自己做 HA。
 
 本轮没有变更正式 Order/Trade/Gateway 镜像，未上传私钥、原始 WAL，未运行 GitHub Actions。
+
+> **T273 追加（本日）：** 已将 TCP 回执的 RSA 身份/前缀/签名验证完全收归 Common `mirrorLocalFsyncedRecordToReplica(...)`；再次真实 A→B→A SIGKILL、E3 B 在线回归及 Netty seq3 fsync PASS。见 [T273](T273_COMMON_RSA_TCP_ACK_VERIFIED_INSIDE_COMMON_20261029.zh-CN.md)。正式 P0 仍 NO-GO。
