@@ -32,3 +32,10 @@
 - 开始实现 `CommonDemoLiveE3ToE4Process` 测试入口：真实 A/B 两个独立 JVM 的 E3 `CommonFileBusinessWal` 与 B Netty、原 A/B RSA 身份和真实三 ZooKeeper 各自持有长寿命 Session；预期两端在同一 E4 RECOVERING CAS 后真实关闭旧 WAL/TCP、撤销缓存授权并分别签名，再由两端新 E4 独立恢复回执发布严格 READY。
 - 测试入口已通过 Java test-compile；**从活 E3 开始、最终 E4 严格 ACK 的多容器执行命令被执行环境安全检查拦截，未实际运行。此测试入口暂时保留在 Common 工作区，未宣称可用、未提交为正式通过用例。** 不得用原 T285 的已关闭 E3 WAL 替代此项验证。
 - 正式 Order/Trade 镜像未替换，仍为 P0 NO-GO；后续必须补完活 E3 退休、E4 故障后多节点认证追平/切换和全业务交易验收。
+
+## 最新补充｜T288 双端未提交尾部与旧写入句柄退休门禁
+
+- Common 现在允许旧 A/B 两份 WAL **各自都有超过认证提交 HEAD 的未确认尾部**，但只有独立 B RSA Custody + A/B RSA Custody 回执共同认证的 seq<=HEAD 帧能被读取；两端各自完整原始文件及不一致的未确认尾部原样保留。使用真实 T287 SIGKILL 的 A seq3、B seq2，另将 B 原始 WAL **仅在测试临时副本中**增加与 A 不同的 seq3；再次验证 A/B 实际都是 seq3 时，认证输出仍仅为前 2 条，两个 `hasUnacknowledged...Tail()` 均为 true。这不删除客户订单，也不追认 LOCAL ACK。
+- 针对历史 E3 signed Stage 的原有 A RSA，新增物理旧写入句柄测试：保持一个真实 `CommonFileBusinessWal` 的独占 OS 锁时，`CommonCertifiedStrictOldEpochRetirement.signAfterStop` 必须拒绝签发；先真实关闭 WAL，再重验签名成功。测试成功 `T289_OLD_E3_WRITER_LOCK_MUST_CLOSE_BEFORE_RSA_RETIRE_PASS`，但这是单 JVM/模拟控制面低层门禁，不是 A/B 跨 JVM 自动切换完成。
+- 上述修复本地 Common 提交：`150a812`（双 Custody 严格前缀）、`269ba85`（活 WAL 锁必须关闭才能退休）、`0a1cd04`（A/B 双方分叉尾部拒绝应用）。在第三次全量 Maven（更改双端尾部之前的已编译构建）中，**146 suites / 637 tests passed / 0 failed / 0 skipped**；后续两端分叉变更另行针对真实 T287 原盘运行了定向测试，退出码 0，标记 `T288_DIVERGENT_UNCOMMITTED_BOTH_WAL_TAILS_EXCLUDED_PASS`。
+- 活 E3 A/B → E4 STRICT READY 的测试入口 `examples/common-only-demo/src/test/java/com/app/common/replication/CommonDemoLiveE3ToE4Process.java` 已成功 `test-compile`；尚未完成真实双容器部署验收，且长流程执行被安全检查阻止，所以**不能将它计入 PASS，不能发布最终 P0 GO**。
