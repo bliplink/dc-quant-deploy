@@ -1,5 +1,11 @@
 # T266｜先验收 Demo+Common，再让 Order/Trade 完全复用（2026-10-29）
 
+## 正式开发优先级（所有后续迭代必须执行）
+
+**P0 仅开发 Demo+Common，必须完整真实验收底层 A/B 主切、单节点写入与副本恢复；P0 不通过禁止跳到 Order/Trade 修复集群。P1 只把已经通过的同一版 Common 运行时接入 Order/Trade，P2 再验证 Robot、Tape 和资金持仓/MD/Projection 全链。**
+
+每次变更都先问：能否用 Demo 原样复现？如果是 HA 机制问题，补丁只能进入 Common，并先在 Demo 上真实验证；业务进程只可提供业务编解码、状态机和必要配置。严禁再次新增 Order/Trade 私有主切逻辑、单独的恢复账本和业务类型白名单。此优先级同时写入 `AGENTS.md` 与主架构规范。
+
 ## 结论
 **不允许再为 Order/Trade 另造一套集群。** OrderSvr/TradeSvr 只实现业务 `byte[]` encode/apply/replay/snapshot；Common 独自提供单主分区、TCP WAL 复制、确认水位、快照/归档、成员租约监测、自动主切、单节点持久化降级、旧主撤权和副本回归追平。
 
