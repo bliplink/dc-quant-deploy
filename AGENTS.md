@@ -41,3 +41,10 @@ Non-negotiable rules:
 - ZooKeeper is control plane only; TCP one-way replication, minimal hot-path I/O; a healthy Primary should continue with clearly signaled local durability if a standby is down.
 - Work directly on the Mac Demo and `saas-crypto` branches; avoid GitHub Actions unless requested; do not discard uncommitted user changes.
 - Real acceptance: auto-approved tenant, Robot live quotes, real Tape trades, auto A/B failover, and exact business consistency. Do not claim PASS from tests or container UP alone.
+
+## P0/P1 Common-only contract — 2026-10-29 (mandatory)
+
+- Demo, Order and Trade MUST NOT implement cluster Watch, Epoch election, READY publication, replica networking, WAL recovery, failover orchestration, or separate cluster persistence. They only supply business validation, opaque `byte[]` encode/apply/replay/snapshot and call the SAME Common runtime APIs.
+- Common MUST remain domain-opaque: no order-type/TIF (GTC, IOC, FOK, PostOnly), execution, balance, position, leverage, or funding-type filtering in signing, WAL, replay or replication. Signatures authenticate Common node/epoch/WAL/commit evidence, never authorize a particular business category.
+- ALL business mutations (new/cancel/mass or batch cancel/replace, fills, balances, positions, settlements, settings) MUST pass through one Common durable commit path before external success. Removing a legacy type gate is forbidden unless its operation is actually connected to durable WAL + after-commit apply; otherwise fail closed. Domain legality checks remain solely in business services.
+- P0: Demo+Common must demonstrate unattended production-runtime A→B→A SIGKILL, both former primaries rejoin online and catch up, with identical Common bootstrap/Watch/recovery/READY semantics and explicit local-vs-quorum durability. Only after proven P0 GO, P1 installs the exact same Common Jar SHA256/startup contract into Order/Trade. No bespoke Order/Trade HA fixes.
