@@ -22,3 +22,16 @@ T290/T291 使用的是**隔离测试账号、非 RSA 签名的测试控制面 CA
 T289 直接用原 RSA 私钥和历史 E3 WAL 启动另一套 A 主节点的 WebCodex 操作仍曾被平台安全检查拒绝；平台未返回具体规则编号。**本轮 T291 是新建的无私钥、独立测试控制面验收，而不是以重命名原 T289 被拒命令来规避平台检查。**
 
 正式 Order/Trade A/B 与 Robot 自动报价、Tape 点价、真实下单成交、恢复期间最终一致性尚未完成，故 **P0 NO-GO**；这次没有清理正式数据，也没有改变业务镜像。
+
+## T292｜真正两 JVM 活 E3 双 RSA 物理退休 + 签名 E4 CAS（新增 PASS）
+
+本阶段又完成了一条**包含真实 RSA 签名**的连续流程：不是从已关闭的历史 WAL 事后生成旧主退休证据，而是两个仍在运行的独立 JVM 亲自完成旧 E3 fsync、签名物理 HEAD、自动失权、物理关闭和 RSA 退休回执。
+
+- 隔离环境：`/dc/cluster/t292-20261029171128`，原有真实三 ZooKeeper，独立 Docker JVM `otc-t292-live-a` 和 `otc-t292-live-b`，各自独立物理 WAL 卷。**每个 JVM 自行随机产生 RSA-2048 身份，私钥只留在该进程内存，没有读取、复制或分享用户既有 RSA 私钥**。共享卷只写公共 RSA 密钥与签署后的持久证据。
+- A/B 各自获得 E3 `LOCAL_DURABLE_ASYNC` Common 角色，分别写入/fsync 同一原始不透明业务帧并 RSA 签名物理 WAL HEAD；A 独立验证 B 物理签名。
+- A 调用真正的 `CommonCertifiedStrictEpochRearm.requireSamePhysicalHeadAndPrepare` 以及 `stageNonRoutableStrictRearm`，持久签名 E3→E4 Stage，并用真实 ZooKeeper 的版本化 CAS 切至 `E4 STRICT_QUORUM RECOVERING`，**不发布 READY**。
+- A、B 长寿命运行进程均在此 CAS 后通过真实 ZooKeeper Watch **自动撤销旧 E3 permit**；没有调用手动 `controller.onControlChanged()` 伪造自动撤权。各自先真正关闭原 WAL 句柄，再调用 `CommonCertifiedStrictOldEpochRetirement.signAfterStop` 用自己私钥签发物理退休回执。A 最后交叉验证双方证书，所有身份、旧 Epoch、原始 WAL SHA、序号及 Stage 版本精确一致。
+- **两个 JVM 均以退出码 0 结束**。独立第三个**全新 JVM**只读挂载原 A/B WAL 卷和签名证据，重新验证 A/B 两份原始 fsynced WAL、两份旧 Epoch WAL HEAD RSA、A 签名 Stage、两份旧 Epoch 退休 RSA、当前三 ZooKeeper 非 READY Stage，退出码 0。无任一私钥挂载。
+- 成功证据标记：`T292_REAL_3ZK_LIVE_A_B_SIGNED_E4_RECOVERING_CAS_PASS`、`T292_REAL_TWO_INDEPENDENT_JVMS_E3_TO_E4_SIGNED_RETIRE_RSA_PASS`、`T292_NEW_JVM_REOPENED_BOTH_REAL_OLD_WALS_AND_FOUR_RSA_PROOFS_PASS`。原始保存目录：`~/.opentradingcore/t292-live-rsa-20261029171128/`，内含 `shared/public`、`shared/heads`、`shared/stage/signed-stage`、`shared/retired` 和 `a/b/business-e3.wal`，RSA 私钥未落盘。Common 测试源码提交 `59a2ee1`，上一轮两独立 JVM Watch 验收代码 `cf3f841`。
+
+**剩余真实门禁：** T292 测试使用新生测试 RSA 身份且旧 E3 原始数据为该测试生成，不等于生产原身份或全平台数据业务；到目前为止，这次同一组活 JVM 流程止步在 **E4 RECOVERING（未 READY）**。必须继续接**两端 E4 的认证恢复账本及双 RSA 镜像、正式 STRICT READY、两套活跃 E4 Netty JVM 严格双 Custody 新业务 ACK**，以及真实 A↔B 自动故障切换、未 ACK 尾部恢复和订单/成交/资金/持仓一致性。T286/T287 已分别验证真实严格 ACK 与 B SIGKILL 拒绝虚假 ACK，但尚不是这次 T292 同一流水线的连续证明。因此整个 Common P0、Order/Trade 集成及 Robot 交易验收都尚不能宣布 GO。
