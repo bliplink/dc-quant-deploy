@@ -1,0 +1,37 @@
+# T325 Demo business restoration on the SAME formal ZK and exact original signed
+# T181 Common E2 manifest. This overrides only Order/Trade image, node properties,
+# and the read-only original A/B RSA signer directories. Gateway unchanged.
+# Invocation requires T325_CONFIG_ROOT, T325_RSA_ROOT and .env.prod.
+services:
+  ordersvr:
+    image: local/otc-t319-ordersvr:virgin-e2-replica
+    environment:
+      JAVA_OPTS: "-Xms128m -Xmx1g -XX:+ExitOnOutOfMemoryError"
+    volumes:
+      - ${T325_CONFIG_ROOT:?}/OrderSvrA.properties:/srv/dc/dc/OrderSvr/config/application.properties:ro
+      - ${T325_RSA_ROOT:?}/a:/read-only-original-rsa/a:ro
+      - ${T325_RSA_ROOT:?}/public:/read-only-original-rsa/public:ro
+  ordersvr-b:
+    image: local/otc-t319-ordersvr:virgin-e2-replica
+    environment:
+      JAVA_OPTS: "-Xms128m -Xmx1g -XX:+ExitOnOutOfMemoryError"
+    volumes:
+      - ${T325_CONFIG_ROOT:?}/OrderSvrB.properties:/srv/dc/dc/OrderSvr/config/application.properties:ro
+      - ${T325_RSA_ROOT:?}/b:/read-only-original-rsa/b:ro
+      - ${T325_RSA_ROOT:?}/public:/read-only-original-rsa/public:ro
+  tradesvr:
+    image: local/otc-t319-tradesvr:virgin-e2-replica
+    environment:
+      JAVA_OPTS: "-Xms128m -Xmx1g -XX:+ExitOnOutOfMemoryError"
+    volumes:
+      - ${T325_CONFIG_ROOT:?}/TradeSvrA.properties:/srv/dc/dc/TradeSvr/config/application.properties:ro
+      - ${T325_RSA_ROOT:?}/a:/read-only-original-rsa/a:ro
+      - ${T325_RSA_ROOT:?}/public:/read-only-original-rsa/public:ro
+  tradesvr-b:
+    image: local/otc-t319-tradesvr:virgin-e2-replica
+    environment:
+      JAVA_OPTS: "-Xms128m -Xmx1g -XX:+ExitOnOutOfMemoryError"
+    volumes:
+      - ${T325_CONFIG_ROOT:?}/TradeSvrB.properties:/srv/dc/dc/TradeSvr/config/application.properties:ro
+      - ${T325_RSA_ROOT:?}/b:/read-only-original-rsa/b:ro
+      - ${T325_RSA_ROOT:?}/public:/read-only-original-rsa/public:ro
