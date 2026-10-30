@@ -35,6 +35,13 @@
 - **严格自动 Order/Trade A→B→A SIGKILL 故障恢复未开展，本轮仍为 HA NO-GO**。不得用已通过交易/证书证明替代故障注入，亦不得把 T329 物理 ACK 失败尾部冒充已提交。
 - 本地已提交：Order T331 `9761518`、Projection T332 `6005498`、部署 T330 `c3e5c4c`。均未使用 GitHub Actions；本轮无远端 push 断言。
 
+## 本轮追加的金融一致性证据
+
+- 再次只读抽样：两租户累计 **1701 原子撮合 / 1701 签名 Trade ACK**，Order/Trade A/B、Projection 容器全部 RUNNING，重启计数 0；两个 Robot 均 RUNNING，各 40 单。
+- **Trade A/B 原始物理 WAL 256/256 严格逐字节相同**，没有缺失路径或不同哈希。两个非空分区：P022/Epoch2、P234/Epoch2。Order A/B 已独立通过 256/256 WAL 字节一致。
+- Trade Projection 的水位：P022 Epoch2 Seq3419、P234 Epoch2 Seq2302（持续增长），`dc_trade_projection_event` 同期 5721 条、`dc_trade_projection_mutation` 33646 条。按 `location/entity_type` 分组有 ACCOUNT_BALANCE、POSITION、POSTING、OPEN_ORDER、DEDUPE_RESULT 的实际变更；无重复的 Trade 物理事件坐标。
+- 不可将 WAL 字节一致直接等同于自动故障切换成功；这仅证明当前正常运行的物理复制状态。
+
 ## 后续执行边界
 
 首要恢复签名已结算业务事件到 MD/行情/ClickHouse，验证 Kline > 0、用户普通成交及资产一致性，再进入自动 HA 注入。保留 T329 原 WAL 失败证据和整个 T330/T332 已认证运行数据；仅使用正式业务事件发送路径，不允许模拟成交、假 ACK、假 READY。
