@@ -14,7 +14,8 @@
 - `631d144`：`CommonCertifiedRecoverySourceRouter.installCertifiedSources` 及 `CommonCertifiedNodeRuntime.installCertifiedRecoverySources` 在**原已启动的一个 Netty TCP listener** 上对目标分区以 copy-on-write 安装原有 Common 已签名 `RecoverySourceHead/Manifest/Data/DurablePrefix` 控制处理器。必须同时满足当前 Common 物理角色、业务恢复门禁、处理器最终类型和源节点主备约束；禁止 lambda 假成功和重复覆盖。
 - 原有 `replaceCertified` 在分区 Epoch 更换时**撤销旧分区全部签名来源处理器**，必须显式重新认证安装新来源。无第二套 HA，没有 Gateway 改造，没有 ZK WAL 热路径。
 - `CommonCertifiedNodeRuntimeTest` 使用原 Demo RSA 身份和共享 Netty 监听验证同 Epoch 拒绝、业务未追平拒绝、未签名处理器拒绝、重复注册拒绝，以及新 Epoch 目标 Primary 成功挂入同一个端口。定向 **14/14 PASS**。测试控制面使用合成 Epoch grant，**并非真实 ZooKeeper CAS 自动接管**。
-- Common 全量回归及 Order/Trade 最新本地依赖兼容结果需以实际执行结果补录，不得从编译或上述定向推断恢复成功。
+- 完整 Common Maven（带 T293 真实 E4→E5 RSA + T330 原始 P193 只读证据）：**153 suites / 661 tests / 0 failures / 0 errors / 6 skipped，最终 exit 0**。首次并发的旧 Maven 测试曾因同一 `target/` 类文件竞争造成 P193 `NoClassDefFoundError`；**后一次不重叠的完整回归通过**，且 P193 单项重新为 1/1 PASS。不可把并发失败误记为业务 WAL 一致性错误。
+- 本地 Maven 安装同一 Common JAR 后，Order **44 suites / 137 tests / 0 failures / 0 errors / 2 skipped**，Trade **52 suites / 207 tests / 0 failures / 0 errors / 0 skipped**；均 exit 0。两项 Order skipped 仍需在真实证据可用环境单独验收。上述仅证明本地源码兼容，不代表 Docker 交易及自动 HA 已经 PASS。
 
 ## 下一轮必须完成而尚未完成
 
