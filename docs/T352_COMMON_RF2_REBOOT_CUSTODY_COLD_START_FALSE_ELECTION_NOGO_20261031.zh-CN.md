@@ -26,7 +26,7 @@ RF2_DYNAMIC_CUSTODY_DENIED_REASON node=CommonHaDemoB cause=IOException: receipt 
 
 正式 Common `CommonCertifiedPartitionRuntime.openWithCertifiedRecovery` 原已在打开 WAL 后，**先**实例化物理 `DurableWalCertificateCustody`，**再**实例化并验证 `DurableWalCustodyReceiptLedger`，最后才暴露 writer；没有 V19 实验的懒加载回执顺序缺陷。Common `CommonCertifiedFailoverWatch` 也已实现先看到旧 Primary 的真实 live ephemeral lease、之后确认消失才考虑 Stage；不能把 V19 的旧选主误判当成 Common 最新版本已存在的同样缺陷。
 
-追加了正式 Common 回归 `DurableWalCustodyReceiptLedgerTest.fullRestartLoadsPreviousSignedReceiptBeforeNewCustodyHead`：真实 RSA 两节点 seq42 已签 Custody 和双回执；关闭重开两个实际物理证书实例，先验证上一笔回执，再安装 seq43 独立 RSA 证书并收到两份新 fsync 回执，再次重启验收 seq43 完全一致。**定向 9/9 测试通过**，Common 本地 commit `bb37b02`。全量 Maven 最终计数另行记录，不能从定向成功推断整个 HA 通过。
+追加了正式 Common 回归 `DurableWalCustodyReceiptLedgerTest.fullRestartLoadsPreviousSignedReceiptBeforeNewCustodyHead`：真实 RSA 两节点 seq42 已签 Custody 和双回执；关闭重开两个实际物理证书实例，先验证上一笔回执，再安装 seq43 独立 RSA 证书并收到两份新 fsync 回执，再次重启验收 seq43 完全一致。**定向 9/9 测试通过**，Common 本地 commit `bb37b02`。全量 Maven 带 T293 真实 E4→E5 RSA 及 T330 P193 原始只读 WAL 证据路径，**153 suites / 661 tests / 0 failures / 0 errors / 6 skipped，exit 0**。其中原 P193 恢复及 E4→E5 证明不等于完整真实 256 分区自动主切通过；`ATSConfig.ini` 旧测试打印找不到文件但 Maven 退出码为 0。
 
 ## 四、后续保持的单一架构与替换门禁
 
