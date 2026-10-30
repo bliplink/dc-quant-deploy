@@ -8,6 +8,14 @@
 - 本地 Common 原有 `CommonHistoricalCertifiedPrefixWithTailTest` 2/2、`CertifiedDirtyTailBoundaryGuardTest` 8/8、`CommonCertifiedE2LargeColdHistoryTest` 3/3，共 **13/13 PASS**，只证明安全边界代码回归，不证明现场自动恢复。
 - T330 Trade A/B P022 各有 **8853** 条 WAL，文件 SHA256 均为 `c726837bced82c36d9d9ab0760073e8df93ae7eabb9d202f4481f4e7bf75c3f1`；Trade A 存在 seq8838 CommitIndex 文件。此只读核验没有执行 RSA 证书验签，**不提升资金证明级别**；Trade 原先的已认证去重释放证据仍按 T336 报告保持。
 
+## 本轮追加：真实原始 RSA + Custody 证明与 22,667 条回放
+
+- 正式 Order/Trade A/B 容器均确认加载同一 Common JAR：SHA256 `2a8b6c8f5322b3351aed1db65d23e3fc89b447a08205dbcf784bfc1b2f6b5d44`。本轮未重新构建镜像。
+- Common 新增 `CommonT337OriginalP193SignedPrefixTest`：只读取得 T330 原始 P193 A/B WAL、原始 A/B RSA **公钥**（不用私钥），把 WAL、Custody HEAD、双独立持久化回执复制至 JUnit 临时盘，再由现有 `CommonCertifiedE2ReplicaHistory` 和 `DurableWalCustodyReceiptLedger` 进行真正的 RSA、HEAD、签名回执及分窗回放。验证原始 22667 条全部符合认证提交，B 有第 22668 条未认证尾部；原始 A/B WAL 逐字节不变；不发布 ACK/READY。
+- `CommonCertifiedE2LargeColdHistoryTest` 新增模拟 P193 规模的 22667 条双签历史与 1 条未认证 `STATE_REMOVE`，验证签名窗口恢复且禁止旧 WAL 被当作可写认证头。
+- 四个 Common 测试类本地 Maven 合计 **15/15 PASS，0 failed / 0 error / 0 skipped**（原始 RSA 证据用例实际运行），Common 本地提交 `1af4847`，分支 `codex/t177-common-saas-crypto-integration-20261027`。
+- 此证据比单纯 CRC 校验更强，但它仅证明**原始已提交物理记录可认证恢复**。尚未实现 Common 持续运行时的原 Primary 安全撤权、缺证尾部隔离后自动切换/自动重新加入及业务 READY；不得据此将实时服务 NO-GO 改成 GO。
+
 ## 唯一修复边界
 
 1. Common 必须从原物理 RSA/CommitIndex/Custody 独立认证 P193 的最后提交边界 **22667**，确认 ZooKeeper Epoch/assignment/原 Primary 隔离、恢复写屏障及 HEAD SHA 一致。
