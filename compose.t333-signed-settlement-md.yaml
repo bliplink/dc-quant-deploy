@@ -1,0 +1,6 @@
+services:
+  ordersvr:
+    # Common signed WAL/Genesis unchanged. Business notification after signed ACK only.
+    image: local/otc-t333-ordersvr:signed-settled-md
+  ordersvr-b:
+    image: local/otc-t333-ordersvr:signed-settled-md
