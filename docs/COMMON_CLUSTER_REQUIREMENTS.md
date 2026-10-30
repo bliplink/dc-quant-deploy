@@ -5,6 +5,7 @@
 > 本文件为 Common 与独立 byte[] Demo 的开发/放行硬门槛；先全部完成功能、真实自动 HA 和性能压测，才开始 Trade / Order / MD 状态机集成。
 
 > 必须区分模式：LOCAL_DURABLE_ASYNC 可用性优先，但 Primary 永久失效可能丢失未复制的已 ACK 尾部；QUORUM_DURABLE 在实际数据副本持久化证明与证书托管法定数不满足时，不得给严格成功 ACK。两种合同不可静默互换。
+> **2026-10-31 强制修订：** [A/B Home Primary 故障接管/追平后自动切回](COMMON_AB_HOME_PRIMARY_AUTO_FAILBACK_ARCHITECTURE_20261031.zh-CN.md) 覆盖本文 C23 等历史表述。旧主**追平前不得抢主**，追平并经 Epoch CAS 后须自动回到 Home 主分区。A/B 默认 256 分区各 128 主/128 备。
 
 
 ## 架构与扩展
@@ -37,7 +38,7 @@
 - **C20** 验证 A→B 与 B→A 双向自动接管。
 - **C21** 旧主 Epoch fencing；禁止双主、旧主继续提交或发布。
 - **C22** 新主须证明完整覆盖旧 Epoch 最高已 ACK 水位后才能 READY。
-- **C23** 旧 Primary 恢复自动降为 Replica，不得抢回主角色。
+- **C23（2026-10-31 修订）** 旧 Primary 恢复必须先以 Learner/Replica 追平，不得未经认证立即抢主；但若它是该分区固定 Home Primary，追平并证明全部已 ACK 数据与幂等状态一致后，**Common 必须无人干预地完成新 Epoch CAS 自动切回 Home Primary**，恢复原始 128/128 主分工。
 - **C24** 通过 Snapshot + WAL/Diff 自动追平 Replica。
 - **C25** 新节点作为 Learner 追平后，再经授权成员变更进入正式数据副本组。
 - **C26** Replica 故障/卡顿/重启不能拖垮健康 Primary；严格模式不满足数据法定数时拒绝严格成功 ACK。
@@ -70,7 +71,9 @@
 - **T03** SIGKILL Replica 后 Primary 不崩溃；严格法定数不足时安全拒 ACK。
 - **T04** SIGKILL Primary 后无需脚本自动接管，已 ACK 完整。
 - **T05** A→B→A 双向故障自动切换。
+- **T05a（新增）** 256 分区常态 128/128、A 故障 B 负责 256、A 恢复自动回归 128/128；B 故障反向成立；健康分区不中断、无旧主旧 Epoch 复活或切换震荡。
 - **T06** 旧主恢复自动降为 Replica，并追平。
+- **T06a（新增）** 恢复节点追平后无需脚本/人工修改 ZooKeeper，Common 自动执行 Home Primary 回切；验证原 A 的 P000–P127 和原 B 的 P128–P255 重新成为 Primary，接管期间的已 ACK 数据完整保留。
 - **T07** 网络分区或租约失效时无双主、无越权 ACK。
 - **T08** 恢复/安装中再故障后仍可安全重试，不误 READY。
 - **T09** 新增/删除成员和 Learner 自动追平、授权迁移。

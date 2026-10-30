@@ -1,6 +1,9 @@
 # Common HA 轻量选主与分区互备：实施决定
 
 状态：**2026-10-23 用户已确认的目标架构 / 实施中，非生产完成**
+
+> **2026-10-31 决定覆盖本文旧自动抢主禁止项：** 故障节点重连后**先**作为 Learner/Replica 追平；若它是该分区固定 Home Primary，**再**由 Common 自动新 Epoch 切回 Home。常态 A/B 每人 128 主 + 128 备。见 [COMMON_AB_HOME_PRIMARY_AUTO_FAILBACK_ARCHITECTURE_20261031.zh-CN.md](COMMON_AB_HOME_PRIMARY_AUTO_FAILBACK_ARCHITECTURE_20261031.zh-CN.md)。
+
 范围：Common 共用集群基础设施 + 隔离 Demo；通过后才适配 Order、Trade、MD。
 权威验收清单：`docs/COMMON_CLUSTER_REQUIREMENTS.md`；详细历史：`docs/COMMON_HA_SHARD_PLACEMENT_REPLICATION_DESIGN_20261023.zh-CN.md`。
 
@@ -35,7 +38,7 @@
 2. A 故障：有资格的协调者在 ZK 上原子取得新的 `epoch/configVersion/primary` 授权，并确保旧 Epoch 不能继续 ACK、发布或回写 WAL。网络隔离下必须防双主，不能只凭“ping 不通 A”升主。
 3. B 本地校验自己的 WAL、commit watermark、checksum、恢复状态以及覆盖**所有可能已给客户端 ACK** 的安全提交边界。RF2 严格 2/2 的旧 ACK 已要求 B 对相应 WAL 落盘；故障时不需从已死亡 A 再请求全量签名，但必须有**可信持久提交边界**，不能把 `B.lastApplied` 直接视为 `maxAcked`。
 4. ZK 新 Epoch 的 CAS 成功、B 恢复水位证明成立、旧 Epoch Fencing 完成后才能发布 READY。B 旧 Epoch 下提交证书的单节点只读 HEAD 查询**仅是证据收集**，不独立授权接管。
-5. A 重启只能先成为 Learner / Replica：隔离旧 WAL 的未提交分叉尾，安装 Snapshot+WAL / Diff，重新追平并校验才可成为有效数据成员。**不自动抢主**。
+5. A 重启**先**成为 Learner / Replica：隔离旧 WAL 未提交尾部，用 Snapshot+WAL 追平现任 B 的全部已确认记录；严禁未追平直接抢主。**追平并通过当前 Epoch/提交证明后，Common 必须自动把属于 A 的 Home 主分区切回 A**（再升一次 Epoch/CAS），B 成为其 Replica；B 重启时对称执行。
 6. 平时只有“Primary→指定 Replica 的单向批量 WAL 数据”和“Replica→Primary 累计 durable ACK”，无每请求全历史 SHA、重复 RSA 签名或多份单条控制 RPC；故障时 O(RF) 的轻量提交水位比较和 ZK CAS，不能消除必要的认证/防双主条件。
 
 对 RF3，候选 B/C 必须选出确实包含旧多数已 ACK 提交前缀的节点；可复用成熟的一致性日志 Election/Commit 原理或 Common 有界持久水位交叉验证，不允许只选“机器可连、序号最大”却没有证书/任期真实性。**2 节点 buddy 的快速路径不意味着所有 N 节点任意可直接升主。**
