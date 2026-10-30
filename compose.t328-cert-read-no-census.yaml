@@ -1,0 +1,12 @@
+# T328 uses existing formal signed E2 config from compose.t325-business-restore.yaml.
+# Only Order B canary is updated until authentic nonempty WAL rejoin succeeds;
+# do not pass unlisted service names to `up`.
+services:
+  ordersvr:
+    image: local/otc-t328-ordersvr:certified-fetch
+  ordersvr-b:
+    image: local/otc-t328-ordersvr:certified-fetch
+  tradesvr:
+    image: local/otc-t328-tradesvr:certified-fetch
+  tradesvr-b:
+    image: local/otc-t328-tradesvr:certified-fetch
