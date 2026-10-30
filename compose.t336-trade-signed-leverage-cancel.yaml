@@ -1,0 +1,5 @@
+services:
+  tradesvr:
+    image: local/otc-t336-tradesvr:signed-leverage-cancel
+  tradesvr-b:
+    image: local/otc-t336-tradesvr:signed-leverage-cancel

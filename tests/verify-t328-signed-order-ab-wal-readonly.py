@@ -44,15 +44,21 @@ def main():
         if a == b:
             identical += 1
         elif a.startswith(b):
-            unmatched.append((part, ac, bc, ac - bc))
+            unmatched.append((part, 'A', ac, bc, ac - bc))
+        elif b.startswith(a):
+            # P193's certified primary is B, so a B-leading tail is NOT
+            # a fork. It is still unsafe for live writes until independently
+            # certified and reconciled. Never silently accept it.
+            unmatched.append((part, 'B', ac, bc, bc - ac))
         else:
             print("T328_WAL_DIVERGED_NOT_PREFIX partition="+part)
             return 3
     print("T328_ORIGINAL_WAL_CENSUS_PARTITION_EQUAL=%d/256" % identical)
-    for p, ac, bc, excess in unmatched:
-        print("T328_UNCERTIFIED_A_TAIL partition=%s aRecords=%d bRecords=%d excessRecords=%d" % (p, ac, bc, excess))
+    for p, leader, ac, bc, excess in unmatched:
+        print("T328_UNRECONCILED_%s_TAIL partition=%s aRecords=%d bRecords=%d excessRecords=%d" %
+              (leader, p, ac, bc, excess))
     if unmatched:
-        print("T328_ORDER_A_RESTART_BLOCKED unsignedTailPartitions=%d "
+        print("T328_ORDER_AB_RESTART_BLOCKED unmatchedTailPartitions=%d "
               "noTruncation=true noBusinessApply=true" % len(unmatched))
         return 2
     print("T328_ORDER_WAL_BYTE_IDENTICAL_PASS partitions=256")

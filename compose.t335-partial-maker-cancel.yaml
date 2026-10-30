@@ -1,0 +1,9 @@
+services:
+  ordersvr:
+    image: local/otc-t335-ordersvr:partial-cancel
+  ordersvr-b:
+    image: local/otc-t335-ordersvr:partial-cancel
+  tradesvr:
+    image: local/otc-t335-tradesvr:partial-cancel
+  tradesvr-b:
+    image: local/otc-t335-tradesvr:partial-cancel
