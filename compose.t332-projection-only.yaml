@@ -1,0 +1,5 @@
+services:
+  projectionsvr:
+    # Single-service Demo fix. Do not restart Order/Trade/RF2 or Robot.
+    # Base image preserved: local/otc-t252-projectionsvr:installed-image.
+    image: local/otc-t332-projectionsvr:certified-batch
