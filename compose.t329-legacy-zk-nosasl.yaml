@@ -1,0 +1,54 @@
+# T329 legacy discovery clients must not attempt SASL against the existing
+# three-Zookeeper demo quorum, which exposes ordinary ZK sessions only.
+# Common Certified Node Runtime uses its ORIGINAL RSA and signed evidence;
+# these overrides do not touch four Common Order/Trade services.
+services:
+  gateway:
+    image: local/otc-t252-gateway:sha-31b9e15bd7ee
+    environment:
+      JAVA_TOOL_OPTIONS: "-Dzookeeper.sasl.client=false"
+  loginsvr:
+    image: local/otc-t252-loginsvr:installed-image
+    environment:
+      JAVA_TOOL_OPTIONS: "-Dzookeeper.sasl.client=false"
+  managersvr:
+    image: local/otc-t252-managersvr:installed-image
+    environment:
+      JAVA_TOOL_OPTIONS: "-Dzookeeper.sasl.client=false"
+  adminsvr:
+    image: local/otc-t263-adminsvr:verify-retry
+    environment:
+      JAVA_TOOL_OPTIONS: "-Dzookeeper.sasl.client=false"
+  apssvr:
+    image: local/otc-t252-apssvr:installed-image
+    dns:
+      - 1.1.1.1
+      - 8.8.8.8
+    environment:
+      JAVA_TOOL_OPTIONS: "-Dzookeeper.sasl.client=false"
+  projectionsvr:
+    image: local/otc-t252-projectionsvr:installed-image
+    environment:
+      JAVA_TOOL_OPTIONS: "-Dzookeeper.sasl.client=false"
+  liqsvr:
+    image: local/otc-t252-liqsvr:installed-image
+    environment:
+      JAVA_TOOL_OPTIONS: "-Dzookeeper.sasl.client=false"
+  robotsvr:
+    image: local/otc-t252-robotsvr:installed-image
+    environment:
+      JAVA_TOOL_OPTIONS: "-Dzookeeper.sasl.client=false"
+      ROBOT_GATEWAY_USER: ${PLATFORM_ADMIN_USERNAME:?}
+      ROBOT_GATEWAY_PASSWORD: ${PLATFORM_ADMIN_PASSWORD:?}
+  mdsvr:
+    image: local/otc-t252-mdsvr:sha-3d096c5d8e99
+    environment:
+      JAVA_TOOL_OPTIONS: "-Dzookeeper.sasl.client=false"
+  mdsvr-b:
+    image: local/otc-t252-mdsvr:sha-3d096c5d8e99
+    environment:
+      JAVA_TOOL_OPTIONS: "-Dzookeeper.sasl.client=false"
+  mdsvr-c:
+    image: local/otc-t252-mdsvr:sha-3d096c5d8e99
+    environment:
+      JAVA_TOOL_OPTIONS: "-Dzookeeper.sasl.client=false"

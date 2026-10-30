@@ -63,6 +63,14 @@ def main():
         "client_type": "TenantAdmin", "Location": location,
     })
     assert login["token"] and login["location"] == location
+    if os.environ.get("T329_ROUTE_PROBE") == "1":
+        # Safe read-only probe; never print or persist the tenant session.
+        for target in ("TradeSvr", "TradeSvrA", "TradeSvrB", "OrderSvr"):
+            body = json.dumps({"serverName": target, "method": "__t329_read_only_route_probe__", "key": location, "content": {"cid": "T329_ROUTE"}}).encode()
+            req = urllib.request.Request(ENDPOINT, data=body, headers={"Content-Type": "application/json", "sessionId": login["token"]})
+            with urllib.request.urlopen(req, timeout=12) as response:
+                result = json.load(response)
+            print(json.dumps({"t329_route": target, "code": result.get("code"), "msg": result.get("msg", "")}, ensure_ascii=False))
     pending = call("ManagerSvr", "tenantApplication", {
         "action": "SUBMIT", "cid": f"MANUAL_E2E_{suffix}",
         "request_id": f"MANUAL_E2E_{suffix}",

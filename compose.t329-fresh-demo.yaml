@@ -1,0 +1,80 @@
+# T329 fresh demo. Old T325 signed WAL, original MySQL, and original
+# ClickHouse are left on disk. This overlay uses an existing UNUSED T318
+# real signed Common E2 Genesis and live 3-ZK READY: no forged signatures.
+# JAVA_OPTS -D properties override the original T319 bridge-network tests
+# without modifying original signed birth, original RSA, or Gateway.
+x-t329-zk: &t329-zk "192.168.128.7:2181,192.168.128.8:2181,192.168.128.9:2181"
+services:
+  mysql:
+    volumes:
+      - ${DEPLOY_ROOT}/data/t329-fresh-mysql:/var/lib/mysql
+      - ./mysql/init:/docker-entrypoint-initdb.d:ro
+  clickhouse:
+    volumes:
+      - ${DEPLOY_ROOT}/data/t329-fresh-clickhouse:/var/lib/clickhouse
+      - ${DEPLOY_ROOT}/log/clickhouse:/var/log/clickhouse-server
+      - ./clickhouse/saas-init:/docker-entrypoint-initdb.d:ro
+      - ./clickhouse/users.d/20-saas-memory.xml:/etc/clickhouse-server/users.d/20-saas-memory.xml:ro
+      - ${DEPLOY_ROOT}/control/clickhouse-ports.xml:/etc/clickhouse-server/config.d/10-saas-ports.xml:ro
+      - ${DEPLOY_ROOT}/control/clickhouse-client.xml:/etc/clickhouse-client/config.xml:ro
+      - ${DEPLOY_ROOT}/control/clickhouse-docker-related.xml:/etc/clickhouse-server/config.d/docker_related_config.xml:ro
+  ordersvr:
+    image: local/otc-t328-ordersvr:certified-fetch
+    environment:
+      JAVA_OPTS: >-
+        -Xms128m -Xmx1g -XX:+ExitOnOutOfMemoryError
+        -Dorder.common.control.zkHosts=192.168.128.7:2181,192.168.128.8:2181,192.168.128.9:2181
+        -Dorder.common.nodeRuntime.nettyPeers=OrderSvrA@127.0.0.1:45322,OrderSvrB@127.0.0.1:45323
+        -Dorder.common.nodeRuntime.dataRoot=/srv/dc/data/t329-fresh/OrderSvr/OrderSvrA
+        -Dorder.common.gatewayDiscovery.enabled=true
+        -Dorder.common.gatewayDiscovery.host=127.0.0.1
+    volumes:
+      - ${T329_T318_BIRTH_ROOT:?}:/srv/dc/data/t318-born:ro
+      - ${T329_T319_ROOT:?}/order/A/application.v4.properties:/srv/dc/dc/OrderSvr/config/application.properties:ro
+      - ${T329_RSA_ROOT:?}/a:/read-only-original-rsa/a:ro
+      - ${T329_RSA_ROOT:?}/public:/read-only-original-rsa/public:ro
+  ordersvr-b:
+    image: local/otc-t328-ordersvr:certified-fetch
+    environment:
+      JAVA_OPTS: >-
+        -Xms128m -Xmx1g -XX:+ExitOnOutOfMemoryError
+        -Dorder.common.control.zkHosts=192.168.128.7:2181,192.168.128.8:2181,192.168.128.9:2181
+        -Dorder.common.nodeRuntime.nettyPeers=OrderSvrA@127.0.0.1:45322,OrderSvrB@127.0.0.1:45323
+        -Dorder.common.nodeRuntime.dataRoot=/srv/dc/data/t329-fresh/OrderSvr/OrderSvrB
+        -Dorder.common.gatewayDiscovery.enabled=true
+        -Dorder.common.gatewayDiscovery.host=127.0.0.1
+    volumes:
+      - ${T329_T318_BIRTH_ROOT:?}:/srv/dc/data/t318-born:ro
+      - ${T329_T319_ROOT:?}/order/B/application.v4.properties:/srv/dc/dc/OrderSvr/config/application.properties:ro
+      - ${T329_RSA_ROOT:?}/b:/read-only-original-rsa/b:ro
+      - ${T329_RSA_ROOT:?}/public:/read-only-original-rsa/public:ro
+  tradesvr:
+    image: local/otc-t328-tradesvr:certified-fetch
+    environment:
+      JAVA_OPTS: >-
+        -Xms128m -Xmx1g -XX:+ExitOnOutOfMemoryError
+        -Dtrade.common.control.zkHosts=192.168.128.7:2181,192.168.128.8:2181,192.168.128.9:2181
+        -Dtrade.common.nodeRuntime.nettyPeers=TradeSvrA@127.0.0.1:45222,TradeSvrB@127.0.0.1:45223
+        -Dtrade.common.nodeRuntime.dataRoot=/srv/dc/data/t329-fresh/TradeSvr/TradeSvrA
+        -Dtrade.common.gatewayDiscovery.enabled=true
+        -Dtrade.common.gatewayDiscovery.host=127.0.0.1
+    volumes:
+      - ${T329_T318_BIRTH_ROOT:?}:/srv/dc/data/t318-born:ro
+      - ${T329_T319_ROOT:?}/trade/A/application.v4.properties:/srv/dc/dc/TradeSvr/config/application.properties:ro
+      - ${T329_RSA_ROOT:?}/a:/read-only-original-rsa/a:ro
+      - ${T329_RSA_ROOT:?}/public:/read-only-original-rsa/public:ro
+  tradesvr-b:
+    image: local/otc-t328-tradesvr:certified-fetch
+    environment:
+      JAVA_OPTS: >-
+        -Xms128m -Xmx1g -XX:+ExitOnOutOfMemoryError
+        -Dtrade.common.control.zkHosts=192.168.128.7:2181,192.168.128.8:2181,192.168.128.9:2181
+        -Dtrade.common.nodeRuntime.nettyPeers=TradeSvrA@127.0.0.1:45222,TradeSvrB@127.0.0.1:45223
+        -Dtrade.common.nodeRuntime.dataRoot=/srv/dc/data/t329-fresh/TradeSvr/TradeSvrB
+        -Dtrade.common.gatewayDiscovery.enabled=true
+        -Dtrade.common.gatewayDiscovery.host=127.0.0.1
+    volumes:
+      - ${T329_T318_BIRTH_ROOT:?}:/srv/dc/data/t318-born:ro
+      - ${T329_T319_ROOT:?}/trade/B/application.v4.properties:/srv/dc/dc/TradeSvr/config/application.properties:ro
+      - ${T329_RSA_ROOT:?}/b:/read-only-original-rsa/b:ro
+      - ${T329_RSA_ROOT:?}/public:/read-only-original-rsa/public:ro
