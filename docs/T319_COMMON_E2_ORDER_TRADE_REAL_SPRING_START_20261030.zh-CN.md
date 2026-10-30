@@ -35,3 +35,10 @@
 - 因远端 `saas-crypto` 跟踪分支与本地严重分叉，本轮只在**本地 Git**提交，不使用 GitHub Actions、不强推。
 
 **下一阶段门禁：**在完整隔离交易环境把 Gateway→新租户自动审批→Robot 报价/Tape 点价→真实下单成交→交易时 Order/Trade A/B 自动互切→订单/成交/资金/持仓一致性全部连续验证；全 PASS 后才允许替换 Demo 现有容器。若测试数据可丢，用原 Mac 一键部署脚本重新注册租户，不引入任何额外业务或 HA 机制。
+
+## 2026-10-30 隔离环境复核与修复（不构成正式 GO）
+
+- WebCodex 再次实际核查 `otc-t319-order-a/b` 与 `otc-t319-trade-a/b` 四个容器：全部 `running`，退出码 0，四台都有真实 Spring `Started` 日志；后续最近 30 秒 `ERROR` 均为 0。仅证明启动稳定，尚无业务交易 ACK 证据。
+- 发现本轮隔离 `otc-t319-mysql` 缺少 `dc_bankruptcy_transfer` / `dc_adl_execution_v2`，导致 Trade A/B `PendingPositionAdlRecovery` 循环报 SQL 缺表错误。对**隔离数据库**执行仓库现有 `mysql/migrations/20260904_01_bankruptcy_insurance_adl.sql` 后，两表可查询且当前各 0 行，Trade A/B 最近 30 秒不再报告该错误。没有改正式 MySQL、业务代码或 Common 门禁。
+- Mac 数据盘仅余约 115 MiB 时，删除 `.work` 下若干**可再编译** Maven `target` 与 `~/.opentradingcore/local-ha-*20261011/source/{tradesvr,mdsvr}/target`，可用空间恢复到约 4.2 GiB。原源码、Git、容器、数据库、RSA、WAL、原始 HA 证据均保留。
+- 正式 `dc-saas-ordersvr-b/c` 与 `dc-saas-robotsvr` 仍退出，隔离环境未接正式 Gateway/Robot。Common 严格模式从 `SIGKILL` 到 `READY` 的完成操作在 T308 测试流程中仍显式调用；无人值守 A→B→A 并在线双向重新追平尚缺完整 P0 证据。因此正式 Order/Trade 恢复及业务 E2E **继续 NO-GO**。
