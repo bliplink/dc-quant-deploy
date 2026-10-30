@@ -1,0 +1,4 @@
+services:
+  projectionsvr:
+    # T332 batch replay retained; bounded fetch timeout and late-response fencing.
+    image: local/otc-t334-projectionsvr:fetch-timeout
