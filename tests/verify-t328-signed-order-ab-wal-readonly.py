@@ -6,10 +6,10 @@ import struct
 import sys
 import zlib
 
-ROOT = Path(os.environ.get(
-    "T328_SIGNED_ORDER_WAL_ROOT",
-    str(Path.home() / ".opentradingcore/dc-saas-runtime-clean-20261016/"
-        "data/t325-trading-e2/OrderSvr")))
+# Avoid silently inspecting a stale generation (the former T325 default).
+# Explicitly select the exact root for the run being audited.
+RAW_ROOT = os.environ.get("T328_SIGNED_ORDER_WAL_ROOT", "").strip()
+ROOT = Path(RAW_ROOT).expanduser() if RAW_ROOT else None
 
 def inspect(wal):
     data = wal.read_bytes()
@@ -29,6 +29,10 @@ def inspect(wal):
     return data, seq
 
 def main():
+    if ROOT is None or not ROOT.is_absolute() or not ROOT.is_dir() or ROOT.is_symlink():
+        print("T328_WAL_ROOT_REQUIRED: set T328_SIGNED_ORDER_WAL_ROOT to an existing absolute non-symlink OrderSvr generation root", file=sys.stderr)
+        return 4
+    print("T328_SIGNED_ORDER_WAL_ROOT=" + str(ROOT))
     identical = 0
     unmatched = []
     for i in range(256):
