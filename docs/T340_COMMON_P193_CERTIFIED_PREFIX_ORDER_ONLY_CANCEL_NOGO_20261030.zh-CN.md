@@ -13,6 +13,8 @@
 - 在 **Common 原有 WAL 类** `CommonFileBusinessWal` 添加 `stageCertifiedPrefixCopy`：仅允许原 WAL read-only 打开、独立 A+B RSA CommitIndex/累计 Custody 回执验证，复制精确原始认证前缀到不曾存在的全新目标文件，强制落盘；拒绝覆盖目标，保留原 A/B WAL 不变，绝不签发 ACK/READY。
 - 用原始 Mac T330 P193 WAL + 原 A/B RSA 公钥 + Custody/Receipt 完成单测：新候选文件逐字节等同 A 原认证 22667 条，B 的未认证第 22668 条不会被当作成功或直接删除；原始证据不变。Common 4 套专项 **15/15 PASS, 0 skipped**。
 - 本地 Common commit `57161f4`，分支 `codex/t177-common-saas-crypto-integration-20261027`。前置 T337 原 RSA 验证 commit `1af4847`。
+- Common Maven **全量回归 153 suites / 654 tests / 0 failures / 0 errors / 62 skipped，exit 0**。其中原始 P193 RSA 证据用例带真实磁盘路径执行，0 跳过；其余 62 项跳过仍不能代替真实自动 HA 验收。
+- 本轮最后的原始 WAL 只读 Census 仍为 **255/256 匹配，P193 A=22667、B=22668**，工具退出 2（预期 NO-GO）。现网 Order A/B T335、Trade A/B T336、Projection T334 仍 running 且重启数 0；Robot exited。没有替换运行容器。
 - **未完成：** Common 仍未把带权威 ZK / 旧 Primary 实际撤权/冻结 / 新 Epoch 启动的前缀候选安全接线进在线恢复。没有替换在线 Order/Trade 容器，没对真实 WAL 截断、清空、清账、另造证书或强制 READY。没有实际运行 ORDER_ONLY、Robot 和 SIGKILL。Live E2E、A↔B HA 仍 **NO-GO**。
 - 关键边界：Common 只处理不透明 `byte[]` WAL，Order/Trade 仍由各自业务状态机负责。不得为了修 P193 而引入 Order/Trade 特制 HA 或对第 22668 条未认证 terminal 付款 / 重放。
 
