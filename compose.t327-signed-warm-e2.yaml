@@ -1,0 +1,12 @@
+# T327: same original T325 signed E2 namespace, original RSA, business data,
+# Gateway registration, and MySQL as T325. Only local Order/Trade images change.
+# Strict nonempty E2 requires verified old signed custody and business replay.
+services:
+  ordersvr:
+    image: local/otc-t327-ordersvr:signed-warm-e2
+  ordersvr-b:
+    image: local/otc-t327-ordersvr:signed-warm-e2
+  tradesvr:
+    image: local/otc-t327-tradesvr:signed-warm-e2
+  tradesvr-b:
+    image: local/otc-t327-tradesvr:signed-warm-e2

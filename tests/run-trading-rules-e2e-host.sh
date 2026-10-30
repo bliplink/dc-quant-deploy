@@ -11,13 +11,16 @@ TAKER="${RULE_E2E_TAKER:-ruletaker}"
 SELF_USER="${RULE_E2E_SELF_USER:-ruleself}"
 RUN_ID="${RULE_E2E_RUN_ID:-$(date +%Y%m%d%H%M%S)}"
 RULE_PASSWORD="${RULE_E2E_PASSWORD:-${E2E_PASSWORD:-}}"
+RULE_AUTOGENERATE_PASSWORD="${RULE_E2E_AUTOGENERATE_PASSWORD:-false}"
+RULE_RESTART_SERVICES="${RULE_E2E_RESTART_SERVICES:-true}"
+RULE_PAUSE_LIQSVR="${RULE_E2E_PAUSE_LIQSVR:-true}"
 
 log() { printf '[rules-e2e] %s\n' "$*"; }
 die() { printf '[rules-e2e] ERROR: %s\n' "$*" >&2; exit 1; }
 safe_identifier() { [[ "$1" =~ ^[A-Za-z0-9_.-]+$ ]]; }
+is_true() { [[ "$1" == "true" || "$1" == "1" || "$1" == "yes" ]]; }
 
 [[ -r "${ENV_FILE}" ]] || die "Cannot read ${ENV_FILE}"
-[[ -n "${RULE_PASSWORD}" ]] || die "RULE_E2E_PASSWORD or E2E_PASSWORD is required"
 for value in "${RULE_LOCATION}" "${MAKER_ONE}" "${MAKER_TWO}" "${TAKER}" "${SELF_USER}" "${RUN_ID}"; do
   safe_identifier "${value}" || die "Unsupported identifier: ${value}"
 done
@@ -26,6 +29,16 @@ set -a
 # shellcheck disable=SC1090
 . "${ENV_FILE}"
 set +a
+
+if [[ -z "${RULE_PASSWORD}" ]]; then
+  RULE_PASSWORD="${RULE_E2E_PASSWORD:-${E2E_PASSWORD:-}}"
+fi
+if [[ -z "${RULE_PASSWORD}" ]] && is_true "${RULE_AUTOGENERATE_PASSWORD}"; then
+  [[ "${RULE_LOCATION}" =~ (^|_)E2E($|_) ]] ||
+    die "Automatic password generation is restricted to isolated *_E2E locations"
+  RULE_PASSWORD="$(uuidgen 2>/dev/null || python3 -c 'import uuid; print(uuid.uuid4())')"
+fi
+[[ -n "${RULE_PASSWORD}" ]] || die "RULE_E2E_PASSWORD or E2E_PASSWORD is required"
 
 # shellcheck source=restart-order-trade-e2e.sh
 . "${SCRIPT_DIR}/restart-order-trade-e2e.sh"
@@ -40,15 +53,19 @@ else
 fi
 
 liq_was_running="$(docker inspect --format '{{.State.Running}}' dc-saas-liqsvr 2>/dev/null || true)"
+liq_paused=false
 restore_liqsvr() {
-  if [[ "${liq_was_running}" == "true" ]]; then
+  if [[ "${liq_paused}" == "true" && "${liq_was_running}" == "true" ]]; then
     docker start dc-saas-liqsvr >/dev/null 2>&1 || true
   fi
 }
 trap restore_liqsvr EXIT
-if [[ "${liq_was_running}" == "true" ]]; then
+if is_true "${RULE_PAUSE_LIQSVR}" && [[ "${liq_was_running}" == "true" ]]; then
   log "Pausing LiqSvr so background liquidation cannot consume deterministic rule-test liquidity."
   docker stop dc-saas-liqsvr >/dev/null
+  liq_paused=true
+else
+  log "Keeping LiqSvr in its current state during this rule-test run."
 fi
 
 mysql_exec() {
@@ -161,7 +178,7 @@ api() {
 place() {
   local user="$1" side="$2" qty="$3" price="$4" tif="$5" clid="$6"
   local ord_type="${7:-Limit}" oc_type="${8:-OPEN}" reduce_only="${9:-false}"
-  api placeOrder "{\"OCType\":\"${oc_type}\",\"OrderQty\":\"${qty}\",\"OrdType\":\"${ord_type}\",\"ClOrdID\":\"${clid}\",\"Terminal\":\"API\",\"AlgoName\":\"cross\",\"Side\":\"${side}\",\"Price\":\"${price}\",\"UserID\":\"${user}\",\"MarketIndicator\":\"4\",\"TimeInForce\":\"${tif}\",\"SecurityID\":\"BTCUSDT\",\"ReduceOnly\":\"${reduce_only}\",\"Location\":\"${RULE_LOCATION}\"}" "${user}"
+  api placeOrder "{\"OCType\":\"${oc_type}\",\"OrderQty\":\"${qty}\",\"OrdType\":\"${ord_type}\",\"ClOrdID\":\"${clid}\",\"Terminal\":\"API\",\"AlgoName\":\"cross\",\"Side\":\"${side}\",\"Price\":\"${price}\",\"UserID\":\"${user}\",\"MarketIndicator\":\"4\",\"TimeInForce\":\"${tif}\",\"SecurityID\":\"BTCUSDT\",\"ReduceOnly\":\"${reduce_only}\",\"Demo\":\"0\",\"Location\":\"${RULE_LOCATION}\"}" "${user}"
 }
 
 assert_success() {
@@ -181,7 +198,7 @@ response_order_id() {
 
 wait_order() {
   local clid="$1" status="$2" count="0"
-  for _ in $(seq 1 60); do
+  for _ in $(seq 1 120); do
     count="$({
       cat <<SQL
 SELECT COUNT(*) FROM dc.dc_orders WHERE location='${RULE_LOCATION}' AND clord_id='${clid}' AND ord_status='${status}';
@@ -190,8 +207,25 @@ SQL
     [[ "${count}" == "1" ]] && return 0
     sleep 1
   done
-  die "Order ${clid} did not reach ${status}"
+  local actual
+  actual="$(mysql_exec dc -e "SELECT COALESCE(GROUP_CONCAT(ord_status),'MISSING') FROM dc.dc_orders WHERE location='${RULE_LOCATION}' AND clord_id='${clid}';")"
+  die "Order ${clid} did not reach ${status} within 120s (actual=${actual})"
 }
+
+# Every strict Common cashIn is immutable and replayed on a cold E2 restart.
+# The legacy fixture below resets MySQL rows: that MUST NOT run for a reused
+# location or previously registered trading identity. On a rerun, use a fresh
+# *_E2E location AND fresh user IDs; never delete signed funds/projections.
+preexisting_fixture_rows="$(mysql_exec -e "
+SELECT (SELECT COUNT(*) FROM dc.dc_users WHERE location='${RULE_LOCATION}'
+          AND user_id IN ('${MAKER_ONE}','${MAKER_TWO}','${TAKER}','${SELF_USER}'))
+     + (SELECT COUNT(*) FROM dc.dc_users_posting WHERE location='${RULE_LOCATION}'
+          AND user_id IN ('${MAKER_ONE}','${MAKER_TWO}','${TAKER}','${SELF_USER}'))
+     + (SELECT COUNT(*) FROM dc.dc_orders WHERE location='${RULE_LOCATION}'
+          AND user_id IN ('${MAKER_ONE}','${MAKER_TWO}','${TAKER}','${SELF_USER}'));
+" dc)"
+[[ "${preexisting_fixture_rows}" == "0" ]] ||
+  die "Existing Common-certified trading fixture cannot be SQL-reset (${preexisting_fixture_rows} rows). Use a fresh *_E2E location and fresh user IDs."
 
 log "Preparing deterministic rule-test accounts in ${RULE_LOCATION}."
 {
@@ -238,7 +272,11 @@ COMMIT;
 SQL
 } | mysql_exec dc
 
-restart_order_trade_for_e2e
+if is_true "${RULE_RESTART_SERVICES}"; then
+  restart_order_trade_for_e2e
+else
+  log "Keeping running OrderSvr/TradeSvr instances; only readiness will be checked."
+fi
 wait_for_route OrderSvr
 wait_for_route TradeSvr
 # Keep MDSvr online as well. Its Common client must restore OrderSvr execution
@@ -249,7 +287,7 @@ for user in "${MAKER_ONE}" "${MAKER_TWO}" "${TAKER}" "${SELF_USER}"; do
   # Direct SQL is only the durable baseline. Publish the account through the
   # clustered TradeSvr mutation path so ACCOUNT_BALANCE/UPSERT is journaled
   # after the recovery boundary and available in hot state.
-  trade_api cashIn "{\"Amount\":\"100000\",\"UserID\":\"${user}\",\"Location\":\"${RULE_LOCATION}\",\"Demo\":\"1\"}" "${user}"
+  trade_api cashIn "{\"Amount\":\"100000\",\"UserID\":\"${user}\",\"Location\":\"${RULE_LOCATION}\",\"Demo\":\"0\",\"Info1\":\"RULE_${RUN_ID}_${user}\"}" "${user}"
   assert_success
 done
 
@@ -320,13 +358,18 @@ place "${MAKER_TWO}" Sell 0.0001 60200 GTC "RULE-${RUN_ID}-FIFO-TWO"; assert_suc
 wait_order "RULE-${RUN_ID}-FIFO-TWO" New
 place "${TAKER}" Buy 0.0001 60200 GTC "RULE-${RUN_ID}-FIFO-TAKER"; assert_success
 wait_order "RULE-${RUN_ID}-FIFO-TAKER" Filled
-fifo_check="$({
-  cat <<SQL
+fifo_check=""
+for _ in $(seq 1 30); do
+  fifo_check="$({
+    cat <<SQL
 SELECT IF((SELECT ord_status FROM dc.dc_orders WHERE location='${RULE_LOCATION}' AND clord_id='RULE-${RUN_ID}-FIFO-ONE')='Filled'
  AND (SELECT ord_status FROM dc.dc_orders WHERE location='${RULE_LOCATION}' AND clord_id='RULE-${RUN_ID}-FIFO-TWO')='New',1,0);
 SQL
-} | mysql_exec dc)"
-[[ "${fifo_check}" == "1" ]] || die "Same-price orders did not follow time priority"
+  } | mysql_exec dc)"
+  [[ "${fifo_check}" == "1" ]] && break
+  sleep 1
+done
+[[ "${fifo_check}" == "1" ]] || die "Same-price orders did not follow time priority after projection convergence"
 
 # FIFO-TWO is intentionally left resting by the priority assertion. Remove it
 # before the STP case so the self-cross is the best (and only) eligible match.
@@ -376,7 +419,7 @@ place "${MAKER_TWO}" Sell 0.0001 80000 GTC "${original_clid}"; assert_success
 original_id="$(response_order_id)"
 wait_order "${original_clid}" New
 replacement_clid="RULE-${RUN_ID}-REPLACE-NEW"
-api replaceOrder "{\"RefOrderID\":\"${original_id}\",\"OCType\":\"OPEN\",\"OrderQty\":\"0.0002\",\"OrdType\":\"Limit\",\"ClOrdID\":\"${replacement_clid}\",\"Terminal\":\"API\",\"AlgoName\":\"cross\",\"Side\":\"Sell\",\"Price\":\"79900\",\"UserID\":\"${MAKER_TWO}\",\"MarketIndicator\":\"4\",\"TimeInForce\":\"GTC\",\"SecurityID\":\"BTCUSDT\",\"ReduceOnly\":\"false\",\"Location\":\"${RULE_LOCATION}\"}" "${MAKER_TWO}"
+api replaceOrder "{\"RefOrderID\":\"${original_id}\",\"OCType\":\"OPEN\",\"OrderQty\":\"0.0002\",\"OrdType\":\"Limit\",\"ClOrdID\":\"${replacement_clid}\",\"Terminal\":\"API\",\"AlgoName\":\"cross\",\"Side\":\"Sell\",\"Price\":\"79900\",\"UserID\":\"${MAKER_TWO}\",\"MarketIndicator\":\"4\",\"TimeInForce\":\"GTC\",\"SecurityID\":\"BTCUSDT\",\"ReduceOnly\":\"false\",\"Demo\":\"0\",\"Location\":\"${RULE_LOCATION}\"}" "${MAKER_TWO}"
 assert_success
 wait_order "${original_clid}" Cancelled
 wait_order "${replacement_clid}" New
@@ -430,7 +473,7 @@ wait_order "RULE-${RUN_ID}-CLOSE-LONG" Filled
 log "Checking attached TP/SL creation, last-price trigger, OCO sibling cancel and reduce-only close."
 place "${MAKER_ONE}" Sell 0.0003 60400 GTC "RULE-${RUN_ID}-BRACKET-MAKER"; assert_success
 wait_order "RULE-${RUN_ID}-BRACKET-MAKER" New
-api placeOrder "{\"OCType\":\"OPEN\",\"OrderQty\":\"0.0003\",\"OrdType\":\"Limit\",\"ClOrdID\":\"RULE-${RUN_ID}-BRACKET-OPEN\",\"Terminal\":\"API\",\"AlgoName\":\"cross\",\"Side\":\"Buy\",\"Price\":\"60400\",\"UserID\":\"${TAKER}\",\"MarketIndicator\":\"4\",\"TimeInForce\":\"GTC\",\"SecurityID\":\"BTCUSDT\",\"ReduceOnly\":\"false\",\"TakeProfitPrice\":\"60500\",\"StopLossPrice\":\"60300\",\"TriggerType\":\"LastPrice\",\"Location\":\"${RULE_LOCATION}\"}" "${TAKER}"
+api placeOrder "{\"OCType\":\"OPEN\",\"OrderQty\":\"0.0003\",\"OrdType\":\"Limit\",\"ClOrdID\":\"RULE-${RUN_ID}-BRACKET-OPEN\",\"Terminal\":\"API\",\"AlgoName\":\"cross\",\"Side\":\"Buy\",\"Price\":\"60400\",\"UserID\":\"${TAKER}\",\"MarketIndicator\":\"4\",\"TimeInForce\":\"GTC\",\"SecurityID\":\"BTCUSDT\",\"ReduceOnly\":\"false\",\"TakeProfitPrice\":\"60500\",\"StopLossPrice\":\"59000\",\"TriggerType\":\"LastPrice\",\"Location\":\"${RULE_LOCATION}\"}" "${TAKER}"
 assert_success
 wait_order "RULE-${RUN_ID}-BRACKET-OPEN" Filled
 bracket_parent_id="$({
