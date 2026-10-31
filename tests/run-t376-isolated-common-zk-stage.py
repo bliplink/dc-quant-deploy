@@ -1,0 +1,233 @@
+#!/usr/bin/env python3
+"""T376 real ZooKeeper E1 -> E2 RECOVERING stage with isolated Docker network.
+
+This is deliberately NOT full HA READY: automatic survivor watches stage a
+real ZK CAS only after a genuine test JVM SIGKILL. No signed business WAL
+replay or new-Epoch READY is asserted by this stage test.
+
+Never shares networks, ZooKeeper data or files with Order/Trade Demo.
+"""
+import argparse
+import hashlib
+import os
+import pathlib
+import secrets
+import shutil
+import subprocess
+import time
+
+ZK_IMAGE = "docker.m.daocloud.io/library/zookeeper:3.8.4"
+DEMO_IMAGE = "dc-saas/gw:cluster-dev-fenced-transport-20261016"
+ZOO_SERVERS = ("server.1=t376-zk1:2888:3888;2181 "
+               "server.2=t376-zk2:2888:3888;2181 "
+               "server.3=t376-zk3:2888:3888;2181")
+
+
+def run(argv, timeout=35, env=None):
+    return subprocess.run([str(a) for a in argv], capture_output=True,
+                          text=True, env=env, timeout=timeout)
+
+
+def compose_text(net_name):
+    parts = ["services:"]
+    for n in range(1, 4):
+        parts.extend([
+            "  zk"+str(n)+":",
+            "    image: "+ZK_IMAGE,
+            "    environment:",
+            '      ZOO_MY_ID: "'+str(n)+'"',
+            '      ZOO_SERVERS: "'+ZOO_SERVERS+'"',
+            '      ZOO_4LW_COMMANDS_WHITELIST: "ruok,stat,mntr"',
+            '      JVMFLAGS: "-Xms64m -Xmx256m"',
+            "    networks:",
+            "      isolated:",
+            "        aliases:",
+            "          - t376-zk"+str(n),
+            "          - otc-t84-source-integrated-otc-ha-zk"+str(n)+"-1",
+        ])
+    parts.extend(["networks:", "  isolated:", "    name: "+net_name])
+    return "\n".join(parts)+"\n"
+TEST_RSA_WITNESS_GENERATOR = r"""
+import java.nio.file.*;
+import java.security.*;
+import java.util.*;
+public class T376IsolatedWitnessKeys {
+ public static void main(String[] args) throws Exception {
+  Path root=Paths.get(args[0]);
+  Path[] privateFiles={
+    root.resolve("a/node.pk8"),
+    root.resolve("b/node.pk8"),
+    root.resolve("c/node.pk8")};
+  Path[] publicFiles={
+    root.resolve("public/CommonHaDemoA.pub.der"),
+    root.resolve("public/CommonHaDemoB.pub.der"),
+    root.resolve("public/CommonHaDemoC.pub.der")};
+  boolean all=true,any=false;
+  for(Path p:privateFiles){all&=Files.isRegularFile(p);any|=Files.exists(p);}
+  for(Path p:publicFiles){all&=Files.isRegularFile(p);any|=Files.exists(p);}
+  if(all){System.out.println("T376_WITNESS_TEST_RSA_REUSED");return;}
+  if(any)throw new IllegalStateException("partial test keys; no overwrite allowed");
+  KeyPairGenerator generator=KeyPairGenerator.getInstance("RSA");
+  generator.initialize(2048);
+  for(int i=0;i<3;i++){
+   Files.createDirectories(privateFiles[i].getParent());
+   Files.createDirectories(publicFiles[i].getParent());
+   KeyPair pair=generator.generateKeyPair();
+   Files.write(privateFiles[i],pair.getPrivate().getEncoded(),StandardOpenOption.CREATE_NEW);
+   Files.write(publicFiles[i],pair.getPublic().getEncoded(),StandardOpenOption.CREATE_NEW);
+   Files.setPosixFilePermissions(privateFiles[i],
+         java.nio.file.attribute.PosixFilePermissions.fromString("rw-------"));
+  }
+  System.out.println("T376_ISOLATED_A_B_C_TEST_RSA_CREATED");
+ }
+}
+"""
+
+
+def main():
+    ap=argparse.ArgumentParser()
+    ap.add_argument("--worktree",type=pathlib.Path,required=True)
+    ap.add_argument("--base",type=pathlib.Path,required=True)
+    ap.add_argument("--expected-sha256",required=True)
+    ap.add_argument("--mode",choices=["stage","signed-replay","signed-rejoin","signed-reverse","signed-cycle"],default="stage")
+    args=ap.parse_args()
+    wt=args.worktree.resolve(strict=True)
+    base=args.base.resolve(strict=True)
+    jar=wt/"target/t375-common-certified-automatic-recovery.jar"
+    if not jar.is_file():
+        raise RuntimeError("no isolated Common T375 candidate")
+    digest=hashlib.sha256(jar.read_bytes()).hexdigest()
+    if digest!=args.expected_sha256:
+        raise RuntimeError("Common candidate JAR digest mismatch; fail closed")
+    demo=wt/"examples/common-only-demo"
+    base_demo=base/"examples/common-only-demo"
+    for relative in ("target/classes","target/test-classes"):
+        dest=demo/relative
+        if not dest.exists():
+            shutil.copytree(base_demo/relative,dest)
+    if not (demo/"target/test-classes/com/opentradingcore/demo/DemoCommonFailoverLiveZkStage.class").is_file():
+        raise RuntimeError("compiled isolated live ZooKeeper witness missing")
+    suffix=secrets.token_hex(4)
+    project="otc-t376-"+suffix
+    network=project+"-net"
+    evidence=wt/"target/t376-isolated-zk"
+    evidence.mkdir(parents=True,exist_ok=True)
+    yaml=evidence/(project+".yaml")
+    yaml.write_text(compose_text(network))
+    call=["docker","compose","-p",project,"-f",yaml]
+    for image in (ZK_IMAGE,DEMO_IMAGE):
+        checked=run(["docker","image","inspect",image],timeout=30)
+        if checked.returncode:
+            raise RuntimeError("required preinstalled image not found: "+image)
+    up=False
+    try:
+        print("T376_ISOLATED_DOCKER_NETWORK",network,flush=True)
+        print("T376_PINNED_COMMON_SHA256",digest,flush=True)
+        started=run(call+["up","-d","--pull","never"],timeout=90)
+        if started.returncode:
+            raise RuntimeError("independent ZooKeeper start failed:\n"+started.stderr[-1500:])
+        up=True
+        # ZooKeeper quorum startup is eventual; verify health without touching
+        # any existing ZooKeeper Docker container or host-mapped port.
+        ready=False
+        for attempt in range(35):
+            status=run(call+["ps","-q"],timeout=12)
+            containers=[line for line in status.stdout.splitlines() if line.strip()]
+            if status.returncode==0 and len(containers)==3:
+                check=run(["docker","exec",containers[0],"bash","-c",
+                           "echo ruok | nc -w 2 127.0.0.1 2181"],timeout=10)
+                if "imok" in check.stdout:
+                    ready=True
+                    break
+            time.sleep(1.5)
+        if not ready:
+            raise RuntimeError("three-node test ZooKeeper quorum did not report ruok")
+        log=evidence/(project+".log")
+        env=os.environ.copy()
+        if args.mode=="stage":
+            env["OTC_T120_NETWORK"]=network
+            env["OTC_T120_COMMON_JAR"]=str(jar)
+            script=demo/"scripts/run-isolated-real-zk-failover-stage.sh"
+        else:
+            if args.mode in ("signed-rejoin","signed-reverse","signed-cycle"):
+                test_keys=wt/"target/t376-physical-witness-identity"
+                key_src=evidence/"T376IsolatedWitnessKeys.java"
+                key_src.write_text(TEST_RSA_WITNESS_GENERATOR)
+                built=run(["javac","-proc:none","-d",evidence,key_src],timeout=25)
+                if built.returncode:
+                    raise RuntimeError("test-only C signer generator failed:"+built.stderr[-300:])
+                generated=run(["java","-cp",evidence,"T376IsolatedWitnessKeys",test_keys],timeout=35)
+                if generated.returncode:
+                    raise RuntimeError("test-only RSA identity creation failed:"+generated.stderr[-300:])
+                print(generated.stdout.strip(),flush=True)
+                env["OTC_T125_ENABLE_DEGRADED"]="1"
+                env["OTC_T126_ENABLE_REJOIN"]="1"
+                if args.mode in ("signed-reverse","signed-cycle"):
+                    env["OTC_T127_ENABLE_REVERSE"]="1"
+                    env["OTC_T128_REQUIRE_E3_INSTALL"]="1"
+                if args.mode=="signed-cycle":
+                    env["OTC_T129_REQUIRE_E3_WRITE"]="1"
+                    env["OTC_T270_ENABLE_E3_B_REJOIN"]="1"
+                    env["OTC_T272_ENABLE_TCP_AFTER_REJOIN"]="1"
+            else:
+                test_keys=wt/"target/t375-isolated-test-identity"
+            if not (test_keys/"a/node.pk8").is_file() or not (test_keys/"b/node.pk8").is_file():
+                raise RuntimeError("isolated test-only RSA A/B identities missing")
+            env["OTC_EXISTING_DEMO_RSA_DIR"]=str(test_keys)
+            env["OTC_T124_NETWORK"]=network
+            env["OTC_T124_COMMON_JAR"]=str(jar)
+            env["OTC_T124_AUTO_ROOT"]=str(wt/"target/t376-signed-replay-evidence")
+            script=demo/"scripts/verify-real-auto-sigkill-genesis-replay.sh"
+        with log.open("w") as f:
+            result=subprocess.run(["bash",str(script)],env=env,stdout=f,
+                                  stderr=subprocess.STDOUT,timeout=230)
+        last=log.read_text(errors="replace").splitlines()
+        for line in last[-65:]:
+            if line.startswith(("T120_","T124_","LIMITATION:")):
+                print(line,flush=True)
+        print("T376_ISOLATED_LOG",log,flush=True)
+        if result.returncode:
+            raise RuntimeError("Common real-ZK stage test failed exit="+str(result.returncode)
+                               +"; evidence log retained")
+        if args.mode=="stage":
+            expected=("T120_OLD_PRIMARY_STILL_RUNNING_STAGE_REJECTED=PASS",
+                      "T120_REAL_ZK_OLD_PRIMARY_SESSION_RETIRED_PASS",
+                      "T120_REAL_ZK_EPOCH_CAS_NO_PREMATURE_READY=PASS")
+        else:
+            expected=("T124_COMMON_WATCH_ARMED_BEFORE_PRIMARY_FAILURE=PASS",
+                      "T124_REAL_E1_BUSINESS_UNDER_A_B_RSA_QUORUM_ACK=PASS",
+                      "T124_REAL_SIGKILL_OLD_A_FULL_COMMON_DEMO_JVM=PASS",
+                      "T124_END_TO_END_AUTO_STAGE_SIGNED_GENESIS_WAL_REPLAY=PASS")
+            if args.mode in ("signed-rejoin","signed-reverse","signed-cycle"):
+                expected+=("T125_AUTO_A_KILL_B_LOCAL_DURABLE_BUSINESS_CONTINUES=PASS",
+                           "T126_A_RETURNED_AND_CAUGHT_UP_E1_AND_E2_BUSINESS=PASS")
+            if args.mode=="signed-reverse":
+                expected+=("T127_E2_B_KILLED_A_AUTOMATIC_E3_RECOVERING=PASS",
+                           "T128_REAL_B_KILLED_A_FORMAL_SIGNED_GENESIS_AND_E1_E2_WAL_REPLAY_COMPLETE=PASS")
+            if args.mode=="signed-cycle":
+                expected+=("T127_B_REAL_SIGKILL_A_AUTO_E3_RECOVERING_PASS",
+                           "T128_REAL_B_KILLED_A_FORMAL_SIGNED_GENESIS_AND_E1_E2_WAL_REPLAY_COMPLETE=PASS")
+                expected+=("T129_TWO_REAL_SIGKILLS_A_B_A_CONTINUES_NEW_BUSINESS=PASS",
+                           "T270_B_E3_ONLINE_REJOIN_RSA_PHYSICAL_AND_COMMON_ROLE=PASS",
+                           "T272_REAL_A_E3_NEW_BUSINESS_TO_REJOINED_B_TCP_RSA_FSYNC=PASS")
+        whole="\n".join(last)
+        if any(marker not in whole for marker in expected):
+            raise RuntimeError("real ZK signed recovery evidence missing")
+        if args.mode=="stage":
+            print("T376_REAL_ZK_SIGKILL_STAGE_PASS strict_READY_not_claimed=true",flush=True)
+        elif args.mode=="signed-replay":
+            print("T376_REAL_ZK_SIGKILL_RSA_WAL_REPLAY_PASS strict_READY_not_claimed=true",flush=True)
+        elif args.mode=="signed-rejoin":
+            print("T376_REAL_ZK_B_LOCAL_DURABLE_AND_A_REJOIN_PASS solo_ACK_possible_RPO=true",flush=True)
+        elif args.mode=="signed-reverse":
+            print("T376_REAL_ZK_TWO_WAY_SIGKILL_E3_REPLAY_PASS E3_READY_not_claimed=true",flush=True)
+        else:
+            print("T376_REAL_ZK_BOTH_DIRECTIONS_REJOIN_TCP_PASS solo_ACK_possible_RPO=true",flush=True)
+    finally:
+        if up:
+            cleanup=run(call+["down","--remove-orphans"],timeout=65)
+            print("T376_ISOLATED_ZK_STOPPED",cleanup.returncode==0,flush=True)
+
+
+if __name__=="__main__":
+    main()
