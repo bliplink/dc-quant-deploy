@@ -1,0 +1,13 @@
+# T362 local images compiled with Common a0599cb candidate WAL cleanup.
+# Apply ONLY after the original T318 signed Genesis mounts and all T361
+# independent dataRoot and DB volumes have passed actual Compose validation.
+# NO-GO until real signed E(n+1) recovery receipts and Robot E2E.
+services:
+  ordersvr:
+    image: local/otc-t362-ordersvr:common-recovery-retry
+  ordersvr-b:
+    image: local/otc-t362-ordersvr:common-recovery-retry
+  tradesvr:
+    image: local/otc-t362-tradesvr:common-recovery-retry
+  tradesvr-b:
+    image: local/otc-t362-tradesvr:common-recovery-retry

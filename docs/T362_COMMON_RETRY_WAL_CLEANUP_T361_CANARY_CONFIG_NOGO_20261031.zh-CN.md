@@ -7,7 +7,7 @@
 - Common 本地源码 commit **a0599cb**：修复 `CommonCertifiedNodeRuntime.armAutomaticPhysicalRecoveryWatchExact` 在已经签名 READY 的后置阶段建立新 Epoch 物理分区、但 `businessReplay` 返回不完整或 `installCertifiedRecoveredPartition` 拒绝时，新建候选 WAL 未关闭、可能持有 OS 文件句柄并阻挡下轮恢复的问题。
 - Watch 现使用唯一 Common 的 `installRecoveredCandidateOrClose`；任何未通过业务回放、旧 Epoch 隔离或物理 ZK Grant 的候选关闭其物理 WAL/Index/Custody 后才允许下一轮新候选重试。关闭过程失败保留原异常并附上 suppressed，不能静默放行客户 ACK；已成功安装的候选不能关闭。
 - `CommonCertifiedNodeRuntimeTest` 加真实 Netty/RSA 单分区验证：T362 人为拒绝新的业务 replay → 候选 WAL 真正关闭 → 旧节点共享 Netty 端口未变且无新 Primary writer → 用新的候选在相同 Epoch 完成已有测试的业务状态安装。**定向 14 tests，0 failures/errors，Maven exit 0。**
-- Common 完整 668 项 RSA/WAL/P193 回归正在运行，结果以最终 Maven 退出码补记。暂不把定向通过等价于完整 HA 自动互切。
+- Common 完整 RSA/WAL/P193 只读证据回归最终 **154 suites / 668 tests / 0 failures / 0 errors / 6 skipped，Maven exit 0**。历史 `ATSConfig.ini` 缺失堆栈为既有测试 stderr，不是测试失败。不可把单机/内存 ZK 测试直接等价于真实自动 HA 互切。
 
 ## T361 Compose 的明确只读结果
 
@@ -23,6 +23,14 @@
 - `T328_SIGNED_ORDER_WAL_ROOT=/Users/kong/.opentradingcore/dc-saas-runtime-clean-20261016/data/t330-fresh/OrderSvr python3 tests/verify-t328-signed-order-ab-wal-readonly.py` 最新实际执行，**255/256 分区 A/B 字节一致**，P193 A=22667、B=22668（B 多未认证 1 帧）。脚本严格返回 exit **2** `T328_ORDER_AB_RESTART_BLOCKED`、`noTruncation=true`、`noBusinessApply=true`。
 - 当前线上仍 Order A/B T335、Trade A/B T336，Robot Exited(143)。Order 实时 `ORDER_PERF_STATS` 仍 0 新委托与成交。
 - APS 容器近期真实日志可见 BTC、ETH、SOL、UNI 每秒 `markPriceUpdate`，但近期 grep 没有得到 `bookTicker/depthUpdate` 的新鲜报价证据，不能以标记价替代 Maker 挂单有效 BBO，也不能虚称 Robot RUNNING。
+
+## 最新本地 T362 Order/Trade 候选镜像及回归
+
+- Common `a0599cb` Maven 安装后的同一 JAR SHA256 为 `e7e4ca54e9289945c37701fc3ea93078fa154786cd32c3f107a4b775bc4162b9`；Order/Trade 两者本地打包引用的文件 SHA256 一致。
+- Order 本地提交 `7eafebe`：镜像 `local/otc-t362-ordersvr:common-recovery-retry`，SHA256 `3bb0299103b823d909fe781f6bfaace9fddb7e5a89e405961057f2032a8421fb`。本地测试 44 suites / 137 tests / 0 failures / 0 errors / 2 skipped。
+- Trade 本地提交 `6496032`：镜像 `local/otc-t362-tradesvr:common-recovery-retry`，SHA256 `fcaf3b38f7b98348837cf1a47c8037dec9834e3a945c2abe24dacc854b4bcda5`。本地测试 52 suites / 207 tests / 0 failures / 0 errors / 0 skipped。
+- 两个镜像均继承上一轮 T335/T336 原 Demo 业务，替换业务 classes 与最新 Common jar，在本地镜像内部检查**只有一份 Common JAR**。仍标记 `CANARY-NO-GO`，并未实际替换旧容器。
+- 以 `compose.t361-fresh-common-home.yaml` 为新数据根，再叠加 `compose.t362-common-retry-wal.yaml` 选择新镜像。**只有 Compose 环境变量实际展开与有效 RSA 挂载检查通过后才允许启动。**
 
 ## 唯一发布门禁
 
