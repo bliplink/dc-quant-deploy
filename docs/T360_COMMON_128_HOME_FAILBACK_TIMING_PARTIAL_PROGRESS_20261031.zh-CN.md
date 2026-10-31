@@ -20,6 +20,12 @@
 
 **可能，而且在逐分区切换时属于正常过渡。** 只要仍有 RECOVERING 或 B代持 Home，128/128 就没有恢复完成。损坏 WAL、旧主未签退休、A 业务回放未完成、双节点新 Epoch 恢复回执缺失时，当前分区必须停止在不路由的 RECOVERING；其他健康分区继续提供服务。Common 原有 Watch 对已持久化的签名 Stage 会尝试恢复，但尚无真实多 JVM 全量证据证明所有故障都能自动最终完成，故长期部分回切必须作为 NO-GO 告警，而不是超时后伪造 READY。
 
+## 本地最终回归（真实运行结果）
+
+- Common commit **2e45510**：154 suites / **668 tests / 0 failures / 0 errors / 6 skipped**，含真实原 RSA、原始 P193 WAL 只读证据、两分区 Netty 签名退休、128 Home 串行进度，Maven 完整退出 **0**。原 ATSConfig.ini 缺失仅在旧测试中打印堆栈，不是本轮用例失败。
+- 使用该 Common JAR 本地 Maven install 后，Order **44 suites / 137 tests / 0 failures / 0 errors / 2 skipped**；Trade **52 suites / 207 tests / 0 failures / 0 errors / 0 skipped**，均退出 **0**。本地源代码兼容不代表真实交易 HA 完成。
+- 最新 128 Home 的 Stage+模拟 READY 样本 **398 毫秒**（仍只是在内存 ZooKeeper Fixture 下 128 次原 RSA Stage fsync / 模拟 READY，与真实全回切 T0→T1 不是同一指标）。
+
 ## 后续验收门槛
 
 使用真实两 JVM + 三 ZK 对完整256分区循环执行 A SIGKILL/B接管/A追平/A逐一回Home/B SIGKILL/A接管/B追平/B归Home，逐分区核对旧 Epoch 退休、双签已提交水位/资金/订单/持仓、无双主、最后一次重启仍可取得严格 ACK。真实 T0/T1 收集后才能回答总回切秒数及暂停 P99。正式 Order/Trade Spring 尚未将完整旧主协作回执与新 Epoch READY publisher 接上，NO-GO 前不替换 T335/T336 容器，Robot 仍停止。原始 P193 A22667/B22668 未签尾保持只读。
