@@ -6,7 +6,15 @@ Common 本地 commit **9561b74**。正式 E1 RECOVERING 业务安装前新增控
 
 **这只是控制面协作，并不授予 READY。** 进入 E1 持久恢复后，每个分区依旧逐步重验原双 RSA Genesis、真实原始零 ACK WAL/Custody、Manifest 身份、两个 lease 的原有物理会话、ZooKeeper CAS 和业务回放。Common 之外 Order/Trade 不实现任何额外集群算法，也不让 ZooKeeper 进入 WAL 热路径。
 
-已新增 `CommonOriginalE1LeaseRendezvousTest`：7/7 单测通过；覆盖稍晚才出现的物理 B 租约、对端一直缺席、ZK 失联、同 Session、伪造自己的 token、本地 grant 被撤权、错误 namespace 或无界超时。完整 Common 回归以最终 Maven 退出码为准，随后执行本地 Order/Trade 源码兼容性回归。
+已新增 `CommonOriginalE1LeaseRendezvousTest`：7/7 单测通过；覆盖稍晚才出现的物理 B 租约、对端一直缺席、ZK 失联、同 Session、伪造自己的 token、本地 grant 被撤权、错误 namespace 或无界超时。Common 完整 Maven 回归已实际完成，exit 0：**156 suites / 677 tests / 0 failures / 0 errors / 7 skipped**，含原始 P193 只读 WAL、RSA 证书与 Home 阶段。Order **44 suites / 137 tests / 0 failures / 0 errors / 2 skipped**、Trade **52 suites / 207 tests / 0 failures / 0 errors / 0 skipped**，分别 Maven exit 0。
+
+## 本地最新容器镜像（构建成功，未部署）
+
+- Common `9561b74` 已重新 Maven install，实际 JAR SHA256：`804fd2548bf7a26c1aadc629be80370d595c291ed976134c7998e62f3fe90e0d`。必须避免复用旧 T362 镜像里的 `e7e4ca54...` Common JAR。
+- Order `saas-crypto` commit **`d24fb01`**，本地镜像 `local/otc-t365-ordersvr:common-e1-rendezvous`，Image ID `sha256:3aba0eda11f5e14e106a08bf7315bc30a626a316d2d355bafc36deea40377fc6`。
+- Trade `saas-crypto` commit **`f81829b`**，本地镜像 `local/otc-t365-tradesvr:common-e1-rendezvous`，Image ID `sha256:e12040146cf903361b3e1684e6f3833f0049f815684016086804e40ed5ddd2f8`。
+- 已在 Mac Docker 使用 `docker run --rm --entrypoint sh` 对两个镜像逐个核验：**各仅一份 Common JAR、实际容器内 SHA256 都等于新 `804fd254...`、对应业务 Spring Common wiring classes 存在**。两者继承当前 T335 Order/T336 Trade 正式业务镜像，不回退部分成交撤单及资金释放功能。
+- 由于正式 T364 E2 业务恢复/双节点租约尚无真实完整通过且平台此前拒绝启动恢复容器，两个新镜像都保留 `CANARY-NO-GO` 标签；没有重启旧服务或 Robot。
 
 ## 当前真实 T364 事实（不可冒充完整恢复）
 
