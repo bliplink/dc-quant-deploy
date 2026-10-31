@@ -23,6 +23,8 @@ Order 与 Trade 当前安装的 Common JAR 一致，SHA-256：
 
 补充：保持 Trade A/B 运行时，对其真实落盘目录运行 T372 物理审计，**256/256 分区、0 mismatch**，最高 WAL 帧序号 2065。Order/Trade 使用相同 Common JAR，但 **数据一致不等于自动主切已启用**。
 
+**新增性能门禁：**已部署 `CommonCertifiedFailoverWatch` 每个对象在构造时调用 `Executors.newSingleThreadScheduledExecutor`，随后 `scheduleWithFixedDelay` 轮询。直接对每个分区各启一个 Watch 会增加约 128～256 个定时线程/节点（具体数量取决于是否同时启用 Home Return），并产生相应 ZooKeeper 轮询。不能按分区直接批量启动当前 Watch，而应在 **Common 内抽出节点级共享调度器**，集中监听/批量刷新，保留每分区认证状态和撤权水位。T373 检查升级为：即使发现激活调用，仍然针对上述独立线程设计返回 `NO_GO_UNBOUNDED_PARTITION_WATCH_EXECUTORS`，直到改为有界线程调度再做真实 HA 验收。
+
 ## 修复方案只放在 Common（不改变业务边界）
 
 1. 取得与上述部署 JAR **完全对应的、可重现编译的 Common 源码**；当前部署检查使用的 `.work/app-common` 工作树不包含 `CommonCertifiedNodeRuntime.java`／`CommonCertifiedNodeBootstrap.java`，不得假装修改旧 Common 代码就是改了已部署类。不得通过运行时反射、对运行中容器热换类或篡改签名替代真实修复。

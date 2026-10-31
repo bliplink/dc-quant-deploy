@@ -50,6 +50,15 @@ def check_startup_disassembly(bootstrap_text, runtime_text):
     }
 
 
+def per_instance_scheduled_thread(watch_bytecode):
+    """A new executor in each Watch constructor is not scalable to 128/256 partitions."""
+    constructors = [body for title, body in method_chunks(watch_bytecode)
+                    if "CommonCertifiedFailoverWatch(" in title]
+    return any("Executors.newSingleThreadScheduledExecutor" in body
+               or "Executors.newScheduledThreadPool" in body
+               for body in constructors)
+
+
 def inspect_source_dirs(roots):
     report = {}
     for name, root in roots.items():
@@ -93,19 +102,27 @@ def main():
     starts = check_startup_disassembly(bs, runtime)
     sources = inspect_source_dirs({"Order": args.order_src, "Trade": args.trade_src})
     watch_class_exists = "public void start();" in watch
+    per_watch_thread = per_instance_scheduled_thread(watch)
     watcher_armed = (starts["bootstrap_arms_watch"] or starts["node_start_arms_watch"]
                      or any(v["wiring_arms_watch"] for v in sources.values()))
+    if not watcher_armed:
+        status = "NO_GO_NO_AUTO_FAILOVER_WATCH_WIRED"
+    elif per_watch_thread:
+        status = "NO_GO_UNBOUNDED_PARTITION_WATCH_EXECUTORS"
+    else:
+        status = "SOURCE_WIRING_PRESENT_NEEDS_REAL_FAILOVER_TEST"
     result = {
         "check": "T373_DEPLOYED_COMMON_AUTOMATIC_TAKEOVER_ACTIVATION",
-        "status": "SOURCE_WIRING_PRESENT_NEEDS_REAL_FAILOVER_TEST" if watcher_armed
-                  else "NO_GO_NO_AUTO_FAILOVER_WATCH_WIRED",
+        "status": status,
         "watch_class_present": watch_class_exists,
+        "watch_per_instance_scheduled_executor": per_watch_thread,
         "start_path": starts,
         "business_sources": sources,
         "safety": "read_only_bytecode_and_source_audit; no authorization or failover attempted"
     }
     print(json.dumps(result, ensure_ascii=False))
-    return 0 if watcher_armed and watch_class_exists and starts["bootstrap_entry_methods"] >= 1 else 2
+    return 0 if (watcher_armed and watch_class_exists and not per_watch_thread
+                 and starts["bootstrap_entry_methods"] >= 1) else 2
 
 
 if __name__ == "__main__":

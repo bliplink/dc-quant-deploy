@@ -51,6 +51,26 @@ class TestT373(unittest.TestCase):
             "  public synchronized void start();")
         self.assertFalse(audit.check_startup_disassembly(BOOTSTRAP, altered)["node_start_arms_watch"])
 
+    def test_partition_watcher_thread_per_instance_detected(self):
+        watch = """
+public final class com.app.common.replication.CommonCertifiedFailoverWatch {
+  public com.app.common.replication.CommonCertifiedFailoverWatch(java.lang.String);
+    Code:
+       0: invokestatic #30 // Method java/util/concurrent/Executors.newSingleThreadScheduledExecutor:()V
+}
+"""
+        self.assertTrue(audit.per_instance_scheduled_thread(watch))
+
+    def test_shared_scheduler_does_not_trigger_per_watch_gate(self):
+        watch = """
+public final class com.app.common.replication.CommonCertifiedFailoverWatch {
+  public com.app.common.replication.CommonCertifiedFailoverWatch(java.lang.String);
+    Code:
+       0: getstatic #30 // Field nodeSharedScheduler:Ljava/util/concurrent/ScheduledExecutorService;
+}
+"""
+        self.assertFalse(audit.per_instance_scheduled_thread(watch))
+
     def test_source_comment_never_counts(self):
         with tempfile.TemporaryDirectory() as tmp:
             root = pathlib.Path(tmp)
