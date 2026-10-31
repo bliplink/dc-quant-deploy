@@ -79,7 +79,8 @@ public final class T376JUnitCount {
   System.out.println("T376_PHYSICAL_RSA_SUITE discovered="+result.getRunCount()
     +" executed="+executed+" assumption_skips="+skipped[0]
     +" ignored="+result.getIgnoreCount()+" failures="+result.getFailureCount());
-  if(result.getRunCount()!=42 || executed!=42 || skipped[0]!=0
+  int required=Integer.parseInt(System.getProperty("t376.expected.tests","42"));
+  if(result.getRunCount()!=required || executed!=required || skipped[0]!=0
        ||result.getIgnoreCount()!=0 ||!result.wasSuccessful())System.exit(2);
  }
 }
@@ -97,12 +98,17 @@ def main():
     p=argparse.ArgumentParser()
     p.add_argument("--worktree",type=pathlib.Path,required=True)
     p.add_argument("--base",type=pathlib.Path,required=True)
+    p.add_argument("--candidate-jar",type=pathlib.Path)
+    p.add_argument("--expected-tests",type=int,default=42)
     p.add_argument("--signed-fixture",type=pathlib.Path,required=True,
                    help="original T293 TEST fixture, copied read-only before test")
     args=p.parse_args()
     worktree=args.worktree.resolve(strict=True)
     base=args.base.resolve(strict=True)
-    jar=worktree/"target/t375-common-certified-automatic-recovery.jar"
+    jar=(args.candidate_jar.resolve(strict=True) if args.candidate_jar else
+         worktree/"target/t375-common-certified-automatic-recovery.jar")
+    if args.expected_tests<1 or not str(jar).startswith(str((worktree/"target").resolve())+os.sep):
+        raise RuntimeError("test candidate jar must be an isolated target artifact")
     if not jar.is_file() or not (base/"target/test-classes").is_dir():
         raise RuntimeError("isolated candidate jar or baseline test classes missing")
     print("T376_PINNED_COMMON_SHA256",hashlib.sha256(jar.read_bytes()).hexdigest(),flush=True)
@@ -143,6 +149,7 @@ def main():
         run(["javac","-proc:none","-cp",classpath,"-d",tmp,helper])
         print(run(["java","-Dotc.demo.existing.keys="+str(keys),
                    "-Dotc.t322.real.root="+str(cloned),
+                   "-Dt376.expected.tests="+str(args.expected_tests),
                    "-cp",str(tmp)+os.pathsep+classpath,"T376JUnitCount"]+list(SUITES),timeout=210),flush=True)
 
 if __name__=="__main__":

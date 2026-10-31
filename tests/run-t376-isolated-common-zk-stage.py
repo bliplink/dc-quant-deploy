@@ -84,16 +84,100 @@ public class T376IsolatedWitnessKeys {
 """
 
 
+def run_real_256_home_control(wt, demo, jar, network, evidence, suffix):
+    """One signed Home CAS with 255 untouched shards and B in a distinct JVM.
+
+    This proves real ZooKeeper 256-shard MANIFEST control only; it neither
+    synthesizes STRICT READY nor installs 256 physical customer WAL files.
+    """
+    keys=wt/"target/t375-isolated-test-identity"
+    java_class=demo/"target/test-classes/com/app/common/replication/CommonT377Real256HomeStageProcess.class"
+    if not java_class.is_file() or not (keys/"a/node.pk8").is_file():
+        raise RuntimeError("T377 isolated 256-Home class or test-only A key missing")
+    data=evidence/("t377-home-signed-"+suffix)
+    data.mkdir(parents=True,exist_ok=False)
+    zk_root="/dc/cluster/t377-"+suffix
+    b_name="otc-t377-old-b-"+suffix
+    clazz="com.app.common.replication.CommonT377Real256HomeStageProcess"
+    cp="/t377/demo-test:/t377/demo:/t377/common.jar:/srv/dc/dc/GW/lib/*"
+    mounts=["-v",str(jar)+":/t377/common.jar:ro",
+            "-v",str(demo/"target/classes")+":/t377/demo:ro",
+            "-v",str(demo/"target/test-classes")+":/t377/demo-test:ro"]
+    env=["-e","OTC_T377_ZK_ROOT="+zk_root]
+    def cmd(action, extra=None, name=None):
+        opts=["docker","run"]
+        if name:opts+=["-d","--name",name]
+        else:opts+=["--rm"]
+        opts+=["--network",network]+mounts+env
+        if extra:opts+=extra
+        return opts+["--entrypoint","java",DEMO_IMAGE,"-cp",cp,clazz,action]
+    bootstrap=run(cmd("--bootstrap"),timeout=40)
+    if bootstrap.returncode or "T377_256_SHARD_REAL_ZK_INITIAL_READY=PASS" not in bootstrap.stdout:
+        raise RuntimeError("T377 bootstrap: "+bootstrap.stdout[-650:]+bootstrap.stderr[-600:])
+    b_started=False
+    try:
+        b=run(cmd("--old-owner",name=b_name),timeout=24)
+        if b.returncode:
+            raise RuntimeError("separate B JVM failed: "+b.stderr[-700:])
+        b_started=True
+        old_live=False
+        for _ in range(35):
+            logs=run(["docker","logs",b_name],timeout=10)
+            if "T377_OLD_B_PRIMARY_IN_SEPARATE_JVM_LEASE_ACTIVE=PASS" in logs.stdout:
+                old_live=True
+                break
+            time.sleep(.4)
+        if not old_live:raise RuntimeError("B primary did not preserve lease")
+        staged=run(cmd("--real-home-stage",extra=[
+            "-v",str(keys/"public")+":/rsa/public:ro",
+            "-v",str(keys/"a/node.pk8")+":/rsa/a/node.pk8:ro",
+            "-v",str(data)+":/srv/t377-durable-stage:rw"]),timeout=90)
+        text=bootstrap.stdout+logs.stdout+staged.stdout+"\n"+staged.stderr
+        stage_log=evidence/("t377-home-control-"+suffix+".log")
+        stage_log.write_text(text)
+        if staged.returncode:
+            raise RuntimeError("T377 stage failed; evidence="+str(stage_log)+
+                               " stdout="+staged.stdout[-900:]+" stderr="+staged.stderr[-700:])
+        required=("T377_REAL_3ZK_256_HOME_FIRST_RSA_STAGE_PASS",
+                  "T377_256_HOME_PARTIAL_CENSUS_PASS")
+        if any(x not in text for x in required):
+            raise RuntimeError("T377 stage omitted real 256 shard evidence")
+        # The first A JVM has exited. Recover the same signed stage using
+        # a different A JVM and independently issued ZooKeeper session.
+        resumed=run(cmd("--resume-home",extra=[
+            "-v",str(keys/"public")+":/rsa/public:ro",
+            "-v",str(keys/"a/node.pk8")+":/rsa/a/node.pk8:ro",
+            "-v",str(data)+":/srv/t377-durable-stage:rw"]),timeout=85)
+        text+="\n"+resumed.stdout+"\n"+resumed.stderr
+        stage_log.write_text(text)
+        if resumed.returncode or (
+                "T377_HOME_RSA_PREDECESSOR_NEW_A_SESSION_RESTORED=PASS"
+                not in resumed.stdout):
+            raise RuntimeError("T377 signed pending stage failed after A restart; "
+                               "evidence="+str(stage_log)+
+                               " stderr="+resumed.stderr[-600:])
+        print("T377_REAL_256_HOME_CONTROL",stage_log,flush=True)
+        for line in (staged.stdout+"\n"+resumed.stdout).splitlines():
+            if line.startswith(("T377_","LIMITATION:")):
+                print(line,flush=True)
+        return resumed
+    finally:
+        if b_started:
+            stopped=run(["docker","rm","-f",b_name],timeout=20)
+            print("T377_ISOLATED_OLD_B_STOPPED",stopped.returncode==0,flush=True)
+
+
 def main():
     ap=argparse.ArgumentParser()
     ap.add_argument("--worktree",type=pathlib.Path,required=True)
     ap.add_argument("--base",type=pathlib.Path,required=True)
     ap.add_argument("--expected-sha256",required=True)
-    ap.add_argument("--mode",choices=["stage","signed-replay","signed-rejoin","signed-reverse","signed-cycle"],default="stage")
+    ap.add_argument("--mode",choices=["stage","signed-replay","signed-rejoin","signed-reverse","signed-cycle","home256"],default="stage")
     args=ap.parse_args()
     wt=args.worktree.resolve(strict=True)
     base=args.base.resolve(strict=True)
-    jar=wt/"target/t375-common-certified-automatic-recovery.jar"
+    jar=wt/("target/t377-common-home-auto-wiring.jar" if args.mode=="home256"
+            else "target/t375-common-certified-automatic-recovery.jar")
     if not jar.is_file():
         raise RuntimeError("no isolated Common T375 candidate")
     digest=hashlib.sha256(jar.read_bytes()).hexdigest()
@@ -144,6 +228,10 @@ def main():
             raise RuntimeError("three-node test ZooKeeper quorum did not report ruok")
         log=evidence/(project+".log")
         env=os.environ.copy()
+        if args.mode=="home256":
+            result=run_real_256_home_control(wt,demo,jar,network,evidence,suffix)
+            print("T377_256_HOME_REAL_CONTROL_ONLY_PASS signedReady_not_claimed=true",flush=True)
+            return
         if args.mode=="stage":
             env["OTC_T120_NETWORK"]=network
             env["OTC_T120_COMMON_JAR"]=str(jar)
