@@ -2,9 +2,9 @@
 
 ## 本轮实测，不能混淆的三项状态
 
-1. **部分业务恢复运行**：新注册并自动审批的 `EBAUU3`（CRC32 P081，A Home）与 `NWQYBB`（P167，B Home）各有一套 Maker/Tape 已入金的 Robot，真实状态各为 `RUNNING / 40`。RobotSvr 正在运行，A/B Order、A/B Trade 和 Gateway 均有运行中的物理容器。原租户 `C8SMUE` 在本次复核仍为 `WAITING_MARKET_DATA / 0`，不能称所有租户已恢复。
-2. **物理 WAL 完整一致**：T371 新容器 `otc-t371-order-b-signed-recovery` 使用独立 `t371-order-b-signed-prefix-20261031/data`，取代失败的旧 `otc-t368-order-b-host`。P168 原始故障表现为 A/B WAL 第 1～3825 帧逐字节一致，3826 开始不同，旧 B 的 Custody HEAD 水位为 3825；旧卷不得破坏。T371 B 重建后，与 Order A 在 P168 的 WAL 和 Custody HEAD 文件哈希一致。新只读脚本扫描 **256/256 分区**，逐帧检查 Epoch、连续序号、物理长度及 CRC，比较 A/B SHA-256 与 HEAD 文件哈希，结果 **0 mismatch**，最高观察帧序号 5134。模拟匹配、分叉和 CRC 损坏 **3/3 PASS**。注意：脚本不提供 RSA 签名/Quorum 验证，此工作由 Common 正式认证链路负责。
-3. **全量业务及 HA 仍 NO-GO**：T369 Projection 的 `dc_order_projection_watermark` 仍停留在 18:42，重新启动 T369 Projection 后，截至 20:00 新租户执行历史表仍为 0；已认证旧租户 `C8SMUE` 的 438 条成交历史保留。必须恢复 Projection 从 Common WAL 的认证订阅/追平。此前 A 停机故障注入未自动将 P000 转给 B，反而导致 B 被拒写，因此不能据 T371 B 的启动成功就宣布自动主切 PASS。
+1. **部分业务恢复运行**：新注册并自动审批的 `EBAUU3`（CRC32 P081，A Home）与 `NWQYBB`（P167，B Home）各有一套 Maker/Tape 已入金的 Robot，真实状态各为 `RUNNING / 40`。RobotSvr 正在运行，A/B Order、A/B Trade 和 Gateway 均有运行中的物理容器。原租户 `C8SMUE` 最新为 `DEGRADED / 0`，不能称所有租户已恢复。
+2. **物理 WAL 完整一致**：T371 新容器 `otc-t371-order-b-signed-recovery` 使用独立 `t371-order-b-signed-prefix-20261031/data`，取代失败的旧 `otc-t368-order-b-host`。P168 原始故障表现为 A/B WAL 第 1～3825 帧逐字节一致，3826 开始不同，旧 B 的 Custody HEAD 水位为 3825；旧卷不得破坏。T371 B 重建后，与 Order A 在 P168 的 WAL 和 Custody HEAD 文件哈希一致。新只读脚本扫描 **256/256 分区**，逐帧检查 Epoch、连续序号、物理长度及 CRC，比较 A/B SHA-256 与 HEAD 文件哈希，结果 **0 mismatch**，第二次运行中复核最高观察帧序号 5182，仍为 0 mismatch。模拟匹配、分叉和 CRC 损坏 **3/3 PASS**。注意：脚本不提供 RSA 签名/Quorum 验证，此工作由 Common 正式认证链路负责。
+3. **成交历史恢复 PASS，完整 HA 仍 NO-GO**：T369 Projection 曾停留在 18:42，经认证源已就绪后的独立重启，水位推进至 **20:01:59**；新租户 `EBAUU3` 已写入 **246 条执行明细（246 distinct ExecID）**、`NWQYBB` **188 条（188 distinct ExecID）**，旧租户 `C8SMUE` 的 438 条成交历史保留。此前 A 停机故障注入未自动将 P000 转给 B，反而导致 B 被拒写；T371 B 的签名恢复启动不等于自动主切 PASS。当前业务在运行，暂不再次杀掉业务 A/B。
 
 ## 自动故障切换代码边界确认
 
