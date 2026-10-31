@@ -1,0 +1,57 @@
+# T361 disposable Demo data roots; T318 original signed birth and P193 forensic WAL untouched.
+# The identity, original RSA, real three-ZK control, Gateway and application props are inherited
+# from T330. This overlay changes only the fresh data root and the two new locally built images.
+services:
+  mysql:
+    volumes:
+      - ${DEPLOY_ROOT}/data/t361-fresh-mysql:/var/lib/mysql
+      - ./mysql/init:/docker-entrypoint-initdb.d:ro
+  clickhouse:
+    volumes:
+      - ${DEPLOY_ROOT}/data/t361-fresh-clickhouse:/var/lib/clickhouse
+      - ${DEPLOY_ROOT}/log/clickhouse:/var/log/clickhouse-server
+      - ./clickhouse/saas-init:/docker-entrypoint-initdb.d:ro
+      - ./clickhouse/users.d/20-saas-memory.xml:/etc/clickhouse-server/users.d/20-saas-memory.xml:ro
+      - ${DEPLOY_ROOT}/control/clickhouse-ports.xml:/etc/clickhouse-server/config.d/10-saas-ports.xml:ro
+      - ${DEPLOY_ROOT}/control/clickhouse-client.xml:/etc/clickhouse-client/config.xml:ro
+      - ${DEPLOY_ROOT}/control/clickhouse-docker-related.xml:/etc/clickhouse-server/config.d/docker_related_config.xml:ro
+  ordersvr:
+    image: local/otc-t361-ordersvr:common-home-canary
+    environment:
+      JAVA_OPTS: >-
+        -Xms128m -Xmx1g -XX:+ExitOnOutOfMemoryError
+        -Dorder.common.control.zkHosts=192.168.128.7:2181,192.168.128.8:2181,192.168.128.9:2181
+        -Dorder.common.nodeRuntime.nettyPeers=OrderSvrA@127.0.0.1:45322,OrderSvrB@127.0.0.1:45323
+        -Dorder.common.nodeRuntime.dataRoot=/srv/dc/data/t361-fresh/OrderSvr/OrderSvrA
+        -Dorder.common.gatewayDiscovery.enabled=true
+        -Dorder.common.gatewayDiscovery.host=127.0.0.1
+  ordersvr-b:
+    image: local/otc-t361-ordersvr:common-home-canary
+    environment:
+      JAVA_OPTS: >-
+        -Xms128m -Xmx1g -XX:+ExitOnOutOfMemoryError
+        -Dorder.common.control.zkHosts=192.168.128.7:2181,192.168.128.8:2181,192.168.128.9:2181
+        -Dorder.common.nodeRuntime.nettyPeers=OrderSvrA@127.0.0.1:45322,OrderSvrB@127.0.0.1:45323
+        -Dorder.common.nodeRuntime.dataRoot=/srv/dc/data/t361-fresh/OrderSvr/OrderSvrB
+        -Dorder.common.gatewayDiscovery.enabled=true
+        -Dorder.common.gatewayDiscovery.host=127.0.0.1
+  tradesvr:
+    image: local/otc-t361-tradesvr:common-home-canary
+    environment:
+      JAVA_OPTS: >-
+        -Xms128m -Xmx1g -XX:+ExitOnOutOfMemoryError
+        -Dtrade.common.control.zkHosts=192.168.128.7:2181,192.168.128.8:2181,192.168.128.9:2181
+        -Dtrade.common.nodeRuntime.nettyPeers=TradeSvrA@127.0.0.1:45222,TradeSvrB@127.0.0.1:45223
+        -Dtrade.common.nodeRuntime.dataRoot=/srv/dc/data/t361-fresh/TradeSvr/TradeSvrA
+        -Dtrade.common.gatewayDiscovery.enabled=true
+        -Dtrade.common.gatewayDiscovery.host=127.0.0.1
+  tradesvr-b:
+    image: local/otc-t361-tradesvr:common-home-canary
+    environment:
+      JAVA_OPTS: >-
+        -Xms128m -Xmx1g -XX:+ExitOnOutOfMemoryError
+        -Dtrade.common.control.zkHosts=192.168.128.7:2181,192.168.128.8:2181,192.168.128.9:2181
+        -Dtrade.common.nodeRuntime.nettyPeers=TradeSvrA@127.0.0.1:45222,TradeSvrB@127.0.0.1:45223
+        -Dtrade.common.nodeRuntime.dataRoot=/srv/dc/data/t361-fresh/TradeSvr/TradeSvrB
+        -Dtrade.common.gatewayDiscovery.enabled=true
+        -Dtrade.common.gatewayDiscovery.host=127.0.0.1
