@@ -19,7 +19,8 @@
 | T355 定向 | `CommonCertifiedFailoverCoordinatorTest 8/8` + `CommonCertifiedStrictCrashReadyCompletionTest 4/4` + `CommonCertifiedNodeRuntimeTest 14/14`，共 26/26 PASS |
 | T356 定向 | `CommonCertifiedFailoverCoordinatorTest 9/9`，包含 wrapper 回调不丢失、READY 前无法重挂、READY 完成且同 Epoch 拒绝、高 Epoch 允许 |
 | T355 全量 | 真实 T293 RSA、P193 只读证据，**153 suites / 662 tests / 0 failures / 0 errors / 6 skipped，Maven exit 0** |
-| T356 最终全量 | **待本轮 Maven 结束后依据实际最终退出码补录**，禁止把定向 PASS 误当在线 HA 成功 |
+| T356 最终全量 | **153 suites / 663 tests / 0 failures / 0 errors / 6 skipped，Maven exit 0**；真实原 P193 WAL 只读证据和历史 E4→E5 RSA 恢复用例通过 |
+| Order / Trade 对新 Common JAR 的源码兼容 | 本地 Maven 安装 Common `6fde0c5` 后，Order **44 suites / 137 tests / 0 failures / 0 errors / 2 skipped**，Trade **52 suites / 207 tests / 0 failures / 0 errors / 0 skipped**；均 exit 0。不是 Docker 业务功能与真实 HA 已通过的证明。 |
 
 ## 真实 Order/Trade 替换仍然受限
 
