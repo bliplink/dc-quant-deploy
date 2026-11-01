@@ -180,7 +180,7 @@ def run_real_256_home_control(wt, demo, jar, network, evidence, suffix):
             print("T377_ISOLATED_OLD_B_STOPPED",stopped.returncode==0,flush=True)
 
 
-def run_real_256_signed_auto_control(wt, demo, jar, network, evidence, suffix, partition):
+def run_real_256_signed_auto_control(wt, demo, jar, network, evidence, suffix, partition, watch_pressure=False):
     """Separate Docker JVMs fsync and RSA-sign test P000 WAL, then Common
     Watch automatically stages only P000. Does not claim physical old-B
     retirement or signed STRICT READY.
@@ -201,7 +201,8 @@ def run_real_256_signed_auto_control(wt, demo, jar, network, evidence, suffix, p
             "-v",str(demo/"target/test-classes")+":/t378/demo-test:ro",
             "-v",str(keys/"public")+":/rsa/public:ro"]
     env=["-e","OTC_T377_ZK_ROOT=/dc/cluster/t377-"+suffix,
-         "-e","OTC_T385_PARTITION="+partition]
+         "-e","OTC_T385_PARTITION="+partition,
+         "-e","OTC_T388_128_WATCHES="+("true" if watch_pressure else "false")]
     def command(action,klass=clazz,extra=None,name=None):
         opts=["docker","run"]
         if name:opts+=["-d","--name",name]
@@ -269,14 +270,16 @@ def run_real_256_signed_auto_control(wt, demo, jar, network, evidence, suffix, p
                 "T385_E3_REAL_TCP_NEW_PRIMARY_A_TO_B_QUORUM_DURABLE_ACK_PASS"
                 not in result.stdout) or (
                 "T385_E3_B_NEW_WAL_TCP_FSYNC_PASS"
-                not in b_final.stdout):
+                not in b_final.stdout) or (
+                watch_pressure and "T388_REAL_3ZK_128_HOME_WATCHES_WITH_ONE_PHYSICAL_STRICT_READY_PASS"
+                not in result.stdout):
             raise RuntimeError("T378 dual RSA fsync Common auto Home failed, log="+
                                str(saved)+" stdout="+result.stdout[-800:]+
                                " stderr="+result.stderr[-700:]+
                                " b_stderr="+b_final.stderr[-1200:])
         print("T378_REAL_RSA_FSYNC_AUTO_HOME_LOG",saved,flush=True)
         for line in result.stdout.splitlines()+b_final.stdout.splitlines():
-            if line.startswith(("T378_","T380_","T381_","T382_","T383_","T384_","T385_","LIMITATION:")):print(line,flush=True)
+            if line.startswith(("T378_","T380_","T381_","T382_","T383_","T384_","T385_","T388_","LIMITATION:")):print(line,flush=True)
         print("T385_REAL_RSA_COMMON_HOME_READY_E3_TCP_QUORUM_ACK_PASS",
               flush=True)
     finally:
@@ -374,6 +377,10 @@ def main():
     ap.add_argument("--base",type=pathlib.Path,required=True)
     ap.add_argument("--expected-sha256",required=True)
     ap.add_argument("--signed-fixture",type=pathlib.Path)
+    ap.add_argument("--all-home-watch-pressure",action="store_true")
+    ap.add_argument("--candidate-jar-name",choices=[
+        "t377-common-home-auto-wiring.jar",
+        "t389-common-cold-watch-proof-first.jar"])
     ap.add_argument("--home-partition",default="P000")
     ap.add_argument("--mode",choices=["stage","signed-replay","signed-rejoin","signed-reverse","signed-cycle","home256","home256-signedwatch","historical-strict-ready"],default="stage")
     args=ap.parse_args()
@@ -383,8 +390,11 @@ def main():
         raise RuntimeError("test Home partition must be P000–P127")
     wt=args.worktree.resolve(strict=True)
     base=args.base.resolve(strict=True)
-    jar=wt/("target/t377-common-home-auto-wiring.jar" if args.mode.startswith("home256") or args.mode=="historical-strict-ready"
-            else "target/t375-common-certified-automatic-recovery.jar")
+    candidate=args.candidate_jar_name or (
+        "t377-common-home-auto-wiring.jar" if args.mode.startswith("home256")
+        or args.mode=="historical-strict-ready"
+        else "t375-common-certified-automatic-recovery.jar")
+    jar=wt/"target"/candidate
     if not jar.is_file():
         raise RuntimeError("no isolated Common T375 candidate")
     digest=hashlib.sha256(jar.read_bytes()).hexdigest()
@@ -447,7 +457,8 @@ def main():
             return
         if args.mode=="home256-signedwatch":
             run_real_256_signed_auto_control(wt,demo,jar,network,evidence,
-                                             suffix,args.home_partition)
+                                             suffix,args.home_partition,
+                                             args.all_home_watch_pressure)
             return
         if args.mode=="stage":
             env["OTC_T120_NETWORK"]=network
