@@ -325,6 +325,10 @@ def run_real_256_signed_auto_control(wt, demo, jar, network, evidence, suffix, p
                                 +" held="+held+" during="+partitions[i])
                         if marker not in result.stdout:
                             raise RuntimeError("T400 retained Home not writable: "+marker)
+                for recovering in partitions[1:]:
+                    if ("T400_OTHER_SHARD_STILL_RECOVERING_DURING_ACK_PASS"
+                            +" target="+recovering not in result.stdout):
+                        raise RuntimeError("T400 missing ACK during RECOVERING "+recovering)
                 if ("T400_A_PREVIOUS_HOME_REMAINED_WRITABLE_PASS"
                         not in result.stdout
                     or "T400_B_ALL_PRIOR_HOME_REPLICA_SERVERS_STAYED_LIVE_PASS"
@@ -461,7 +465,8 @@ def main():
     ap.add_argument("--continuous-writes",action="store_true")
     ap.add_argument("--candidate-jar-name",choices=[
         "t377-common-home-auto-wiring.jar",
-        "t389-common-cold-watch-proof-first.jar"])
+        "t389-common-cold-watch-proof-first.jar",
+        "t401-common-safe-prewal-reproof.jar"])
     ap.add_argument("--home-partitions",default=None)
     ap.add_argument("--home-partition",default="P000")
     ap.add_argument("--mode",choices=["stage","signed-replay","signed-rejoin","signed-reverse","signed-cycle","home256","home256-signedwatch","historical-strict-ready"],default="stage")
