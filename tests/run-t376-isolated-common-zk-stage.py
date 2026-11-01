@@ -247,14 +247,28 @@ def run_real_256_signed_auto_control(wt, demo, jar, network, evidence, suffix):
                 "T380_BOTH_OLD_E2_P000_REAL_FSYNC_WAL_RETIRED_RSA_PASS"
                 not in result.stdout) or (
                 "T380_B_P000_OLD_PRIMARY_REAL_WAL_CLOSED_RSA_RETIRED_PASS"
-                not in b_final.stdout):
+                not in b_final.stdout) or (
+                "T381_B_E2_REAL_COMMITINDEX_CUSTODY_2_OF_2_FSYNC_PASS"
+                not in b_final.stdout) or (
+                "T381_E2_REAL_TWO_JVM_COMMITINDEX_CUSTODY_RSA_RECOVERY_SOURCE_PASS"
+                not in result.stdout) or (
+                "T382_B_E3_DUAL_RSA_SEALED_IMAGE_REOPEN_PASS"
+                not in b_final.stdout) or (
+                "T382_E3_TWO_REAL_VOTERS_RSA_FSYNC_SNAPSHOT_SEALED_PASS"
+                not in result.stdout) or (
+                "T383_E3_COMMON_TWO_JVM_REPLAY_AND_RECOVERY_RSA_BOTH_PASS"
+                not in result.stdout) or (
+                "T383_E3_CommonHaDemoB_REAL_COMMON_REPLAY_COMPLETE_RSA_RECEIPT_PASS"
+                not in b_final.stdout) or (
+                "T384_REAL_COMMON_AUTO_HOME_SIGNED_E3_STRICT_READY_PASS"
+                not in result.stdout):
             raise RuntimeError("T378 dual RSA fsync Common auto Home failed, log="+
                                str(saved)+" stdout="+result.stdout[-800:]+
                                " stderr="+result.stderr[-700:])
         print("T378_REAL_RSA_FSYNC_AUTO_HOME_LOG",saved,flush=True)
-        for line in result.stdout.splitlines()+logs.stdout.splitlines():
-            if line.startswith(("T378_","LIMITATION:")):print(line,flush=True)
-        print("T378_REAL_DUAL_JVM_SIGNED_WAL_HOME_WATCH_STAGE_PASS STRICT_READY_not_claimed=true",
+        for line in result.stdout.splitlines()+b_final.stdout.splitlines():
+            if line.startswith(("T378_","T380_","T381_","T382_","T383_","T384_","LIMITATION:")):print(line,flush=True)
+        print("T384_REAL_RSA_COMMON_HOME_READY_E3_PASS newEpochClientAck_not_yet_tested=true",
               flush=True)
     finally:
         if old_up:
