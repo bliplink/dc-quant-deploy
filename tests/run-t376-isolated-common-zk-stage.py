@@ -128,11 +128,24 @@ def run_real_256_home_control(wt, demo, jar, network, evidence, suffix):
                 break
             time.sleep(.4)
         if not old_live:raise RuntimeError("B primary did not preserve lease")
+        # First test the real automatic Home scheduler. Without independent
+        # signed physical catchup it must refuse ALL 128 Home partitions,
+        # leaving the original 256 READY manifest and B's live lease intact.
+        denied=run(cmd("--watch-no-physical",extra=[
+            "-v",str(keys/"public")+":/rsa/public:ro",
+            "-v",str(keys/"a/node.pk8")+":/rsa/a/node.pk8:ro",
+            "-v",str(data)+":/srv/t377-durable-stage:rw"]),timeout=85)
+        if denied.returncode or (
+                "T378_REAL_3ZK_128_AUTO_HOME_WATCH_MISSING_WAL_DENIED_PASS"
+                not in denied.stdout):
+            raise RuntimeError("T378 real auto Home Watch failed to refuse "
+                               "missing signed WAL; stdout="+denied.stdout[-650:]+
+                               " stderr="+denied.stderr[-650:])
         staged=run(cmd("--real-home-stage",extra=[
             "-v",str(keys/"public")+":/rsa/public:ro",
             "-v",str(keys/"a/node.pk8")+":/rsa/a/node.pk8:ro",
             "-v",str(data)+":/srv/t377-durable-stage:rw"]),timeout=90)
-        text=bootstrap.stdout+logs.stdout+staged.stdout+"\n"+staged.stderr
+        text=bootstrap.stdout+logs.stdout+denied.stdout+"\n"+denied.stderr+"\n"+staged.stdout+"\n"+staged.stderr
         stage_log=evidence/("t377-home-control-"+suffix+".log")
         stage_log.write_text(text)
         if staged.returncode:
@@ -157,7 +170,7 @@ def run_real_256_home_control(wt, demo, jar, network, evidence, suffix):
                                "evidence="+str(stage_log)+
                                " stderr="+resumed.stderr[-600:])
         print("T377_REAL_256_HOME_CONTROL",stage_log,flush=True)
-        for line in (staged.stdout+"\n"+resumed.stdout).splitlines():
+        for line in (denied.stdout+"\n"+staged.stdout+"\n"+resumed.stdout).splitlines():
             if line.startswith(("T377_","LIMITATION:")):
                 print(line,flush=True)
         return resumed
@@ -167,16 +180,90 @@ def run_real_256_home_control(wt, demo, jar, network, evidence, suffix):
             print("T377_ISOLATED_OLD_B_STOPPED",stopped.returncode==0,flush=True)
 
 
+def run_real_256_signed_auto_control(wt, demo, jar, network, evidence, suffix):
+    """Separate Docker JVMs fsync and RSA-sign test P000 WAL, then Common
+    Watch automatically stages only P000. Does not claim physical old-B
+    retirement or signed STRICT READY.
+    """
+    keys=wt/"target/t375-isolated-test-identity"
+    required=(keys/"a/node.pk8",keys/"b/node.pk8",
+              keys/"public/CommonHaDemoA.pub.der",keys/"public/CommonHaDemoB.pub.der")
+    for p in required:
+        if not p.is_file():raise RuntimeError("missing test-only RSA identity "+str(p))
+    phys=evidence/("t378-physical-"+suffix)
+    a=phys/"a";b=phys/"b"
+    a.mkdir(parents=True,exist_ok=False);b.mkdir(parents=True,exist_ok=False)
+    clazz="com.app.common.replication.CommonT378RealWalAutoHomeProcess"
+    bootstrap_clazz="com.app.common.replication.CommonT377Real256HomeStageProcess"
+    cp="/t378/demo-test:/t378/demo:/t378/common.jar:/srv/dc/dc/GW/lib/*"
+    mounts=["-v",str(jar)+":/t378/common.jar:ro",
+            "-v",str(demo/"target/classes")+":/t378/demo:ro",
+            "-v",str(demo/"target/test-classes")+":/t378/demo-test:ro",
+            "-v",str(keys/"public")+":/rsa/public:ro"]
+    env=["-e","OTC_T377_ZK_ROOT=/dc/cluster/t377-"+suffix]
+    def command(action,klass=clazz,extra=None,name=None):
+        opts=["docker","run"]
+        if name:opts+=["-d","--name",name]
+        else:opts+=["--rm"]
+        opts+=["--network",network]+mounts+env
+        if extra:opts+=extra
+        return opts+["--entrypoint","java",DEMO_IMAGE,"-cp",cp,klass,action]
+    seeded=run(command("--bootstrap",klass=bootstrap_clazz),timeout=40)
+    if seeded.returncode or "T377_256_SHARD_REAL_ZK_INITIAL_READY=PASS" not in seeded.stdout:
+        raise RuntimeError("isolated 256 original Home manifest creation failed: "+
+                           seeded.stdout[-400:]+seeded.stderr[-500:])
+    old_name="otc-t378-physical-b-"+suffix
+    old_up=False
+    try:
+        boot=run(command("--old-b",name=old_name,extra=[
+            "-v",str(b)+":/srv/t378-b:rw",
+            "-v",str(keys/"b/node.pk8")+":/rsa/b/node.pk8:ro"]),timeout=35)
+        if boot.returncode:
+            raise RuntimeError("old B writer JVM failed to start: "+boot.stderr[-650:])
+        old_up=True
+        signed=False
+        for _ in range(45):
+            logs=run(["docker","logs",old_name],timeout=10)
+            if "T378_B_OLD_PRIMARY_ACTUAL_FSYNC_RSA_SIGNED_PASS" in logs.stdout:
+                signed=True;break
+            time.sleep(.3)
+        if not signed:
+            raise RuntimeError("old B did not prove real signed fsync WAL; "+
+                               logs.stdout[-350:]+logs.stderr[-250:])
+        result=run(command("--watch-a",extra=[
+            "-v",str(a)+":/srv/t378-a:rw",
+            "-v",str(b)+":/srv/t378-b:ro",
+            "-v",str(keys/"a/node.pk8")+":/rsa/a/node.pk8:ro"]),timeout=95)
+        saved=evidence/("t378-signed-auto-home-"+suffix+".log")
+        saved.write_text(seeded.stdout+"\n"+logs.stdout+"\n"+
+                         result.stdout+"\n"+result.stderr)
+        if result.returncode or (
+                "T378_REAL_TWO_JVM_DUAL_FSYNC_RSA_AUTO_HOME_STAGE_PASS"
+                not in result.stdout):
+            raise RuntimeError("T378 dual RSA fsync Common auto Home failed, log="+
+                               str(saved)+" stdout="+result.stdout[-800:]+
+                               " stderr="+result.stderr[-700:])
+        print("T378_REAL_RSA_FSYNC_AUTO_HOME_LOG",saved,flush=True)
+        for line in result.stdout.splitlines()+logs.stdout.splitlines():
+            if line.startswith(("T378_","LIMITATION:")):print(line,flush=True)
+        print("T378_REAL_DUAL_JVM_SIGNED_WAL_HOME_WATCH_STAGE_PASS STRICT_READY_not_claimed=true",
+              flush=True)
+    finally:
+        if old_up:
+            killed=run(["docker","rm","-f",old_name],timeout=22)
+            print("T378_ISOLATED_PHYSICAL_B_STOPPED",killed.returncode==0,flush=True)
+
+
 def main():
     ap=argparse.ArgumentParser()
     ap.add_argument("--worktree",type=pathlib.Path,required=True)
     ap.add_argument("--base",type=pathlib.Path,required=True)
     ap.add_argument("--expected-sha256",required=True)
-    ap.add_argument("--mode",choices=["stage","signed-replay","signed-rejoin","signed-reverse","signed-cycle","home256"],default="stage")
+    ap.add_argument("--mode",choices=["stage","signed-replay","signed-rejoin","signed-reverse","signed-cycle","home256","home256-signedwatch"],default="stage")
     args=ap.parse_args()
     wt=args.worktree.resolve(strict=True)
     base=args.base.resolve(strict=True)
-    jar=wt/("target/t377-common-home-auto-wiring.jar" if args.mode=="home256"
+    jar=wt/("target/t377-common-home-auto-wiring.jar" if args.mode.startswith("home256")
             else "target/t375-common-certified-automatic-recovery.jar")
     if not jar.is_file():
         raise RuntimeError("no isolated Common T375 candidate")
@@ -231,6 +318,9 @@ def main():
         if args.mode=="home256":
             result=run_real_256_home_control(wt,demo,jar,network,evidence,suffix)
             print("T377_256_HOME_REAL_CONTROL_ONLY_PASS signedReady_not_claimed=true",flush=True)
+            return
+        if args.mode=="home256-signedwatch":
+            run_real_256_signed_auto_control(wt,demo,jar,network,evidence,suffix)
             return
         if args.mode=="stage":
             env["OTC_T120_NETWORK"]=network
