@@ -19,6 +19,12 @@
 - 实际 B 原始 256 个 E2 WAL 文件总约 1425 MiB，4 个最大的 WAL 分区 P158 388.82 MiB、P164 370.79 MiB、P048 367.17 MiB、P168 298.3 MiB。现有 `CommonCertifiedE2ReplicaHistory.openExistingReadOnly` 最大载荷 64 MiB，Common Gate 需要可信快照及之后的 WAL 才能安全恢复。未删数据、未提升阈值、未跳过签名校验。
 - 最新 Docker：旧 Order B `otc-t371-order-b-signed-recovery` 已退出 1；Order A、Trade A/B、Robot、MD、Trade Web 均运行。Order A 仍是旧 T368，改造时间字段尚未上线。
 
+## 最新业务健康复核与本地源码提交
+- Order A 容器虽然运行，但日志出现 `Common poisoned primary Epoch cannot renew` 和 `Common physically certified partition writer unavailable: P048`；Robot 出现多个租户报价 `ERROR`。因此 Demo 交易能力属于降级/不可验收状态，不可只根据容器 RUNNING 宣告业务恢复。
+- MD 历史查询另有 ClickHouse `UNKNOWN_TABLE market_trade` 错误，影响部分最近成交历史查询，但实时 MD 帧依然传出成交价与执行 ID。
+- 已在 Order 源码本地提交 `00eaf33`（签名原子撮合 Maker/Taker 成交时间）；MD 测试本地提交 `6ad0105`；均未推送远端，未运行 GitHub Actions。
+- 尚无可用于这些大分区恢复的已验证可信快照；不能通过擅自清空 B 的 WAL、虚增 64 MiB 限制或关闭签名校验来宣告恢复。
+
 ## 下一步门禁
 1. 在 Common 中实现和验收带可信快照的 E2 认证恢复/流式分批回放，让 Order B 可从原始持久化数据安全追平，不能扩大内存硬限制掩盖问题。
 2. 在业务仍运行的条件下先恢复 Order B 并证明安全路由、真实写入与可回放，再分节点部署 T395 Order 镜像，不可在 B down 时强行停止 Order A。
