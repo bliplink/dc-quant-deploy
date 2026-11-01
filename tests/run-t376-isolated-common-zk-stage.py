@@ -213,6 +213,7 @@ def run_real_256_signed_auto_control(wt, demo, jar, network, evidence, suffix):
         raise RuntimeError("isolated 256 original Home manifest creation failed: "+
                            seeded.stdout[-400:]+seeded.stderr[-500:])
     old_name="otc-t378-physical-b-"+suffix
+    env.extend(["-e","OTC_T385_B_PEER="+old_name])
     old_up=False
     try:
         boot=run(command("--old-b",name=old_name,extra=[
@@ -261,19 +262,39 @@ def run_real_256_signed_auto_control(wt, demo, jar, network, evidence, suffix):
                 "T383_E3_CommonHaDemoB_REAL_COMMON_REPLAY_COMPLETE_RSA_RECEIPT_PASS"
                 not in b_final.stdout) or (
                 "T384_REAL_COMMON_AUTO_HOME_SIGNED_E3_STRICT_READY_PASS"
-                not in result.stdout):
+                not in result.stdout) or (
+                "T385_E3_REAL_TCP_NEW_PRIMARY_A_TO_B_QUORUM_DURABLE_ACK_PASS"
+                not in result.stdout) or (
+                "T385_E3_B_NEW_WAL_TCP_FSYNC_PASS"
+                not in b_final.stdout):
             raise RuntimeError("T378 dual RSA fsync Common auto Home failed, log="+
                                str(saved)+" stdout="+result.stdout[-800:]+
                                " stderr="+result.stderr[-700:])
         print("T378_REAL_RSA_FSYNC_AUTO_HOME_LOG",saved,flush=True)
         for line in result.stdout.splitlines()+b_final.stdout.splitlines():
-            if line.startswith(("T378_","T380_","T381_","T382_","T383_","T384_","LIMITATION:")):print(line,flush=True)
-        print("T384_REAL_RSA_COMMON_HOME_READY_E3_PASS newEpochClientAck_not_yet_tested=true",
+            if line.startswith(("T378_","T380_","T381_","T382_","T383_","T384_","T385_","LIMITATION:")):print(line,flush=True)
+        print("T385_REAL_RSA_COMMON_HOME_READY_E3_TCP_QUORUM_ACK_PASS",
               flush=True)
     finally:
         if old_up:
             killed=run(["docker","rm","-f",old_name],timeout=22)
             print("T378_ISOLATED_PHYSICAL_B_STOPPED",killed.returncode==0,flush=True)
+
+
+    audited=run(command("--audit",
+        klass="com.app.common.replication.CommonT386PostHomeAckDiskAudit",
+        extra=["-v",str(a)+":/srv/t378-a:ro",
+               "-v",str(b)+":/srv/t378-b:ro"]),timeout=40)
+    with saved.open("a") as evidence_append:
+        evidence_append.write("\n"+audited.stdout+"\n"+audited.stderr)
+    if audited.returncode or (
+            "T386_INDEPENDENT_3RD_JVM_E3_REAL_TCP_DUAL_RSA_CUSTODY_PASS"
+            not in audited.stdout):
+        raise RuntimeError("T386 physical on-disk independent audit failed: "+
+                           str(saved)+" "+audited.stderr[-650:])
+    print("T386_INDEPENDENT_READ_ONLY_RSA_CUSTODY_LOG",saved,flush=True)
+    print(audited.stdout.strip(),flush=True)
+
 
 
 def run_real_zk_historical_strict_ready(wt, demo, jar, network, evidence, suffix, fixture):
