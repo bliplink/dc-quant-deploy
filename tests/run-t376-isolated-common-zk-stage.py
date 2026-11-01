@@ -217,6 +217,7 @@ def run_real_256_signed_auto_control(wt, demo, jar, network, evidence, suffix):
     try:
         boot=run(command("--old-b",name=old_name,extra=[
             "-v",str(b)+":/srv/t378-b:rw",
+            "-v",str(a)+":/srv/t378-a:ro",
             "-v",str(keys/"b/node.pk8")+":/rsa/b/node.pk8:ro"]),timeout=35)
         if boot.returncode:
             raise RuntimeError("old B writer JVM failed to start: "+boot.stderr[-650:])
@@ -237,9 +238,16 @@ def run_real_256_signed_auto_control(wt, demo, jar, network, evidence, suffix):
         saved=evidence/("t378-signed-auto-home-"+suffix+".log")
         saved.write_text(seeded.stdout+"\n"+logs.stdout+"\n"+
                          result.stdout+"\n"+result.stderr)
+        b_final=run(["docker","logs",old_name],timeout=10)
+        saved.write_text(seeded.stdout+"\n"+b_final.stdout+"\n"+
+                         result.stdout+"\n"+result.stderr)
         if result.returncode or (
                 "T378_REAL_TWO_JVM_DUAL_FSYNC_RSA_AUTO_HOME_STAGE_PASS"
-                not in result.stdout):
+                not in result.stdout) or (
+                "T380_BOTH_OLD_E2_P000_REAL_FSYNC_WAL_RETIRED_RSA_PASS"
+                not in result.stdout) or (
+                "T380_B_P000_OLD_PRIMARY_REAL_WAL_CLOSED_RSA_RETIRED_PASS"
+                not in b_final.stdout):
             raise RuntimeError("T378 dual RSA fsync Common auto Home failed, log="+
                                str(saved)+" stdout="+result.stdout[-800:]+
                                " stderr="+result.stderr[-700:])
@@ -254,16 +262,84 @@ def run_real_256_signed_auto_control(wt, demo, jar, network, evidence, suffix):
             print("T378_ISOLATED_PHYSICAL_B_STOPPED",killed.returncode==0,flush=True)
 
 
+def run_real_zk_historical_strict_ready(wt, demo, jar, network, evidence, suffix, fixture):
+    """True ZooKeeper CAS of historical T293 physically signed evidence.
+    No fabricated receipts; this is fixture-backed, NOT a live Home return.
+    """
+    fixture=fixture.resolve(strict=True)
+    if not (fixture/"b/t298-e5-stage/P090-epoch-5.signed-stage").is_file():
+        raise RuntimeError("T379 historical RSA stage fixture absent")
+    if any(p.is_symlink() for p in fixture.rglob("*")):
+        raise RuntimeError("T379 source fixture contains symlink")
+    clone=evidence/("t379-signed-fixture-"+suffix)
+    shutil.copytree(fixture,clone)
+    clazz="com.app.common.replication.CommonT379RealZkStrictReadyFixtureProcess"
+    cp="/t379/demo-test:/t379/demo:/t379/common.jar:/srv/dc/dc/GW/lib/*"
+    mounts=["-v",str(jar)+":/t379/common.jar:ro",
+            "-v",str(demo/"target/classes")+":/t379/demo:ro",
+            "-v",str(demo/"target/test-classes")+":/t379/demo-test:ro",
+            "-v",str(clone)+":/t379/signed:ro"]
+    env=["-e","OTC_T379_RSA_FIXTURE=/t379/signed"]
+    def command(mode,name=None):
+        args=["docker","run"]
+        if name:args+=["-d","--name",name]
+        else:args+=["--rm"]
+        args+=["--network",network]+mounts+env
+        return args+["--entrypoint","java",DEMO_IMAGE,"-cp",cp,clazz,mode]
+    seeded=run(command("--bootstrap"),timeout=55)
+    if seeded.returncode or (
+            "T379_REAL_3ZK_SIGNED_T293_STAGE_REPLAYED_FOR_FIXTURE_PASS"
+            not in seeded.stdout):
+        raise RuntimeError("T379 signed stage fixture preflight failed: "+
+                           seeded.stdout[-700:]+seeded.stderr[-700:])
+    replica="otc-t379-fixture-a-"+suffix
+    started=False
+    try:
+        created=run(command("--replica-a",name=replica),timeout=30)
+        if created.returncode:
+            raise RuntimeError("T379 independent A session failed to start")
+        started=True
+        present=False
+        for _ in range(40):
+            logs=run(["docker","logs",replica],timeout=12)
+            if "T379_REAL_ZK_REPLICA_A_DISTINCT_LIVE_SESSION_PASS" in logs.stdout:
+                present=True;break
+            time.sleep(.35)
+        if not present:
+            raise RuntimeError("T379 A distinct session absent; "+logs.stderr[-350:])
+        published=run(command("--ready-b"),timeout=95)
+        result=evidence/("t379-actual-strict-ready-"+suffix+".log")
+        result.write_text(seeded.stdout+"\n"+logs.stdout+"\n"+
+                          published.stdout+"\n"+published.stderr)
+        if published.returncode or (
+                "T379_REAL_ZK_T293_RSA_STRICT_READY_CAS_PASS"
+                not in published.stdout):
+            raise RuntimeError("T379 historical signed STRICT READY failed; "+
+                               str(result)+" stdout="+published.stdout[-800:]+
+                               " stderr="+published.stderr[-800:])
+        print("T379_REAL_RSA_STRICT_READY_LOG",result,flush=True)
+        for line in (seeded.stdout+"\n"+logs.stdout+"\n"+
+                     published.stdout).splitlines():
+            if line.startswith("T379_"):print(line,flush=True)
+        print("T379_REAL_3ZK_HISTORICAL_RSA_CERTIFIED_READY_PASS "
+              "fixture_backed_only=true live_home_not_claimed=true",flush=True)
+    finally:
+        if started:
+            stopped=run(["docker","rm","-f",replica],timeout=25)
+            print("T379_INDEPENDENT_REPLICA_A_STOPPED",stopped.returncode==0,flush=True)
+
+
 def main():
     ap=argparse.ArgumentParser()
     ap.add_argument("--worktree",type=pathlib.Path,required=True)
     ap.add_argument("--base",type=pathlib.Path,required=True)
     ap.add_argument("--expected-sha256",required=True)
-    ap.add_argument("--mode",choices=["stage","signed-replay","signed-rejoin","signed-reverse","signed-cycle","home256","home256-signedwatch"],default="stage")
+    ap.add_argument("--signed-fixture",type=pathlib.Path)
+    ap.add_argument("--mode",choices=["stage","signed-replay","signed-rejoin","signed-reverse","signed-cycle","home256","home256-signedwatch","historical-strict-ready"],default="stage")
     args=ap.parse_args()
     wt=args.worktree.resolve(strict=True)
     base=args.base.resolve(strict=True)
-    jar=wt/("target/t377-common-home-auto-wiring.jar" if args.mode.startswith("home256")
+    jar=wt/("target/t377-common-home-auto-wiring.jar" if args.mode.startswith("home256") or args.mode=="historical-strict-ready"
             else "target/t375-common-certified-automatic-recovery.jar")
     if not jar.is_file():
         raise RuntimeError("no isolated Common T375 candidate")
@@ -315,6 +391,12 @@ def main():
             raise RuntimeError("three-node test ZooKeeper quorum did not report ruok")
         log=evidence/(project+".log")
         env=os.environ.copy()
+        if args.mode=="historical-strict-ready":
+            if args.signed_fixture is None:
+                raise RuntimeError("T379 historical test requires original signed fixture")
+            run_real_zk_historical_strict_ready(wt,demo,jar,network,evidence,
+                                                suffix,args.signed_fixture)
+            return
         if args.mode=="home256":
             result=run_real_256_home_control(wt,demo,jar,network,evidence,suffix)
             print("T377_256_HOME_REAL_CONTROL_ONLY_PASS signedReady_not_claimed=true",flush=True)
