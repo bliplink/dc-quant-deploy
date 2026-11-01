@@ -67,3 +67,19 @@ python3 tests/run-t376-isolated-common-zk-stage.py \
 4. 本轮未修改正式 Common 主干 WAL/HA 机制或重新构建正式业务镜像；新 T400 逻辑为隔离测试代码。不能以测试证据冒充正式业务 HA PASS。
 
 **执行原则：Common 负责所有 HA/快照/WAL/恢复，Order/Trade 只做业务状态机；Gateway 仅认证路由/透传；不添加多余架构或隐式失败自动通过。**
+
+## T400 增补｜Mac 共享目录问题与 32 分区 Docker 原生卷实测
+
+原先使用 Mac bind mount 存放每分区 E3 Genesis/WAL，32 分区第一次在 P010 遇 NoSuchFileException（B 的已写 Genesis 在共享目录中不能立即读回）。**该次 FAIL 不计入 HA 验收。**
+
+修改 tests/run-t376-isolated-common-zk-stage.py 的 --continuous-writes 隔离路径：A 和 B 各自使用独立的 otc-t400-<run-id>-a/b Docker managed volume，双方仍需真实独立 fsync、2/2 RSA、TCP Replica 与第三 JVM 只读审计。原测试路径和实际旧证据保留；生成的新卷不自动清理。
+
+新路径 4 分区回归 PASS；随后同一三 ZooKeeper、两个 JVM 的 **32 分区连续回切及持续写入 PASS**：
+
+- 原始日志：.work/t374-demo-common-ha/target/t376-isolated-zk/t378-signed-auto-home-203dad98.log
+- 32 个 T390_SAME_ZK_HOME_STAGE_READY_PASS；**61 次迁移期间额外 QUORUM_DURABLE ACK**。
+- 32 个 T400_REPLICA_STILL_LIVE_FSYNC_PASS，32 个第三独立 JVM T386_INDEPENDENT_3RD_JVM_E3_REAL_TCP_DUAL_RSA_CUSTODY_PASS。
+- P000 第 2 至第 32 笔迁移期严格 ACK 持续成功，最终 A/B 已认证 WAL HEAD=32；P001–P030 各 2/2，P031 1/1。
+- A/B JVM 过程用时分别约 154.7 秒和 156.0 秒（包括签名恢复、测试等待及日志；不是故障断单时间）；单分区 READY 耗时 1988–3572ms，当前 32 样本的 P95 约 3399ms，不能冒充 128 分区 P99。
+
+**仍然 NO-GO：** 128/128 真正持续可写全量、A/B 双向真实 SIGKILL 自动接管/恢复回 Home、真实租户+Robot 交易与资金不变量尚未完成。

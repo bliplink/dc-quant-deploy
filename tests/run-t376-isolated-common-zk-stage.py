@@ -192,7 +192,21 @@ def run_real_256_signed_auto_control(wt, demo, jar, network, evidence, suffix, p
         if not p.is_file():raise RuntimeError("missing test-only RSA identity "+str(p))
     phys=evidence/("t378-physical-"+suffix)
     a=phys/"a";b=phys/"b"
-    a.mkdir(parents=True,exist_ok=False);b.mkdir(parents=True,exist_ok=False)
+    if continuous_writes:
+        # Mac Docker Desktop bind mounts may delay visibility of a newly
+        # fsynced hard link. Use genuinely independent Docker-managed
+        # physical A and B volumes for both WAL and Genesis, as in T398.
+        # Preserve both volumes after the run for independent forensic audit.
+        a="otc-t400-"+suffix+"-a"
+        b="otc-t400-"+suffix+"-b"
+        for volume in (a,b):
+            created=run(["docker","volume","create",volume],timeout=35)
+            if created.returncode:
+                raise RuntimeError("T400 physical evidence volume unavailable")
+        print("T400_REAL_DOCKER_PHYSICAL_VOLUME_A",a,flush=True)
+        print("T400_REAL_DOCKER_PHYSICAL_VOLUME_B",b,flush=True)
+    else:
+        a.mkdir(parents=True,exist_ok=False);b.mkdir(parents=True,exist_ok=False)
     clazz="com.app.common.replication.CommonT378RealWalAutoHomeProcess"
     bootstrap_clazz="com.app.common.replication.CommonT377Real256HomeStageProcess"
     cp="/t378/demo-test:/t378/demo:/t378/common.jar:/srv/dc/dc/GW/lib/*"
