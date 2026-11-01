@@ -180,7 +180,7 @@ def run_real_256_home_control(wt, demo, jar, network, evidence, suffix):
             print("T377_ISOLATED_OLD_B_STOPPED",stopped.returncode==0,flush=True)
 
 
-def run_real_256_signed_auto_control(wt, demo, jar, network, evidence, suffix, partition, watch_pressure=False):
+def run_real_256_signed_auto_control(wt, demo, jar, network, evidence, suffix, partition, watch_pressure=False, serial_home=None):
     """Separate Docker JVMs fsync and RSA-sign test P000 WAL, then Common
     Watch automatically stages only P000. Does not claim physical old-B
     retirement or signed STRICT READY.
@@ -200,9 +200,12 @@ def run_real_256_signed_auto_control(wt, demo, jar, network, evidence, suffix, p
             "-v",str(demo/"target/classes")+":/t378/demo:ro",
             "-v",str(demo/"target/test-classes")+":/t378/demo-test:ro",
             "-v",str(keys/"public")+":/rsa/public:ro"]
+    partitions=serial_home or [partition]
     env=["-e","OTC_T377_ZK_ROOT=/dc/cluster/t377-"+suffix,
          "-e","OTC_T385_PARTITION="+partition,
          "-e","OTC_T388_128_WATCHES="+("true" if watch_pressure else "false")]
+    if serial_home:
+        env.extend(["-e","OTC_T390_HOME_PARTITIONS="+",".join(partitions)])
     def command(action,klass=clazz,extra=None,name=None):
         opts=["docker","run"]
         if name:opts+=["-d","--name",name]
@@ -237,11 +240,17 @@ def run_real_256_signed_auto_control(wt, demo, jar, network, evidence, suffix, p
         result=run(command("--watch-a",extra=[
             "-v",str(a)+":/srv/t378-a:rw",
             "-v",str(b)+":/srv/t378-b:ro",
-            "-v",str(keys/"a/node.pk8")+":/rsa/a/node.pk8:ro"]),timeout=95)
+            "-v",str(keys/"a/node.pk8")+":/rsa/a/node.pk8:ro"]),timeout=max(95,70*len(partitions)))
         saved=evidence/("t378-signed-auto-home-"+suffix+".log")
         saved.write_text(seeded.stdout+"\n"+logs.stdout+"\n"+
                          result.stdout+"\n"+result.stderr)
         b_final=run(["docker","logs",old_name],timeout=10)
+        if serial_home and result.returncode==0:
+            for _ in range(60):
+                if ("T390_SAME_JVM_SESSION_HOME_SERIES_PASS node=CommonHaDemoB"
+                        in b_final.stdout):break
+                time.sleep(.25)
+                b_final=run(["docker","logs",old_name],timeout=10)
         saved.write_text(seeded.stdout+"\n"+b_final.stdout+"\n"+
                          b_final.stderr+"\n"+result.stdout+"\n"+result.stderr)
         if result.returncode or (
@@ -277,6 +286,32 @@ def run_real_256_signed_auto_control(wt, demo, jar, network, evidence, suffix, p
                                str(saved)+" stdout="+result.stdout[-800:]+
                                " stderr="+result.stderr[-700:]+
                                " b_stderr="+b_final.stderr[-1200:])
+        if serial_home:
+            import re
+            def all_targets(log,marker):
+                return re.findall(r"(?m)^"+re.escape(marker)+r".*?target=(P[0-9]{3})",log)
+            staged=all_targets(result.stdout,"T390_SAME_ZK_HOME_STAGE_READY_PASS")
+            if staged!=partitions:
+                raise RuntimeError("T390 physical Home ordered READY != requested plan: "+
+                                   str(staged)+" != "+str(partitions))
+            for p in partitions:
+                if ("partition="+p+" epoch=3 seq=1 clientAck=QUORUM_DURABLE"
+                        not in result.stdout):
+                    raise RuntimeError("T390 missing exact per-shard strict TCP ACK "+p)
+            for node,log in (("CommonHaDemoA",result.stdout),
+                             ("CommonHaDemoB",b_final.stdout)):
+                marker="T390_SAME_JVM_SESSION_HOME_SERIES_PASS node="+node
+                if marker+" returned="+str(len(partitions)) not in log:
+                    raise RuntimeError("T390 independent JVM did not complete "+node)
+                sessions=re.findall(
+                    r"(?m)^T390_SAME_ZK_SESSION node="+node+
+                    r" session=(\d+) target=(P\d{3})",log)
+                if [p for _,p in sessions]!=partitions or len(set(x for x,_ in sessions))!=1:
+                    raise RuntimeError("T390 ZK session churn detected for "+node+
+                                       " "+str(sessions))
+            print("T390_TRUE_SAME_ZK_TWO_PARTITION_SIGNED_READY_TCP_ACK_PASS "+
+                  "order="+",".join(partitions)+" ALease=CONTINUOUS BLease=CONTINUOUS",
+                  flush=True)
         print("T378_REAL_RSA_FSYNC_AUTO_HOME_LOG",saved,flush=True)
         for line in result.stdout.splitlines()+b_final.stdout.splitlines():
             if line.startswith(("T378_","T380_","T381_","T382_","T383_","T384_","T385_","T388_","LIMITATION:")):print(line,flush=True)
@@ -288,19 +323,25 @@ def run_real_256_signed_auto_control(wt, demo, jar, network, evidence, suffix, p
             print("T378_ISOLATED_PHYSICAL_B_STOPPED",killed.returncode==0,flush=True)
 
 
-    audited=run(command("--audit",
-        klass="com.app.common.replication.CommonT386PostHomeAckDiskAudit",
-        extra=["-v",str(a)+":/srv/t378-a:ro",
-               "-v",str(b)+":/srv/t378-b:ro"]),timeout=40)
-    with saved.open("a") as evidence_append:
-        evidence_append.write("\n"+audited.stdout+"\n"+audited.stderr)
-    if audited.returncode or (
-            "T386_INDEPENDENT_3RD_JVM_E3_REAL_TCP_DUAL_RSA_CUSTODY_PASS"
-            not in audited.stdout):
-        raise RuntimeError("T386 physical on-disk independent audit failed: "+
-                           str(saved)+" "+audited.stderr[-650:])
-    print("T386_INDEPENDENT_READ_ONLY_RSA_CUSTODY_LOG",saved,flush=True)
-    print(audited.stdout.strip(),flush=True)
+    for audit_shard in partitions:
+        audited=run(command("--audit",
+            klass="com.app.common.replication.CommonT386PostHomeAckDiskAudit",
+            extra=["-e","OTC_T385_PARTITION="+audit_shard,
+                   "-v",str(a)+":/srv/t378-a:ro",
+                   "-v",str(b)+":/srv/t378-b:ro"]),timeout=40)
+        with saved.open("a") as evidence_append:
+            evidence_append.write("\n"+audited.stdout+"\n"+audited.stderr)
+        required="T386_INDEPENDENT_3RD_JVM_E3_REAL_TCP_DUAL_RSA_CUSTODY_PASS"
+        if (audited.returncode or required not in audited.stdout
+                or "partition="+audit_shard not in audited.stdout):
+            raise RuntimeError("T390 per-shard third-JVM audit failed "+audit_shard+
+                               " evidence="+str(saved)+" "+audited.stderr[-650:])
+        print("T386_INDEPENDENT_READ_ONLY_RSA_CUSTODY_LOG",saved,flush=True)
+        print(audited.stdout.strip(),flush=True)
+    if serial_home:
+        print("T390_SAME_ZK_ALL_HOME_PHYSICAL_THIRD_JVM_AUDIT_PASS "+
+              "total="+str(len(partitions))+" shards="+",".join(partitions),
+              flush=True)
 
 
 
@@ -381,6 +422,7 @@ def main():
     ap.add_argument("--candidate-jar-name",choices=[
         "t377-common-home-auto-wiring.jar",
         "t389-common-cold-watch-proof-first.jar"])
+    ap.add_argument("--home-partitions",default=None)
     ap.add_argument("--home-partition",default="P000")
     ap.add_argument("--mode",choices=["stage","signed-replay","signed-rejoin","signed-reverse","signed-cycle","home256","home256-signedwatch","historical-strict-ready"],default="stage")
     args=ap.parse_args()
@@ -388,6 +430,20 @@ def main():
             or not args.home_partition[1:].isdigit()
             or int(args.home_partition[1:])>127):
         raise RuntimeError("test Home partition must be P000–P127")
+    serial_home=None
+    if args.home_partitions:
+        serial_home=args.home_partitions.split(",")
+        if len(serial_home)<2 or len(serial_home)>128 or len(set(serial_home))!=len(serial_home):
+            raise RuntimeError("T390 sequential Home must be 2 to 128 unique shards")
+        numeric=[]
+        for part in serial_home:
+            if len(part)!=4 or part[0]!="P" or not part[1:].isdigit():
+                raise RuntimeError("T390 invalid Home partition")
+            numeric.append(int(part[1:]))
+        if max(numeric)>127 or numeric!=sorted(numeric):
+            raise RuntimeError("T390 only increasing original A Home supported")
+        if args.mode!="home256-signedwatch":
+            raise RuntimeError("T390 serial Home requires actual signed Watch test")
     wt=args.worktree.resolve(strict=True)
     base=args.base.resolve(strict=True)
     candidate=args.candidate_jar_name or (
@@ -457,8 +513,8 @@ def main():
             return
         if args.mode=="home256-signedwatch":
             run_real_256_signed_auto_control(wt,demo,jar,network,evidence,
-                                             suffix,args.home_partition,
-                                             args.all_home_watch_pressure)
+                                             suffix,serial_home[0] if serial_home else args.home_partition,
+                                             args.all_home_watch_pressure,serial_home)
             return
         if args.mode=="stage":
             env["OTC_T120_NETWORK"]=network
