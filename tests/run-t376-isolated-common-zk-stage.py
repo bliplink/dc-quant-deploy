@@ -180,7 +180,7 @@ def run_real_256_home_control(wt, demo, jar, network, evidence, suffix):
             print("T377_ISOLATED_OLD_B_STOPPED",stopped.returncode==0,flush=True)
 
 
-def run_real_256_signed_auto_control(wt, demo, jar, network, evidence, suffix, partition, watch_pressure=False, serial_home=None):
+def run_real_256_signed_auto_control(wt, demo, jar, network, evidence, suffix, partition, watch_pressure=False, serial_home=None, continuous_writes=False):
     """Separate Docker JVMs fsync and RSA-sign test P000 WAL, then Common
     Watch automatically stages only P000. Does not claim physical old-B
     retirement or signed STRICT READY.
@@ -206,6 +206,10 @@ def run_real_256_signed_auto_control(wt, demo, jar, network, evidence, suffix, p
          "-e","OTC_T388_128_WATCHES="+("true" if watch_pressure else "false")]
     if serial_home:
         env.extend(["-e","OTC_T390_HOME_PARTITIONS="+",".join(partitions)])
+    if continuous_writes:
+        if not serial_home:
+            raise RuntimeError("T400 live-shard test needs multi-partition Home plan")
+        env.extend(["-e","OTC_T400_CONTINUOUS_WRITES=true"])
     def command(action,klass=clazz,extra=None,name=None):
         opts=["docker","run"]
         if name:opts+=["-d","--name",name]
@@ -298,6 +302,27 @@ def run_real_256_signed_auto_control(wt, demo, jar, network, evidence, suffix, p
                 if ("partition="+p+" epoch=3 seq=1 clientAck=QUORUM_DURABLE"
                         not in result.stdout):
                     raise RuntimeError("T390 missing exact per-shard strict TCP ACK "+p)
+            if continuous_writes:
+                # Durability is checked AGAIN in the third independent JVM.
+                for i in range(1,len(partitions)):
+                    previous={partitions[0],partitions[i-1]}
+                    for held in previous:
+                        marker=("T400_E3_CONTINUOUS_QUORUM_DURABLE_ACK_PASS"
+                                +" held="+held+" during="+partitions[i])
+                        if marker not in result.stdout:
+                            raise RuntimeError("T400 retained Home not writable: "+marker)
+                if ("T400_A_PREVIOUS_HOME_REMAINED_WRITABLE_PASS"
+                        not in result.stdout
+                    or "T400_B_ALL_PRIOR_HOME_REPLICA_SERVERS_STAYED_LIVE_PASS"
+                        not in b_final.stdout):
+                    raise RuntimeError("T400 previous Home writers not continuously live")
+                for shard in partitions:
+                    if ("T400_REPLICA_STILL_LIVE_FSYNC_PASS shard="+shard
+                            not in b_final.stdout):
+                        raise RuntimeError("T400 B replica lost live shard "+shard)
+                print("T400_SAME_ZK_PRIOR_READY_SHARDS_STAY_WRITABLE_PASS "
+                    +"tested="+str(len(partitions))+" signedAck=QUORUM_DURABLE",
+                    flush=True)
             for node,log in (("CommonHaDemoA",result.stdout),
                              ("CommonHaDemoB",b_final.stdout)):
                 marker="T390_SAME_JVM_SESSION_HOME_SERIES_PASS node="+node
@@ -419,6 +444,7 @@ def main():
     ap.add_argument("--expected-sha256",required=True)
     ap.add_argument("--signed-fixture",type=pathlib.Path)
     ap.add_argument("--all-home-watch-pressure",action="store_true")
+    ap.add_argument("--continuous-writes",action="store_true")
     ap.add_argument("--candidate-jar-name",choices=[
         "t377-common-home-auto-wiring.jar",
         "t389-common-cold-watch-proof-first.jar"])
@@ -444,6 +470,8 @@ def main():
             raise RuntimeError("T390 only increasing original A Home supported")
         if args.mode!="home256-signedwatch":
             raise RuntimeError("T390 serial Home requires actual signed Watch test")
+    if args.continuous_writes and serial_home is None:
+        raise RuntimeError("T400 retained writers require explicit serial Home plan")
     wt=args.worktree.resolve(strict=True)
     base=args.base.resolve(strict=True)
     candidate=args.candidate_jar_name or (
@@ -514,7 +542,8 @@ def main():
         if args.mode=="home256-signedwatch":
             run_real_256_signed_auto_control(wt,demo,jar,network,evidence,
                                              suffix,serial_home[0] if serial_home else args.home_partition,
-                                             args.all_home_watch_pressure,serial_home)
+                                             args.all_home_watch_pressure,serial_home,
+                                             args.continuous_writes)
             return
         if args.mode=="stage":
             env["OTC_T120_NETWORK"]=network
