@@ -18,6 +18,14 @@ Common/Order/Trade/MD 的 HA、资金、订单一致性必须独立验收，不�
 
 统一图文 PDF 一键生成：`./scripts/generate-user-manuals.sh`，详见 `docs/USER_MANUAL_ONE_CLICK_GENERATION.zh-CN.md`。
 
+## Demo 快速修复与最新代码归档（2026-11-01，用户确认）
+
+- **失败就优先全新部署**：Mac Demo 是开发验收环境，旧 WAL、Snapshot、残留分区、旧租户数据若阻碍修复与验证，不得反复纠缠。先明确失败根因并保存最小可核验日志与代码后，直接选全新独立部署命名空间、空数据目录和新安装，重新注册租户走自动审批、Robot 报价/Tape 点价、订单成交与 A/B 故障切换全链路。
+- **不得复用旧 Epoch 证明**：重新部署可以丢弃 Demo 业务数据，但不可把旧 RSA 出生凭据、旧 Quorum/READY 或旧 WAL 假装为新数据。仍须通过 Common 的真实 ZooKeeper 会话、双物理签名、WAL/快照、状态认证及业务验收。
+- **目标是系统持续向前**：优先修真正机制和业务问题，严格保持 Common 通用、Order/Trade 业务专注；反复失败时直接重建 Demo，而不是长期维护旧数据兼容性或引入新框架。运行镜像可以彻底替换，但先保留必要证据和可回退镜像。
+- **最新源码统一归档**：在 `saas-crypto` 研发基础上，可将当前已验证的各仓库最新源码分别提交并推送至其 `saas-crypto-latest` 分支；主仓统一记录各仓库 SHA、Common JAR SHA、构建镜像及 GO/NO-GO。不能把 Docker 运行产物、私钥、密码、数据卷、巨型临时目录提交进 Git；不得使用 GitHub Actions，除非用户明确要求。
+- **真实交付门禁**：镜像已构建/容器 UP 不代表新部署 PASS。必须核对实际自动审批、Robot 持续挂价、真实成交、MD 成交时间、Order/Trade A/B 自动切换和持久业务状态一致，结果未完成时如实标记 NO-GO。
+
 ## 集群开发优先级（P0 强制门禁）
 
 **2026-10-31 A/B 最终架构强制决定：** [Common A/B Home Primary 自动切回](docs/COMMON_AB_HOME_PRIMARY_AUTO_FAILBACK_ARCHITECTURE_20261031.zh-CN.md) 为最新版分区选主、回主和验收标准。默认 256 分区 A/B 各 128 主、128 备；A 故障 B 自动接管，A 追平后无人工干预地将其 128 主分区自动切回 A；B 同理。禁止把“重启后只能永远当备”误读为目标，也禁止把“重启立刻抢主”当自动切回。必须先追平、后升 Epoch/CAS 切回，保持所有安全证明及明确的单节点持久化合同。
