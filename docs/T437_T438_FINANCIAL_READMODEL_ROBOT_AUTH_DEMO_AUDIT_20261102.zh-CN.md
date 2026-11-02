@@ -45,3 +45,18 @@
 2. T437 SQL 兼容性需获得正常允许的隔离数据库级测试，再开启开关，小批量验收 MySQL 余额/持仓与 Common 认证 WAL 的精确一致性；此前财务业务表保持原样。
 3. T438 下次自然会话到期做真实重认验收，记录同一幂等键没有重复订单。
 4. 所有业务 E2E 稳定后才进行 Common 自动 Order/Trade A/B 故障注入与一致性终验。
+
+## T439｜后续源码复核：5003 订阅／缓存判定（尚非实机根因）
+
+> 2026-11-02 后续 GitHub 静态复核。以下只证明源码行为，**没有**取得新的 Demo 运行日志或重新部署证据；不可把待复现的机制等同于已确认故障根因。
+
+1. **Trade 的 5003 判定**：`com.app.dc.tradesvr/src/main/java/com/app/dc/service/check/MarkPxCheck.java` 的 `Newing + OPEN` 调用 `MarketPriceFacade.getMarketPrice(location, securityID)`，返回 null 即 `MARKPX_NOTEXIST`。不应通过 `allowMissingMarkPrice=true` 绕过风险校验。
+2. **5 秒新鲜度门禁**：`com.app.dc.tradesvr/src/main/java/com/app/dc/service/price/MarketPriceFacade.java` 默认 `risk.mark-price.max-age-ms=5000`，基于接收本地时间 `markUpdatedAt` 判断过期。实时诊断应逐租户、逐 Symbol 记录 MD 发布时刻、Trade 接收时刻、缓存更新时间与 TTL，不能仅凭最新成交价存在认定标记价有效。
+3. **明确需要排查的两条条件分支**：
+   - `MarketPriceFacade` 的 MD 回调将 `t.getMarkPrice()` 解析失败／字段为空时的 `markPx=null` 写入缓存并将 `markUpdatedAt` 清零。需要用实际 MD Topic 消息证明有无“只有成交价、没有标记价”的输入；如有，核实其是否造成 5003，且不能把超过 TTL 的旧标记价无限保活。
+   - `getMPrice()` 使用 `subscribedMarkets.add(key)` 一次性触发订阅；订阅抛异常时仍保留订阅标记，源码依赖 Common MD 订阅层完成恢复。需查失败日志及下游恢复事实；不能未经证据就在下单热路径增加 Image 轮询。
+4. **MD 发布端**：`com.app.dc.mdsvr/src/main/java/com/app/dc/service/index/IndexFacade.java` 调用 `TradeFacade.publishTenantMarkPrice`，后者对 `htLatestTrade` 中已有的对应租户／Symbol 发送更新；要核对发生 5003 的租户是否有缓存市场、源字段不为空、实际 Topic 推送与 Trade 订阅是否匹配。
+5. **T437 不得提前开启**：新 `CertifiedTradeFinancialReadModel` 的 9 项测试只覆盖 Mutation 字段校验，不涉及真实 MySQL 方言、主键、事务回滚或 Epoch 切换。开启前必须以独立 MySQL 临时表验证 `dc_users_balance` / `dc_orders_position` Upsert、游标原子提交及恢复后重放，并验证当前 Epoch 之前的初始化状态是否完整可重建；不得凭解析单测直接生产回填。
+6. **5000 需要真实 Trade 帐户快照对账**：对每个 Maker 账户记录 `balance / usedMargin / freezedMargin / freezedCommission` 和实际订单风险需求，以 Common 认证状态为准。T437 测试里的数值是模拟样例，不作为当前实机账户余额证据；不得通过重复入金、清除委托或放宽风险绕过。
+
+**下一步实际执行门禁**：先导出 5003 发生前后相同 `location + security_id` 的 APS/MD 发送与 Trade 接收日志、`markUpdatedAt` 差值，同时核对 Trade 账户快照解释 5000。确认具体触发分支后才允许定向修复；之后恢复双租户持续报价／Tape 成交，完成 T437 MySQL 兼容验收及 A/B HA 故障注入。当前所有 NO-GO 结论不变。
