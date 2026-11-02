@@ -85,3 +85,12 @@
 - 18:57:35 实际 `docker restart` 新 Projection；18:58:23 日志检测 `CERTIFIED_TRADE_FINANCIAL_READMODEL_STARTED` PASS，未见 `CERTIFIED_TRADE_FINANCIAL_READMODEL_RETRY`。
 - 对 JRHHXA/KCV203 四个余额／四个持仓在重启前后进行一致算法的 MySQL MD5：余额 `f0c38965d1575a2d64492056a3ae604c`，持仓 `4c1fa99fc119787184292355529e070c`，前后**完全相同**，记录数均 4；P129/P238/P240/P242 与 Trade 源水位 **4/4 MATCH**。T437 余额/持仓认证读模型、事务提交与重启幂等可标记**Demo 范围 PASS**，POSTING/资金明细仍未覆盖。
 - 18:59:38–47 从本机 Gateway 的公开 `MDSvr.queryPublicMarket(location,BTCUSDT)` 做两租户各五次**纯读取**：所有返回 `code=0`，都有非空 MarkPrice/IndexPrice，且 18:59:38→42 有实际变化，两租户标记价同步；这证明抽样时 **MD 公开行情有标记价**，不能直接认定 APS 或 MD 全局停供。18:58 左右单次公开盘口查询 JRHHXA `bookLevels=0`、KCV203 `bookLevels=13`，当时 Robot 未运行，不能视为 40 档持续报价通过。Trade 本地 mark 缓存/订阅恢复仍需对时观察，5003 尚未确证修复。
+
+
+### T441｜5000 已确认的 HEDGE/Robot 风险口径失配
+
+- Demo MySQL `dc_users_config` 确认 JRHHXA/KCV203 的四个 Maker/Tape 账户均使用 `position_way_type=HEDGE`，Symbol 1x 杠杆。认证 WAL 投影中的真实多/空仓位都非零，例如 JRHHXA Maker001 long 0.0673 + short 0.0496 = **gross 0.1169 BTC**，但 net 0.0177 BTC；KCV203 Maker001 gross 0.1174 BTC，net 0.0032 BTC。两账户已用保证金分别约 9163.68 和 9189.19 USDT。
+- `RobotRepository.netPosition` 只解析 TradeSvr `PositionReport` 的 `longPosition-shortPosition`，再与 Tape 净值相加。`QuoteEngine.build(...,netPosition)`/ `InventoryController.allowBid/allowAsk` 的硬限只比较**净**偏差与 `max_position_qty=0.1`，不检查 HEDGE 多+空总占资；`InventoryController.reduce` 也只看净偏差，且当前 `strategy_config` 没有 `inventory_auto_reduce_enabled`，默认 false。
+- **具体失配**：Robot 在净头寸远低于 0.1 的情况下继续补买卖报价；Trade 新认证入场按真实 `usedMargin+frozenMargin+commission` 拒绝无足额抵押的 OPEN，产生 `5000`。这种差异在迁移到 Common 认证财务状态、严格校验后暴露。此处不得恢复旧的不充分校验或绕过 5000；要在 Robot 使用**权威 Trade Balance/Position** 对 HEDGE 总仓和当前可用保证金进行报价/减仓联动，且 Tape 也不得无约束地累积双向 gross。**本轮只完成取证，尚未部署该 Robot 机制修复。**
+- 进一步需把每笔 5000 对齐拒单前 Trade 帐户序号/冻结状态，尤其 JRHHXA 拒单后取消旧委托恢复了部分可用余额；不能仅用取消后的 `availableBalance` 反证拒单。
+- 只读 MD 查询在 18:59 多次返回两租户同步、变化的 MarkPrice，说明当时的 APS→MD 对外公开价格可用；5003 需观察每个 Trade 节点的订阅接收时间与本地 TTL。这是**未闭环项目**，不能宣布已经修复。
