@@ -60,3 +60,21 @@
 6. **5000 需要真实 Trade 帐户快照对账**：对每个 Maker 账户记录 `balance / usedMargin / freezedMargin / freezedCommission` 和实际订单风险需求，以 Common 认证状态为准。T437 测试里的数值是模拟样例，不作为当前实机账户余额证据；不得通过重复入金、清除委托或放宽风险绕过。
 
 **下一步实际执行门禁**：先导出 5003 发生前后相同 `location + security_id` 的 APS/MD 发送与 Trade 接收日志、`markUpdatedAt` 差值，同时核对 Trade 账户快照解释 5000。确认具体触发分支后才允许定向修复；之后恢复双租户持续报价／Tape 成交，完成 T437 MySQL 兼容验收及 A/B HA 故障注入。当前所有 NO-GO 结论不变。
+
+
+## T440｜2026-11-02 18:53 Demo 财务物化实际部署验证
+
+### 从原单机路径到 Common 集群路径的根因判定
+
+- **已确认回归（T437）**：认证 Trade WAL → `dc_trade_projection_mutation`/`watermark` 事务归档没有继续物化至 `dc_users_balance`/`dc_orders_position`。这是从旧业务表写入路径切到 Common 认证状态后遗漏的查询侧适配；不是认证 WAL 或 MySQL 本身丢失。修复使用已经在 `com.app.dc.projectionsvr/saas-crypto-latest` 提交的 `CertifiedTradeFinancialReadModel`，Common 无业务代码修改。
+- **保证金（5000）的实机依据**：18:40 前后的认证余额快照，JRHHXA 001 balance=9998.16819655 / used=9163.67978515 / available=834.47513741；KCV203 001 balance=9998.16323518 / used=9189.18789481 / frozen=803.1374 / available=4.84054341。审计拒单发生在前一时间窗口，**仍需对齐拒单前精确财务水位**，不可用较晚解除冻结后的余额替代。两租户 BTCUSDT Maker 多空总仓高：JRHHXA 001 long=0.0673 / short=0.0496，KCV203 001 long=0.0603 / short=0.0571；Robot 配置是单侧 20 档、depth_margin_budget=1000、max_position_qty=0.1、`inventory_auto_reduce_enabled` 未配置（代码默认 false），而 Robot `netPosition` 读取 Trade 认证持仓后使用 long-short 净额。**由多空总保证金和净头寸控制口径不同造成持续资金压力，是已证实的配置/机制失配；每一笔 5000 仍需按事发时点风控快照核对**，不能关闭严格保证金，也不得重复入金。
+- **标记价（5003）仍待动态链路证明**：旧版 Trade `MarketPriceFacade`（2026-09-04 `bdbd5e9`）已经使用 5 秒风险 TTL，也已对空 MarkPrice 清缓存。新版本的重大变化是 `getMPrice` 改为非阻塞单次订阅（`subscribedMarkets.add`）且异常时保留该标记，依赖 Common 订阅层自动重新连接。须核对 APS→MD 缓存→租户 Topic→Trade 回调的真实帧/时序，才可定性 5003；严禁恢复每笔下单轮询 Image 或使用 LastPrice 绕过。
+
+### 可复核的 T440 实机测试与操作
+
+- Demo 主机：Mac Docker，数据源 `otc-t398-mysql`，数据库 `dc`。正式财务表操作前用 MySQL 8 的 **TEMPORARY** 克隆表模拟原始列及 UPSERT；balance、position、cursor 同事务 `ROLLBACK` 后分别为 0 行，COMMIT 后分别为 1 行，DECIMAL(30,16) 数值精确保持；未写正式四账户。
+- 完整性预检：Epoch2 `ACCOUNT_BALANCE` 13,249 条，`POSITION` 13,241 条；两类 `JSON_VALID=0` 计数均 0，必要字段缺失计数均 0。JRHHXA/KCV203 的四个账户在 Epoch2 都有变更。
+- 将旧运行容器 `otc-t434-projection-class-parity` **停止但保留**，复制原服务网络/挂载/运行环境配置并启动 `otc-t440-projection-financial-readmodel`，镜像为 `local/otc-t437-projectionsvr:financial-readmodel-disabled`（镜像 SHA256 前缀 `56fe3bb0a2c0d57c638`），以 JVM `-Dtrade.financial.readmodel.enabled=true` 激活已提交的新类。**没有替换或编辑 Common/Order/Trade 的认证 WAL。**
+- 18:53:26 启动日志 `CERTIFIED_TRADE_FINANCIAL_READMODEL_STARTED`；18:53:28–31 四分区 `CAUGHT_UP`：`P129 epoch2 seq2523`、`P238 epoch2 seq3348`、`P240 epoch2 seq2679`、`P242 epoch2 seq2765`。真实 MySQL `dc_trade_financial_readmodel_cursor` 对应四分区与 `dc_trade_projection_watermark` **4/4 MATCH**。
+- 实际正式业务表当前已写回四账户余额/已用与冻结保证金及四个 BTCUSDT 持仓，值与上述认证 Mutation 最新快照一致；`dc_orders_position` 初始空表已变为 4 条实际头寸。写入的是读模型，非新增资金、订单或 Trade WAL。
+- **尚未通过/待检**：按重启重复消费严格验证不重复、POSTING 流水读模型、Robot 持续运行/成交、5003 实帧定位、5000 拒单前精确水位与 A/B 自动互切都未完成；不得宣布整体 GO。Robot 容器在本轮曾有退出 137（`OOMKilled=false`）及后续人为终止 143，不能以数据库旧 `RUNNING` 字段代替真实运行状态。财务回填成功也不代表 HA 完成。
