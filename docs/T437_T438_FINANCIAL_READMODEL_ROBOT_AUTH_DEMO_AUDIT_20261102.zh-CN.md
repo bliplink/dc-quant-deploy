@@ -78,3 +78,10 @@
 - 18:53:26 启动日志 `CERTIFIED_TRADE_FINANCIAL_READMODEL_STARTED`；18:53:28–31 四分区 `CAUGHT_UP`：`P129 epoch2 seq2523`、`P238 epoch2 seq3348`、`P240 epoch2 seq2679`、`P242 epoch2 seq2765`。真实 MySQL `dc_trade_financial_readmodel_cursor` 对应四分区与 `dc_trade_projection_watermark` **4/4 MATCH**。
 - 实际正式业务表当前已写回四账户余额/已用与冻结保证金及四个 BTCUSDT 持仓，值与上述认证 Mutation 最新快照一致；`dc_orders_position` 初始空表已变为 4 条实际头寸。写入的是读模型，非新增资金、订单或 Trade WAL。
 - **尚未通过/待检**：按重启重复消费严格验证不重复、POSTING 流水读模型、Robot 持续运行/成交、5003 实帧定位、5000 拒单前精确水位与 A/B 自动互切都未完成；不得宣布整体 GO。Robot 容器在本轮曾有退出 137（`OOMKilled=false`）及后续人为终止 143，不能以数据库旧 `RUNNING` 字段代替真实运行状态。财务回填成功也不代表 HA 完成。
+
+
+### T440 18:57 重启幂等与 18:59 只读 MD 抽样
+
+- 18:57:35 实际 `docker restart` 新 Projection；18:58:23 日志检测 `CERTIFIED_TRADE_FINANCIAL_READMODEL_STARTED` PASS，未见 `CERTIFIED_TRADE_FINANCIAL_READMODEL_RETRY`。
+- 对 JRHHXA/KCV203 四个余额／四个持仓在重启前后进行一致算法的 MySQL MD5：余额 `f0c38965d1575a2d64492056a3ae604c`，持仓 `4c1fa99fc119787184292355529e070c`，前后**完全相同**，记录数均 4；P129/P238/P240/P242 与 Trade 源水位 **4/4 MATCH**。T437 余额/持仓认证读模型、事务提交与重启幂等可标记**Demo 范围 PASS**，POSTING/资金明细仍未覆盖。
+- 18:59:38–47 从本机 Gateway 的公开 `MDSvr.queryPublicMarket(location,BTCUSDT)` 做两租户各五次**纯读取**：所有返回 `code=0`，都有非空 MarkPrice/IndexPrice，且 18:59:38→42 有实际变化，两租户标记价同步；这证明抽样时 **MD 公开行情有标记价**，不能直接认定 APS 或 MD 全局停供。18:58 左右单次公开盘口查询 JRHHXA `bookLevels=0`、KCV203 `bookLevels=13`，当时 Robot 未运行，不能视为 40 档持续报价通过。Trade 本地 mark 缓存/订阅恢复仍需对时观察，5003 尚未确证修复。
