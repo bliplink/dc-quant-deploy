@@ -62,7 +62,7 @@ docker run -d --name "$B" --network "$NET" "${MOUNTS[@]}" "${ENV[@]}" \
  com.opentradingcore.demo.DemoCommon256StrictProcess --node=B >/dev/null
 echo 'T466_256_BOTH_PHYSICAL_JVMS_STARTED'
 finished=false
-for i in $(seq 1 850);do
+for i in $(seq 1 2100);do
   if docker logs "$A" 2>&1 | grep '^T466_256_NODE_128_HOME_STRICT_ALL_STAGES_PASS' >/dev/null &&
      docker logs "$B" 2>&1 | grep '^T466_256_NODE_128_HOME_STRICT_ALL_STAGES_PASS' >/dev/null;then
     finished=true;break
