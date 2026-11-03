@@ -37,6 +37,8 @@ def main():
     parser.add_argument("--expected-sha256",required=True)
     parser.add_argument("--classes",type=pathlib.Path,required=True)
     parser.add_argument("--keys",type=pathlib.Path,required=True)
+    parser.add_argument("--pin-original-home",action="store_true",
+                        help="T462: force 256 pinned Home while B takes over A's poisoned P060")
     args=parser.parse_args()
     candidate=args.candidate.resolve(strict=True)
     classes=args.classes.resolve(strict=True)
@@ -70,6 +72,8 @@ def main():
             "-v",str(classes)+":/t460/probe:ro",
             "-v",str(keys/"public")+":/rsa/public:ro",
             "-e","OTC_T460_ZK_ROOT="+zkroot]
+    if args.pin_original_home:
+        common += ["-e","OTC_T462_PIN_HOME=1"]
     java="com.app.common.replication.CommonT460PoisonedPrimaryRealZkProcess"
     def command(action,side=None,name=None,extras=None):
         cmd=["docker","run"]
@@ -123,6 +127,10 @@ def main():
         (evidence/"candidate-b.log").write_text(b.stdout+b.stderr)
         if "T460_REAL_3ZK_LIVE_POISON_SIGNED_AUTO_WATCH_STAGE_PASS" not in b.stdout:
             raise RuntimeError("T460 missed signed live-poison A→B nonREADY Stage")
+        if args.pin_original_home and (
+                "T462_REAL_3ZK_256_PINNED_HOME_NONHOME_B_POISON_STAGE_PASS"
+                not in b.stdout):
+            raise RuntimeError("T462 pinned original Home incorrectly blocked non-Home B")
         still=invoke(["docker","inspect",oldname,
                       "--format","{{.State.Running}}"],timeout=10)
         if still.stdout.strip()!="true":
