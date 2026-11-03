@@ -64,3 +64,15 @@
 4. 另需专项验证 B 恢复后新交易客户 ACK 是否切回严格 2/2；任何本地降级 ACK 都需显式标识其 RPO 风险。
 
 **结论：Common Demo 自动 A→B→A 与新 WAL TCP 复制 PASS；正式 Order/Trade HA 仍 NO-GO。**
+
+## T456 追加复测｜B 独立 fsync 日志与磁盘字节验收（2026-11-03）
+
+前一次 11:49 的 T456 清理只存了生存 B、C 与回归 A 的日志，未单独保存回归 B (`BR`) 的 stdout。为避免 A 侧成功输出被误用为 B 独立证据，现已在标准测试脚本退出清理中增加 `t456-returned-b.log` 留证，源码增量提交 [`8938388`](https://github.com/bliplink/com.app.common/commit/893838815d57dd09460dd03303899e8af67583d4)。只增加日志采集，不修改 Common WAL、签名或复制协议。
+
+- **重新运行证据目录**：`~/.opentradingcore/t124-live-kill-runs/20261103130830`；控制台：`~/.opentradingcore/t124-live-kill-runs/t456-20261103-recheck-130830.log`；进程 **exit 0**。同一隔离 A/B/C、原有 RSA 和 Common 候选 JAR；JAR SHA-256 `0e9205761029f2f616f65b42359606b0cdea79cc634bb8e10a147632c6b7f024`。
+- **双向故障注入**：A E1 双签名状态 40；SIGKILL A 后 B E2 持续写入至 60；A E2 认证追平成为 Replica；SIGKILL B 后 A E3 经 C 见证与 Common Watch READY 持续写入至 74。
+- **B E3 在线重加入**：B 独立日志 `t456-returned-b.log` 含 `T277_COMMON_GENERIC_E3_REPLICA_RSA_INSTALL_PASS head=2 applied=2`、`T278_COMMON_AUTOMATIC_E3_REJOIN_WATCH_SIGNED_RSA=PASS`、`T270_REAL_B_E3_ONLINE_RSA_REPLICA_REJOIN_PASS total=74 requests=6 e3Seq=2 historicalLocalRpo=true`。
+- **新 WAL TCP 复制**：B 独立接收器打印 `T272_B_COMMON_TCP_REPLICA_LISTENING=PASS port=29301`、`T272_B_E3_COMMON_TCP_NEW_WAL_FSYNCED_PASS seq=3 total=85 requests=7`；A 打印 `T272_A_E3_COMMON_TCP_SIGNED_B_FSYNC_PASS seq=3 total=85 localAckNotRetroactiveQuorum=true`。控制台终止断言 `T272_REAL_A_E3_NEW_BUSINESS_TO_REJOINED_B_TCP_RSA_FSYNC=PASS`。
+- **物理文件交叉验证**：A `a/CommonHaDemo/CommonHaDemoA/P090/epoch-3/local-async-business.wal` 和 B `b/CommonHaDemo/CommonHaDemoB/P090/epoch-3/rejoined-E3-business.wal` 均为 178 字节，`cmp` 完全一致，两份 SHA-256 均为 `0935a4241ce2a5d1ab17137d29d2e8e5cec8c000e30346c69dbc0094a62ce689`。B 文件写入时间晚于 A；隔离容器清理，证据卷保留。
+
+**验收判定**：T456 单分区 Demo+Common A→B→A、B E3 追平、TCP WAL 及 fsync 复测 PASS。降级客户 ACK 仍是 `LOCAL_DURABLE_ASYNC / quorum=false / rpoRisk=true`；正式 Order/Trade 256 分区 HA 与业务一致性并未在 T456 中验证通过，继续 **NO-GO**，不得据此替换现网。
