@@ -73,6 +73,6 @@
 - **双向故障注入**：A E1 双签名状态 40；SIGKILL A 后 B E2 持续写入至 60；A E2 认证追平成为 Replica；SIGKILL B 后 A E3 经 C 见证与 Common Watch READY 持续写入至 74。
 - **B E3 在线重加入**：B 独立日志 `t456-returned-b.log` 含 `T277_COMMON_GENERIC_E3_REPLICA_RSA_INSTALL_PASS head=2 applied=2`、`T278_COMMON_AUTOMATIC_E3_REJOIN_WATCH_SIGNED_RSA=PASS`、`T270_REAL_B_E3_ONLINE_RSA_REPLICA_REJOIN_PASS total=74 requests=6 e3Seq=2 historicalLocalRpo=true`。
 - **新 WAL TCP 复制**：B 独立接收器打印 `T272_B_COMMON_TCP_REPLICA_LISTENING=PASS port=29301`、`T272_B_E3_COMMON_TCP_NEW_WAL_FSYNCED_PASS seq=3 total=85 requests=7`；A 打印 `T272_A_E3_COMMON_TCP_SIGNED_B_FSYNC_PASS seq=3 total=85 localAckNotRetroactiveQuorum=true`。控制台终止断言 `T272_REAL_A_E3_NEW_BUSINESS_TO_REJOINED_B_TCP_RSA_FSYNC=PASS`。
-- **物理文件交叉验证**：A `a/CommonHaDemo/CommonHaDemoA/P090/epoch-3/local-async-business.wal` 和 B `b/CommonHaDemo/CommonHaDemoB/P090/epoch-3/rejoined-E3-business.wal` 均为 178 字节，`cmp` 完全一致，两份 SHA-256 均为 `0935a4241ce2a5d1ab17137d29d2e8e5cec8c000e30346c69dbc0094a62ce689`。B 文件写入时间晚于 A；隔离容器清理，证据卷保留。
+- **物理文件交叉验证**：A `a/CommonHaDemo/CommonHaDemoA/P090/epoch-3/local-async-business.wal` 和 B `b/CommonHaDemo/CommonHaDemoB/P090/epoch-3/rejoined-E3-business.wal` 均为 178 字节，`cmp` 完全一致，两份 SHA-256 均为 `0935a4241ce2a5d1ab17137d29d2d8e5cec8c000e30346c69dbc0094a62ce689`。B 文件写入时间晚于 A；隔离容器清理，证据卷保留。
 
 **验收判定**：T456 单分区 Demo+Common A→B→A、B E3 追平、TCP WAL 及 fsync 复测 PASS。降级客户 ACK 仍是 `LOCAL_DURABLE_ASYNC / quorum=false / rpoRisk=true`；正式 Order/Trade 256 分区 HA 与业务一致性并未在 T456 中验证通过，继续 **NO-GO**，不得据此替换现网。
