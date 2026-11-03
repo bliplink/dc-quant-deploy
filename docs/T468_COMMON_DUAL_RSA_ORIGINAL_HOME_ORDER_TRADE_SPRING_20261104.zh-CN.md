@@ -69,3 +69,17 @@ SHA-256：**`300d16610d78e228db38c6d31b2ae16cd90e6078ac6051753bf3ac365dd12c2a`**
 - T466 已完成 55,310 严格 2/2 压测，本轮新 Common 又经过 540 严格回归；上线门禁仍是 **256 自动 HA + 真业务状态/回 Home 通过**。
 
 当前四个运行中的 Order/Trade 容器没有替换、没有重启、没有清理旧 P060。隔离 T468 压测容器已清理；GitHub Actions 未使用。
+
+## 5. 本轮追加完成的真实全量源码兼容回归
+
+在上述 Common **同一份** `300d16610d78e228db38c6d31b2ae16cd90e6078ac6051753bf3ac365dd12c2a` JAR 下，实际重新编译了两个服务**全部 main Java 源码**，不是只编译新 Spring 类：
+
+- **Order：122/122 源码编译 PASS**，产生 179 个 class；将签名原始 Home 的最新 Spring 接线与 Order 撮合、撤单、部分成交、Recovery、业务状态测试组合，**41/41 JUnit PASS**。
+- **Trade：172/172 源码编译 PASS**，产生 219 个 class；将签名原始 Home 的最新 Spring 接线与持仓、保证金、资金入账、成交对账、Recovery、业务状态测试组合，**46/46 JUnit PASS**。
+- **合计 294 个 Java main 源码、87 项精选 JUnit PASS**。非 full Maven clean package；不是 Docker 上的 Order/Trade 真实 E2/E3 资金/委托恢复验收。
+
+本地证据：
+- `.work/t444-order-stream/target/t468-latest-common-full-abi/`、`target/t468-latest-common-business-junit.txt`。
+- `.work/t452-trade-windowed-e2/target/t468-latest-common-full-abi/`、`target/t468-latest-common-business-junit.txt`。
+
+E1 原始 Home 凭据应在**真实原始业务 E1 双节点 Genesis 完成、零 ACK 证明仍成立**、尚未开始正式提交、仍持有原始相同 ZK Session 时，按两个物理 JVM 分别显式 `provisionOriginalHome=true` 签发。发行阶段 `automaticRecovery=false` 防止在双签名尚不齐全时自动 Watch Bean 抢先启动；收集两张独立 RSA 持久凭据后，在两个节点都将发行参数恢复为 false，再切换到自动 HA。不能在 E2/E3 根据当前主备重新发行，也不能借此跳过缺失的其他四个物理证据 Bean。
