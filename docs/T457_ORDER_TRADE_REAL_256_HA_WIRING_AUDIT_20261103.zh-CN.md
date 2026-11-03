@@ -18,6 +18,7 @@
 
 - Trade manifest 同样是 **256 分区 READY、A/B 各 128 Primary、全部 STRICT_QUORUM**；这只是 ZK 控制面快照，**不是**真实故障切换成功证明。
 - 业务源码 `OrderCommonNodeRuntimeWiring.certifiedCommonNode` 和 `TradeCommonNodeRuntimeWiring.certifiedCommonNode` 仍调用旧的 `CommonCertifiedNodeBootstrap.openAndStartWithZkFencingAndReplay`。它们没有向 Common 的 `openAndStartWithCertifiedAutomaticRecovery` 提供 **完整的每个本地 Replica 的 `AutomaticReplicaRecoveryPlan`**，也没有安装对应认证的 CatchupProof、签名 READY Publisher 与业务 WAL/Snapshot Install 回调。
+- 进一步代码核查确认：`OrderCommonPhysicalProofWiring.commonPhysicalEvidenceRegistry()` 初始创建的是**空 Common 物理证明注册表**，不是已具备 E2/E3 恢复证明；`OrderCommonRecoveredDomainWiring` 的现有安装校验明确仅接受原始 **E1、snapshotSeq=0、committedHeadSeq=0** 的 Genesis。必须先把真实跨 Epoch Snapshot/WAL 业务重放接上既有 Common RecoveryBinding，不能只把启动方法名替换为 automatic 并传空计划，不能凭 Spring READY 或 ZooKeeper READY 绕过这些安全条件。
 - 现场对四个 Java 容器执行 `jstack 1`，匹配 `common-failover-cold-* ` 的线程数均为 **0**。T456 所验证的自动 Watch 尚未被真正部署到 Order/Trade，不能依赖脚本代替常驻自动接管。
 - 当前 Common 的完整自动启动入口会在真正启动 WAL/Netty 前核对全部 Replica 计划，并在启动失败时 fail-closed；不能通过向其传入空 Map、无证明回调或无业务恢复的成功桩冒充上线。
 
