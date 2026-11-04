@@ -19,6 +19,10 @@ T479 已将 Order、Trade 的 **v2 完整业务恢复入口显式绑定到同一
 
 **重要：** Demo 单分区/Genesis + C 签名见证与正式 256 分区分配、真实历史业务状态、全部已确认成交账本是不同的验收维度。不能用 Demo PASS 代替正式业务 READY；也不能因为业务缺 Bean 而反复修改 Common 选主算法。
 
+### 另外确认的启动门禁差异
+
+`OrderCommonNodeRuntimeWiring.certifiedWriters` 和 `TradeCommonNodeRuntimeWiring.certifiedWriters` 在 Spring Bean 创建时都会调用 `installed.requireAuthenticatedReady()`、`attestedBusinessRecovery.requireBusinessRecoveryReady(service,node)`。这两个当前是全节点聚合门禁，而不是“只有指定 Pxxx 下单时才检查对应分区”。在一个分区缺认证或被 Common poison 时，**可能连带使整节点 writer Bean 不可用**；即使后面业务适配器已增加逐分区校验也不能逆转已经失败的 Spring 启动。这是仍需按 Common 真正物理分区 READY 数据分解的具体后续问题，不得简单去掉全局门禁而让未恢复分区进入写入。
+
 ## 本轮 T479 实际代码交付
 
 两个业务仓 `saas-crypto-latest`：
