@@ -15,6 +15,10 @@
 - Common canonical Stage [60ee176](https://github.com/bliplink/com.app.common/commit/60ee176929d46f5f50218779e5645f8673f57d65)、Source Authority [15f2da8](https://github.com/bliplink/com.app.common/commit/15f2da84820aa509c8a9fa50e1455c43c20528f4)、Common Pre-READY 入口 [4155b2a](https://github.com/bliplink/com.app.common/commit/4155b2ae520edd4fb9e0a7efdd5014c5655bd966)、Netty 篡改/恢复测试 [4b132f8](https://github.com/bliplink/com.app.common/commit/4b132f82f8e94034958090fc2b62255c8710d91a)
 - Order 业务调用 [d1a4165](https://github.com/bliplink/com.app.dc.ordersvr/commit/d1a41658f39d5feca9e1ca33cefb138597e2c479)；Trade 业务调用 [3919732](https://github.com/bliplink/com.app.dc.tradesvr/commit/39197324007b14fde074e8b700d2f4f411f49825)
 
+**同版 T481 Demo 真正双向故障实测补充：**隔离 Demo+Common 使用以上 **SHA256 为 `7bdecd2f...` 的确切 T481 JAR**，两次实际 SIGKILL A→B→A + A 追平 E1/E2、B 重新加入 E3、E3 新业务 TCP RSA fsync 至 B **PASS，脚本退出 0**。证据 `.work/t449-common-gw-rejoin/target/t481-two-sigkill-run.log` 和 `/Users/kong/.opentradingcore/t124-live-kill-runs/20261104183812`。故障期 `historicalLocalRpo=true`、`LOCAL ACK`，**不宣称 RPO0**。
+
+**T481 ARM64 同版候选镜像**：`local/otc-t481-ordersvr:canonical-stage-fenced-replay-no-go`（`sha256:7f27d74bf926...`），`local/otc-t481-tradesvr:canonical-stage-fenced-replay-no-go`（`sha256:88fbf3537eee...`）。来自完整 Java 8 主源码输出，镜像中各只有一份 T481 Common JAR；在 `docker run --network none` 中 ABI/预 READY 入口类加载检查 PASS。**标签明确 NO-GO，未部署至四个现有业务容器。**
+
 **仍未完成的门禁**：Spring 正式 `CertifiedPhysicalRecovery` 工厂、跨 E1/E2/E3 真实 RSA+Custody+WAL+Snapshot 证据、256 分区签名 READY、真实 Robot 成交、Order/Trade 双向 SIGKILL。现有业务容器未替换，也没有手工清除过期 lease 或 poisoned Epoch。下文是修复前的历史 RED 诊断，不代表最新状态。
 
 ---
