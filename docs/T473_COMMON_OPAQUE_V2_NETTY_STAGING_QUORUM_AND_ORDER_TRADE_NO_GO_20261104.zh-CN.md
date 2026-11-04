@@ -36,3 +36,15 @@
 - 本轮核对四个 Order/Trade 容器处于 Up 状态；**未触碰容器、未清理 P060、未用 GitHub Actions**。
 
 **最终状态：T473 Common v2 跨 Netty 认证 Staging 测试 PASS；OpenTradingCore 真实 Order/Trade 完整 HA 仍 NO-GO。**
+
+## T473 同一最终候选 JAR 的后续真实验证（补充）
+
+- 候选路径：`.work/t449-common-gw-rejoin/target/t473-common-v2-netty-tested-candidate.jar`，SHA-256 **`5eb5c089054d91edb85dd01e2256b12d0fb10d62a64e590741a2953284daa9a6`**。
+- 通过 `unzip -tq`，JAR 没有重复 Zip entries；`javap` 确认 `stageOpaqueWithSourceManifest`、`requireAuthenticatedOriginalSourceWalWire` API 已包含。该候选以 T472 先前测试 JAR 叠加本次编译类得到，**并非完整 Maven clean 发布**。
+- **256 分区健康 E1 压测 540/540 STRICT 2/2 ACK、0 失败、256/256 bit-exact WAL 一致 PASS**。A/B Home 各 128，10→50→200 模拟租户。证据 `.work/t466-common-256-strict/20261104040720-89286/metrics.json`，测试脚本 `tests/run-t466-demo-common-256-strict-load.sh`，日志 `.work/t449-common-gw-rejoin/target/t473-256-strict-run.log`。
+- **真实 Demo+Common 两次 SIGKILL 测试退出码 0，PASS**：A SIGKILL → B 自动 E2 Replay/LOCAL ACK → A 重入追平；B SIGKILL → A 自动 E3 Replay/LOCAL ACK → B 重入追平，E3 后新 WAL 通过 TCP 到 B fsync，业务总量 40→60→74→85。日志 `.work/t449-common-gw-rejoin/target/t473-real-two-sigkill-run.log`，运行目录 `/Users/kong/.opentradingcore/t124-live-kill-runs/20261104120754`。
+- 故障期日志仍明确为 `quorum=false`、`rpoRisk=true`、`localAckNotRetroactiveQuorum=true`，所以此项**不证明严格 RPO0 或故障期 2/2 ACK**；也不代表 Order/Trade 生产恢复 Bean 已接线。
+- 新 Common 候选 JAR 下 Order **122 Java 8 源文件 / 179 class 编译 PASS，40/40 精选测试 PASS**；Trade **172 源文件 / 219 class 编译 PASS，53/53 精选测试 PASS**。编译和测试发生在 Mac 隔离工作目录，**四个正式业务运行容器未替换**。
+- 容器巡检：`otc-t453-order-b-standby-parent-watch`、`otc-t452-trade-b-windowed`、`otc-t436-trade-a-margin`、`otc-t432-order-a-restored` 均为 Up。
+
+**补充后的最终结论：Common 最新候选 JAR 的健康严格复制、Demo 双向 SIGKILL/追平、Order/Trade Java ABI 和相关业务测试 PASS。由于真正业务 Snapshot SourceEvidence/PhysicalRecovery Bean、Order/Trade E2/E3 真业务回放、资金持仓/委托/成交/Projection 一致性和 256 分区 Home 自动回切尚无证据，完整产品 HA 状态仍然 NO-GO。**
