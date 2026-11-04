@@ -15,7 +15,7 @@
 ### 2. 真业务非空快照回归
 
 - Order `OrderCertifiedNonEmptyOrderbookSnapshotTest`：实际 `OrderManager` 内存数据中两笔本分区委托订单（qty 0.500 + 1.250 = **1.750**，带真实价格 43000.25 和 43150.50），外加另外租户一笔订单，调用实际 `OrderSnapshotManager.captureAtCertifiedWriterHead(P090, E1, seq11)`。业务 JSON round-trip 后仍只包含本租户两笔委托，原价/数量及 seq11 一致。**PASS**。测试通过反射布置内存测试数据，**并非实盘入金/下单**，不构成真实交易 HA 证据。
-- Trade `TradeCertifiedNonEmptyFundsSnapshotTest`：向实际 `AccountBalanceFacade` 恢复两条本租户余额及另一租户余额，调用实际 `TradeBusinessSnapshotCapture.captureAtCertifiedWriterHead(P091, E2, seq9)`。本租户 U001 余额 **10000.00**、已用保证金 **100.00**、冻结保证金 **20.00**、可用余额 **9880.00**；业务 JSON round-trip 后一致，其他租户资金完全隔离。**PASS**。这不等于已经验收真实交易资金/持仓跨 Epoch 恢复。
+- Trade `TradeCertifiedNonEmptyFundsSnapshotTest`：向实际 `AccountBalanceFacade` 恢复两条本租户余额及另一租户余额，调用实际 `TradeBusinessSnapshotCapture.captureAtCertifiedWriterHead(P091, E2, seq9)`。本租户 U001 余额 **10000.00**、已用保证金 **100.00**、冻结保证金 **20.00**、可用余额 **9880.00**；另加入 **100× 杠杆**、BTCUSDT 多仓 **0.5**、开仓均价 **50000**、持仓保证金 **250** 的真实 `PositionFacade` 内存状态，业务 JSON round-trip 后全部保留，其他租户的余额及持仓完全隔离。**PASS**。这不等于已经验收真实交易资金/持仓跨 Epoch 恢复。
 - [Order 测试提交 1b426913490eaaff5e004f6748040805ffef0426](https://github.com/bliplink/com.app.dc.ordersvr/commit/1b426913490eaaff5e004f6748040805ffef0426)
 - [Trade 测试提交 029a17f2522801c49fdd26b9d7f12edeb59a5d7e](https://github.com/bliplink/com.app.dc.tradesvr/commit/029a17f2522801c49fdd26b9d7f12edeb59a5d7e)
 
@@ -43,5 +43,7 @@ SHA-256：`906ce74c762526b775eaafd68fb665d171ad9d910836e5790d0e2843e959d5de`。
 - **Order/Trade 正式 `orderCommonCertifiedPhysicalRecovery` / `tradeCommonCertifiedPhysicalRecovery` Bean 仍缺少可核验的生产实现**。它应调用 **Common** 的 `CommonCertifiedAutomaticReplicaPlanWiring.DurablePhysicalRecovery` 四项真实来源：签名控制协调器、独立 fsync Replica catchup、双方签名 READY、经认证的新 Epoch 物理 WAL 和业务 Snapshot/Apply 安装。不允许实现占位成功回调，也不允许在业务中复制 Common 的 Watch/Epoch/WAL。
 - `OrderCommonRecoveredDomainWiring` 目前仍明确限制仅能验证原始 E1 空 Genesis；尚未验证正式 Order/Trade 的 E2/E3 实际业务恢复、资金/持仓/委托/成交/Projection 一致性与 Robot 持续报价成交。
 - 四个当前运行中的业务容器依然 Up：`otc-t453-order-b-standby-parent-watch`、`otc-t452-trade-b-windowed`、`otc-t436-trade-a-margin`、`otc-t432-order-a-restored`；没有替换、更改或清理旧数据。
+
+**补充：**同一 T476 JAR 的双次真实 SIGKILL 已在后续隔离回归中退出码 0；上述 Trade 增加非空 100× 杠杆持仓后重新运行 **63/63 PASS**。证据 `.work/t452-trade-windowed-e2/target/t475-certified-snapshot/t476-funds-position-regression.log`，更新测试提交 [c1cf7e8804b88199dde426a86e0145cf0562293e](https://github.com/bliplink/com.app.dc.tradesvr/commit/c1cf7e8804b88199dde426a86e0145cf0562293e)。
 
 **结论：Common 层通过本轮验证；正式 Order/Trade 业务 HA NO-GO。下一步只攻克真实物理 Replica installer + 两签 READY，随后可直接在隔离/可清空数据的 Demo 环境执行完整业务重部署和租户/Robot 验收。**
