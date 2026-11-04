@@ -1,5 +1,31 @@
 # T483｜Home Replica 对非 Home Primary 崩溃后的自动接管：真实控制分支缺陷（2026-11-04）
 
+## 最新结论｜T483 RED → GREEN，源码提交与真实双向故障切换 PASS
+
+**下文的早期 RED、修复未完成、操作被拦截等描述属于历史诊断记录，现以本节为准。** 2026-11-04 完成最小 Common 代码修复，已经通过确定性 JUnit、完整 Common 回归、Demo 实际双 SIGKILL、256 分区严格复制及 Order/Trade 兼容回归。**但是正式 Order/Trade 自动物理恢复 + 双节点 RSA READY 仍 NO-GO**。
+
+- 修复点只有 Common：
+  1. `CommonCertifiedFailoverCoordinator.stageHomeReturnOrCrash`：严格校验固定原 Home 身份、当前已认证 READY Replica、候选 ZK lease；如果旧主 **ephemeral lease 已不存在**，调用既有 `stageRecovering` （不可路由的签名崩溃接管）；旧主 lease 仍存在则调用既有 `stageHomeReturn`（严格在线协作回切）。后两者各自再次检查租约、旧 Epoch 证据、签名 stage 和 ZK CAS，没有通过捕获任意异常偷偷降级成另一条路径。
+  2. `CommonCertifiedFailoverWatch` 将原 Home 分支调用改成同一选择入口，不改业务、WAL、ACK 或 READY。
+- 确定性 RED（补了 latch，防止在线回切抢先完成）：连续两轮 **14 项中 1 项失败**；修复后同一组 **14/14 PASS**，连同 Home 在线回切、严格签名 READY、原始 Home 账本测试 **25/25 PASS**。
+- 完整 Common Netty、WAL v1/v2、RSA 来源与 Snapshot、持久账本、ZK/Failover 等 **134/134 PASS**，日志 `.work/t449-common-gw-rejoin/target/t483-common-expanded-regression.log`。
+- **同一个 T483 Common JAR** 在独立 Demo 环境先后 SIGKILL A、SIGKILL B：B E2 接管、A 追平 E1/E2、A E3 反向接管、B E3 重新加入并收到 A 新业务 TCP/RSA fsync，脚本 **退出 0**。日志 `.work/t449-common-gw-rejoin/target/t483-two-sigkill-run.log`，证据目录 `/Users/kong/.opentradingcore/t124-live-kill-runs/20261104214858`。故障期间 `historicalLocalRpo=true` / `LOCAL ACK`，不能称 RPO0。
+- 同版 2 JVM/3 ZK/256 分区健康严格复制：**540 帧、256/256 原始 WAL bit-exact PASS**，metrics `.work/t466-common-256-strict/20261104135103-25514/metrics.json`。
+- Order 与 T483 Common 同版 **52/52 PASS**，Trade **64/64 PASS**。ABI-only ARM64 候选镜像在 `docker run --network none` 下均通过类加载、两镜像各仅含 1 份 Common Jar。候选镜像有 NO-GO 标签，未部署。
+- 同版 Common 测试 JAR `.work/t449-common-gw-rejoin/target/t483-home-crash-routing-candidate.jar` SHA-256 `3c628fc9744a6508c050490cba038bf1d4769e445fb3533fc0638f740a98960d`，ZIP CRC PASS、0 duplicate。
+- 离线镜像：
+  - `local/otc-t483-ordersvr:home-crash-common-no-go` SHA256 `4dbc1d7d0ddfd21c2a3419cf77418bdc5c95bc6dc7f5c68dce886ef5c4866fcb`
+  - `local/otc-t483-tradesvr:home-crash-common-no-go` SHA256 `32a00529a7dedd07f8d742a51a3c78e33a37071734a41c704ea97911302359f6`
+
+**代码已提交 `saas-crypto-latest`：**
+- <https://github.com/bliplink/com.app.common/commit/7d6bd11514ee61efb30256557e477b1a3b93014c>：Coordinator 原 Home crash/cooperative 双 Stage 判别
+- <https://github.com/bliplink/com.app.common/commit/70eabf3b7aa28899653f454a3b4b1d83c505b8d1>：Watch 调用统一 Common 判别
+- <https://github.com/bliplink/com.app.common/commit/9c56c03124faaf4ebff18435e7caca46bc7c9237>：确定性 RED+正向对照测试
+
+**仍未交付**：目前 `OrderCommonAutomaticRecoveryDependenciesWiring`、`TradeCommonAutomaticRecoveryDependenciesWiring` 依赖的真实 `DurablePhysicalRecovery` 生产提供者（旧 Epoch 签名 Coordinator、独立 Replica WAL fsync、已签名 READY、真实 Snapshot+WAL 的业务恢复）尚没有可核验完整实现。现有四个 Order/Trade 业务容器保持运行，仍使用原来的 Common，尚未做真实自动 E2/E3 A→B→A 与用户交易对账。**不能把 Demo 双向切换 PASS 冒充业务集群 GO。**
+
+---
+
 ## 结论
 
 **发现并实测复现了 Common 自动 Watch 的一个独立故障切换问题；修复未提交。** 不应该继续把它归咎于 Order/Trade Spring Bean，也不应扩展新集群框架。
