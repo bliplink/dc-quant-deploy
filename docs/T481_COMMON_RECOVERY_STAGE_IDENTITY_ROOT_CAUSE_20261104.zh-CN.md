@@ -1,5 +1,24 @@
 # T481｜Common 单入口安装暴露 Stage 恢复请求身份不稳定（2026-11-04）
 
+## 修复验收结果（后续更新，覆盖下方历史 RED 状态）
+
+**T481 请求身份问题已修复、正式提交；同版 Common/Order/Trade 本地回归 PASS。正式 Order/Trade 物理 E2/E3 自动 HA 仍 NO-GO。**
+
+- **唯一身份**：`VerifiedRecoveryStagingClient.Result.verifiedInstallRequest()` 对同一 Stage 返回同一个 canonical `RecoveryRequest` 实例（Java8 `synchronized`）；但每次调用仍重新验证原始 Snapshot SHA/长度、原始 WAL SHA 及恢复收据完整内容，缓存不成为放行捷径。
+- **恢复失败先隔离**：`CertifiedRecoverySourceAuthority.exactPinnedRequest()` 仅返回 Source Authority 固定的请求对象，不授予业务权限。Common 新 `prepareCertifiedOpaqueBusinessBeforeReady()` 直接进入现有 `CommonCertifiedRecoveryInstall.install()`，使旧业务回放准入**先撤销并将分区标记 NOT_READY，然后才复核 Stage 和独立物理 quorum**。即使 Stage 已篡改，旧恢复资格也无法残留。
+- **三个业务共用路径**：Order/Trade 的 `*CommonRecoveryBinding.recoverCertifiedOpaquePhysical` 仅提供业务 `PartitionStateMachineRegistry`，统一调用 Common 的上述入口；不再提前读取 Stage，也没有本地选主、WAL、READY 逻辑。
+- **实际负面测试**：同一 Stage 多次读取 `assertSame`；分别篡改收据、Snapshot、WAL 均拒绝，并在恢复原始字节后保持同一身份；真实双 Netty/HMAC voter Stage + business Restore/Apply/finish 各 1 次；已完成恢复后再次篡改 WAL 重试，旧 replay proof 立刻撤销，**没有二次 Apply，也没有 READY**。
+- **隔离候选 JAR**：`.work/t449-common-gw-rejoin/target/t481-canonical-stage-before-ready-candidate.jar`，SHA256 `7bdecd2f1b455863434ed54e14f23c5d17b433d50ac97279f585354aa1629aea`。该 JAR 是按已通过编译的 class 增量封装、0 个重复 ZIP 条目，非 clean Maven 发布。
+- **同版真实测试**：Common **109/109 PASS**（`target/t481-common-full-canonical-regression.log`）；Order **52/52 PASS**、122 源码 Java8 全量编译（`.work/t444-order-stream/target/t481-full-main/`）；Trade **64/64 PASS**、172 源码全量编译（`.work/t452-trade-windowed-e2/target/t481-full-main/`）；256 分区两 JVM/三 ZK 健康严格 RF2 **540/540 ACK 且 256/256 WAL bit-exact PASS**（`.work/t466-common-256-strict/20261104103423-15862/metrics.json`）。
+
+**已提交 GitHub `saas-crypto-latest`：**
+- Common canonical Stage [60ee176](https://github.com/bliplink/com.app.common/commit/60ee176929d46f5f50218779e5645f8673f57d65)、Source Authority [15f2da8](https://github.com/bliplink/com.app.common/commit/15f2da84820aa509c8a9fa50e1455c43c20528f4)、Common Pre-READY 入口 [4155b2a](https://github.com/bliplink/com.app.common/commit/4155b2ae520edd4fb9e0a7efdd5014c5655bd966)、Netty 篡改/恢复测试 [4b132f8](https://github.com/bliplink/com.app.common/commit/4b132f82f8e94034958090fc2b62255c8710d91a)
+- Order 业务调用 [d1a4165](https://github.com/bliplink/com.app.dc.ordersvr/commit/d1a41658f39d5feca9e1ca33cefb138597e2c479)；Trade 业务调用 [3919732](https://github.com/bliplink/com.app.dc.tradesvr/commit/39197324007b14fde074e8b700d2f4f411f49825)
+
+**仍未完成的门禁**：Spring 正式 `CertifiedPhysicalRecovery` 工厂、跨 E1/E2/E3 真实 RSA+Custody+WAL+Snapshot 证据、256 分区签名 READY、真实 Robot 成交、Order/Trade 双向 SIGKILL。现有业务容器未替换，也没有手工清除过期 lease 或 poisoned Epoch。下文是修复前的历史 RED 诊断，不代表最新状态。
+
+---
+
 ## 状态与证据
 
 **根因已通过实际双 Netty Stage 联合安装测试重现，修复未完成；禁止部署 T481 本地工作树和替换业务镜像。**
