@@ -38,3 +38,15 @@ Java 8 `javac -source 8 -target 8` 对 `CommonCertifiedNodeRuntime.java` 编译�
 Order/Trade 正式 `CommonCertifiedAutomaticReplicaPlanWiring.DurablePhysicalRecovery` 生产执行者四项实物仍缺，不能使用 Demo 仅测试签名回调伪装：需要旧 Epoch RSA+CommitIndex+Custody、独立原始 WAL fsync、两个新 Epoch 真正 RSA 恢复收据、非空真实业务 Snapshot/WAL 恢复和 signed READY。当前运行的四个业务容器保留原镜像/数据；Order A 的 lease expired 与 Order B poisoned Primary 仍需在新数据 Demo 上按证据清理后恢复，不能自行重签或强行 READY。
 
 **下一验收动作：**当正常测试执行环境允许，先让这个 T484 `CommonCertifiedNodeRuntimeTest` RED→GREEN，然后扩展 Common 相关 134 项、同版 Order 52/Trade 64 回归、真实 Demo HA 与 256 分区负载。只在完整 E2/E3 物理 READY+新租户 Robot Tape 交易 E2E 通过后，才允许正式业务镜像替换。
+
+## 同轮追加审计：Demo 降级授权与 Order/Trade 真正的生产缺口
+
+为了推进完整验收，继续逐层对照 Demo 两次 SIGKILL 成功的实际代码，而不是把一个 Bean 缺失当成全部根因：
+
+1. Demo 脚本 `verify-real-auto-sigkill-genesis-replay.sh` 确实启动**独立第三 JVM C**（只拥有自己的 RSA 私钥）和 `CommonCertifiedIndependentWitnessWatch`。A 被杀死后 B 先调用 `CommonCertifiedGenesisSurvivorInstall.install` 做带原始旧 Epoch RSA CommitIndex/Custody 的非 READY 回放，再使用 C 的独立外部见证，由 `CommonCertifiedFailoverCoordinator.publishCertifiedDegradedReady` 发布 `LOCAL_DURABLE_ASYNC` 认证授权，随后 `CommonCertifiedDegradedPrimary` 才能对客户做本地 fsync 后 ACK（仍有 RPO）。E3 反向接管还需 `CommonIndependentLocalReverseWitness` 和真实签名/原始 WAL 追平。**这些 Common 原语已经存在，不要重写协议。**
+2. 正式 Order/Trade 的 `*CommonAutomaticRecoveryDependenciesWiring` 仅消费四方法 `DurablePhysicalRecovery` 的 Bean，但业务源码里没有任何对应生产提供者；`*CommonControlWiring` 没有接 `CommonCertifiedLocalPolicyTransition` 或 `CommonCertifiedLocalReverseTransition`，与 Demo 的**第三见证降级/反向继续写入**路径不是同一条完整生命周期。因此光补一个非空 Spring Bean 无法恢复业务。
+3. 更直接的业务安全限制：`OrderCommonRecoveredDomainWiring` 和 `TradeCommonRecoveredDomainWiring` 的 serving-state 校验 **硬编码只接受 E1 Genesis、seq=0/Head=0**，拒绝所有真实已成交订单或非零资金结算历史的 E2/E3 安装，即使已获得 Common 正确的签名恢复证据。必须改为依赖 Common 已完成的真实非空 Snapshot/WAL 持久回放并核对最终业务状态（水位、资金、订单、重复交易状态），不能删除验证器或伪造 E1 空数据。
+4. 原 Common `CommonCertifiedDegradedPrimary.requireCurrentDegradedGrant` 对每一次本地提交都调用**全节点** replay gate；256 分区时 P091 未恢复会导致 P090 本地降级写也被阻断。现已将其改为 Common 现有 `requireBusinessPartitionRecoveryReady(service,node,partition)`，仍逐次要求 `NodeClusterControlManager.requirePrimary(...,LOCAL_DURABLE_ASYNC)` 的真实 ZK permit、lease、ackEvidence。Java 8 编译通过；[Common 2d4722e](https://github.com/bliplink/com.app.common/commit/2d4722ed789d28c6ba620ca3c3e8b8b7f36ea3e0)；**此变更未运行完整测试，未部署**。
+5. T484 `CommonCertifiedNodeRuntimeTest` GREEN 仍被 Mac 执行环境安全检查拒绝，不能通过更换执行方式绕过。先前的 T483 134/134、Demo 真实双 SIGKILL、256 分区完整性属于 **T483**，不可移作 T484 的通过证据。
+
+**当前严格目标仍 NO-GO**。不应该清除现有交易数据或在缺少认证准备时直接替换四个运行容器。只有把 Demo 已存在的 Common 物理原语与 Order/Trade 真实持久化业务回放完整连通并测试 E2/E3 后，才适合正式双次 SIGKILL + Robot 成交一致性验证。
