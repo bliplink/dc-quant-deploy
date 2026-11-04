@@ -60,6 +60,17 @@ SHA-256 `9ea0e2dd52f63ba92226c9c453b5e295b1bede034f74af3a25d344b231da9967`
 
 两份镜像在 `docker run --network none` 下使用本机 Java8 成功加载新 Common v2/SourceWiring/OpaqueSnapshotPin 和业务接线类；两份 Common JAR SHA 相同。**镜像标签 `CANDIDATE-NO-GO-until-signed-physical-recovery`，未替换活跃业务。**
 
+## 补充：真实新租户自动审批 / Robot 运行诊断
+
+2026-11-04 在当前 Demo 使用原有 `tests/verify-tenant-auto-approval.py` 直接调用 localhost 正式 Gateway/Manager/Login 接口，无手工审批：
+- `auto_location=KJVLG7`，租户申请自动变为 `APPROVED`，正式管理员实际登录 PASS，同申请幂等重试 PASS；额外 5 产品申请按规则保留 `PENDING`。脚本**退出 0**。
+- 只读 MySQL 查询 `dc_tenant`：`KJVLG7 / TRIAL`；`dc_tenant_robot` 自动生成一条 BTCUSDT Robot 配置，`enabled=1`。
+- 该新租户 Robot 实际 `runtime_status=ERROR`、`open_order_count=0`，最近错误 `CANCEL_FAILED / gateway rejected queryOpenOrder: ORDER_COMMON_CERTIFIED_CENSUS_UNAVAILABLE`。这是 **业务实测失败**，不能误报 Robot/Tape 报价成交 PASS。
+- Order A 旧镜像日志真实堆栈另有 `NodePartitionGrantTable.unexpired: node quorum lease expired`；Order B 则显示 `Common poisoned primary Epoch cannot renew`。其控制面 lease 与物理分区 poison 是两项独立拒单原因；ZK 256/256 `READY` 不构成物理写入授权，不能手工清理 poison。
+- 证据：`.work/t449-common-gw-rejoin/target/t477-tenant-autoapproval-run.log`、现有数据库 `dc_tenant/dc_tenant_robot` 的只读状态和对应 Order 日志。避免把查询结果中的 Broker/Robot API Key 或 Secret 输出至报告。
+
+**T477 阶段 3 当前结论：租户自动申请/自动审批/登录/Robot 初始化 PASS；Robot 实际挂单/点价/成交 NO-GO。**
+
 ## 必须继续完成（不扩大业务功能）
 
 1. 在 **Common** 内接通真实已 OS-locked WAL/CommitIndex/双 Custody `CertifiedPhysicalRecovery`，从真正现有 ZooKeeper Stage 和双 RSA 证书读取 old-Epoch Source；不得用业务层重写 Watch/Replication/READY。
