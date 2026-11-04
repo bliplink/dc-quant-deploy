@@ -30,3 +30,9 @@
 - 当前产品完整业务 HA、Robot 点价成交及业务自动双向故障切换仍 **NO-GO**。
 
 **下一轮正确工作是实际完成上述 Common 两阶段安装，不是创建一个仅返回非空对象的 Spring Bean。**
+
+## 补充：T480 同版联合回归
+
+在 T478 已实测的同一 Common JAR `t478-common-v2-netty-durable-install-candidate.jar` 下，将新的 `CommonPreOpenReplayDependencyTest` 与原有完整 Netty/WAL/ZK/物理快照与持久恢复测试一起执行，**109/109 JUnit PASS，退出码 0**。证据：`.work/t449-common-gw-rejoin/target/t480-common-replay-gate-and-baseline.log`。
+
+该回归确认原有认证协议不回退，**并不代表已解决 PREPARE→INSTALL→ACTIVATE 的生产自动恢复接线，也不代表 Order/Trade E2/E3 PASS**。
