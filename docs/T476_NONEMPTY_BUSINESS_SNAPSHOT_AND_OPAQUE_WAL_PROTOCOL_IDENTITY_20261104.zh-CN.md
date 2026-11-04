@@ -35,7 +35,7 @@ SHA-256：`906ce74c762526b775eaafd68fb665d171ad9d910836e5790d0e2843e959d5de`。
 | Trade 真业务快照、启动门禁及旧恢复回归（同一 T476 JAR） | **63/63 PASS** | `.work/t452-trade-windowed-e2/target/t475-certified-snapshot/t476-on-finaljar-junit.log` |
 | 两台真实 Common JVM、三台 ZooKeeper、256 分区、128:128 Home，10/50/200 租户模拟的健康严格 ACK | **540/540、0 失败、256/256 字节一致 PASS** | `.work/t466-common-256-strict/20261104080428-4965/metrics.json`, `.work/t449-common-gw-rejoin/target/t476-256-strict-run.log` |
 
-最新 T476 修复针对恢复请求身份边界；之前 T475 的**同一 T475 候选 JAR**已实际通过 A→B→A 双次真实 SIGKILL，但**本次未重新执行 T476 候选 JAR 的双次 SIGKILL**，不可误报成新的相同测试。故障期仍为 `LOCAL ACK` 带 RPO 风险，并非严格 RPO0。
+**补充真实 T476 同版双向故障验证（已完成）：**最新 SHA-256 为 `906ce74c762526b775eaafd68fb665d171ad9d910836e5790d0e2843e959d5de` 的 T476 JAR 在隔离 Demo+Common 两次真实 SIGKILL、A→B→A 自动接管、A/B 重新加入追平、E3 新 WAL 通过 TCP RSA fsync 至 B 全部 PASS，脚本退出码 **0**。证据 `.work/t449-common-gw-rejoin/target/t476-two-sigkill-run.log`、`/Users/kong/.opentradingcore/t124-live-kill-runs/20261104160623`。故障期明确为 `LOCAL ACK`（`historicalLocalRpo=true`），**不构成故障期严格 RPO0**。
 
 ### 4. 正式业务集群的明确 NO-GO 阻塞
 
