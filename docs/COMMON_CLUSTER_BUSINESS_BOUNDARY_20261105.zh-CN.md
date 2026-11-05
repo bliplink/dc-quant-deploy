@@ -94,6 +94,13 @@ Common **独占**：ZooKeeper/节点存活与租约、每分区主备及 Home �
 - **最新真实三 ZK / Docker 双 SIGKILL PASS**：在迁移后的 Demo/Common 类上，独立 C JVM 自动签发 E2/E3 许可，A SIGKILL→B E2 恢复并写至 60→A 重加入追平→B SIGKILL→A E3 恢复写至 74→B 重加入追平→A TCP WAL 向 B 签名 fsync，**双方最终 85/7 一致**。真实隔离卷 `~/.opentradingcore/t124-live-kill-runs/20261105193305`，Mac 日志 `.work/t513-common-independent-ready/t513-final-common-owned-old-lease-ababa.log`。故障窗口的客户凭证始终 `LOCAL_DURABLE_ASYNC`、`rpoRisk=true`，**不是 2/2 ACK**。
 - **严格 NO-GO 不变**：Common 尚未完成供所有服务直接启动的 `CommonCertifiedProductionPhysicalRecovery` 全量计划自发现、真实业务快照及跨 Epoch 安装执行器；本次只完成了旧 STRICT E1→E2 LOCAL 的实际物理 READY 发布共用入口，不能宣称 256 分区生产 Order/Trade 自动 A/B 故障切换通过。候选镜像没有替换运行中的服务。
 
+### T514｜同一份 T513 故障历史恢复到真实双副本 STRICT（2026-11-05）
+
+- 使用 T513 的真实两次 SIGKILL 后 E3 持久化卷 `~/.opentradingcore/t124-live-kill-runs/20261105193305`，A/B 各自独立物理 JVM 用原始 RSA 签署新 E4 Snapshot，业务状态 **85 / 7**，无 READY/ACK 冒充；双签名基线位于 `~/.opentradingcore/t514-e4-t513-history-20261105194136`。
+- T498 真实三节点 ZooKeeper、旧 E3 A 主/B 备停机与物理 WAL/Netty 关闭、两独立 RSA 退休证据、新 E4 A/B 业务回放与恢复回执、最终 `STRICT_QUORUM READY` CAS：**PASS**。证据 `~/.opentradingcore/t514-live-e3-to-e4-t513-20261105194158`，日志 `.work/t513-common-independent-ready/t514-t513-live-e3-to-e4-strict.log`。
+- T499 在新 E4 双独立 Netty/RSA 物理节点实际新增两条业务数据，A/B CommitIndex、Custody 以及 B 的原始 WAL **seq=2**，客户端返回真正的 `QUORUM_DURABLE`：**PASS**。接着 **SIGKILL B**，A 新提交因缺少独立 Replica fsync 而报错，**无客户 ACK**：PASS。日志 `.work/t513-common-independent-ready/t514-t513-e4-quorum-ack-kill.log`。
+- 所有 T513→T514 运行均使用同一 Common JAR SHA256 `2374f4b76ddf87944edb0ad6416a9c8d58a6953c5941718cac9a0e359e7d50f9`。历史 E2/E3 `LOCAL_DURABLE_ASYNC` ACK **不会**追认双物理严格提交。Order/Trade 正式自动 A/B 生产门禁仍 **NO-GO**，候选容器未部署。
+
 ## 4. 实施顺序（不因某个服务缺 Bean 而改变）
 
 1. **Common 完成统一生产物理恢复执行器**：从 Common 打开的 WAL、已认证原始成员/签名/物理状态构建恢复计划；完成旧主撤权、Replica 独立持久化验证、Snapshot+真实原始 WAL 安装、双物理签名/READY。不能凭回调有值即宣称完成；单向复制、单节点可工作及风险等级由统一 Common 策略决定。
