@@ -36,6 +36,15 @@ Common **独占**：ZooKeeper/节点存活与租约、每分区主备及 Home �
 3. **从 GitHub `saas-crypto-latest` 实际下载新代码重新编译运行**：`TradeSignedNonRoutableFundsRecoveryTest`（资金、持仓、去重与撤权）和 `TradeCommonPhysicalBusinessSnapshotIntegrationTest`（真实双 RSA Snapshot@1 + WAL@2）`2/2 PASS`。另行重新运行 `OrderCommonPhysicalBusinessSnapshotIntegrationTest`，真实 Order Snapshot@1 + WAL@2 回放 **1/1 PASS**。这是业务和物理回放回归，**不**代表生产 A/B 自动互切已验证。未修改运行中的 Demo 容器。
 4. `tests/check-common-business-boundary.py --mode business`：**PASS**；`--mode production`：**FAIL（预期）**，明确检测 Order/Trade 业务专属物理恢复 Bean 依赖、Common 完整生产执行器缺失。严格门禁保持不放宽。
 
+### T496–T499 最新落实与验收
+
+- **T496**：Order、Trade 的 `*CommonRecoveryBinding` 均已只保留 `businessRegistry(request)`，物理安装、E1/E3 恢复及低级恢复执行方法已删除；两项领域工厂反射/非法 v2 入口测试 **2/2 PASS**。
+- **T497**：Common `CommonCertifiedNodeRuntime` 现在必须在签名 READY 发布之前验证业务 Snapshot + WAL 安装及分区已认证回放；无生产安装器默认拒绝。Common 七组 **60/60 JUnit PASS**。
+- **T497 Demo**：实际 A SIGKILL→B 接管→A 重启追平→B SIGKILL→A 接管→B 重启追平，最终业务状态 **85 / 7**，第三节点 C 的独立 RSA 授权及新 TCP fsync 全部通过。故障时客户 ACK 采用清楚标识 RPO 风险的 `LOCAL_DURABLE_ASYNC`，**不得记成 STRICT**。
+- **T498**：真实在线 E3 A/B 两 JVM 关闭旧物理 WAL/Netty、各自 RSA 签署退休后，独立业务恢复 **85 / 7** 并签署 E4 证据，在三节点 ZK 单次发布 E4 `STRICT_QUORUM READY`，真实实测 PASS。
+- **T499**：T498 E4 READY 上新发两条物理业务操作，A/B 双写 fsync、CommitIndex/Custody 客户 ACK 为真实 `QUORUM_DURABLE`，B SIGKILL 后 A 下一条**拒绝伪造客户 ACK**。隔离 P090 实测 PASS。
+- 完整证据参见 [T497–T499 验收记录](T497_T499_COMMON_LIVE_STRICT_RECOVERY_AUDIT_20261105.zh-CN.md)。这些是隔离 Demo 验收，**不是**生产 256 分区自动 HA/Order–Trade 业务完整 GO；Common 真正统一的生产 `DurablePhysicalRecovery` 执行器缺失、两业务专属 Spring qualifier 仍存在，生产门禁仍 FAIL。
+
 ## 4. 实施顺序（不因某个服务缺 Bean 而改变）
 
 1. **Common 完成统一生产物理恢复执行器**：从 Common 打开的 WAL、已认证原始成员/签名/物理状态构建恢复计划；完成旧主撤权、Replica 独立持久化验证、Snapshot+真实原始 WAL 安装、双物理签名/READY。不能凭回调有值即宣称完成；单向复制、单节点可工作及风险等级由统一 Common 策略决定。
