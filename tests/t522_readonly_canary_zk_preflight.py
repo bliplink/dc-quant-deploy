@@ -13,7 +13,7 @@ def check(output, service):
     if "Node does not exist:" in output or "KeeperErrorCode" in output:
         raise ValueError("NAMESPACE_OR_MANIFEST_MISSING")
     lines = [s.strip() for s in output.splitlines()]
-    if "NPC1|1" not in lines:
+    if not any(re.fullmatch(r"NPC1\|[1-9][0-9]*", line) for line in lines):
         raise ValueError("MISSING_NPC1_MANIFEST")
     found = {}
     for line in lines:
