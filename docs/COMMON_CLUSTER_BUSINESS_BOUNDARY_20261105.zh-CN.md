@@ -79,6 +79,13 @@ Common **独占**：ZooKeeper/节点存活与租约、每分区主备及 Home �
 
 **T512 新候选真实物理回归补证（已完成，区别于测试替身）：** T512 Demo+Common 三节点 ZooKeeper、A/B 独立 RSA、独立 C 自动见证连续完成 A SIGKILL→B E2 LOCAL 继续写→A 追平→B SIGKILL→A E3 LOCAL 继续写→B 追平→TCP 复制至 **85 / 7**，证据 `~/.opentradingcore/t124-live-kill-runs/20261105190203`；随后**使用同一轮 E3 原始 WAL 历史**重新在两物理 JVM 上封存双 RSA E4 Snapshot：`~/.opentradingcore/t512-e4-baseline-20261105190425`。真正 E3→E4 旧节点退休、两个 E4 安装回执、三 ZK E4 `STRICT_QUORUM READY`：PASS；新 E4 A/B Netty 双 RSA/Custody 两笔客户写入真实 `QUORUM_DURABLE`、B WAL seq=2，之后 SIGKILL B，新写入拒绝假 ACK：PASS。证据 `~/.opentradingcore/t512-live-e3-to-e4-20261105190450` 与本地 `.work/t512-common-local-recovery/t512-e4-strict-ack-kill.log`。**Demo 物理回归已通过，但尚未把该完整执行器直接自动装配到正式 Order/Trade 256 分区 Spring 入口，生产仍 NO-GO。**
 
+### T513｜LOCAL→STRICT 原始物理退休（2026-11-05）
+
+- **Common 已提交** `42ed9b2`：在同一个 `CommonCertifiedNodeRuntime` 新增 `retireCertifiedLocalForStrictRearm`，仅用于经过授权的 **LOCAL→更高 Epoch STRICT 非 READY** 恢复。在任何真正关闭旧 LOCAL WAL 前，调用者必须提交 `CommonCertifiedStrictEpochRearm.Prepared`——由 Common 私有构造器生成、已经验证**两独立物理磁盘的完整 fsync WAL HEAD、两个原始 RSA 签名回执和一致的 Snapshot/成员/Stage 关系**。不再接受任意业务传入的 `head/sha` 作为物理认证。Common 还核查签名新 Epoch Stage、原始物理 RSA 不变、当前三 ZK RECOVERING，以及旧本地 writer 的原始 fsync 前缀，然后真实关闭旧 OS WAL，签发原节点 RSA 退休凭证并注销旧注册表；**并不**发布新 Epoch READY 或客户 ACK。
+- **测试** `CommonCertifiedLocalWatchInstallTest`：先由 Common Watch 在测试 C 授权下将真实旧 Replica 退休并安装 E2 LOCAL 物理 WAL，再使用真实 B 和 A 两个不同目录独立 fsync 的相同原始 E2 WAL 和两份真实 RSA 回执生成 Common 私有 `Prepared`；完成真实 E2 B writer OS WAL 关闭和 RSA 退休，严格拒绝旧 writer / 尚未发布的 E3 STRICT ACK。新增该路径测试和 T512 原路径 **2/2 PASS**；Common 12 组 **79/79** HA/STRICT/LOCAL 单元与 Netty 回归 PASS。
+- **同一个候选** `SHA256=6711965ba3c452d35b32d15b02a3016fcd9999a6c94a55cc19f557110c78b40c`，Common **330**、Order **123**、Trade **173** 个 Java 8 源文件全部编译 PASS；Order/Trade **无任何新集群实现**。
+- **验收界限**：T513 的 C/ZK 外部授权是标注清楚的测试替身；原始 A/B 物理 WAL 和签名凭证是真实独立 fsync/RSA。此前 T512 Demo 真实 C RSA + 双 SIGKILL + E3→E4 STRICT 双物理持久提交已实测，但**尚未**验证 T513 新方法在同一生产进程中完成自动 E3→E4 及 256 分区，因此 **生产 HA NO-GO**。仍需 Common 的统一生产自动物理恢复执行器，并真实完成 Order/Trade 服务启动、业务 E2E、完整双向 HA。
+
 ## 4. 实施顺序（不因某个服务缺 Bean 而改变）
 
 1. **Common 完成统一生产物理恢复执行器**：从 Common 打开的 WAL、已认证原始成员/签名/物理状态构建恢复计划；完成旧主撤权、Replica 独立持久化验证、Snapshot+真实原始 WAL 安装、双物理签名/READY。不能凭回调有值即宣称完成；单向复制、单节点可工作及风险等级由统一 Common 策略决定。
