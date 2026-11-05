@@ -28,6 +28,13 @@ Common **独占**：ZooKeeper/节点存活与租约、每分区主备及 Home �
 - T495 已将 Trade 业务状态机对 `CommonCertifiedFailoverCoordinator/Stage` 的直接依赖移出，Common 的 `CommonCertifiedRecoveringBusinessFence` 在恢复阶段撤权时拒绝继续应用业务；Trade 只校验快照/资金/仓位/去重语义。该变更本身**不**发布 READY 或闭合生产自动恢复。
 - **当前生产 NO-GO：** `CommonCertifiedAutomaticReplicaPlanWiring.DurablePhysicalRecovery` 的真正生产物理执行器及其原始双 RSA/旧主隔离/新 Epoch Snapshot+WAL 安装仍未闭合。现在 Order/Trade 的 `orderCommonCertifiedPhysicalRecovery` / `tradeCommonCertifiedPhysicalRecovery` Spring 引用没有真实统一实现；不得让业务服务各实现一份。应由 Common 自身实现及管理，然后移除这两个业务专用依赖。
 
+### T495 已验证证据与远端同步（2026-11-05）
+
+1. Common 新增的物理恢复栅栏为 `final` 类型，**构造器私有**，工厂需真实的 Common 协调器、签名 Stage、精确恢复请求和物理节点；使用前、业务分区锁内及使用后重新检查 Stage。业务资金模块不能传入任意 `Runnable` 假装授权。
+2. Trade 业务状态机仅接收 Common 颁发的恢复凭证，不再持有 `FailoverCoordinator/Stage`；资金恢复器只执行领域数据校验和修改。Order 业务状态机原已按 `ReplicatedStateMachine` 接口执行，没有增加 HA 代码。
+3. **从 GitHub `saas-crypto-latest` 实际下载新代码重新编译运行**：`TradeSignedNonRoutableFundsRecoveryTest`（资金、持仓、去重与撤权）和 `TradeCommonPhysicalBusinessSnapshotIntegrationTest`（真实双 RSA Snapshot@1 + WAL@2）`2/2 PASS`。这是业务和物理回放回归，**不**代表生产 A/B 自动互切已验证。未修改运行中的 Demo 容器。
+4. `tests/check-common-business-boundary.py --mode business`：**PASS**；`--mode production`：**FAIL（预期）**，明确检测 Order/Trade 业务专属物理恢复 Bean 依赖、Common 完整生产执行器缺失。严格门禁保持不放宽。
+
 ## 4. 实施顺序（不因某个服务缺 Bean 而改变）
 
 1. **Common 完成统一生产物理恢复执行器**：从 Common 打开的 WAL、已认证原始成员/签名/物理状态构建恢复计划；完成旧主撤权、Replica 独立持久化验证、Snapshot+真实原始 WAL 安装、双物理签名/READY。不能凭回调有值即宣称完成；单向复制、单节点可工作及风险等级由统一 Common 策略决定。
