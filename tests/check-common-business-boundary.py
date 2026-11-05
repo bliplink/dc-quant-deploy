@@ -42,6 +42,10 @@ for forbidden in ('CommonCertifiedFailoverCoordinator', '.requireCurrentRecoveri
         failures.append('Trade business mutation layer contains HA: '+forbidden)
 if 'requireCurrentRecoveringStage(stage)' not in fence:
     failures.append('Common recovering gate not authenticating current Stage')
+if 'private CommonCertifiedRecoveringBusinessFence(' not in fence or 'public void requireCurrent()' not in fence:
+    failures.append('Common recovering gate must be an unforgeable private-constructor capability')
+if 'CommonCertifiedRecoveringBusinessFence independentlyCertifiedCommonFence' not in trade_applier:
+    failures.append('Trade funds recovery must require Common capability, not a no-op Runnable')
 if 'CommonCertifiedRecoveringBusinessFence' not in trade_binding:
     failures.append('Trade binding not using Common signed recovering gate')
 
