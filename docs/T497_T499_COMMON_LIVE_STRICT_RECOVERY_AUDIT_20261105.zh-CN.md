@@ -20,6 +20,7 @@
 | T498 活 E3 → E4 | 在线 E3 A 主/B 备关闭物理 WAL/Netty，独立签署 E3 retire；A/B 各执行 E4 Snapshot 业务回放并签署恢复回执；同一真实三 ZK E4 STRICT `READY` CAS | **真实在线双节点退休**，旧验证缺口已补 |
 | T499 E4 新写入 | 在上一步新 E4 `READY` 上实际启动 A/B Netty；两条新 `byte[]` 客户命令返回 **`QUORUM_DURABLE`**，B 物理 WAL fsync 到 seq `2` | 新 Epoch 的真实 2/2 物理提交 |
 | T499 SIGKILL E4 B | 再杀 B，A 的下一条写入返回复制异常，**没有客户 ACK**，不能追认 A 未确认尾部 | 无假 quorum 的拒写安全验收 |
+| T500 真实严格故障 WAL 审计 | 对本轮 T499 真实物理卷 **只读重开**：A 实际 3 条、B 2 条，双 RSA/Custody 只认证 2 条；原始未确认第 3 条绝不重放，破坏副本原始 WAL/Custody 的测试均拒绝 | `CommonCertifiedStrictCrashPrefixTest` **1/1 PASS** |
 
 全部这些命令真实退出 0，而非只对比文件名或依赖异步外部编译。使用 T497 Common 候选 JAR SHA-256：`2e12e10aa406b82e91efb4161a5c3a9e234b5c4c8039ada149540391c6f52b8a`。E4 A/B 基线 `a6e76d0b3f001f972fd7d63fee8360151e8db66c400edfbe08904a706833c8f4`。
 
@@ -34,6 +35,8 @@
 
 - Common 仓库 `examples/common-only-demo/scripts/verify-real-live-e3-e4-strict-t498.sh`。
 - Common 仓库 `examples/common-only-demo/scripts/verify-real-live-e4-strict-ack-t499.sh`。
+
+T500 使用 T499 **同一组**新的 E4 磁盘，而不是之前 T287 的旧样例：`-Dotc.t287.real.fault=.work/t497-common-ready-boundary/t498-live-e3-e4-20261105145233/new-strict-business`，输出 `T288_REAL_E4_AFTER_B_SIGKILL_CERTIFIED_PREFIX_ONLY_PASS oldPrimaryFrames=3 dualCustodyCertified=2 exposedCommands=2 unackedTailExcluded=true`；包含损坏 WAL、缺失物理 Custody 回执、B 端不同未确认尾部拒绝验收，**不写回原盘**。
 
 ## 代码边界调整
 
