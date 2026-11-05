@@ -77,6 +77,8 @@ Common **独占**：ZooKeeper/节点存活与租约、每分区主备及 Home �
 - Common **78/78** HA/LOCAL 回归，330 个 Common、123 个 Order、173 个 Trade Java8 同一候选 JAR 全源码编译 **PASS**。候选 `SHA256=a3243ab1757d64cd25249813c1e2dad49531c79ce267cd86de638b4ef83dd5d9`。
 - **仍 NO-GO**：生产 `CommonCertifiedProductionPhysicalRecovery` 真实物理计划装配仍缺失；这项新增 Watch 接线并未证明正式 256 分区 Spring A/B 自动恢复，也未在生产上提供 E(n) LOCAL→E(n+1) STRICT 的完整同运行时无损轮转。不得增加 Order/Trade 的对应集群实现。
 
+**T512 新候选真实物理回归补证（已完成，区别于测试替身）：** T512 Demo+Common 三节点 ZooKeeper、A/B 独立 RSA、独立 C 自动见证连续完成 A SIGKILL→B E2 LOCAL 继续写→A 追平→B SIGKILL→A E3 LOCAL 继续写→B 追平→TCP 复制至 **85 / 7**，证据 `~/.opentradingcore/t124-live-kill-runs/20261105190203`；随后**使用同一轮 E3 原始 WAL 历史**重新在两物理 JVM 上封存双 RSA E4 Snapshot：`~/.opentradingcore/t512-e4-baseline-20261105190425`。真正 E3→E4 旧节点退休、两个 E4 安装回执、三 ZK E4 `STRICT_QUORUM READY`：PASS；新 E4 A/B Netty 双 RSA/Custody 两笔客户写入真实 `QUORUM_DURABLE`、B WAL seq=2，之后 SIGKILL B，新写入拒绝假 ACK：PASS。证据 `~/.opentradingcore/t512-live-e3-to-e4-20261105190450` 与本地 `.work/t512-common-local-recovery/t512-e4-strict-ack-kill.log`。**Demo 物理回归已通过，但尚未把该完整执行器直接自动装配到正式 Order/Trade 256 分区 Spring 入口，生产仍 NO-GO。**
+
 ## 4. 实施顺序（不因某个服务缺 Bean 而改变）
 
 1. **Common 完成统一生产物理恢复执行器**：从 Common 打开的 WAL、已认证原始成员/签名/物理状态构建恢复计划；完成旧主撤权、Replica 独立持久化验证、Snapshot+真实原始 WAL 安装、双物理签名/READY。不能凭回调有值即宣称完成；单向复制、单节点可工作及风险等级由统一 Common 策略决定。
