@@ -101,6 +101,15 @@ Common **独占**：ZooKeeper/节点存活与租约、每分区主备及 Home �
 - T499 在新 E4 双独立 Netty/RSA 物理节点实际新增两条业务数据，A/B CommitIndex、Custody 以及 B 的原始 WAL **seq=2**，客户端返回真正的 `QUORUM_DURABLE`：**PASS**。接着 **SIGKILL B**，A 新提交因缺少独立 Replica fsync 而报错，**无客户 ACK**：PASS。日志 `.work/t513-common-independent-ready/t514-t513-e4-quorum-ack-kill.log`。
 - 所有 T513→T514 运行均使用同一 Common JAR SHA256 `2374f4b76ddf87944edb0ad6416a9c8d58a6953c5941718cac9a0e359e7d50f9`。历史 E2/E3 `LOCAL_DURABLE_ASYNC` ACK **不会**追认双物理严格提交。Order/Trade 正式自动 A/B 生产门禁仍 **NO-GO**，候选容器未部署。
 
+### T515｜Common 通用生产自动恢复装配器 E1 阶段（2026-11-05）
+
+- Common `430af44`：新增 `CommonCertifiedProductionPhysicalRecovery`，由 Common 自己实现 `DurablePhysicalRecovery` 与 `CertifiedPhysicalRecoveryPlanFactory`。自动恢复计划只基于运行时**已真实打开并 OS 锁定**的 256 个分区和实际签名 ZooKeeper 授权生成，不依赖 Order/Trade Spring 中的 128 个物理恢复 Bean。
+- Common 从 `CommonCertifiedOriginalHomeLedger.requireBothOriginalRsaReceipts` 验证原始 256 Home（A/B 两个不同 RSA 物理签名）并自动派生本节点的 128 个 Replica。**先检查全部 128 份双 RSA Genesis；全部成功以后才允许调用任一业务状态机或创建恢复 Ledger**。业务接入只有 `BusinessPorts` 的状态机注册、业务互斥及原有 JournalBaseline，而不是自行选主/复制/持久化。正式 Order/Trade v2 不应回退到遗留的 v1 JournalBaseline。
+- 已实装的 E1→E2 支路：真实打开的 B Replica 物理 WAL 和双 RSA CommitIndex/Custody、旧主 ZooKeeper 撤权、不可变签名 Stage、`CommonCertifiedGenesisSurvivorInstall` 的原始 Snapshot+WAL 事务回放，以及 `CommonCertifiedIndependentLocalReady` 的独立 C RSA 许可；签名 Stage 重试不会重复打开相同旧 WAL。新主 LOCAL 必须返回 `rpoRisk=true`，绝不可伪装 `QUORUM_DURABLE`。
+- 回归：Common **83/83 PASS**；332 个 Common、123 个 Order、173 个 Trade Java 8 文件同一 JAR 编译 PASS；Order、Trade 原始真实双 RSA Snapshot@1+WAL@2 业务回放各 **1/1 PASS**。候选 JAR SHA256 `a96ddf56027cf3a1073dbab55ad31006133f31800fee076fdb0a7cc19731be7d`。本次未替换 Demo 运行容器。
+- **严格 NO-GO**：该执行器目前只支持原始 E1 STRICT→E2 LOCAL，尚**没有**把 `CommonCertifiedCrossEpochSurvivorInstall`（E2→E3 跨 Epoch）、v2 原始业务 Snapshot 在 B 的真实自动预热和安装、E4 严格 RSA 双副本恢复，以及服务的单一 Spring 生产 Factory 完整接通。因此不能因为它的类名存在、编译通过或隔离 E1 测试通过，就放开生产门禁。正式 256 分区 Order/Trade A/B 自动切换、Robot/资金一致性验收仍待完成。
+- 生产静态门禁 `tests/check-certified-auto-recovery-wiring.py` 解析实现声明时已支持 Java 正常换行，但仍要求 Common 真实 E3/跨 Epoch 原语和完整 E2E；不得为使脚本变绿而添加空回调、字符串标记或假签名。脚本变绿仍不能替代真实 HA 业务验收。
+
 ## 4. 实施顺序（不因某个服务缺 Bean 而改变）
 
 1. **Common 完成统一生产物理恢复执行器**：从 Common 打开的 WAL、已认证原始成员/签名/物理状态构建恢复计划；完成旧主撤权、Replica 独立持久化验证、Snapshot+真实原始 WAL 安装、双物理签名/READY。不能凭回调有值即宣称完成；单向复制、单节点可工作及风险等级由统一 Common 策略决定。
