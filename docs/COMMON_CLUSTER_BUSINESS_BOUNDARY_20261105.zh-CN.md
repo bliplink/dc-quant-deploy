@@ -119,6 +119,16 @@ Common **独占**：ZooKeeper/节点存活与租约、每分区主备及 Home �
 - **Common 84/84 项 HA 回归 PASS**，Common 333、Order 123、Trade 173 个 Java 8 源文件使用同一 Jar 编译 PASS，JAR SHA256 `852bd211a420d50ba457c739d20fb2c1c7ce4fed70b27c6e0e16647cd6080961`。新增 v2 严格拒绝第二份业务日志 JUnit PASS。发布源码分支 `saas-crypto-latest`，Demo 为显式测试开关，未替换正在运行的业务服务。
 - **仍然 NO-GO**：上面验证的是独立真实 Demo/通用 Common；正式 `Order/Trade` 全 256 分区容器尚未通过生产 auto-plan 的跨 Epoch E2→E3 物理接入、非零业务 Snapshot 在 Replica 的真正可恢复安装、资金/委托/Projection/Robot 在容器的连续一致性验收。当前 Common 通用生产执行器 E1→E2 已实装，但不可冒称 E2/E3/E4 在服务启动即自动接通。
 
+### T517｜真实签名 RecoveryRequest 交给业务状态机工厂；完整故障链路复验（2026-11-05）
+
+- Common `41720ce`：增加只涉及业务的 `CommonCertifiedBusinessStateFactory.businessRegistry(Common 原始认证 RecoveryRequest)`。业务**仅**实例化本来就有的 `ReplicatedStateMachine`（Snapshot restore／原始 byte[] apply）；不接收也不能制造 ZooKeeper Stage、RSA、WAL、READY 或 ACK。Order `OrderCommonRecoveryBinding` 和 Trade `TradeCommonRecoveryBinding` 已沿用该统一接口，无重复实现集群协议。
+- `CommonCertifiedOpaqueGenesisSurvivorInstall` 在原始双 RSA Genesis@0 与真实 B Replica WAL/Custody 完整验签以后，才调用工厂，并传给业务有权威物理 HEAD 的 `RecoveryRequest`。`CommonCertifiedProductionPhysicalRecovery` 将此次**真正完成回放的状态机实例**与签名 Epoch 绑定，后续 E2 LOCAL writer 使用**同一个已恢复对象**；若对象／业务回放缺失则拒绝新增 writer，避免回放到 A 对象却对空的 B 对象开展交易。
+- 排除了旧候选 JAR 的 `NoClassDefFoundError` 和 Demo 代码／Common JAR `NoSuchMethodError`：将当前 **334** 个 Common Java 8 源文件一次性编入不可变候选 JAR，显式验证 v2 两个 overload 和内部类齐全。真实统一 JAR SHA256：`3a1bea7408c6ef6c84ef9d48a736eb6680ec7e55b49f85ac3d3d56e990a13bc7`。
+- 同一最新 JAR：Common 15 组 HA/原始双 RSA/Netty/业务 v2 回归 **90/90 PASS**；Order **123**、Trade **173** 个 Java 8 源码兼容编译 PASS；Order 委托和撤单、Trade 资金／仓位真实 Snapshot@1 + 原始 WAL@2 回放各 **1/1 PASS**。
+- **真实三 ZooKeeper + 两个 SIGKILL 复验 PASS**：A 主 E1 原始双 RSA ACK → SIGKILL A → B E2 Common v2 原始 WAL/业务回放并获独立 C RSA 签名 LOCAL READY → B 写至 60 → A 重加入独立 fsync 追平 → SIGKILL B → A E3 自动 RECOVERING/跨 Epoch E1+E2 WAL 回放，独立 C RSA 授权 → A 写至 74 → B 追平 → A TCP 原始 WAL→B 签名持久化，双方 **85/7**；E2/E3 历史客户端 ACK 均为 `LOCAL_DURABLE_ASYNC` 且 `rpoRisk=true`。完整证据卷 `~/.opentradingcore/t124-live-kill-runs/20261105214503`；日志 `.work/t517-common-v2-factory-repack/t517-full-3zk-two-sigkill.log`。
+- **严格模式恢复 PASS**：由同一历史 A/B 独立签名 E4 Snapshot、真实 E3 旧 WAL/Netty 关闭、独立旧 Epoch RSA 退休和 E4 业务回放回执，完成 `STRICT_QUORUM READY`；新 E4 实际双 RSA/Custody/Netty 持久 ACK `QUORUM_DURABLE`（seq=2），随后 SIGKILL B 时无双副本 fsync 的新写入正确拒绝 ACK。日志 `.work/t517-common-v2-factory-repack/t517-live-e3-e4-strict.log` 与 `t517-e4-strict-ack-kill.log`；证据卷 `~/.opentradingcore/t517-live-e3-e4-v2-20261105214746`。
+- **剩余 NO-GO 范围**：以上是单分区 Demo＋Common 真实 JVM/三 ZK 验收，不等于 **256 分区正式业务生产自动 HA**。Common 的生产 `CertifiedPhysicalRecoveryPlanFactory` 尚需把 E2→E3 历史和 E4 STRICT 物理安装、C 许可的真实证据目录、v2 每分区业务快照恢复、Spring 通用自动注册配置贯通；正式 Order/Trade A/B 双向切换、Robot 交易、Projection／资金和 10→50→200 租户持续压测尚未实际通过，不应释放生产门禁。运行中 T488 Order/Trade 和 Robot 未被本轮测试替换。
+
 ## 4. 实施顺序（不因某个服务缺 Bean 而改变）
 
 1. **Common 完成统一生产物理恢复执行器**：从 Common 打开的 WAL、已认证原始成员/签名/物理状态构建恢复计划；完成旧主撤权、Replica 独立持久化验证、Snapshot+真实原始 WAL 安装、双物理签名/READY。不能凭回调有值即宣称完成；单向复制、单节点可工作及风险等级由统一 Common 策略决定。
