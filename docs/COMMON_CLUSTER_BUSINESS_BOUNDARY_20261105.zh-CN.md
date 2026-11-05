@@ -137,6 +137,15 @@ Common **独占**：ZooKeeper/节点存活与租约、每分区主备及 Home �
 - 真实 T488 业务容器的**只读**物理前置检查：四个 Order/Trade A/B 节点仍运行，镜像为各自现有 `full-source-no-go`，重启次数为 0；在 `/srv/dc/data/t488-born` 可发现各自 512 个 `genesis-e1.quorum` 文件，但**没有**在该卷或 `/srv/dc/data/t488-ready-v1` 发现 `*.original-home.rsa`。这意味着生产 Common 不能凭当前 512 个 Genesis 文件“推断”独立签署的 256 分区原始 Home：必须在正式集群启动阶段由 A/B 原始物理身份各自通过 `CommonOriginalE1SignedMembersSource` 认证、签署和双签验收，不能直接生成假签名或降低启动门禁。只读检查未更改运行中容器。
 - **生产仍 NO-GO**：通用身份配置的静态和隔离测试不等于第三业务服务真实部署，也不等于 Order/Trade A/B 256 分区自动切换和 Robot/Projection/资金验收。Common `CommonCertifiedProductionPhysicalRecovery` 尚需真正自动装配跨 Epoch E2→E3、严格 E4、真实业务 v2 Snapshot 接收与各分区 signed Home，并经正式服务真实 SIGKILL/交易恢复验收。Demo 单分区已过，不得混写成生产 PASS。
 
+### T519｜Common 双 Epoch E1＋E2 原始 WAL v2 恢复（代码测试标记 T518，2026-11-05）
+
+- Common `e3e206b`：扩展 `StateMachineRecoveryCoordinator.RecoveryRequest.opaqueSignedE1E2PhysicalFrames` 和 `CommonCertifiedCrossEpochSurvivorInstall.installE3OpaqueV2`，由 **Common** 同时验证 E1 原始 A/B RSA Genesis、双 Custody／CommitIndex／原始 WAL、E2 B LOCAL 原始 WAL 和 A 独立 fsync 签名，再用连续逻辑序号完整重放业务 `byte[]`。**不需要** Order/Trade/Demo 第二套 JournalBaseline，也不允许把历史 LOCAL RPO 风险追认成双副本 ACK。
+- 普通 `opaqueFrames` 仍**拒绝**非法的跨 Epoch Snapshot/head 组合；只有显式物理 E1→E2 请求能使用 Genesis@E1 / HEAD@E2（代码和物理原始 RSA 证据另行验签）。新建 2 项 JUnit 正反对照 PASS，正常 v1 和同 Epoch v2 行为保持不变。
+- **真实三 ZK＋A/B JVM＋独立 C RSA 全 v2 验收 PASS**：E1 A 严格持久化→SIGKILL A→B E2 原始 WAL v2 回放／LOCAL READY→A 加入追平→SIGKILL B→A E3 用 `installE3OpaqueV2` 恢复原始 E1+E2 共 4 条 WAL，`REPLAY_COMPLETE`，业务状态 60→独立 C 授权 E3 LOCAL READY→A 写至 74→B 恢复追平并实测 TCP RSA fsync，最终 A/B 业务状态 **85/7**。E2 与 E3 两次恢复均没有额外 Demo 业务 journal，日志 `.work/t518-common-multi-epoch-opaque/t518-real-v2-e1-e2-e3-double-sigkill.log`；原始持久证据卷 `~/.opentradingcore/t124-live-kill-runs/20261105224952`，A 节点 `t456-returned-a.log` 包含 T518 原始 E1＋E2 物理业务请求和无双重 Journal PASS。
+- 同一候选 Common JAR SHA256 `a1b9329fc034dba5647c194e9de0f617fb0bd6479e5254fcafdaae901e1b393e`：Common 15 组复用 HA/Netty／RSA／LOCAL／物理恢复 **86/86 JUnit PASS**；335 个 Common、123 个 Order、173 个 Trade Java 8 源码构建 PASS；Order 真实业务 Snapshot＋原始 WAL 委托撤单回放 **1/1 PASS**，Trade 余额／仓位结算回放 **1/1 PASS**。
+- **新 v2 历史重新进入严格模式 PASS**：同一 E3 历史，A/B 分别 RSA 签署 E4 原始 Snapshot，完成三 ZK 下双 RSA E4 `STRICT_QUORUM READY`；A/B 原始 Netty/Custody fsync 至 seq=2，客户端返回 `QUORUM_DURABLE`；`SIGKILL B` 后缺少副本证明的新 ACK 被拒绝。证据 `~/.opentradingcore/t518-e4-live-strict-20261105225244`，日志 `.work/t518-common-multi-epoch-opaque/t518-e3-to-e4-strict.log` 和 `t518-e4-strict-two-rsa-ack-kill.log`。
+- 本次只提交 Common 两个恢复协议文件、一个负例测试和 Demo 恢复集成测试的**最小修改**，没有给 Order/Trade 写任何集群逻辑。**生产仍 NO-GO**：这里的 E2→E3 v2 被真实 Demo 调用，但正式 `CommonCertifiedProductionPhysicalRecovery` 的 256 分区计划尚未与 E2→E3、E4 严格恢复、v2 非零 Snapshot 的自动生产装配以及 Spring 通用 Factory 真正接通。正式 Order/Trade A/B SIGKILL、Robot 交易、Projection／资金一致性尚未达到最终验收，运行容器未替换。
+
 ## 4. 实施顺序（不因某个服务缺 Bean 而改变）
 
 1. **Common 完成统一生产物理恢复执行器**：从 Common 打开的 WAL、已认证原始成员/签名/物理状态构建恢复计划；完成旧主撤权、Replica 独立持久化验证、Snapshot+真实原始 WAL 安装、双物理签名/READY。不能凭回调有值即宣称完成；单向复制、单节点可工作及风险等级由统一 Common 策略决定。
