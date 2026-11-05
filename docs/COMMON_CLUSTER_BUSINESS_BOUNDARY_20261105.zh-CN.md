@@ -70,6 +70,13 @@ Common **独占**：ZooKeeper/节点存活与租约、每分区主备及 Home �
 - **真实 Demo+Common**：T509 对最新 Common 候选重新执行真实三 ZK、原 A/B 双 RSA、独立 C 签名见证、两次 SIGKILL，A→B→A 自动主备切换/副本追平、持续业务总计 **85/7 PASS**。故障期间 LOCAL 写入仍有不可取消的 RPO 风险，不可冒称永久 2/2；此前 T508 独立验证 E3→E4 恢复 STRICT 及两副本物理 ACK。
 - **正式 HA 仍 NO-GO**：`CommonCertifiedProductionPhysicalRecovery` 这类真正由 Common 持有的生产自动物理执行器、Common 原始已打开 WAL/Custody 到签名恢复计划的装配、RECOVERING→真实业务回放→独立 READY→运行时接管尚未完整连通。生产门禁 `tests/check-common-business-boundary.py --mode production` 当前仍 **FAIL（预期、正确拒绝放行）**。此轮仅隔离回归，没有部署候选镜像到运行中的 Order/Trade；不得把静态接口编译成功表述为正式 A/B HA 通过。
 
+### T512｜Common Watch 的 LOCAL 物理角色接管（2026-11-05）
+
+- Common `53c794c`：`CommonCertifiedNodeRuntime.RecoveredPhysicalPartition` 提供新的可选 `requireRecoveredLocal(stage)`，**默认 fail-closed**；自动 Watch 仍必须先完成签名的 `RECOVERING`、旧 Replica 的真正 WAL 关闭、Common business Snapshot/WAL 的认证恢复、外部 READY 发布器、当前 ZK `LOCAL_DURABLE_ASYNC` 准入，再由 Common 运行时安装 `CommonCertifiedDegradedPrimary`。无独立物理授权不会变成严格 2/2 ACK。
+- 新建 `CommonCertifiedLocalWatchInstallTest`：真实旧 E1 Replica OS WAL 关闭后，新 E2 LOCAL WAL 的 seq1 fsync、同一个 Common Registry 对业务有效、拒绝伪造 `QUORUM_DURABLE`，以及重启存在旧 LOCAL 写入时拒绝未验证的直接重开。该测试的 ZooKeeper/C 策略证明**明确为测试替身**，不能充当独立 C RSA 生产证据。
+- Common **78/78** HA/LOCAL 回归，330 个 Common、123 个 Order、173 个 Trade Java8 同一候选 JAR 全源码编译 **PASS**。候选 `SHA256=a3243ab1757d64cd25249813c1e2dad49531c79ce267cd86de638b4ef83dd5d9`。
+- **仍 NO-GO**：生产 `CommonCertifiedProductionPhysicalRecovery` 真实物理计划装配仍缺失；这项新增 Watch 接线并未证明正式 256 分区 Spring A/B 自动恢复，也未在生产上提供 E(n) LOCAL→E(n+1) STRICT 的完整同运行时无损轮转。不得增加 Order/Trade 的对应集群实现。
+
 ## 4. 实施顺序（不因某个服务缺 Bean 而改变）
 
 1. **Common 完成统一生产物理恢复执行器**：从 Common 打开的 WAL、已认证原始成员/签名/物理状态构建恢复计划；完成旧主撤权、Replica 独立持久化验证、Snapshot+真实原始 WAL 安装、双物理签名/READY。不能凭回调有值即宣称完成；单向复制、单节点可工作及风险等级由统一 Common 策略决定。
