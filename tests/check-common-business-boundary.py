@@ -36,6 +36,15 @@ for service, source in (('Order', order_machine), ('Trade', trade_machine)):
                       'CommonCertifiedFailoverWatch', '.stageRecovering(', '.publishCertifiedReady('):
         if forbidden in source:
             failures.append(service+' domain machine contains physical HA: '+forbidden)
+for service, root in (('Order', a.order), ('Trade',a.trade)):
+    binding = read(root, service+'CommonRecoveryBinding.java')
+    if 'public PartitionStateMachineRegistry businessRegistry' not in binding:
+        failures.append(service+' must expose business state-machine factory')
+    for protocol in ('CommonCertifiedFailoverCoordinator','CommonCertifiedGenesisSurvivorInstall',
+                     'CommonCertifiedCrossEpochSurvivorInstall','recoverCertifiedOpaquePhysical',
+                     'recoverCertifiedE1FromSurvivor','public StateMachineRecoveryCoordinator.RecoveryResult recover('):
+        if protocol in binding:
+            failures.append(service+' binding still owns physical recovery: '+protocol)
 for forbidden in ('CommonCertifiedFailoverCoordinator', '.requireCurrentRecoveringStage(',
                   '.stageRecovering(', '.publishCertifiedReady('):
     if forbidden in trade_applier:
@@ -46,8 +55,8 @@ if 'private CommonCertifiedRecoveringBusinessFence(' not in fence or 'public voi
     failures.append('Common recovering gate must be an unforgeable private-constructor capability')
 if 'CommonCertifiedRecoveringBusinessFence independentlyCertifiedCommonFence' not in trade_applier:
     failures.append('Trade funds recovery must require Common capability, not a no-op Runnable')
-if 'CommonCertifiedRecoveringBusinessFence' not in trade_binding:
-    failures.append('Trade binding not using Common signed recovering gate')
+if 'CommonCertifiedRecoveringBusinessFence' in trade_binding:
+    failures.append('Trade business binding must NOT assemble signed recovering stages')
 
 if a.mode == 'production':
     # Target state, NOT a workaround that makes current NO-GO disappear.
