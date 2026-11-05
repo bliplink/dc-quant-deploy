@@ -70,6 +70,17 @@ T500 使用 T499 **同一组**新的 E4 磁盘，而不是之前 T287 的旧样�
 - 本轮 T498/T499 实际在线 E3→E4 严格切换和两条 QUORUM 写入的历史实验依旧使用 T497 物理等价核心 JAR；**没有用完整 T500 JAR再次执行 T498/T499**，须保留清楚的证据边界。
 - Common 生产统一物理恢复执行器仍未完成；真实 Order/Trade 启动自动恢复闭环 **NO-GO**。不要在这项门禁通过前部署候选镜像。
 
+## T501–T503｜完整构建、Zero-suffix 恢复根因与正式 Common 修复（11 月 5 日）
+
+- **T501 完整依赖门禁：** 已新增 `tests/check-common-order-trade-java8-compat.sh`，通过同一完整 Common JAR 编译 Order 的 123 个、Trade 的 173 个 Java 8 源文件；实际使用 Lombok 注解处理，确认恢复 fence 等关键类型真实打入 JAR，不以几个单测替代全量编译。GitHub 提交 `dc5be24d5c7513c4a2ec71908b862630f092a223`。
+- **T502 Common 源码完整构建：** 直接从 **330 个 Common Java 源文件**编译并生成候选 JAR，SHA-256 `8b60f3abf0909a25fc885f8bbe07d7fe4aaddeb32614081b7a9d5b60c16a2b58`；Common 60/60 JUnit、Order 全源码、Trade 全源码兼容 PASS。该完整 JAR 上真实 Docker 三 ZK 双 SIGKILL A→B→A 与双方业务恢复、B 回归后 TCP 原始 WAL fsync 最终状态 85 / 7 亦退出 0，证据 `.work/t502-full-common-source-build/t502-real-ababa-full.log`。故障阶段客户 ACK 仍为 RPO 有风险的 LOCAL。
+- **T503 根因：** 完整业务 Snapshot 水位与双节点认证提交 HEAD 完全相等（例如 seq=2）时，Netty 复制的后续原始 WAL 区间**长度为 0**，先前 `RecoveryQuorumWindowFromStaging.requireFullWindow` 仍要求在这个空区间中读到末条 WAL 帧，从而错误地抛 `source original WAL terminal not certified`，阻塞合法的业务恢复。
+- **T503 修复（只在 Common）：** `VerifiedRecoveryStagingClient.Result` 对零尾段仅从已通过**两独立物理投票者 RPC**的认证 Prefix 取出*最后一条原始物理 WAL 帧 SHA*；每次重新读验持久 image、receipt、WAL SHA；严格绑定同一个已认证 `RecoveryRequest` 对象/partition/Epoch/HEAD/interval/hash；`RecoveryQuorumWindowFromStaging` 不合成新的帧，正常非空 WAL 依旧要求真实终止帧。后续 `CertifiedRecoverySourceAuthority` 还需**重新向实际两端投票者取回当前 HEAD、核对原始区间和赋权状态**，成功与否不直接发布 READY。
+- **T503 负例：** 对 staging 原始 WAL 塞入多余字节会拒绝，伪造“字段相同但对象不同”的恢复请求拒绝，修改 transport receipt 或业务 Snapshot 仍拒绝；证书不足、被撤权与错误分区不得被空 WAL 特例绕过。
+- **T503 代码已真正落 GitHub：** `bliplink/com.app.common` 的 `saas-crypto-latest` 一次原子提交 `ef3c3a133bff57bbd3488b16475b7e78f270d7b5`，涉及 6 个 Common Java 源文件、1 个新增 JUnit 实例，未改动 Order/Trade 集群代码。
+- **T503 全源码验证：** 最新完整 Common JAR SHA-256 `78385b8448666ea739c8edcd915619578d91ae8a65209c11011aef20ce2ffd0b`，Common 330/330 源文件、Order 123/123、Trade 173/173 Java 8 编译 PASS；10 个 Common Test Class、**69/69 JUnit PASS**，其中签名 Snapshot@HEAD 无后续 WAL 的真实 Netty 集成测例及篡改负例 PASS。证据 `.work/t503-common-zero-suffix/t503-69-common-junit.log` 与 `.work/t503-common-zero-suffix/full-order-trade-compat`。
+- **严格范围声明：** T503 定向 Netty Snapshot-at-HEAD 测试使用 HMAC 物理投票者测试凭据；另有真实双 RSA Common 物理 WAL/Custody 测试组合回归，但不能把该单例称为“线上 Order/Trade 256 分区严格完整 HA 通过”。Common 的生产自动恢复 `DurablePhysicalRecovery` 全链路仍未装配完成，Order/Trade 自动恢复/产品交易完整验收依旧 **NO-GO**。
+
 ## 代码边界调整
 
 1. T496 已从 `OrderCommonRecoveryBinding` / `TradeCommonRecoveryBinding` 删除业务侧原有的物理恢复入口（包括签名分段安装、旧主失败恢复、E3 反向恢复），两个业务绑定类现只暴露 `businessRegistry(request)`，即已有 `ReplicatedStateMachine` 工厂。两项反射及 Common 非认证恢复拒绝测试各 1/1 PASS。
