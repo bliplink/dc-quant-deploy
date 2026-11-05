@@ -86,6 +86,14 @@ Common **独占**：ZooKeeper/节点存活与租约、每分区主备及 Home �
 - **同一个候选** `SHA256=6711965ba3c452d35b32d15b02a3016fcd9999a6c94a55cc19f557110c78b40c`，Common **330**、Order **123**、Trade **173** 个 Java 8 源文件全部编译 PASS；Order/Trade **无任何新集群实现**。
 - **验收界限**：T513 的 C/ZK 外部授权是标注清楚的测试替身；原始 A/B 物理 WAL 和签名凭证是真实独立 fsync/RSA。此前 T512 Demo 真实 C RSA + 双 SIGKILL + E3→E4 STRICT 双物理持久提交已实测，但**尚未**验证 T513 新方法在同一生产进程中完成自动 E3→E4 及 256 分区，因此 **生产 HA NO-GO**。仍需 Common 的统一生产自动物理恢复执行器，并真实完成 Order/Trade 服务启动、业务 E2E、完整双向 HA。
 
+### T513｜Demo 独立 C RSA LOCAL READY 校验正式下沉 Common（2026-11-05）
+
+- Common `7feb1ec`：新增 `CommonCertifiedIndependentLocalReady.publishFromPersistedIndependentC(...)`，统一校验真实签名 `RECOVERING` Stage、旧主 ZooKeeper Ephemeral Lease 已失效、Replica 原始 WAL/CommitIndex、双 RSA Custody、业务 Snapshot+原始 WAL `REPLAY_COMPLETE` Ledger，以及**不属于 A/B 的独立 C 公钥和其真实签名文件**，由 Common 调用原有 `publishCertifiedDegradedReady` 发布 E2 `LOCAL_DURABLE_ASYNC`。业务层不能自行拼 `CommonExternalFenceCertificate.Intent`，不能自己构造旧主 physical fencer，也不能用 C 身份替代原 A/B 签名。
+- Demo `DemoCommonLiveZkProcess` 删除重复的旧 WAL/Custody/C 签名验证和 LOCAL READY CAS 代码，直接调用 Common 上述服务无关入口。此次只发布该调用区域的最小源码差异，**没有混入**工作目录里尚未提交的 T466 压测修改。Order/Trade 不新增集群类，仍只提供业务 `byte[]` 状态机及既有恢复回放接口。
+- 全量本地构建：**Common 331 + Order 123 + Trade 173** 个 Java 8 源码 PASS，共用候选 JAR SHA256 `2374f4b76ddf87944edb0ad6416a9c8d58a6953c5941718cac9a0e359e7d50f9`。Common 13 组 HA/Netty/双 RSA/LOCAL 验证 **80/80 PASS**，新增 4 种独立 C 缺失、旧 A/B 密钥冒用、业务回放未完成等负例全部拒绝 READY。
+- **最新真实三 ZK / Docker 双 SIGKILL PASS**：在迁移后的 Demo/Common 类上，独立 C JVM 自动签发 E2/E3 许可，A SIGKILL→B E2 恢复并写至 60→A 重加入追平→B SIGKILL→A E3 恢复写至 74→B 重加入追平→A TCP WAL 向 B 签名 fsync，**双方最终 85/7 一致**。真实隔离卷 `~/.opentradingcore/t124-live-kill-runs/20261105193305`，Mac 日志 `.work/t513-common-independent-ready/t513-final-common-owned-old-lease-ababa.log`。故障窗口的客户凭证始终 `LOCAL_DURABLE_ASYNC`、`rpoRisk=true`，**不是 2/2 ACK**。
+- **严格 NO-GO 不变**：Common 尚未完成供所有服务直接启动的 `CommonCertifiedProductionPhysicalRecovery` 全量计划自发现、真实业务快照及跨 Epoch 安装执行器；本次只完成了旧 STRICT E1→E2 LOCAL 的实际物理 READY 发布共用入口，不能宣称 256 分区生产 Order/Trade 自动 A/B 故障切换通过。候选镜像没有替换运行中的服务。
+
 ## 4. 实施顺序（不因某个服务缺 Bean 而改变）
 
 1. **Common 完成统一生产物理恢复执行器**：从 Common 打开的 WAL、已认证原始成员/签名/物理状态构建恢复计划；完成旧主撤权、Replica 独立持久化验证、Snapshot+真实原始 WAL 安装、双物理签名/READY。不能凭回调有值即宣称完成；单向复制、单节点可工作及风险等级由统一 Common 策略决定。
