@@ -54,6 +54,12 @@ Common **独占**：ZooKeeper/节点存活与租约、每分区主备及 Home �
 - **交叉编译及回归**：同一 T506 完整 Common JAR（SHA-256 `04364dd84ca84647bff7de5d4e90a33923d69a8b5872c50ddbb613538874b5e7`），Common 330 个 Java 8 源文件、Order 123 个、Trade 173 个编译 PASS，Common 十组 **72/72 JUnit PASS**。本地证据 `.work/t506-common-full-release/`。
 - **尚未完成：** Common 的统一生产 `DurablePhysicalRecovery` 具体执行器仍需将旧 Epoch 原始 WAL/双 Custody、签名 Stage、Replica 独立追平、业务 Snapshot+WAL 安装及双 RSA READY 端到端接好，并从**同一个 Common 入口**供 Demo 和所有业务复用。T505 是该入口和真实物理源装配边界，**不是**已具备全部生产恢复证明的完成声明。Order/Trade 当前仍存在业务专属 `orderCommonCertifiedPhysicalRecovery`/`tradeCommonCertifiedPhysicalRecovery` Spring qualifier；不能靠空 Bean 解锁，正式启动门禁仍 **FAIL / NO-GO**。
 
+### T507｜删除 Order/Trade 私有物理 Bean，保留完整生产门禁（2026-11-05）
+
+- Order `e9c426fc44d7b67aba5461282fa7e4ed10ce76` 与 Trade `929bdb3f8f1f06f4d20b4353d155cd30de50e606`：删除业务层 `*CommonAutomaticReplicaPlans` Spring Bean、`orderCommonCertifiedPhysicalRecovery`/`tradeCommonCertifiedPhysicalRecovery` 专属集群依赖；两个 `*CommonNodeRuntimeWiring` 改为注入 Common 通用 `CertifiedPhysicalRecoveryPlanFactory` 并只调用 `openAndStartWithCertifiedAutomaticRecoveryFromOpenedPhysical`。业务侧只保留已存在的 opaque Snapshot/WAL 原始数据源与领域状态机，不再装配物理 HA。
+- Order 全量 123、Trade 全量 173 Java8 源码使用 T506 同一 JAR 编译 **PASS**。更新 `tests/check-certified-auto-recovery-wiring.py` 和 6 项反向测试，校验业务端不能添加物理恢复 Qualifier/Bean，也不能调用旧 pre-open 启动入口；源码层 **PASS**。`--mode business` 持续 PASS。
+- **明确仍 NO-GO**：Common 尚未注册可执行的生产通用 `CommonCertifiedProductionPhysicalRecovery`（含实际 RSA Stage、物理旧 WAL + 双 Custody、独立 Replica 追平、按业务快照/后续 WAL 恢复、第三方降级/双 RSA READY）；所以本轮只修复业务侧错误依赖，不能宣称新版 Order/Trade 自动 HA 可以部署。旧 Demo Order/Trade/Robot 保持原样运行。升级门禁持续保持 FAIL，禁止用空 Bean/自动 return true 绕过。
+
 ## 4. 实施顺序（不因某个服务缺 Bean 而改变）
 
 1. **Common 完成统一生产物理恢复执行器**：从 Common 打开的 WAL、已认证原始成员/签名/物理状态构建恢复计划；完成旧主撤权、Replica 独立持久化验证、Snapshot+真实原始 WAL 安装、双物理签名/READY。不能凭回调有值即宣称完成；单向复制、单节点可工作及风险等级由统一 Common 策略决定。

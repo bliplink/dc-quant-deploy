@@ -1,10 +1,9 @@
 #!/usr/bin/env python3
-"""Read-only fail-closed preflight for the REAL Order/Trade Common auto-HA beans.
+"""Read-only fail-closed preflight for Common-only physical automatic HA.
 
-A passing Spring compilation or nonempty Snapshot test cannot prove that an
-application can start its default full automatic HA graph. This preflight only
-checks the production bean declarations and same Common JAR evidence; it
-NEVER claims ready/failover success (which requires real ZooKeeper/Netty).
+Order/Trade must inject one Common post-open factory, not their own physical
+producer. Still NO-GO until Common's REAL service-neutral physical executor
+exists, and even then a source scan cannot replace actual Docker E2E.
 """
 import argparse
 import hashlib
@@ -12,9 +11,9 @@ from pathlib import Path
 import re
 import sys
 
-PRODUCTION_BEANS = {
-    'OrderSvr': ('order', 'orderCommonCertifiedPhysicalRecovery'),
-    'TradeSvr': ('trade', 'tradeCommonCertifiedPhysicalRecovery'),
+SERVICE_NODE_WIRING = {
+    'OrderSvr': ('order', 'OrderCommonNodeRuntimeWiring.java'),
+    'TradeSvr': ('trade', 'TradeCommonNodeRuntimeWiring.java'),
 }
 
 
@@ -24,25 +23,54 @@ def without_comments(source):
     return re.sub(r'(?m)//[^\n]*', '', source)
 
 
-def check_service(name, root, bean):
+def check_service(name, root, wiring_file):
     folder = root / 'src/main/java/com/app/dc/service/state'
-    if not folder.is_dir():
-        return False, f'{name}:SOURCE_NOT_FOUND:{folder}'
-    candidates = []
+    main = folder / wiring_file
+    if not main.is_file():
+        return False, f'{name}:COMMON_NODE_BOOTSTRAP_SOURCE_MISSING:{main}'
+    source = without_comments(main.read_text(encoding='utf-8'))
+    bad = []
     for file in sorted(folder.rglob('*.java')):
-        source = without_comments(file.read_text(encoding='utf-8'))
-        if bean not in source:
-            continue
-        # @Qualifier consumption is not a producer. Require explicit bean
-        # definition + exact Common API return type on a real method.
-        pattern = r'@Bean\s*\(\s*name\s*=\s*"' + re.escape(bean) + r'"\s*\)\s*' \
-                  r'(?:@[A-Za-z_][\w.]*\s*(?:\([^)]*\))?\s*)*' \
-                  r'public\s+[\w$.<>?,\s]*?DurablePhysicalRecovery\s+\w+\s*\('
-        if re.search(pattern, source):
-            candidates.append(file.relative_to(root).as_posix())
-    if len(candidates) != 1:
-        return False, f'{name}:PHYSICAL_RECOVERY_BEAN_MISSING_OR_DUPLICATE:name={bean} producers={len(candidates)}'
-    return True, f'{name}:PHYSICAL_RECOVERY_BEAN_DECLARED:{candidates[0]}'
+        content = without_comments(file.read_text(encoding='utf-8'))
+        if re.search(r'@Qualifier\s*\(\s*"(?:order|trade)CommonCertifiedPhysicalRecovery"\s*\)', content):
+            bad.append(file.name + ':service-owned physical recovery qualifier')
+        if 'CommonCertifiedAutomaticReplicaPlanWiring.DurablePhysicalRecovery' in content:
+            bad.append(file.name + ':service-created physical recovery')
+        if re.search(r'@Bean\s*\(\s*name\s*=\s*"(?:order|trade)CommonAutomaticReplicaPlans"', content):
+            bad.append(file.name + ':service-owned automatic plan producer')
+    if bad:
+        return False, f'{name}:SERVICE_PHYSICAL_CLUSTER_IMPLEMENTATION_NOT_ALLOWED:{bad}'
+    requirements = (
+        'CommonCertifiedNodeBootstrap.CertifiedPhysicalRecoveryPlanFactory',
+        'openAndStartWithCertifiedAutomaticRecoveryFromOpenedPhysical(',
+        'CommonCertifiedNodeBootstrap',
+    )
+    if not all(token in source for token in requirements):
+        return False, f'{name}:COMMON_POSTOPEN_FACTORY_NOT_WIRED'
+    if 'openAndStartWithCertifiedAutomaticRecoveryFromPhysicalSources(' in source:
+        return False, f'{name}:OLD_PREOPEN_PHYSICAL_PLAN_ENTRY_FORBIDDEN'
+    return True, f'{name}:COMMON_POSTOPEN_FACTORY_BUSINESS_WIRING_ONLY'
+
+
+def check_common_executor(root):
+    file = root / ('src/main/java/com/app/common/replication/'
+                   'CommonCertifiedProductionPhysicalRecovery.java')
+    if not file.is_file():
+        return False, 'COMMON_PRODUCTION_AUTO_PHYSICAL_RECOVERY_EXECUTOR_MISSING'
+    content = without_comments(file.read_text(encoding='utf-8'))
+    if 'implements CommonCertifiedAutomaticReplicaPlanWiring.DurablePhysicalRecovery' not in content:
+        return False, 'COMMON_PRODUCTION_EXECUTOR_DOES_NOT_IMPLEMENT_REAL_PHYSICAL_CONTRACT'
+    # Structure is necessary, NOT sufficient. A class name, empty callbacks,
+    # or a fake Bean must never be misrepresented as successful runtime HA.
+    required = ('signedCoordinator(', 'independentFsyncedReplica(',
+                'bothSignedPhysicalReady(', 'recoveredBusinessWalAndSnapshot(',
+                'CommonCertifiedPhysicalEvidenceRegistry',
+                'CommonDurableFailoverStageLedger',
+                'CommonCertifiedGenesisSurvivorInstall',
+                'CommonCertifiedCrossEpochSurvivorInstall')
+    if not all(token in content for token in required):
+        return False, 'COMMON_PRODUCTION_EXECUTOR_MISSING_ACTUAL_WAL_RSA_RECOVERY_STEPS'
+    return True, 'COMMON_EXECUTOR_DECLARED_REQUIRES_REAL_E2E_VALIDATION'
 
 
 def digest(file):
@@ -57,14 +85,18 @@ def main():
     p = argparse.ArgumentParser(description=__doc__)
     p.add_argument('--order-root', type=Path, default=Path('.work/t444-order-stream'))
     p.add_argument('--trade-root', type=Path, default=Path('.work/t452-trade-windowed-e2'))
+    p.add_argument('--common-root', type=Path, default=Path('.work/t472-common-publish-20261104'))
     p.add_argument('--order-common-jar', type=Path)
     p.add_argument('--trade-common-jar', type=Path)
     args = p.parse_args()
     checked = []
-    for service, (arg, bean) in PRODUCTION_BEANS.items():
-        result = check_service(service, getattr(args, arg + '_root'), bean)
+    for service, (arg, wiring) in SERVICE_NODE_WIRING.items():
+        result = check_service(service, getattr(args, arg + '_root'), wiring)
         checked.append(result)
-        print(('PASS' if result[0] else 'NO-GO') + ':T489_' + result[1])
+        print(('PASS' if result[0] else 'NO-GO') + ':T507_' + result[1])
+    common_result = check_common_executor(args.common_root)
+    checked.append(common_result)
+    print(('PASS' if common_result[0] else 'NO-GO') + ':T507_' + common_result[1])
     if bool(args.order_common_jar) != bool(args.trade_common_jar):
         checked.append((False, 'both exact Common JAR paths required'))
         print('NO-GO:T489_BOTH_SERVICE_COMMON_JARS_REQUIRED')
@@ -79,7 +111,7 @@ def main():
     if not all(success for success, _ in checked):
         print('NO-GO:T489_PRODUCTION_AUTOMATIC_HA_NOT_AUTHORIZED')
         return 2
-    print('PASS:T489_BEAN_STRUCTURE_ONLY_REAL_HA_STILL_REQUIRES_RUNTIME_VERIFICATION')
+    print('PASS:T507_SOURCE_ONLY_REAL_DEMO_ORDER_TRADE_HA_AND_RUNTIME_PROOF_STILL_REQUIRED')
     return 0
 
 
