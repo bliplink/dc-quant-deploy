@@ -59,7 +59,16 @@ T500 使用 T499 **同一组**新的 E4 磁盘，而不是之前 T287 的旧样�
 - 完整统一 Common 候选 `.work/t500-unified-common-package/common-t500-candidate.jar`，SHA-256 **`77ccd13419eb2fae94b1ae21d55a7eb8b05f9faa7cf3d2d165eddc7613556821`**；从 T497 候选加上 Common 内已提交的最终恢复凭证类，`javap` 可验证。
 - Java 8 + Maven 本地依赖 + Lombok 1.18.34 注解处理器对 Order **123/123** 与 Trade **173/173** Java 主源码编译均成功（两服务不是单文件试编；且没有 GitHub Actions）。
 - 用这份**完整 T500 JAR**重新执行原始业务物理两 RSA Snapshot + WAL suffix 回归：Order **1/1 PASS**，Trade **1/1 PASS**（包含恢复后真实业务编码/解析/幂等应用）。
-- T497 A/B 双向 SIGKILL、T498/T499 E4 严格 ACK、T500 256 分区压力链路在之前 T497 核心物理代码 JAR 上实测；完整 T500 JAR 是增补缺失的 Common 业务恢复凭证类型，**不能把重新打包自动当成全部物理故障试验重测通过**。后续应继续以完整 T500 构建物单独复跑故障及压力链路，保留真实证据。
+- T497 A/B 双向 SIGKILL、T498/T499 E4 严格 ACK、T500 256 分区压力链路在之前 T497 核心物理代码 JAR 上实测；完整 T500 JAR 是增补缺失的 Common 业务恢复凭证类型，**不能把重新打包自动当成全部物理故障试验重测通过**。后续已经以完整 T500 构建物单独复跑故障和 256 分区压力，实测结果见下。
+
+**完整打包统一候选 T500 JAR 的最终复测结果：**
+
+- **真实 Demo A/B 两次 SIGKILL、双向追平和 B 重加入**：命令退出 **0**，日志 `.work/t500-unified-common-package/t500-full-jar-real-ababa.log`；原始 RSA 物理卷 `~/.opentradingcore/t124-live-kill-runs/20261105152132`。实际 A→B 恢复 40→60、A 回归追平、B→A 恢复写入 74、B 回归追平 74、A→B TCP 新写入后两端 85 / 7。E2/E3 单活客户 ACK 仍显式 LOCAL、RPO 风险不变。
+- **真实双 JVM 256 分区严格物理压力重测**：命令退出 **0**，`.work/t500-unified-common-package/t500-full-jar-256-strict-load.log`，原始物理卷/完整 JSON 指标 `.work/t466-common-256-strict/20261105072402-77336/`。双方 256/256 分区字节一致、**540/540** 原始 WAL 帧一致，0 失败。200 档 A：**45.97 TPS、p95 155.366 ms、p99 189.462 ms**；B：**45.88 TPS、p95 162.733 ms、p99 212.426 ms**。这是**模拟租户**和共享 Mac Docker 资源，不是实际 200 SaaS 租户或生产性能承诺。
+- **业务真实 RSA Snapshot+WAL suffix 回归**：同一 T500 完整 Common JAR，Order **1/1 PASS**、Trade **1/1 PASS**。
+- **Order/Trade 全源码 Java 8 编译**：同一 JAR 加 Lombok 注解处理，**Order 123/123**、**Trade 173/173**。
+- 本轮 T498/T499 实际在线 E3→E4 严格切换和两条 QUORUM 写入的历史实验依旧使用 T497 物理等价核心 JAR；**没有用完整 T500 JAR再次执行 T498/T499**，须保留清楚的证据边界。
+- Common 生产统一物理恢复执行器仍未完成；真实 Order/Trade 启动自动恢复闭环 **NO-GO**。不要在这项门禁通过前部署候选镜像。
 
 ## 代码边界调整
 
