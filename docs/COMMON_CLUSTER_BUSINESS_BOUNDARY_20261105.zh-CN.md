@@ -45,6 +45,15 @@ Common **独占**：ZooKeeper/节点存活与租约、每分区主备及 Home �
 - **T499**：T498 E4 READY 上新发两条物理业务操作，A/B 双写 fsync、CommitIndex/Custody 客户 ACK 为真实 `QUORUM_DURABLE`，B SIGKILL 后 A 下一条**拒绝伪造客户 ACK**。隔离 P090 实测 PASS。
 - 完整证据参见 [T497–T499 验收记录](T497_T499_COMMON_LIVE_STRICT_RECOVERY_AUDIT_20261105.zh-CN.md)。这些是隔离 Demo 验收，**不是**生产 256 分区自动 HA/Order–Trade 业务完整 GO；Common 真正统一的生产 `DurablePhysicalRecovery` 执行器缺失、两业务专属 Spring qualifier 仍存在，生产门禁仍 FAIL。
 
+### T503–T506｜统一 Common 的物理恢复装配落点
+
+- **T503**：修正业务 Snapshot 水位已等于认证 WAL HEAD 时的零尾段恢复：原始 WAL 终止帧的摘要来自已认证的双物理投票者 Prefix，不能从空 WAL 合成帧；缺失、错误请求身份、篡改源仍拒绝。Common 原子提交 `ef3c3a1`，9/9 定向 Netty 测试 PASS。
+- **T504**：Common 在物理工厂被调用前先验证 **所有 256 分区、全量分区标识与旧主 RSA**；即便最后一个分区非法，也不能先打开其他分区的恢复凭证。提交 `fa30022`。
+- **T505**：增加 **`CommonCertifiedNodeBootstrap.openAndStartWithCertifiedAutomaticRecoveryFromOpenedPhysical`** 与通用 `CertifiedPhysicalRecoveryPlanFactory`。Common 从**本 JVM 已取得 ZK 授权且实际打开的物理 WAL/Custody** 构造自动恢复计划，在 Netty 监听启动前核对签名 Source 与当前 Replica 计划的完整性。真实 A/B Netty WAL、Replica 已 fsync 的 post-open 测试 PASS；错误节点身份、缺少任一必要计划均拒绝。此入口只是 Common 内已存在选主/恢复/READY 机制的统一装配，**不是另一个集群协议**。
+- **T506**：只有真实认证的 256 分区全部为当前 JVM 的 Primary 时，允许 **256 Primary / 0 Replica Watch**；不是“缺失计划”自动当成功。任何实际 Replica 仍须绑定完整物理计划；节点角色需继续由 Common 当前 ZK、RSA、WAL 认证后才能对客户处理请求。**该启动特例不提供无副本的严格 2/2 客户 ACK**：失去 B 时严格模式必须拒绝缺失物理确认的交易，若需要继续写入，只能经既有 Common 第三方独立 RSA 授权且明确标注 RPO 风险的 LOCAL 策略。T505/T506 Common 6 文件原子提交 `4948c1c`。
+- **交叉编译及回归**：同一 T506 完整 Common JAR（SHA-256 `04364dd84ca84647bff7de5d4e90a33923d69a8b5872c50ddbb613538874b5e7`），Common 330 个 Java 8 源文件、Order 123 个、Trade 173 个编译 PASS，Common 十组 **72/72 JUnit PASS**。本地证据 `.work/t506-common-full-release/`。
+- **尚未完成：** Common 的统一生产 `DurablePhysicalRecovery` 具体执行器仍需将旧 Epoch 原始 WAL/双 Custody、签名 Stage、Replica 独立追平、业务 Snapshot+WAL 安装及双 RSA READY 端到端接好，并从**同一个 Common 入口**供 Demo 和所有业务复用。T505 是该入口和真实物理源装配边界，**不是**已具备全部生产恢复证明的完成声明。Order/Trade 当前仍存在业务专属 `orderCommonCertifiedPhysicalRecovery`/`tradeCommonCertifiedPhysicalRecovery` Spring qualifier；不能靠空 Bean 解锁，正式启动门禁仍 **FAIL / NO-GO**。
+
 ## 4. 实施顺序（不因某个服务缺 Bean 而改变）
 
 1. **Common 完成统一生产物理恢复执行器**：从 Common 打开的 WAL、已认证原始成员/签名/物理状态构建恢复计划；完成旧主撤权、Replica 独立持久化验证、Snapshot+真实原始 WAL 安装、双物理签名/READY。不能凭回调有值即宣称完成；单向复制、单节点可工作及风险等级由统一 Common 策略决定。
