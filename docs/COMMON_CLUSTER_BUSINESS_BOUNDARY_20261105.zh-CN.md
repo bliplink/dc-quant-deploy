@@ -162,6 +162,16 @@ Common **独占**：ZooKeeper/节点存活与租约、每分区主备及 Home �
 - 重用上述**最新真实故障历史**重新产生 E4 双独立 A/B RSA Snapshot（`~/.opentradingcore/t520-e4-baseline-20261105234454`），完成三 ZK `STRICT_QUORUM READY`（`~/.opentradingcore/t520-e4-strict-20261105234517`），随后真实双副本 `QUORUM_DURABLE` 客户 ACK 与 B SIGKILL 后拒绝伪造 ACK **PASS**；完整日志 `.work/t520-common-preopened-wal/t520-e4-strict-2rsa-ack-kill.log`。
 - Order/Trade 使用同一 Common JAR 重新执行双 RSA 非零 Snapshot＋原始 WAL 后缀恢复：Order **1/1 PASS**、Trade **1/1 PASS**。当前静态生产门禁 `tests/check-certified-auto-recovery-wiring.py` **exit=2（NO-GO）**，缺少 Common 完整跨 Epoch 256 分区生产执行器。以上均为隔离 Common/Demo 验证，没有替换正在运行的 Order/Trade、Robot、Projection，也不能冒充真实 SaaS HA 完成。
 
+### T521｜Order/Trade 独立候选部署与真实 Spring 启动诊断（2026-11-05；Mac UTC+8 11/06）
+
+- **新镜像已实际构建 PASS**：Mac ARM64 由工作目录最新完整 Order（180 个 .class）、Trade（220 个 .class）与同一 Common T520 JAR SHA256 `3ea53430102f5d9111bc0da842bf4a95308d008a1bdf58f71f48fa1115efaf35` 构建本地 `local/otc-t521-ordersvr:common-t520-business-smoke-r2`（镜像 `d89f66ff9abb`）及 `local/otc-t521-tradesvr:common-t520-business-smoke-r2`（`bd8ca7d004bc`）。**源码还包含本地未提交的历史改动，不能将镜像视为仅从 GitHub 干净检出重建**；暂不推广为 release。
+- 原始部署 `otc-t488-order-a/b-ready` 与 `otc-t488-trade-a/b-ready` **4/4 持续运行**，旧配置 `automaticRecovery=false`（只有启动认证、没有连续 A/B 自动接管），且旧业务 Gateway 连接日志存在指向 `127.0.0.1` 的拒绝连接，不能被新镜像启动验收掩盖。
+- 用户已授权部署；尝试含停服/改名/自动回滚的原容器滚动替换被执行环境安全检查拦截，**未触碰原容器、原 T488 数据卷和 ZK 原命名空间**。转而建立新的只用于候选诊断的 `otc-t521-order-b-canary`、`otc-t521-trade-b-canary` 容器、独立 `otc-t521-canary-data` 数据卷、独立 `/otc/t521-canary-20261105/{order,trade}` ZooKeeper 路径。隔离密钥为不同物理角色提供真正的随机 256-bit HMAC 文件，签名与读取目录分离、POSIX owner-only，**不拿它充当原始 A/B 或 C 的正式物理证明**。
+- **首次启动发现真实 Spring 缺陷**：六个 `@Configuration` 类声明为 `final`，Spring 5.2 CGLIB 无法增强。Order `5cdef7c`、Trade `6da708e`（各三次原子修复提交）已将它们改成可增强的非 final 配置类；Java 8 重新编译，候选 r2 镜像重新构建。未新增 Order/Trade 选主、复制、WAL 或恢复逻辑。
+- **r2 再启动：成功越过 Spring 配置增强和服务专用 HMAC 启动检查；但不能启动 READY。** 原因是隔离 ZK 命名空间没有先行独立认证的完整 **256 分区签名授权清单**，两者均在 `CommonCertifiedAutomaticSourceWiring` 的物理源初始化阶段 fail-closed：`COMMON_CERTIFIED_CENSUS_STARTUP_TIMEOUT`，容器退出码 **1**。这是实际启动测试失败，不是集群恢复 PASS。必须完成真实 A/B RSA Genesis、签名 Original Home、独立 ZK 清单、Replica 原始 WAL/业务 Snapshot 水位及 Common 完整 production physical factory，才能重新执行部署，不能复制旧原数据或假造 READY。
+- 正式 Common 源码生产门禁 `tests/check-certified-auto-recovery-wiring.py` 仍 **exit=2 / NO-GO**；`CommonCertifiedProductionPhysicalRecovery` 的 E2→E3、E4 严格以及多分区 Snapshot 自动安装仍未完成完整 256 分区生产装配。当前 **Order/Trade T521 候选只完成镜像构建和失败的安全隔离启动**；Gateway、Robot 真实新租户交易、A/B SIGKILL、Projection 和资金/持仓一致性**没有**在 T521 新镜像上通过。不可替换四个旧容器或宣布 HA 已恢复。
+- 所有可追溯运行证据保留于 Mac `.work/t521-order-trade-deploy/{order,trade}/`、退出候选容器 Docker logs，独立候选配置和 HMAC 位于 `~/.opentradingcore/t521-deploy-canary-config/` 与 `~/.opentradingcore/t521-canary-recovery-hmac/`，未将密钥提交 GitHub。
+
 ## 4. 实施顺序（不因某个服务缺 Bean 而改变）
 
 1. **Common 完成统一生产物理恢复执行器**：从 Common 打开的 WAL、已认证原始成员/签名/物理状态构建恢复计划；完成旧主撤权、Replica 独立持久化验证、Snapshot+真实原始 WAL 安装、双物理签名/READY。不能凭回调有值即宣称完成；单向复制、单节点可工作及风险等级由统一 Common 策略决定。
