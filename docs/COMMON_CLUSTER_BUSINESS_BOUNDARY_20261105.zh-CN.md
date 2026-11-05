@@ -27,6 +27,7 @@ Common **独占**：ZooKeeper/节点存活与租约、每分区主备及 Home �
 - T493/T494 隔离的 Order/Trade 真实业务 Snapshot@1 + 认证 WAL@2 回放测试通过，但不代表生产 ZooKeeper A/B 自动恢复通过。T492 两 JVM 256 分区、双物理 RSA WAL 一致性及 Common 定期业务 Snapshot 局部通过，200 为**模拟租户**，不是 200 真实 SaaS 租户。
 - T495 已将 Trade 业务状态机对 `CommonCertifiedFailoverCoordinator/Stage` 的直接依赖移出，Common 的 `CommonCertifiedRecoveringBusinessFence` 在恢复阶段撤权时拒绝继续应用业务；Trade 只校验快照/资金/仓位/去重语义。该变更本身**不**发布 READY 或闭合生产自动恢复。
 - **当前生产 NO-GO：** `CommonCertifiedAutomaticReplicaPlanWiring.DurablePhysicalRecovery` 的真正生产物理执行器及其原始双 RSA/旧主隔离/新 Epoch Snapshot+WAL 安装仍未闭合。现在 Order/Trade 的 `orderCommonCertifiedPhysicalRecovery` / `tradeCommonCertifiedPhysicalRecovery` Spring 引用没有真实统一实现；不得让业务服务各实现一份。应由 Common 自身实现及管理，然后移除这两个业务专用依赖。
+- **已定位 Common 核心生命周期断点**：`CommonCertifiedNodeBootstrap.openAndStart(...)` 对 `!assignment.isRoutable()` 直接拒绝打开，而 `CommonRecoveringNodeRuntime.requireBusinessReady()` 明确持续拒绝业务 READY。两个入口各自安全但未组成 RECOVERING→已认证 Snapshot+WAL 安装→独立签名/旧主撤权→READY→新物理节点接管的自动闭环。必须在 Common 内复用两者并完成切换/重新打开节点，不能让 Order/Trade 根据 Spring 配置自建第二套生命周期，也不能把 RECOVERING 入口改成直接接受写入。
 
 ### T495 已验证证据与远端同步（2026-11-05）
 
