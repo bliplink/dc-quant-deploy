@@ -98,6 +98,13 @@ T500 使用 T499 **同一组**新的 E4 磁盘，而不是之前 T287 的旧样�
 
 原有运行中的 `otc-t488-order-a/b-ready`、`otc-t488-trade-a/b-ready` 及 Robot、Projection 容器均未替换或破坏；此处的真实 SIGKILL 只针对隔离 Common+Demo 容器。下一步必须由 Common 将完整的旧 Epoch 物理签名 Stage、独立 Replica 追平、原始 Snapshot/WAL 恢复、旧主撤权、第三方降级或严格双 RSA READY、以及恢复后角色安装封装为**一个可运行的通用物理执行器**，而不是 Order/Trade 的专属 Bean 或测试回调。
 
+### T507–T508 补充：统一入口、真实 WAL 关闭验证
+
+- T507：Order `06e9c42`、Trade `929bdb3` 已删除服务侧 `*CommonAutomaticReplicaPlans` Bean 和业务专属物理恢复 Qualifier；两者统一调用 `CommonCertifiedNodeBootstrap.openAndStartWithCertifiedAutomaticRecoveryFromOpenedPhysical`。Order 123 + Trade 173 Java 8 源码使用相同 T506 JAR 全量编译 PASS。
+- 部署仓库提交 `847a40f` 更新 Common-only 自动 HA 启动门禁与 6 个反向测试；**业务边界 PASS，Common 生产执行器仍 NO-GO**。缺少真实执行器时不允许靠空 Spring Bean 或 fabricated READY 解锁。
+- T508：Common `b3d1f66` 新增生产入口的**真实物理 OS-locked Replica WAL**启动负例。启动过程中先打开 B 的 WAL/Custody，绑定 Common 最终类型的认证 Source Handler，然后注入缺少全部恢复计划的工厂，证实拒绝 Netty 启动并关闭真实 WAL 锁；随即从相同物理目录重新开启 B Replica 成功。Common `CommonCertifiedNodeRuntimeTest` **16/16 PASS**。本项只证明错误路径没有句柄泄漏、没有伪造 READY 或客户 ACK，不证明生产自动 A/B 全部恢复。
+- T506 原隔离 Demo A→B→A 双 SIGKILL、256 严格 WAL 比对以及 Order/Trade Snapshot + WAL 后缀的验证结果保持有效；当前业务运行容器未替换。
+
 ## 代码边界调整
 
 1. T496 已从 `OrderCommonRecoveryBinding` / `TradeCommonRecoveryBinding` 删除业务侧原有的物理恢复入口（包括签名分段安装、旧主失败恢复、E3 反向恢复），两个业务绑定类现只暴露 `businessRegistry(request)`，即已有 `ReplicatedStateMachine` 工厂。两项反射及 Common 非认证恢复拒绝测试各 1/1 PASS。
