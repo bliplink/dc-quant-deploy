@@ -58,7 +58,7 @@ def check_common_executor(root):
     if not file.is_file():
         return False, 'COMMON_PRODUCTION_AUTO_PHYSICAL_RECOVERY_EXECUTOR_MISSING'
     content = without_comments(file.read_text(encoding='utf-8'))
-    if 'implements CommonCertifiedAutomaticReplicaPlanWiring.DurablePhysicalRecovery' not in content:
+    if not re.search(r'implements\s+CommonCertifiedAutomaticReplicaPlanWiring\.DurablePhysicalRecovery\b', content):
         return False, 'COMMON_PRODUCTION_EXECUTOR_DOES_NOT_IMPLEMENT_REAL_PHYSICAL_CONTRACT'
     # Structure is necessary, NOT sufficient. A class name, empty callbacks,
     # or a fake Bean must never be misrepresented as successful runtime HA.
