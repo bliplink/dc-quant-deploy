@@ -52,6 +52,15 @@ T500 使用 T499 **同一组**新的 E4 磁盘，而不是之前 T287 的旧样�
 
 **边界：** 10/50/200 是模拟租户请求并非注册的真实 SaaS 租户；仅证明 256 分区稳定严格提交/一致性，不包含注入这 256 分区的真实自动双向 SIGKILL，也未验证 Order/Trade 资金/持仓/投影与 Robot E2E。Mac 的现有 CPU/Docker 负载会影响 TPS/p99，不得宣称生产性能。
 
+### T500｜完整 Common 候选 JAR 与业务全源码编译
+
+首次打包 T497 JVM 运行时的候选 JAR 只包含 `CommonCertifiedNodeRuntime` 的变更，却遗漏了 T495 已提交的 `CommonCertifiedRecoveringBusinessFence` class；独立的 T495 专项测试此前通过，是因为测试 classpath 额外提供了该 class。**本轮通过真实业务全源码编译发现并修复这个打包问题**，没有恢复任何业务侧集群实现。
+
+- 完整统一 Common 候选 `.work/t500-unified-common-package/common-t500-candidate.jar`，SHA-256 **`77ccd13419eb2fae94b1ae21d55a7eb8b05f9faa7cf3d2d165eddc7613556821`**；从 T497 候选加上 Common 内已提交的最终恢复凭证类，`javap` 可验证。
+- Java 8 + Maven 本地依赖 + Lombok 1.18.34 注解处理器对 Order **123/123** 与 Trade **173/173** Java 主源码编译均成功（两服务不是单文件试编；且没有 GitHub Actions）。
+- 用这份**完整 T500 JAR**重新执行原始业务物理两 RSA Snapshot + WAL suffix 回归：Order **1/1 PASS**，Trade **1/1 PASS**（包含恢复后真实业务编码/解析/幂等应用）。
+- T497 A/B 双向 SIGKILL、T498/T499 E4 严格 ACK、T500 256 分区压力链路在之前 T497 核心物理代码 JAR 上实测；完整 T500 JAR 是增补缺失的 Common 业务恢复凭证类型，**不能把重新打包自动当成全部物理故障试验重测通过**。后续应继续以完整 T500 构建物单独复跑故障及压力链路，保留真实证据。
+
 ## 代码边界调整
 
 1. T496 已从 `OrderCommonRecoveryBinding` / `TradeCommonRecoveryBinding` 删除业务侧原有的物理恢复入口（包括签名分段安装、旧主失败恢复、E3 反向恢复），两个业务绑定类现只暴露 `businessRegistry(request)`，即已有 `ReplicatedStateMachine` 工厂。两项反射及 Common 非认证恢复拒绝测试各 1/1 PASS。
