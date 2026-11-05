@@ -81,6 +81,23 @@ T500 使用 T499 **同一组**新的 E4 磁盘，而不是之前 T287 的旧样�
 - **T503 全源码验证：** 最新完整 Common JAR SHA-256 `78385b8448666ea739c8edcd915619578d91ae8a65209c11011aef20ce2ffd0b`，Common 330/330 源文件、Order 123/123、Trade 173/173 Java 8 编译 PASS；10 个 Common Test Class、**69/69 JUnit PASS**，其中签名 Snapshot@HEAD 无后续 WAL 的真实 Netty 集成测例及篡改负例 PASS。证据 `.work/t503-common-zero-suffix/t503-69-common-junit.log` 与 `.work/t503-common-zero-suffix/full-order-trade-compat`。
 - **严格范围声明：** T503 定向 Netty Snapshot-at-HEAD 测试使用 HMAC 物理投票者测试凭据；另有真实双 RSA Common 物理 WAL/Custody 测试组合回归，但不能把该单例称为“线上 Order/Trade 256 分区严格完整 HA 通过”。Common 的生产自动恢复 `DurablePhysicalRecovery` 全链路仍未装配完成，Order/Trade 自动恢复/产品交易完整验收依旧 **NO-GO**。
 
+### T504–T506 最终实测补充（2026-11-05）
+
+**Common 代码提交：** `fa30022a583f3e11bebecb9ba2a3747154279e8c`（T504 全清单/RSA 物理工厂前置校验）；`4948c1c30dc1a4dc7f6c19a72c942307754d9926`（T505 后打开 WAL 通用工厂、T506 256 Primary/0 Replica Watch 安全布局）。部署仓库架构文档已同步记录这两个更改。
+
+**最终可复现物理候选：** 完整 Common 330 源码编译 JAR SHA-256 `04364dd84ca84647bff7de5d4e90a33923d69a8b5872c50ddbb613538874b5e7`，同一 JAR 编译 Order 123、Trade 173 个 Java8 源文件全部 PASS；Common 10 组 **72/72 JUnit PASS**。新测试覆盖真实已打开的 B Replica 原始 WAL/custody 安全 factory 输入、未知旧主 RSA、最后一分区非法、129/127 动态 Home、256 全 Primary 但 0 个 Replica Watch。**256 全 Primary 测试属于结构/认证门禁，不是“B 宕机后 256 分区都可无损严格写入”的证明。**
+
+| 最新 T506 真实隔离验收 | 结果与证据 |
+|---|---|
+| 三 ZK、A/B/C 独立物理 RSA、真实两次 SIGKILL | **PASS**；A→B 自动接管 40→60，A 重新加入追平，B→A 自动接管 60→74，B 返回追平，随后 A→B TCP 原始 WAL fsync 双方业务 **85/7**；`.work/t506-common-full-release/t506-real-ababa-full.log`，原始卷 `~/.opentradingcore/t124-live-kill-runs/20261105163611`。故障期客户 ACK 是有 RPO 风险的 **LOCAL**，不可冒充严格 ACK |
+| 256 分区、两个真实 JVM 严格物理提交 | **PASS**；256/256 分区及 540/540 WAL 原始帧逐字节相同，10/50/200 模拟租户档位各零失败；`.work/t506-common-full-release/t506-256-real-strict-load.log`，物理度量 `.work/t466-common-256-strict/20261105083835-84654/metrics.json` |
+| 模拟 200 租户档位 | A 200/200 ACK，**46.37 TPS**，p95 162.141 ms，p99 298.418 ms；B 200/200 ACK，**47.25 TPS**，p95 153.211 ms，p99 298.162 ms。共享 Mac Docker 资源下的测试负载，非 200 个真实 SaaS 租户 |
+| Order 真实业务快照 + 签名 WAL 后缀 | **1/1 PASS**，`T494_ORDER_NONEMPTY_SIGNED_SNAPSHOT_PLUS_WAL_SUFFIX_REPLAY_PASS`；`.work/t506-common-full-release/t506-Order-business/test.log` |
+| Trade 真实业务资金/持仓快照 + 签名 WAL 后缀 | **1/1 PASS**，`T494_TRADE_CERTIFIED_SNAPSHOT_PLUS_WAL_FUNDS_POSITIONS_PASS`；`.work/t506-common-full-release/t506-Trade-business/test.log` |
+| Common 生产自动启动与物理恢复具体执行器 | **NO-GO（未完成）**：`tests/check-certified-auto-recovery-wiring.py` 当前两个 `orderCommonCertifiedPhysicalRecovery`、`tradeCommonCertifiedPhysicalRecovery` Bean producer 都为 0，严格 `--mode production` 检查仍 FAIL。T505 为 Common 通用启动及真实 WAL 后绑定能力，**还不是**整个生产执行器 |
+
+原有运行中的 `otc-t488-order-a/b-ready`、`otc-t488-trade-a/b-ready` 及 Robot、Projection 容器均未替换或破坏；此处的真实 SIGKILL 只针对隔离 Common+Demo 容器。下一步必须由 Common 将完整的旧 Epoch 物理签名 Stage、独立 Replica 追平、原始 Snapshot/WAL 恢复、旧主撤权、第三方降级或严格双 RSA READY、以及恢复后角色安装封装为**一个可运行的通用物理执行器**，而不是 Order/Trade 的专属 Bean 或测试回调。
+
 ## 代码边界调整
 
 1. T496 已从 `OrderCommonRecoveryBinding` / `TradeCommonRecoveryBinding` 删除业务侧原有的物理恢复入口（包括签名分段安装、旧主失败恢复、E3 反向恢复），两个业务绑定类现只暴露 `businessRegistry(request)`，即已有 `ReplicatedStateMachine` 工厂。两项反射及 Common 非认证恢复拒绝测试各 1/1 PASS。
