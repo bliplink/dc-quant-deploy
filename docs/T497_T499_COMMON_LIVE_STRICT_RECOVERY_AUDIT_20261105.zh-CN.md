@@ -105,6 +105,15 @@ T500 使用 T499 **同一组**新的 E4 磁盘，而不是之前 T287 的旧样�
 - T508：Common `b3d1f66` 新增生产入口的**真实物理 OS-locked Replica WAL**启动负例。启动过程中先打开 B 的 WAL/Custody，绑定 Common 最终类型的认证 Source Handler，然后注入缺少全部恢复计划的工厂，证实拒绝 Netty 启动并关闭真实 WAL 锁；随即从相同物理目录重新开启 B Replica 成功。Common `CommonCertifiedNodeRuntimeTest` **16/16 PASS**。本项只证明错误路径没有句柄泄漏、没有伪造 READY 或客户 ACK，不证明生产自动 A/B 全部恢复。
 - T506 原隔离 Demo A→B→A 双 SIGKILL、256 严格 WAL 比对以及 Order/Trade Snapshot + WAL 后缀的验证结果保持有效；当前业务运行容器未替换。
 
+### T508｜最新 Common 候选的真实 E3→E4 STRICT 与故障拒写重验
+
+**同一版 Common JAR：** `04364dd84ca84647bff7de5d4e90a33923d69a8b5872c50ddbb613538874b5e7`，对应 Common T505/T506 `4948c1c`；Common JUnit T508 新增真实启动负例 `b3d1f66`。
+
+1. 基于同一天 T506 **真实两次 SIGKILL 后的 E3 物理 WAL** `~/.opentradingcore/t124-live-kill-runs/20261105163611`，独立 A/B JVM 各用原始 RSA 针对**完全相同的物理历史**重新签名 E4 Snapshot，重开双物理证据，业务总值 **85**、请求计数 **7**，新基线：`~/.opentradingcore/t508-e4-baseline-from-t506-20261105172820`。旧 T281 基线与当前 E3 历史不对应，首次试验由 Common SHA/成员摘要拒绝 `persisted original Genesis bytes/census differ`；改用正确的同一历史基线后通过，**没有**改代码、绕过认证或修改旧数据。
+2. 真实三 ZK、在线 E3 A 主/B 备关闭原始 WAL/Netty、分别 RSA 签发旧 Epoch 退休证据，A/B 各自恢复 E4 并生成原始 RSA 恢复回执，最终发布**真实 E4 `STRICT_QUORUM READY`：PASS**。日志 `.work/t506-common-full-release/t508-e3-e4-strict-rearm-matched.log`，隔离证据卷 `~/.opentradingcore/t508-live-e3-to-e4-matched-20261105172842`。
+3. 在这一个 E4 READY 上重启两个真实 JVM，实际完成新 E4 两条 Netty TCP 双 RSA、双 Custody fsync 客户提交，Replica WAL **seq=2**，客户返回 **`QUORUM_DURABLE`：PASS**；再 **SIGKILL B**，A 新写入因缺失物理 quorum 而拒绝伪造 ACK：**PASS**。日志 `.work/t506-common-full-release/t508-e4-new-strict-dual-ack-and-kill.log`。
+4. 该完整组合证明最新 Common 在 Demo 隔离环境中**先容忍已声明 RPO 风险的 LOCAL 故障期，再安全切回双物理 STRICT** 的底层能力没有被 T504–T506 破坏。它**不是** Order/Trade 正式生产自动 HA 的 PASS：`CommonCertifiedProductionPhysicalRecovery` 完整执行器仍缺失，且 Spring 业务接线仅已切换到统一 Common Factory 接口，尚未完成真实自动化厂装配，正式验收仍 **NO-GO**。没有更换运行中的 `otc-t488-order/trade-a/b-ready` 容器。
+
 ## 代码边界调整
 
 1. T496 已从 `OrderCommonRecoveryBinding` / `TradeCommonRecoveryBinding` 删除业务侧原有的物理恢复入口（包括签名分段安装、旧主失败恢复、E3 反向恢复），两个业务绑定类现只暴露 `businessRegistry(request)`，即已有 `ReplicatedStateMachine` 工厂。两项反射及 Common 非认证恢复拒绝测试各 1/1 PASS。
