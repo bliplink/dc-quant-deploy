@@ -60,6 +60,16 @@ Common **独占**：ZooKeeper/节点存活与租约、每分区主备及 Home �
 - Order 全量 123、Trade 全量 173 Java8 源码使用 T506 同一 JAR 编译 **PASS**。更新 `tests/check-certified-auto-recovery-wiring.py` 和 6 项反向测试，校验业务端不能添加物理恢复 Qualifier/Bean，也不能调用旧 pre-open 启动入口；源码层 **PASS**。`--mode business` 持续 PASS。
 - **明确仍 NO-GO**：Common 尚未注册可执行的生产通用 `CommonCertifiedProductionPhysicalRecovery`（含实际 RSA Stage、物理旧 WAL + 双 Custody、独立 Replica 追平、按业务快照/后续 WAL 恢复、第三方降级/双 RSA READY）；所以本轮只修复业务侧错误依赖，不能宣称新版 Order/Trade 自动 HA 可以部署。旧 Demo Order/Trade/Robot 保持原样运行。升级门禁持续保持 FAIL，禁止用空 Bean/自动 return true 绕过。
 
+### T509–T511｜同一个 Common 业务 WAL 接口、全 Replica 稳定注入（2026-11-05）
+
+**服务接入契约不变：业务只实现 `ReplicatedStateMachine` / 原始 `byte[]` 编解码、Snapshot、业务状态应用；所有物理 ACK、WAL fsync、选主、主备恢复、独立 RSA 和 ZooKeeper 授权均归 Common。** 新服务不得新增自己的一套 `DurablePhysicalRecovery` Spring Bean、选主 Watch 或复制协议。
+
+- **T509 Common `dd62ad1`**：LOCAL 故障期的 `CommonCertifiedDegradedPrimary.commitThenApplyLocal(encoder,applier)` 接受相同的 partition/epoch/seq 原始业务字节，返回真实 `LOCAL_DURABLE_ASYNC`（`quorumDurable=false`）。WAL 已 fsync 而业务应用失败会永久隔离该 writer，未落盘的编码失败不误封。新增 3 项 JUnit PASS。
+- **T510 Common `2e57097`**：`CertifiedBusinessCommandRegistry.commitThenApplyCertified(partition,encoder,applier)` 是**唯一统一的业务写入口**，Common 根据已装配的真实严格物理 writer 或经过独立 C RSA 策略批准的 LOCAL writer 选择路径；`CertifiedCommitReceipt` 明确给出 `durability`、`quorumDurable`、`rpoRisk`、Epoch/seq。严格写入测试从两个独立 RSA/Netty 物理节点取得新 seq=2 的 `QUORUM_DURABLE`，LOCAL 测试明确 `rpoRisk=true`，不伪造严格 ACK。**77/77 Common 测试 PASS**。Order `206aeda` 的 4 处、Trade `643300c` 的 1 处业务编码回调切换成这个 Common 入口，编译与各 1 项真实业务 Snapshot＋WAL 后缀回放测试 PASS，无业务集群实现。
+- **T511 Common `a283f2b`、测试 `9903985`、Order `6a8bcff`、Trade `55f52b9`**：启动时仅有 Replica 的节点仍注入**相同的** `CommonCertifiedNodeRuntime.requireCertifiedBusinessRegistry()` 实例，不再在 Spring 暴露 `null`。在真实签名 Primary 安装前该注册表为空，所有写入严格拒绝；Common 后续认证晋升会填充同一实例。单个分区 `RECOVERING` 不影响其他 READY 分区。真实 A/B 物理测试 31/31 PASS、Common 330 / Order 123 / Trade 173 文件 Java 8 编译通过。
+- **真实 Demo+Common**：T509 对最新 Common 候选重新执行真实三 ZK、原 A/B 双 RSA、独立 C 签名见证、两次 SIGKILL，A→B→A 自动主备切换/副本追平、持续业务总计 **85/7 PASS**。故障期间 LOCAL 写入仍有不可取消的 RPO 风险，不可冒称永久 2/2；此前 T508 独立验证 E3→E4 恢复 STRICT 及两副本物理 ACK。
+- **正式 HA 仍 NO-GO**：`CommonCertifiedProductionPhysicalRecovery` 这类真正由 Common 持有的生产自动物理执行器、Common 原始已打开 WAL/Custody 到签名恢复计划的装配、RECOVERING→真实业务回放→独立 READY→运行时接管尚未完整连通。生产门禁 `tests/check-common-business-boundary.py --mode production` 当前仍 **FAIL（预期、正确拒绝放行）**。此轮仅隔离回归，没有部署候选镜像到运行中的 Order/Trade；不得把静态接口编译成功表述为正式 A/B HA 通过。
+
 ## 4. 实施顺序（不因某个服务缺 Bean 而改变）
 
 1. **Common 完成统一生产物理恢复执行器**：从 Common 打开的 WAL、已认证原始成员/签名/物理状态构建恢复计划；完成旧主撤权、Replica 独立持久化验证、Snapshot+真实原始 WAL 安装、双物理签名/READY。不能凭回调有值即宣称完成；单向复制、单节点可工作及风险等级由统一 Common 策略决定。
