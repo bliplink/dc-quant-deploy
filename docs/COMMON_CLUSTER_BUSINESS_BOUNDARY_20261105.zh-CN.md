@@ -110,6 +110,15 @@ Common **独占**：ZooKeeper/节点存活与租约、每分区主备及 Home �
 - **严格 NO-GO**：该执行器目前只支持原始 E1 STRICT→E2 LOCAL，尚**没有**把 `CommonCertifiedCrossEpochSurvivorInstall`（E2→E3 跨 Epoch）、v2 原始业务 Snapshot 在 B 的真实自动预热和安装、E4 严格 RSA 双副本恢复，以及服务的单一 Spring 生产 Factory 完整接通。因此不能因为它的类名存在、编译通过或隔离 E1 测试通过，就放开生产门禁。正式 256 分区 Order/Trade A/B 自动切换、Robot/资金一致性验收仍待完成。
 - 生产静态门禁 `tests/check-certified-auto-recovery-wiring.py` 解析实现声明时已支持 Java 正常换行，但仍要求 Common 真实 E3/跨 Epoch 原语和完整 E2E；不得为使脚本变绿而添加空回调、字符串标记或假签名。脚本变绿仍不能替代真实 HA 业务验收。
 
+### T516｜Common 原生 byte[] v2 无二次业务日志的 A/B/C 故障恢复（2026-11-05）
+
+- Common `aa971d6`：新增 `CommonCertifiedOpaqueGenesisSurvivorInstall.install`，严格从 B 的原始 **A/B 双 RSA 签署 Genesis@0**、B 已 fsync 的原始物理 WAL、两份签名 Custody HEAD 读取每一个提交的原始业务 `byte[]`；使用 `RecoveryRequest.opaqueFrames`、`CommonCertifiedSurvivorRecoveryAuthority` 和 `DurableRecoveryTransactionControl.forOpaqueCommittedWal` 完成 **真正的 v2 恢复和 `REPLAY_COMPLETE` ledger**。完全不创建旧 Demo 的第二份 STATE/STATE_COMMIT 业务 JournalBaseline，也不代替独立 C RSA 发布 READY。
+- `CommonCertifiedProductionPhysicalRecovery.OriginalE1` 新增显式 `opaqueV2` 持久恢复模式；v2 明确禁止非空第二份业务 JournalBaseline。基于两 RSA 签署的 256 Home 自动派生 128 个 Replica，`originalE1FromPersistedHome` 默认选择 v2，仅业务 `ReplicatedStateMachine`／Snapshot／互斥应用接口由新服务提供。旧 v1 仅作为显式兼容测试分支。
+- **真实三 ZK＋独立 C RSA＋两次 SIGKILL** 已在独立新环境按 v2 全链路测试 PASS：A 死→B E2 恢复 `40→60`；A 追平；B 死→A E3 恢复 `60→74`；B 追平，A/B 最终 **85 / 7** 并完成真实 TCP RSA WAL fsync。测试数据 `~/.opentradingcore/t124-live-kill-runs/20261105203653`；日志 `.work/t516-common-opaque-v2-genesis/t516-real-v2-two-sigkill-with-C.log`。第一个原型 JAR 不完整只打包主 class，实际 E1 恢复曾失败 `NoClassDefFoundError`，已根因定位并在全源码 JAR 修复（不能误报为业务算法故障）。
+- 同一 v2 历史已继续 E3 LOCAL→E4 STRICT，真实 A/B 两份独立 RSA 退休与恢复回执、ZK READY、Netty 双 Replica fsync 到 **seq=2** 后提供真正 `QUORUM_DURABLE`。再次 SIGKILL B 时正确拒绝客户虚假严格 ACK。签名基线 `~/.opentradingcore/t516-e4-v2-history-20261105203945`；E4 证据 `~/.opentradingcore/t516-live-v2-e4-20261105204007`。
+- **Common 84/84 项 HA 回归 PASS**，Common 333、Order 123、Trade 173 个 Java 8 源文件使用同一 Jar 编译 PASS，JAR SHA256 `852bd211a420d50ba457c739d20fb2c1c7ce4fed70b27c6e0e16647cd6080961`。新增 v2 严格拒绝第二份业务日志 JUnit PASS。发布源码分支 `saas-crypto-latest`，Demo 为显式测试开关，未替换正在运行的业务服务。
+- **仍然 NO-GO**：上面验证的是独立真实 Demo/通用 Common；正式 `Order/Trade` 全 256 分区容器尚未通过生产 auto-plan 的跨 Epoch E2→E3 物理接入、非零业务 Snapshot 在 Replica 的真正可恢复安装、资金/委托/Projection/Robot 在容器的连续一致性验收。当前 Common 通用生产执行器 E1→E2 已实装，但不可冒称 E2/E3/E4 在服务启动即自动接通。
+
 ## 4. 实施顺序（不因某个服务缺 Bean 而改变）
 
 1. **Common 完成统一生产物理恢复执行器**：从 Common 打开的 WAL、已认证原始成员/签名/物理状态构建恢复计划；完成旧主撤权、Replica 独立持久化验证、Snapshot+真实原始 WAL 安装、双物理签名/READY。不能凭回调有值即宣称完成；单向复制、单节点可工作及风险等级由统一 Common 策略决定。
