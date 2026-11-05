@@ -15,7 +15,7 @@ WebCodex 在 Mac 的 dc-quant-deploy / saas-crypto-latest 分支完成只读核�
 
 新增 tests/t522_readonly_canary_zk_preflight.py：使用只读 zkCli get 核对指定隔离命名空间中 NPC1 原始 256 分区 manifest 的结构及 A/B 成员。它不验证 RSA、不创建 ZK 数据、不认证 READY、不替代 Common。
 
-真实 T521 Order 执行结果：NO-GO:T522_CANARY_ZK_BOOTSTRAP:NAMESPACE_OR_MANIFEST_MISSING，exit=2。离线解析测试：合法 256 行 PASS；缺分区、重复分区、错误物理主备成员均拒绝 PASS。
+真实 T521 Order/Trade 执行结果均为 NO-GO:T522_CANARY_ZK_BOOTSTRAP:NAMESPACE_OR_MANIFEST_MISSING，exit=2。真实既有 T488 Order/Trade 的 256 分区 NPC1 第 2 代 manifest 作为结构正对照，二者均返回结构校验通过（exit=0），明确不代表 RSA/READY 通过。离线解析测试：合法 256 行 PASS；缺分区、重复分区、错误物理主备成员均拒绝 PASS。初版严格限定 NPC1|1 导致对真实第 2 代 manifest 误拒，已修复为接受正整数代数。
 
 ### 后续必须完成
 
