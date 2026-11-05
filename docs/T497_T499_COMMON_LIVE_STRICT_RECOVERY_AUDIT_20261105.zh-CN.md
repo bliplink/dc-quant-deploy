@@ -38,6 +38,20 @@
 
 T500 使用 T499 **同一组**新的 E4 磁盘，而不是之前 T287 的旧样例：`-Dotc.t287.real.fault=.work/t497-common-ready-boundary/t498-live-e3-e4-20261105145233/new-strict-business`，输出 `T288_REAL_E4_AFTER_B_SIGKILL_CERTIFIED_PREFIX_ONLY_PASS oldPrimaryFrames=3 dualCustodyCertified=2 exposedCommands=2 unackedTailExcluded=true`；包含损坏 WAL、缺失物理 Custody 回执、B 端不同未确认尾部拒绝验收，**不写回原盘**。
 
+### T500｜同一 T497 Common JAR：256 分区真实双 JVM 严格提交压力复测
+
+使用 `tests/run-t466-demo-common-256-strict-load.sh`，将 `OTC_T466_COMMON_JAR` 精确绑定上述 SHA-256 的 T497 候选 JAR，真实三节点 ZooKeeper、两个独立 Docker JVM、256 分区（A/B 各 128 Home）、严格 RSA/WAL/CommitIndex/双 Custody 客户 ACK：
+
+| 模拟租户档位 | A 已 ACK / 失败 / TPS / p99 | B 已 ACK / 失败 / TPS / p99 |
+|---|---|---|
+| 10 | 20 / 0 / 8.06 / 469.535 ms | 20 / 0 / 7.54 / 535.902 ms |
+| 50 | 50 / 0 / 19.37 / 281.638 ms | 50 / 0 / 20.57 / 232.940 ms |
+| 200 | 200 / 0 / 30.80 / 465.579 ms | 200 / 0 / 28.85 / 442.818 ms |
+
+双方逐分区原始持久 WAL **256/256 SHA 相同，540/540 帧字节一致**，验收输出 `T466_256_REAL_A_B_256_PARTITIONS_BITEXACT_PASS frames=540 partitions=256`、`T466_256_STRICT_TWO_JVM_STRESS_PASS`，命令退出 **0**。本机证据 `.work/t497-common-ready-boundary/t500-256-strict-load.log` 及 `.work/t466-common-256-strict/20261105071552-75565/metrics.json`。
+
+**边界：** 10/50/200 是模拟租户请求并非注册的真实 SaaS 租户；仅证明 256 分区稳定严格提交/一致性，不包含注入这 256 分区的真实自动双向 SIGKILL，也未验证 Order/Trade 资金/持仓/投影与 Robot E2E。Mac 的现有 CPU/Docker 负载会影响 TPS/p99，不得宣称生产性能。
+
 ## 代码边界调整
 
 1. T496 已从 `OrderCommonRecoveryBinding` / `TradeCommonRecoveryBinding` 删除业务侧原有的物理恢复入口（包括签名分段安装、旧主失败恢复、E3 反向恢复），两个业务绑定类现只暴露 `businessRegistry(request)`，即已有 `ReplicatedStateMachine` 工厂。两项反射及 Common 非认证恢复拒绝测试各 1/1 PASS。
