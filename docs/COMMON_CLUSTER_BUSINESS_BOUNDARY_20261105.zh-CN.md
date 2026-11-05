@@ -155,6 +155,13 @@ Common **独占**：ZooKeeper/节点存活与租约、每分区主备及 Home �
 - **同一 T520 Common JAR 的业务回归**：Order 真实双 RSA 非零委托 Snapshot@1＋原始 WAL@2 撤单状态重放 **1/1 PASS**（`T520_Order_SIGNED_SNAPSHOT_ORIGINAL_WAL_BUSINESS_REAL_PASS`），Trade 真实双 RSA 非零余额／持仓 Snapshot@1＋原始 WAL@2 资金仓位回放 **1/1 PASS**（`T520_Trade_SIGNED_SNAPSHOT_ORIGINAL_WAL_BUSINESS_REAL_PASS`）。本地证据 `.work/t520-common-preopened-wal/{Order,Trade}-real-business/junit.log`。原有 Demo Order/Trade A/B、Projection、Robot 容器仍正常运行，**未执行生产镜像替换**。
 - **正式 Order/Trade/Robot 生产 HA 仍 NO-GO**：该修复解决了 Common E1→E2 生产路径的确定性双开 WAL 阻塞，但 E2→E3 自动全分区工厂、业务 Snapshot v2 非零水位自动预热／安装、实际生产 Spring 256 分区注入与 Order/Trade 自动 A/B 完整故障交易一致性未验收。继续只在 Common 实现集群机制；Order/Trade 保持原有 `CommonCertifiedBusinessStateFactory` 的业务 byte[] 状态机接口。当前未替换运行中的 Order/Trade 容器，严禁将隔离 Demo PASS 误写为生产 GO。
 
+### T520 补充复核｜同一候选 JAR，2026-11-05 晚间
+
+- Common 候选 JAR SHA256 `3ea53430102f5d9111bc0da842bf4a95308d008a1bdf58f71f48fa1115efaf35`。最新 16 组全量 Common HA/Netty/原始 RSA/物理 WAL／v2 跨 Epoch 单测 **89/89 PASS**（含 T520 缺失预打开物理证据拒绝放行、T518 不合法 E1/E2 跨 Epoch 请求拒绝）。
+- 以**同一候选 JAR**重新执行原始 E1 B WAL 文件锁未释放情况下的独立 C RSA READY、真实 A SIGKILL→B E2→A 追平→B SIGKILL→A E3→B 追平，最终 **85 / 7 一致**；同进程两次打开旧 WAL 因 OS 锁拒绝，新接口复用原读取器才完成真实 READY。运行证据 `~/.opentradingcore/t124-live-kill-runs/20261105234121/t520-B-original-wal-locked-through-C-ready.log` 与 `.work/t520-common-preopened-wal/t520-real-locked-wal-proofs.log`。
+- 重用上述**最新真实故障历史**重新产生 E4 双独立 A/B RSA Snapshot（`~/.opentradingcore/t520-e4-baseline-20261105234454`），完成三 ZK `STRICT_QUORUM READY`（`~/.opentradingcore/t520-e4-strict-20261105234517`），随后真实双副本 `QUORUM_DURABLE` 客户 ACK 与 B SIGKILL 后拒绝伪造 ACK **PASS**；完整日志 `.work/t520-common-preopened-wal/t520-e4-strict-2rsa-ack-kill.log`。
+- Order/Trade 使用同一 Common JAR 重新执行双 RSA 非零 Snapshot＋原始 WAL 后缀恢复：Order **1/1 PASS**、Trade **1/1 PASS**。当前静态生产门禁 `tests/check-certified-auto-recovery-wiring.py` **exit=2（NO-GO）**，缺少 Common 完整跨 Epoch 256 分区生产执行器。以上均为隔离 Common/Demo 验证，没有替换正在运行的 Order/Trade、Robot、Projection，也不能冒充真实 SaaS HA 完成。
+
 ## 4. 实施顺序（不因某个服务缺 Bean 而改变）
 
 1. **Common 完成统一生产物理恢复执行器**：从 Common 打开的 WAL、已认证原始成员/签名/物理状态构建恢复计划；完成旧主撤权、Replica 独立持久化验证、Snapshot+真实原始 WAL 安装、双物理签名/READY。不能凭回调有值即宣称完成；单向复制、单节点可工作及风险等级由统一 Common 策略决定。
