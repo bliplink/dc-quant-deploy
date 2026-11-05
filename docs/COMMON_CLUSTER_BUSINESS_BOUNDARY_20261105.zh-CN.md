@@ -129,6 +129,14 @@ Common **独占**：ZooKeeper/节点存活与租约、每分区主备及 Home �
 - **严格模式恢复 PASS**：由同一历史 A/B 独立签名 E4 Snapshot、真实 E3 旧 WAL/Netty 关闭、独立旧 Epoch RSA 退休和 E4 业务回放回执，完成 `STRICT_QUORUM READY`；新 E4 实际双 RSA/Custody/Netty 持久 ACK `QUORUM_DURABLE`（seq=2），随后 SIGKILL B 时无双副本 fsync 的新写入正确拒绝 ACK。日志 `.work/t517-common-v2-factory-repack/t517-live-e3-e4-strict.log` 与 `t517-e4-strict-ack-kill.log`；证据卷 `~/.opentradingcore/t517-live-e3-e4-v2-20261105214746`。
 - **剩余 NO-GO 范围**：以上是单分区 Demo＋Common 真实 JVM/三 ZK 验收，不等于 **256 分区正式业务生产自动 HA**。Common 的生产 `CertifiedPhysicalRecoveryPlanFactory` 尚需把 E2→E3 历史和 E4 STRICT 物理安装、C 许可的真实证据目录、v2 每分区业务快照恢复、Spring 通用自动注册配置贯通；正式 Order/Trade A/B 双向切换、Robot 交易、Projection／资金和 10→50→200 租户持续压测尚未实际通过，不应释放生产门禁。运行中 T488 Order/Trade 和 Robot 未被本轮测试替换。
 
+### T518｜第三个业务服务通用接入 Common：去除首次部署／恢复的 Order/Trade 服务名写死（2026-11-05）
+
+- Common `5988acd`：新增 `CommonCertifiedServiceIdentity.requireConfigPrefix`，统一服务名和属性前缀映射。改造 5 个**原有 Common 类**：`CommonExclusiveBusinessClusterStartup`、`CommonOriginalE1SignedMembersSource`、`CommonOriginalE1FleetBirthProvisioner`、`CommonRecoveryOnlyProcess`、`CommonOriginalE1FirstReadyActivation`；不增加任何新选主、Watch、WAL 或恢复协议。原 `OrderSvr -> order`、`TradeSvr -> trade` 的历史配置及证据目录继续兼容。
+- 新服务例子：在其**唯一一份 Common 配置**中显式填写 `common.cluster.service=RiskSvr`、`common.cluster.configPrefix=risk`、`risk.common.nodeRuntime.service=RiskSvr`，以及已有 Common 必需开关、真实 RSA/ZK/证书／物理根目录；注册 `CommonCertifiedBusinessStateFactory.businessRegistry(Common 已认证 RecoveryRequest)`。无需创建服务专用选主、复制、确认、READY 或自动恢复实现。严禁凭服务名推断或借用 `order`/`trade` 根目录；服务名与签名物理身份或配置不一致必须拒绝启动。
+- 新增拒绝放行测试：第三业务服务 `RiskSvr` 的同一 Common RECOVERING 配置装配成功；冒用另一服务名、遗漏身份声明、复用 order/trade 前缀、非法属性前缀、开启任何旧集群 lifecycle/failover/replication，全部在物理启动前拒绝。第三服务与旧服务配置测试 **10/10 PASS**。最新 Common **335 个** Java 8 源码编译通过；17 组 Common HA/Netty/双 RSA/opaque-v2/签名 Home/第三服务 JUnit **100/100 PASS**；使用同一 JAR 的 Order **123**、Trade **173** 个 Java 8 源码兼容 PASS。Common JAR SHA256 `f2c6127c42b01d28f9e4ad1206511d83cc09c628c4d049f94697dda815e89f1e`。
+- 真实 T488 业务容器的**只读**物理前置检查：四个 Order/Trade A/B 节点仍运行，镜像为各自现有 `full-source-no-go`，重启次数为 0；在 `/srv/dc/data/t488-born` 可发现各自 512 个 `genesis-e1.quorum` 文件，但**没有**在该卷或 `/srv/dc/data/t488-ready-v1` 发现 `*.original-home.rsa`。这意味着生产 Common 不能凭当前 512 个 Genesis 文件“推断”独立签署的 256 分区原始 Home：必须在正式集群启动阶段由 A/B 原始物理身份各自通过 `CommonOriginalE1SignedMembersSource` 认证、签署和双签验收，不能直接生成假签名或降低启动门禁。只读检查未更改运行中容器。
+- **生产仍 NO-GO**：通用身份配置的静态和隔离测试不等于第三业务服务真实部署，也不等于 Order/Trade A/B 256 分区自动切换和 Robot/Projection/资金验收。Common `CommonCertifiedProductionPhysicalRecovery` 尚需真正自动装配跨 Epoch E2→E3、严格 E4、真实业务 v2 Snapshot 接收与各分区 signed Home，并经正式服务真实 SIGKILL/交易恢复验收。Demo 单分区已过，不得混写成生产 PASS。
+
 ## 4. 实施顺序（不因某个服务缺 Bean 而改变）
 
 1. **Common 完成统一生产物理恢复执行器**：从 Common 打开的 WAL、已认证原始成员/签名/物理状态构建恢复计划；完成旧主撤权、Replica 独立持久化验证、Snapshot+真实原始 WAL 安装、双物理签名/READY。不能凭回调有值即宣称完成；单向复制、单节点可工作及风险等级由统一 Common 策略决定。
