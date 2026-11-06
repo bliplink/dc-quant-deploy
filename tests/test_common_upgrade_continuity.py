@@ -91,6 +91,16 @@ class UpgradeContinuityTests(unittest.TestCase):
                       check(layouts(), old, proj("t398-ready-v1"),
                             proj("t398-ready-v1"), False, "upgrade"))
 
+    def test_new_common_generation_refuses_old_mysql_projection_watermarks(self):
+        current = layouts("t523-ready-v1")
+        problems = check(current, {}, proj("fresh-projection"),
+                         proj("legacy-projection"), False, "fresh",
+                         watermark_counts={"order": 6, "trade": 6})
+        self.assertIn("FRESH_MYSQL_HAS_LEGACY_PROJECTION_WATERMARKS",
+                      problems)
+        self.assertNotIn("FRESH_PROJECTION_REUSES_LEGACY_CONSUMER_VOLUME",
+                         problems)
+
     def test_physical_mapping_longest_mount_and_traversal_denial(self):
         mounts = [
             {"Destination": "/srv/dc/data", "Source": "/old-root"},

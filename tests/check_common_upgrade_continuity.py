@@ -100,8 +100,45 @@ def inspect(name, docker="docker"):
     return rows[0]
 
 
+def read_mysql_projection_counts(container, database="dc"):
+    """Read-only SQL census; no reset, no projection side effects."""
+    user = os.environ.get("MYSQL_USERNAME")
+    password = os.environ.get("MYSQL_PASSWORD")
+    if not user or not password:
+        raise ValueError("MYSQL_CREDENTIALS_ENV_REQUIRED")
+    if not DOCKER_NAME.fullmatch(container) or not re.fullmatch(
+            r"[A-Za-z][A-Za-z0-9_]*", database):
+        raise ValueError("INVALID_MYSQL_TARGET")
+    sql = (
+        "SELECT 'order',COUNT(*) FROM dc_order_projection_watermark;"
+        "SELECT 'trade',COUNT(*) FROM dc_trade_projection_watermark;"
+    )
+    try:
+        result = subprocess.run(
+            ["docker", "exec", "-i", "-e", "MYSQL_PWD=" + password,
+             container, "mysql", "-u" + user, "-N", database, "-e", sql],
+            stdout=subprocess.PIPE, stderr=subprocess.PIPE,
+            text=True, timeout=20, check=False)
+    except (OSError, subprocess.TimeoutExpired):
+        # Never print the subprocess argv: it contains MYSQL_PWD.
+        raise ValueError("MYSQL_READONLY_CONNECTION_FAILED") from None
+    if result.returncode != 0:
+        raise ValueError("MYSQL_READONLY_QUERY_FAILED")
+    counts = {}
+    for line in result.stdout.splitlines():
+        parts = line.split("\t")
+        if len(parts) != 2 or parts[0] not in ("order", "trade"):
+            raise ValueError("PROJECTION_SQL_RESPONSE_UNEXPECTED")
+        counts[parts[0]] = int(parts[1])
+        if counts[parts[0]] < 0:
+            raise ValueError("PROJECTION_SQL_NEGATIVE_COUNT")
+    if set(counts) != {"order", "trade"}:
+        raise ValueError("PROJECTION_SQL_INCOMPLETE_WATERMARK_CENSUS")
+    return counts
+
+
 def check(layouts, old_layouts, projection_source, previous_projection_source,
-          robot_running, mode, approved_sha256=None):
+          robot_running, mode, approved_sha256=None, watermark_counts=None):
     problems = []
     roots = [layouts[role]["physical_root"] for role in ROLES]
     if len(set(roots)) != 4:
@@ -137,6 +174,9 @@ def check(layouts, old_layouts, projection_source, previous_projection_source,
     # Order/Trade WAL. Compare its previous consumer state with the new
     # consumer state, not against the producer's WAL volume. Distinct
     # MySQL watermark scopes still need separate verified business E2E.
+    if watermark_counts is not None and mode == "fresh" and any(
+            watermark_counts.get(service, 0) > 0 for service in ("order", "trade")):
+        problems.append("FRESH_MYSQL_HAS_LEGACY_PROJECTION_WATERMARKS")
     if projection_source is None or previous_projection_source is None:
         problems.append("PROJECTION_SOURCE_LINEAGE_NOT_INSPECTED")
     elif mode == "upgrade" and projection_source != previous_projection_source:
@@ -158,6 +198,8 @@ def run(argv=None):
                    help="Target ProjectionSvr container (read-only inspection)")
     p.add_argument("--old-projection", required=True,
                    help="Previous ProjectionSvr container; may be stopped")
+    p.add_argument("--mysql-container", required=True,
+                   help="Read-only MySQL projection watermark census container")
     p.add_argument("--robot", help="Robot container; required in fresh mode")
     args = p.parse_args(argv)
     if not re.fullmatch(r"[0-9a-f]{64}", args.approved_common_sha256):
@@ -204,10 +246,16 @@ def run(argv=None):
             robot_running = bool(inspect(args.robot)["State"]["Running"])
         except (OSError, ValueError, subprocess.SubprocessError, KeyError) as e:
             errors.append("ROBOT_INSPECTION_FAILED:" + str(e))
+    watermark_counts = None
+    try:
+        watermark_counts = read_mysql_projection_counts(args.mysql_container)
+    except (OSError, ValueError, subprocess.SubprocessError, KeyError) as e:
+        errors.append("PROJECTION_SQL_WATERMARK_READ_FAILED:" + str(e).split("\n")[0])
     if len(current) == 4:
         errors.extend(check(current, previous, projection_source,
                             previous_projection_source, robot_running, args.mode,
-                            approved_sha256=args.approved_common_sha256))
+                            approved_sha256=args.approved_common_sha256,
+                            watermark_counts=watermark_counts))
     else:
         errors.append("INCOMPLETE_FOUR_NODE_COMMON_CENSUS")
     print("T528_MODE=" + args.mode)
@@ -217,6 +265,7 @@ def run(argv=None):
                item["gateway_enabled"]))
     print("T528_PREVIOUS_PROJECTION_VOLUME=" + str(previous_projection_source))
     print("T528_TARGET_PROJECTION_VOLUME=" + str(projection_source))
+    print("T528_PROJECTION_SQL_WATERMARK_COUNTS=" + str(watermark_counts))
     for error in errors:
         print("NO-GO:T528_" + error)
     if errors:

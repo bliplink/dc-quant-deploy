@@ -38,6 +38,8 @@
 4. 在新租户里重新自动启动 Robot，实测盘口报价/Tape/下单成交，核对两物理副本提交证据，最后核对新 Projection 与资金/持仓；
 5. 未完成全链路前只能称为“新服务可启动”，不能称为交易恢复成功。
 
+**运行要求：** 在操作终端预先从已有的 `.env.prod` 安全加载 `MYSQL_USERNAME`、`MYSQL_PASSWORD`（不在命令参数、日志或仓库中写出凭据）；两个模式均需 `--mysql-container` 执行只读水位查询。以下命令不会执行任何 SQL 写入。
+
 ### 命令：真实部署只读审计
 
 ```bash
@@ -53,7 +55,8 @@ python3 tests/check_common_upgrade_continuity.py \
   --new-trade-a otc-t523-trade-a-hostready \
   --new-trade-b otc-t523-trade-b-hostready \
   --projection otc-t454-projection-common-rejoin \
-  --old-projection otc-t454-projection-common-rejoin
+  --old-projection otc-t454-projection-common-rejoin \
+  --mysql-container otc-t398-mysql
 ```
 
 实际结果：四个 `BUSINESS_WAL_SNAPSHOT_GENERATION_CHANGED`，返回 `exit 2`，**UPGRADE NO-GO**。Projection 的旧消费者卷自身虽然未变，但无法安全消费已重新初始化的 Common 业务状态。
@@ -68,17 +71,19 @@ python3 tests/check_common_upgrade_continuity.py \
   --new-trade-b otc-t523-trade-b-hostready \
   --projection otc-t454-projection-common-rejoin \
   --old-projection otc-t454-projection-common-rejoin \
-  --robot otc-t438-robotsvr-session-recovery
+  --robot otc-t438-robotsvr-session-recovery \
+  --mysql-container otc-t398-mysql
 ```
 
-实际结果：`FRESH_DEPLOYMENT_STILL_HAS_OLD_ROBOT_WRITERS`、`FRESH_PROJECTION_REUSES_LEGACY_CONSUMER_VOLUME`，返回 `exit 2`，**FRESH NO-GO**。
+实际结果：`FRESH_DEPLOYMENT_STILL_HAS_OLD_ROBOT_WRITERS`、`FRESH_PROJECTION_REUSES_LEGACY_CONSUMER_VOLUME`、`FRESH_MYSQL_HAS_LEGACY_PROJECTION_WATERMARKS`，返回 `exit 2`，**FRESH NO-GO**。MySQL 真实只读检查：Order / Trade 消费水位表各有 **6** 条非零记录（最大 seq 分别为 **258333 / 101637**），历史订单投影事件 **550827** 条、资金/交易投影事件 **113006** 条。不得将这些表直接归零。
 
 ## 实现与测试边界
 
 - 实际使用 `docker inspect` 的 **Mount.Source + Mount.Destination + 应用 Properties `nodeRuntime.dataRoot`**计算物理数据根。不会把 ZK Epoch 相等误认成数据相同。
 - 实际通过挂载 JAR 文件字节 SHA256 检查跨 Order/Trade 四节点一致性，并强制要求与部署批准的 `--approved-common-sha256` **完全一致**（不会因四节点一起跑错版本而放行）。Projection 与其**原消费者卷**比较，不要求与 Order/Trade 数据卷相同。旧节点不强制运行，也不要求旧镜像有外置 JAR。
-- 正常的 `upgrade`（相同真实数据源）、`fresh`（新数据源与消费者完全隔离）、版本不一致、未发布 Gateway、旧停机节点、路径 traversal 拒绝及未经批准的 Common SHA 拒绝等共 **10/10 Python tests PASS**。
-- 审计**不读任何用户密码/私钥**，也不创建业务提交、ZK READY/签名/RSA；不执行 `docker stop`、重建镜像或 MySQL UPDATE/DELETE。
+- 审计从当前环境变量 `MYSQL_USERNAME`、`MYSQL_PASSWORD` 只读查询 `dc_order_projection_watermark` / `dc_trade_projection_watermark` 行数；不输出密码或 MySQL 命令参数。FRESH 模式只允许**首次切流前**的空水位数据库（如已在新数据源产生合法新成交，必须通过数据身份签名另行验收）；不能继续消费旧 MySQL 历史坐标。
+- 正常 `upgrade`、`fresh`、版本不一致、Gateway 未发布、旧停机节点、路径 traversal、未经批准的 Common SHA 和旧 MySQL 水位拒绝等共 **11/11 Python tests PASS**。
+- 审计**只读取现有专用 MySQL 环境凭据（不显示、不持久化），从不读取用户登录密码/业务 RSA 私钥**，也不创建业务提交、ZK READY/签名/RSA；不执行 `docker stop`、重建镜像或 MySQL UPDATE/DELETE。
 - 本工具只能做**结构性拒绝检查**：即便它 PASS，仍必须验证真实 Snapshot/WAL 签名、Projection **MySQL 消费水位和数据身份**及业务恢复/订单成交。仅新建消费者卷并不足以隔离旧 MySQL 水位。不能用脚本字段自称完成证据迁移。
 
 ## 下一阶段业务修复顺序
