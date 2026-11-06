@@ -6,7 +6,7 @@
 
 ### 已执行的真实部署操作
 
-1. 使用现有 T523 `local/otc-t521-{ordersvr,tradesvr}:common-t520-business-smoke-r2` 候选镜像。**镜像内的 Common 是 T520，不是刚测试过的 T526**；升级 Common JAR 需单独实证。
+1. 使用现有 T523 `local/otc-t521-{ordersvr,tradesvr}:common-t520-business-smoke-r2` 候选镜像。**T528 复核更正**：镜像 Tag 带 `t520`，但实际四个 Docker 容器均将 `common-t523-d2d1ce0-full.jar` 挂载覆盖为运行的 Common，SHA256 同为 `b170df0dffd6d8cbeeb64ff3ac9865fe5a89aa803d49580bf0d78eae123801b2`。因此此前“运行的是 T520 Common”的判断不准确；T526 新 JAR 仍未用于当前 Order/Trade。
 2. 原 T523 的 `{order,trade}.common.gatewayDiscovery.enabled=false`，导致新服务实际不经 Gateway 收单。将其改为 `true`，同时改为**实际 TCP 监听端口**而不是过时的 330xx：Order A=34536、Order B=34541、Trade A=34537、Trade B=34546，按节点滚动重启，保留原配置同目录 `application.properties.t527-pre-gateway.bak`。
 3. 四个 JVM 实际输出 `COMMON_GATEWAY_CERTIFIED_PARTITION_ROUTING_PASS ... partitions=256 manifestGeneration=2` 以及 `COMMON_GATEWAY_DISCOVERY_CERTIFIED`，并分别输出 `Started OrderSvr/TradeSvr`；同一 ZooKeeper 实时 `/MDTService/OrderSvr` 只看到新 A/B sequential endpoints，`/MDTService/TradeSvr` 只看到新 A/B。
 4. 停止旧 `otc-t453-order-b-standby-parent-watch`、`otc-t436-trade-a-margin`、`otc-t452-trade-b-windowed`。保留容器及原数据，未 `docker rm`、未清理卷。现存 T523 四容器均 Up；T488、T522 隔离候选容器未触碰。
