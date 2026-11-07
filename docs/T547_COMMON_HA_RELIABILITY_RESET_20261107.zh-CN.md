@@ -88,3 +88,12 @@
 证据：`docs/T546_ORDER_ONLY_DEFAULT_LIVE_ROLLOUT_BLOCK_20261107.zh-CN.md`，本机保护目录 `~/.opentradingcore/t546-rollout-evidence-20261107/`；源代码已提交 GitHub `bliplink/com.app.dc.ordersvr:t545-default-exec-unified-candidate`，不得误合并 T544 实验协议。
 
 **交付定义只有一个：真实交易期间 A/B 可安全停机、发布、自动接管、追平、切回，数据满足用户明确的 ACK/RPO 合同。未做到就仍是 NO-GO。**
+
+## 7. T547 真正落地的防复发动作与下一次验收入口
+
+- 已在 `deploy-saas.sh` 完成 **Compose 变更前**、Mac `mac-colima-saas.sh reinstall` **卸载之前**的只读强制预检。新 `tests/check_certified_live_upgrade_preflight.py` 对真正运行中的 Order/Trade A/B 在没有完整滚动恢复物理认证时 fail-closed；不再允许凭容器 Up 或 ZK READY 就停机升级。冷启动/新安装是另外一条路径，不能标记 HA PASS。9 项独立单测和 Mac 一键部署离线测试通过。T531/T532 现场返回 `NO_GO_EXISTING_LIVE_CLUSTER_UPGRADE`。
+- Common 生产源代码 `CommonCertifiedProductionPhysicalRecovery` 仍含 `prior.epoch!=1` 及 `a.getEpoch()!=1`，不支持现役 E2 STRICT 恢复源的生产认证工厂。更新 `tests/check-certified-auto-recovery-wiring.py` 的审计门禁，当前真实源码返回 `COMMON_PRODUCTION_E1_ONLY_E2_STRICT_ROLLING_NOT_SUPPORTED`，不得用 Callback 名称数量或简单结构测试代替完整恢复。
+- T547 只读盘查时，A/B 所挂载的 Order E2 数据根目录（**包含共同可见的完整树，不能作为独立物理副本计数**）各可见 E2 `business.wal` 512 个、Snapshot 约 529/530 个、名称含 Custody 的路径约 1,536 个。**存在文件 ≠ RSA 签名、连续 WAL、水位、独立副本或跨 Epoch 新证书已验真**；不允许原地“改一个 Epoch 数字”修复。
+- 发现正式 `build-saas-images.sh` 的 Common、Order、Trade 等基础服务仍使用 `saas-crypto` 源分支，而当前候选代码在 `saas-crypto-latest`。GitHub 远端实际 Maven POM：Common `saas-crypto-latest` 工程版本 **0.0.5-SNAPSHOT**；Order/Trade `saas-crypto-latest` 使用 **0.0.6-common-t143-unified-20261029-SNAPSHOT**；旧 `saas-crypto` 才是同版本 `0.0.5-SNAPSHOT`，并且其它服务并非全部拥有 latest 分支。**所以不能偷偷将全部分支替换成 latest**，也不能继续从旧版本构建冒充 T546 修复。下一次正式镜像发布必须先做逐服务版本、源 SHA、Common 物理 JAR SHA 和依赖锁定；禁止用测试用临时 `systemPath` 作为正式 release。
+- T546 private archive 中最早可见的是 **poisoned 状态之后**的拒写堆栈，尚不足以证明第一笔 WAL/ACK 不确定性究竟由哪条物理失败触发。若继续保留旧 E2 数据，必须从首个原始物理异常和 commit-index/custody 链取证；不能仅凭 B 曾停机就猜测所有根因。
+- **下一次真正可以说“恢复了”的唯一证据**：在完全独立新数据目录与 ZK namespace 上，同一个正式 Common 构建先通过带真实 WAL/Snapshot/签名收据的 A→B→A 自动故障切换和正常 B/A 滚动升级；然后同 SHA 切换 Order/Trade，新的 ORDER_ONLY 真实成交历史、MD/K线和资金无变化通过。没有这个证据，不允许从 NO-GO 提升。
