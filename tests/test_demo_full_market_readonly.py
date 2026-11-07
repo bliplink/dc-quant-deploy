@@ -11,6 +11,26 @@ spec.loader.exec_module(m)
 
 
 class T542MarketAcceptanceTests(unittest.TestCase):
+    def test_new_browser_selection_ignores_dormant_first_product(self):
+        dormant={"location":"A2I12Z","securityID":"BTC003USDT",
+                 "recentTrades":{"NoMDEntries":[]}}
+        live={"location":"A2I12Z","securityID":"BTCUSDT",
+              "recentTrades":{"NoMDEntries":[{"MDEntryID":"E1"}]}}
+        self.assertEqual(m.live_market_score(dormant,"A2I12Z","BTC003USDT"),0)
+        self.assertEqual(m.live_market_score(live,"A2I12Z","BTCUSDT"),3)
+        self.assertEqual(m.live_market_score(live,"OTHER","BTCUSDT"),0)
+
+    def test_custom_only_no_trades_is_not_a_fake_binance_market(self):
+        self.assertEqual(m.live_market_score(
+            {"location":"CUSTOM","securityID":"MYCOIN"},
+            "CUSTOM","MYCOIN"),0)
+
+    def test_two_sided_book_without_trade_is_marked_live(self):
+        book={"location":"CUSTOM","securityID":"MYCOIN",
+              "orderBook":{"NoMDEntries":[
+                  {"MDEntryType":"0"},{"MDEntryType":"1"}]}}
+        self.assertEqual(m.live_market_score(book,"CUSTOM","MYCOIN"),1)
+
     def test_valid_ohlc_epoch_and_volume(self):
         rows=["160500,1794038700000,76111,76120,76034.9,76110,0.001,76.11",
               "161000,1794039000000,76110,76130,76090,76125,0.002,152.2"]
