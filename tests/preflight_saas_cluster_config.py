@@ -146,6 +146,28 @@ def check_gateway_md_mode(env, control_dir):
     return []
 
 
+def check_business_md_client_mode(env, control_dir):
+    """Fail closed if Trade/Liq client mode differs from Gateway MD topology."""
+    expected = env.get("MD_CLUSTER_ENABLED", "false").lower()
+    if expected not in ("true", "false"):
+        return ["INVALID_MD_CLUSTER_MODE"]
+    services = ["TradeSvr", "LiqSvr"]
+    if env.get("TRADE_CLUSTER_ENABLED", "false").lower() == "true":
+        services.extend(("TradeSvrA", "TradeSvrB"))
+    issues = []
+    for service in services:
+        filename = (Path(control_dir) / "overrides" / service / "config" /
+                    "application.properties")
+        if not filename.is_file():
+            issues.append("MISSING_BUSINESS_MD_MODE_CONFIG:" + service)
+            continue
+        actual = read_properties(filename).get("md.cluster.enabled")
+        if actual != expected:
+            issues.append("BUSINESS_MD_MODE_MISMATCH:" + service + ":expected_" +
+                          expected + ":observed_" + (actual or "MISSING"))
+    return issues
+
+
 def check_zk_types(zk_container, cli, zk_addr, env):
     if not re.fullmatch(r"[a-zA-Z0-9_.-]+", zk_container):
         raise ValueError("INVALID_ZK_CONTAINER")
@@ -186,6 +208,7 @@ def main():
         config = read_properties(Path(args.control_dir) / "ATSConfig.ini")
         issues = check_static(env, config, args.runtime_root)
         issues.extend(check_gateway_md_mode(env, args.control_dir))
+        issues.extend(check_business_md_client_mode(env, args.control_dir))
         if args.zk_container:
             issues.extend(check_zk_types(
                 args.zk_container, args.zk_cli,
