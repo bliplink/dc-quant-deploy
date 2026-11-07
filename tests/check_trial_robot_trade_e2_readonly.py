@@ -23,8 +23,9 @@ def require_container(value):
 def sql_for(minutes):
     if not isinstance(minutes, int) or not 1 <= minutes <= 1440:
         raise ValueError("INVALID_LOOKBACK_MINUTES")
-    # T543: all SELECTs inspect one consistent transaction and stable cutoff.
-    # Independent live SELECTs raced Tape writes and caused spurious pair mismatches.
+    # T543: every SELECT must inspect the SAME durable snapshot and cutoff.
+    # Under live Tape writes, independent NOW()/SELECT queries race each other
+    # and may report posting_rows!=2*event_ids despite zero bad posting pairs.
     matching = ("entity_type='POSTING' AND "
                 "source_type='TRADE_ATOMIC_MATCH_PAIR_PREPARED' "
                 "AND create_time>=@gate_window_start")
