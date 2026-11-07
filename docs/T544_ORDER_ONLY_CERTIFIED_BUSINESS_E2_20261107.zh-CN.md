@@ -1,3 +1,5 @@
+> **T545 架构纠正（2026-11-07）：本文件中为 ORDER_ONLY 单独新增 `STATE_MATCH_ORDER_ONLY_NOTIFIED_V1`、特殊 ReadModel/回执协议的方案已废弃，不得部署或合并。ORDER_ONLY 必须走现有 `DefaultExecOrder`，与 TRADE 共用成交报文、历史与 MD/K线发布；只在是否调用 TradeSvr 资金/持仓结算上不同。权威纠正文档：`docs/T545_DEFAULT_EXEC_UNIFIED_CORRECTION_20261107.zh-CN.md`。原 T544 业务/行情验收数据可保留，仅架构建议被取代。**
+
 # T544｜ORDER_ONLY 成交通知与交易/K线最终验收边界（2026-11-07）
 
 ## 结论：TRADE 业务 PASS；ORDER_ONLY 仍 NO-GO；A/B HA 未复验
