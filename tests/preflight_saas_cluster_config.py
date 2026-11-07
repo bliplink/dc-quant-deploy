@@ -85,6 +85,8 @@ def check_static(env, conf, runtime_root=None):
                  "SINGLE_NODE_HAS_STALE_B_ENTRY:" + name)
             need(conf.get("LBConfig." + name) != "Partition",
                  "SINGLE_NODE_HAS_PARTITION_LB:" + name)
+            need(conf.get("Cluster." + name + ".Enabled") != "true",
+                 "SINGLE_NODE_HAS_STALE_CLUSTER_FLAG:" + name)
     if runtime_root:
         namespace = {}
         bind_ports = {}
