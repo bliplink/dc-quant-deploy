@@ -25,4 +25,7 @@ python3 -m unittest discover -s "${SCRIPT_DIR}/tests" -p test_provision_robot_se
 python3 -m unittest discover -s "${SCRIPT_DIR}/tests" -p test_trial_robot_live_readiness.py -q
 # Opt-in Binance SOCKS5 proxy is scoped to APS and does not proxy internal cluster.
 python3 -m unittest discover -s "${SCRIPT_DIR}/tests" -p test_apssvr_binance_socks_wiring.py -q
+# Business E2E: must prove real Tape Filled IDs and certified Trade posting pairs.
+# Unit contract checks run offline; the live gate is invoked with real containers.
+python3 -m unittest discover -s "${SCRIPT_DIR}/tests" -p test_trial_robot_trade_e2_readonly.py -q
 printf '[test-mac-colima-saas] PASS\n'
