@@ -65,3 +65,9 @@ python3 tests/check_order_live_rollout_preflight.py \
 3. 完成可靠物理恢复后，再构建/替换 `ORDER_ONLY` 候选 Order 并跑新租户 Maker/Taker 的 **2 条真实历史 ExecID + MD + K线 + Trader资金/持仓不变 + 重放幂等**；随后 A/B 自动双向故障切换和 10/50/200 租户压力。
 
 当前 NO-GO 不能因为 21 项 Maven PASS 或镜像构建 PASS 而关闭。
+## T546 现场收尾与前向部署边界
+
+- 候选 B 的启动日志、Docker inspect 和旧 A/B 失败时间窗日志已保存在 **Mac 私有** `~/.opentradingcore/t546-rollout-evidence-20261107/`（目录 0700、文件 0600）；候选启动日志 SHA256 `a9e3ee60c2e677fffa015315933e94ecd72d740b17b7e171cae2ba10ba0ed2dd`。随后仅删除已经退出的 T546 候选容器，**未删除任何业务卷**；旧四个 Order/Trade 进程仍运行，不代表所有分区可写。
+- 正式 `mac-colima-saas.sh reinstall` 会运行默认 `uninstall-saas.sh` → `install-saas.sh`，作用域是另一套 `dc-saas-*` 正式 Compose 栈；**不能用它来假装修复此处手工隔离 T529/T530/T531 的 poisoned E2 集群**，也不得未经证据迁移直接卸载另一套服务。
+- 从 GitHub `bliplink/com.app.common:saas-crypto-latest` 读回 `CommonCertifiedProductionPhysicalRecovery.java`，其 `OriginalE1` 仍要求 `prior.epoch!=1` 拒绝，`verifiedPlans` 仍有 `a.getEpoch()!=1` 拒绝；说明该分支的现有生产物理工厂不能直接服务当前 E2→E3。T525/T526 通用离线恢复验收不是完整工厂已上线的证据。
+- 若要恢复当前 Demo，不得重置 A 的 poisoned 内存标记或单纯重启 A 以重新放行同 Epoch；应完成 Common 认证 E3，或使用全新隔离 ZK namespace 与空业务盘进行真实 E1→E2 Genesis；保留旧只读证据，不伪造 E2 法定提交。
