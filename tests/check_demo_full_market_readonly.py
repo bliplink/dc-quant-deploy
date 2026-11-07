@@ -46,6 +46,45 @@ def parse_bars(rows, period):
     return len(rows), max(seen)
 
 
+def live_market_score(snapshot, location, symbol):
+    """Same strictly tenant-scoped precedence as Web's fresh-visitor choice."""
+    if (not isinstance(snapshot, dict)
+            or snapshot.get("location") != location
+            or snapshot.get("securityID") != symbol):
+        return 0
+    recent = (snapshot.get("recentTrades") or {}).get("NoMDEntries") or []
+    if isinstance(recent, list) and recent:
+        return 3
+    try:
+        if float((snapshot.get("ticker") or {}).get("LastPrice") or 0) > 0:
+            return 2
+    except (ValueError, TypeError):
+        pass
+    book = (snapshot.get("orderBook") or {}).get("NoMDEntries") or []
+    if not isinstance(book, list):
+        return 0
+    bids = any(str(x.get("MDEntryType")) == "0" for x in book if isinstance(x, dict))
+    asks = any(str(x.get("MDEntryType")) == "1" for x in book if isinstance(x, dict))
+    return 1 if bids and asks else 0
+
+
+def initial_live_market(base, location, active, reference_symbol, reference_market):
+    """Don't confuse the first enabled (possibly dormant) product with Web's
+    new verified-live default; never assume that BTCUSDT exists for every tenant.
+    """
+    first = active[0] if active else ""
+    chosen, best = first, 0
+    for product in active[:4]:
+        snapshot = (reference_market if product == reference_symbol else
+                    api(base, "MDSvr", "queryPublicMarket",
+                        {"location": location, "securityID": product},
+                        "%s\\x1f4\\x1f%s" % (location, product)))
+        score = live_market_score(snapshot, location, product)
+        if score > best:
+            chosen, best = product, score
+    return chosen, best
+
+
 def test_location(base, location, symbol):
     catalog = api(base, "AdminSvr", "querySymbol", {"location": location}) or {}
     products = catalog.get("symbols", []) if isinstance(catalog, dict) else []
@@ -84,12 +123,14 @@ def test_location(base, location, symbol):
         counts[period], latest[period] = parse_bars(rows, period)
     if abs(datetime.now(timezone.utc).timestamp()*1000 - latest["5M"]) > 15*60*1000:
         raise ValueError("KLINE_5M_STALE")
-    default = active[0] if active else ""
+    default, score = initial_live_market(base, location, active, symbol, market)
     default_bars = api(base, "AdminSvr", "queryKLine", dict(content, text="5M", securityID=default))
     return {
         "products": active, "bid_levels": bids, "ask_levels": asks,
         "recent_trades": len(recent), "ticker_fields": 8,
         "kline_periods": counts, "default_symbol": default,
+        "first_enabled_symbol": active[0] if active else "",
+        "default_market_score": score,
         "default_symbol_5m_bars": len(default_bars or []),
         "last_mark": ticker.get("MarkPrice"), "last_index": ticker.get("IndexPrice")
     }
@@ -108,8 +149,8 @@ def main():
         try:
             result = test_location(args.url, location, args.symbol)
             results[location] = result
-            if not result["default_symbol_5m_bars"]:
-                notes.append("DEFAULT_PRODUCT_NO_KLINE:" + location + ":" + result["default_symbol"])
+            if result["default_market_score"] and not result["default_symbol_5m_bars"]:
+                notes.append("ACTIVE_DEFAULT_NO_KLINE:" + location + ":" + result["default_symbol"])
         except (ValueError, HTTPError, URLError, TimeoutError, TypeError, KeyError) as error:
             errors.append(location + ":" + str(error)[:110])
     for port in args.frontends.split(","):
@@ -131,8 +172,8 @@ def main():
     if errors:
         raise SystemExit(2)
     if notes:
-        # An anonymous user's first-selected product is the real first chart;
-        # passing the alternative BTCUSDT alone is insufficient for UX PASS.
+        # If a market has live trades/quotes, it must also show real candles.
+        # A brand-new custom-only tenant with no trades may legitimately be blank.
         raise SystemExit(3)
 
 
