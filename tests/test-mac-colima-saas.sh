@@ -39,4 +39,9 @@ python3 -m unittest discover -s "${SCRIPT_DIR}/tests" -p test_frontend_gateway_t
 # T546: offline guard contract. The separate live rolling preflight must
  # check physically pinned Common, poison status and automatic recovery.
 python3 -m unittest discover -s "${SCRIPT_DIR}/tests" -p test_order_live_rollout_preflight.py -q
+# T547: real deploy and Mac reinstall must perform a no-mutation preflight
+# before an existing certified peer can be removed/recreated.
+grep -Fq 'check_certified_live_upgrade_preflight.py' "${SCRIPT_DIR}/deploy-saas.sh" || fail "missing early deploy rolling preflight"
+grep -Fq 'check_certified_live_upgrade_preflight.py' "${TARGET}" || fail "macOS reinstall lacks pre-uninstall proof"
+python3 -m unittest discover -s "${SCRIPT_DIR}/tests" -p test_certified_live_upgrade_preflight.py -q
 printf '[test-mac-colima-saas] PASS\n'
