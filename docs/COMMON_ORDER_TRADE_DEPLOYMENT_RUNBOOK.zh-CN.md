@@ -42,6 +42,10 @@
 
 | D19 | 自动审批了新租户，却没有 Robot 报价；启动 Robot 进程直接失败 | 新库 `dc_tenant_liquidity_bootstrap` 有 6 条 `PENDING|CREATE_MAKER`，但 `dc_tenant_robot=0`；Admin 编译了 bootstrap worker，却没配置 `TRIAL_LIQUIDITY_BOOTSTRAP_ENABLED` / 长期稳定 `TRIAL_LIQUIDITY_MASTER_KEY`；候选 Robot 因缺 `ROBOT_GATEWAY_USER` 退出 1，旧 Robot 自带 Common 3.0.16 | **自动审批只代表流程入队，不代表 Robot 初始化完成**。必须独立验收 worker 已合法开启、派生凭证有可恢复密钥、认证 Gateway/Robot Runtime 凭据与 Common SHA 同版、资金入账去重／异常对账，最终 Robot/Tape 实际下单成交。不得将旧实例 API Key/密码搬到全新数据代际。 |
 
+| D20 | `TradeSvr` 报 `MDSvr partition is not routable`，虽然 Gateway 公开行情已恢复 | `com.app.dc.utils.MDSvrClient` 初始 Image 强制查 Multi-MD 分区，单机 `MDSvr` 没有该分区，和 Gateway 模式配置不一致 | 统一从 `MD_CLUSTER_ENABLED` 生成 `TradeSvr{,A,B}` + `LiqSvr` 的 `md.cluster.enabled`。仅显式 `false` 时使用 `SERVER.MDSvr`；默认 `true` 严格 Common 分区校验。部署前预检拒绝 Gateway/Trade/Liq 模式错配。T536 共享客户端 Java8 JUnit 10/10、配置门禁 10/10 PASS；Trade 镜像已构建**未部署**。 |
+| D21 | 已生成自动审批任务却没有 Robot 运行；新 Admin 没报明显失败 | T529 直接起 Docker 时漏传 Admin Worker 的独立稳定主密钥和显式开启标志。T536 只读 `docker inspect` 证实 Admin 缺失，候选 Robot 缺 6 项 Gateway/Runtime 身份；新库 6 条 Pending、Robot 0 行 | 正式 Compose Admin 显式接线，默认关闭自动入金；`deploy-saas.sh` 生成独立且稳定的 `TRIAL_LIQUIDITY_MASTER_KEY`，严格禁用不安全的模糊成功自动重试。试用覆盖模式显式 opt-in，Tape 可按租户灰度。启动前必须运行 `tests/check-trial-bootstrap-runtime.py` 验证**实际容器有效环境**而不打印秘密；不能凭 .env 文件已包含值就报 PASS。 |
+| D22 | 误把代码级 MD 修复或 Broker 测试成交当完整 Robot/Tape 与 HA | T535 Broker CUSTOM 经 APS→MD、Maker/Taker Filled 2/2、Order/Trade 512 对 WAL SHA 确实 PASS，但 Robot 默认消费 Binance bookticker；外网 Binance 不可达且 `automaticRecovery=false` | 必须分开报告：Broker CUSTOM 交易 PASS；Robot/Tape 常态报价 NO-GO；Order cancelAll 持久化 NO-GO；生产双向 HA NO-GO。详见 [T536 自动初始化与共享 MD 客户端](T536_ROBOT_BOOTSTRAP_AND_SINGLE_MD_CLIENT_20261107.zh-CN.md)。 |
+
 最新可核验业务 E2E：隔离新租户 `J4BMAH`、`RU7WZO`，Broker 签名自定义价格 `90001` 经 APS→MD，Maker/Taker 各入金 1,000 USDT，对手限价挂单 `Filled` × 2，Execution × 2，资金持仓读回和 MySQL Projection 检查 PASS；在最新 GitHub Gateway 源码生成镜像复测成功。详见 [T535 真实交易及剩余安全门禁](T535_FRESH_BROKER_CUSTOM_TRADE_AND_SINGLE_MD_ROUTE_20261107.zh-CN.md)。**自动 HA、批量撤单、外部 Binance 实时数据仍 NO-GO。**
 
 ## 三、部署前必须执行的检查（可复制）
