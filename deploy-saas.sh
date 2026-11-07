@@ -1014,6 +1014,12 @@ persist_compose_config_names
 prepare_local_build_identity
 ensure_host_runtime
 load_env
+# T547: refuse an unverified live A/B rolling upgrade before compose recreates
+# any backend. Cold installs are a separate path, never an HA PASS.
+python3 "${SCRIPT_DIR}/tests/check_certified_live_upgrade_preflight.py" \
+  --order-enabled "${ORDER_CLUSTER_ENABLED:-false}" \
+  --trade-enabled "${TRADE_CLUSTER_ENABLED:-false}" || \
+  die "Existing certified Order/Trade HA is not ready for live rolling replacement; see docs/T547_COMMON_HA_RELIABILITY_RESET_20261107.zh-CN.md"
 validate_runtime_root
 validate_runtime_capacity
 validate_initial_ports
