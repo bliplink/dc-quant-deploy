@@ -30,4 +30,6 @@ python3 -m unittest discover -s "${SCRIPT_DIR}/tests" -p test_apssvr_binance_soc
 python3 -m unittest discover -s "${SCRIPT_DIR}/tests" -p test_trial_robot_trade_e2_readonly.py -q
 # T542: no false K-line PASS from blank, duplicate or invalid OHLC history.
 python3 -m unittest discover -s "${SCRIPT_DIR}/tests" -p test_demo_full_market_readonly.py -q
+# T543: prevent heavy internal system ClickHouse MergeTree logs from OOM K-line.
+python3 -m unittest discover -s "${SCRIPT_DIR}/tests" -p test_clickhouse_internal_logs_profile.py -q
 printf '[test-mac-colima-saas] PASS\n'
