@@ -40,6 +40,8 @@
 | D17 | Trade 日志仍报 `MDSvr partition is not routable: Pxxx` | 通用 `MDSvrClient.mdPrimary` 对单机 MD 仍使用 Multi-MD 分区读法；**Gateway 公开行情的单机修复不等于 Trade 内部 MD 客户端已修** | 在通用 MD 客户端的模式接线中修复，不能在 Trade 新建自己的 HA 或降低 Multi-MD 旧主隔离。发布前检查标记价订阅/交易价格/清算价的真实同租户数据。 |
 | D18 | 误把 512 分区 WAL SHA 一致叫做自动 HA | T535 实测 Order 256 对、Trade 256 对 `business.wal` 字节一致；其中有真实成交后的非空 WAL，但运行配置仍 `automaticRecovery=false` | 仅作为真实持续数据一致性的静态证据。A→B→A SIGKILL、重启追平、客户端返回前物理 ACK、旧主撤权和单节点 LOCAL 合同必须单独验收。 |
 
+| D19 | 自动审批了新租户，却没有 Robot 报价；启动 Robot 进程直接失败 | 新库 `dc_tenant_liquidity_bootstrap` 有 6 条 `PENDING|CREATE_MAKER`，但 `dc_tenant_robot=0`；Admin 编译了 bootstrap worker，却没配置 `TRIAL_LIQUIDITY_BOOTSTRAP_ENABLED` / 长期稳定 `TRIAL_LIQUIDITY_MASTER_KEY`；候选 Robot 因缺 `ROBOT_GATEWAY_USER` 退出 1，旧 Robot 自带 Common 3.0.16 | **自动审批只代表流程入队，不代表 Robot 初始化完成**。必须独立验收 worker 已合法开启、派生凭证有可恢复密钥、认证 Gateway/Robot Runtime 凭据与 Common SHA 同版、资金入账去重／异常对账，最终 Robot/Tape 实际下单成交。不得将旧实例 API Key/密码搬到全新数据代际。 |
+
 最新可核验业务 E2E：隔离新租户 `J4BMAH`、`RU7WZO`，Broker 签名自定义价格 `90001` 经 APS→MD，Maker/Taker 各入金 1,000 USDT，对手限价挂单 `Filled` × 2，Execution × 2，资金持仓读回和 MySQL Projection 检查 PASS；在最新 GitHub Gateway 源码生成镜像复测成功。详见 [T535 真实交易及剩余安全门禁](T535_FRESH_BROKER_CUSTOM_TRADE_AND_SINGLE_MD_ROUTE_20261107.zh-CN.md)。**自动 HA、批量撤单、外部 Binance 实时数据仍 NO-GO。**
 
 ## 三、部署前必须执行的检查（可复制）
