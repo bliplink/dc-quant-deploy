@@ -156,6 +156,9 @@ main() {
       log "SaaS containers removed. Existing localhost forward processes are harmless and will fail health checks until reinstall."
       ;;
     reinstall)
+      # T547: the install-side gate runs AFTER uninstall, too late for a live
+      # cluster. Check the existing peers before taking any backend down.
+      remote_shell "cd $(printf '%q' "${REMOTE_REPO}") && sudo -E python3 ./tests/check_certified_live_upgrade_preflight.py --order-enabled true --trade-enabled true"
       remote_run_script uninstall-saas.sh
       remote_run_script install-saas.sh "$@"
       ensure_forward
