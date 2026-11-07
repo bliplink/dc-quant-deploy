@@ -68,9 +68,18 @@ def check_common_executor(root):
                 'CommonDurableFailoverStageLedger',
                 'CommonCertifiedGenesisSurvivorInstall',
                 'CommonCertifiedCrossEpochSurvivorInstall')
+    # T547: exact production release must support CURRENT signed Epoch.
+    # The T520-era factory still hard-rejects E2+ while reporting a healthy
+    # E1 helper shape. No source-only success may authorize rolling upgrades.
+    original_e1_only = (
+        r'\bprior\s*\.\s*epoch\s*!=\s*1\b',
+        r'\ba\s*\.\s*getEpoch\s*\(\s*\)\s*!=\s*1\b',
+    )
+    if any(re.search(rule, content) for rule in original_e1_only):
+        return False, 'COMMON_PRODUCTION_E1_ONLY_E2_STRICT_ROLLING_NOT_SUPPORTED'
     if not all(token in content for token in required):
         return False, 'COMMON_PRODUCTION_EXECUTOR_MISSING_ACTUAL_WAL_RSA_RECOVERY_STEPS'
-    return True, 'COMMON_EXECUTOR_DECLARED_REQUIRES_REAL_E2E_VALIDATION'
+    return True, 'COMMON_EXECUTOR_SOURCE_ONLY_CURRENT_EPOCH_MUST_STILL_PASS_REAL_HA'
 
 
 def digest(file):
