@@ -222,6 +222,11 @@ ensure_env_defaults() {
   fi
   ensure_generated_env_secret ROBOT_RUNTIME_API_KEY
   ensure_generated_env_secret ROBOT_RUNTIME_API_SECRET
+  # Dedicated, stable bootstrap identity; never derive from the hedge key.
+  ensure_generated_env_secret TRIAL_LIQUIDITY_MASTER_KEY
+  if ! grep -q '^TRIAL_LIQUIDITY_BOOTSTRAP_ENABLED=' "${ENV_FILE}"; then
+    printf 'TRIAL_LIQUIDITY_BOOTSTRAP_ENABLED=false\n' >> "${ENV_FILE}"
+  fi
   migrate_env_value GW_IMAGE_REPOSITORY dc-saas/gw ghcr.io/bliplink/gw
   migrate_env_value LOGINSVR_IMAGE_REPOSITORY dc-saas/loginsvr ghcr.io/bliplink/loginsvr
   migrate_env_value MDSVR_IMAGE_REPOSITORY dc-saas/mdsvr ghcr.io/bliplink/mdsvr
