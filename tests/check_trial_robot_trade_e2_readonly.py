@@ -23,14 +23,19 @@ def require_container(value):
 def sql_for(minutes):
     if not isinstance(minutes, int) or not 1 <= minutes <= 1440:
         raise ValueError("INVALID_LOOKBACK_MINUTES")
-    window = "DATE_SUB(NOW(3), INTERVAL %d MINUTE)" % minutes
+    # T543: all SELECTs inspect one consistent transaction and stable cutoff.
+    # Independent live SELECTs raced Tape writes and caused spurious pair mismatches.
     matching = ("entity_type='POSTING' AND "
                 "source_type='TRADE_ATOMIC_MATCH_PAIR_PREPARED' "
-                "AND create_time>=" + window)
+                "AND create_time>=@gate_window_start")
     return "\n".join([
+        "SET TRANSACTION ISOLATION LEVEL REPEATABLE READ;",
+        "START TRANSACTION WITH CONSISTENT SNAPSHOT, READ ONLY;",
+        "SET @gate_now := NOW(3);",
+        "SET @gate_window_start := DATE_SUB(@gate_now, INTERVAL %d MINUTE);" % minutes,
         "SELECT 'bootstrap_complete',COUNT(*) FROM dc_tenant_liquidity_bootstrap WHERE status='COMPLETE' AND step='DONE';",
         "SELECT 'robot_live',COUNT(*) FROM dc_tenant_robot WHERE enabled=1 AND runtime_status='RUNNING' "
-        "AND open_order_count>=2 AND last_heartbeat_time>=DATE_SUB(NOW(),INTERVAL 30 SECOND);",
+        "AND open_order_count>=2 AND last_heartbeat_time>=DATE_SUB(@gate_now,INTERVAL 30 SECOND);",
         "SELECT 'robot_quote_orders',COALESCE(SUM(open_order_count),0) FROM dc_tenant_robot WHERE enabled=1 AND runtime_status='RUNNING';",
         "SELECT 'posting_rows',COUNT(*) FROM dc_trade_projection_mutation WHERE " + matching + ";",
         "SELECT 'posting_event_ids',COUNT(DISTINCT event_id) FROM dc_trade_projection_mutation WHERE " + matching + ";",
@@ -38,9 +43,10 @@ def sql_for(minutes):
         "SELECT 'bad_posting_pairs',COUNT(*) FROM (SELECT event_id FROM dc_trade_projection_mutation "
         "WHERE " + matching + " GROUP BY event_id HAVING COUNT(*)<>2) pair_check;",
         "SELECT 'balance_locations',COUNT(DISTINCT location) FROM dc_users_balance WHERE location<>'PLATFORM' "
-        "AND update_time>=DATE_FORMAT(" + window + ",'%Y-%m-%d %H:%i:%s');",
-        "SELECT 'projection_age_seconds',COALESCE(TIMESTAMPDIFF(SECOND,MAX(create_time),NOW()),999999) "
+        "AND update_time>=DATE_FORMAT(@gate_window_start,'%Y-%m-%d %H:%i:%s');",
+        "SELECT 'projection_age_seconds',COALESCE(TIMESTAMPDIFF(SECOND,MAX(create_time),@gate_now),999999) "
         "FROM dc_trade_projection_event;",
+        "COMMIT;",
         "",
     ])
 
@@ -49,7 +55,7 @@ def query_counts(mysql_container, lookback_minutes):
     args = ["docker", "exec", "-i", require_container(mysql_container), "sh", "-c",
             'MYSQL_PWD="$MYSQL_ROOT_PASSWORD" exec mysql -uroot -N dc']
     result = subprocess.run(args, input=sql_for(lookback_minutes), text=True,
-                            capture_output=True, check=False, timeout=30)
+                            capture_output=True, check=False, timeout=90)
     if result.returncode:
         raise RuntimeError("READONLY_MYSQL_QUERY_FAILED")
     expected = {"bootstrap_complete", "robot_live", "robot_quote_orders", "posting_rows",
