@@ -553,6 +553,194 @@ services:
     mem_limit: ${ROBOTSVR_MEMORY_LIMIT:-384m}
     cpus: ${ROBOTSVR_CPU_LIMIT:-0.20}
 
+  # Public site and API Docs must share host ports with Cloudflare Tunnel.
+  # Nginx dynamic template reads the same GW_HTTP_PORT as Trade/Tenant Web.
+  public-web:
+    image: ${PUBLIC_WEB_IMAGE_REPOSITORY:-ghcr.io/bliplink/opentradingcore-web}:${PUBLIC_WEB_TAG:-saas-crypto}
+    network_mode: host
+    restart: unless-stopped
+    logging: *default-logging
+    volumes:
+      - ./config/frontend-proxies/public-web.conf.template:/etc/nginx/templates/default.conf.template:ro
+    environment:
+      TZ: Asia/Shanghai
+      GATEWAY_HOST: 127.0.0.1
+      GATEWAY_HTTP_PORT: ${GW_HTTP_PORT:-33002}
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://127.0.0.1:18094/healthz | grep -q '^ok    image: ${TRADE_WEB_IMAGE_REPOSITORY:-ghcr.io/bliplink/dc-saas-trade-web}:${TRADE_WEB_TAG:-saas-crypto}
+    container_name: dc-saas-trade-web
+    network_mode: host
+    restart: unless-stopped
+    logging: *default-logging
+    depends_on:
+      gateway:
+        condition: service_started
+    environment:
+      TZ: Asia/Shanghai
+      WEB_LISTEN_PORT: ${WEB_LISTEN_PORT:-18088}
+      GATEWAY_HOST: 127.0.0.1
+      GATEWAY_HTTP_PORT: ${GW_HTTP_PORT:-33002}
+      GATEWAY_WS_PORT: ${GW_WEBSOCKET_PORT:-33001}
+      TENANT_WEB_HOST: 127.0.0.1
+      TENANT_WEB_PORT: 18092
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://127.0.0.1:$${WEB_LISTEN_PORT}/healthz | grep -q '^ok$'"]
+      interval: 15s
+      timeout: 5s
+      retries: 10
+      start_period: 10s
+    mem_limit: ${TRADE_WEB_MEMORY_LIMIT:-256m}
+    cpus: ${TRADE_WEB_CPU_LIMIT:-0.10}
+
+  tenant-web:
+    image: ${TENANT_WEB_IMAGE_REPOSITORY:-ghcr.io/bliplink/dc-saas-tenant-web}:${TENANT_WEB_TAG:-saas-crypto}
+    container_name: dc-saas-tenant-web
+    network_mode: host
+    restart: unless-stopped
+    logging: *default-logging
+    volumes:
+      - ./config/frontend-proxies/tenant-web.conf.template:/etc/nginx/templates/default.conf.template:ro
+    depends_on:
+      gateway:
+        condition: service_started
+      adminsvr:
+        condition: service_started
+    environment:
+      TZ: Asia/Shanghai
+      GATEWAY_HOST: 127.0.0.1
+      GATEWAY_HTTP_PORT: ${GW_HTTP_PORT:-33002}
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://127.0.0.1:18092/healthz | grep -q '^ok$'"]
+      interval: 15s
+      timeout: 5s
+      retries: 10
+      start_period: 10s
+    mem_limit: ${TENANT_WEB_MEMORY_LIMIT:-128m}
+    cpus: ${TENANT_WEB_CPU_LIMIT:-0.05}
+
+  platform-web:
+    image: ${PLATFORM_WEB_IMAGE_REPOSITORY:-ghcr.io/bliplink/dc-saas-platform-web}:${PLATFORM_WEB_TAG:-saas-crypto}
+    container_name: dc-saas-platform-web
+    network_mode: host
+    restart: unless-stopped
+    logging: *default-logging
+    volumes:
+      - ./config/frontend-proxies/platform-web.conf.template:/etc/nginx/templates/default.conf.template:ro
+    depends_on:
+      gateway:
+        condition: service_started
+      managersvr:
+        condition: service_started
+    environment:
+      TZ: Asia/Shanghai
+      GATEWAY_HOST: 127.0.0.1
+      GATEWAY_HTTP_PORT: ${GW_HTTP_PORT:-33002}
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://127.0.0.1:18090/healthz | grep -q '^ok$'"]
+      interval: 15s
+      timeout: 5s
+      retries: 10
+      start_period: 10s
+    mem_limit: ${PLATFORM_WEB_MEMORY_LIMIT:-128m}
+    cpus: ${PLATFORM_WEB_CPU_LIMIT:-0.05}"]
+      interval: 15s
+      timeout: 5s
+      retries: 10
+      start_period: 10s
+    mem_limit: ${PUBLIC_WEB_MEMORY_LIMIT:-128m}
+    cpus: ${PUBLIC_WEB_CPU_LIMIT:-0.05}
+
+  api-docs:
+    image: ${API_DOCS_IMAGE_REPOSITORY:-ghcr.io/bliplink/opentradingcore-api-docs-web}:${API_DOCS_TAG:-saas-crypto}
+    network_mode: host
+    restart: unless-stopped
+    logging: *default-logging
+    environment:
+      TZ: Asia/Shanghai
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://127.0.0.1:18096/healthz | grep -q '^ok    image: ${TRADE_WEB_IMAGE_REPOSITORY:-ghcr.io/bliplink/dc-saas-trade-web}:${TRADE_WEB_TAG:-saas-crypto}
+    container_name: dc-saas-trade-web
+    network_mode: host
+    restart: unless-stopped
+    logging: *default-logging
+    depends_on:
+      gateway:
+        condition: service_started
+    environment:
+      TZ: Asia/Shanghai
+      WEB_LISTEN_PORT: ${WEB_LISTEN_PORT:-18088}
+      GATEWAY_HOST: 127.0.0.1
+      GATEWAY_HTTP_PORT: ${GW_HTTP_PORT:-33002}
+      GATEWAY_WS_PORT: ${GW_WEBSOCKET_PORT:-33001}
+      TENANT_WEB_HOST: 127.0.0.1
+      TENANT_WEB_PORT: 18092
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://127.0.0.1:$${WEB_LISTEN_PORT}/healthz | grep -q '^ok$'"]
+      interval: 15s
+      timeout: 5s
+      retries: 10
+      start_period: 10s
+    mem_limit: ${TRADE_WEB_MEMORY_LIMIT:-256m}
+    cpus: ${TRADE_WEB_CPU_LIMIT:-0.10}
+
+  tenant-web:
+    image: ${TENANT_WEB_IMAGE_REPOSITORY:-ghcr.io/bliplink/dc-saas-tenant-web}:${TENANT_WEB_TAG:-saas-crypto}
+    container_name: dc-saas-tenant-web
+    network_mode: host
+    restart: unless-stopped
+    logging: *default-logging
+    volumes:
+      - ./config/frontend-proxies/tenant-web.conf.template:/etc/nginx/templates/default.conf.template:ro
+    depends_on:
+      gateway:
+        condition: service_started
+      adminsvr:
+        condition: service_started
+    environment:
+      TZ: Asia/Shanghai
+      GATEWAY_HOST: 127.0.0.1
+      GATEWAY_HTTP_PORT: ${GW_HTTP_PORT:-33002}
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://127.0.0.1:18092/healthz | grep -q '^ok$'"]
+      interval: 15s
+      timeout: 5s
+      retries: 10
+      start_period: 10s
+    mem_limit: ${TENANT_WEB_MEMORY_LIMIT:-128m}
+    cpus: ${TENANT_WEB_CPU_LIMIT:-0.05}
+
+  platform-web:
+    image: ${PLATFORM_WEB_IMAGE_REPOSITORY:-ghcr.io/bliplink/dc-saas-platform-web}:${PLATFORM_WEB_TAG:-saas-crypto}
+    container_name: dc-saas-platform-web
+    network_mode: host
+    restart: unless-stopped
+    logging: *default-logging
+    volumes:
+      - ./config/frontend-proxies/platform-web.conf.template:/etc/nginx/templates/default.conf.template:ro
+    depends_on:
+      gateway:
+        condition: service_started
+      managersvr:
+        condition: service_started
+    environment:
+      TZ: Asia/Shanghai
+      GATEWAY_HOST: 127.0.0.1
+      GATEWAY_HTTP_PORT: ${GW_HTTP_PORT:-33002}
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://127.0.0.1:18090/healthz | grep -q '^ok$'"]
+      interval: 15s
+      timeout: 5s
+      retries: 10
+      start_period: 10s
+    mem_limit: ${PLATFORM_WEB_MEMORY_LIMIT:-128m}
+    cpus: ${PLATFORM_WEB_CPU_LIMIT:-0.05}"]
+      interval: 15s
+      timeout: 5s
+      retries: 10
+      start_period: 10s
+    mem_limit: ${API_DOCS_MEMORY_LIMIT:-128m}
+    cpus: ${API_DOCS_CPU_LIMIT:-0.05}
+
   web:
     image: ${TRADE_WEB_IMAGE_REPOSITORY:-ghcr.io/bliplink/dc-saas-trade-web}:${TRADE_WEB_TAG:-saas-crypto}
     container_name: dc-saas-trade-web
