@@ -72,7 +72,9 @@ def main():
         else:
             findings.append({"tenant":tenant,"visible":[],"enabled":0})
     admin=post(args.gateway,"AdminSvr","tenantProductDataSource",{"action":"LIST","location":args.tenant[0]})
-    assert admin.get("code")==10004,admin
+    # Gateway may reject at its front-door session gate (9002) or the
+    # downstream authorization gate (10004); both must hide admin data.
+    assert admin.get("code") in (9002,10004) and not admin.get("data"),admin
     findings.append({"unscoped_administrative_list":"AUTHENTICATED_SESSION_REQUIRED"})
     if args.api_only:
         print(json.dumps({"api_checks":findings,"browser_checks":[],"mode":"api-only"},
