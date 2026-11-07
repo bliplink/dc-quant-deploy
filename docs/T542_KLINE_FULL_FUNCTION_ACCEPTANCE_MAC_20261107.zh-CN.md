@@ -46,3 +46,8 @@ Order 业务的 ProductMatchingExecOrder 按 matching_mode 选择 DefaultExecOrd
 - 公开租户产品只读：python3 tests/test-public-tenant-product-e2e.py --api-only --gateway http://127.0.0.1:43002 --tenant A2I12Z --tenant AGKW5V --tenant BML3DA --tenant CN8U7C --tenant J4BMAH --tenant RU7WZO --expect BTCUSDT。
 
 保留当前运行的所有核心容器，未注入HA故障；Maven构建和镜像的正式统一发布、Web默认项优化、ORDER_ONLY可靠成交投影仍为后续任务。
+## T542 存储稳态复查：当前不满足最终 GO（17:09 证据追加）
+
+虽然 3GiB ClickHouse 已恢复运行、MD 继续写入 5M K 线，但 Docker RestartCount=3（计数本身不能证明这次恢复后重复重启；当前 OOMKilled=false），ClickHouse 持久错误日志在 17:08–17:09 仍出现系统日志后台合并 Code 241 / memory limit exceeded。系统实际查询：MemoryTracking约2.41GiB，其中 MergesMutationsMemoryTracking约2.03GiB；system.merges 中主要为 system.metric_log，tenant dc.kline 只有6个活跃 part/1121行、dc.market_trade 5个part/5249行。system.trace_log约899万行、system.asynchronous_metric_log约1820万行；压力主要来自 ClickHouse 内部遥测 MergeTree 表的合并，而不是租户K线数据本身。3GiB内存是可用性临时恢复，不表示该OOM根因的长期稳态修复。没有直接删除系统日志/历史业务数据，也没有在负载运行中再重启ClickHouse。后续应在隔离镜像配置中对系统metric/trace日志的采样和后台merge进行明确控制，并做30–60分钟负载巡检，确保Code241不再新增，才允许标记ClickHouse稳定PASS。
+
+同一时间已新增数个隔离试验租户：自动初始化累计11 COMPLETE/DONE，Robot 11 RUNNING/439委托；此为当时状态快照，不影响原六租户的独立验收结论。ORDER_ONLY缺口仍在。
