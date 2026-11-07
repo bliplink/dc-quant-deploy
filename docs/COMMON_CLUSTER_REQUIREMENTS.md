@@ -1,5 +1,7 @@
 # Common 集群统一功能及独立 Demo 验收基线
 
+> **2026-11-07 最新强制执行：** [T547 集群可靠性纠偏与交付红线](T547_COMMON_HA_RELIABILITY_RESET_20261107.zh-CN.md)。该文明确停止在生产 E2 自动恢复缺失时尝试滚动升级、先从可信 Common+Demo 同配置验证完整滚动和双向 HA，Order/Trade 禁止另建业务集群协议。历史 PASS 不得跨环境推断为生产 PASS；当前 HA 为 NO-GO。
+
 版本：1.0｜确认日期：2026-10-23
 
 > 本文件为 Common 与独立 byte[] Demo 的开发/放行硬门槛；先全部完成功能、真实自动 HA 和性能压测，才开始 Trade / Order / MD 状态机集成。
