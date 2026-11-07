@@ -258,7 +258,9 @@ sync_repo managersvr https://github.com/bliplink/com.app.dc.managersvr.git saas-
 sync_repo adminsvr https://github.com/bliplink/com.app.dc.adminsvr.git saas-crypto
 sync_repo robotsvr https://github.com/bliplink/com.app.dc.robotsvr.git saas-crypto
 sync_repo gateway https://github.com/bliplink/gw.git saas-crypto
-sync_repo trade-web https://github.com/bliplink/dc-trade-web.git saas-crypto
+# T543: Web live-market default/K-line fixes are in saas-crypto-latest.
+# Never rebuild older Web from saas-crypto and regress anonymous K-line.
+sync_repo trade-web https://github.com/bliplink/dc-trade-web.git "${TRADE_WEB_SOURCE_BRANCH:-saas-crypto-latest}"
 sync_repo tenant-web https://github.com/bliplink/dc-saas-tenant-web.git main
 sync_repo platform-web https://github.com/bliplink/dc-saas-platform-web.git saas
 
