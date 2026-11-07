@@ -45,3 +45,11 @@
 tests/test_trial_robot_live_readiness.py 的 6 项 unittest 均 PASS。现场预检为 NO_GO/exit 2，原因 BINANCE_DNS_UNAVAILABLE 和 NO_LIVE_TWO_SIDED_QUOTES。
 
 下一项必须先恢复**合法、持续更新的 Binance 上游价格**，或明确经产品配置切换为受租户隔离、具备 TTL 的自定义 Broker 价格源，不能把租户私有价格伪装成公共 Binance 价格。其后让现有 Trial Worker 完成 VERIFY，核对盘口、Tape、真实成交、资金/持仓/Order/Trade/Projection。继续复用既有 Mac 一键部署流程，不新增第二套集群/Robot 初始化框架。
+
+## T539 后续复测与安全回退（2026-11-07 14:48 后）
+
+继续执行持久任务后：6 条 Trial bootstrap 记录均有 Maker 资金确认，其中 5 条 Tape 资金确认，5 个 Robot 已创建启用，但没有任何一个拥有双边挂单。1 条仍在资金权限收尾；VERIFY 因价格源无效进入 RETRY/FAILED。实时进度会变化，不应把上表早前 4 个 Robot 的中间值当成最终进度。
+
+启用 Binance 的 T539 APS 实际连续报 UnknownHostException，连接数快速增长；为避免 DNS 重试风暴和日志资源浪费，**已停止 otc-t539-fresh-apssvr，并启动原 otc-t535-fresh-apssvr-custom**。原 Broker 自定义数据源测试配置恢复；T539 新 APS 容器及文件保留可审计，不作为当前有效的 Binance 源。T539 Admin 与 Robot 仍在运行。
+
+对实际恢复后的旧自定义 APS 重新运行只读门禁，返回 exit 2：BINANCE_SOURCE_DISABLED_OR_NOT_RUNNING、NO_LIVE_TWO_SIDED_QUOTES。当前仍未获得合法公共 Binance 行情和任何真实 Robot 双边委托、Tape 成交。标准一键部署的用户初始化/环境门禁与公网行情可用性是两项独立要求，后者不能被前者 PASS 代替。
