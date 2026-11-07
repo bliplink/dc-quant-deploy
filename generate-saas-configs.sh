@@ -940,7 +940,9 @@ if [[ ! -e "${OVERRIDE_ROOT}/GW/config/publicMethodWhitelist.csv" ]]; then
     "${OVERRIDE_ROOT}/GW/config/publicMethodWhitelist.csv"
 fi
 
-cat > "${OVERRIDE_ROOT}/GW/config/spring-gw-client.xml" <<'EOF'
+# Mode-specific Gateway routing is part of the generated release contract.
+# Single MD uses MDSvr directly; Multi-MD requires Common-certified epoch.
+cat > "${OVERRIDE_ROOT}/GW/config/spring-gw-client.xml" <<EOF
 <?xml version="1.0" encoding="UTF-8"?>
 <beans xmlns="http://www.springframework.org/schema/beans"
        xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
@@ -950,6 +952,7 @@ cat > "${OVERRIDE_ROOT}/GW/config/spring-gw-client.xml" <<'EOF'
     <property name="notifyProxy" ref="notify"/>
     <property name="tcpConnector" ref="tcpConnector"/>
     <property name="SessionService" value="LoginSvr"/>
+    <property name="mdClusterEnabled" value="${MD_CLUSTER_ENABLED}"/>
     <property name="RequestService" value="AdminSvr,APSSvr,OrderSvr,OrderSvrA,OrderSvrB,TradeSvr,TradeSvrA,TradeSvrB,MDSvr,MDSvrA,MDSvrB,LoginSvr,ManagerSvr,LiqSvr,ProjectionSvr"/>
     <property name="Subscribes">
       <map>
