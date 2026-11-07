@@ -68,3 +68,8 @@ Trade Projection 同窗口记录 **510 个原子匹配事件**、**1,020 条 POS
 5. 保留日志/配置/发布受保护，继续执行长时间稳态、50/200 租户和 HA 测试，不要在未验证前关闭已恢复的 Robot。
 
 失败后回退 APS：停止 otc-t541-fresh-apssvr，启动原 otc-t535-fresh-apssvr-custom（原 Broker 自定义行情隔离环境，不提供新租户默认 Binance 行情）；不要破坏现有 Order/Trade/MySQL 业务数据。
+## T541 连续运行巡检追加（16:20）
+
+隔离 APSSvr 已连续运行 14 分钟且保持 Up；Robot、Admin、Order A/B、Trade A/B、Projection 原容器继续运行，未作新的进程故障注入。再次执行 10 分钟真实业务只读门禁返回 PASS_LIVE_BUSINESS_NOT_HA：6/6 Trial complete，6/6 Robot RUNNING，双向委托 240，Tape Filled IOC 482、不同 ExecID 482，覆盖六租户；Trade 原子匹配事件 483、POSTING 966，双边 2/2、invalid pair 0，六租户余额更新时间更新，投影延迟 2 秒。所有统计为时间窗口快照，不应当作固定持续总数。
+
+A/B 当前存活只能证明没有服务退出，**不能证明宕机接管/旧主撤权/追平**，故 T541 业务 PASS 仍不得标记 HA PASS。
