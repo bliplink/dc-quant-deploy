@@ -6,6 +6,8 @@ and must never be printed. Every mutation uses the public, authenticated API.
 No direct DB writes or bypasses of the tenant security/session policy.
 """
 import argparse
+import os
+import re
 from decimal import Decimal
 import subprocess
 import hashlib
@@ -68,9 +70,28 @@ def ok(url, service, method, content, session=None, route_location=None):
 def readonly_sql(statement):
     if not statement.lstrip().upper().startswith('SELECT ') or ';' in statement:
         raise ValueError('Only a single SELECT is allowed')
-    query=subprocess.run(['docker','exec','dc-saas-mysql','sh','-c',
-        'mysql -uroot -p"$MYSQL_ROOT_PASSWORD" -N dc -e "$1"','--',statement],
-        capture_output=True,text=True,timeout=15)
+    container=os.environ.get('OTC_E2E_MYSQL_CONTAINER','dc-saas-mysql')
+    if not re.fullmatch(r'[A-Za-z0-9][A-Za-z0-9_.-]*',container):
+        raise ValueError('Unsafe E2E MySQL container identifier')
+    user=os.environ.get('MYSQL_USERNAME')
+    password=os.environ.get('MYSQL_PASSWORD')
+    if user and password:
+        if not re.fullmatch(r'[A-Za-z0-9_]+',user):
+            raise ValueError('Unsafe E2E MySQL username')
+        # Docker -e MYSQL_PWD passes the caller's environment without exposing
+        # password bytes in the command-line argv, logs, or test evidence.
+        env=os.environ.copy()
+        env['MYSQL_PWD']=password
+        argv=['docker','exec','-e','MYSQL_PWD',container,
+              'mysql','-u'+user,'-N','dc','-e',statement]
+        query=subprocess.run(argv,env=env,capture_output=True,text=True,timeout=15)
+    elif container=='dc-saas-mysql':
+        # Existing local-demo compatibility without requiring explicit test env.
+        query=subprocess.run(['docker','exec',container,'sh','-c',
+            'mysql -uroot -p"$MYSQL_ROOT_PASSWORD" -N dc -e "$1"','--',statement],
+            capture_output=True,text=True,timeout=15)
+    else:
+        raise RuntimeError('Fresh E2E MySQL requires MYSQL_USERNAME and MYSQL_PASSWORD')
     if query.returncode:
         raise RuntimeError('Read-only MySQL verification unavailable')
     return [row.split('\t') for row in query.stdout.splitlines()]
