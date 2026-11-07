@@ -85,7 +85,8 @@ services:
       timeout: 5s
       retries: 30
       start_period: 30s
-    mem_limit: ${CLICKHOUSE_MEMORY_LIMIT:-2048m}
+    # T542: 1.5 GiB isolated Demo ClickHouse was OOMKilled (137), breaking K-line history.
+    mem_limit: ${CLICKHOUSE_MEMORY_LIMIT:-3072m}
     cpus: ${CLICKHOUSE_CPU_LIMIT:-0.75}
 
   zookeeper:
