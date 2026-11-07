@@ -4,7 +4,9 @@ import tempfile
 import unittest
 from pathlib import Path
 from unittest.mock import patch, MagicMock
-from preflight_saas_cluster_config import check_static, read_properties, check_zk_types
+from preflight_saas_cluster_config import (
+    check_static, read_properties, check_zk_types, check_gateway_md_mode,
+)
 
 
 def settings(ab):
@@ -96,6 +98,26 @@ class PreflightRegression(unittest.TestCase):
         env, cfg = settings(False)
         cfg["Cluster.OrderSvr.Enabled"] = "true"
         self.assertIn("SINGLE_NODE_HAS_STALE_CLUSTER_FLAG:OrderSvr", check_static(env, cfg))
+
+    def test_md_single_and_cluster_gateway_xml_explicitly_matches(self):
+        for md_cluster in ("true", "false"):
+            env, _ = settings(True)
+            env["MD_CLUSTER_ENABLED"] = md_cluster
+            with tempfile.TemporaryDirectory() as root:
+                xml = (Path(root) / "overrides" / "GW" / "config" /
+                       "spring-gw-client.xml")
+                xml.parent.mkdir(parents=True, exist_ok=True)
+                xml.write_text(
+                    "<beans xmlns='http://www.springframework.org/schema/beans'>"
+                    "<bean id='proxy'><property name='mdClusterEnabled' "
+                    "value='" + md_cluster + "'/></bean></beans>")
+                self.assertEqual([], check_gateway_md_mode(env, root))
+                env["MD_CLUSTER_ENABLED"] = "false" if md_cluster == "true" else "true"
+                self.assertTrue(any(x.startswith("GATEWAY_MD_MODE_MISMATCH:")
+                                    for x in check_gateway_md_mode(env, root)))
+                xml.unlink()
+                self.assertIn("MISSING_GATEWAY_MODE_CONFIG",
+                              check_gateway_md_mode(env, root))
 
     def test_duplicate_key_rejected(self):
         with tempfile.TemporaryDirectory() as d:
