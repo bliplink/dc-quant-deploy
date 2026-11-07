@@ -965,41 +965,15 @@ SQL
 }
 
 provision_robot_runtime_identity() {
-  [[ "${ROBOT_RUNTIME_LOCATION}" =~ ^[A-Za-z0-9_.@-]{1,64}$ ]] \
-    || die "ROBOT_RUNTIME_LOCATION contains unsupported characters."
-  [[ "${ROBOT_RUNTIME_USER_ID}" =~ ^[A-Za-z0-9_.@-]{3,45}$ ]] \
-    || die "ROBOT_RUNTIME_USER_ID contains unsupported characters."
-  [[ "${ROBOT_RUNTIME_API_KEY}" =~ ^[A-Za-z0-9]{32,64}$ ]] \
-    || die "ROBOT_RUNTIME_API_KEY must contain 32-64 alphanumeric characters."
-  [[ "${ROBOT_RUNTIME_API_SECRET}" =~ ^[A-Za-z0-9]{32,64}$ ]] \
-    || die "ROBOT_RUNTIME_API_SECRET must contain 32-64 alphanumeric characters."
-
-  local password_hash identity_count
-  password_hash="$(printf '%s' "${ROBOT_RUNTIME_API_SECRET}" | sha256sum | awk '{print $1}')"
-  identity_count="$(docker exec -e MYSQL_PWD="${MYSQL_ROOT_PASSWORD}" dc-saas-mysql \
-    mysql --protocol=TCP -h127.0.0.1 -P"${MYSQL_PORT}" -uroot -N dc -e \
-    "SELECT COUNT(*) FROM dc_users_api WHERE location='${ROBOT_RUNTIME_LOCATION}' \
-      AND user_id='${ROBOT_RUNTIME_USER_ID}' AND api_key='${ROBOT_RUNTIME_API_KEY}' \
-      AND secret_key='${ROBOT_RUNTIME_API_SECRET}' AND enable='1';")"
-  [[ "${identity_count}" == "1" ]] || ROBOT_IDENTITY_CHANGED="true"
-  docker exec -i -e MYSQL_PWD="${MYSQL_ROOT_PASSWORD}" dc-saas-mysql \
-    mysql --protocol=TCP -h127.0.0.1 -P"${MYSQL_PORT}" -uroot dc <<SQL
-INSERT INTO dc_users(user_id,user_name,name,password,user_type,enable,remark,create_time,update_time,
-  enable_trade,enable_cash_in,enable_cash_out,close_by,location)
-VALUES('${ROBOT_RUNTIME_USER_ID}','${ROBOT_RUNTIME_USER_ID}','Robot Runtime','${password_hash}',
-  '1','1','Internal GW-only Robot runtime',NOW(3),NOW(3),'0','0','0','deploy-saas','${ROBOT_RUNTIME_LOCATION}')
-ON DUPLICATE KEY UPDATE password=VALUES(password),enable='1',update_time=NOW(3),close_by='deploy-saas';
-UPDATE dc_users_api SET enable='0',update_time=DATE_FORMAT(NOW(3),'%Y-%m-%d %H:%i:%s.%f'),close_by='deploy-saas'
-WHERE location='${ROBOT_RUNTIME_LOCATION}' AND user_id='${ROBOT_RUNTIME_USER_ID}'
-  AND api_key<>'${ROBOT_RUNTIME_API_KEY}';
-INSERT INTO dc_users_api(user_id,type,api_key,secret_key,enable,create_time,update_time,close_by,inf1,location)
-VALUES('${ROBOT_RUNTIME_USER_ID}','ROBOT_RUNTIME','${ROBOT_RUNTIME_API_KEY}','${ROBOT_RUNTIME_API_SECRET}',
-  '1',DATE_FORMAT(NOW(3),'%Y-%m-%d %H:%i:%s.%f'),DATE_FORMAT(NOW(3),'%Y-%m-%d %H:%i:%s.%f'),
-  'deploy-saas','GW-only Robot runtime','${ROBOT_RUNTIME_LOCATION}')
-ON DUPLICATE KEY UPDATE secret_key=VALUES(secret_key),enable='1',update_time=VALUES(update_time),
-  close_by='deploy-saas',location=VALUES(location);
-SQL
-  log "Dedicated Robot runtime identity ${ROBOT_RUNTIME_LOCATION}/${ROBOT_RUNTIME_USER_ID} provisioned."
+  # Same dedicated account serves Robot Gateway Manager TCP login and
+  # ManagerSvr ROBOT_RUNTIME API login. Never use PLATFORM_ADMIN for Robot.
+  # The helper is also used for isolated Mac Demo's fresh MySQL namespace.
+  local result
+  result="$(python3 "${SCRIPT_DIR}/scripts/provision-robot-service-user.py" \
+    --env-file "${ENV_FILE}" --mysql-container dc-saas-mysql)" \
+    || die "Robot Gateway/Runtime user provisioning failed."
+  [[ "${result}" == *"changed=true"* ]] && ROBOT_IDENTITY_CHANGED="true"
+  log "${result}"
 }
 
 verify_ghcr_access() {
