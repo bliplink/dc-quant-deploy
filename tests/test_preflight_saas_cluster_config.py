@@ -6,6 +6,7 @@ from pathlib import Path
 from unittest.mock import patch, MagicMock
 from preflight_saas_cluster_config import (
     check_static, read_properties, check_zk_types, check_gateway_md_mode,
+    check_business_md_client_mode,
 )
 
 
@@ -118,6 +119,31 @@ class PreflightRegression(unittest.TestCase):
                 xml.unlink()
                 self.assertIn("MISSING_GATEWAY_MODE_CONFIG",
                               check_gateway_md_mode(env, root))
+
+    def test_trade_liq_md_mode_must_match_generated_single_or_cluster_topology(self):
+        for trade_ab in (True, False):
+            for md_cluster in ("true", "false"):
+                env, _ = settings(trade_ab)
+                env["MD_CLUSTER_ENABLED"] = md_cluster
+                services = ["TradeSvr", "LiqSvr"]
+                if trade_ab:
+                    services += ["TradeSvrA", "TradeSvrB"]
+                with tempfile.TemporaryDirectory() as root:
+                    for service in services:
+                        config = (Path(root) / "overrides" / service / "config" /
+                                  "application.properties")
+                        config.parent.mkdir(parents=True, exist_ok=True)
+                        config.write_text("md.cluster.enabled=" + md_cluster + "\n")
+                    self.assertEqual([], check_business_md_client_mode(env, root))
+                    poisoned = (Path(root) / "overrides" / "TradeSvr" / "config" /
+                                "application.properties")
+                    poisoned.write_text("md.cluster.enabled=" +
+                                        ("false" if md_cluster == "true" else "true") + "\n")
+                    self.assertTrue(any("BUSINESS_MD_MODE_MISMATCH:TradeSvr" in issue
+                                        for issue in check_business_md_client_mode(env, root)))
+                    poisoned.unlink()
+                    self.assertIn("MISSING_BUSINESS_MD_MODE_CONFIG:TradeSvr",
+                                  check_business_md_client_mode(env, root))
 
     def test_duplicate_key_rejected(self):
         with tempfile.TemporaryDirectory() as d:
