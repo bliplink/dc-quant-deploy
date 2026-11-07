@@ -22,6 +22,14 @@ def filled():
 
 
 class RobotTradeReadOnlyTests(unittest.TestCase):
+    def test_live_sql_uses_one_readonly_snapshot_and_fixed_window(self):
+        sql=M.sql_for(10)
+        self.assertIn('START TRANSACTION WITH CONSISTENT SNAPSHOT, READ ONLY;',sql)
+        self.assertIn('SET @gate_window_start := DATE_SUB(@gate_now, INTERVAL 10 MINUTE);',sql)
+        self.assertIn('create_time>=@gate_window_start',sql)
+        self.assertIn('TIMESTAMPDIFF(SECOND,MAX(create_time),@gate_now)',sql)
+        self.assertTrue(sql.rstrip().endswith('COMMIT;'))
+
     def test_happy_path_is_business_only_not_ha(self):
         self.assertEqual(M.assess(counts(), filled(), 6), [])
 
