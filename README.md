@@ -7,6 +7,8 @@ quantitative web application.
 Current product priorities, verified baseline, remaining gates, and delivery
 sequence: [DC SaaS product and engineering delivery plan](docs/SAAS_PRODUCT_DELIVERY_PLAN_20260929.zh-CN.md).
 
+Mandatory pre-deploy gate for single-node and A/B Common deployments: [Common / Order / Trade deployment failure runbook](docs/COMMON_ORDER_TRADE_DEPLOYMENT_RUNBOOK.zh-CN.md). The config generator runs its fail-closed static topology preflight automatically; check live ZooKeeper, Common JAR parity, DNS, and real-trading acceptance separately.
+
 ## Runtime boundary
 
 | Layer | Components | Storage |
