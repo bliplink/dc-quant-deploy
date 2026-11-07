@@ -36,4 +36,7 @@ python3 -m unittest discover -s "${SCRIPT_DIR}/tests" -p test_clickhouse_interna
 python3 -m unittest discover -s "${SCRIPT_DIR}/tests" -p test_trade_web_active_market_source.py -q
 # T543: enforce same dynamic Gateway port in public/tenant/platform/trade Web.
 python3 -m unittest discover -s "${SCRIPT_DIR}/tests" -p test_frontend_gateway_templates.py -q
+# T546: offline guard contract. The separate live rolling preflight must
+ # check physically pinned Common, poison status and automatic recovery.
+python3 -m unittest discover -s "${SCRIPT_DIR}/tests" -p test_order_live_rollout_preflight.py -q
 printf '[test-mac-colima-saas] PASS\n'
