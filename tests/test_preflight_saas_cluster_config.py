@@ -3,7 +3,8 @@
 import tempfile
 import unittest
 from pathlib import Path
-from preflight_saas_cluster_config import check_static, read_properties
+from unittest.mock import patch, MagicMock
+from preflight_saas_cluster_config import check_static, read_properties, check_zk_types
 
 
 def settings(ab):
@@ -81,6 +82,20 @@ class PreflightRegression(unittest.TestCase):
             self.assertIn("STALE_RUNTIME_ZK:tradeB", problems)
             self.assertIn("INVALID_COMMON_NAMESPACE:tradeB", problems)
             self.assertIn("AB_NAMESPACE_MISMATCH:trade", problems)
+
+    def test_live_zookeeper_group_mismatch_is_rejected(self):
+        env, _ = settings(True)
+        with patch("preflight_saas_cluster_config.subprocess.run") as mock:
+            mock.side_effect = [
+                MagicMock(returncode=0, stdout="STANDBY\n", stderr=""),
+                MagicMock(returncode=0, stdout="ALL\n", stderr="")]
+            issues = check_zk_types("fresh-zk", "zkCli.sh", "127.0.0.1:42181", env)
+        self.assertEqual(["ZK_DISCOVERY_MODE_MISMATCH:OrderSvr:expected_ALL:observed_STANDBY"], issues)
+
+    def test_single_mode_with_stale_cluster_flag_rejected(self):
+        env, cfg = settings(False)
+        cfg["Cluster.OrderSvr.Enabled"] = "true"
+        self.assertIn("SINGLE_NODE_HAS_STALE_CLUSTER_FLAG:OrderSvr", check_static(env, cfg))
 
     def test_duplicate_key_rejected(self):
         with tempfile.TemporaryDirectory() as d:
