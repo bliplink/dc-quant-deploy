@@ -49,6 +49,25 @@ class CommonOnlyAutoHA(unittest.TestCase):
         ''',encoding='utf-8')
         result=audit.check_common_executor(self.root/'common')
         self.assertFalse(result[0])
+    def test_prod_physical_factory_rejects_e1_only_even_with_ha_methods(self):
+        root=self.root/'common'/'src/main/java/com/app/common/replication'
+        root.mkdir(parents=True)
+        required=('signedCoordinator(', 'independentFsyncedReplica(',
+                  'bothSignedPhysicalReady(', 'recoveredBusinessWalAndSnapshot(',
+                  'CommonCertifiedPhysicalEvidenceRegistry',
+                  'CommonDurableFailoverStageLedger',
+                  'CommonCertifiedGenesisSurvivorInstall',
+                  'CommonCertifiedCrossEpochSurvivorInstall')
+        original='class CommonCertifiedProductionPhysicalRecovery implements CommonCertifiedAutomaticReplicaPlanWiring.DurablePhysicalRecovery {\n'+'\n'.join(required)+'\nif(prior.epoch!=1)throw new Exception();\n}'
+        source=root/'CommonCertifiedProductionPhysicalRecovery.java'
+        source.write_text(original,encoding='utf-8')
+        passed,reason=audit.check_common_executor(self.root/'common')
+        self.assertFalse(passed,reason)
+        self.assertIn('E1_ONLY',reason)
+        source.write_text(original.replace('prior.epoch!=1','prior.epoch<1'),encoding='utf-8')
+        passed,reason=audit.check_common_executor(self.root/'common')
+        self.assertTrue(passed,reason) # source-only, never real HA evidence
+
     def test_comments_are_not_producer(self):
         (self.service/'OrderLegacy.java').write_text('''
             // @Qualifier("orderCommonCertifiedPhysicalRecovery")
