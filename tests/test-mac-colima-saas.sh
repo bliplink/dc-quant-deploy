@@ -23,4 +23,6 @@ fi
 python3 -m unittest discover -s "${SCRIPT_DIR}/tests" -p test_provision_robot_service_user.py -q
 # Fresh Trial Worker/Robot/APS must be checked against live runtime, not merely Compose YAML.
 python3 -m unittest discover -s "${SCRIPT_DIR}/tests" -p test_trial_robot_live_readiness.py -q
+# Opt-in Binance SOCKS5 proxy is scoped to APS and does not proxy internal cluster.
+python3 -m unittest discover -s "${SCRIPT_DIR}/tests" -p test_apssvr_binance_socks_wiring.py -q
 printf '[test-mac-colima-saas] PASS\n'
