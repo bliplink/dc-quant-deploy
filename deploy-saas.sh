@@ -515,6 +515,7 @@ verify_order_cluster_images() {
       expected_revision="${revision}"
     else
       [[ "${revision}" == "${expected_revision}" ]] || die "${name} embeds a different Common revision."
+      [[ "${hash}" == "${expected_hash}" ]] || die "${name} embeds a different Common JAR SHA-256 than gateway."
     fi
   done
   log "Cluster image identity verified: Common revision ${expected_revision}; per-image JAR SHA labels present."
@@ -540,9 +541,36 @@ verify_md_cluster_images() {
       expected_revision="${revision}"
     else
       [[ "${revision}" == "${expected_revision}" ]] || die "${name} embeds a different Common revision."
+      [[ "${hash}" == "${expected_hash}" ]] || die "${name} embeds a different Common JAR SHA-256 than gateway."
     fi
   done
   log "MD cluster image identity verified: Common revision ${expected_revision}; per-image JAR SHA labels present."
+}
+
+verify_trade_cluster_images() {
+  [[ "${TRADE_CLUSTER_ENABLED:-false}" == "true" ]] || return 0
+  local expected_hash="" expected_revision="" spec name image hash revision
+  local specs=(
+    "gateway|${GW_IMAGE_REPOSITORY}:${GW_TAG}"
+    "tradesvr|${TRADESVR_IMAGE_REPOSITORY}:${TRADESVR_TAG}"
+  )
+  for spec in "${specs[@]}"; do
+    name="${spec%%|*}"
+    image="${spec#*|}"
+    require_immutable_cluster_image "${name}" "${image}"
+    hash="$(docker image inspect "${image}" --format '{{index .Config.Labels "dc.common.jar.sha256"}}' 2>/dev/null || true)"
+    revision="$(docker image inspect "${image}" --format '{{index .Config.Labels "dc.common.revision"}}' 2>/dev/null || true)"
+    [[ "${hash}" =~ ^[0-9a-f]{64}$ ]] || die "${name} cluster image has no Common SHA-256 label: ${image}"
+    [[ -n "${revision}" && "${revision}" != "unknown" ]] || die "${name} cluster image has no Common revision label: ${image}"
+    if [[ -z "${expected_hash}" ]]; then
+      expected_hash="${hash}"
+      expected_revision="${revision}"
+    else
+      [[ "${revision}" == "${expected_revision}" ]] || die "${name} embeds a different Common revision."
+      [[ "${hash}" == "${expected_hash}" ]] || die "${name} embeds a different Common JAR SHA-256 than gateway."
+    fi
+  done
+  log "Trade cluster image identity verified: Common revision ${expected_revision}, identical Common JAR SHA-256."
 }
 
 wait_for_health() {
@@ -1030,6 +1058,7 @@ else
 fi
 verify_order_cluster_images
 verify_md_cluster_images
+verify_trade_cluster_images
 
 if docker inspect dc-saas-loginsvr >/dev/null 2>&1; then
   LOGIN_CONTAINER_EXISTED="true"
