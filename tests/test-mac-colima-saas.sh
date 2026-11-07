@@ -19,4 +19,6 @@ if grep -Eq 'pkill|killall|open -a v2ray|docker restart' "${TARGET}"; then
 fi
 # Mac one-click must reject mixed Common JARs before touching containers.
 /bin/bash "${SCRIPT_DIR}/tests/test-deploy-common-image-parity.sh"
+# The one-click deploy must seed a dedicated Robot Gateway user and Runtime key.
+python3 -m unittest discover -s "${SCRIPT_DIR}/tests" -p test_provision_robot_service_user.py -q
 printf '[test-mac-colima-saas] PASS\n'
