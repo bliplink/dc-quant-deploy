@@ -983,4 +983,9 @@ EOF
 
 chmod 0600 "${CONTROL_ROOT}/DBPoolConfig.ini" "${CONTROL_ROOT}/ATSConfig.ini"
 find "${OVERRIDE_ROOT}" -type f -exec chmod 0600 {} +
+# Block invalid single-node/A/B Gateway topology before any JVM is started.
+# This static guard never modifies ZooKeeper or certifies business READY.
+python3 "${SCRIPT_DIR}/tests/preflight_saas_cluster_config.py" \
+  --env "${ENV_FILE}" --control-dir "${CONTROL_ROOT}" ||
+  die "Generated Gateway/Common topology preflight failed (deployment NO-GO)"
 log "Generated isolated SaaS configuration under ${CONTROL_ROOT}"
