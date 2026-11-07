@@ -68,3 +68,16 @@ python3 tests/test-custom-product-live-e2e.py \
 - **依赖与证据边界**：Common、Order、Trade 的 SHA/认证、Gateway 注册、真实成交、A/B WAL 和自动 HA 仍是独立门禁，不以一个 PASS 替代所有阶段。
 
 本轮沒有修改 Common 协议、Order/Trade 的选主/复制实现，没有绕过授权签名或安全门禁，也没有宣称生产 HA GO。
+
+
+## 5. Robot/Tape 自动接入的真实预检与阻塞（T535 后续）
+
+为了向“新租户审批后 Robot 自动报价/Tape 点价”推进，本轮对隔离新 MySQL、Admin 与旧 Robot 镜像做了真实预检：
+
+- 新库 `dc_tenant_liquidity_bootstrap` 有 **6 条 `PENDING|CREATE_MAKER`** 的自动流动性任务，但 `dc_tenant_robot` **0 行**，说明自动审批只创建了待处理工作，并没有实际启动任何 Robot。
+- 新运行的 `otc-t529-fresh-adminsvr` 编译了 `TrialLiquidityBootstrapWorker`，但运行环境**没有** `TRIAL_LIQUIDITY_BOOTSTRAP_ENABLED` / `TRIAL_LIQUIDITY_MASTER_KEY`；源码 `poll()` 开头要求 `TRIAL_LIQUIDITY_BOOTSTRAP_ENABLED=true` 才执行；如果真正运行到 `CREATE_MAKER`，`makerPassword()` 还要求长度不少于 32 的稳定主密钥。
+- 已真实尝试在全新控制目录启动 `otc-t535-fresh-robotsvr-common`，以只读挂载将旧 `Common 3.0.16` 替换为已验收 SHA `b170df0dffd6d8cbeeb64ff3ac9865fe5a89aa803d49580bf0d78eae123801b2`；该候选**启动失败 exit 1**，日志明确 `ROBOT_GATEWAY_USER is required`，未运行/未报价，候选仅留作诊断。
+- 旧 Robot 环境还依赖 `ROBOT_GATEWAY_PASSWORD`、`ROBOT_RUNTIME_API_KEY`、`ROBOT_RUNTIME_API_SECRET` 等凭据。**不得将旧生产或原 T438 凭据复制到全新数据库来强行启动，也不得为了启动 Robot 直接向 MySQL 写伪造任务／用户。**
+- 原 `TrialLiquidityBootstrapWorker` 显式说明 `cashIn` 尚未具有完整请求级幂等；自动资金步骤遇到未知成功与超时要走原实现的 `FUND_IN_FLIGHT` 对账，**不能因为审批任务 Pending 就无脑重试入金**。
+
+当前 Robot/Tape 为 **NO-GO**。后续在独立测试环境为 Admin 安全提供稳定主密钥并显式启用合法 bootstrap，且为 Robot 提供该环境正式授权的 Gateway/Runtime 账户；按 `CREATE_MAKER → CREATE_KEY → FUND → ... → CREATE_ROBOT → ENABLE → VERIFY` 的真实任务步骤核查，不允许绕过资金风险控制。必须核实动态盘口、真实 Tape 成交、Order/Trade 资金和 Projection 后才能报告完成。
