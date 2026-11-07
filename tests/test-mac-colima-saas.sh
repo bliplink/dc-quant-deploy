@@ -32,4 +32,6 @@ python3 -m unittest discover -s "${SCRIPT_DIR}/tests" -p test_trial_robot_trade_
 python3 -m unittest discover -s "${SCRIPT_DIR}/tests" -p test_demo_full_market_readonly.py -q
 # T543: prevent heavy internal system ClickHouse MergeTree logs from OOM K-line.
 python3 -m unittest discover -s "${SCRIPT_DIR}/tests" -p test_clickhouse_internal_logs_profile.py -q
+# T543: verify latest K-line/default-live-market Web source on one-click.
+python3 -m unittest discover -s "${SCRIPT_DIR}/tests" -p test_trade_web_active_market_source.py -q
 printf '[test-mac-colima-saas] PASS\n'
