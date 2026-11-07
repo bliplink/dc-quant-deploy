@@ -708,6 +708,9 @@ log4j.async=true
 storePath=../../data/${node}
 enableSaveDBDemo=false
 allowMissingMarkPrice=${TRADE_ALLOW_MISSING_MARK_PRICE:-false}
+# Used by shared MDSvrClient. SINGLE has no Common MD partition census;
+# Multi-MD remains fenced by Common's actual READY primary assignment.
+md.cluster.enabled=${MD_CLUSTER_ENABLED}
 trade.executionDedupe.maxEntries=${TRADE_EXECUTION_DEDUPE_MAX_ENTRIES:-1000000}
 trade.node.businessEnabled=${business_enabled}
 trade.cluster.serviceName=SERVER.TradeSvr
@@ -802,6 +805,7 @@ fi
 cat > "${OVERRIDE_ROOT}/LiqSvr/config/application.properties" <<EOF
 tradeServerKey=SERVER.TradeSvr
 serverKey=SERVER.LiqSvr
+md.cluster.enabled=${MD_CLUSTER_ENABLED}
 log4j.file=./config/log4j.ini
 log4j.thread=1
 log4j.writeTime=true
