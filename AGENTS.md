@@ -26,6 +26,17 @@ Common/Order/Trade/MD 的 HA、资金、订单一致性必须独立验收，不�
 - **最新源码统一归档**：在 `saas-crypto` 研发基础上，可将当前已验证的各仓库最新源码分别提交并推送至其 `saas-crypto-latest` 分支；主仓统一记录各仓库 SHA、Common JAR SHA、构建镜像及 GO/NO-GO。不能把 Docker 运行产物、私钥、密码、数据卷、巨型临时目录提交进 Git；不得使用 GitHub Actions，除非用户明确要求。
 - **真实交付门禁**：镜像已构建/容器 UP 不代表新部署 PASS。必须核对实际自动审批、Robot 持续挂价、真实成交、MD 成交时间、Order/Trade A/B 自动切换和持久业务状态一致，结果未完成时如实标记 NO-GO。
 
+## Common / Order / Trade 部署防回归门禁（T534，强制）
+
+**每次新部署、新服务接 Common 或升级 Common，先阅读 [长期部署故障手册](docs/COMMON_ORDER_TRADE_DEPLOYMENT_RUNBOOK.zh-CN.md)**；不能仅看最近一轮 PASS 日志。
+
+- 一律由 `generate-saas-configs.sh` 针对**真实目标模式**生成 Gateway / 业务配置：单机就单机，A/B 就生成完整 A/B。生成器自动执行 `tests/preflight_saas_cluster_config.py`，检查节点 A/B、RegType、Partition LB、ZK 注册地址和端口；失败立即停止部署。
+- ZooKeeper 已经运行时，执行同一预检的 `--zk-container` 检查；Common 阶段配置存在时加 `--runtime-root` 检查 ZK、namespace 和节点端口。不允许把 `STANDBY` 单机发现目录误作 A/B 的 `ALL`。
+- Order/Trade/Projection 等消费者必须锁定**相同、已审核的 Common JAR SHA256**；发布前执行 `tests/check-common-jar-consumer-parity.sh`。只替换 Order/Trade 而忽略 Projection 不算完整升级。
+- APS 的 Colima host-network 执行 `tests/check-host-network-dns.sh`；DNS 通过不能代替外部 WebSocket 连接或真实行情收包，不得以 `subscribe active` 当成功报价。
+- 恢复顺序：Birth → 原始业务 Snapshot/WAL/Ledger 安装 → 双 Home RSA → E2 CAS → 业务 READY → Gateway；旧临时租约等待自然撤销，禁止伪造认证、跳步或混用旧资金/Projection。
+- **检查 PASS 只是部署预检**：真实租户审批、入金、订单成交、资金/持仓与 Projection、物理 ACK 和自动 A→B→A HA 必须独立证明。执行安全检查阻塞时保留 NO-GO，不能绕开。
+
 ## Common 升级连续性强制门禁（2026-11-06，T528）
 
 **先选择唯一模式，不得混用：** `UPGRADE`（保留旧数据，实际滚动升级）或 `FRESH`（开发环境全新业务数据源）。部署脚本、验收记录必须显式写明模式。不得将 `T398` 旧 MySQL/Projection/Robot 水位与 `T523` 全新 Common WAL/Snapshot 当作同一个可恢复的业务状态。
