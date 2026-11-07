@@ -923,6 +923,22 @@ gateway_routes_need_refresh() {
   return 1
 }
 
+cleanup_clickhouse_disabled_system_logs() {
+  # T543: These four ClickHouse *internal telemetry* streams are now disabled
+  # by config.d. Old MergeTree parts from prior installs keep merging after
+  # a restart and can OOM the small Demo before MD writes any K-line.
+  # No dc.* business table, query/error/part log, or filesystem log is touched.
+  local table
+  for table in metric_log asynchronous_metric_log trace_log text_log; do
+    if ! docker exec dc-saas-clickhouse sh -c \
+      'clickhouse-client --port "$SAAS_CLICKHOUSE_NATIVE_PORT" --user "$CLICKHOUSE_USER" --password "$CLICKHOUSE_PASSWORD" --query "$1"' \
+      -- "DROP TABLE IF EXISTS system.${table} SYNC"; then
+      die "ClickHouse internal system.${table} cleanup failed; refusing to start SaaS with K-line storage OOM risk."
+    fi
+  done
+  log "ClickHouse internal metric/trace/text MergeTree cleanup passed; tenant business/history and query/error logs preserved."
+}
+
 apply_mysql_migrations() {
   local migration
   local migrations=()
@@ -1042,6 +1058,7 @@ log "Starting isolated MySQL, ClickHouse, and ZooKeeper."
 compose_up -d mysql clickhouse zookeeper
 wait_for_health dc-saas-mysql 420
 wait_for_health dc-saas-clickhouse 420
+cleanup_clickhouse_disabled_system_logs
 wait_for_health dc-saas-zookeeper 120
   ensure_zookeeper_service_root
   ensure_order_cluster_assignments
