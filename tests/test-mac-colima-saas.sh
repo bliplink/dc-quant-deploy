@@ -34,4 +34,6 @@ python3 -m unittest discover -s "${SCRIPT_DIR}/tests" -p test_demo_full_market_r
 python3 -m unittest discover -s "${SCRIPT_DIR}/tests" -p test_clickhouse_internal_logs_profile.py -q
 # T543: verify latest K-line/default-live-market Web source on one-click.
 python3 -m unittest discover -s "${SCRIPT_DIR}/tests" -p test_trade_web_active_market_source.py -q
+# T543: enforce same dynamic Gateway port in public/tenant/platform/trade Web.
+python3 -m unittest discover -s "${SCRIPT_DIR}/tests" -p test_frontend_gateway_templates.py -q
 printf '[test-mac-colima-saas] PASS\n'
