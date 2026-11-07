@@ -29,5 +29,14 @@ class ClickhouseInternalLogsTests(unittest.TestCase):
         self.assertNotIn('DROP TABLE', CFG.read_text())
 
 
+    def test_one_click_cleans_only_disabled_internal_logs_after_health(self):
+        source = (ROOT / 'deploy-saas.sh').read_text()
+        self.assertIn('cleanup_clickhouse_disabled_system_logs() {', source)
+        self.assertIn('wait_for_health dc-saas-clickhouse 420\\ncleanup_clickhouse_disabled_system_logs', source)
+        self.assertIn('DROP TABLE IF EXISTS system.${table} SYNC', source)
+        self.assertIn('for table in metric_log asynchronous_metric_log trace_log text_log;', source)
+        self.assertNotIn('DROP TABLE dc.', source)
+
+
 if __name__ == '__main__':
     unittest.main()
