@@ -29,6 +29,19 @@
 | D11 | Demo A/B 切换 PASS，替换成 Order/Trade 却不工作 | 跨服务恢复接口/Bean、业务原始 Snapshot 和配置接线可能未接入，而不是 Common HA 已通过即可自动证明所有 Spring 服务可运行 | **先在 Demo+Common 验证协议，再确保 Order/Trade 只实现 Common SPI；真实 Spring、Gateway 和业务数据链路单独验收**。不在业务服务内重写集群功能。 |
 | D12 | 两节点各自 256 个 `business.wal` 文件就宣称复制和 HA 通过 | WAL 文件存在不等于存在真实客户端写入、对端持久化 ACK、自动主切 | 必须在实际写入时验证双节点原始 WAL/CommitIndex/ACK，SIGKILL 主节点、自动接管、旧主隔离、恢复追平、反向切换和业务最终一致性。STRICT 与 LOCAL 保障必须区分说明。 |
 
+## T535 补充：单机 MD、Broker CUSTOM 与真实成交验证（2026-11-07）
+
+| 编号 | 真实故障或验证盲点 | 根因与证据 | 强制预防 |
+| --- | --- | --- | --- |
+| D13 | Broker 的价格 `ACCEPTED`，但 `MDSvr.queryPublicMarket` 返回 `9000 INTERNAL_ERROR` | Gateway `SaasGWProxy.publicMdTarget` 将**单机** `MDSvr` 当成**多节点 MD**，要求 Multi-MD 认证分区 Primary 和 Epoch，新部署根本没有该类分区 | 发布时必须按 `MD_CLUSTER_ENABLED` 生成 Spring `mdClusterEnabled`；单机只走 `SERVER.MDSvr`，Multi-MD 保留 Common 认证分区路径；新 `preflight_saas_cluster_config.py` 检查 XML/ENV 一致。旧配置未声明时 Gateway 默认严格 Multi-MD。8 项 Java 路由单测及 9 项部署门禁通过。 |
+| D14 | Broker 签名通过却无法自定义报价；APS 外网疯狂重连 | 新 APS `broker.price.publish.enabled` 默认 OFF，且 Binance 外部 HTTPS/WS 物理不可达 | 仅在明确隔离的 Broker CUSTOM E2E 环境按项目原有鉴权允许启用并关闭无效外部订阅；验证真实 APS→MD `90001` 回读、TTL/源绑定。**禁止把自定义测试价格当生产实时报价**；正式环境保留自定义报价的权限审计和默认安全配置。 |
+| D15 | 两笔订单已经 `Filled`，E2E 却报 `Read-only MySQL verification unavailable` | 原脚本硬编码旧容器 `dc-saas-mysql`，新独立数据库为 `otc-t529-fresh-mysql` | 使用 `OTC_E2E_MYSQL_CONTAINER`、`MYSQL_USERNAME`、`MYSQL_PASSWORD` 明确真实数据库代际，仅执行 SELECT、不能打印凭据；数据库查询异常不等价于撮合失败，先以业务接口和真实 WAL 查根因。 |
+| D16 | 成交回归 PASS，清理阶段 `cancelAllOrder` 报 `ORDER_COMMON_DURABLE_BATCH_NOT_CONNECTED` | `OrderStateJournal.beginSynchronousBatch` 当前为显式 fail-closed，批量撤单尚未接入业务预提交 Common SPI | 标记 **cancelAll 持久化 NO-GO**，不得删除抛错或先修改订单再补 WAL；必须单独测试真实未成交订单的撤单/资金释放/原始 WAL 与 Projection。成交 PASS **不能**替代撤单 PASS。 |
+| D17 | Trade 日志仍报 `MDSvr partition is not routable: Pxxx` | 通用 `MDSvrClient.mdPrimary` 对单机 MD 仍使用 Multi-MD 分区读法；**Gateway 公开行情的单机修复不等于 Trade 内部 MD 客户端已修** | 在通用 MD 客户端的模式接线中修复，不能在 Trade 新建自己的 HA 或降低 Multi-MD 旧主隔离。发布前检查标记价订阅/交易价格/清算价的真实同租户数据。 |
+| D18 | 误把 512 分区 WAL SHA 一致叫做自动 HA | T535 实测 Order 256 对、Trade 256 对 `business.wal` 字节一致；其中有真实成交后的非空 WAL，但运行配置仍 `automaticRecovery=false` | 仅作为真实持续数据一致性的静态证据。A→B→A SIGKILL、重启追平、客户端返回前物理 ACK、旧主撤权和单节点 LOCAL 合同必须单独验收。 |
+
+最新可核验业务 E2E：隔离新租户 `J4BMAH`、`RU7WZO`，Broker 签名自定义价格 `90001` 经 APS→MD，Maker/Taker 各入金 1,000 USDT，对手限价挂单 `Filled` × 2，Execution × 2，资金持仓读回和 MySQL Projection 检查 PASS；在最新 GitHub Gateway 源码生成镜像复测成功。详见 [T535 真实交易及剩余安全门禁](T535_FRESH_BROKER_CUSTOM_TRADE_AND_SINGLE_MD_ROUTE_20261107.zh-CN.md)。**自动 HA、批量撤单、外部 Binance 实时数据仍 NO-GO。**
+
 ## 三、部署前必须执行的检查（可复制）
 
 按 **目标模式**准备 `ENV`、`DEPLOY_ROOT`，不要把真实账号、MySQL 密码、RSA 私钥打印到日志或提交到仓库。
