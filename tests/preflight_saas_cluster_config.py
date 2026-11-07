@@ -10,6 +10,7 @@ import re
 import subprocess
 import sys
 from pathlib import Path
+from xml.etree import ElementTree as ET
 
 
 def read_properties(path):
@@ -124,6 +125,27 @@ def check_static(env, conf, runtime_root=None):
     return issues
 
 
+def check_gateway_md_mode(env, control_dir):
+    """Require XML to agree with declared MD topology, not default silently."""
+    xml = Path(control_dir) / "overrides" / "GW" / "config" / "spring-gw-client.xml"
+    if not xml.is_file():
+        return ["MISSING_GATEWAY_MODE_CONFIG"]
+    root = ET.parse(str(xml)).getroot()
+    ns = "{http://www.springframework.org/schema/beans}"
+    bean = root.find(ns + "bean[@id='proxy']")
+    if bean is None:
+        return ["MISSING_GATEWAY_PROXY_BEAN"]
+    values = [prop.get("value") for prop in bean.findall(ns + "property")
+              if prop.get("name") == "mdClusterEnabled"]
+    expected = env.get("MD_CLUSTER_ENABLED", "false").lower()
+    if expected not in ("true", "false"):
+        return ["INVALID_MD_CLUSTER_MODE"]
+    if values != [expected]:
+        return ["GATEWAY_MD_MODE_MISMATCH:expected_" + expected +
+                ":observed_" + (",".join(str(x) for x in values) or "MISSING")]
+    return []
+
+
 def check_zk_types(zk_container, cli, zk_addr, env):
     if not re.fullmatch(r"[a-zA-Z0-9_.-]+", zk_container):
         raise ValueError("INVALID_ZK_CONTAINER")
@@ -163,6 +185,7 @@ def main():
         env = read_properties(args.env)
         config = read_properties(Path(args.control_dir) / "ATSConfig.ini")
         issues = check_static(env, config, args.runtime_root)
+        issues.extend(check_gateway_md_mode(env, args.control_dir))
         if args.zk_container:
             issues.extend(check_zk_types(
                 args.zk_container, args.zk_cli,
