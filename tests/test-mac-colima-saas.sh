@@ -17,4 +17,6 @@ grep -Fq '.default-e2e-credentials.txt' "${TARGET}" || fail "wrapper must surfac
 if grep -Eq 'pkill|killall|open -a v2ray|docker restart' "${TARGET}"; then
   fail "Mac wrapper must not manage v2ray/xray or restart Docker"
 fi
+# Mac one-click must reject mixed Common JARs before touching containers.
+/bin/bash "${SCRIPT_DIR}/tests/test-deploy-common-image-parity.sh"
 printf '[test-mac-colima-saas] PASS\n'
