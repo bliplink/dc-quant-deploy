@@ -42,3 +42,6 @@ recovery/test_runs_clustering.py text eol=lf
 recovery/verify_runs_clustering.py text eol=lf
 recovery/strategy_research_runs_clustering_protocol_20261111.json text eol=lf
 recovery/snapshots/runs-clustering-research-start-20261111.json text eol=lf
+recovery/run_runs_clustering_batch.py text eol=lf
+recovery/test_runs_clustering_batch.py text eol=lf
+recovery/snapshots/runs-clustering-formal-readiness-20261111.json text eol=lf
