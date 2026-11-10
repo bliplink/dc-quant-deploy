@@ -52,18 +52,23 @@ def require_parent_complete(parent):
         raise ValueError('parent must genuinely finish400, not disappear or fail')
 
 
-def run_case(args, row, manifest_hash, ready, protocol, cp, parity_cp, proof_records):
+def run_case(args, row, manifest_hash, ready, protocol, cp, parity_cp, proof_records,
+             *, export_source=None, scope_fields=None):
     output = args.output_dir / 'candidates' / row['strategy']
     if (output / 'checkpoint.json').exists():
         saved = completed_case(output, manifest_hash)
-        if any(saved[k] != row[k] for k in ('strategy', 'symbol', 'scene', 'hypothesis', 'family', 'mechanism_group', 'mode', 'side')):
+        fields = scope_fields or ('strategy', 'symbol', 'scene', 'hypothesis', 'family', 'mechanism_group', 'mode', 'side')
+        if any(saved[k] != row[k] for k in fields):
             raise ValueError('completed source scope/event changed')
         return saved
     if output.exists():
         raise ValueError('partial attempt: diagnose without replay: ' + str(output))
     output.mkdir(parents=True)
-    frozen, item, _ = export_candidate(args.indsvr_repo, args.output_dir / 'frozen',
-        row['symbol'], row['scene'], row['side'], row['mode'])
+    if export_source is None:
+        frozen, item, _ = export_candidate(args.indsvr_repo, args.output_dir / 'frozen',
+            row['symbol'], row['scene'], row['side'], row['mode'])
+    else:
+        frozen, item, _ = export_source(args, row)
     source = frozen / 'GeneratedStrategy.java'
     original = proof_records.get(row['strategy']) if row['symbol'] == 'BTCUSDT' and row['scene'] == 'trend' else None
     if original:
