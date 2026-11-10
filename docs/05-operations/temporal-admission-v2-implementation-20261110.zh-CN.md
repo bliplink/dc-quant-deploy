@@ -69,3 +69,25 @@ BTC趋势回调空头亦未过必要验证门槛，扣费验证-976.880222，证
 队列目录`strategy-fit-risk-balanced-scope-20261110`；后台编排PID4332，日志`strategy-fit-risk-balanced-scope-launch-20261110`。每项先有四档训练合同，再跑validation-only；主期未过则不调用新留出。若出现异常/半完成金融标记，整批停止并保留证据，禁止自动覆盖重试。已经完成的BTC多头失败通过原manifest和结果哈希复用，不重复看前瞻。该编排完全本地，无发布/模型接口；合格项必须由后续审阅阶段处理，不能放任数量触发实盘。
 
 源码工程检查PID7012，截至19:37完成38/400；原旧协议研究PID21108完成188/245。115项Python测试全通过，9组训练期实际选参/交易对照已通过，Java CLI编译通过。记录的运行PID和计数只代表这个时间点；换会话必须先核对进程、status.json与FAILED标记，不推断进程仍存活，不重跑已消费金融失败。生产最新已核实库存仍是18:10审计的ACTIVE4/runtime-qualified4（仅2条同时达到单项前瞻贡献门槛），缺96；没有新策略上线。
+
+## 19:57 接续：三条新补充留出均失败，核清未注册版本
+
+原冻结245项又出现三条旧协议通过者，均使用原始完全固定源、显式锁定空参数，仅做新2025-10-13～12-13的62天重放；原主期未重跑、原额外留出未重跑、源参数未改。三条均未通过：
+
+| SOL/range固定源 | 新留出笔数 | PF | 扣费留出PnL |
+| --- | ---: | ---: | ---: |
+| `catalog_solusdt_range_383b0b4a3d9c`，MedianMAD确认 | 40 | 0.429943 | -2316.37308183 |
+| `catalog_solusdt_range_1dde52f3736a`，MedianMAD重入 | 26 | 0.359133 | -1766.99284415 |
+| `catalog_solusdt_range_1378d9afcc2a`，Hull趋势回调 | 31 | 0.489147 | -1407.57391336 |
+
+分别保存到`strategy-temporal-supplement-sol-median-mad-20261110`、`strategy-temporal-supplement-sol-median-mad-reentry-20261110`、`strategy-temporal-supplement-sol-hull-pullback-20261110`。以上是初始10000模型单位的回测，不是新增实盘损失。两个MedianMAD变体在原17:50冻结清单中均已存在，重入变体的主回测在第一次SOL新留出前已结束；Hull源亦早已冻结，由未改动的旧批次独立产生原主期结果，没有依据新留出改阈值。两个MedianMAD仍应按同一位移回归机制保守去重，不能因触发阈值和类名不同就当作独立机制。连同此前ETH Aroon，4条旧通过源的新分离留出全部失败，0导入/0发布。
+
+19:49:01北京时间经126已知host key只读复核，`strategy-live-inventory-20261110-1949/summary.json`：ACTIVE=4、当前运行资格=4、另过前瞻贡献单项=2，缺96。未注册但满足部分历史门槛的版本行8条，其中前瞻贡献通过3条；不是8个或3个新策略。
+
+后3条均为`research_r33_uni_median_true_range_edge_fade_short`的v3/v6/v7。读取准确`java_source_path`并在运行容器内核验SHA，再只规范化package版本声明，证明v3/v5/v6/v7其余源码逐字相同：规范化SHA256=`b1e9d1141b211d166d91f5a69d30d8dfdd03e27f40c9d645f50314d271c9eeb0`，logicFingerprint均`282d6469b28dd8b4ed04a0f44f60ac33b709a2c3c93808a39adf307fdfe7ee3f`。源码副本及完整JSON保存在私有`strategy-unregistered-uni-audit-20261110`，不提交公开库。
+
+真实SUCCESS终态的原发布决定：v3 `validate score not better than active baseline`，v6/v7 `forward_score not better than active baseline`；不是“服务器漏发”。曾发布的v5在2026-11-10新复核（2025-11-09～2026-11-09）43笔、PF1.73191，但扣费前瞻-346.40719、OOS=0，已是OFFLINE。不得拿同源旧窗口的v3/v6/v7较好成绩恢复、凑数或绕过原基线比较。没有修改实盘注册行、交易/仓位/风控或触发新的服务端代码生成。
+
+读取带中文任务payload的私有证据要明确UTF-8；Windows PowerShell默认编码会让ConvertFrom-Json报假性的坏JSON，Python UTF-8解析验证原件正常。不要因此重写原始任务或金融文件。
+
+19:56快照：旧批次205/245，旧通过4、新分离通过0；平衡队列15/400、新通过0；源码工程检查至少84/400。三个主进程已重新确认存活，后续依真实状态继续，不重复失败窗口。目标仍未完成。
