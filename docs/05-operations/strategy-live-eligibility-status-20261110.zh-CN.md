@@ -37,3 +37,15 @@ python -m recovery.reconcile_live_strategy_eligibility --output-dir <同一目�
 本次证据目录：`E:\sourcecode\codex\_work\strategy-live-eligibility-offline-20261110`。最终结果以其 `summary.json`、`after/runtime-audit.json` 和 `after/ui-active-list.json` 为准；计划冻结或接口修复完成均不等于生产下线完成。
 
 补充策略回测在独立进程继续，不因下线把候选或失败版本计作新实盘策略。完成目标仍为 100 条真正合格、逻辑独立的实盘库存。
+
+## 生产完成结果
+
+2026-11-10 **03:56:41 UTC（北京时间 11:56:41）** 执行结束：96/96 条正式下线；数据库 ACTIVE=4、运行资格通过=4、ACTIVE 中不合格=0、Web 实盘列表 API 的 ACTIVE total=4。所有请求均返回 status-only，平仓信号合计为 0；没有直接数据库写入、撤单或强平。
+
+保留的当前合格版本为 `wb15_trend_t019_u70080@v2`（ADA/trend）、`lcr1_doge_ran_98a0e7e9@v1`（DOGE/range）、`lcr1_link_tre_66fbd6eb@v2`（LINK/trend）、`lcr1_xrp_ran_33d9206a@v1`（XRP/range）。资格通过不代表当前场景一定被选择，也不代表必然产生信号；仍需正常通过场景与交易风控。
+
+INDSvr `latest` 修复 revision：`b9204267fd0742f1aafd99a7d07dca9be26259da`。GitHub Actions 运行 `42752133367` 成功；服务器通过既有 `auto-update-service.sh indsvr` 更新，仅重建 INDSvr，运行镜像 revision 已核验，RestartCount=0、OOMKilled=false。Java 定向测试共 86 项通过（Workbench 76、Qualification 8、VersionGate 2），工具测试 6 项通过。
+
+当前真正合格库存缺口是 **96**，不是当天早晨快照的 95。原研究批次命名和冻结清单保持不变，后续以动态服务器库存核算，不篡改历史清单。
+
+本次是对已核实的历史 ACTIVE 存量做一次状态对齐，**没有新增周期性自动下线任务**。新版本的正式上线接口本身仍有资格检查；若未来复核再次令 ACTIVE 策略失去资格，仍需通过这套可审计的状态对齐流程处理，不能把本次清理描述成永久自动同步已实现。

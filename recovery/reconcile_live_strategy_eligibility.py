@@ -105,6 +105,8 @@ def main():
     directory = args.output_dir.resolve()
     directory.mkdir(parents=True, exist_ok=True)
     plan_path = directory / 'plan.json'
+    if not args.apply and plan_path.exists():
+        raise ValueError('existing frozen plan; use a new output directory without overwriting evidence')
     if args.apply:
         if not args.expected_plan_sha256 or not plan_path.exists():
             parser.error('--apply requires an existing plan and --expected-plan-sha256')
@@ -144,8 +146,6 @@ def main():
                     'retained': [row for row in rows if not confirmed_failure(row)],
                     'close_positions': False, 'direct_database_writes': False,
                     'target_reasons': dict(Counter(row['reason'] for row in targets))}
-            if plan_path.exists():
-                raise ValueError('existing frozen plan; use a new output directory')
             atomic_write_json(plan_path, plan)
             print(json.dumps({name: plan[name] for name in
                   ('active_before', 'qualified_before', 'target_count', 'target_reasons')}), flush=True)
