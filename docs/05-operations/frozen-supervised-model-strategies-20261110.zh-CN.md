@@ -37,3 +37,11 @@ Java源码直接嵌入系数和树，不加载在线模型服务。信号仍使�
 读取 `cycle-status.json`、`formal/status.json`、`formal/results.json` 和最终 `formal/cycle-summary.json` 获取最新状态。上传项必须含 `server/<strategy>/source-only-audit.json`，证明external_java及该版本LLM调用记录为0。
 
 总体目标仍为100条真实合格、逻辑独立的库存。不同模型类名、同一逻辑的多版本或训练方向不能自动算作独立实盘策略。总体接续见 [持续目标](strategy-inventory-100-active-goal-20261110.zh-CN.md)。
+
+## 本批最终结果
+
+北京时间14:23完成全部流程：800项预筛、14条正式/留出期回测，1条本地双重合格，即ETH/range `catalog_ethusdt_range_6e2b04b639d5@v1`。仅这一条被上传，服务器固定源码编译成功、回测任务正常结束，但财务资格未通过：16笔、PF=0.665722、扣费验证收益=-453.959597、扣费前瞻收益=-171.732095、OOS=0；没有发布，不得重调同一版本后再试相同前瞻。
+
+`source-only-audit.json`证明上传37,759字节、源码SHA与本地一致、provider=external、generationType=EXTERNAL_IMPORT、engine=external_java，该版本LLM调用数=0。最新库存快照2026-11-10 06:23:10 UTC仍是ACTIVE=4、合格=4、缺96。8108已结束，不能继续描述为运行中。
+
+研究远端独立分支 `codex/local-frozen-model-strategies-20261110`，提交 `61908c61b1ae81de9b10720d35f5466436a59bc9`；本地研究提交和远端文件的Git blob逐项校验一致。接续为 [执行路径模型批次](execution-path-model-strategies-20261110.zh-CN.md)，不是放宽本批失败条件。
