@@ -22,6 +22,7 @@
 - [当前补齐100条策略的持续目标与接续入口](05-operations/strategy-inventory-100-active-goal-20261110.zh-CN.md)：优先读这里确认真实合格库存、已结束批次和正在执行的工作；不调用服务端DeepSeek生成策略。
 - [ADX服务器拒绝结果与本地发布前门槛复核](05-operations/true-adx-server-admission-and-strict-floor-20261110.zh-CN.md)：区分原始通过标记、本地严格资格、服务器执行成功和正式发布；保留失败与精确源码/JAR证据。
 - [四档训练校验启动合并证明](05-operations/four-profile-launch-batching-20261110.zh-CN.md)：原校验器不改，8组32档训练对照一致；说明新作用域工具和在跑冻结队列的集成边界。
+- [完整目录检查点安全交接及启动合并实装](05-operations/full-catalog-batched-checkpoint-handoff-20261110.zh-CN.md)：115条原结果不重放，原完整队列接入2个隔离worker；新的实时入口、OS锁与guardian恢复约束。
 - [LINK均线回调策略本地通过及服务器拒绝记录](05-operations/fit-risk-link-server-admission-20261110.zh-CN.md)：固定源码一次导入、完整365日失败、0发布，以及确定package空白差异的只读产物审计。
 - [本地固定源码→回测→服务器验证工作流](05-operations/local-source-strategy-workflow-20261110.zh-CN.md)
 - [安全说明](05-operations/security.zh-CN.md)
