@@ -20,3 +20,6 @@ recovery/verify_cusum_drift.py text eol=lf
 recovery/test_cusum_drift.py text eol=lf
 recovery/strategy_research_cusum_drift_protocol_20261111.json text eol=lf
 recovery/snapshots/cusum-drift-engineering-20261111.json text eol=lf
+recovery/run_cusum_drift_batch.py text eol=lf
+recovery/test_cusum_drift_batch.py text eol=lf
+recovery/snapshots/cusum-drift-formal-queue-20261111.json text eol=lf
