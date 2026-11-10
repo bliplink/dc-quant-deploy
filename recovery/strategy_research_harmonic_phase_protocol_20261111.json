@@ -1,0 +1,43 @@
+{
+  "protocol_version": "temporal_source_research_v2",
+  "source_cohort": "harmonic_phase_v1",
+  "mechanism_group": "causal_harmonic_phase_projection",
+  "clock": "UTC",
+  "primary_begin": "2024-12-15",
+  "primary_end_inclusive": "2025-10-12",
+  "holdout_begin": "2025-10-13",
+  "holdout_end_inclusive": "2025-12-13",
+  "minimum_holdout_calendar_days": 62,
+  "minimum_primary_slices": 3,
+  "minimum_forward_contribution": "0.20",
+  "selection_mode": "fixed_source_no_parameter_grid",
+  "fixed_source_defaults": {
+    "warmupBars": 100,
+    "maximumVisibleBars": 200,
+    "returnWindow": 64,
+    "returns": "completed close log differences only; no future observations or training labels",
+    "frequencies": "integer bins2..8 over64 returns; select the greatest cosine/sine squared amplitude, strict greater comparison in ascending bin order",
+    "coefficients": "mean-center all64 returns, A=2/64 sum centeredReturn_j cos(2*pi*k*j/64), B=2/64 sum centeredReturn_j sin(2*pi*k*j/64)",
+    "energy": "full time-domain centered sum of squares, including energy in excluded frequencies; concentration=(64/2)*(A*A+B*B)/energy",
+    "minimumConcentration": 0.4,
+    "projectionBars": 8,
+    "projection": "sum A*cos(2*pi*k*(64+h)/64)+B*sin(2*pi*k*(64+h)/64), h=0..7; mean deliberately excluded",
+    "minimumProjectedLogReturn": 0.0024,
+    "trigger": "both adjacent windows must pass concentration, selected bin must match; first cross from side*previousProjection<0.0024 to side*currentProjection>=0.0024; no repeated entry while remaining over threshold",
+    "currentBar": "positive current volume; all visible OHLC finite valid and positive; volumes finite nonnegative",
+    "risk": "unchanged ATR14 stop1.5/take3; original explicit ATR20 EMS with firstStep at least0.5percent, positive step and valid under-trigger/under-target geometry",
+    "parameters": "none; deterministic frequency selection uses observed returns only, not financial optimization; two directions share one mechanism group"
+  },
+  "hypotheses": [
+    "hp1_harmonic_phase_long",
+    "hp1_harmonic_phase_short"
+  ],
+  "directions_are_not_independent_mechanisms": true,
+  "holdout_parameter_policy": "frozen_pre_holdout_representative",
+  "holdout_locked_parameters": {},
+  "holdout_optimizer_invocations": 0,
+  "holdout_fit_invocations": 0,
+  "research_caveat": "Causal harmonic projection is an explicitly predeclared OHLCV trading feature, not evidence that a market is periodic, a statistical confidence interval, a guarantee of profitability or economic independence. Frequency selection and overlapping windows remain model-selection risk. Do not retune after inspecting forward/holdout. Current active peer source/signal review remains mandatory before promotion.",
+  "server_codegen_allowed": false,
+  "production_write": false
+}
