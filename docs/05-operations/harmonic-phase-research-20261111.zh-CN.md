@@ -1,4 +1,10 @@
-# 固定谐波相位 OHLCV 研究：工程验证已启动，尚未通过
+# 固定谐波相位 OHLCV 研究：零信号覆盖拒绝，工程已停止
+
+## 最新终态：2026-11-11 06:54，北京时间
+
+**本版本工程未通过，19572已结束，不要按下面历史启动/准备记录重启。** 实际Java编译、16数学测试（含64独立OHLC）与首份原source validator通过；首BTC长向2023全年35040根对照却是researchSignals=0/exportedSignals=0/mismatches=0，原非零覆盖要求正常拒绝。失败marker SHA `d60ac0d1cc66089f204e32284298fe75af2a931532e79b37d9c3622d3a620378`，parity日志 `ed659b379279d0807ac8d54c0194abdbed9fae7679a97ea53f9a19a2f5ec2e08`，数学日志 `709d50f6d4a947ae7d51498d3b7b284bcf6dde4162c17e1f98d9a4592c074f64`。1753关键文件事后哈希未变，属于真实零信号覆盖拒绝，不是编译错误或可声称全量等价的通过。
+
+另一方向/完整至少188 Java回归未执行，SOURCE_CONTRACT_COMPLETE不存在，实际formal验证也正确拒绝FAILED；没有formal进程/目录/金融回放/上传。这里只观测了BTC长向训练年，不能泛称10品种全部无信号。保留原规则和失败，不降低集中度、投影或覆盖要求来制造通过。本次策略未进入金融，不算金融亏损，也不能算可上线。新终态摘要 `recovery/snapshots/harmonic-phase-engineering-rejection-20261111.json`；历史research-start/readiness快照保持不变。
 
 最新06:41准备接续见[谐波正式执行链](harmonic-phase-formal-pipeline-20261111.zh-CN.md)：新树13控制/完整305 Python通过、原字节协议视图与精确24444父绑定已准备；真实预检拒绝尚未完成的工程，没有启动formal。以下06:34状态保留为历史观察，不能据此重复启动19572。
 

@@ -1,0 +1,50 @@
+{
+  "schema": "harmonic_phase_engineering_terminal_v1",
+  "observed_utc": "2026-11-10T22:54:15.422960+00:00",
+  "owner_pid": 19572,
+  "owner_create_time": 1794349879.7879152,
+  "module": "recovery.verify_harmonic_phase",
+  "owner_ended": true,
+  "manifest_sha256": "dae9f979f1293804d39b737c8f01ae0318552dfce77f308f5a310ffae6a540c2",
+  "failed": {
+    "completed": 0,
+    "error": "actual nonzero35040-bar signal/risk/exit source parity required",
+    "production_write": false
+  },
+  "files_sha256": {
+    "FAILED.json": "d60ac0d1cc66089f204e32284298fe75af2a931532e79b37d9c3622d3a620378",
+    "mathematics-tests.log": "709d50f6d4a947ae7d51498d3b7b284bcf6dde4162c17e1f98d9a4592c074f64",
+    "compile.log": "033f79d7df727efe3deb2d134f915ff78b47dd23311a7c3f511870566b56bb94",
+    "catalog_btcusdt_trend_84e2c4ebbb30-parity.log": "ed659b379279d0807ac8d54c0194abdbed9fae7679a97ea53f9a19a2f5ec2e08",
+    "catalog_btcusdt_trend_84e2c4ebbb30-source.log": "c980d06b4f6e891909e64c2b788d0c462c181c9297be218ca565393036349189",
+    "GeneratedStrategy.java": "3d69b74eaef146b8d3d0ea798407db0d24e43cf7e2ee92b0a8c82425897af3df",
+    "strategy.jar": "2effd82874102d7ad3769ead06ac1f6de20a47718da3ead398e6d5a6d6954c1c"
+  },
+  "mathematics_tests_passed": 16,
+  "mathematics_seconds": 0.863,
+  "independent_raw_ohlc_fixtures": 64,
+  "source_validator_passed": true,
+  "full_year": {
+    "symbol": "BTCUSDT",
+    "direction": 1,
+    "begin": "2023-01-01",
+    "end": "2023-12-31",
+    "bars": 35040,
+    "research_signals": 0,
+    "exported_signals": 0,
+    "mismatches": 0,
+    "nonzero_coverage": false
+  },
+  "generated_direction_contracts_completed": 0,
+  "total_generated_direction_contracts_required": 2,
+  "minimum_java_regressions_required": 188,
+  "full_java_regressions_executed": false,
+  "source_contract_complete_exists": false,
+  "source_and_tool_critical_files_unchanged": 1753,
+  "actual_formal_preflight_rejected_failed_engineering": true,
+  "formal_output_exists": false,
+  "formal_started": false,
+  "financial_validation_started": false,
+  "production_write": false,
+  "goal_complete": false
+}
