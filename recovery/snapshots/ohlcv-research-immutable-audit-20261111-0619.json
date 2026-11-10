@@ -1,0 +1,46 @@
+{
+  "schema": "immutable_ohlcv_completed_case_audit_v1",
+  "observed_utc": "2026-11-10T22:19:22.900091+00:00",
+  "financial_replays": 0,
+  "production_write": false,
+  "initial_probe_failure": "path comparison used unnormalized Windows output path; assertion failed before reading financial results; normalized both paths only",
+  "batches": [
+    {
+      "root": "strategy-directional-clock-parallel-formal-20261111",
+      "owner_pid": 23812,
+      "owner_create_time": 1794337323.3252933,
+      "module": "recovery.run_directional_clock_parallel",
+      "manifest_sha256": "f2a7ee61d8ca590bd596cc89ef163c6af1487147a9ed6a25d16b3942ef373f16",
+      "audited_completed": 92,
+      "queue_total": 100,
+      "qualified": [],
+      "rejections": {
+        "oos_not_passed": 83,
+        "too_few_trades": 8,
+        "fee_adjusted_forward_not_positive": 1
+      },
+      "completed_checkpoint_set_sha256": "08909ceddf9c16c970612b552aeb2f2ba058b9487cf7229a7922e2fef8043ef2",
+      "source_artifact_seed_financial_hashes_verified": true,
+      "exact_scope_membership_verified": true,
+      "live_owner_reverified": true
+    },
+    {
+      "root": "strategy-ohlcv-profile-formal-20261111",
+      "owner_pid": 20660,
+      "owner_create_time": 1794330108.9962358,
+      "module": "recovery.run_ohlcv_profile_proxy_batch",
+      "manifest_sha256": "cce5da0df561e347ab2062810e48326cbab16879d630a64cfaa68c43fb4c8af0",
+      "audited_completed": 137,
+      "queue_total": 200,
+      "qualified": [],
+      "rejections": {
+        "oos_not_passed": 127,
+        "too_few_trades": 10
+      },
+      "completed_checkpoint_set_sha256": "4e16057d2d2b7be82018d9e7b9346c60615152306015f13b7ee16ee16b6181d7",
+      "source_artifact_seed_financial_hashes_verified": true,
+      "exact_scope_membership_verified": true,
+      "live_owner_reverified": true
+    }
+  ]
+}
