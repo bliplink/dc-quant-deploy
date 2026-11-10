@@ -36,3 +36,17 @@ PID12040于2026-11-10 21:38:37启动，输出`strategy-fit-risk-full-catalog-202
 换会话先查12040、22576、8676、4332的实际进程身份及小型status/FAILED/完成标记。不要读取/输出仍频繁原子替换的大型status或results；采用静态已完成单项证据，避免Windows读句柄阻断写入。不能为了恢复操作而修改已冻结脚本/协议/市场数据。任何金融通过或失败必须沿用原结果，不能因接续而再次挑参数。
 
 最近生产只读核验仍为20:36的ACTIVE/运行资格4，另过前瞻贡献单项2，缺96；本扩展尚无金融通过或生产发布，不可将队列规模当作完成目标。
+
+## 21:53真实接续：400证明已完成，首项金融已执行
+
+22576已在最后两份SessionRangeBreakout检查后正常结束；`SOURCE_CONTRACT_COMPLETE.json`确认400/400、1600档，SHA256=`f9a3c54568d79bfb5e0c9bdd2e4e5b91f602ba79795428cf4b35a00bd1db59d4`。8档零信号来自`fr1_scene_wick_reversal_long_s8_t15`及short两个方向（各四档），不是1600档都有信号；其余398方向有训练信号。零信号不得冒充实际覆盖或金融资格。
+
+12040自动通过全部冻结源码/JAR/合同复核，生成`engineering-proof.json`，SHA256=`8cc99360bc6fcf84adde06eabc0dd490af4f1507d9b0326b7c9f3f3081694481`，已进入RUNNING。首项`catalog_adausdt_range_06e7f562e709`（ADA/range、四档fit选择的回调空头）实际完成50笔验证交易、PF1.044731、DD0.049586、扣费验证-306.205112、代表riskProfile=2；原必要门槛未过，因此forward/full-period仍WITHHELD，未创建PRIMARY_STARTED或HOLDOUT_STARTED。
+
+该源SHA256=`9ba2f610e2c0ad8e97886d474489e304ec38ce49b236c8a34cf9cf5b2151daab`；validation.json SHA256=`f4e3ea5d7c2c3b38064999b68ffca16c7051d2c0358de80de7f13654c509b4d7`，FORMAL_COMPLETE SHA256=`cf69115a8576e0fa9dc9e309444405a0795bc99301caa10004d254b94cf434a5`。实际目录`admissions/catalog_adausdt_range_06e7f562e709`；原`completed_observation`再次只读验证通过。不是只启动空编排器，也不是看到验证失败后再执行留出。0新增合格/0发布，剩余队列继续，原金融8676/4332仍独立执行。
+
+## 零信号定位出的独立源码语义缺陷：下一步隔离修复
+
+仅追踪训练零信号及源逻辑，未查看这两个方向的金融绩效。冻结源`StrategyResearchBatchCli.java:5354`中`SceneWickReversalHypothesis`多头要求lowerWick/range≥0.45同时closeLocation≤0.45；由于min(open,close)≤close，必有lowerWick/range≤closeLocation，故条件只剩等式边界。空头要求upperWick/range≥0.45、closeLocation≥0.55，同理upperWick/range≤1-closeLocation≤0.45，也只剩等式边界（浮点实现还会有极小邻域）。这不是以金融表现为依据调参，而是可从有效OHLC几何直接推导的约束退化。
+
+下一步应在新隔离研究源码树中修复影线/收盘位置关系，先用手工合法OHLC反例、镜像/未来不变性和原validator及全年信号对照证明语义；再冻结新假设与参数后研究。此时尚未实施该修复，不能声称已有新策略；不得改当前2e82681/8bbac72研究源、400合同、12040计划或旧失败记录，也不能把修复版本及旧影线机制重复算作独立机制。原旧条件的金融作用域继续按已冻结计划留证，不据训练观察篡改在跑版本。
