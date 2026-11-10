@@ -45,3 +45,11 @@
 schema 为 `independent_mechanism_review_v1`，reviews 每项包含 strategy、source_sha256、symbol、scene、decision=APPROVE、mechanism_id、reviewer、rationale、active_peers 和 peer_comparisons。复核必须绑定本地通过的源 SHA/范围，明确比对该单元当前每一个 ACTIVE 合格版本（name@version）及其入场机制；同单元本批多个候选的同一 mechanism_id 最多一个进入导入。不能为增加数量给克隆任意起不同机制名。
 
 复核由当前本地开发会话在读完正式结果和固定源码后完成，不需要用户逐条操作；不能改已观察的参数。将真实复核写入该批 formal/semantic-review.json，再使用已验证冻结清单的 `--resume-from server_import_backtest_audit` 接续服务器阶段。生产财务发布门槛仍由服务器最终决定。语义审计进入 cycle-summary，不会把未复核候选计成已上线。
+
+17:51:56，51 项中第 20 项出现首条本地双重合格：`catalog_ethusdt_channel_4a0b9c87e1c5`（ETHUSDT/channel，中位数/MAD 偏离后确认反转）。固定源 SHA256=`2068f016b7f78fbe9be2d893f2f3151b09be677821dfc2068003086597c4a76e`。正式 49 笔、PF 1.435377、回撤 0.035281，扣费验证/前瞻 378.321290/275.189375，OOS=1；时序留出 22 笔、PF 1.266406、扣费仅 +0.2704879，余量很小，不是稳健盈利证明。源码与实际 median/MAD、ATR/退出辅助计算已阅读核对，当前该单元无 ACTIVE 同类；保守把分位数、MAD 和 z-score 偏离再入场视作同机制组，不靠估计器变化重复计数。已写本地 semantic-review.json，prepare-only 通过 1 条，尚未上传或发布。最终仍须服务器近期 365 天资格及发布审计，不能按此快照把实盘数量加一。
+
+## 未消费候选的自动接续
+
+`recovery/run_representative_reserve_cycle.py` 仅复用本批已完成验证排序，不重新筛选、调参或增加服务。必须等原 cycle_complete（包括服务器库存审计），核对 source/screen/formal 完成哈希、完整 51 项身份及全部失败记录，再以 prepare-only 重算原源码/类/输入冻结清单。随后调用既有 prepare_representative_reserve_queue，排除该单元已消费的整个源码类（含另一方向），把未消费类冻结到独立目录，正式 v4/时序留出后才进入原审核发布路径。源码机制复核仍强制，未复核候选只 deferred、不得上线。
+
+新增 4 项守卫测试，Python 全量 93 项通过。17:50:26 启动等待进程 21108，目录 `strategy-catalog-atr-exit-reserve-cycle-20261110`，等待原 21056 完整结束后接续；目前是 waiting_for_parent_audit，不是已经完成 reserve 或发现合格策略。若原批次失败，等待器会停止，不跳过错误；重启时省略已经退出的 wait-pid，原金融 checkpoint 包含失败且不得删除。接续数量以冻结后 shortlist.json 为准，不把 303-51 直接当作独立可用候选数量。
