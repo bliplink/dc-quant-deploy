@@ -34,6 +34,14 @@
 
 21:07快照24/200、0新合格/0发布/0错误，其余继续。源码及规则已消费金融结果，不能调参重试旧窗口。目标没有完成。
 
+### 21:22首条主期通过者的隔离留出拒绝
+
+批次已至少47/200，0新增全门槛合格。`catalog_bnbusdt_range_9f1c75a667dd`（基础ADX突破多、BNBUSDT/range）原v4主期通过：34笔、PF1.536316、DD0.023111、OOS=1、扣费验证245.376049、扣费前瞻97.509290。随后同源固定空参数`{}`执行2025-10-13～12-13留出，25笔、PF0.561118、DD0.098052、扣费Pnl=-844.71411228，`passed=false`、fit/optimizerInvocations均0。最终`separate_chronological_holdout_failed`，不得把主期通过当作新增策略，未上传/发布，不重调这条源后重测同一留出。
+
+证据目录`strategy-true-adx-formal-20261110/candidates/catalog_bnbusdt_range_9f1c75a667dd`；批次manifest SHA256=`965ed4ecd8f30ccbc0bab5681e78e67ac8780f1ae75eb8f54cc62bb00fe7f5e7`。源码SHA256=`af105d9d2d4e9cf265dc3a1528b5bd86c8d2397990bbc364c258f84df1b51f7c`；`primary.json`=`28c6423eb0459b22ff4de287b0ce08a144c0fcfb4b60e6fd29cf76c05c4902ee`，`holdout.json`=`9b810457804d54663016256cfee0c61f34c1e55c8026a7097760634ad277bffd`，`local-pre-admission.json`=`3c56b477000987cc1cf8f7b11d61374d27bbdbd9a5ec887518d9a5306f934815`。检查点保存上述哈希，续接只校验复用，不重跑已消费观察。
+
+用户本次明确回复仍为仅现有OHLCV、不改服务架构；不采集资金费率/OI、不调用服务端生成。对应实现/协议已推送dc-quant-deploy latest `7099e700f3fef193907b26c79127bcd48b424cb7`，远端ref已只读核实。
+
 ## 旧批次完整收尾及另两线
 
 旧245项已结束：186 OOS、18 PF、15扣费前瞻、16前瞻贡献、4旧额外留出、1扣费验证未过，5旧通过；5条全分离留出均失败。21108/9876已退出，父FORMAL_COMPLETE、WATCH_COMPLETE、cycle_complete一致，不再报告在跑。20:36:38收尾服务器只读核实ACTIVE/运行资格仍4，另过前瞻贡献单项2，缺96，0新增发布。
