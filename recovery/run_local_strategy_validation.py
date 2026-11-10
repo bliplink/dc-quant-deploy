@@ -94,6 +94,8 @@ def main():
     parser.add_argument('--java-heap-mb', type=int, default=256)
     parser.add_argument('--protocol', type=Path,
                         help='Freeze the older-data validation window and READY input hashes')
+    parser.add_argument('--representative-catalog', action='store_true',
+                        help='One input-independent parameter set per signal class and direction')
     args = parser.parse_args()
     if not 64 <= args.java_heap_mb <= 1024:
         parser.error('--java-heap-mb must be between 64 and 1024')
@@ -121,7 +123,9 @@ def main():
                    '-Ddc.research.validationOnly=true',
                    '-Ddc.research.years=' + str(date.fromisoformat(args.end).year),
                    '-cp', args.classes,
-                   'com.app.dc.service.strategy.research.StrategyResearchBatchCli']
+                   ('com.app.dc.service.strategy.research.StrategyRepresentativeCatalogCli'
+                    if args.representative_catalog else
+                    'com.app.dc.service.strategy.research.StrategyResearchBatchCli')]
         completed = subprocess.run(command, capture_output=True, text=True, encoding='utf-8')
         if completed.returncode:
             raise RuntimeError(
@@ -146,6 +150,7 @@ def main():
         writer.writeheader()
         writer.writerows(passing)
     metadata = {'created_utc': datetime.now(timezone.utc).isoformat(timespec='seconds'),
+                'representative_catalog': args.representative_catalog,
                 'scene': args.scene, 'cohort': args.cohort, 'pattern': args.pattern,
                 'begin': args.begin, 'end': args.end, 'symbols': symbols,
                 'tested': len(all_rows), 'validation_pass': len(passing),

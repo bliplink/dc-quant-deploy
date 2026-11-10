@@ -306,6 +306,8 @@ def run_local_backtest(args, item, artifact, entry_class, work_dir, local_port, 
             "-Dtrainer.backtest.localResearchInputDir=" + str(args.local_research_input_dir),
             "-Dtrainer.backtest.localBarsSha256=" + args.local_input_hashes["bars_sha256"],
             "-Dtrainer.backtest.localScenesSha256=" + args.local_input_hashes["scenes_sha256"],
+            "-Dtrainer.backtest.localHoldoutBegin=" + json.loads(
+                args.older_protocol.read_text(encoding="utf-8"))["holdout_begin"],
         ]
     process = subprocess.run(java, cwd=str(work_dir), text=True)
     if process.returncode != 0:
