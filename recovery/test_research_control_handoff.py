@@ -10,11 +10,25 @@ from unittest.mock import Mock, patch
 
 import psutil
 
-from recovery.research_control_handoff import drain_and_stop, identity, require_local_research_parent
-from recovery.run_fit_risk_catalog_batch import read
+from recovery.research_control_handoff import drain_and_stop, identity, require_local_research_parent, read
 
 
 class ResearchControlHandoffTest(unittest.TestCase):
+    def test_only_transient_permission_reads_are_bounded_operational_retries(self):
+        with patch('recovery.research_control_handoff.raw_read', side_effect=[PermissionError(13, 'sharing'), {'phase': 'READY'}]) as source, \
+             patch('recovery.research_control_handoff.time.sleep'):
+            self.assertEqual({'phase': 'READY'}, read('metadata'))
+            self.assertEqual(2, source.call_count)
+        with patch('recovery.research_control_handoff.raw_read', side_effect=PermissionError(13, 'persistent')) as source, \
+             patch('recovery.research_control_handoff.time.sleep'):
+            with self.assertRaises(PermissionError): read('metadata')
+            self.assertEqual(8, source.call_count)
+
+    def test_corrupt_metadata_is_not_retried_or_substituted(self):
+        with patch('recovery.research_control_handoff.raw_read', side_effect=ValueError('corrupt')) as source:
+            with self.assertRaises(ValueError): read('metadata')
+            self.assertEqual(1, source.call_count)
+
     def test_only_exact_local_wrapper_identity_is_accepted(self):
         with patch('recovery.research_control_handoff.psutil.Process') as cls:
             process = cls.return_value

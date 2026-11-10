@@ -9,8 +9,19 @@ import time
 
 import psutil
 
-from recovery.run_fit_risk_catalog_batch import read, write_status
+from recovery.run_fit_risk_catalog_batch import read as raw_read, write_status
 from recovery.watch_fixed_primary_supplements import parent_alive
+
+
+def read(path):
+    """Bounded metadata I/O retry for transient Windows atomic-replace sharing locks."""
+    for attempt in range(8):
+        try:
+            return raw_read(path)
+        except PermissionError as error:
+            if (error.errno != 13 and getattr(error, 'winerror', None) not in (5, 32, 33)) or attempt == 7:
+                raise
+            time.sleep(.02 * (attempt + 1))
 
 
 def identity(process):

@@ -8,3 +8,4 @@
 *.ini text eol=lf
 *.dat text eol=lf
 .env* text eol=lf
+recovery/java/*.java text eol=lf
