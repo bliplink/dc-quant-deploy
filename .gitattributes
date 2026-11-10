@@ -58,3 +58,7 @@ recovery/snapshots/harmonic-phase-formal-readiness-20261111.json text eol=lf
 recovery/snapshots/harmonic-phase-engineering-rejection-20261111.json text eol=lf
 recovery/snapshots/fit-risk-median-ada-server-rejection-20261111.json text eol=lf
 recovery/snapshots/clock-complete-cusum-financial-start-20261111.json text eol=lf
+recovery/research_harmonic_response.py text eol=lf
+recovery/test_harmonic_response.py text eol=lf
+recovery/harmonic_response_training_protocol_20261111.json text eol=lf
+recovery/snapshots/harmonic-response-training-start-20261111.json text eol=lf
