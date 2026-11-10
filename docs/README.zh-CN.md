@@ -20,6 +20,7 @@
 - [实盘策略 v4 资格门槛与持续复核](05-operations/live-strategy-v4-qualification.zh-CN.md)
 - [100 条实盘策略补齐进度与研究交接](05-operations/strategy-inventory-100-progress-20261014.zh-CN.md)
 - [当前补齐100条策略的持续目标与接续入口](05-operations/strategy-inventory-100-active-goal-20261110.zh-CN.md)：优先读这里确认真实合格库存、已结束批次和正在执行的工作；不调用服务端DeepSeek生成策略。
+- [ADX服务器拒绝结果与本地发布前门槛复核](05-operations/true-adx-server-admission-and-strict-floor-20261110.zh-CN.md)：区分原始通过标记、本地严格资格、服务器执行成功和正式发布；保留失败与精确源码/JAR证据。
 - [本地固定源码→回测→服务器验证工作流](05-operations/local-source-strategy-workflow-20261110.zh-CN.md)
 - [安全说明](05-operations/security.zh-CN.md)
 

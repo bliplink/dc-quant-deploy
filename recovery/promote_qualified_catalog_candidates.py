@@ -28,6 +28,8 @@ from recovery.strategy_recovery_common import (
 from recovery.strategy_inventory_snapshot import query
 from recovery.run_local_historical_scene_campaign import write_json
 from recovery.temporal_admission_contract import require_temporally_isolated_admission
+from recovery.strict_primary_admission import adjudicate_primary, require_primary_admission
+from recovery.compiled_source_audit import compiled_artifact_audit
 
 
 def prior_submission(output_dir, name, request):
@@ -73,6 +75,7 @@ def promotion_request(record, formal_dir, end_date):
     if (item['symbol'] != record['symbol'] or item['scene'] != record['scene']
             or item['strategyName'] != record['strategy']):
         raise ValueError('frozen strategy scope changed')
+    require_primary_admission(result, item['request'].get('optimizationProfile'))
     request = dict(item['request'])
     request.update(strategyName=record['strategy'], scene=record['scene'],
                    symbol=record['symbol'], symbols=record['symbol'], text='15m',
@@ -167,6 +170,15 @@ def main():
     qualified = sorted((record for record in records if record['qualified']),
                        key=lambda item: (item['symbol'], item['scene'],
                                          -item.get('validation_net_bps', 0), item['strategy']))
+    strict_audits, admitted = [], []
+    for record in qualified:
+        envelope = json.loads(Path(record['result_path']).read_text(encoding='utf-8'))
+        seed = json.loads((args.formal_dir / 'frozen' / record['strategy'] / 'seed.json').read_text(encoding='utf-8'))
+        audit = adjudicate_primary(envelope['result'], seed['strategies'][0]['request'].get('optimizationProfile'))
+        strict_audits.append(dict(audit, strategy=record['strategy'], source_sha256=record['source_sha256']))
+        if audit['qualified']:
+            admitted.append(record)
+    qualified = admitted
     occupied, occupied_names, active_rows = Counter(), set(), []
     if args.inventory_snapshot:
         with args.inventory_snapshot.open(encoding='utf-8', newline='') as stream:
@@ -178,6 +190,9 @@ def main():
     if args.limit > 0:
         qualified = qualified[:args.limit]
     args.output_dir.mkdir(parents=True, exist_ok=True)
+    write_json(args.output_dir / 'strict-local-admission-audit.json', {
+        'minimum_forward_contribution': '0.20', 'audits': strict_audits,
+        'financial_outputs_modified': False, 'financial_replay_performed': False, 'production_write': False})
     if qualified and (args.require_semantic_review or any(
             record['family'].startswith(('CatalogAtrExit', 'FitOnlyRisk')) for record in qualified)):
         review_path = args.semantic_review or args.formal_dir / 'semantic-review.json'
@@ -294,8 +309,13 @@ def main():
                     calls = query(client, "SELECT count() AS count FROM dc.strategy_llm_call_log "
                                   "WHERE strategy_name='" + safe_name + "' AND strategy_version='"
                                   + safe_version + "' FORMAT JSONEachRow")[0]['count']
-                    write_json(destination / 'source-only-audit.json',
-                               source_only_execution_audit(status, request, calls))
+                    source_audit = source_only_execution_audit(status, request, calls)
+                    candidate = object_value(status.get('candidate'))
+                    if candidate.get('compile_status') == 'COMPILE_SUCCESS':
+                        source_audit.update(compiled_artifact_audit(client, candidate, request))
+                    else:
+                        source_audit['compiled_source_verified'] = False
+                    write_json(destination / 'source-only-audit.json', source_audit)
                     live = call_gateway(url, api_key, LIVE_LIST_TOPIC,
                                         {'strategyName': name, 'status': 'ACTIVE', 'pageSize': 20}, attempts=1)
                     write_json(destination / 'live.json', live)

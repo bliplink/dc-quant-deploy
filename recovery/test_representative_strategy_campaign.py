@@ -76,6 +76,9 @@ class RepresentativeCampaignTest(unittest.TestCase):
                         'sourceSha256': hashlib.sha256(source.read_bytes()).hexdigest(),
                         'result': {'qualified': True,
                                    'executionModelVersion': 'v4_non_overlapping_walk_forward',
+                                   'oosPass': 1, 'tradeCount': 25, 'profitFactor': 1.5, 'maxDrawdownPct': 0.05,
+                                   'feeAdjustedValidatePnl': 50, 'feeAdjustedForwardPnl': 25,
+                                   'totalPnl': 100, 'minForwardContribution': 0,
                                    'admissionSchema': 'local_temporal_holdout_v2',
                                    'beginDate': '2024-12-15', 'endDate': '2025-10-12',
                                    'selectedParameters': {}, 'bestParamSetJson': '{}',
@@ -105,6 +108,18 @@ class RepresentativeCampaignTest(unittest.TestCase):
             self.assertEqual(request['optimizationProfile']['backtestBeginDate'], '2025-11-10')
             self.assertEqual(request['optimizationProfile']['backtestEndDate'], '2026-11-09')
             self.assertIs(request['validationOnly'], False)
+            envelope['result']['feeAdjustedForwardPnl'] = 1
+            result.write_text(json.dumps(envelope), encoding='utf-8')
+            with self.assertRaisesRegex(ValueError, 'forward_contribution_too_low'):
+                promotion_request(record, root, date(2026, 11, 9))
+            envelope['result']['feeAdjustedForwardPnl'] = 25
+            result.write_text(json.dumps(envelope), encoding='utf-8')
+            seed['strategies'][0]['request']['optimizationProfile']['minForwardContribution'] = .30
+            (seed_dir / 'seed.json').write_text(json.dumps(seed), encoding='utf-8')
+            with self.assertRaisesRegex(ValueError, 'forward_contribution_too_low'):
+                promotion_request(record, root, date(2026, 11, 9))
+            seed['strategies'][0]['request']['optimizationProfile']['minForwardContribution'] = .20
+            (seed_dir / 'seed.json').write_text(json.dumps(seed), encoding='utf-8')
             envelope['result']['holdout']['passed'] = False
             result.write_text(json.dumps(envelope), encoding='utf-8')
             with self.assertRaisesRegex(ValueError, 'qualification'):
