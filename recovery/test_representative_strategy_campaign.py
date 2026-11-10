@@ -73,9 +73,24 @@ class RepresentativeCampaignTest(unittest.TestCase):
             source = root / 'GeneratedStrategy.java'
             source.write_text('class Frozen {}', encoding='utf-8')
             envelope = {'sourceFile': str(source), 'productionWrite': False,
+                        'sourceSha256': hashlib.sha256(source.read_bytes()).hexdigest(),
                         'result': {'qualified': True,
                                    'executionModelVersion': 'v4_non_overlapping_walk_forward',
-                                   'holdout': {'passed': True}}}
+                                   'admissionSchema': 'local_temporal_holdout_v2',
+                                   'beginDate': '2024-12-15', 'endDate': '2025-10-12',
+                                   'selectedParameters': {}, 'bestParamSetJson': '{}',
+                                   'sliceResults': [],
+                                   'holdout': {'passed': True, 'beginDate': '2025-10-13', 'endDate': '2025-12-13',
+                                       'lockedParameters': {}, 'parameterPolicy': 'frozen_pre_holdout_representative',
+                                       'sourceSha256': hashlib.sha256(source.read_bytes()).hexdigest(),
+                                       'optimizerInvocations': 0, 'fitInvocations': 0}}}
+            from datetime import timedelta
+            for index in range(3):
+                first = date(2024, 12, 15) + timedelta(days=44 * index)
+                envelope['result']['sliceResults'].append({'sliceNo': index + 1,
+                    **{phase + edge: str(first + timedelta(days=offset)) for phase, edge, offset in (
+                        ('fit', 'Begin', 0), ('fit', 'End', 119), ('validate', 'Begin', 120),
+                        ('validate', 'End', 149), ('forward', 'Begin', 150), ('forward', 'End', 163))}})
             result = root / 'result.json'
             result.write_text(json.dumps(envelope), encoding='utf-8')
             seed_dir = root / 'frozen' / 'candidate'

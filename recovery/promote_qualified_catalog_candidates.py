@@ -27,6 +27,7 @@ from recovery.strategy_recovery_common import (
 )
 from recovery.strategy_inventory_snapshot import query
 from recovery.run_local_historical_scene_campaign import write_json
+from recovery.temporal_admission_contract import require_temporally_isolated_admission
 
 
 def prior_submission(output_dir, name, request):
@@ -50,6 +51,8 @@ def prior_submission(output_dir, name, request):
 def promotion_request(record, formal_dir, end_date):
     envelope = json.loads(Path(record['result_path']).read_text(encoding='utf-8'))
     result = envelope['result']
+    require_temporally_isolated_admission(envelope,
+        require_risk_profile=record['family'].startswith('FitOnlyRisk'))
     if (not record['qualified'] or not result['qualified']
             or result.get('executionModelVersion') != 'v4_non_overlapping_walk_forward'
             or (result.get('holdout') or {}).get('passed') is not True
@@ -59,6 +62,8 @@ def promotion_request(record, formal_dir, end_date):
     source_hash = hashlib.sha256(source.encode('utf-8')).hexdigest()
     if source_hash != record['source_sha256']:
         raise ValueError('frozen candidate source changed')
+    if envelope['sourceSha256'] != source_hash:
+        raise ValueError('temporal holdout source attestation does not match compiled candidate source')
     # INDSvr's established source validator requires these exact argument names.
     # This is an identifier-only transform; retain the original local source hash.
     source = re.sub(r'\bkline\b', 'newKline', source)

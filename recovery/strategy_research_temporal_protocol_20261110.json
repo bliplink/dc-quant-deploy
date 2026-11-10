@@ -1,0 +1,22 @@
+{
+  "protocol_version": "temporal_source_research_v2",
+  "source_cohort": "fit_only_risk_v1",
+  "clock": "UTC",
+  "primary_begin": "2024-12-15",
+  "primary_end_inclusive": "2025-10-12",
+  "holdout_begin": "2025-10-13",
+  "holdout_end_inclusive": "2025-12-13",
+  "minimum_holdout_calendar_days": 62,
+  "minimum_primary_slices": 3,
+  "selection_mode": "fit_only_four_joint_risk_profiles_then_validation_ranking",
+  "fit_objective": "FEE_ADJUSTED_PROFIT_FIRST",
+  "risk_profiles": [0, 1, 2, 3],
+  "holdout_parameter_policy": "frozen_pre_holdout_representative",
+  "holdout_optimizer_invocations": 0,
+  "holdout_fit_invocations": 0,
+  "bar_extension_source": "read_only_existing_production_ohlcv",
+  "scene_extension_source": "read_only_existing_historical_kline_scene_rows",
+  "research_caveat": "New policy hypothesis; historical market data and other policy tests have been seen. This is not prospective live-profit evidence or statistical independence after multiple research trials.",
+  "server_codegen_allowed": false,
+  "production_write": false
+}
