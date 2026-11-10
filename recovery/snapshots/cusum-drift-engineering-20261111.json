@@ -1,0 +1,61 @@
+{
+  "schema": "cusum_drift_engineering_observation_v1",
+  "cohort": "cusum_drift_v1",
+  "conservative_mechanism_groups": 1,
+  "native_local_commit": "40098bbcd7af98ce5b7fdfbd74d35dec985588cc",
+  "native_research_branch": "codex/local-cusum-drift-20261111",
+  "native_remote_commit": "cf13e098e3d4dee09d565e1040a136f4b6f61129",
+  "native_remote_tree": "5d8700613237721c1cda7e830a4505b54ca95fd4",
+  "native_changed_blobs_verified": 5,
+  "engineering_directory_name": "strategy-cusum-drift-engineering-20261111-v1",
+  "protocol_sha256": "740b3b6349e31c647267e1ff21214d00a699146b409b02e540aadc99f61c0332",
+  "engineering_manifest_sha256": "1aee7da502d093ab773a0c6b48ace9d127969b7c0a631219dcddb5a8ecfafb2b",
+  "engineering_complete_sha256": "82f5a94843b1dc570a0fc23e208303dd7cb483f90044692a0d22ba0498958525",
+  "regression_manifest_sha256": "27f859577a10394e642e0d8f80b64db69db448d8834631ca9285868ff4a82add",
+  "regression_log_sha256": "9963f73fbccd6677d8797cac155eb7535487c49aacc6805ce9188cf76d8571c7",
+  "mathematics_tests": 16,
+  "independent_maximum_suffix_fixtures": 64,
+  "complete_java_regression_tests": 155,
+  "frozen_engineering_classes": 779,
+  "python_new_export_protocol_tests": 6,
+  "python_final_full_regression_tests": 210,
+  "python_final_full_regression_process_exit": 0,
+  "python_failed_attempts_preserved": [
+    "208 tests: immediate suspended-state assertion and fixture guardian log cleanup failure",
+    "210 tests: unrelated historical-scene fixture Windows temporary-directory cleanup WinError145"
+  ],
+  "python_runtime_handoff_code_changed": false,
+  "python_test_fixture_only_sync_fix": true,
+  "market_input_directory_name": "strategy-cusum-drift-temporal-input-20261111",
+  "market_ready_sha256": "1efcf589918ffcf519f4e050908f6a955490c144f3f05950b03a5d37cc61f152",
+  "market_bytes_unchanged": true,
+  "representative_source_parity": [
+    {
+      "hypothesis": "cs1_standardized_drift_long",
+      "strategy": "catalog_btcusdt_trend_1b8c493a8902",
+      "source_sha256": "952c40d476efa5482910c501d6db66b9ecb9826eecb636699f25e2365fbf6d92",
+      "artifact_sha256": "2d6942045eee59a346fd12d1c3c3ea5dd393ed7d4f1deb6c05fde7c6305d9dd2",
+      "training_bars": 35040,
+      "training_signals": 535,
+      "mismatches": 0
+    },
+    {
+      "hypothesis": "cs1_standardized_drift_short",
+      "strategy": "catalog_btcusdt_trend_bc353c7eaa35",
+      "source_sha256": "0bb3cc8398b08a422febc0271220b5b37d89f275d0b80275d3109f6645989f4f",
+      "artifact_sha256": "417be18d6995a1894fdb31d126d390dfcf31f4fceeb628a04836ea7d93e19817",
+      "training_bars": 35040,
+      "training_signals": 487,
+      "mismatches": 0
+    }
+  ],
+  "financial_validation_started": false,
+  "new_holdout_read": false,
+  "parameter_grid_search": false,
+  "local_financial_qualified": 0,
+  "uploaded_to_server": 0,
+  "new_live_publications": 0,
+  "server_codegen_calls": 0,
+  "production_write": false,
+  "goal_complete": false
+}

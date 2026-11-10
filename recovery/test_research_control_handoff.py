@@ -13,7 +13,36 @@ import psutil
 from recovery.research_control_handoff import drain_and_stop, identity, require_local_research_parent, read
 
 
+def wait_for_fixture_state(pid, created, state, timeout=10):
+    """Observe the actual OS state; a preceding ledger write is not a state barrier."""
+    deadline = time.monotonic() + timeout
+    while True:
+        process = psutil.Process(pid)
+        if process.create_time() != created:
+            raise AssertionError('fixture PID identity changed')
+        if process.status() == state:
+            return
+        if time.monotonic() >= deadline:
+            raise AssertionError('fixture did not reach OS state: ' + state)
+        time.sleep(.02)
+
+
 class ResearchControlHandoffTest(unittest.TestCase):
+    def test_fixture_state_barrier_waits_for_os_observation_not_a_ledger_marker(self):
+        process = Mock(); process.create_time.return_value = 10.5
+        process.status.side_effect = [psutil.STATUS_RUNNING, psutil.STATUS_STOPPED]
+        with patch(__name__ + '.psutil.Process', return_value=process), \
+             patch(__name__ + '.time.sleep') as sleep:
+            wait_for_fixture_state(10, 10.5, psutil.STATUS_STOPPED)
+        self.assertEqual(2, process.status.call_count); sleep.assert_called_once_with(.02)
+
+    def test_fixture_state_barrier_rejects_reused_pid(self):
+        process = Mock(); process.create_time.return_value = 99.5
+        with patch(__name__ + '.psutil.Process', return_value=process):
+            with self.assertRaisesRegex(AssertionError, 'identity changed'):
+                wait_for_fixture_state(10, 10.5, psutil.STATUS_STOPPED)
+        process.status.assert_not_called()
+
     def test_only_transient_permission_reads_are_bounded_operational_retries(self):
         with patch('recovery.research_control_handoff.raw_read', side_effect=[PermissionError(13, 'sharing'), {'phase': 'READY'}]) as source, \
              patch('recovery.research_control_handoff.time.sleep'):
@@ -127,6 +156,7 @@ class ResearchControlHandoffTest(unittest.TestCase):
                     if owner.poll() is not None or time.monotonic() > deadline:
                         self.fail('handoff fixture never suspended its parent')
                     time.sleep(.02)
+                wait_for_fixture_state(parent.pid, bound['create_time'], psutil.STATUS_STOPPED)
                 self.assertEqual(psutil.STATUS_STOPPED, psutil.Process(parent.pid).status())
                 owner.terminate()
                 owner.wait(timeout=5)
@@ -146,9 +176,25 @@ class ResearchControlHandoffTest(unittest.TestCase):
                 if owner and owner.poll() is None:
                     owner.terminate()
                     owner.wait(timeout=5)
-                psutil.Process(parent.pid).resume()
-                parent.terminate()
-                parent.wait(timeout=5)
+                # Join only this fixture's exact guardian while its exact parent
+                # still exists. Do not race TempDirectory cleanup against its log.
+                ready_path = root / 'GUARDIAN_READY.json'
+                if ready_path.exists():
+                    guardian = read(ready_path)['guardian']
+                    try:
+                        guard = psutil.Process(guardian['pid'])
+                        if guard.create_time() != guardian['create_time'] or guard.cmdline() != guardian['command']:
+                            raise AssertionError('fixture guardian PID identity changed')
+                        guard.wait(timeout=10)
+                    except psutil.NoSuchProcess:
+                        pass
+                if parent.poll() is None:
+                    process = psutil.Process(parent.pid)
+                    if process.create_time() != bound['create_time']:
+                        raise AssertionError('fixture parent PID identity changed')
+                    process.resume()
+                    parent.terminate()
+                    parent.wait(timeout=5)
 
 
 if __name__ == '__main__':
