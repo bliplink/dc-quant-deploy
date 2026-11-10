@@ -98,7 +98,8 @@ def main():
     parser.add_argument('--snapshot', type=Path, required=True)
     parser.add_argument('--protocol', type=Path, required=True)
     parser.add_argument('--java', default='java')
-    parser.add_argument('--cohort', default='all', help='Explicit frozen research cohort; all preserves prior campaigns')
+    parser.add_argument('--cohort', default='all', choices=('all', 'structural_v1'),
+                        help='Explicit frozen research cohort; all preserves prior campaigns')
     parser.add_argument('--workers', type=int, default=2)
     parser.add_argument('--java-heap-mb', type=int, default=384)
     parser.add_argument('--timeout-minutes', type=int, default=60)
