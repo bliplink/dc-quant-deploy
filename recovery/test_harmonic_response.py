@@ -35,6 +35,39 @@ def independent_feature(values):
 
 
 class HarmonicResponseTrainingTest(unittest.TestCase):
+    def test_full_harmonic_cycle_is_exact_zero_for_every_phase_and_amplitude(self):
+        j = np.arange(64)
+        windows = np.asarray([amplitude * np.cos(2 * np.pi * 8 * j / 64 + phase) + drift
+            for amplitude in (1e-9, .001, .1) for phase in np.linspace(0, 2*np.pi, 17)
+            for drift in (0., .01)])
+        actual = research.spectral_features(windows)
+        np.testing.assert_array_equal(actual['bin'], np.full(len(windows),8))
+        self.assertTrue(np.all(actual['valid']))
+        np.testing.assert_array_equal(actual['projection'],np.zeros(len(windows)))
+        # The separate complex convolution oracle agrees up to cancellation error;
+        # the exact expected zero follows from the roots-of-unity identity.
+        for row in windows[::13]:
+            expected = independent_feature(row)
+            self.assertEqual(8,expected[0]); self.assertAlmostEqual(0.,expected[1],places=13)
+
+    def test_full_cycle_has_no_fittable_response_or_indicative_hurdle(self):
+        j=np.arange(64)
+        windows=np.asarray([.001*np.cos(2*np.pi*8*j/64+phase) for phase in np.linspace(0,6,96)])
+        x=research.spectral_features(windows)['projection']; y=np.linspace(-.02,.02,len(x))
+        model=research.fit_response(x,y)
+        self.assertIsNone(model)
+        audit=research.evaluate_response(x,y,model)
+        self.assertFalse(audit['model_available']); self.assertEqual(0,audit['indicative_hurdle_exceedances'])
+        self.assertEqual(0,audit['financial_qualified_candidates'])
+
+    def test_non_full_cycle_projection_is_not_zeroed_by_a_magnitude_filter(self):
+        j=np.arange(64)
+        for bin_no in range(2,8):
+            raw=1e-12*np.cos(2*np.pi*bin_no*j/64+.31)
+            actual=research.spectral_features(raw[None,:]); expected=independent_feature(raw)
+            self.assertEqual(bin_no,actual['bin'][0]); self.assertNotEqual(0.,actual['projection'][0])
+            self.assertAlmostEqual(expected[1]/1e-12,actual['projection'][0]/1e-12,places=12)
+
     def test_pure_cosine_and_sine_match_separate_direct_projection(self):
         j = np.arange(64)
         for a, b in ((.001, 0), (0, .002)):

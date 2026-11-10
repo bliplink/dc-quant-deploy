@@ -1,0 +1,157 @@
+{
+  "schema": "harmonic_response_v1_terminal_v2_fix_start_v1",
+  "observed_utc": "2026-11-10T23:51:38.813754+00:00",
+  "v1": {
+    "manifest_sha256": "dbf97fe36a5311f5c897e31809cab9b987a278d0ef3bd79473a44a505ed82425",
+    "complete_sha256": "01ef72b6d6522561d23d5fc19db0367c594a20762f9439011df2abf83fdebad2",
+    "critical_files": 159,
+    "data_files": 10,
+    "reports": [
+      {
+        "symbol": "ADAUSDT",
+        "fit_samples": 8751,
+        "audit_samples": 4187,
+        "hurdles": 0,
+        "bin8_beta": -195666904965987.53,
+        "report_sha256": "8dcfd219df1e9871b8424851fbf51f40188db77bcba47c9eaec8d1a02e638b3a"
+      },
+      {
+        "symbol": "BNBUSDT",
+        "fit_samples": 8751,
+        "audit_samples": 4187,
+        "hurdles": 0,
+        "bin8_beta": -55369719132931.84,
+        "report_sha256": "31ba99a34458a5d1d3d44711f3faf790564ed93a1a659d4f705fd2b899592412"
+      },
+      {
+        "symbol": "BTCUSDT",
+        "fit_samples": 8750,
+        "audit_samples": 4187,
+        "hurdles": 0,
+        "bin8_beta": 9992936400503.01,
+        "report_sha256": "54d9b1146ad0f96fa752a34537c86b5b3c901ba2650c58ab8389f30b40303e47"
+      },
+      {
+        "symbol": "DOGEUSDT",
+        "fit_samples": 8751,
+        "audit_samples": 4187,
+        "hurdles": 1,
+        "bin8_beta": -165105089493171.25,
+        "report_sha256": "6c2c2c27892b2973a40e6092cf3f4dc1fddbb639a137fd4cbd301d90bc263c68"
+      },
+      {
+        "symbol": "ETHUSDT",
+        "fit_samples": 8751,
+        "audit_samples": 4187,
+        "hurdles": 0,
+        "bin8_beta": 20013258626449.17,
+        "report_sha256": "80d09582ae123b3072ba9cb4ddf2bc41904680cda08a03ac79e3b6fe3005b35a"
+      },
+      {
+        "symbol": "LINKUSDT",
+        "fit_samples": 8751,
+        "audit_samples": 4187,
+        "hurdles": 0,
+        "bin8_beta": -45128497371298.71,
+        "report_sha256": "4399009a7358777fb6461bd143f5fdd04b7173839ca27d196e3a025a22254398"
+      },
+      {
+        "symbol": "SOLUSDT",
+        "fit_samples": 8673,
+        "audit_samples": 4187,
+        "hurdles": 0,
+        "bin8_beta": -146193098522825.78,
+        "report_sha256": "859d27caa33c11e43ec614d0cb2d6f88a0768499b46da13304b360a92c00bf43"
+      },
+      {
+        "symbol": "TRXUSDT",
+        "fit_samples": 8673,
+        "audit_samples": 4187,
+        "hurdles": 0,
+        "bin8_beta": -3814462828004.196,
+        "report_sha256": "8749f69eecd81453119fce8c316b94c14d73439a29605d2034ffd51093949c50"
+      },
+      {
+        "symbol": "UNIUSDT",
+        "fit_samples": 8751,
+        "audit_samples": 4187,
+        "hurdles": 0,
+        "bin8_beta": -147761079401425.03,
+        "report_sha256": "ba9d6b310c4a17581eb274a55fe32cdff051f1182c0741e9e60bb8f2e044fa33"
+      },
+      {
+        "symbol": "XRPUSDT",
+        "fit_samples": 8673,
+        "audit_samples": 4187,
+        "hurdles": 8,
+        "bin8_beta": -245964095943218.6,
+        "report_sha256": "308885780c83f31b02ea964aa8b62c39fa57b5abe65678e31e256471ca5836af"
+      }
+    ]
+  },
+  "v1_bin8_fit_unusable": true,
+  "mathematical_defect": "64-sample DFT bin8 projected over8 points sums exactly zero; floating cancellation residue was fitted into huge slopes.",
+  "v2": {
+    "observed_utc": "2026-11-10T23:51:38.813754+00:00",
+    "owner": {
+      "pid": 24920,
+      "create_time": 1794354677.6026304,
+      "command": [
+        "C:\\Python314\\python.exe",
+        "-X",
+        "utf8",
+        "-B",
+        "-u",
+        "-m",
+        "recovery.research_harmonic_response",
+        "--input-dir",
+        "E:\\sourcecode\\codex\\_work\\strategy-regime-training-input-20261110",
+        "--protocol",
+        "E:\\sourcecode\\codex\\_work\\dc-quant-deploy-harmonic-response-training-v2-20261111\\recovery\\harmonic_response_training_protocol_20261111.json",
+        "--output-dir",
+        "E:\\sourcecode\\codex\\_work\\strategy-harmonic-response-training-20261111-v2"
+      ]
+    },
+    "manifest_sha256": "80e6452ba2ad8c32cc6829780ae2bc8f8a462d319dc080c40c2fd3a9321af28d",
+    "schema": "harmonic_response_training_diagnostic_run_v2",
+    "critical_files": 161,
+    "data_files": 10,
+    "source_sha256": {
+      "research_harmonic_response.py": "b889a30bd2e065e059721aa221abd6a1ee0e64f375a76cee430e494837b9e7c7",
+      "test_harmonic_response.py": "cc7065dfb339d12b385b489d90a611fce01ce7052734b13cc58b1a15a0badc06",
+      "harmonic_response_training_protocol_20261111.json": "12876d755a4ff3c805ba833f7dacbc76b8a76c0d7a3d858c0657b286169c7b93"
+    },
+    "status": {
+      "state": "WAITING_FOR_TRAINING_DIAGNOSTIC_RESOURCES",
+      "symbol": "ADAUSDT",
+      "completed": 0,
+      "total": 10,
+      "resources": {
+        "ready": false,
+        "free_disk_bytes": 34132930560,
+        "available_memory_bytes": 2691010560,
+        "minimum_free_disk_bytes": 8589934592,
+        "minimum_available_memory_bytes": 1610612736,
+        "extra_slot_memory_mib": 2566,
+        "minimum_extra_slot_memory_mib": 3072,
+        "logical_cores": 8
+      },
+      "financial_validation_read": false,
+      "production_write": false
+    },
+    "complete": false,
+    "failed": false
+  },
+  "local_source_commit": "e5e6120",
+  "full_python_tests": 340,
+  "full_python_seconds": 41.368,
+  "full_python_exit": 0,
+  "full_python_log": "harmonic-response-v2-tests-a5252989297d4cb08c7479a191310ad7/unittest.log",
+  "full_python_log_sha256": "ba31f550b583577f48af0181d58e9335af3ecbeb658fb1235e93f170a464448f",
+  "training_only": true,
+  "financial_validation_read": false,
+  "financial_qualified_candidates": 0,
+  "server_or_llm_calls": 0,
+  "production_write": false,
+  "goal_complete": false
+}

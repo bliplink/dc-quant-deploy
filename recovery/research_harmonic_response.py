@@ -70,6 +70,9 @@ def spectral_features(windows):
     angles = 2 * np.pi * selected[:, None] * (WINDOW + np.arange(HORIZON)) / WINDOW
     projection = (coefficient.real * np.sum(np.cos(angles), axis=1)
         - coefficient.imag * np.sum(np.sin(angles), axis=1)) * (2.0 / WINDOW)
+    # Roots of unity sum to exactly zero over an integer number of full periods.
+    # Do not fit a response to floating-point cancellation residue (bin8 here).
+    projection[(selected * HORIZON) % WINDOW == 0] = 0.0
     concentration = np.divide(2 * power[index, offsets], WINDOW * energy,
         out=np.zeros(len(windows)), where=energy > 0)
     if not (np.all(np.isfinite(energy)) and np.all(np.isfinite(projection)) and np.all(np.isfinite(concentration))):
@@ -205,7 +208,7 @@ def main():
     require_hashes(data)
     args.output_dir.mkdir(parents=True)
     with exclusive_batch(args.output_dir):
-        write_status(args.output_dir/'manifest.json',dict(schema='harmonic_response_training_diagnostic_run_v1',
+        write_status(args.output_dir/'manifest.json',dict(schema='harmonic_response_training_diagnostic_run_v2',
             critical_sha256=critical,data_sha256=data,protocol_sha256=sha(args.protocol),numpy_version=np.__version__,
             python_version=sys.version,projection_label_is_trading_pnl=False,financial_validation_read=False,production_write=False))
         manifest_hash=sha(args.output_dir/'manifest.json'); records={}

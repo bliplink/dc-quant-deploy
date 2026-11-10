@@ -1,5 +1,6 @@
 {
-  "schema": "harmonic_response_training_diagnostic_v1",
+  "schema": "harmonic_response_training_diagnostic_v2",
+  "full_cycle_projection": "exact zero when selected_bin * projection_bars is divisible by return_window; integer roots-of-unity identity, not an epsilon threshold or fitted filter",
   "purpose": "training_forecast_diagnostic_only",
   "fit_begin": "2022-01-01",
   "fit_end_exclusive": "2024-01-01",
