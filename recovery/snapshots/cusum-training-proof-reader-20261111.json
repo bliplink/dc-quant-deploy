@@ -1,0 +1,53 @@
+{
+  "schema": "cusum_training_proof_reader_observation_v1",
+  "observed_utc": "2026-11-10T20:58:37.130422+00:00",
+  "controller_sha256": "3527f9283831695a835e6d2bbb9486924c70a3777f71e40a09474ec74801c9e9",
+  "test_sha256": "c69bf53f9257617325f5eae1dff66bdd83c2ed97949dda5aba8c1cb082b4b5b6",
+  "python_regression_tests": 253,
+  "new_control_tests": 14,
+  "python_regression_exit_code": 0,
+  "python_regression_seconds": 37.140,
+  "raw_test_log_sha256": "0681ab939a94f245e9d64aba0acdf7234cc2f1ed287bddf79f212b8d8a0b2cbd",
+  "prior_stderr_logging_shell_exit_code": 1,
+  "matrix_pid": 3948,
+  "matrix_create_time": 1794342593.785792,
+  "matrix_manifest_sha256": "a074c787bacd4a61f605113303636f76c4ca42dcb4e5f6867ddd036ced908e02",
+  "matrix_context_sha256": "7ef5634ee42c5ee6d14c66bc4afe8a2b99b7494a490426dfa7856e75470a9864",
+  "actual_incomplete_matrix_rejected_before_ledger_read": true,
+  "actual_environment_critical_files_verified": 939,
+  "actual_environment_classpath_classes_verified": 2280,
+  "actual_environment_runtime_jars_verified": 68,
+  "actual_completed_groups_audited": [
+    {
+      "symbol": "ADAUSDT",
+      "side": 1,
+      "training_bars": 35040,
+      "training_signals": 467,
+      "mismatches": 0,
+      "scope_proofs": 5,
+      "group_marker_sha256": "b4afcb260d2de6842084958da86a10a2e93eef2860e1fc032fbdafcba1c224dd",
+      "canonical_sha256": "7092356e0d116b0d79fb9874e5f9e8f9d2b6fe164b6e1e60d9775651d8a139a1",
+      "actual_full_year_log_sha256": "85add75b145f398fa663b48872509cccee09ce6036b46e7eeea50533af96aaa1"
+    },
+    {
+      "symbol": "ADAUSDT",
+      "side": -1,
+      "training_bars": 35040,
+      "training_signals": 517,
+      "mismatches": 0,
+      "scope_proofs": 5,
+      "group_marker_sha256": "b393907cbe5143f3099c8d4347ae6fdc5ff15a723c96582ae0d15f99a778fccb",
+      "canonical_sha256": "e33ef5b27df705df302581974468242ba492fc19b75050f9f8d4ce01c00c80f8",
+      "actual_full_year_log_sha256": "66f56db1c0b672cab182ecb8ae3aeddd05d02e8ed94d758719374cd0d5bcc2f2"
+    }
+  ],
+  "complete_matrix_successfully_admitted": false,
+  "runtime_reuse_enabled": false,
+  "runtime_controller_integrated": false,
+  "financial_validation_started_by_reader": false,
+  "new_holdout_read": false,
+  "server_upload_performed": false,
+  "newly_published_strategies": 0,
+  "production_write": false,
+  "goal_complete": false
+}

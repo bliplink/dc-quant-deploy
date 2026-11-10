@@ -30,3 +30,6 @@ recovery/snapshots/cusum-identity-training-pilot-20261111.json -text
 recovery/verify_cusum_identity_matrix.py text eol=lf
 recovery/test_cusum_identity_matrix.py text eol=lf
 recovery/snapshots/cusum-identity-training-matrix-start-20261111.json text eol=lf
+recovery/cusum_training_proof_admission.py text eol=lf
+recovery/test_cusum_training_proof_admission.py text eol=lf
+recovery/snapshots/cusum-training-proof-reader-20261111.json text eol=lf
