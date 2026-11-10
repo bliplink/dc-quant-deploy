@@ -2,6 +2,8 @@
 
 2026-11-11 01:57接续。目标仍是100条真实独立、生产合格策略，尚未完成。只用现有OHLCV，不增加资金费率/OI/采集或服务架构，不调用DeepSeek。工程通过、信号数、作用域数都不是合格或上线数。
 
+03:04最新权威：[零执行队列交接及额外内存守卫](directional-clock-zero-finance-handoff-20261111.zh-CN.md)。原27328在0/100、无金融开始、无计算子进程时经两次身份复核后退休，新23812已在strategy-directional-clock-parallel-formal-20261111真实启动首条主期。旧等待manifest/status保留，ORCHESTRATION_HANDOFF指向新根；不要再启动27328，下面01:57的等待关系属于历史。原100作用域与源码/协议/工具/数据/门槛均未变，202项Python回归通过，0金融重放；其它计算进程不动。
+
 ## 先排除旧机制，不以改名字凑数
 
 开始曾考虑历史形态近邻；检查canonical源码后发现已有`KernelAnalogueForecastHypothesis`：六维滚动特征、核权重、已观测8根标签、有效样本和收缩预测。没有再改邻居数、方向或版本来算新机制。

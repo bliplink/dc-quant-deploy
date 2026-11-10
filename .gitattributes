@@ -11,3 +11,7 @@
 recovery/java/*.java text eol=lf
 recovery/snapshots/fixed-policy-publication-gate-observation-20261111.json -text
 recovery/snapshots/fit-risk-strict-rejection-link-20261111.json text eol=lf
+recovery/run_directional_clock_parallel.py text eol=lf
+recovery/retire_directional_clock_waiter.py text eol=lf
+recovery/test_directional_clock_parallel.py text eol=lf
+recovery/snapshots/directional-clock-zero-finance-handoff-20261111.json text eol=lf
