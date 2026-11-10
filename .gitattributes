@@ -57,3 +57,4 @@ recovery/test_harmonic_phase_batch.py text eol=lf
 recovery/snapshots/harmonic-phase-formal-readiness-20261111.json text eol=lf
 recovery/snapshots/harmonic-phase-engineering-rejection-20261111.json text eol=lf
 recovery/snapshots/fit-risk-median-ada-server-rejection-20261111.json text eol=lf
+recovery/snapshots/clock-complete-cusum-financial-start-20261111.json text eol=lf
