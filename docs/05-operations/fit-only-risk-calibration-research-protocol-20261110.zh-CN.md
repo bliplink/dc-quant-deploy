@@ -26,3 +26,23 @@
 四个档位不是四条策略；同一基础入场机制的固定风险、ATR 退出、校准风险版本也不能在同单元当作独立机制凑数量。独立性复核和已有服务器全部资格/成本/场景/前瞻贡献/基线门槛保持不变。
 
 本预案不改变当前 `strategy-catalog-atr-exit-cycle-20261110-sourceeligible` 的冻结源码或流程。应先完成该批正式结果和审计，再决定是否实现这一不同的拟合规则；不得把本预案当作已完成工作或盈利证据，也不能用它包装同一失败版本的人工调参。
+
+## 第一阶段工程验证已完成（18:36）
+
+原全目录首批 51 项已完整结束，唯一 ETH/channel 本地双重合格者在服务器近期365天扣费验证/前瞻均负、OOS=0，未发布，库存仍4、缺96。245个未消费类已在原工作树继续正式回测；没有改动这批的冻结源码、导出器、参数或输入。
+
+仅在独立源码树 `indsvr-local-fit-only-risk-strategies-20261110` 与工具树 `dc-quant-deploy-fit-only-risk-20261110` 实现本预案的参数原型：202类、400方向，每个只注册默认档0；withRiskProfile 从保存的原始构造参数重建，不从已缩放字段再次乘档位。保持原入场/方向/周期/过滤条件和已验证 ATR20 保护不变，四档只是同一机制的参数，不是四条独立策略。原四个源码合同失败的 ADX 代理仍不进入目录，没有给校验器加例外。
+
+本地 INDSvr 提交 `2e82681`，远端独立研究分支 `codex/local-fit-only-risk-strategies-20261110` 提交 `8bbac72c3a717beee6db4730dda4c4c14cafb766`；4个Java变更blob逐项核对。90项Java测试、96项Python测试通过：覆盖全400方向四档原构造语义、风险/退出字段、档位往返不二次缩放、非法整数档位、200根窗口及未来访问，以及新导出参数schema。未改生产服务镜像或架构。
+
+工程集成证据 `strategy-fit-only-risk-contract-20261110/audit.json`：冻结清单 SHA256=`b3f30dcbf07b2346a7b59055ed73150a7dd5467bf762808bfdaf9baa153487bf`。8类结构代表固定源码通过未修改的生产校验器；只读既有 BTC 2023-01-01～2023-12-31 训练OHLCV，每档35,040根，32个逐字段信号用例全部零差异且每项都有实际信号。8类每档信号数依次为1010、358、985、81、310、305、961、4893。8类是工程路径抽样，不能冒充全部400方向均完成了生产源码合同。
+
+调用真实 BacktestOptimizationService / SliceOptimizedWalkForwardRunner 的8个人工用例通过：恰好4个联合粗档、无fine扩展；fit扣费收益优先，其后gross fit和较低回撤并列排序、全相同保留稳定顺序；按已有零fit样本下限0，零交易可优先于负fit收益，不另加自创回退；默认1000次预算在3～7折不截断四档。真实代表参数函数取多折出现次数最多的参数，同票按既有首次出现顺序的后者，不必是最后一折档位。这里只验证函数规则，尚未证明发布/运行时整条保存链路。
+
+实际 LegacyLiveSignalAdapter 从 StrategyInitContext.strategyParams/parameters 读 paramInt，不读取 SignalContext.parameters。参数一致性CLI已使用真实init入口；生成源另外拒绝非法字符串/非整数数字，避免原paramInt的intValue截断或解析失败默认值被误当合法档位。主导出候选默认参数为riskProfile=0，schema只有int候选[0,1,2,3]，coarseOnlyParams只含此项，目标保持FEE_ADJUSTED_PROFIT_FIRST。FitOnlyRisk也强制source-bound机制复核。
+
+## 尚未完成的第二阶段：不能提前做金融筛选
+
+上述仅为源码/参数工程验证，financial_validation_started=false、forward_pnl_read=false。尚未实现或证明“预筛每折只用fit选择四档”与真实SIM的费用、复利、交易边界、选参结果逐折一致，也没有完成发布保存参数到live初始化的端到端核对。不得拿现有固定档预筛冒充自适应拟合，不得根据验证/前瞻人工指定档位。新金融cohort尚未接到原正式编排器，先完成这些证明，再冻结新批次，并对每份候选所有档位做源码/信号检查；没有新增合格或上线策略。
+
+当前245项仍用原工具树 `dc-quant-deploy-strategy-inventory-100-20261014` 的冻结导出器（首批结束时本地1690e12、对应远端3af86c444f7836057b3a17ea319c6ad02e04e7ed）。不要把新工具覆盖到正在跑的旧工作树；否则其已冻结formal manifest中的exporter哈希会改变。新工具与新研究保持独立，现有金融失败及快照不覆盖。

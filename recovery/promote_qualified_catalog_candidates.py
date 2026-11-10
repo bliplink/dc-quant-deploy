@@ -172,7 +172,7 @@ def main():
         qualified = qualified[:args.limit]
     args.output_dir.mkdir(parents=True, exist_ok=True)
     if qualified and (args.require_semantic_review or any(
-            record['family'].startswith('CatalogAtrExit') for record in qualified)):
+            record['family'].startswith(('CatalogAtrExit', 'FitOnlyRisk')) for record in qualified)):
         review_path = args.semantic_review or args.formal_dir / 'semantic-review.json'
         document = json.loads(review_path.read_text(encoding='utf-8')) if review_path.exists() else {}
         if args.inventory_snapshot is None:

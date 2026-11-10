@@ -43,6 +43,7 @@ def exit_policy_contract_version(research_source):
 
 def candidate_source(research_source, catalog_row, symbol, strategy_name, version='v1'):
     family = catalog_row['family']
+    risk_profile_source = family.startswith('FitOnlyRisk')
     parameters = json.loads(catalog_row['parameters'])
     blocks = []
     current = family
@@ -68,6 +69,10 @@ def candidate_source(research_source, catalog_row, symbol, strategy_name, versio
     math_end = research_source.index('    static final class ResearchResult', math_begin)
     support = declaration(research_source, 'Hypothesis', interface=True) + '\n' \
         + '\n'.join(reversed(blocks)) + '\n' + research_source[math_begin:math_end]
+    if risk_profile_source:
+        if parameters.get('riskProfile') != 0:
+            raise ValueError('fit-risk catalog must freeze raw parameters at profile zero')
+        support = declaration(research_source, 'RiskProfileHypothesis', interface=True) + '\n' + support
     if not re.fullmatch(r'[A-Z0-9]+', symbol):
         raise ValueError('invalid candidate symbol')
     if not re.fullmatch(r'v[1-9][0-9]*', version):
@@ -132,6 +137,16 @@ public class GeneratedStrategy extends LegacyLiveSignalAdapter {
 '''
     header = header.replace('PACKAGE', package).replace('EXPRESSION', expression) \
         .replace('SYMBOL', symbol).replace('STRATEGY', strategy_name)
+    if risk_profile_source:
+        header = header.replace('Setup setup = HYPOTHESIS.setup(bars, bars.size() - 1);',
+            'Object configuredRiskProfile = paramValue("riskProfile");\n'
+            '        int riskProfile = paramInt("riskProfile", 0);\n'
+            '        if (configuredRiskProfile != null && (configuredRiskProfile instanceof Number\n'
+            '                ? ((Number) configuredRiskProfile).doubleValue() != riskProfile\n'
+            '                : !String.valueOf(configuredRiskProfile).matches("[0-3]")))\n'
+            '            throw new IllegalArgumentException("riskProfile must be an integer from 0 through 3");\n'
+            '        Hypothesis selected = ((RiskProfileHypothesis) HYPOTHESIS).withRiskProfile(riskProfile);\n'
+            '        Setup setup = selected.setup(bars, bars.size() - 1);')
     if exit_policy_contract_version(research_source) == 1:
         for field, literal, attribute in (
                 ('firstStep', '0.5', 'firstStepPct'), ('step', '0.2', 'stepPct'),
@@ -164,6 +179,13 @@ def export_candidate(campaign_dir, indsvr_repo, output_dir, symbol, scene, hypot
                          'validateWindowDays': 20 if scene in ('breakout', 'reversal') else 30,
                          'forwardWindowDays': 10 if scene in ('breakout', 'reversal') else 14,
                          'objective': 'FEE_ADJUSTED_PROFIT_FIRST'}}}
+    if row['family'].startswith('FitOnlyRisk'):
+        seed_item['request']['parameterSchema'] = {'parameters': [
+            {'name': 'riskProfile', 'type': 'int', 'default': 0, 'candidates': [0, 1, 2, 3]}]}
+        seed_item['request']['defaultParameters'] = {'riskProfile': 0}
+        seed_item['request']['optimizationProfile'].update({
+            'mode': 'LAYERED_GRID', 'coarseOnlyParams': ['riskProfile'], 'topN': 1,
+            'maxFullGrid': 4, 'maxCoarseCandidates': 4, 'maxFineCandidates': 1})
     output = output_dir / name
     if output.exists():
         existing = (output / 'GeneratedStrategy.java').read_text(encoding='utf-8')
