@@ -7,10 +7,22 @@ from pathlib import Path
 
 from recovery.export_representative_candidate import declaration, java_mask
 from recovery.run_representative_strategy_campaign import select_shortlist
+from recovery.run_representative_formal_batch import write_empty_formal_batch
 from recovery.promote_qualified_catalog_candidates import promotion_request, prior_submission, source_only_execution_audit
 
 
 class RepresentativeCampaignTest(unittest.TestCase):
+    def test_empty_shortlist_has_a_durable_zero_result_ledger(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            write_empty_formal_batch(root, 'frozen')
+            self.assertEqual([], json.loads((root / 'results.json').read_text(encoding='utf-8')))
+            status = json.loads((root / 'status.json').read_text(encoding='utf-8'))
+            self.assertEqual((0, 0, 0, []), (status['completed'], status['total'], status['published'], status['errors']))
+            complete = json.loads((root / 'FORMAL_COMPLETE.json').read_text(encoding='utf-8'))
+            self.assertIs(complete['production_write'], False)
+            self.assertEqual('frozen', complete['manifest_sha256'])
+
     def test_uploaded_source_never_uses_server_codegen_or_llm_repair(self):
         import base64
         payload = {'provider': 'external', 'sourceType': 'EXTERNAL_SOURCE',

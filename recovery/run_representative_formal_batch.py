@@ -27,6 +27,17 @@ def sha(path):
     return hashlib.sha256(path.read_bytes()).hexdigest()
 
 
+def write_empty_formal_batch(output, manifest_hash):
+    """An empty validation shortlist is a completed zero-result batch, not an error."""
+    write_json(output / 'results.json', [])
+    write_json(output / 'status.json', {
+        'updated_utc': datetime.now(timezone.utc).isoformat(timespec='seconds'),
+        'completed': 0, 'total': 0, 'local_formal_qualified': 0, 'published': 0, 'errors': []})
+    write_json(output / 'FORMAL_COMPLETE.json', {
+        'manifest_sha256': manifest_hash, 'completed': 0,
+        'local_formal_qualified': 0, 'production_write': False})
+
+
 def validation_windows(scene):
     fit, validate, forward = ((90, 30, 14) if scene == 'range' else
                              (120, 20, 10) if scene in ('breakout', 'reversal') else (120, 30, 14))
@@ -131,6 +142,10 @@ def main():
     if manifest_path.exists() and json.loads(manifest_path.read_text(encoding='utf-8')) != manifest:
         raise ValueError('formal batch inputs changed; use a new output directory')
     write_json(manifest_path, manifest)
+    if not items:
+        write_empty_formal_batch(args.output_dir, sha(manifest_path))
+        print('Empty validation shortlist; formal complete with zero candidates', flush=True)
+        return
     pilot = None
     if args.pilot_result:
         if not args.pilot_frozen:

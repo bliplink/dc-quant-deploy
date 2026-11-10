@@ -33,3 +33,13 @@
 顺序不变：冻结源/类哈希 → 16个代表独立编译、真实源码校验和预筛前信号比较 → 800项验证预筛 → 正式v4/时序留出期 → 合格源码上传服务器 → 2025-11-10～2026-11-09回测 → 精确版本ACTIVE和当前库存核验。源码生成、失败修复不调用DeepSeek；不得绕过发布门槛。
 
 进度以 `cycle-status.json`、`source-contract/status.json`、`screen/status.json`、`formal/status.json`、`server/*/source-only-audit.json`、`formal/cycle-summary.json` 为准。进程号只是启动记录，接续时须重新核实是否仍运行。上一批已结束，真实合格库存起点4、缺口96；本批完成不代表持续目标完成。
+
+## 目录注册修复及本批最终结果
+
+原13200在预筛前被检查拦截，原因是专用目录已有16个模型，但一致性检查使用的`all`目录未注册它们，报`unknown frozen hypothesis`。没有消费本批财务留出结果。已补上注册和一项回归测试，共42项Java测试通过；模型权重、参数、训练包SHA均未改变。本地最终研究提交`7ed0854`，远端独立分支`codex/local-execution-model-strategies-20261110`，提交`5ca2a9d8c9e981d6d3160cdf3ccc593c4226d1df`。
+
+北京时间14:31:38以3860进程在新目录`strategy-execution-path-cycle-20261110-catalogfix`冻结并执行。16/16源码检查通过，800/800验证预筛完成，0条通过，0正式留出、0上传、0发布。766项为零成交；34项有成交，其中达到20笔的两项净收益均为负。不能把门槛降下来制造合格策略。
+
+空短名单还暴露工作流没有写空`results.json`的收尾问题；已补零结果/零状态持久化及回归测试，不需要SSH或重新跑财务结果。14:36:55只读库存复核仍4、缺96；`formal/cycle-summary.json`和`cycle-status.json`已正确完成。13200和3860都已结束。
+
+后续另行设计跨2022/2023/2024阶段中位数共识的新假设，先补齐验证之前的官方历史训练数据；不是重调这批失败版本。见[跨阶段共识研究协议](regime-consensus-research-protocol-20261110.zh-CN.md)。

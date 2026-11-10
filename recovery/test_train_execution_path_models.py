@@ -58,6 +58,13 @@ class ExecutionPathModelsTest(unittest.TestCase):
                 self.assertLess(frame.iloc[start + 96]['time'], pd.Timestamp('2024-12-15', tz='UTC'))
                 self.assertLessEqual(end, start + 96)
 
+    def test_new_strict_history_cannot_bridge_a_missing_bar(self):
+        frame = self.frame().drop(index=2000).reset_index(drop=True)
+        _, _, observed = training_samples(frame, 1, strict_grid=True)
+        for start, _, _ in observed:
+            self.assertEqual(pd.Timedelta(minutes=(96 + 199) * 15),
+                             frame.iloc[start + 96]['time'] - frame.iloc[start - 199]['time'])
+
 
 if __name__ == '__main__':
     unittest.main()

@@ -78,18 +78,21 @@ def path_label(prices, index, atr, side, horizon=HORIZON):
     return None
 
 
-def training_samples(frame, side):
+def training_samples(frame, side, train_begin=TRAIN_BEGIN, strict_grid=False):
     import numpy as np
     import pandas as pd
     x, volatility = execution_features(frame)
     prices = frame[['open', 'high', 'low', 'close']].to_numpy(dtype=float)
-    eligible = ((frame['time'] >= pd.Timestamp(TRAIN_BEGIN, tz='UTC'))
+    eligible = ((frame['time'] >= pd.Timestamp(train_begin, tz='UTC'))
                 & (np.arange(len(frame)) >= 200) & (np.arange(len(frame)) % STRIDE == 0)
                 & np.isfinite(x).all(axis=1))
     xs, ys, observed = [], [], []
     for i in np.flatnonzero(eligible):
         # Require the ENTIRE potential observation horizon before validation.
         if i + HORIZON >= len(frame) or frame.iloc[i + HORIZON]['time'] >= pd.Timestamp(TRAIN_END_EXCLUSIVE, tz='UTC'):
+            continue
+        if strict_grid and (frame.iloc[i + HORIZON]['time'] - frame.iloc[i - 199]['time']
+                            != pd.Timedelta(minutes=(HORIZON + 199) * 15)):
             continue
         atr = volatility[i] * prices[i, 3]
         if atr * 3 / prices[i, 3] < .0048:
