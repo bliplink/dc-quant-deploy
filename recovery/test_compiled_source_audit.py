@@ -27,6 +27,18 @@ class CompiledSourceAuditTest(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, 'checksum'):
             compare_stored_source(b'class X {}', b'class X {}', 'a' * 64, 'b' * 64)
 
+    def test_only_exact_observed_package_prefix_normalization_is_allowed(self):
+        upload = b'package x.y;\nimport java.util.*;\nclass X {}\n'
+        stored = b'package x.y;\n\nimport java.util.*;\nclass X {}'
+        audit = compare_stored_source(upload, stored, 'a' * 64, 'a' * 64)
+        self.assertEqual('package_header_blank_line_and_outer_ascii_whitespace', audit['source_normalization'])
+        self.assertTrue(audit['source_tokens_unchanged'])
+        for invalid in (stored.replace(b'x.y', b'x.z'), stored.replace(b'class X', b'class Z'),
+                        stored.replace(b'class X', b'\nclass X'), stored.replace(b'class X', b'class  X'),
+                        stored.replace(b'import java.util.*;', b'// import java.util.*;')):
+            with self.assertRaisesRegex(ValueError, 'stored source differs'):
+                compare_stored_source(upload, invalid, 'a' * 64, 'a' * 64)
+
     def test_path_and_candidate_identity_are_checked_before_remote_reads(self):
         client = Mock()
         with self.assertRaises(ValueError):

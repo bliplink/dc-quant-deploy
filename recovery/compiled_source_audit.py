@@ -7,6 +7,17 @@ import re
 import shlex
 
 
+def package_header_normalization(source):
+    """Permit only the observed compiler's unchanged package + two-newline prefix.
+
+    Do not implement its class-name rewrites or common-API repairs: those change
+    tokens and must still fail the uploaded fixed-source contract.
+    """
+    match = re.fullmatch(rb'(package [A-Za-z_$][A-Za-z0-9_$]*(?:\.[A-Za-z_$][A-Za-z0-9_$]*)*;)[ \t\r\n]*(.*)',
+                         source.strip(b' \t\r\n'), re.S)
+    return match[1] + b'\n\n' + match[2] if match else None
+
+
 def compare_stored_source(uploaded, stored, jar_sha256, candidate_checksum):
     if not re.fullmatch(r'[0-9a-f]{64}', str(jar_sha256)) or jar_sha256 != candidate_checksum:
         raise ValueError('compiled JAR does not match candidate checksum')
@@ -14,8 +25,10 @@ def compare_stored_source(uploaded, stored, jar_sha256, candidate_checksum):
         normalization = 'exact'
     elif stored == uploaded.strip(b' \t\r\n'):
         normalization = 'outer_ascii_whitespace_trim'
+    elif stored == package_header_normalization(uploaded):
+        normalization = 'package_header_blank_line_and_outer_ascii_whitespace'
     else:
-        raise ValueError('stored source differs beyond allowed outer whitespace normalization')
+        raise ValueError('stored source differs beyond allowed package-header/outer whitespace normalization')
     return {'uploaded_source_sha256': hashlib.sha256(uploaded).hexdigest(),
             'stored_source_sha256': hashlib.sha256(stored).hexdigest(),
             'uploaded_source_bytes': len(uploaded), 'stored_source_bytes': len(stored),
