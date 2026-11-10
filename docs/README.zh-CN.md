@@ -25,6 +25,8 @@
 - [完整目录检查点安全交接及启动合并实装](05-operations/full-catalog-batched-checkpoint-handoff-20261110.zh-CN.md)：115条原结果不重放，原完整队列接入2个隔离worker；新的实时入口、OS锁与guardian恢复约束。
 - [OHLCV价格分箱代理的新研究与排队入口](05-operations/ohlcv-profile-proxy-research-20261111.zh-CN.md)：一个机制组、四个工程方向，123项Java/178项Python及4份全年对照通过；200作用域先等待旧平衡批次结束，不冒充已金融通过。
 - [LINK均线回调策略本地通过及服务器拒绝记录](05-operations/fit-risk-link-server-admission-20261110.zh-CN.md)：固定源码一次导入、完整365日失败、0发布，以及确定package空白差异的只读产物审计。
+- [UNI突破本地通过及服务器拒绝记录](05-operations/fit-risk-uni-server-admission-20261111.zh-CN.md)：七笔独立留出的局限、服务器前向亏损和0发布，保留原四档FIT政策与固定源审计。
+- [ADA通道重入完整目录首个严格通过后的服务器验证](05-operations/fit-risk-ada-server-admission-20261111.zh-CN.md)：单条原结果只读校验、365日正常拒绝及最新4运行资格/另2过贡献的真实库存。
 - [本地固定源码→回测→服务器验证工作流](05-operations/local-source-strategy-workflow-20261110.zh-CN.md)
 - [安全说明](05-operations/security.zh-CN.md)
 

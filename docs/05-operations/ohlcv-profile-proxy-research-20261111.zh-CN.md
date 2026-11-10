@@ -37,3 +37,5 @@ Native本地`cdbdf8d`/`852b9f3`，研究远端分支`codex/local-ohlcv-auction-p
 接续会先查同一20660实际存活及小状态，不按等待状态重复启动。新正式链路逐作用域原validator/训练期信号一致性→未改FixedSourcePrimaryReplayCli实际v4→独立strict_primary_admission至少0.20（或更高）→主期全部过才执行分离62天锁空参/0优化留出。原DTO默认0不再让贡献失败者进入新留出。保留原始engine输出、strict审计、源/seed/JAR/金融哈希和失败；半完成目录拒绝重跑。
 
 工具无SSH/模型/导入/发布路径。将来本地严格合格还需同单元真实源码机制复核、固定源服务器最近完整365日与正常场景/基线/发布器，不能直接写registry或重试已消费失败。最近服务器库存证据仍23:33快照4条运行资格、另2条过贡献；本轮未新增服务器发布，100条目标继续。
+
+01:31接续复核：20660与创建时间/完整命令均仍吻合，实际状态仍WAITING/0/200，没有金融子目录；冻结源/helper/protocol不改。4332为345/400、本地2（LINK及UNI均已服务器失败），24052为352/19,599、raw1/strict1，新增ADA/channel也已服务器失败。最近生产库存更新为17:31:21UTC快照`strategy-live-inventory-risk-ada-post-20261111`，仍4运行资格/另2过贡献/0新增；新代理工程通过不能计作金融或实盘数。详见[ADA终态及全部接续](fit-risk-ada-server-admission-20261111.zh-CN.md)。
