@@ -40,8 +40,32 @@
 
 `supplement_temporal_holdout.py` 核对原金融信封、源、冻结目录及原门槛全部通过后，只编译同一源码，再做新的62天留出，没有重跑主回测。结果8笔、PF=0、扣费后-731.84678459（回测初始资金10000模型单位，并非新增实盘损失），未通过，不上传/发布。证据 `strategy-temporal-supplement-eth-aroon-20261110`。该留出已消费，不能修改同版参数、换名或重跑来改善分数。
 
-## 当前仍未完成的工作
+## 每折选参和验证窗口对照已完成
 
-四档风险原型的源码/信号工程证据保留，但每折fit四档选择、validate-only汇总与完整真实v4的逐折等价仍未完成，不能先跑400方向金融筛选。接下来应复用实际SliceOptimizedWalkForwardRunner的选参和窗口方法，训练期先验证；随后冻结新主期流程，只有主期及分离留出全部通过且机制复核通过的固定源才进入服务器365天验证/原发布器。
+`verify_fit_validation_replay.py` 使用BTC 2023全年35040根训练行情，比较3个代表源×3套正式窗口配置，共9项；工程场景夹具轮换目标场景/不交易，明确不得用于金融资格。`FitOnlyValidationReplayCli` 反射调用现有SliceOptimizedWalkForwardRunner的buildSlices、selectBestParamForSlice、runWindow、mergeValidatePhase和代表参数方法，保留真实成本/复利/经济性过滤。每折严格执行4次fit、1次validate；WindowGuard在进入引擎前拒绝forward或全期执行。
 
-旧245项会继续产出研究证据；截至19:06:17为129/245，旧协议通过1，但新增完全分离留出通过0。生产库存最近服务器审计仍为4、缺96，本轮没有新增上线。源码、工具和边界修复持续记录于dc-quant-deploy。
+完整不改的v4作为训练期参考，9项均逐折参数、fit分数、验证收益、逐笔验证交易/费用/退出字段、PF、回撤、拒绝原因及代表参数一致。3族分别为TrendPullback、RsiAtrEnvelopeReentryLong、SceneControlledBreakout；trend/range/breakout窗口的折数分别5/6/8，验证交易分别138/148/127、23/19/22、77/87/84。另把2023-05-01起所有OHLC乘1.2，保留此前120天以及所有时间/成交量不动，每个用例的首折四档fit试验分数和选择均不改变。没有读取新留出绩效。
+
+证据：`strategy-fit-validation-replay-oracle-20261110/audit.json`，9/9 complete；manifest SHA256=`5b29252b6355097ae408dddef3ca0cc02f89d3b3c39339ce03253db7ee551399`。真实执行类字节码、助手源、配置均绑定；后续改动必须重新做工程证明，不能覆盖已经消费的金融记录。
+
+## 新参数方案财务筛选已开始
+
+`verify_fit_risk_catalog.py` 正在为全部400方向编译冻结源、调用原源码validator，并在2023训练行情逐根比较4档信号的全部风险字段。每个方向单独制品目录，可并行2项，只有主线程写总账。不要求稀有规则在这一个品种年份一定有信号；零信号必须明确标注，不能当作有交易覆盖的参数证明。源码数量/参数档数不是独立策略或资格数量。
+
+`run_fit_risk_admission.py` 只允许源/JAR与四档训练证明完全匹配的固定候选进入新流程，先跑真正的fit+validate并隐藏forward/full-period，再检查原有必要验证门槛（20笔、PF1.2、DD0.15、扣费验证>0）。通过后用`FitOnlyPrimaryReplayCli`直接执行完整原v4、调用原LocalBacktestCli私有qualificationReason；还要求其验证交易、指标和代表参数与预筛完全相同。仅原主期门槛全通过才调用独立62天留出，参数锁定为主期代表档，0次拟合。没有SSH、数据库写入、自动发布或模型调用入口。每个金融尝试强制新证据目录；失败及STARTED标记保留，不允许当参数搜索重跑。
+
+首个真实结果：`strategy-fit-risk-admission-pilot-20261110-long`，BTC/trend、`fr1_trend_pullback_long_s15_t30`，67笔、PF0.694573、DD0.035195、扣费验证-1231.814573，代表riskProfile=3。必要验证门槛失败，未执行forward/full-period或62天留出，不上传/发布，不因其表现修改同源政策。
+
+当前仍未完成：全部400方向工程检查、新政策跨品种/场景筛选、合格源的独立机制复核、服务器365天验证和发布后实盘参数持久化审计。不能把离线工程对照当作生产上线完成。旧245项截至19:31为180/245，旧协议通过1，但新增完全分离留出通过0。生产库存最近服务器审计仍为4、缺96，本轮没有新增上线。
+
+## 19:39继续：跨品种/场景固定研究队列
+
+BTC趋势回调空头亦未过必要验证门槛，扣费验证-976.880222，证据`strategy-fit-risk-admission-pilot-20261110-short`；没有执行其前瞻或新留出，不修改该政策以重测。
+
+`prepare_fit_risk_scope_contract.py` 对每个明确品种/场景重新导出相应源，仍调用原validator、真实源编译、该品种2023全年35040根行情四档信号逐字段对照，所有源和训练行情/字节码核对哈希；不使用人工工程场景作为金融数据。ETH/range的首个跨品种源`catalog_ethusdt_range_b0b0117f812c`已完成4档证明（`strategy-fit-risk-scope-pilot-20261110-eth-range`），尚无该源金融结果。
+
+`run_fit_risk_scope_batch.py` 已冻结并启动10品种×5场景×先前工程阶段固定8族的400项队列，cell内固定族顺序，无依据新金融成绩挑族、调参数；该8族可在第一阶段manifest中追溯。它们是400个作用域候选、8种待经济独立性复核的逻辑族，不是400个独立合格策略。与另一个“400方向源码工程检查”是不同计数维度，绝不能相加作为合格数。
+
+队列目录`strategy-fit-risk-balanced-scope-20261110`；后台编排PID4332，日志`strategy-fit-risk-balanced-scope-launch-20261110`。每项先有四档训练合同，再跑validation-only；主期未过则不调用新留出。若出现异常/半完成金融标记，整批停止并保留证据，禁止自动覆盖重试。已经完成的BTC多头失败通过原manifest和结果哈希复用，不重复看前瞻。该编排完全本地，无发布/模型接口；合格项必须由后续审阅阶段处理，不能放任数量触发实盘。
+
+源码工程检查PID7012，截至19:37完成38/400；原旧协议研究PID21108完成188/245。115项Python测试全通过，9组训练期实际选参/交易对照已通过，Java CLI编译通过。记录的运行PID和计数只代表这个时间点；换会话必须先核对进程、status.json与FAILED标记，不推断进程仍存活，不重跑已消费金融失败。生产最新已核实库存仍是18:10审计的ACTIVE4/runtime-qualified4（仅2条同时达到单项前瞻贡献门槛），缺96；没有新策略上线。
