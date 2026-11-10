@@ -30,6 +30,15 @@ def main():
     validator = os.pathsep.join([classes, str(args.indsvr_repo / 'target/classes'),
         str(args.sim_repo / 'target/classes'), str(args.sim_repo / 'target/dependency/*')])
     commands = [
+        ('freeze_local_catalog', ['recovery.run_representative_strategy_campaign',
+            '--input-dir', str(args.input_dir), '--output-dir', str(screen),
+            '--classes', classes, '--indsvr-repo', str(args.indsvr_repo),
+            '--snapshot', str(args.snapshot), '--protocol', str(args.protocol),
+            '--cohort', args.cohort, '--prepare-only']),
+        ('local_source_contract', ['recovery.validate_local_catalog_sources',
+            '--campaign-dir', str(screen), '--indsvr-repo', str(args.indsvr_repo),
+            '--sim-repo', str(args.sim_repo), '--input-dir', str(args.input_dir),
+            '--output-dir', str(args.output_dir / 'source-contract')]),
         ('local_screen', ['recovery.run_representative_strategy_campaign',
             '--input-dir', str(args.input_dir), '--output-dir', str(screen),
             '--classes', classes, '--indsvr-repo', str(args.indsvr_repo),

@@ -79,11 +79,11 @@ import org.ta4j.core.BarSeries;
 public class GeneratedStrategy extends LegacyLiveSignalAdapter {
     private static final Hypothesis HYPOTHESIS = EXPRESSION;
     @Override
-    public Signal onBars(MarketDataSnapshotFullRefresh kline, IndicatorSymbol indicators) {
+    public Signal onBars(MarketDataSnapshotFullRefresh newKline, IndicatorSymbol indicatorSymbol) {
         Signal signal = new Signal();
-        String symbol = kline.getSecurityID();
+        String symbol = newKline.getSecurityID();
         if (!"SYMBOL".equals(symbol)) return signal;
-        IndicatorSymbol.IndicatorVar variable = indicators.getIndicator(symbol);
+        IndicatorSymbol.IndicatorVar variable = indicatorSymbol.getIndicator(symbol);
         if (variable == null || variable.series == null) return signal;
         final BarSeries series = variable.series;
         if (series.getBarCount() < HYPOTHESIS.warmupBars()) return signal;
@@ -105,7 +105,7 @@ public class GeneratedStrategy extends LegacyLiveSignalAdapter {
         Setup setup = HYPOTHESIS.setup(bars, bars.size() - 1);
         if (setup == null || !setup.valid()) return signal;
         signal.symbol = symbol;
-        signal.text = kline.getInfo3();
+        signal.text = newKline.getInfo3();
         signal.side = setup.side > 0 ? Side.BUY : Side.SELL;
         signal.ocType = OCType.OPEN;
         signal.orderType = "LIMIT";
