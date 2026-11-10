@@ -127,6 +127,8 @@ def reviewed_independent_candidates(records, document, active_rows):
         elif (not review.get('reviewer') or len(str(review.get('rationale') or '').strip()) < 20
               or not re.fullmatch(r'[a-z0-9_:-]{3,100}', str(review.get('mechanism_id') or ''))):
             reason = 'review requires an explicit mechanism, reviewer and substantive rationale'
+        elif 'mechanism_group' in record and review.get('mechanism_id') != record['mechanism_group']:
+            reason = 'review changes the predeclared conservative mechanism group'
         elif sorted(review.get('active_peers', [])) != peers:
             reason = 'review does not cover current qualified peers in the same cell'
         elif peers and any(len(str(review.get('peer_comparisons', {}).get(peer) or '').strip()) < 20 for peer in peers):

@@ -1,0 +1,32 @@
+{
+  "protocol_version": "temporal_source_research_v2",
+  "source_cohort": "true_adx_repair_v1",
+  "clock": "UTC",
+  "primary_begin": "2024-12-15",
+  "primary_end_inclusive": "2025-10-12",
+  "holdout_begin": "2025-10-13",
+  "holdout_end_inclusive": "2025-12-13",
+  "minimum_holdout_calendar_days": 62,
+  "minimum_primary_slices": 3,
+  "selection_mode": "fixed_source_no_parameter_grid",
+  "fixed_source_defaults": {
+    "adxPeriod": 14,
+    "adxThreshold": 20.0,
+    "basicDiGap": 8.0,
+    "selectiveDiGap": 12.0,
+    "riskAtrPeriod": 14,
+    "stopMultiplier": 1.5,
+    "takeMultiplier": 3.0,
+    "exitAtrPeriod": 20,
+    "minimumFirstStepPercent": 0.5
+  },
+  "mechanism_group": "wilder_adx_directional_breakout",
+  "four_directions_are_not_four_independent_mechanisms": true,
+  "holdout_parameter_policy": "frozen_pre_holdout_representative",
+  "holdout_locked_parameters": {},
+  "holdout_optimizer_invocations": 0,
+  "holdout_fit_invocations": 0,
+  "research_caveat": "Actual DMI/ADX semantic repair plus a fixed non-optimized ADX20 trend-strength condition, not a renamed proxy or tuned existing forward failure. Historical prices and other strategy-policy tests have been observed; this is not prospective live-profit evidence or independence after multiple trials.",
+  "server_codegen_allowed": false,
+  "production_write": false
+}

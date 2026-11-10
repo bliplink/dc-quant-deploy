@@ -37,6 +37,19 @@ class SemanticReleaseReviewTest(unittest.TestCase):
         self.assertEqual(['first'], [row['strategy'] for row in approved])
         self.assertEqual(1, len(deferred))
 
+    def test_predeclared_group_cannot_be_relabelled_to_count_a_variant_twice(self):
+        records = [{**self.record(name), 'mechanism_group': 'wilder_adx_directional_breakout'}
+                   for name in ('first', 'second')]
+        reviews = [{**self.review('first'), 'mechanism_id': 'wilder_adx_directional_breakout'},
+                   {**self.review('second'), 'mechanism_id': 'wilder_adx_selective_variant'}]
+        approved, deferred = self.run_review(records, reviews)
+        self.assertEqual(['first'], [row['strategy'] for row in approved])
+        self.assertIn('predeclared', deferred[0]['reason'])
+        reviews[1]['mechanism_id'] = 'wilder_adx_directional_breakout'
+        approved, deferred = self.run_review(records, reviews)
+        self.assertEqual(['first'], [row['strategy'] for row in approved])
+        self.assertIn('same reviewed mechanism', deferred[0]['reason'])
+
     def test_changed_active_peers_require_a_fresh_explicit_comparison(self):
         peer = {'strategy_name': 'active', 'strategy_version': 'v2', 'reason': 'qualified',
                 'symbol_scope': 'BTCUSDT', 'scene': 'trend'}
