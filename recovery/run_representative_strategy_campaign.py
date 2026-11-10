@@ -69,7 +69,7 @@ def run_task(args, symbol, scene, catalog_names, manifest_sha):
     command = [sys.executable, '-u', '-m', 'recovery.run_local_strategy_validation',
                '--java', args.java, '--classes', args.classes,
                '--input-dir', str(args.input_dir), '--output-dir', str(output),
-               '--scene', scene, '--symbols', symbol, '--cohort', 'all', '--pattern', '.*',
+               '--scene', scene, '--symbols', symbol, '--cohort', args.cohort, '--pattern', '.*',
                '--begin', '2024-12-15', '--end', '2025-08-11',
                '--protocol', str(args.protocol), '--representative-catalog',
                '--java-heap-mb', str(args.java_heap_mb)]
@@ -98,6 +98,7 @@ def main():
     parser.add_argument('--snapshot', type=Path, required=True)
     parser.add_argument('--protocol', type=Path, required=True)
     parser.add_argument('--java', default='java')
+    parser.add_argument('--cohort', default='all', help='Explicit frozen research cohort; all preserves prior campaigns')
     parser.add_argument('--workers', type=int, default=2)
     parser.add_argument('--java-heap-mb', type=int, default=384)
     parser.add_argument('--timeout-minutes', type=int, default=60)
@@ -111,7 +112,7 @@ def main():
     assert_research_protocol(args.protocol, args.input_dir,
                              '2024-12-15', '2025-08-11', SYMBOLS)
     catalog_process = subprocess.run(
-        [args.java, '-Ddc.research.listRepresentativesOnly=true', '-cp', args.classes,
+        [args.java, '-Ddc.research.listRepresentativesOnly=true', '-Ddc.research.cohort=' + args.cohort, '-cp', args.classes,
          CATALOG_CLASS], capture_output=True, text=True, encoding='utf-8', check=True)
     catalog = list(csv.DictReader(io.StringIO(catalog_process.stdout), delimiter='\t'))
     names = {row['hypothesis'] for row in catalog}
@@ -135,6 +136,8 @@ def main():
                 'source_sha256': {name: sha(source_dir / (name + '.java')) for name in
                                   ('StrategyResearchBatchCli', 'StrategyRepresentativeCatalogCli')},
                 'class_sha256': {path.name: sha(path) for path in sorted(class_dir.glob('*.class'))}}
+    if args.cohort != 'all':
+        manifest['cohort'] = args.cohort
     args.output_dir.mkdir(parents=True, exist_ok=True)
     manifest_path = args.output_dir / 'campaign.json'
     if manifest_path.exists():

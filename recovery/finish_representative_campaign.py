@@ -12,17 +12,20 @@ from recovery.run_local_historical_scene_campaign import write_json
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument('--wait-pid', type=int, required=True)
+    parser.add_argument('--wait-pid', type=int, help='Optional Windows PID; omit only for an already-complete formal batch')
     parser.add_argument('--formal-dir', type=Path, required=True)
     parser.add_argument('--server-dir', type=Path, required=True)
     parser.add_argument('--snapshot-dir', type=Path, required=True)
     parser.add_argument('--validator-classes', required=True)
     parser.add_argument('--backtest-end-date', required=True)
     args = parser.parse_args()
-    if args.wait_pid <= 0:
+    if args.wait_pid is not None and args.wait_pid <= 0:
         parser.error('--wait-pid must be positive')
-    print('waiting for local formal batch', args.wait_pid, flush=True)
-    wait_for_process(args.wait_pid)
+    if args.wait_pid is not None:
+        print('waiting for local formal batch', args.wait_pid, flush=True)
+        wait_for_process(args.wait_pid)
+    elif not (args.formal_dir / 'FORMAL_COMPLETE.json').exists():
+        raise RuntimeError('without --wait-pid a complete formal batch is required')
     if not (args.formal_dir / 'results.json').exists():
         raise RuntimeError('formal batch has no completed result ledger')
     status = json.loads((args.formal_dir / 'status.json').read_text(encoding='utf-8'))

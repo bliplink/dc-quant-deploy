@@ -7,10 +7,30 @@ from pathlib import Path
 
 from recovery.export_representative_candidate import declaration, java_mask
 from recovery.run_representative_strategy_campaign import select_shortlist
-from recovery.promote_qualified_catalog_candidates import promotion_request, prior_submission
+from recovery.promote_qualified_catalog_candidates import promotion_request, prior_submission, source_only_execution_audit
 
 
 class RepresentativeCampaignTest(unittest.TestCase):
+    def test_uploaded_source_never_uses_server_codegen_or_llm_repair(self):
+        import base64
+        payload = {'provider': 'external', 'sourceType': 'EXTERNAL_SOURCE',
+                   'generationType': 'EXTERNAL_IMPORT', 'generationEngine': 'external_java',
+                   'generationEngineRequested': 'external_java', 'generationEngineFallback': None}
+        status = {'generationTask': {'payload': json.dumps(payload)}}
+        request = {'javaSourceBase64': base64.b64encode(b'class Frozen {}').decode()}
+        audit = source_only_execution_audit(status, request, 0)
+        self.assertFalse(audit['server_codegen_used'])
+        self.assertEqual(audit['uploaded_source_sha256'], hashlib.sha256(b'class Frozen {}').hexdigest())
+        with self.assertRaisesRegex(ValueError, 'LLM calls'):
+            source_only_execution_audit(status, request, 1)
+        for key, value in [('provider', 'deepseek'), ('generationEngine', 'full_java'),
+                           ('generationEngineRequested', 'full_java'), ('sourceType', 'MANUAL')]:
+            with self.assertRaises(ValueError):
+                source_only_execution_audit({'generationTask': {'payload': {**payload, key: value}}}, request, 0)
+        with self.assertRaisesRegex(ValueError, 'fallback'):
+            source_only_execution_audit({'generationTask': {'payload': {
+                **payload, 'generationEngineFallback': 'full_java'}}}, request, 0)
+
     def test_prior_server_ledger_prevents_duplicate_submission_across_output_dirs(self):
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)

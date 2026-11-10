@@ -146,6 +146,7 @@ def main():
                        key_filename=runner.DEFAULT_KEY,
                        passphrase=os.environ.pop('STC_PROD_KEY_PASSPHRASE'),
                        look_for_keys=False, allow_agent=False, timeout=20)
+        client.get_transport().set_keepalive(20)
         remote_env = runner.read_remote_env(client)
         runner.ForwardHandler.ssh_transport = client.get_transport()
         runner.ForwardHandler.remote_port = int(remote_env.get('CLICKHOUSE_HTTP_PORT') or 8123)

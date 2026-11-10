@@ -23,8 +23,9 @@ import paramiko
 from recovery.local_strategy_backtest import DEFAULT_HOST, DEFAULT_USER, DEFAULT_KEY
 from recovery.prod_gateway_tunnel import ForwardServer, ForwardHandler
 from recovery.strategy_recovery_common import (
-    call_gateway, CANDIDATE_IMPORT_TOPIC, CANDIDATE_STATUS_TOPIC, LIVE_LIST_TOPIC,
+    call_gateway, object_value, CANDIDATE_IMPORT_TOPIC, CANDIDATE_STATUS_TOPIC, LIVE_LIST_TOPIC,
 )
+from recovery.strategy_inventory_snapshot import query
 from recovery.run_local_historical_scene_campaign import write_json
 
 
@@ -79,6 +80,23 @@ def promotion_request(record, formal_dir, end_date):
     profile['backtestBeginDate'] = (end_date - timedelta(days=364)).isoformat()
     request['optimizationProfile'] = profile
     return request
+
+
+def source_only_execution_audit(status, request, llm_call_count):
+    """Reject any server-side generator/repair fallback for uploaded source."""
+    task = object_value(status.get('generationTask'))
+    payload = object_value(task.get('payload'))
+    expected = {'provider': 'external', 'sourceType': 'EXTERNAL_SOURCE',
+                'generationType': 'EXTERNAL_IMPORT', 'generationEngine': 'external_java',
+                'generationEngineRequested': 'external_java'}
+    if any(payload.get(name) != value for name, value in expected.items()):
+        raise ValueError('server did not execute the explicit external-source import contract')
+    if payload.get('generationEngineFallback') not in (None, '') or llm_call_count != 0:
+        raise ValueError('server import used a generator fallback or recorded LLM calls')
+    source = base64.b64decode(request['javaSourceBase64'], validate=True)
+    return {**expected, 'llm_call_count': 0, 'server_codegen_used': False,
+            'uploaded_source_sha256': hashlib.sha256(source).hexdigest(),
+            'uploaded_source_bytes': len(source)}
 
 
 def main():
@@ -143,6 +161,7 @@ def main():
     client.connect(DEFAULT_HOST, username=DEFAULT_USER, key_filename=DEFAULT_KEY,
                    passphrase=os.environ.pop('STC_PROD_KEY_PASSPHRASE'),
                    look_for_keys=False, allow_agent=False, timeout=20)
+    client.get_transport().set_keepalive(20)
     server = None
     try:
         ForwardHandler.transport = client.get_transport()
@@ -208,6 +227,14 @@ def main():
                     previous = phases
                 if phases[0] in ('FAILED', 'CANCELLED', 'SKIPPED') or phases[1] in (
                         'SUCCESS', 'FAILED', 'CANCELLED', 'SKIPPED', 'SUSPENDED'):
+                    # Query only the exact imported version, not unrelated scene/selection LLM calls.
+                    safe_name = name.replace("'", "''")
+                    safe_version = version.replace("'", "''")
+                    calls = query(client, "SELECT count() AS count FROM dc.strategy_llm_call_log "
+                                  "WHERE strategy_name='" + safe_name + "' AND strategy_version='"
+                                  + safe_version + "' FORMAT JSONEachRow")[0]['count']
+                    write_json(destination / 'source-only-audit.json',
+                               source_only_execution_audit(status, request, calls))
                     live = call_gateway(url, api_key, LIVE_LIST_TOPIC,
                                         {'strategyName': name, 'status': 'ACTIVE', 'pageSize': 20}, attempts=1)
                     write_json(destination / 'live.json', live)
