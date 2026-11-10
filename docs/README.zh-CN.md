@@ -19,8 +19,8 @@
 - [场景、策略选择、信号与下单链路运维](05-operations/strategy-chain-health-and-gap-fill.zh-CN.md)
 - [实盘策略 v4 资格门槛与持续复核](05-operations/live-strategy-v4-qualification.zh-CN.md)
 - [100 条实盘策略补齐进度与研究交接](05-operations/strategy-inventory-100-progress-20261014.zh-CN.md)
-- [未达标策略修复记录（2026-10-13）](05-operations/strategy-repair-20261013.zh-CN.md)
-- [APSSvr 每日定时重启](05-operations/apssvr-daily-restart.zh-CN.md)
+- [当前补齐100条策略的持续目标与接续入口](05-operations/strategy-inventory-100-active-goal-20261110.zh-CN.md)：优先读这里确认真实合格库存、已结束批次和正在执行的工作；不调用服务端DeepSeek生成策略。
+- [本地固定源码→回测→服务器验证工作流](05-operations/local-source-strategy-workflow-20261110.zh-CN.md)
 - [安全说明](05-operations/security.zh-CN.md)
 
 ### 策略使用者
