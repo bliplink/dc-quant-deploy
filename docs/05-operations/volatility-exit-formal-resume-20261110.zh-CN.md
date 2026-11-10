@@ -8,4 +8,6 @@
 
 `run_local_source_strategy_cycle --resume-from local_formal_holdout` 先重新计算原有 catalog/input/source/class 冻结清单并要求完全相同，再校验 SOURCE_CONTRACT_COMPLETE 与 SCREEN_COMPLETE 的 campaign SHA、无生产写入及留出未读取标记。正式工具仍按原 manifest/checkpoint 保存所有已完成财务结果，不重跑失败的金融结果。服务器阶段续跑还要求匹配的 FORMAL_COMPLETE 和完整结果账本。
 
-北京时间 16:15:45（以进程实际 StartTime 为准）启动续跑 PID 8508；须读取 cycle-resume.stdout.log、cycle-status.json 和正式账本确认最新状态，不把已结束的进程当作仍运行。75 项 Python 回归测试通过。当前仍只允许固定源码外部导入，禁止服务端生成/修复代码；库存直到服务器核验前仍为 4、缺 96。
+北京时间 16:15:45 启动续跑 PID 8508，16:22:18 已完整结束并核验服务器，当前不再运行。75 项 Python 回归测试通过。10/10 正式回测完成、0 执行错误、0 合格、0 上传/发布；7 条 OOS、1 条费用调整前瞻不为正、1 条 PF、1 条时序留出失败。库存仍为 4、缺 96，最终证据为本批 formal/cycle-summary.json。
+
+继续研究版本见[正式口径训练标签协议](formal-payoff-label-research-protocol-20261110.zh-CN.md)。不改本批失败候选的参数重跑，也不因预筛通过而绕过正式失败。

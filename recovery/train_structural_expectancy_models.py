@@ -35,6 +35,8 @@ def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--dataset-dir', type=Path, required=True)
     parser.add_argument('--output-dir', type=Path, required=True)
+    parser.add_argument('--formal-payoff-labels', action='store_true',
+                        help='New frozen ATR-policy label schema, never legacy labels under a new name')
     args = parser.parse_args()
     if (args.output_dir / 'TRAINING_COMPLETE.json').exists():
         raise ValueError('models already frozen; do not overwrite')
@@ -44,6 +46,13 @@ def main():
     ready = json.loads((args.dataset_dir / 'READY.json').read_text(encoding='utf-8'))
     if ready.get('purpose') != 'training_events_only' or ready.get('training_cutoff_exclusive') != '2024-12-15':
         raise ValueError('explicitly training-only event dataset required')
+    if args.formal_payoff_labels:
+        from recovery.formal_payoff_labels import LABEL_SCHEMA
+        if (ready.get('label_schema') != LABEL_SCHEMA or ready.get('oracle_passed') is not True
+                or not ready.get('oracle_audit_sha256') or ready.get('financial_validation_read') is not False):
+            raise ValueError('verified new formal-payoff training labels required')
+    elif ready.get('label_schema'):
+        raise ValueError('new label schema requires explicit training version selection')
     arrays = []
     for symbol, record in sorted(ready['files'].items()):
         path = args.dataset_dir / (symbol + '.npz')
@@ -53,7 +62,7 @@ def main():
             arrays.append({name: data[name] for name in ('x', 'y', 'years', 'families', 'sides')})
     data = {name: np.concatenate([row[name] for row in arrays]) for name in arrays[0]}
     args.output_dir.mkdir(parents=True, exist_ok=True)
-    manifest = {'version': 'structural_expectancy_v1', 'families': list(FAMILIES),
+    manifest = {'version': 'formal_payoff_v1' if args.formal_payoff_labels else 'structural_expectancy_v1', 'families': list(FAMILIES),
         'base_rules_sha256': ready['base_rules_sha256'], 'features': 18,
         'training_cutoff_exclusive': '2024-12-15', 'year_balancing': 'equal aggregate weight per 2022/2023/2024',
         'prediction_target': 'conditional arithmetic mean of all retained net-payoff labels',
@@ -69,6 +78,13 @@ def main():
         'independence_or_significance_claim': False,
         'proxy_limitations': ['96-bar censor', 'no scene exits', 'no subsequent signal interference', 'cost notional approximation']}
     atomic_write_json(args.output_dir / 'training-manifest.json', manifest)
+    if args.formal_payoff_labels:
+        manifest.update(label_schema=ready['label_schema'], oracle_audit_sha256=ready['oracle_audit_sha256'],
+            label_helper_sha256=ready['label_helper_sha256'],
+            exit_policy='first=max(.5%,2ATR); step=.5ATR; stop=1.5ATR; take=3ATR; frozen on entry',
+            proxy_limitations=['96-bar censor', 'no scene exits', 'no subsequent signal interference',
+                               'fixed 10000 training notional versus compounded formal equity'])
+        atomic_write_json(args.output_dir / 'training-manifest.json', manifest)
     models, skipped, diagnostics = [], [], []
     with threadpool_limits(limits=1):
         for family in FAMILIES:
