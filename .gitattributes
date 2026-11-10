@@ -33,3 +33,7 @@ recovery/snapshots/cusum-identity-training-matrix-start-20261111.json text eol=l
 recovery/cusum_training_proof_admission.py text eol=lf
 recovery/test_cusum_training_proof_admission.py text eol=lf
 recovery/snapshots/cusum-training-proof-reader-20261111.json text eol=lf
+recovery/cusum_training_consumer.py text eol=lf
+recovery/test_cusum_training_consumer.py text eol=lf
+recovery/run_ohlcv_profile_proxy_batch.py text eol=lf
+recovery/snapshots/cusum-training-consumer-prototype-20261111.json text eol=lf

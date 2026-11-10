@@ -53,7 +53,7 @@ def require_parent_complete(parent):
 
 
 def run_case(args, row, manifest_hash, ready, protocol, cp, parity_cp, proof_records,
-             *, export_source=None, scope_fields=None):
+             *, export_source=None, scope_fields=None, training_proof_resolver=None):
     output = args.output_dir / 'candidates' / row['strategy']
     if (output / 'checkpoint.json').exists():
         saved = completed_case(output, manifest_hash)
@@ -70,7 +70,12 @@ def run_case(args, row, manifest_hash, ready, protocol, cp, parity_cp, proof_rec
     else:
         frozen, item, _ = export_source(args, row)
     source = frozen / 'GeneratedStrategy.java'
-    original = proof_records.get(row['strategy']) if row['symbol'] == 'BTCUSDT' and row['scene'] == 'trend' else None
+    if training_proof_resolver is not None:
+        original = training_proof_resolver(row, source, frozen / 'seed.json')
+        if not original or 'training_proof_receipt' not in original or 'training_proof_receipt_sha256' not in original:
+            raise ValueError('explicit complete training proof required; never fall back to a different source')
+    else:
+        original = proof_records.get(row['strategy']) if row['symbol'] == 'BTCUSDT' and row['scene'] == 'trend' else None
     if original:
         artifact, entry = Path(original['artifact_path']), original['entry_class']
         if original['source_sha256'] != sha(source) or original['artifact_sha256'] != sha(artifact):
@@ -90,10 +95,16 @@ def run_case(args, row, manifest_hash, ready, protocol, cp, parity_cp, proof_rec
             raise ValueError('scoped original-CLI source parity failed')
         signals = int(found[2])
     source_hash = sha(source)
-    write_status(output / 'source-contract.json', {'source_path': str(source), 'source_sha256': source_hash,
+    source_contract = {'source_path': str(source), 'source_sha256': source_hash,
         'artifact_path': str(artifact), 'artifact_sha256': sha(artifact), 'seed_sha256': sha(frozen / 'seed.json'),
         'training_bars': 35040, 'training_signals': signals, 'nonzero_training_signal_coverage': signals > 0,
-        'mismatches': 0, 'canonical_proof_reused': original is not None, 'production_write': False})
+        'mismatches': 0, 'canonical_proof_reused': original is not None, 'production_write': False}
+    if training_proof_resolver is not None:
+        from recovery.cusum_training_consumer import require_receipt
+        receipt = require_receipt(original, row, source, frozen / 'seed.json', artifact, signals)
+        source_contract.update(training_proof_receipt=receipt,
+            training_proof_receipt_sha256=original['training_proof_receipt_sha256'])
+    write_status(output / 'source-contract.json', source_contract)
     files = ready['files'][row['symbol']]
     spec = {'schema': 'offline_temporal_replay_v1', 'researchMode': 'fixed_full_primary',
         'strategyName': row['strategy'], 'strategyVersion': 'v1', 'symbol': row['symbol'], 'scene': row['scene'],
