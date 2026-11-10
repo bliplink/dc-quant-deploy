@@ -70,3 +70,16 @@
 OHLCV金融目录仍`strategy-ohlcv-profile-formal-20261111`、原日志`strategy-ohlcv-profile-formal-launch-20261111`，继续同一20660，不因开头旧WAITING标签重复启动。完整目录24052已486/19,599/raw2/strict1/errors空，原27328仍等待该OHLCV批次真正200完成。原4332已终态，不能再启动；旧12040仍是历史已交接进程。
 
 公开保存未改探针的原始人工摘要观察`recovery/snapshots/fixed-policy-publication-gate-observation-20261111.json`，与私有原observation逐字节同SHA ea549ee8...。原实际Windows报告为CRLF，因此该单份证据限定`-text`禁用Git换行转换，不为了规范格式而改变原字节；新写的拒绝摘要单独限定LF。除了工作树测试，还核对Git入库blob原字节，避免本机测试通过而克隆后的证据SHA变化。新增“软件诊断不等于财务/发布”回归后Python完整192项通过。固定策略格式修复依然待用户确认，生产和在跑执行器没有改。
+
+## 首条OHLCV OOS为正仍不足样本：不能沿用“全部OOS失败”的旧汇总
+
+02:40以后已完成记录出现ADA/channel空向价值区重入`catalog_adausdt_channel_832d9330eaf9`，假设`ovp1_value_reentry_short`、同一`ohlcv_distribution_auction`机制组。该原主期OOS1、PF1.35368、扣费验证131.206327、扣费前向467.751172，但只有14笔交易，低于既有20笔门槛，首个拒绝原因为`too_few_trades`，不是新的本地合格策略。
+
+原completed_case再次核对源码/JAR/seed合同、完成checkpoint和金融输出哈希；独立strict算术同样拒绝，仍保持至少0.20底线（本例比值1.826539，不是失败项）。该比值按既有forward/totalPnl定义，不应解读为全窗口利润分配百分比。没有HOLDOUT_STARTED，没有服务器上传；不延长窗口、放宽样本数、改分箱或风险参数来让它过关。
+
+- 源SHA `25a74a81a015e5897136819ddfd0cb2ef4ae4b166e1c8782445516b5cc4457ba`。
+- checkpoint `ab2c7bd511670431e4c3e1a103c7c50bb8c302141b2015a5ee5d85aa48e128a2`，source-contract `0163b051218e832ffc74133ede6da0b281d4e68d61ac0caf66bf5af03c2feb26`。
+- primary `6648baad0a0f5625f2cee744ed551fe8eea7161173efa493ff42241a89c7a5dd`，原engine `1c9883fc5edbc710c175822287a54ebbbe60310f15e62fb0c49f7d5bfc14d569`。
+- strict审计 `e5427f9d2b0997e3d6e646f845206583492eb48c37598b2f757c0537670dcbef`。
+
+原证据仍在`strategy-ohlcv-profile-formal-20261111/candidates/catalog_adausdt_channel_832d9330eaf9`，窗口已消费，原冻结队列继续。逐项审计时11条完成记录中10条真实有交易、全部少于20笔，其中10条首因OOS、1条首因样本；9条扣费验证非正、7条扣费前向非正。这些事实说明执行器确实进行交易回放，也能给出OOS1；并不证明盈利稳健或允许修复/重调已失败版本。
