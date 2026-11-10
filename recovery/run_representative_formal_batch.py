@@ -96,6 +96,7 @@ def run_one(args, item, db_config, manifest_hash, pilot):
         raise ValueError('qualified result lacks a passing chronological holdout')
     record = {'symbol': symbol, 'scene': scene, 'hypothesis': hypothesis, 'strategy': name,
               'family': item['family'], 'result_path': results[0], 'qualified': bool(result['qualified']),
+              'validation_net_bps': float(item['wf_validate_bps']),
               'reason': result['qualificationReason'], 'manifest_sha256': manifest_hash,
               'source_sha256': sha(frozen_dir / 'GeneratedStrategy.java'), 'production_write': False}
     write_json(checkpoint, record)
@@ -108,14 +109,14 @@ def main():
         parser.add_argument('--' + name, type=Path, required=True)
     parser.add_argument('--pilot-result', type=Path)
     parser.add_argument('--pilot-frozen', type=Path)
-    parser.add_argument('--workers', type=int, default=2)
+    parser.add_argument('--workers', type=int, default=1)
     args = parser.parse_args()
     if not 1 <= args.workers <= 2:
         parser.error('workers must be 1..2')
     for name in ('campaign_dir', 'input_dir', 'output_dir', 'indsvr_repo', 'sim_repo', 'protocol'):
         setattr(args, name, getattr(args, name).resolve())
     complete = json.loads((args.campaign_dir / 'SCREEN_COMPLETE.json').read_text(encoding='utf-8'))
-    if complete.get('holdout_withheld') is not True:
+    if complete.get('screen_holdout_withheld', complete.get('holdout_withheld')) is not True:
         raise ValueError('screen campaign did not withhold chronological holdout')
     items = json.loads((args.campaign_dir / 'shortlist.json').read_text(encoding='utf-8'))
     manifest = {'shortlist_sha256': sha(args.campaign_dir / 'shortlist.json'),

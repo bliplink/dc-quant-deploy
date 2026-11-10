@@ -10,6 +10,9 @@ import hashlib
 import json
 import os
 import re
+import subprocess
+import csv
+from collections import Counter
 import threading
 import time
 from datetime import date, timedelta
@@ -23,6 +26,24 @@ from recovery.strategy_recovery_common import (
     call_gateway, CANDIDATE_IMPORT_TOPIC, CANDIDATE_STATUS_TOPIC, LIVE_LIST_TOPIC,
 )
 from recovery.run_local_historical_scene_campaign import write_json
+
+
+def prior_submission(output_dir, name, request):
+    """Use the durable request ledger; an unversioned status query may return no candidate."""
+    matches = []
+    for peer in output_dir.parent.glob('strategy-95-server-*'):
+        if peer.resolve() == output_dir.resolve() or not peer.is_dir():
+            continue
+        folder = peer / name
+        request_path, response_path = folder / 'request.json', folder / 'submission.json'
+        if not request_path.exists() or not response_path.exists():
+            continue
+        if json.loads(request_path.read_text(encoding='utf-8')) == request:
+            response = json.loads(response_path.read_text(encoding='utf-8'))
+            version = str(response.get('strategyVersion') or 'v1')
+            order = int(version[1:]) if version.startswith('v') and version[1:].isdigit() else 0
+            matches.append((order, response))
+    return max(matches, key=lambda item: item[0])[1] if matches else None
 
 
 def promotion_request(record, formal_dir, end_date):
@@ -68,11 +89,24 @@ def main():
     parser.add_argument('--limit', type=int, default=1)
     parser.add_argument('--wait-seconds', type=int, default=1800)
     parser.add_argument('--prepare-only', action='store_true')
+    parser.add_argument('--validator-classes',
+                        help='Classpath containing the frozen source validator and parity CLI')
+    parser.add_argument('--inventory-snapshot', type=Path,
+                        help='Current qualification TSV; cap submissions at the remaining two-per-cell slots')
     parser.add_argument('--retry-source-format', action='store_true',
                         help='Retry only a failed exact-signature/IndicatorSymbol source validation')
     args = parser.parse_args()
     records = json.loads((args.formal_dir / 'results.json').read_text(encoding='utf-8'))
-    qualified = sorted((record for record in records if record['qualified']), key=lambda item: item['strategy'])
+    qualified = sorted((record for record in records if record['qualified']),
+                       key=lambda item: (item['symbol'], item['scene'],
+                                         -item.get('validation_net_bps', 0), item['strategy']))
+    occupied, occupied_names = Counter(), set()
+    if args.inventory_snapshot:
+        with args.inventory_snapshot.open(encoding='utf-8', newline='') as stream:
+            for row in csv.DictReader(stream, delimiter='\t'):
+                if row['reason'] == 'qualified':
+                    occupied[row['symbol_scope'], row['scene']] += 1
+                    occupied_names.add(row['strategy_name'])
     if args.limit > 0:
         qualified = qualified[:args.limit]
     args.output_dir.mkdir(parents=True, exist_ok=True)
@@ -85,10 +119,24 @@ def main():
         if request_path.exists() and json.loads(request_path.read_text(encoding='utf-8')) != request:
             raise ValueError('server request changed after freeze')
         write_json(request_path, request)
+        source_path = destination / 'GeneratedStrategy.java'
+        source_path.write_text(base64.b64decode(request['javaSourceBase64']).decode('utf-8'),
+                               encoding='utf-8', newline='\n')
+        if args.validator_classes:
+            validation = subprocess.run(['java', '-cp', args.validator_classes,
+                'com.app.dc.service.strategy.research.RepresentativeSignalParityCli',
+                '--validate-source', str(source_path), request['description'], request['strategyName']],
+                capture_output=True, text=True, encoding='utf-8', errors='replace', timeout=120)
+            (destination / 'source-validation.log').write_text(
+                validation.stdout + validation.stderr, encoding='utf-8')
+            if validation.returncode:
+                raise ValueError('server source contract validation failed: ' + str(destination))
         requests.append((record, request, destination))
     print('prepared locally qualified server candidates', len(requests), flush=True)
     if args.prepare_only or not requests:
         return
+    if not args.validator_classes:
+        parser.error('--validator-classes is required before server submission')
     client = paramiko.SSHClient()
     client.load_host_keys(str(Path.home() / '.ssh' / 'known_hosts'))
     client.set_missing_host_key_policy(paramiko.RejectPolicy())
@@ -107,12 +155,24 @@ def main():
         call_gateway(url, api_key, LIVE_LIST_TOPIC, {'status': 'ACTIVE', 'pageSize': 1}, attempts=1)
         for record, request, destination in requests:
             name = record['strategy']
+            cell = record['symbol'], record['scene']
+            if occupied[cell] >= 2:
+                print(name, 'skip: symbol/scene already has two qualified entries', flush=True)
+                continue
             response_path = destination / 'submission.json'
             if response_path.exists():
                 response = json.loads(response_path.read_text(encoding='utf-8'))
             else:
+                prior = prior_submission(args.output_dir, name, request)
+                if prior is not None:
+                    write_json(response_path, prior)
+                    print(name, 'reusing durable server submission', prior.get('strategyVersion'), flush=True)
+                    response = prior
+                else:
+                    response = None
+            if not response_path.exists():
                 existing = call_gateway(url, api_key, CANDIDATE_STATUS_TOPIC,
-                                        {'strategyName': name}, attempts=1)
+                                        {'strategyName': name, 'strategyVersion': 'v1'}, attempts=1)
                 write_json(destination / 'before-status.json', existing)
                 summary = existing.get('summary') or {}
                 compile_log = str((existing.get('generationTask') or {}).get('compile_log') or '')
@@ -152,11 +212,15 @@ def main():
                                         {'strategyName': name, 'status': 'ACTIVE', 'pageSize': 20}, attempts=1)
                     write_json(destination / 'live.json', live)
                     active = [row for row in live.get('items', []) if row.get('strategyName') == name
-                              and str(row.get('status')).upper() == 'ACTIVE']
+                              and str(row.get('status')).upper() == 'ACTIVE'
+                              and str(row.get('strategyVersion') or row.get('strategy_version')) == version]
                     write_json(destination / 'outcome.json', {'strategy': name, 'version': version,
                                'generation_status': phases[0], 'backtest_status': phases[1],
                                'published': bool(active), 'registry_versions': active})
                     print(name, 'server terminal', phases, 'published', bool(active), flush=True)
+                    if active and name not in occupied_names:
+                        occupied[cell] += 1
+                        occupied_names.add(name)
                     break
                 time.sleep(5)
             else:

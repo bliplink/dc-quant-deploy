@@ -7,10 +7,25 @@ from pathlib import Path
 
 from recovery.export_representative_candidate import declaration, java_mask
 from recovery.run_representative_strategy_campaign import select_shortlist
-from recovery.promote_qualified_catalog_candidates import promotion_request
+from recovery.promote_qualified_catalog_candidates import promotion_request, prior_submission
 
 
 class RepresentativeCampaignTest(unittest.TestCase):
+    def test_prior_server_ledger_prevents_duplicate_submission_across_output_dirs(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            request = {'strategyName': 'candidate', 'javaSourceBase64': 'frozen'}
+            for suffix, version in [('first', 'v1'), ('formatfix', 'v2')]:
+                folder = root / ('strategy-95-server-' + suffix) / 'candidate'
+                folder.mkdir(parents=True)
+                (folder / 'request.json').write_text(json.dumps(request), encoding='utf-8')
+                (folder / 'submission.json').write_text(
+                    json.dumps({'strategyVersion': version}), encoding='utf-8')
+            selected = prior_submission(root / 'strategy-95-server-final', 'candidate', request)
+            self.assertEqual(selected['strategyVersion'], 'v2')
+            self.assertIsNone(prior_submission(root / 'strategy-95-server-final',
+                                               'candidate', {**request, 'javaSourceBase64': 'different'}))
+
     def test_server_submission_requires_frozen_source_and_passing_holdout(self):
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
