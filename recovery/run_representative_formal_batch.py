@@ -27,6 +27,11 @@ def sha(path):
     return hashlib.sha256(path.read_bytes()).hexdigest()
 
 
+def research_parity_classpath(indsvr_repo, sim_repo):
+    return os.pathsep.join([str(indsvr_repo / 'target/test-classes'),
+                           str(indsvr_repo / 'target/classes'), runner.java_classpath(sim_repo)])
+
+
 def write_empty_formal_batch(output, manifest_hash):
     """An empty validation shortlist is a completed zero-result batch, not an error."""
     write_json(output / 'results.json', [])
@@ -75,7 +80,7 @@ def run_one(args, item, db_config, manifest_hash, pilot):
                                         args.output_dir / 'frozen', symbol, scene, hypothesis)
     source = (frozen_dir / 'GeneratedStrategy.java').read_text(encoding='utf-8')
     artifact, entry_class, _ = runner.compile_source(source, args.sim_repo, output / 'parity-artifact')
-    parity_cp = str(args.indsvr_repo / 'target/test-classes') + os.pathsep + runner.java_classpath(args.sim_repo)
+    parity_cp = research_parity_classpath(args.indsvr_repo, args.sim_repo)
     with (output / 'signal-parity.log').open('w', encoding='utf-8') as log:
         for begin, end in validation_windows(scene):
             command = ['java', '-Xmx256m', '-Duser.timezone=UTC', '-cp', parity_cp,

@@ -5,6 +5,8 @@ production key is inherited in memory solely for audited server operations.
 """
 
 import argparse
+import hashlib
+import json
 import subprocess
 import sys
 from datetime import datetime, timezone
@@ -13,12 +15,36 @@ from pathlib import Path
 from recovery.strategy_recovery_common import atomic_write_json
 
 
+def verify_resume_markers(output, stage):
+    """Resume only frozen completed stages; financial checkpoints remain authoritative."""
+    screen = output / 'screen'
+    campaign_hash = hashlib.sha256((screen / 'campaign.json').read_bytes()).hexdigest()
+    contract = json.loads((output / 'source-contract/SOURCE_CONTRACT_COMPLETE.json').read_text(encoding='utf-8'))
+    screened = json.loads((screen / 'SCREEN_COMPLETE.json').read_text(encoding='utf-8'))
+    if (contract.get('campaign_sha256') != campaign_hash
+            or screened.get('manifest_sha256') != campaign_hash
+            or contract.get('production_write') is not False
+            or screened.get('production_write') is not False
+            or screened.get('screen_holdout_withheld', screened.get('holdout_withheld')) is not True):
+        raise ValueError('resume requires matching completed source/screen contracts')
+    if stage == 'server_import_backtest_audit':
+        formal = output / 'formal'
+        finished = json.loads((formal / 'FORMAL_COMPLETE.json').read_text(encoding='utf-8'))
+        manifest_hash = hashlib.sha256((formal / 'manifest.json').read_bytes()).hexdigest()
+        results = json.loads((formal / 'results.json').read_text(encoding='utf-8'))
+        if (finished.get('manifest_sha256') != manifest_hash
+                or finished.get('production_write') is not False
+                or finished.get('completed') != len(results)):
+            raise ValueError('resume requires a matching completed formal ledger')
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     for name in ('input-dir', 'output-dir', 'indsvr-repo', 'sim-repo', 'snapshot', 'protocol'):
         parser.add_argument('--' + name, type=Path, required=True)
     parser.add_argument('--cohort', required=True)
     parser.add_argument('--backtest-end-date', required=True)
+    parser.add_argument('--resume-from', choices=('local_formal_holdout', 'server_import_backtest_audit'))
     args = parser.parse_args()
     for name in ('input_dir', 'output_dir', 'indsvr_repo', 'sim_repo', 'snapshot', 'protocol'):
         setattr(args, name, getattr(args, name).resolve())
@@ -53,6 +79,12 @@ def main():
             '--snapshot-dir', str(args.output_dir / 'inventory'), '--validator-classes', validator,
             '--backtest-end-date', args.backtest_end_date]),
     ]
+    if args.resume_from:
+        # Recompute every original catalog/input/class hash before skipping work.
+        subprocess.run([sys.executable, '-u', '-m'] + commands[0][1], check=True)
+        verify_resume_markers(args.output_dir, args.resume_from)
+        commands = commands[next(index for index, item in enumerate(commands)
+                                 if item[0] == args.resume_from):]
     for stage, command in commands:
         atomic_write_json(args.output_dir / 'cycle-status.json', {
             'stage': stage, 'state': 'running', 'cohort': args.cohort,

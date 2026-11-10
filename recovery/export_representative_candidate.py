@@ -31,6 +31,16 @@ def declaration(source, name, interface=False):
     return source[match.start():index]
 
 
+def exit_policy_contract_version(research_source):
+    setup = java_mask(declaration(research_source, 'Setup'))
+    if 'EXIT_POLICY_SCHEMA_VERSION' not in setup:
+        return 0  # Explicit historical source contract, output stays byte-identical.
+    match = re.search(r'\bEXIT_POLICY_SCHEMA_VERSION\s*=\s*(\d+)\s*;', setup)
+    if not match or match.group(1) != '1':
+        raise ValueError('unsupported explicit exit policy source contract')
+    return 1
+
+
 def candidate_source(research_source, catalog_row, symbol, strategy_name, version='v1'):
     family = catalog_row['family']
     parameters = json.loads(catalog_row['parameters'])
@@ -122,6 +132,13 @@ public class GeneratedStrategy extends LegacyLiveSignalAdapter {
 '''
     header = header.replace('PACKAGE', package).replace('EXPRESSION', expression) \
         .replace('SYMBOL', symbol).replace('STRATEGY', strategy_name)
+    if exit_policy_contract_version(research_source) == 1:
+        for field, literal, attribute in (
+                ('firstStep', '0.5', 'firstStepPct'), ('step', '0.2', 'stepPct'),
+                ('underTriggerProfitPrice', '0.8', 'fallbackTriggerPct'),
+                ('underTakerProfitPrice', '0.5', 'fallbackTakePct')):
+            header = header.replace('signal.' + field + ' = BigDecimal.valueOf(' + literal + ');',
+                                    'signal.' + field + ' = BigDecimal.valueOf(setup.exitPolicy.' + attribute + ');')
     return header + support + '\n}\n'
 
 

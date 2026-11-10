@@ -8,10 +8,19 @@ from pathlib import Path
 from recovery.export_representative_candidate import declaration, java_mask
 from recovery.run_representative_strategy_campaign import select_shortlist
 from recovery.run_representative_formal_batch import write_empty_formal_batch
+from recovery.run_representative_formal_batch import research_parity_classpath
 from recovery.promote_qualified_catalog_candidates import promotion_request, prior_submission, source_only_execution_audit
 
 
 class RepresentativeCampaignTest(unittest.TestCase):
+    def test_formal_parity_resolves_both_research_and_indsvr_contract_classes(self):
+        from unittest.mock import patch
+        import os
+        with patch('recovery.run_representative_formal_batch.runner.java_classpath', return_value='formal-runtime'):
+            cp = research_parity_classpath(Path('research'), Path('sim'))
+        self.assertEqual([str(Path('research/target/test-classes')),
+                          str(Path('research/target/classes')), 'formal-runtime'], cp.split(os.pathsep))
+
     def test_empty_shortlist_has_a_durable_zero_result_ledger(self):
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
