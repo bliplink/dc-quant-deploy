@@ -9,6 +9,34 @@ from recovery import validate_local_catalog_sources as validator
 
 
 class SourceContractPreflightTest(unittest.TestCase):
+    def parallel(self, failing):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            (root / 'campaign.json').write_text(json.dumps({'catalog': [
+                {'hypothesis': 'first'}, {'hypothesis': 'second'}]}), encoding='utf-8')
+            args = ['validator', '--campaign-dir', str(root), '--indsvr-repo', str(root),
+                    '--sim-repo', str(root), '--output-dir', str(root / 'output'),
+                    '--input-dir', str(root), '--workers', '2']
+            def validate(args, item, classpath):
+                if failing and item['hypothesis'] == 'second':
+                    raise ValueError('source contract rejected')
+                return {'hypothesis': item['hypothesis'], 'pre_screen_signal_parity': True}
+            with patch('sys.argv', args), patch.object(validator, 'java_classpath', return_value='runtime'), \
+                 patch.object(validator, 'validate_source_item', side_effect=validate) as run:
+                if failing:
+                    with self.assertRaisesRegex(ValueError, 'source contract rejected'):
+                        validator.main()
+                else:
+                    validator.main()
+                self.assertEqual(2, run.call_count)
+                self.assertEqual(not failing, (root / 'output/SOURCE_CONTRACT_COMPLETE.json').exists())
+
+    def test_parallel_contract_completion_requires_every_source_pass(self):
+        self.parallel(False)
+
+    def test_parallel_rejection_cannot_write_a_completion_marker(self):
+        self.parallel(True)
+
     def execute(self, parity_code):
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)

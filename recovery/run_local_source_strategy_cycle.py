@@ -44,6 +44,7 @@ def main():
         parser.add_argument('--' + name, type=Path, required=True)
     parser.add_argument('--cohort', required=True)
     parser.add_argument('--backtest-end-date', required=True)
+    parser.add_argument('--source-contract-workers', type=int, choices=(1, 2), default=1)
     parser.add_argument('--resume-from', choices=('local_formal_holdout', 'server_import_backtest_audit'))
     args = parser.parse_args()
     for name in ('input_dir', 'output_dir', 'indsvr_repo', 'sim_repo', 'snapshot', 'protocol'):
@@ -64,7 +65,8 @@ def main():
         ('local_source_contract', ['recovery.validate_local_catalog_sources',
             '--campaign-dir', str(screen), '--indsvr-repo', str(args.indsvr_repo),
             '--sim-repo', str(args.sim_repo), '--input-dir', str(args.input_dir),
-            '--output-dir', str(args.output_dir / 'source-contract')]),
+            '--output-dir', str(args.output_dir / 'source-contract'),
+            '--workers', str(args.source_contract_workers)]),
         ('local_screen', ['recovery.run_representative_strategy_campaign',
             '--input-dir', str(args.input_dir), '--output-dir', str(screen),
             '--classes', classes, '--indsvr-repo', str(args.indsvr_repo),
