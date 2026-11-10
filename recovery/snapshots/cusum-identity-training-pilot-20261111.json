@@ -1,0 +1,48 @@
+{
+  "schema": "cusum_identity_training_pilot_observation_v1",
+  "manifest_sha256": "21d831ce9bdbf36a3fc9bb2781e2d0c19281ffbba59c0065d21138219d5b6687",
+  "canonical_strategy": "catalog_btcusdt_trend_1b8c493a8902",
+  "canonical_source_sha256": "952c40d476efa5482910c501d6db66b9ecb9826eecb636699f25e2365fbf6d92",
+  "candidate_strategy": "catalog_btcusdt_range_cfd83f4a1a39",
+  "source_sha256": "832778a4427f831bc737196f133249a6cc155fcfbb1955262d43536b4c923bce",
+  "artifact_sha256": "3bb6dfc7e4de72b6a53df6e0ce54a1aa88f3b5ac1ce06f866ed8a6ceb45cc7fe",
+  "identity_proof": {
+    "normalized_class_sha256": {
+      "GeneratedStrategy$1.class": "bf64d7dfc6037af9e04ac8bb886857ed25513c4a784e9a5ba3fad2d7849719e2",
+      "GeneratedStrategy$Quotes.class": "e870d6762194a4c609361dc28701037baa81d68fe238915008ccfac0c8555739",
+      "GeneratedStrategy.class": "0f92d43d0c70fe70d86a3ec33638eb6c2ce6f0cfdfde7b09b1e1747b2a248db4"
+    },
+    "manifest_content_sha256": "46d647944ea3219cc3abe291315bfbaffd234ad23fdd36e82107f2b8cd39b510"
+  },
+  "training_bars": 35040,
+  "signals": 535,
+  "mismatches": 0,
+  "identity_comparison_seconds": 0.008490100037306547,
+  "full_year_parity_seconds": 18.2685732000391,
+  "negative_controls": [
+    {
+      "label": "entry_constant",
+      "source_sha256": "dc32a17d6b2e005a2443fedfa2a9296c640b324236187bacc4ebd10586f1f497",
+      "artifact_sha256": "40c9de89231f4b716a8015be4b5dcc7a475783e7a89688f152a440e732530fcb",
+      "source_rejected": true,
+      "bytecode_rejected": true,
+      "financial_replay_started": false
+    },
+    {
+      "label": "exit_stop",
+      "source_sha256": "f28546159353a1cc2afb8a58fa7ea2a99f15c576c877282a1fc1f64e5bd48979",
+      "artifact_sha256": "190b24b40e07eca0b35b061b065c3dd4dee9a93d980a6825dcfb1ca0e63a1d30",
+      "source_rejected": true,
+      "bytecode_rejected": true,
+      "financial_replay_started": false
+    }
+  ],
+  "adapter_javap_sha256": "e732e5b49ac675e5cae41b61ec589c3c88e2af59549c3ca929d93a34c0f655b5",
+  "full_year_log_sha256": "c77198e8a479837ad88a1d1a2a88728c66890586b886f7e6e8266fb571188d6b",
+  "runtime_reuse_enabled": false,
+  "all_scopes_reuse_ready": false,
+  "financial_validation_started": false,
+  "old_financial_results_replayed": false,
+  "new_holdout_read": false,
+  "production_write": false
+}
