@@ -91,3 +91,15 @@ BTC趋势回调空头亦未过必要验证门槛，扣费验证-976.880222，证
 读取带中文任务payload的私有证据要明确UTF-8；Windows PowerShell默认编码会让ConvertFrom-Json报假性的坏JSON，Python UTF-8解析验证原件正常。不要因此重写原始任务或金融文件。
 
 19:56快照：旧批次205/245，旧通过4、新分离通过0；平衡队列15/400、新通过0；源码工程检查至少84/400。三个主进程已重新确认存活，后续依真实状态继续，不重复失败窗口。目标仍未完成。
+
+## 20:05 接续：本地补充留出自动接续器
+
+新增`recovery/watch_fixed_primary_supplements.py`只跟随经实际进程身份验证的原父任务：绑定PID、创建时间、完整module命令及准确output目录，防止PID复用；不是只看lock或status文件。父任务写status后再写results，接续器须读到前后status字节相同、结果数和资格数一致的完整账本才处理。父任务错误、半完成留出、已完成观察被改/丢弃、源/主信封/输入/助手哈希错配都停下并写FAILED，不覆盖重试。
+
+每条旧主期通过记录都调用既有`supplement_temporal_holdout`固定源路径，保持主期不重跑、新62天0拟合；已有4条失败仅核验原结果并复用。该工具没有SSH凭据、导入、生成或发布调用；主流程完成后仅形成WATCH_COMPLETE，本地新通过者仍须人工源码机制复核和正常服务器365天门槛，不会自动上线。
+
+20:04:56启动PID9876，输出`strategy-fixed-primary-supplement-watch-20261110`，启动日志`strategy-fixed-primary-supplement-watch-launch-20261110`。实际日志已确认4/4旧失败均`reused=True`，没有重跑；初始父进度213/245、严格新资格0，仍在跟随。它的聚合results和frozen种子可供之后机制复核/发布准备读取，但绝不能把legacy_passes_seen当成新合格。
+
+4项新保护测试通过，全套Python合计119项通过。该可选本地工具依赖已验证的psutil7.2.1/paramiko4.0.0（Python3.14），在独立研究环境可用`python -m pip install -r recovery/requirements-watch.txt`准备；本次使用本机已有依赖，没有安装/修改服务器。不要用Windows的`os.kill(pid, 0)`探测进程，也不要因为日志短暂无更新而重启原任务。
+
+20:05其余研究仍运行：400方向训练工程112/400、跨单元金融22/400/0新合格、原固定源213/245/4旧通过。换会话先检查9876及原3个PID的真实进程和全部FAILED/状态文件；若进程已结束按终态诊断，不盲目再启动接续器或重跑已看窗口。生产最近只读核验仍4/缺96，目标继续进行。

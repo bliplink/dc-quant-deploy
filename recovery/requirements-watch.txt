@@ -1,0 +1,3 @@
+# Optional local research watcher; these exact versions were exercised on Python 3.14.
+paramiko==4.0.0
+psutil==7.2.1
