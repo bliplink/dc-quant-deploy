@@ -14,8 +14,9 @@
 | trend | 快速均线偏向，ATR 止损 1.1／止盈 1.8 | 20 | 0 | 验证交易最多 185 笔，20 组扣成本收益均为负 |
 | range | 收盘位置偏向，ATR 止损 1.1／止盈 1.8 | 20 | 0 | 验证交易最多 518 笔，20 组扣成本收益均为负 |
 | reversal | K 线实体衰竭反向，ATR 止损 1.1／止盈 1.8 | 20 | 0 | 验证交易最多 22 笔，只有 4 组收益为正但均未满足完整准入 |
+| range | 稳健中位数偏离后的回归，ATR 止损 2.0／止盈 4.0 | 20 | 0 | 验证交易最多 17 笔；4 组收益为正，但证据不足 |
 
-原始本机结果在 `E:\sourcecode\codex\_work\strategy-local-validation-20261110\` 的四个对应目录；每个目录有 `metadata.json`、`validation_results.tsv` 和 `validation_pass.tsv`，元数据记录输入 SHA-256 和研究协议哈希。四个 `validation_pass.tsv` 均无候选行，研究输出的前瞻字段均为 `WITHHELD`。
+原始本机结果在 `E:\sourcecode\codex\_work\strategy-local-validation-20261110\` 的五个对应目录；每个目录有 `metadata.json`、`validation_results.tsv` 和 `validation_pass.tsv`，元数据记录输入 SHA-256 和研究协议哈希。五个 `validation_pass.tsv` 均无候选行，研究输出的前瞻字段均为 `WITHHELD`。
 
 场景频率也是硬约束：上述预筛期 10 品种合计 4,800 个半日桶，其中 `breakout=105`（2.19%）、`reversal=84`（1.75%），而 `channel=1653`、`range=1486`、`trend=1413`。每个品种只有 6～18 个突破桶、4～11 个反转桶，不能指望仅靠这一段历史为每个稀有场景制造 30 笔以上的独立交易。补齐这类槽位需要更长且保持独立的历史／前瞻证据或新的可解释事件定义，不能删掉样本数门槛。
 
