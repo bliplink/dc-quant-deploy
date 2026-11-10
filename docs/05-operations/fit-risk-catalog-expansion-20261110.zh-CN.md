@@ -50,3 +50,5 @@ PID12040于2026-11-10 21:38:37启动，输出`strategy-fit-risk-full-catalog-202
 仅追踪训练零信号及源逻辑，未查看这两个方向的金融绩效。冻结源`StrategyResearchBatchCli.java:5354`中`SceneWickReversalHypothesis`多头要求lowerWick/range≥0.45同时closeLocation≤0.45；由于min(open,close)≤close，必有lowerWick/range≤closeLocation，故条件只剩等式边界。空头要求upperWick/range≥0.45、closeLocation≥0.55，同理upperWick/range≤1-closeLocation≤0.45，也只剩等式边界（浮点实现还会有极小邻域）。这不是以金融表现为依据调参，而是可从有效OHLC几何直接推导的约束退化。
 
 下一步应在新隔离研究源码树中修复影线/收盘位置关系，先用手工合法OHLC反例、镜像/未来不变性和原validator及全年信号对照证明语义；再冻结新假设与参数后研究。此时尚未实施该修复，不能声称已有新策略；不得改当前2e82681/8bbac72研究源、400合同、12040计划或旧失败记录，也不能把修复版本及旧影线机制重复算作独立机制。原旧条件的金融作用域继续按已冻结计划留证，不据训练观察篡改在跑版本。
+
+22:24后续已在隔离树实施上述修复并完成111项Java/141项Python及两向全年非零精确对照；新21320已启动独立固定源100作用域金融批次，旧源及本19,599计划均未修改。详见[影线几何修复研究](wick-geometry-repair-research-20261110.zh-CN.md)；尚无新增完整合格/服务器发布，不能把方向、工程检查或队列项当成策略库存。
