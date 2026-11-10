@@ -99,6 +99,44 @@ def source_only_execution_audit(status, request, llm_call_count):
             'uploaded_source_bytes': len(source)}
 
 
+def reviewed_independent_candidates(records, document, active_rows):
+    """Source-bound mechanism review is distinct from financial qualification."""
+    reviews = document.get('reviews', []) if document.get('schema') == 'independent_mechanism_review_v1' else []
+    by_name = {}
+    for review in reviews:
+        name = review.get('strategy')
+        if not name or name in by_name:
+            raise ValueError('missing or duplicate semantic review identity')
+        by_name[name] = review
+    approved, deferred, used = [], [], set()
+    for record in records:
+        review = by_name.get(record['strategy'], {})
+        peers = sorted(row['strategy_name'] + '@' + row['strategy_version'] for row in active_rows
+                       if row.get('reason') == 'qualified' and row['symbol_scope'] == record['symbol']
+                       and row['scene'] == record['scene'])
+        reason = None
+        if review.get('decision') != 'APPROVE':
+            reason = 'independent mechanism review absent or not approved'
+        elif any(review.get(key) != record[key] for key in ('source_sha256', 'symbol', 'scene')):
+            reason = 'semantic review source or scope changed'
+        elif (not review.get('reviewer') or len(str(review.get('rationale') or '').strip()) < 20
+              or not re.fullmatch(r'[a-z0-9_:-]{3,100}', str(review.get('mechanism_id') or ''))):
+            reason = 'review requires an explicit mechanism, reviewer and substantive rationale'
+        elif sorted(review.get('active_peers', [])) != peers:
+            reason = 'review does not cover current qualified peers in the same cell'
+        elif peers and any(len(str(review.get('peer_comparisons', {}).get(peer) or '').strip()) < 20 for peer in peers):
+            reason = 'review lacks a substantive comparison against each active peer'
+        key = record['symbol'], record['scene'], review.get('mechanism_id')
+        if reason is None and key in used:
+            reason = 'another candidate in the same cell uses the same reviewed mechanism'
+        if reason:
+            deferred.append({'strategy': record['strategy'], 'source_sha256': record['source_sha256'], 'reason': reason})
+        else:
+            approved.append(record)
+            used.add(key)
+    return approved, deferred
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--formal-dir', type=Path, required=True)
@@ -107,6 +145,10 @@ def main():
     parser.add_argument('--limit', type=int, default=1)
     parser.add_argument('--wait-seconds', type=int, default=1800)
     parser.add_argument('--prepare-only', action='store_true')
+    parser.add_argument('--require-semantic-review', action='store_true',
+                        help='Also require source-bound independent-mechanism review for older cohorts')
+    parser.add_argument('--semantic-review', type=Path,
+                        help='Defaults to formal-dir/semantic-review.json; mandatory for CatalogAtrExit sources')
     parser.add_argument('--validator-classes',
                         help='Classpath containing the frozen source validator and parity CLI')
     parser.add_argument('--inventory-snapshot', type=Path,
@@ -118,16 +160,28 @@ def main():
     qualified = sorted((record for record in records if record['qualified']),
                        key=lambda item: (item['symbol'], item['scene'],
                                          -item.get('validation_net_bps', 0), item['strategy']))
-    occupied, occupied_names = Counter(), set()
+    occupied, occupied_names, active_rows = Counter(), set(), []
     if args.inventory_snapshot:
         with args.inventory_snapshot.open(encoding='utf-8', newline='') as stream:
             for row in csv.DictReader(stream, delimiter='\t'):
+                active_rows.append(row)
                 if row['reason'] == 'qualified':
                     occupied[row['symbol_scope'], row['scene']] += 1
                     occupied_names.add(row['strategy_name'])
     if args.limit > 0:
         qualified = qualified[:args.limit]
     args.output_dir.mkdir(parents=True, exist_ok=True)
+    if qualified and (args.require_semantic_review or any(
+            record['family'].startswith('CatalogAtrExit') for record in qualified)):
+        review_path = args.semantic_review or args.formal_dir / 'semantic-review.json'
+        document = json.loads(review_path.read_text(encoding='utf-8')) if review_path.exists() else {}
+        if args.inventory_snapshot is None:
+            raise ValueError('semantic release review requires a current inventory snapshot')
+        qualified, deferred = reviewed_independent_candidates(qualified, document, active_rows)
+        write_json(args.output_dir / 'semantic-review-audit.json', {
+            'approved': [record['strategy'] for record in qualified], 'deferred': deferred,
+            'review_file': str(review_path), 'production_write': False})
+        print('semantic release review approved', len(qualified), 'deferred', len(deferred), flush=True)
     requests = []
     for record in qualified:
         request = promotion_request(record, args.formal_dir, args.backtest_end_date)

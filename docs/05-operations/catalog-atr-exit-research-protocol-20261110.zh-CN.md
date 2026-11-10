@@ -23,3 +23,19 @@
 86 项 Java 回归测试、84 项 Python 测试通过。本地研究提交 64b7bed17c93352209de92a3f281beb7e59da55b，远端独立研究分支 `codex/local-catalog-atr-exit-strategies-20261110` 提交 17d0600142847906df251d21b84faf5a6a881096；核心与测试文件 blob 已逐项核对。没有修改或发布生产服务镜像。
 
 北京时间 16:40:26 以 PID 18140 启动完整流程，输出 `strategy-catalog-atr-exit-cycle-20261110`，最近服务器窗口仍为 2025-11-10 至 2026-11-09。418 项源码检查需要一定时间，以实际 source-contract/status.json、cycle-status.json 及子进程为准；不要仅因尚无新实盘数量就重跑已经完成的财务结果或修改被冻结源码。
+
+18140 在第 67 项源码合同失败，已结束且未进入任何财务初筛/留出，前 66 项通过证据保留。错误为 ADX-like 过滤合同未实现，而非已完成财务亏损。额外只读诊断在一个独立 JVM 调用未经修改的正式 StrategyGeneratedSourceValidator，对全部 418 份固定源码检查：414 通过，4 失败；证据 `strategy-catalog-atr-exit-source-rules-audit-20261110/audit.json`。此诊断不代替单份编译或逐信号检查。
+
+4 项失败是 AdxDirectionalBreakoutHypothesis、SelectiveAdxBreakoutHypothesis 的多空各一项。核对旧代码为方向运动/强度代理，不是完整 Wilder ADX；不添加未使用的 isStrongTrend 假方法，不改名避开校验器，不给校验器例外。将这 4 个明确标为 INVALID_SOURCE_CONTRACT，从新研究资格目录排除；保留原类和失败证据，未声称已修复它们或把它们算作合格。
+
+剩余 209 个原类、414 个方向的参数/入场/原风险/保护均保持不变，在新目录重新冻结并完成全部 414 项单份编译/合同/逐信号验证，然后进行 20,700 项初筛及后续原正式流程。更改只发生在财务前的源码资格目录，任何源码失败项都不进入金融筛选，原失败目录不覆盖。
+
+资格目录修正后 86 项 Java 再次通过，Python（含语义审计和并行合同）89 项通过。本地研究最终 d72ee16cdebcc24b095698930ae13e0369726042，远端同一独立分支最终 ad313c0a6ee1076f80d34638e3aa4ed512f7dd60，两个变更 Java blob 已核对一致。16:55:13 以 21056 启动新目录 `strategy-catalog-atr-exit-cycle-20261110-sourceeligible`，之后以这个进程/账本为准。旧首轮 18140 已结束。批量源码规则诊断工具只是提早报告所有规则失败，未替代新目录中每一项实际编译、合同和逐信号检查。
+
+## 发布前必须落实机制独立性复核
+
+原 shortlisted 记录要求语义复核，不能只按 Java 类名不同自动当作两个独立机制。CatalogAtrExit 候选现在必须有 `formal/semantic-review.json` 才能进入服务器导入；缺少、未批准或证据不匹配只标为 deferred，不把财务合格改成财务失败，也不调用服务器生成器。
+
+schema 为 `independent_mechanism_review_v1`，reviews 每项包含 strategy、source_sha256、symbol、scene、decision=APPROVE、mechanism_id、reviewer、rationale、active_peers 和 peer_comparisons。复核必须绑定本地通过的源 SHA/范围，明确比对该单元当前每一个 ACTIVE 合格版本（name@version）及其入场机制；同单元本批多个候选的同一 mechanism_id 最多一个进入导入。不能为增加数量给克隆任意起不同机制名。
+
+复核由当前本地开发会话在读完正式结果和固定源码后完成，不需要用户逐条操作；不能改已观察的参数。将真实复核写入该批 formal/semantic-review.json，再使用已验证冻结清单的 `--resume-from server_import_backtest_audit` 接续服务器阶段。生产财务发布门槛仍由服务器最终决定。语义审计进入 cycle-summary，不会把未复核候选计成已上线。

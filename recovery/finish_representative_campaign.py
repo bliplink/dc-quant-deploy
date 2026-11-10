@@ -42,8 +42,11 @@ def main():
     subprocess.run([sys.executable, '-u', '-m', 'recovery.strategy_inventory_snapshot',
                     '--output-dir', str(args.snapshot_dir)], check=True)
     inventory = json.loads((args.snapshot_dir / 'summary.json').read_text(encoding='utf-8'))
+    review_path = args.server_dir / 'semantic-review-audit.json'
+    review = json.loads(review_path.read_text(encoding='utf-8')) if review_path.exists() else None
     write_json(args.formal_dir / 'cycle-summary.json', {
         'local_formal_status': status, 'production_inventory': inventory,
+        'semantic_release_review': review,
         'qualified_inventory_gap': max(0, 100 - inventory['qualified_count']),
         'inventory_count_target_met': inventory['qualified_count'] >= 100,
         'source_independence_review_required': True})
