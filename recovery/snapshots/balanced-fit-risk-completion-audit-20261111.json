@@ -1,0 +1,32 @@
+{
+  "state": "complete_read_only_audit",
+  "batch_manifest_sha256": "f046c3dad656c2fc990125e1d4d679e9abf6edeb5343fbff06fb26e68975e8da",
+  "completion_marker_sha256": "ca23c7b181bcd8ab6a3a9564d0e681b7097d083e0b15ab27a2a8f015a6deb4b0",
+  "results_sha256": "fb1102739292c2b468780783c15950055fbe3c7f7159f60c98aac969e0d7f3bd",
+  "case_checkpoint_summary_sha256": "19439aabd2ba956583242b580200131782a085db1abc0f1697d6874484a6a68d",
+  "completed": 400,
+  "source_artifact_seed_contracts_verified": 400,
+  "profile_signal_contracts_verified": 1600,
+  "original_admission_reused": 1,
+  "raw_local_qualified": [
+    "catalog_linkusdt_trend_46e6647d07dd",
+    "catalog_uniusdt_trend_4b3620782701"
+  ],
+  "strict_local_qualified": [
+    "catalog_linkusdt_trend_46e6647d07dd",
+    "catalog_uniusdt_trend_4b3620782701"
+  ],
+  "reason_counts": {
+    "validation_only_necessary_gate_failed": 366,
+    "oos_not_passed": 19,
+    "separate_chronological_holdout_failed": 6,
+    "fee_adjusted_forward_not_positive": 7,
+    "qualified": 2
+  },
+  "contract_resolution": "match the exact original admission manifest contract_sha256, not the first currently available same-named contract directory",
+  "two_local_passes_already_failed_server_admission": true,
+  "independent_qualified_strategy_count_not_implied_by_scope_count": true,
+  "financial_replay_performed": false,
+  "financial_outputs_modified": false,
+  "production_write": false
+}

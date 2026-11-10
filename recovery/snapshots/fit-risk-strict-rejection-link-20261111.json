@@ -1,0 +1,53 @@
+{
+  "schema": "read_only_consumed_strict_admission_observation_v1",
+  "strategy": "catalog_linkusdt_trend_c76c02a485c8",
+  "hypothesis": "fr1_trend_rsi_pullback_long_s15_t30",
+  "family": "FitOnlyRiskTrendRsiPullbackHypothesis",
+  "symbol": "LINKUSDT",
+  "scene": "trend",
+  "source_sha256": "569e9d3f93d312a4aaf402c448ddf6de2034aae9ec22bf5da27ede7ae2ec1ddb",
+  "original_admission": "strategy-fit-risk-full-catalog-20261110/admissions/catalog_linkusdt_trend_c76c02a485c8",
+  "original_plan_sha256": "59944b8d1fcb4f504cb129e29c49956da064e5c6270bce1409b47b6db2a1c347",
+  "original_manifest_sha256": "8282cfa082e816f2940ebb36652ebe0f186155ae2cd175cec2189ee374e74def",
+  "original_results_sha256": "675f6c0309336a33a500943b505a6445ade7bb5d177c293f01e071501f5e7b36",
+  "primary_sha256": "be83ebafdf9f1fea3e3a7170dd334f0c4c2834acf563554c82722890477e23ca",
+  "holdout_sha256": "d7b47dc2699af14983d7f1aa2a44183e034224981c3d4197dd80297a009befed",
+  "local_pre_admission_sha256": "6af769b8aaa359a549c56f3f9fc78261667b9724551aa4a75c4f3b9749629be8",
+  "raw_local_qualified": true,
+  "primary_result": {
+    "executionModelVersion": "v4_non_overlapping_walk_forward",
+    "tradeCount": 47,
+    "profitFactor": 1.491248,
+    "maxDrawdownPct": 0.04698,
+    "feeAdjustedValidatePnl": 803.019875,
+    "feeAdjustedForwardPnl": 200.958939,
+    "totalPnl": 1228.868244,
+    "minForwardContribution": 0,
+    "oosPass": 1,
+    "bestParamSetJson": "{\"riskProfile\":3}"
+  },
+  "holdout": {
+    "tradeCount": 13,
+    "profitFactor": 1.742732,
+    "maxDrawdownPct": 0.047112,
+    "feeAdjustedPnl": 333.9879073,
+    "passed": true,
+    "lockedParameters": {"riskProfile": 3},
+    "optimizerInvocations": 0,
+    "fitInvocations": 0
+  },
+  "strict_admission": {
+    "qualified": false,
+    "reason": "forward_contribution_too_low",
+    "required_forward_contribution": "0.20",
+    "forward_contribution_ratio": "0.163532",
+    "raw_result_min_forward_contribution": 0
+  },
+  "server_submission_count": 0,
+  "published_count": 0,
+  "financial_outputs_modified": false,
+  "financial_replay_performed": false,
+  "source_or_risk_retuned": false,
+  "consumed_windows_must_not_be_researched_again": true,
+  "production_write": false
+}

@@ -9,3 +9,5 @@
 *.dat text eol=lf
 .env* text eol=lf
 recovery/java/*.java text eol=lf
+recovery/snapshots/fixed-policy-publication-gate-observation-20261111.json -text
+recovery/snapshots/fit-risk-strict-rejection-link-20261111.json text eol=lf

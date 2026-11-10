@@ -1,0 +1,20 @@
+{
+  "schema": "fixed_policy_publication_gate_observation_v1",
+  "synthetic_summary_only": true,
+  "financial_replay_performed": false,
+  "production_write": false,
+  "publish_or_dao_invocations": 0,
+  "optimization_supported": false,
+  "default_param_sets": [
+    {}
+  ],
+  "expects_optimization_evidence": false,
+  "global_precondition_reason": "",
+  "fixed_empty_parameter_reason": "best param set missing",
+  "nonempty_parameter_control_only_reason": "",
+  "control_is_not_a_proposed_dummy_parameter_workaround": true,
+  "negative_forward_reason": "fee adjusted forward pnl <= 0",
+  "failed_oos_reason": "oos gate not passed",
+  "low_contribution_reason": "forward contribution below threshold",
+  "failed_scene_reason": "scene fixture rejected"
+}
