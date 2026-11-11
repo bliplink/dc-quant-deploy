@@ -69,3 +69,9 @@ recovery/snapshots/harmonic-response-v1-terminal-v2-start-20261111.json text eol
 recovery/snapshots/profile-complete-runs-slot-transition-20261111.json text eol=lf
 recovery/snapshots/cusum-holdout-rejection-runs-first-financial-20261111.json text eol=lf
 recovery/snapshots/harmonic-response-v2-terminal-20261111.json text eol=lf
+recovery/export_ehlers_fisher_candidate.py text eol=lf
+recovery/verify_ehlers_fisher.py text eol=lf
+recovery/test_ehlers_fisher.py text eol=lf
+recovery/strategy_research_ehlers_fisher_protocol_20261111.json text eol=lf
+recovery/snapshots/ehlers-fisher-engineering-start-20261111.json text eol=lf
+recovery/snapshots/ehlers-fisher-engineering-complete-20261111.json text eol=lf

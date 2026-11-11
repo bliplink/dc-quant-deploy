@@ -1,0 +1,143 @@
+{
+  "schema": "ehlers_fisher_engineering_actual_start_v1",
+  "observed_utc": "2026-11-11T00:27:36.947458+00:00",
+  "owner": {
+    "pid": 19640,
+    "create_time": 1794356743.227481,
+    "command": [
+      "C:\\Python314\\python.exe",
+      "-X",
+      "utf8",
+      "-B",
+      "-u",
+      "-m",
+      "recovery.verify_ehlers_fisher",
+      "--indsvr-repo",
+      "E:\\sourcecode\\codex\\_work\\indsvr-local-ehlers-fisher-20261111",
+      "--reference-indsvr-repo",
+      "E:\\sourcecode\\codex\\_work\\indsvr-local-fit-only-risk-strategies-20261110",
+      "--sim-repo",
+      "E:\\sourcecode\\codex\\_work\\simsrv-local-scene-formal-20261016",
+      "--training-input-dir",
+      "E:\\sourcecode\\codex\\_work\\strategy-regime-training-input-20261110",
+      "--protocol",
+      "E:\\sourcecode\\codex\\_work\\dc-quant-deploy-ehlers-fisher-20261111\\recovery\\strategy_research_ehlers_fisher_protocol_20261111.json",
+      "--output-dir",
+      "E:\\sourcecode\\codex\\_work\\strategy-ehlers-fisher-engineering-20261111-v1"
+    ]
+  },
+  "output_dir": "strategy-ehlers-fisher-engineering-20261111-v1",
+  "logs": "strategy-ehlers-fisher-engineering-launch-20261111-v1",
+  "manifest_sha256": "af8d7b3a4034833d799bf384db491b72d89071d6dd6ba52e12d6ecb5519cad81",
+  "critical_files": 1762,
+  "reference_classes": 1501,
+  "runtime_jars": 68,
+  "source_sha256": {
+    "StrategyResearchBatchCli.java": "02d8081b6740baa73c84a4e39a45d490ffa579d862383e77068b0d851eb914a9",
+    "EhlersFisherStrategy.java": "1807b46cb92941b8d56f6bec1df704e224da4582fafd428efa3fe8fe083febd3",
+    "EhlersFisherCatalog.java": "a4d2fccc037c1a389c8e0d1881ebc8af5bd6bdbb09dfe1c5b27ccade7827d1a6",
+    "EhlersFisherTest.java": "cad2927fff64b207011b43eea6c7c975a8c316066187b1733433004a32199fec",
+    "RunsClusteringStrategy.java": "1ccab0bdf2eb9d1db5fea174b7543edf08f2ad7ecd7b0bf0a33e636fad423927",
+    "RunsClusteringCatalog.java": "a701ccde39e5856c0bd39c776ef2d8b8d6cd1e5cf363dd68d47f65349bb9ddd5",
+    "RunsClusteringTest.java": "bb6e32b28c34fe8b85bce04108872b8dfc6625bada95909c7b50a4c35545c3fa",
+    "CusumDriftStrategy.java": "94dcb0ab63567c1ec9a38789e42621321333e27561ab1c00eb4d19f9859d452a",
+    "CusumDriftCatalog.java": "31d2287861a9a0e8d325337e1831f1a22c525d1ca1011f39f45597741bf9868e",
+    "CusumDriftTest.java": "fbfb5137a9e70e804612196e8a834c06f384b9fa75e5a1b29bb9399cb74df2c3",
+    "DirectionalClockStrategy.java": "54dc095e40700b197c9544642eee42a4ca6d7bcb18f2da4789856c07342f5249",
+    "DirectionalClockCatalog.java": "e7a8f62d2da981f1f24baf21df98ae907e55cd1b954bd67562023ddffd58f694",
+    "DirectionalClockTest.java": "cf673ee417d51f05ef16519e6447910d930ea55901894be02a43e823b87549bb",
+    "TrueAdxRepairStrategy.java": "d5206b043ae3e1fb2ad4be9754db87a737f47bbb9120abed30d1fc3d79e3ffb5",
+    "TrueAdxRepairCatalog.java": "16eae046b087bec36ca63e1a58f301f6cbf0d4887f7cf464f7fd91f40af06447",
+    "WickGeometryRepairStrategy.java": "c0abd6735f0ac1ce2cb2fd570d3b94dbb571b2a749b3670793ab9db57f6fe0ff",
+    "WickGeometryRepairCatalog.java": "5d9f6e23bd8b5f9c9e9a0b6d7322d4a838e1d17797534b2b710ababb05fdf5b9",
+    "OhlcvProfileProxyStrategy.java": "b5eb37f6c611b80480fe2d6a4a0d83a3dab7f68bda2b8eee9b6cb00b94c3d126",
+    "OhlcvProfileProxyCatalog.java": "a9202ebab6a57ddb24a3e9ab74041727093708b4e0354a94961618ee34f7530e"
+  },
+  "protocol_sha256": "55a0f4910e792c837523f4fc9357c5cde0cdb8f126dcc60ccc9a477bd192b8a3",
+  "status": {
+    "state": "WAITING_FOR_ENGINEERING_RESOURCES",
+    "stage": "mathematics-compile",
+    "completed": 0,
+    "total": 2,
+    "resources": {
+      "ready": false,
+      "free_disk_bytes": 34052345856,
+      "available_memory_bytes": 2826043392,
+      "minimum_free_disk_bytes": 8589934592,
+      "minimum_available_memory_bytes": 1610612736,
+      "extra_slot_memory_mib": 2695,
+      "minimum_extra_slot_memory_mib": 3072,
+      "logical_cores": 8
+    },
+    "financial_validation_started": false,
+    "production_write": false
+  },
+  "failed": false,
+  "complete": false,
+  "new_tests": 9,
+  "full_python_tests": 349,
+  "full_python_seconds": 46.782,
+  "full_python_exit": 0,
+  "full_python_log": "ehlers-fisher-tests-b3eb78d86d1f4e91bf939222662c89b5/unittest.log",
+  "full_python_log_sha256": "d0c7c992c4f8514737b56a5ce30ec25b0f234cc5f69d2f82b54c874faa917d74",
+  "native_commit": "fbee33ee9e7bdf0e63fe447832d1f2d1a7f5d24e",
+  "tools_commit": "668f5e710c1654c843e077646e04694c8b31de88",
+  "financial_qualified": 0,
+  "server_or_llm_calls": 0,
+  "production_write": false,
+  "goal_complete": false,
+  "native_public_commit": "e95120f7e949f4729e8a32174c0ae8fb19245c50",
+  "native_public_branch": "codex/local-ehlers-fisher-20261111",
+  "native_public_git_blobs": [
+    {
+      "path": ".gitattributes",
+      "git_blob_sha": "f5a40818d3c4a4c09610ce3a074925b23e91f892"
+    },
+    {
+      "path": "src/test/java/com/app/dc/service/strategy/research/EhlersFisherStrategy.java",
+      "git_blob_sha": "ef9c51e9c362be6ef2a063580aa3dbd865c056df"
+    },
+    {
+      "path": "src/test/java/com/app/dc/service/strategy/research/EhlersFisherCatalog.java",
+      "git_blob_sha": "d27b0029629538bff5223c8490b6deed98dec522"
+    },
+    {
+      "path": "src/test/java/com/app/dc/service/strategy/research/EhlersFisherTest.java",
+      "git_blob_sha": "afcc3eee799712f657744ede3837daee865dd95e"
+    },
+    {
+      "path": "src/test/java/com/app/dc/service/strategy/research/StrategyResearchBatchCli.java",
+      "git_blob_sha": "6d6b47941c73443af2a232cc598c8979efa23faf"
+    }
+  ],
+  "later_observation": {
+    "observed_utc": "2026-11-11T00:31:35.496999+00:00",
+    "pid": 19640,
+    "create_time": 1794356743.227481,
+    "status": {
+      "state": "WAITING_FOR_ENGINEERING_RESOURCES",
+      "stage": "source-validator:-1",
+      "completed": 1,
+      "total": 2,
+      "resources": {
+        "ready": false,
+        "free_disk_bytes": 34042523648,
+        "available_memory_bytes": 3052625920,
+        "minimum_free_disk_bytes": 8589934592,
+        "minimum_available_memory_bytes": 1610612736,
+        "extra_slot_memory_mib": 2911,
+        "minimum_extra_slot_memory_mib": 3072,
+        "logical_cores": 8
+      },
+      "financial_validation_started": false,
+      "production_write": false
+    },
+    "mathematics_tests": 15,
+    "mathematics_log_sha256": "0e20247e6fa312ed1ba3ce4c15a209bb75375cae6f6cb636161f3f8bf152cf7d",
+    "failed": false,
+    "complete": false
+  },
+  "source_parity_long_observed_signals": 966,
+  "source_parity_long_observation_local_time": "2026-11-11 08:32:24 +08:00",
+  "full_engineering_complete": false
+}

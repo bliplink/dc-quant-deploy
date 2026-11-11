@@ -1,0 +1,42 @@
+{
+  "protocol_version": "temporal_source_research_v2",
+  "source_cohort": "ehlers_fisher_v1",
+  "mechanism_group": "ehlers_recursive_fisher_reversal",
+  "clock": "UTC",
+  "primary_begin": "2024-12-15",
+  "primary_end_inclusive": "2025-10-12",
+  "holdout_begin": "2025-10-13",
+  "holdout_end_inclusive": "2025-12-13",
+  "minimum_holdout_calendar_days": 62,
+  "minimum_primary_slices": 3,
+  "minimum_forward_contribution": "0.20",
+  "selection_mode": "fixed_source_no_parameter_grid",
+  "fixed_source_defaults": {
+    "warmupBars": 180,
+    "maximumVisibleBars": 200,
+    "normalizationPeriod": 20,
+    "recursiveObservations": 160,
+    "input": "median=(high+low)/2 of completed historical bars; normalize median by rolling20 median extrema, NOT high/low extrema or close",
+    "state": "seed x=0 and F=0 once at first of160 consecutive observations ending at t-1; both t-2/t-1 outputs share that seed",
+    "recursion": "x=.33*z+.67*xPrevious, z=2*((median-minMedian)/(maxMedian-minMedian)-.5); x>.99 becomes .999 and x<-.99 becomes -.999; F=.5*ln((1+x)/(1-x))+.5*FPrevious",
+    "flat_window": "when maxMedian equals minMedian, use neutral z=0 and decay the existing state; explicit finite-history adaptation",
+    "trigger": "preserve original extreme1.4: long F[t-2]<=-1.4 and F[t-1]>F[t-2] and C[t]>H[t-1]; short mirror",
+    "currentBar": "positive current volume; every visible bar finite positive valid OHLC with nonnegative volume; no fill",
+    "risk": "original ATR14 stop1.5/take3 and ATR20 EMS geometry, unchanged",
+    "parameters": "none; both directions and the old Fisher cousin belong to one conservative Fisher family, not duplicate independent mechanisms"
+  },
+  "hypotheses": [
+    "ef1_recursive_fisher_long",
+    "ef1_recursive_fisher_short"
+  ],
+  "directions_are_not_independent_mechanisms": true,
+  "holdout_parameter_policy": "frozen_pre_holdout_representative",
+  "holdout_locked_parameters": {},
+  "holdout_optimizer_invocations": 0,
+  "holdout_fit_invocations": 0,
+  "method_reference": "https://c.mql5.com/forextsd/forum/68/using_the_fisher_transform.pdf",
+  "research_caveat": "The original direct-close raw log transform is preserved, not retroactively relabeled a profitable failure or a necessarily-invalid Fisher variant. This explicit median/recursive reference variant is a semantic hypothesis, not parameter tuning from consumed financial results. No Gaussianity, probability calibration, economic independence or profitability guarantee. Do not count old/new cousins or two directions as multiple independent strategies, and review actual current peers before promotion.",
+  "server_codegen_allowed": false,
+  "production_write": false,
+  "method_reference_note": "John Ehlers, Using the Fisher Transform, Figure4; retain existing20-period/1.4 trading conditions rather than copy article default10. Zero160-history seed and flat-range neutral adaptation explicitly declared."
+}

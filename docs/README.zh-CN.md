@@ -23,6 +23,7 @@
 - [signed-runs复用已完成分布队列槽位](05-operations/runs-profile-slot-reuse-20261111.zh-CN.md)：分布200项真实完成0通过，08:03经guardian转移旧零调度parent到新金融根；不加金融槽位、不改原执行器，实时进度转读新根。
 - [谐波训练整周期数值修复](05-operations/harmonic-response-numerical-fix-20261111.zh-CN.md)：v2已真实完成10/10，60非整周期模型与原版完全一致，10整周期无模型；预测证据不足，不推进交易源码/金融回测。
 - [CUSUM ADA主期通过后的独立留出拒绝](05-operations/cusum-ada-holdout-rejection-20261111.zh-CN.md)：44笔主期/贡献0.367091通过，但分离62日22笔扣费亏损，0上传；保留原失败，不调参重放。
+- [明确递推Fisher的隔离研究与真实工程入口](05-operations/ehlers-fisher-research-20261111.zh-CN.md)：349 Python/15数学/64独立oracle、两份全年966/980信号0差异及完整187 Java已通过；正式金融尚未启动，旧规则/风险和全部门槛不变。
 - [ADX服务器拒绝结果与本地发布前门槛复核](05-operations/true-adx-server-admission-and-strict-floor-20261110.zh-CN.md)：区分原始通过标记、本地严格资格、服务器执行成功和正式发布；保留失败与精确源码/JAR证据。
 - [四档训练校验启动合并证明](05-operations/four-profile-launch-batching-20261110.zh-CN.md)：原校验器不改，8组32档训练对照一致；说明新作用域工具和在跑冻结队列的集成边界。
 - [完整目录检查点安全交接及启动合并实装](05-operations/full-catalog-batched-checkpoint-handoff-20261110.zh-CN.md)：115条原结果不重放，原完整队列接入2个隔离worker；新的实时入口、OS锁与guardian恢复约束。
