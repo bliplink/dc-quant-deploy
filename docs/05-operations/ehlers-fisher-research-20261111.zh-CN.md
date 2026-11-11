@@ -1,5 +1,7 @@
 # 明确递推Fisher新研究：旧规则保留，不靠变更口径凑数
 
+08:44后续：[原正式执行链已在新树实装并启动等待](ehlers-fisher-formal-pipeline-20261111.zh-CN.md)，真实4748绑定CUSUM21204自然完成100后复用槽位；0/100无金融dispatch。下文08:34“尚未启动”是当时工程终态，不能作为当前队列不存在的判断，也不得据此重启旧工程19640。
+
 ## 08:34真实完整工程通过：优先读本段
 
 19640/create1794356743.227481已自然结束，真实SOURCE_CONTRACT_COMPLETE SHA48b0d618812d40f6c15e57183d52eee453fc5e48c4c024bf31f99146c05e25e6，manifest仍af8d7b3a...。全部1762关键SHA、795产出class的完整成员/哈希、两份源/JAR、原seed与当前确定性导出完全一致、原validator和全年训练日志已独立重核，未有FAILED。

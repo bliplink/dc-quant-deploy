@@ -75,3 +75,6 @@ recovery/test_ehlers_fisher.py text eol=lf
 recovery/strategy_research_ehlers_fisher_protocol_20261111.json text eol=lf
 recovery/snapshots/ehlers-fisher-engineering-start-20261111.json text eol=lf
 recovery/snapshots/ehlers-fisher-engineering-complete-20261111.json text eol=lf
+recovery/run_ehlers_fisher_batch.py text eol=lf
+recovery/test_ehlers_fisher_batch.py text eol=lf
+recovery/snapshots/ehlers-fisher-formal-start-20261111.json text eol=lf
