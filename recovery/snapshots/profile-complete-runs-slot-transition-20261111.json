@@ -1,0 +1,89 @@
+{
+  "schema": "profile_complete_runs_slot_transition_v1",
+  "observed_utc": "2026-11-11T00:04:03.030115+00:00",
+  "profile": {
+    "manifest_sha256": "cce5da0df561e347ab2062810e48326cbab16879d630a64cfaa68c43fb4c8af0",
+    "complete_sha256": "70307101c2c08d426d120b684183e08128e87270e0e8fe0cc764e1fa0202f6af",
+    "completed": 200,
+    "qualified": 0,
+    "reason_counts": {
+      "oos_not_passed": 182,
+      "too_few_trades": 18
+    },
+    "audit_sha256": "1986ea34cb44ddcaf246f06dfd7abc022c359168a5cad8ba59c7f4bf693580f0",
+    "all_checkpoint_hashes_verified": 200,
+    "original_owner_ended": true
+  },
+  "handoff": {
+    "sha256": "b96b10cf9d2b149c2553e7ab6f58af37a4926b3a9735a990ddacaf687e03db45",
+    "retired_utc": "2026-11-11T00:03:16.449300+00:00",
+    "old_owner_stop_verified": true,
+    "original_completed": 0,
+    "financial_dispatch_ever_started": false,
+    "guardian_intent_sha256": "07b4ff56de34472d090371b5ce09d2960a99d1a208408c0685b516536708a4eb",
+    "guardian_checkpoint_sha256": "3f256301d6fc685db7e267e0d0851a460317cf7ac271a2b3cc185be7eaff0c0d"
+  },
+  "new": {
+    "owner": {
+      "pid": 13568,
+      "create_time": 1794354508.805948,
+      "command": [
+        "C:\\Python314\\python.exe",
+        "-X",
+        "utf8",
+        "-B",
+        "-u",
+        "-m",
+        "recovery.run_runs_profile_slot",
+        "--original-wait-dir",
+        "E:\\sourcecode\\codex\\_work\\strategy-runs-clustering-formal-20261111",
+        "--original-manifest-sha256",
+        "8df12c9516fac173c4b4abfdf6b35020b171dad67a4930aaf23f6b26b90eb601",
+        "--waiting-pid",
+        "24444",
+        "--waiting-create-time",
+        "1794348475.3380008",
+        "--profile-dir",
+        "E:\\sourcecode\\codex\\_work\\strategy-ohlcv-profile-formal-20261111",
+        "--profile-manifest-sha256",
+        "cce5da0df561e347ab2062810e48326cbab16879d630a64cfaa68c43fb4c8af0",
+        "--profile-pid",
+        "20660",
+        "--profile-create-time",
+        "1794330108.9962358",
+        "--control-dir",
+        "E:\\sourcecode\\codex\\_work\\strategy-runs-clustering-profile-slot-control-20261111-v2",
+        "--output-dir",
+        "E:\\sourcecode\\codex\\_work\\strategy-runs-clustering-profile-slot-formal-20261111",
+        "--execute"
+      ]
+    },
+    "output_dir": "E:\\sourcecode\\codex\\_work\\strategy-runs-clustering-profile-slot-formal-20261111",
+    "manifest_sha256": "a66d0ae930456d7a9b4c51266e66b9e774be433e4910d622c3c170184efa1564",
+    "schema": "frozen_runs_clustering_profile_replacement_100_scopes_v1",
+    "queue_length": 100,
+    "added_financial_slots": 0,
+    "status": {
+      "state": "WAITING_FOR_REPLACEMENT_SLOT_RESOURCES",
+      "completed": 0,
+      "total": 100,
+      "resources": {
+        "ready": false,
+        "free_disk_bytes": 34132697088,
+        "available_memory_bytes": 2779975680,
+        "minimum_free_disk_bytes": 8589934592,
+        "minimum_available_memory_bytes": 1610612736,
+        "extra_slot_memory_mib": 2651,
+        "minimum_extra_slot_memory_mib": 3072,
+        "logical_cores": 8
+      },
+      "production_write": false
+    },
+    "entire_frozen_context_unchanged": true,
+    "financial_observations_reexecuted": 0
+  },
+  "production_write": false,
+  "financial_qualified_new": 0,
+  "server_uploads": 0,
+  "goal_complete": false
+}

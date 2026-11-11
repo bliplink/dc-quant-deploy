@@ -1,0 +1,124 @@
+{
+  "schema": "cusum_holdout_rejection_and_runs_first_financial_v1",
+  "observed_utc": "2026-11-11T00:10:04.080146+00:00",
+  "cases": {
+    "catalog_adausdt_channel_0d97bf7a8908": {
+      "record": {
+        "hypothesis": "cs1_standardized_drift_short",
+        "family": "CatalogAtrExitCusumDriftHypothesis",
+        "side": -1,
+        "mechanism_group": "standardized_return_cusum_drift",
+        "strategy": "catalog_adausdt_channel_0d97bf7a8908",
+        "symbol": "ADAUSDT",
+        "scene": "channel",
+        "source_sha256": "74c3780056e9e61ebc1bd6740e2f63906061fd8024982e1fb5b41d53f456696b",
+        "qualified": false,
+        "reason": "separate_chronological_holdout_failed",
+        "result_path": "E:\\sourcecode\\codex\\_work\\strategy-cusum-drift-formal-20261111\\candidates\\catalog_adausdt_channel_0d97bf7a8908\\local-pre-admission.json",
+        "primary_result_path": "E:\\sourcecode\\codex\\_work\\strategy-cusum-drift-formal-20261111\\candidates\\catalog_adausdt_channel_0d97bf7a8908\\primary.json",
+        "production_write": false
+      },
+      "checkpoint_sha256": "110202113ccd65cc1103d9df8377bec370f16bb91d5339bd46b69cc2bf7bd3f0",
+      "source_contract": {
+        "source_path": "E:\\sourcecode\\codex\\_work\\strategy-cusum-drift-formal-20261111\\frozen\\catalog_adausdt_channel_0d97bf7a8908\\GeneratedStrategy.java",
+        "source_sha256": "74c3780056e9e61ebc1bd6740e2f63906061fd8024982e1fb5b41d53f456696b",
+        "artifact_path": "E:\\sourcecode\\codex\\_work\\strategy-cusum-drift-formal-20261111\\candidates\\catalog_adausdt_channel_0d97bf7a8908\\artifact\\strategy.jar",
+        "artifact_sha256": "58b1e3c8d92022723fb7b29d569aad1751d7916e2851851d5b4b825d57caada2",
+        "seed_sha256": "c6ba2db6277d96235de1dacabdf09cb37c6838c8609634c3dbe92d85686e1d95",
+        "training_bars": 35040,
+        "training_signals": 517,
+        "nonzero_training_signal_coverage": true,
+        "mismatches": 0,
+        "canonical_proof_reused": false,
+        "production_write": false
+      },
+      "primary": {
+        "tradeCount": 44,
+        "profitFactor": 1.35779,
+        "maxDrawdownPct": 0.041071,
+        "totalPnl": 709.301468,
+        "feeAdjustedValidatePnl": 308.375807,
+        "feeAdjustedForwardPnl": 260.378103,
+        "oosPass": 1
+      },
+      "strict_primary": {
+        "qualified": true,
+        "reason": "qualified",
+        "required_forward_contribution": "0.20",
+        "forward_contribution_ratio": "0.367091",
+        "raw_result_min_forward_contribution": 0,
+        "financial_outputs_modified": false,
+        "financial_replay_performed": false
+      },
+      "holdout": {
+        "beginDate": "2025-10-13",
+        "endDate": "2025-12-13",
+        "tradeCount": 22,
+        "profitFactor": 0.892338,
+        "maxDrawdownPct": 0.063281,
+        "feeAdjustedPnl": -385.93538055,
+        "passed": false,
+        "lockedParameters": {},
+        "optimizerInvocations": 0,
+        "fitInvocations": 0,
+        "artifactSha256": "58b1e3c8d92022723fb7b29d569aad1751d7916e2851851d5b4b825d57caada2",
+        "sourceSha256": "74c3780056e9e61ebc1bd6740e2f63906061fd8024982e1fb5b41d53f456696b"
+      }
+    },
+    "catalog_adausdt_trend_db4fee2d02f0": {
+      "record": {
+        "hypothesis": "rc1_signed_runs_long",
+        "family": "CatalogAtrExitRunsClusteringHypothesis",
+        "side": 1,
+        "mechanism_group": "conditional_signed_runs_clustering",
+        "strategy": "catalog_adausdt_trend_db4fee2d02f0",
+        "symbol": "ADAUSDT",
+        "scene": "trend",
+        "source_sha256": "2c6ab576b6b4fa373ae51cb93ab3bcad07f67745a95e8d6bc0880070a191635e",
+        "qualified": false,
+        "reason": "oos_not_passed",
+        "result_path": null,
+        "primary_result_path": "E:\\sourcecode\\codex\\_work\\strategy-runs-clustering-profile-slot-formal-20261111\\candidates\\catalog_adausdt_trend_db4fee2d02f0\\primary.json",
+        "production_write": false
+      },
+      "checkpoint_sha256": "c71342632e26682bd99fcd4371f2a7811cec5eeb0b3d09a55ee0e9b4b625b9fc",
+      "source_contract": {
+        "source_path": "E:\\sourcecode\\codex\\_work\\strategy-runs-clustering-profile-slot-formal-20261111\\frozen\\catalog_adausdt_trend_db4fee2d02f0\\GeneratedStrategy.java",
+        "source_sha256": "2c6ab576b6b4fa373ae51cb93ab3bcad07f67745a95e8d6bc0880070a191635e",
+        "artifact_path": "E:\\sourcecode\\codex\\_work\\strategy-runs-clustering-profile-slot-formal-20261111\\candidates\\catalog_adausdt_trend_db4fee2d02f0\\artifact\\strategy.jar",
+        "artifact_sha256": "23c6c97a57ca6ae4280de1363e6fb73bb27ab7d741e049ccf1c4864c6cd266a5",
+        "seed_sha256": "075f8f1d2938ec80526253d4569878ac1ac5125572e5ad6eeba465b8c5eb294f",
+        "training_bars": 35040,
+        "training_signals": 27,
+        "nonzero_training_signal_coverage": true,
+        "mismatches": 0,
+        "canonical_proof_reused": false,
+        "production_write": false
+      },
+      "primary": {
+        "tradeCount": 3,
+        "profitFactor": 3.49774,
+        "maxDrawdownPct": 0.006194,
+        "totalPnl": 154.71,
+        "feeAdjustedValidatePnl": 127.622145,
+        "feeAdjustedForwardPnl": 0,
+        "oosPass": 0
+      },
+      "strict_primary": {
+        "qualified": false,
+        "reason": "oos_not_passed",
+        "required_forward_contribution": "0.20",
+        "forward_contribution_ratio": "0.000000",
+        "raw_result_min_forward_contribution": 0,
+        "financial_outputs_modified": false,
+        "financial_replay_performed": false
+      }
+    }
+  },
+  "financial_observations_reexecuted": 0,
+  "source_retuned": false,
+  "new_qualified": 0,
+  "server_uploads": 0,
+  "production_write": false,
+  "goal_complete": false
+}

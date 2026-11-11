@@ -66,3 +66,6 @@ recovery/run_runs_profile_slot.py text eol=lf
 recovery/test_runs_profile_slot.py text eol=lf
 recovery/snapshots/runs-profile-slot-start-20261111.json text eol=lf
 recovery/snapshots/harmonic-response-v1-terminal-v2-start-20261111.json text eol=lf
+recovery/snapshots/profile-complete-runs-slot-transition-20261111.json text eol=lf
+recovery/snapshots/cusum-holdout-rejection-runs-first-financial-20261111.json text eol=lf
+recovery/snapshots/harmonic-response-v2-terminal-20261111.json text eol=lf

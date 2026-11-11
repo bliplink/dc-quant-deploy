@@ -1,0 +1,155 @@
+{
+  "schema": "harmonic_response_v2_terminal_audit_v1",
+  "observed_utc": "2026-11-11T00:10:28.524124+00:00",
+  "owner_ended": true,
+  "owner_pid": 24920,
+  "owner_create_time": 1794354677.6026304,
+  "manifest_sha256": "80e6452ba2ad8c32cc6829780ae2bc8f8a462d319dc080c40c2fd3a9321af28d",
+  "complete_sha256": "5fb431011ab88003ecbdef0e2dac81e0c141b424f86a5aff95444cc02657a81f",
+  "critical_files_verified": 161,
+  "training_files_verified": 10,
+  "reports": [
+    {
+      "symbol": "ADAUSDT",
+      "fit": 8751,
+      "audit": 4187,
+      "hurdles": 0,
+      "report_sha256": "80b3c96d4b84b9f439be15dfc3e5790ff6782ba6aa49b67e25902ece67f00bc9",
+      "non_full_cycle_bins_exactly_equal": 6,
+      "bin8_model_unavailable": true
+    },
+    {
+      "symbol": "BNBUSDT",
+      "fit": 8751,
+      "audit": 4187,
+      "hurdles": 0,
+      "report_sha256": "0a5d203b7846927deeb9d58a47f4fd3f6e6f9efe67647424f8c44fb051af64e1",
+      "non_full_cycle_bins_exactly_equal": 6,
+      "bin8_model_unavailable": true
+    },
+    {
+      "symbol": "BTCUSDT",
+      "fit": 8750,
+      "audit": 4187,
+      "hurdles": 0,
+      "report_sha256": "298b77e87dc258ab00cb6103e26cd1fe5449a5f4a3e8fc022ed4fc3c3b52e3fd",
+      "non_full_cycle_bins_exactly_equal": 6,
+      "bin8_model_unavailable": true
+    },
+    {
+      "symbol": "DOGEUSDT",
+      "fit": 8751,
+      "audit": 4187,
+      "hurdles": 1,
+      "report_sha256": "b4bc199b22437c785a00a5be911491e3515f29382280364a41d8959aa5a64542",
+      "non_full_cycle_bins_exactly_equal": 6,
+      "bin8_model_unavailable": true
+    },
+    {
+      "symbol": "ETHUSDT",
+      "fit": 8751,
+      "audit": 4187,
+      "hurdles": 0,
+      "report_sha256": "bb99eba16f15b69042b0352fe034b714892833a031af877a895afbd9436dc579",
+      "non_full_cycle_bins_exactly_equal": 6,
+      "bin8_model_unavailable": true
+    },
+    {
+      "symbol": "LINKUSDT",
+      "fit": 8751,
+      "audit": 4187,
+      "hurdles": 0,
+      "report_sha256": "97b8f49fb75426f1cfaff54ab942a86c95f29427ca01bab837c8aba2a67b6e94",
+      "non_full_cycle_bins_exactly_equal": 6,
+      "bin8_model_unavailable": true
+    },
+    {
+      "symbol": "SOLUSDT",
+      "fit": 8673,
+      "audit": 4187,
+      "hurdles": 0,
+      "report_sha256": "71bee932afe913a2749d9c0c5a9a351c88e88de59b047afd679634e1fa0b0605",
+      "non_full_cycle_bins_exactly_equal": 6,
+      "bin8_model_unavailable": true
+    },
+    {
+      "symbol": "TRXUSDT",
+      "fit": 8673,
+      "audit": 4187,
+      "hurdles": 0,
+      "report_sha256": "7545f6a759c0599663eac2733e125711fb7a68fdb070030e61663f6fddff5a2a",
+      "non_full_cycle_bins_exactly_equal": 6,
+      "bin8_model_unavailable": true
+    },
+    {
+      "symbol": "UNIUSDT",
+      "fit": 8751,
+      "audit": 4187,
+      "hurdles": 0,
+      "report_sha256": "15dfbd64b7722d89594d3e0939b7b5fc7d2f1a22b112cf8b72e0c09e54ea8b1e",
+      "non_full_cycle_bins_exactly_equal": 6,
+      "bin8_model_unavailable": true
+    },
+    {
+      "symbol": "XRPUSDT",
+      "fit": 8673,
+      "audit": 4187,
+      "hurdles": 8,
+      "report_sha256": "583defa48b4410154d581516496efd5380ae7cab30112406a4d9ded46ed144d0",
+      "non_full_cycle_bins_exactly_equal": 6,
+      "bin8_model_unavailable": true
+    }
+  ],
+  "fit_samples": 87275,
+  "audit_samples": 41870,
+  "hurdles": 9,
+  "hurdle_models": [
+    {
+      "symbol": "DOGEUSDT",
+      "bin": 3,
+      "audit": {
+        "samples": 516,
+        "model_available": true,
+        "zero_forecast_mean_squared_log_error": 0.00030600146102034205,
+        "model_mean_squared_log_error": 0.00030707539044403195,
+        "relative_mean_squared_log_error_improvement": -0.003509556523386914,
+        "indicative_hurdle_exceedances": 1,
+        "predicted_long": 1,
+        "predicted_short": 0,
+        "directional_future_log_return_mean_selected": 0.013727876506501646,
+        "positive_labels": 268,
+        "negative_labels": 246,
+        "zero_labels": 2,
+        "financial_qualified_candidates": 0,
+        "label_is_trading_pnl": false
+      }
+    },
+    {
+      "symbol": "XRPUSDT",
+      "bin": 4,
+      "audit": {
+        "samples": 528,
+        "model_available": true,
+        "zero_forecast_mean_squared_log_error": 0.00021572470097030612,
+        "model_mean_squared_log_error": 0.00022299869148519017,
+        "relative_mean_squared_log_error_improvement": -0.033718857794988066,
+        "indicative_hurdle_exceedances": 8,
+        "predicted_long": 3,
+        "predicted_short": 5,
+        "directional_future_log_return_mean_selected": -0.011500240703956895,
+        "positive_labels": 274,
+        "negative_labels": 247,
+        "zero_labels": 7,
+        "financial_qualified_candidates": 0,
+        "label_is_trading_pnl": false
+      }
+    }
+  ],
+  "all60_non_full_cycle_models_and_statistics_exactly_equal": true,
+  "all10_full_cycle_models_unavailable": true,
+  "financial_validation_read": false,
+  "financial_qualified_candidates": 0,
+  "server_or_llm_calls": 0,
+  "production_write": false,
+  "goal_complete": false
+}
