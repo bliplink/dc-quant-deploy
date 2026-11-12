@@ -488,6 +488,15 @@ services:
       MAIN_CLASS: AdminSvr
       JAVA_OPTS: ${ADMINSVR_JAVA_OPTS:--server -Xms64m -Xmx256m -Xmn64m -Djava.security.auth.login.config=../../control/jaas.ini}
       DC_HEDGE_CREDENTIAL_MASTER_KEY: ${DC_HEDGE_CREDENTIAL_MASTER_KEY}
+      # The durable trial-liquidity worker reads process environment, not
+      # application.properties. Passing these explicitly keeps a clean Demo
+      # registration equivalent to the previously configured runtime. Disabled
+      # by default for production deployments without a trial flow.
+      TRIAL_LIQUIDITY_BOOTSTRAP_ENABLED: ${TRIAL_LIQUIDITY_BOOTSTRAP_ENABLED:-false}
+      TRIAL_LIQUIDITY_DEMO_RETRY_ENABLED: ${TRIAL_LIQUIDITY_DEMO_RETRY_ENABLED:-false}
+      TRIAL_LIQUIDITY_TAPE_ENABLED: ${TRIAL_LIQUIDITY_TAPE_ENABLED:-false}
+      TRIAL_LIQUIDITY_MASTER_KEY: ${TRIAL_LIQUIDITY_MASTER_KEY:-}
+      TRIAL_LIQUIDITY_GATEWAY_URL: ${TRIAL_LIQUIDITY_GATEWAY_URL:-http://127.0.0.1:18088/httpapi/}
     volumes:
       - ${DEPLOY_ROOT}/control:/srv/dc/control:ro
       - ${DEPLOY_ROOT}/data:/srv/dc/data
@@ -519,8 +528,8 @@ services:
       GATEWAY_HTTP_URL: http://127.0.0.1:${GW_HTTP_PORT:-33002}/api
       GATEWAY_HOST: 127.0.0.1
       GATEWAY_TCP_PORT: ${GW_TCP_PORT:-33000}
-      ROBOT_GATEWAY_USER: ${PLATFORM_ADMIN_USERNAME:-platformadmin}
-      ROBOT_GATEWAY_PASSWORD: ${PLATFORM_ADMIN_PASSWORD}
+      ROBOT_GATEWAY_USER: ${ROBOT_RUNTIME_USER_ID:-robotsvr}
+      ROBOT_GATEWAY_PASSWORD: ${ROBOT_RUNTIME_API_SECRET}
       ROBOT_GATEWAY_CLIENT_TYPE: Manager
       ROBOT_GATEWAY_LOCATION: PLATFORM
       ROBOT_RUNTIME_LOCATION: ${ROBOT_RUNTIME_LOCATION:-PLATFORM}

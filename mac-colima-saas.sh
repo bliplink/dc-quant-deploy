@@ -19,6 +19,13 @@ Usage:
   ./mac-colima-saas.sh install [install-saas.sh args...]
   ./mac-colima-saas.sh uninstall [uninstall-saas.sh args...]
   ./mac-colima-saas.sh reinstall [install-saas.sh args...]
+  ./mac-colima-saas.sh fresh [verified build directory]
+  ./mac-colima-saas.sh fresh-verified CANDIDATE_DIRECTORY PHYSICAL_RESULT_DIRECTORY
+  ./mac-colima-saas.sh verify-common COMMON_REVISION
+  ./mac-colima-saas.sh verify-fresh RUN_DIRECTORY
+  ./mac-colima-saas.sh verify-order-cancel RUN_DIRECTORY
+  ./mac-colima-saas.sh verify-ha RUN_DIRECTORY {term,kill} [FIRST_ORDER_SLOT [FIRST_ORDER_ROBOT_LOCATION]]
+  ./mac-colima-saas.sh roll-voter RUN_DIRECTORY {order,trade} {A,B} [--fault term|kill] [--signed-business|--order-only-business] [--robot-traffic]
   ./mac-colima-saas.sh acceptance [acceptance-saas.sh args...]
 
 Mac-only wrapper for the Colima development/demo environment.
@@ -156,10 +163,86 @@ main() {
       log "SaaS containers removed. Existing localhost forward processes are harmless and will fail health checks until reinstall."
       ;;
     reinstall)
+      # T547: check live Order/Trade BEFORE uninstall. deploy-saas.sh runs
+      # after uninstall and would otherwise discover zero live peers too late.
+      remote_shell "cd $(printf '%q' "${REMOTE_REPO}") && sudo -E python3 ./tests/check_certified_live_upgrade_preflight.py --order-enabled true --trade-enabled true"
       remote_run_script uninstall-saas.sh
       remote_run_script install-saas.sh "$@"
       ensure_forward
       show_credentials
+      ;;
+    fresh|fresh-verified)
+      local stamp build_dir run_dir build_seconds active_generation order_base trade_base md_base
+      SECONDS=0
+      stamp="$(date +%Y%m%d-%H%M%S)"
+      run_dir="${HOME}/.opentradingcore/mac-demo-${stamp}"
+      if [[ "$action" == fresh-verified ]]; then
+        [[ "$#" -eq 2 && "$1" == /* && "$2" == /* && -f "$1/commit.sha" && -f "$1/jar.sha" ]] ||
+          die "Usage: ./mac-colima-saas.sh fresh-verified CANDIDATE_DIRECTORY PHYSICAL_RESULT_DIRECTORY"
+        build_dir="${HOME}/.opentradingcore/mac-demo-build-${stamp}"
+        order_base="${MAC_DEMO_ORDER_BASE:-}"
+        trade_base="${MAC_DEMO_TRADE_BASE:-}"
+        md_base="${MAC_DEMO_MD_BASE:-$(docker inspect -f '{{.Image}}' dc-saas-mdsvr)}"
+        active_generation="$(docker inspect -f '{{if .State.Running}}{{index .Config.Labels "com.docker.compose.project"}}{{end}}' dc-saas-gateway 2>/dev/null || true)"
+        if [[ "$active_generation" =~ ^mac-demo-[0-9]{8}-[0-9]{6}$ ]]; then
+          # The builder reuses dependencies only after comparing the complete library list and bytes.
+          order_base="${order_base:-$(docker inspect -f '{{.Image}}' "${active_generation}-order-a-hostready" 2>/dev/null || true)}"
+          trade_base="${trade_base:-$(docker inspect -f '{{.Image}}' "${active_generation}-trade-a-hostready" 2>/dev/null || true)}"
+        fi
+        MAC_DEMO_ORDER_BASE="$order_base" MAC_DEMO_TRADE_BASE="$trade_base" MAC_DEMO_MD_BASE="$md_base" \
+          MAC_DEMO_MD_SOURCE="${MAC_DEMO_MD_SOURCE:-${SCRIPT_DIR}/.work/t446-md-price-independent}" \
+        MAC_DEMO_COMMON_REVISION="$(cat "$1/commit.sha")" \
+          MAC_DEMO_VERIFIED_COMMON_DIR="$1" MAC_DEMO_VERIFIED_COMMON_SHA256="$(cat "$1/jar.sha")" \
+          MAC_DEMO_VERIFIED_COMMON_RESULT="$2" MAC_DEMO_REQUIRE_INTERRUPTED_RETURN=true \
+          MAC_DEMO_PROJECTION_HISTORY_SOURCE="${MAC_DEMO_PROJECTION_HISTORY_SOURCE:-${SCRIPT_DIR}/.work/projectionsvr}" \
+          bash "${SCRIPT_DIR}/scripts/build-mac-demo-core.sh" "${build_dir}"
+      else
+        [[ "$#" -le 1 ]] || die "Usage: ./mac-colima-saas.sh fresh [verified build directory]"
+        build_dir="${1:-${HOME}/.opentradingcore/mac-demo-build-${stamp}}"
+        if [[ "$#" == 0 ]]; then
+          bash "${SCRIPT_DIR}/scripts/build-mac-demo-core.sh" "${build_dir}"
+        fi
+      fi
+      build_seconds="$SECONDS"
+      log "Build/prepared images: ${build_seconds}s. New generation: ${run_dir}"
+      python3 "${SCRIPT_DIR}/scripts/mac-demo-fresh.py" "${run_dir}" "${build_dir}" --apply --verify-business
+      log "Fresh startup, physical and business checks: $((SECONDS - build_seconds))s."
+      ;;
+    verify-common)
+      [[ "$#" == 1 ]] || die "Usage: ./mac-colima-saas.sh verify-common COMMON_REVISION"
+      local common_stamp candidate_dir common_result_dir
+      common_stamp="$(date +%Y%m%d-%H%M%S)"
+      candidate_dir="${HOME}/.opentradingcore/t554-common-candidates/${common_stamp}"
+      common_result_dir="${HOME}/.opentradingcore/t554-common-verifications/${common_stamp}"
+      log "Common fault verification: ${common_result_dir}"
+      MAC_DEMO_REQUIRE_INTERRUPTED_RETURN="${MAC_DEMO_REQUIRE_INTERRUPTED_RETURN:-true}" \
+        bash "${SCRIPT_DIR}/scripts/build-mac-common-candidate.sh" "$1" "$candidate_dir" "$common_result_dir"
+      ;;
+    verify-fresh)
+      [[ "$#" == 1 ]] || die "Usage: ./mac-colima-saas.sh verify-fresh RUN_DIRECTORY"
+      bash "${SCRIPT_DIR}/scripts/verify-mac-demo-fresh.sh" "$1"
+      ;;
+    verify-order-cancel)
+      [[ "$#" == 1 ]] || die "Usage: ./mac-colima-saas.sh verify-order-cancel RUN_DIRECTORY"
+      python3 "${SCRIPT_DIR}/scripts/verify-mac-demo-order-cancel-capacity.py" "$1"
+      ;;
+    verify-ha)
+      [[ "$#" -ge 2 && "$#" -le 4 && "$2" =~ ^(term|kill)$ && "${3:-A}" =~ ^[AB]$ ]] ||
+        die "Usage: ./mac-colima-saas.sh verify-ha RUN_DIRECTORY {term,kill} [FIRST_ORDER_SLOT [FIRST_ORDER_ROBOT_LOCATION]]"
+      local order_first="${3:-A}" order_second=B slot
+      if [[ "$order_first" == B ]]; then order_second=A; fi
+      local roll=(python3 "${SCRIPT_DIR}/scripts/roll-mac-demo-voter.py" "$1")
+      local checks=(--fault "$2" --robot-traffic --timeout 3600)
+      local first_order=(order "$order_first" "${checks[@]}" --order-only-business)
+      if [[ "$#" -eq 4 ]]; then first_order+=(--robot-location "$4"); fi
+      "${roll[@]}" "${first_order[@]}"
+      "${roll[@]}" order "$order_second" "${checks[@]}" --signed-business
+      for slot in A B; do
+        "${roll[@]}" trade "$slot" "${checks[@]}" --signed-business
+      done
+      ;;
+    roll-voter)
+      python3 "${SCRIPT_DIR}/scripts/roll-mac-demo-voter.py" "$@"
       ;;
     acceptance)
       ensure_forward

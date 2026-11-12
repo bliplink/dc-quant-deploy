@@ -106,17 +106,17 @@ public final class TradeEmptyGenesisBootstrap {
                         && loaded.getCommittedStateEpoch() == 0
                         && loaded.getLocations().isEmpty() && loaded.getBalances().isEmpty()
                         && loaded.getPositions().isEmpty() && loaded.getOpenOrders().isEmpty()
-                        && loaded.getAccountConfigs().isEmpty() && loaded.getSymbolParas().isEmpty()
-                        && loaded.getCashRequestResults().isEmpty(), "genesis read-back mismatch");
-                // Exercise the real live startup parser, including its no-cash-ledger gate.
-                TradeRecoveryApplier applier = new TradeRecoveryApplier();
-                Field authoritative = TradeRecoveryApplier.class.getDeclaredField("authoritativeRecovery");
-                authoritative.setAccessible(true); authoritative.set(applier, true);
-                try (TradeSnapshotStore.RecoverySnapshot handle = store.openRecovery(id)) {
-                    TradeRecoveryPlan plan = new TradeRecoveryPlan(id, 1L, handle.getSnapshot(),
-                            java.util.Collections.emptyList(), 0L, 0L).withRecoverySnapshot(handle);
-                    require(applier.prepareLifecycle(plan, () -> { }).hasBaseline(), "live parser rejected baseline");
-                }
+                        && loaded.getAccountConfigs().isEmpty() && loaded.getSymbolParas().isEmpty(),
+                        "genesis read-back mismatch");
+                // Validate current TradeSvr's real current-version reader,
+                // canonical image identity and the exact durable bytes. The
+                // old prepareLifecycle API no longer exists in Trade; the
+                // running lifecycle will separately verify and bind this
+                // untouched E1 image to each physical Chronicle journal.
+                require(snapshot.getSnapshotId().equals(loaded.getSnapshotId())
+                        && store.requireSnapshotSha256(id,snapshot.getSnapshotId(),0L)
+                                .matches("[a-fA-F0-9]{64}"),
+                        "genesis canonical physical image hash mismatch");
             }
         }
         Files.write(resetFile.resolveSibling(resetFile.getFileName() + ".genesis-complete"),
@@ -127,8 +127,20 @@ public final class TradeEmptyGenesisBootstrap {
     public static void main(String[] args) throws Exception {
         require(args.length == 3, "usage: runtimeRoot reset-proof.json actual-assignments.jsonl");
         Path root = Paths.get(args[0]);
-        require("/data/dc-saas-runtime".equals(root.toString()) || "/opt/dc-saas-runtime".equals(root.toString()),
-                "unsupported standalone test runtime root");
+        // The disposable Mac mini Demo uses an exact, opt-in, user-owned
+        // isolated runtime. Never accept an arbitrary host path; the fresh
+        // reset proof, untouched ZK assignments and empty A/B directories
+        // remain mandatory even for this opt-in path.
+        String optInMacRoot = System.getenv("SAAS_FRESH_MAC_TEST_ROOT");
+        Path homeDemo = Paths.get(System.getProperty("user.home"), ".opentradingcore").toAbsolutePath().normalize();
+        boolean allowedMac = optInMacRoot != null && !optInMacRoot.isEmpty()
+                && root.toAbsolutePath().normalize().toString().equals(optInMacRoot)
+                && root.toAbsolutePath().normalize().getParent().equals(homeDemo)
+                && root.getFileName().toString().startsWith("dc-saas-runtime-clean-")
+                && Files.isDirectory(root.resolve("control"))
+                && !Files.isSymbolicLink(root) && !Files.isSymbolicLink(root.resolve("control"));
+        require("/data/dc-saas-runtime".equals(root.toString()) || "/opt/dc-saas-runtime".equals(root.toString())
+                || allowedMac,"unsupported standalone test runtime root");
         bootstrap(root, Paths.get(args[1]), Paths.get(args[2]));
     }
 }

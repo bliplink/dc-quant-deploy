@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Demo-only, opt-in real Order-only product acceptance; isolated QA tenant.
 
-No TradeSvr deposits, leverage, balance or position mutation; no HA injection.
+No TradeSvr deposits, leverage, balance or position mutation.
 Requires --execute; cleans up the temporary signed Broker price API Key.
 Never automatically retries ambiguous orders or creates non-Demo customers.
 """
@@ -9,7 +9,9 @@ import argparse
 import importlib.util
 import json
 from pathlib import Path
+import re
 import secrets
+import subprocess
 import time
 import sys
 import threading
@@ -22,7 +24,43 @@ spec.loader.exec_module(h)
 def sql(statement):
     return h.readonly_sql(statement)
 
-def run(endpoint,verify_streams=False):
+def witnessed_order_only_fills(phase, location, order_ids):
+    survivor=phase['survivor_id']
+    if phase['service']!='OrderSvr' or not re.fullmatch(r'[0-9a-f]{64}',survivor):
+        raise AssertionError('Missing exact surviving Order process')
+    expected=set(order_ids)
+    decoder=json.JSONDecoder()
+    for _ in range(30):
+        logs=subprocess.run(['docker','logs','--since',phase['business_local_started_at'],survivor],
+                            capture_output=True,text=True,errors='replace',check=True,timeout=20)
+        observed={}
+        for line in (logs.stdout+'\n'+logs.stderr).splitlines():
+            if '"OrdStatus":"Filled"' not in line or not any(order in line for order in expected):
+                continue
+            offset=line.find('[{')
+            if offset<0:
+                continue
+            try:
+                reports,_=decoder.raw_decode(line[offset:])
+            except ValueError:
+                continue
+            for report in reports:
+                if (report.get('Location')!=location or report.get('SecurityID')!='BTC003USDT'
+                        or report.get('ExecType')!='Trade' or report.get('OrdStatus')!='Filled'
+                        or report.get('ClOrdID') not in expected or not report.get('ExecID')):
+                    continue
+                observed.setdefault(report['ClOrdID'],set()).add(report['ExecID'])
+        if any(len(executions)!=1 for executions in observed.values()):
+            raise AssertionError('Duplicate execution for one of the controlled orders during LOCAL')
+        if observed.keys()==expected:
+            execution_ids=sorted({eid for executions in observed.values() for eid in executions})
+            if len(execution_ids)==2:
+                return execution_ids
+            raise AssertionError('Both Order-only orders reused one execution identity')
+        time.sleep(2)
+    raise AssertionError('Surviving Order did not publish both exact Filled reports during LOCAL')
+
+def run(endpoint,verify_streams=False,ha_evidence=None,ha_timeout=1900):
     suffix=secrets.token_hex(5).upper()
     password=secrets.token_urlsafe(23)
     location=None
@@ -68,6 +106,11 @@ def run(endpoint,verify_streams=False):
         assert db_mode==[['ORDER_ONLY']],db_mode
         checkpoint('product_created_in_order_only_mode',product='BTC003USDT')
 
+        def login_trader(uid,username,userpass):
+            return h.ok(endpoint,'LoginSvr','SYS.ATS.LOGIN',{'method':'login',
+                'cid':'LOGIN_'+username,'user_id':uid,'user_name':username,
+                'password':userpass,'client_type':'WEB','Location':location})['token']
+
         def create_trader(label):
             username='oo_'+suffix.lower()+'_'+label
             userpass=secrets.token_urlsafe(24)
@@ -77,10 +120,8 @@ def run(endpoint,verify_streams=False):
                 'password':userpass,'request_id':username,'cid':username})
             uid=str(data['user_id'])
             assert uid.isdigit() and len(uid)==12, 'new user_id is not the 12-digit tenant allocator format'
-            logged=h.ok(endpoint,'LoginSvr','SYS.ATS.LOGIN',{'method':'login',
-                'cid':'LOGIN_'+username,'user_id':uid,'user_name':username,
-                'password':userpass,'client_type':'WEB','Location':location})
-            return {'user_id':uid,'token':logged['token']}
+            return {'user_id':uid,'token':login_trader(uid,username,userpass),
+                    'username':username,'password':userpass}
         maker=create_trader('maker');taker=create_trader('taker')
         checkpoint('trader_ids_are_numeric',both_12_digit=True)
         # Non-funded users are supposed to trade an Order-only product.
@@ -194,16 +235,42 @@ def run(endpoint,verify_streams=False):
                 raise AssertionError('Maker rejected after admission: '+str(states))
             time.sleep(1)
         else:raise AssertionError('Order-only maker not resting')
+        if ha_evidence:
+            h.ha_marker(ha_evidence,'business-maker',location=location,client_order_id=maker_id)
+            phase=h.wait_ha_stage(ha_evidence,'business_local_ready',ha_timeout)
+            broker_session=h.signed_login(endpoint,broker['api_key'],broker['secret_key'],location)['token']
+            publish_price()
+            taker['token']=login_trader(taker['user_id'],taker['username'],taker['password'])
         taker_id=place(taker,'Buy','TAKER')
         checkpoint('taker_submitted',order=taker_id)
+        if ha_evidence:
+            local_exec_ids=witnessed_order_only_fills(phase,location,[maker_id,taker_id])
+            md_entry_id=h.verify_ha_market(endpoint,location)
+            if sql(balance_query)!=before or sql(position_query)!=before_positions:
+                raise AssertionError('Order-only trading changed funds or positions during LOCAL')
+            h.ha_marker(ha_evidence,'business-local',location=location,client_order_id=taker_id,
+                        maker_client_order_id=maker_id,service=phase['service'],slot=phase['slot'],
+                        execution_ids=local_exec_ids,md_entry_id=md_entry_id)
+            h.wait_ha_stage(ha_evidence,'business_readback',ha_timeout)
         for i in range(45):
             states=sql("SELECT clord_id,ord_status,cum_qty FROM dc_orders WHERE location='"+location+"' AND clord_id IN ('"+maker_id+"','"+taker_id+"') ORDER BY clord_id")
             if len(states)==2 and all(row[1]=='Filled' for row in states):break
             time.sleep(2)
         else:raise AssertionError('Order-only orders did not both fill: '+str(states))
-        fills=sql("SELECT exec_id,order_id,side,last_qty,last_px FROM dc_orders_execorders WHERE location='"+location+"' AND security_id='BTC003USDT' AND last_qty>0")
+        # The order projection and the certified execution-history delivery
+        # observe the same commit independently. Allow bounded delivery lag.
+        fill_query=("SELECT exec_id,order_id,side,last_qty,last_px FROM dc_orders_execorders "
+                    "WHERE location='"+location+"' AND security_id='BTC003USDT' AND last_qty>0 ORDER BY exec_id")
+        for _ in range(20):
+            fills=sql(fill_query)
+            if len(fills)>=2:
+                break
+            time.sleep(1)
         if len(fills)!=2 or len({row[0] for row in fills})!=2:
             raise AssertionError('Missing/duplicate order-only execution reports: '+str(len(fills)))
+        if not ha_evidence:
+            h.verify_unfilled_immediate_orders(endpoint, location, maker['user_id'], maker['token'],
+                'BTC003USDT', suffix, 'ORDER_ONLY', publish_price, checkpoint)
         after=sql(balance_query)
         after_positions=sql(position_query)
         if before!=after:
@@ -213,6 +280,14 @@ def run(endpoint,verify_streams=False):
         checkpoint('order_only_filled_no_trade_balance_mutation',orders=2,
                    executions=len(fills),trader_balance_rows=len(after),
                    trader_position_rows=len(after_positions))
+        if ha_evidence:
+            if sorted(row[0] for row in fills)!=local_exec_ids:
+                raise AssertionError('Order-only SQL executions differ from the original LOCAL reports')
+            if h.verify_ha_market(endpoint,location)!=md_entry_id:
+                raise AssertionError('Order-only MD changed the original trade identity after strict return')
+            h.ha_marker(ha_evidence,'business-match',location=location,orders=[maker_id,taker_id],
+                        executions=fills,md_entry_id=md_entry_id,trade_balance_unchanged=True,
+                        trade_position_unchanged=True)
         if verify_streams:
             # Market notifications are async; wait a short bounded window
             # after the durable fill and demand the actual recent-trades push.
@@ -249,6 +324,12 @@ if __name__=='__main__':
     parser.add_argument('--endpoint',default='http://127.0.0.1:33002/httpapi/')
     parser.add_argument('--verify-streams',action='store_true',
                         help='Additionally require an actual Python SDK recent-trades notification')
+    parser.add_argument('--ha-evidence-dir',type=Path,help='Coordinate an Order-only match with a real voter replacement')
+    parser.add_argument('--ha-timeout',type=int,default=1900)
     args=parser.parse_args()
     if not args.execute: parser.error('refusing mutations without --execute')
-    sys.exit(run(h.require_local(args.endpoint),verify_streams=args.verify_streams))
+    if args.ha_evidence_dir and (args.verify_streams or not args.ha_evidence_dir.is_absolute()
+            or not 60<=args.ha_timeout<=3900 or not (args.ha_evidence_dir/'evidence.json').is_file()):
+        parser.error('HA requires a live rollout evidence directory and REST verification')
+    sys.exit(run(h.require_local(args.endpoint),verify_streams=args.verify_streams,
+                 ha_evidence=args.ha_evidence_dir,ha_timeout=args.ha_timeout))

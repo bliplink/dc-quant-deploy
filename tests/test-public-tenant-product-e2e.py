@@ -72,7 +72,9 @@ def main():
         else:
             findings.append({"tenant":tenant,"visible":[],"enabled":0})
     admin=post(args.gateway,"AdminSvr","tenantProductDataSource",{"action":"LIST","location":args.tenant[0]})
-    assert admin.get("code")==10004,admin
+    # Gateway may report its front-door session gate (9002) or the
+    # service-level authorization gate (10004); neither exposes admin data.
+    assert admin.get("code") in (9002,10004) and not admin.get("data"),admin
     findings.append({"unscoped_administrative_list":"AUTHENTICATED_SESSION_REQUIRED"})
     if args.api_only:
         print(json.dumps({"api_checks":findings,"browser_checks":[],"mode":"api-only"},
@@ -120,8 +122,14 @@ def main():
             page.wait_for_function(
                 "code => document.querySelector('.symbolCode')?.textContent?.includes(code)",
                 arg=target, timeout=12000)
-            page.wait_for_timeout(2000)
-            matches=[s for s in snapshots if s[:3]==(200,0,tenant) and s[3]==target]
+            # The trading terminal intentionally fetches MD snapshots after
+            # its market-subscription bootstrap. On a cold page this can be
+            # >2 seconds; wait for the actual network response, not a timer.
+            matches=[]
+            for _ in range(40):
+                matches=[s for s in snapshots if s[:3]==(200,0,tenant) and s[3]==target]
+                if matches:break
+                page.wait_for_timeout(500)
             assert matches,(target,snapshots)
             assert not errors,errors
             browser_checks.append({"viewport":width,"http":response.status,

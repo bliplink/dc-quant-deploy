@@ -7,6 +7,9 @@ No direct DB writes or bypasses of the tenant security/session policy.
 """
 import argparse
 from decimal import Decimal
+import os
+from pathlib import Path
+import re
 import subprocess
 import hashlib
 import hmac
@@ -68,7 +71,12 @@ def ok(url, service, method, content, session=None, route_location=None):
 def readonly_sql(statement):
     if not statement.lstrip().upper().startswith('SELECT ') or ';' in statement:
         raise ValueError('Only a single SELECT is allowed')
-    query=subprocess.run(['docker','exec','dc-saas-mysql','sh','-c',
+    # T542: isolated fresh Demo runs in otc-t529-fresh-mysql, while the
+    # one-click stack uses dc-saas-mysql. Never compare against the wrong DB.
+    container = os.environ.get('OTC_E2E_MYSQL_CONTAINER', 'dc-saas-mysql')
+    if not re.fullmatch(r'[A-Za-z0-9][A-Za-z0-9_.-]{0,127}', container):
+        raise ValueError('Unsafe read-only MySQL container name')
+    query=subprocess.run(['docker','exec',container,'sh','-c',
         'mysql -uroot -p"$MYSQL_ROOT_PASSWORD" -N dc -e "$1"','--',statement],
         capture_output=True,text=True,timeout=15)
     if query.returncode:
@@ -76,9 +84,140 @@ def readonly_sql(statement):
     return [row.split('\t') for row in query.stdout.splitlines()]
 
 
+def ha_marker(directory, marker, **fields):
+    temporary=directory/(marker+'.tmp')
+    temporary.write_text(json.dumps(fields,sort_keys=True)+'\n')
+    temporary.replace(directory/(marker+'.json'))
+
+
+def wait_ha_stage(directory, expected, timeout):
+    deadline=time.monotonic()+timeout
+    while time.monotonic()<deadline:
+        status=json.loads((directory/'evidence.json').read_text())
+        stage=status.get('stage')
+        if stage==expected:
+            if len(status.get(expected,{}))!=256:
+                raise AssertionError('HA evidence does not contain all 256 partitions')
+            return status
+        if stage in ('failed','complete'):
+            raise RuntimeError('HA exercise ended before '+expected)
+        time.sleep(1)
+    raise RuntimeError('HA exercise timed out waiting for '+expected)
+
+
+def verify_ha_match(url, location, ids, phase):
+    if not re.fullmatch('[A-Za-z0-9_-]+', location):
+        raise AssertionError('Unsafe test tenant')
+    orders=readonly_sql(
+        "SELECT o.clord_id,o.user_id,e.exec_id FROM dc_orders o JOIN dc_orders_execorders e "
+        "ON e.location=o.location AND e.user_id=o.user_id AND e.order_id=o.order_id AND e.last_qty>0 "
+        "WHERE o.location='"+location+"' AND o.clord_id IN ('"+"','".join(ids)+"') "
+        "AND o.security_id='BTC003USDT' ORDER BY o.clord_id")
+    if (len(orders)!=2 or {row[0] for row in orders}!=set(ids)
+            or len({row[1] for row in orders})!=2 or len({row[2] for row in orders})!=2):
+        raise AssertionError('Expected exactly one distinct execution per authenticated order')
+    postings_query=(
+        "SELECT m.partition_id,m.source_epoch,m.journal_seq,m.event_id,"
+        "JSON_UNQUOTE(JSON_EXTRACT(m.payload,'$.userID')),"
+        "JSON_UNQUOTE(JSON_EXTRACT(m.payload,'$.sourceID')) "
+        "FROM dc_trade_projection_mutation m "
+        "WHERE m.location='"+location+"' AND m.entity_type='POSTING' "
+        "AND m.source_type='TRADE_ATOMIC_MATCH_PAIR_PREPARED' "
+        "AND JSON_UNQUOTE(JSON_EXTRACT(m.payload,'$.securityID'))='BTC003USDT' ORDER BY m.mutation_index")
+    for attempt in range(25):
+        postings=readonly_sql(postings_query)
+        if len(postings)>=2:
+            break
+        time.sleep(2)
+    if (len(postings)!=2 or len({tuple(row[:4]) for row in postings})!=1
+            or {tuple(row[4:6]) for row in postings}!={tuple(row[1:3]) for row in orders}):
+        raise AssertionError('Expected exactly one atomic Trade event with the two Order executions')
+    partition,epoch,seq,event=postings[0][:4]
+    if phase['service']=='TradeSvr' and [partition,int(epoch),int(seq)]!=phase['business_local_trade_coordinate']:
+        raise AssertionError('Trade projection changed the original LOCAL settlement coordinate')
+    return dict(orders=orders,postings=postings,partition=partition,source_epoch=int(epoch),
+                journal_seq=int(seq),event_id=event,md_entry_id=verify_ha_market(url,location))
+
+
+def verify_ha_market(url, location):
+    for _ in range(25):
+        market=ok(url,'MDSvr','queryPublicMarket',{'location':location,'securityID':'BTC003USDT'})
+        entries=(market.get('recentTrades') or {}).get('NoMDEntries') or []
+        exact=[row for row in entries if row.get('MDEntryID') and row.get('MDEntryTime')
+               and Decimal(str(row.get('MDEntryPx','0')))==Decimal('90000')
+               and Decimal(str(row.get('MDEntrySize','0')))==Decimal('0.001')]
+        if exact:
+            break
+        time.sleep(1)
+    if len(exact)!=1:
+        raise AssertionError('Expected exactly one public MD print for the test match')
+    return exact[0]['MDEntryID']
+
+
+def verify_unfilled_immediate_orders(url, location, user, token, symbol, reference,
+                                     mode, refresh_price, record):
+    account_fields = ('Balance', 'UsedMargin', 'FreezedMargin', 'FreezedCommission')
+    before = None
+    if mode == 'TRADE':
+        account = ok(url, 'TradeSvr', 'queryAccountBalance', {}, token, route_location=location)
+        before = {field: Decimal(str(account[field])) for field in account_fields}
+    cases = []
+    for tif in ('IOC', 'FOK'):
+        refresh_price()
+        client = 'EMPTY-' + reference + '-' + tif
+        ok(url, 'OrderSvr', 'placeOrder', {
+            'OCType': 'OPEN', 'OrderQty': '0.001', 'OrdType': 'Limit',
+            'ClOrdID': client, 'Terminal': 'API', 'AlgoName': 'cross',
+            'Side': 'Buy', 'Price': '89900', 'UserID': user, 'MarketIndicator': '4',
+            'TimeInForce': tif, 'SecurityID': symbol, 'ReduceOnly': 'false',
+            'Demo': '0', 'Location': location,
+        }, token)
+        deadline = time.monotonic() + 60
+        rows = []
+        while time.monotonic() < deadline:
+            rows = readonly_sql(
+                "SELECT order_id,ord_status,cum_qty FROM dc_orders "
+                f"WHERE location='{location}' AND user_id='{user}' "
+                f"AND security_id='{symbol}' AND clord_id='{client}'")
+            if len(rows) == 1 and rows[0][1] == 'Cancelled':
+                break
+            if len(rows) > 1 or rows and rows[0][1] in ('Filled', 'Partially_Filled', 'Rejected'):
+                raise AssertionError('Unfilled immediate order has an unexpected terminal state')
+            time.sleep(0.5)
+        else:
+            raise AssertionError('Unfilled immediate order did not durably cancel')
+        order_id, state, cumulative = rows[0]
+        if Decimal(cumulative) != 0:
+            raise AssertionError('Unfilled immediate order gained executions')
+        open_orders = ok(url, 'OrderSvr', 'queryOpenOrder', {
+            'userid': user, 'securityid': symbol, 'location': location,
+            'marketIndicator': '4', 'maxOrderCount': 100,
+        }, token)
+        if isinstance(open_orders, str):
+            open_orders = json.loads(open_orders)
+        if not isinstance(open_orders, list):
+            raise AssertionError('Authenticated immediate-order readback is not a list')
+        if any((row.get('ClOrdID') or row.get('ClOrderID') or row.get('clOrdID')) == client
+               for row in open_orders):
+            raise AssertionError('Cancelled immediate order remains open')
+        trades = readonly_sql(
+            "SELECT COUNT(*) FROM dc_orders_execorders "
+            f"WHERE location='{location}' AND order_id='{order_id}' AND exec_type='Trade'")
+        if trades != [['0']]:
+            raise AssertionError('Unfilled immediate order produced a Trade execution')
+        if mode == 'TRADE':
+            account = ok(url, 'TradeSvr', 'queryAccountBalance', {}, token, route_location=location)
+            after = {field: Decimal(str(account[field])) for field in account_fields}
+            if after != before:
+                raise AssertionError('Unfilled immediate cancellation changed or retained customer funds')
+        cases.append({'time_in_force': tif, 'client_order_id': client, 'order_id': order_id,
+                      'state': state, 'cumulative_quantity': cumulative})
+    record('unfilled_immediate_orders_cancelled', mode=mode, cases=cases)
+
+
 def accept_trade_scenario(url,location,suffix,broker_session,source_id,record,
                           near_simultaneous=False,sdk_signed=False,broker_client=None,
-                          verify_private_streams=False):
+                          verify_private_streams=False,ha_evidence=None,ha_timeout=1900):
     """Small simulated, authenticated trader-to-trader match; no manual DB writes."""
     traders=[]
     active=[]
@@ -229,6 +368,28 @@ def accept_trade_scenario(url,location,suffix,broker_session,source_id,record,
         record('current_source_mark_live',mark='90001')
 
         maker,taker=traders
+        if ha_evidence:
+            fault=json.loads((ha_evidence/'evidence.json').read_text())
+            commands=int(os.environ.get('MAC_DEMO_HA_TRADE_PREFIX_COMMANDS','0'))
+            if commands and fault['service']=='TradeSvr':
+                if not 4097<=commands<=8192:
+                    raise ValueError('Use 4097 to 8192 real Trade setup commands for the large-prefix HA regression')
+                for index in range(commands):
+                    maker['sdk'].set_leverage('BTC003USDT',10+index%2)
+                    if (index+1)%512==0:
+                        record('ha_trade_large_prefix_preload_progress',commands=index+1)
+                maker['sdk'].set_leverage('BTC003USDT',10)
+                for _ in range(30):
+                    heads=readonly_sql("SELECT partition_id,source_epoch,MAX(journal_seq) "
+                        "FROM dc_trade_projection_mutation WHERE location='"+location+
+                        "' GROUP BY partition_id,source_epoch")
+                    if any(int(row[2])>=commands for row in heads):break
+                    time.sleep(1)
+                else:
+                    raise AssertionError('Real Trade setup did not produce the required committed prefix')
+                record('ha_trade_large_committed_prefix_before_fault',api_commands=commands,
+                       committed_projection_heads=heads)
+                refresh_price()
         if verify_private_streams:
             from websocket import WebSocketTimeoutException
             for trader in traders:
@@ -322,8 +483,134 @@ def accept_trade_scenario(url,location,suffix,broker_session,source_id,record,
                 time.sleep(1)
             else:
                 raise AssertionError('Maker not found as New in authenticated Order state')
+            def refresh_sessions():
+                for trader in traders:
+                    trader['session']=trader['sdk'].login(mode='trader').token
+
+            def account_waterline():
+                fields=('Balance','UsedMargin','FreezedMargin','FreezedCommission')
+                result={}
+                for trader in traders:
+                    account=ok(url,'TradeSvr','queryAccountBalance',{},trader['session'],route_location=location)
+                    if not account or any(account.get(field) is None for field in fields):
+                        raise AssertionError('Signed Trade account read was unavailable')
+                    result[trader['role']]={field:Decimal(str(account[field])) for field in fields}
+                return result
+
+            if ha_evidence:
+                before=account_waterline()
+                ha_marker(ha_evidence,'business-maker',location=location,client_order_id=resting)
+                phase=wait_ha_stage(ha_evidence,'business_local_ready',ha_timeout)
+                refresh_sessions()
+                if phase['service']=='TradeSvr':
+                    local=account_waterline()
+                    if local!=before:
+                        raise AssertionError('Witnessed LOCAL Trade account state differs from strict state')
+                    refresh_price()
+                    cancel_id=put(taker,'Buy','LOCAL-CANCEL','89999')
+                    for _ in range(25):
+                        orders=taker['sdk'].open_orders('BTC003USDT') or []
+                        resting_cancel=[row for row in orders
+                            if (row.get('ClOrdID') or row.get('ClOrderID'))==cancel_id
+                            and (row.get('OrdStatus') or row.get('orderStatus'))=='New']
+                        if len(resting_cancel)==1:
+                            break
+                        time.sleep(1)
+                    else:
+                        raise AssertionError('LOCAL Trade did not freeze margin for the cancellable order')
+                    held_order=resting_cancel[0]
+                    reservation=held_order.get('TradeReserveCommit','').split('/')
+                    if (held_order.get('TradeReserveDurability')!='LOCAL_DURABLE_ASYNC'
+                            or held_order.get('TradeReserveRpoRisk') is not True or len(reservation)!=3
+                            or reservation[0] not in phase['survivor_local']
+                            or int(reservation[1])!=phase['survivor_local'][reservation[0]]['epoch']
+                            or int(reservation[2])<=0):
+                        raise AssertionError('Client did not see the actual LOCAL Trade margin reservation and its risk')
+                    held=account_waterline()
+                    frozen_margin=held['taker']['FreezedMargin']-before['taker']['FreezedMargin']
+                    frozen_commission=held['taker']['FreezedCommission']-before['taker']['FreezedCommission']
+                    if held['maker']!=before['maker'] or frozen_margin<=0 or frozen_commission<0:
+                        raise AssertionError('Trade did not apply the expected single-node account freeze')
+                    record('ha_trade_local_margin_reserved',client_order_id=cancel_id,
+                           reservation=reservation,frozen_margin=str(frozen_margin),
+                           frozen_commission=str(frozen_commission))
+                    order_id=held_order.get('OrderID') or held_order.get('orderID')
+                    taker['sdk'].cancel_order('BTC003USDT',order_id,clord_id=cancel_id+'-REQUEST')
+                    for _ in range(25):
+                        cancel=readonly_sql("SELECT ord_status FROM dc_orders WHERE location='"+location+
+                                            "' AND clord_id='"+cancel_id+"'")
+                        if cancel in ([['Cancelled']],[['Canceled']]) and account_waterline()==before:
+                            break
+                        time.sleep(1)
+                    else:
+                        raise AssertionError('LOCAL Trade cancellation did not release the exact frozen margin')
+                    record('ha_trade_local_cancel_released_margin',client_order_id=cancel_id)
+                refresh_price()
             buying=put(taker,'Buy','TAKER')
             record('taker_order_submitted',clientOrderId=buying)
+            if ha_evidence:
+                local_accounts=0
+                if phase['service']=='TradeSvr':
+                    for _ in range(45):
+                        local_accounts=0
+                        for trader in traders:
+                            position=ok(url,'TradeSvr','queryTradePosition',{'securityid':'BTC003USDT'},
+                                        trader['session'],route_location=location)
+                            side='Short' if trader['role']=='maker' else 'Long'
+                            if position and Decimal(str(position.get(side+'Position','0')))==Decimal('0.001'):
+                                local_accounts+=1
+                        if local_accounts==2:
+                            balances=account_waterline()
+                            if any(Decimal(item['Balance'])>=Decimal(before[role]['Balance'])
+                                   for role,item in balances.items()):
+                                raise AssertionError('LOCAL Trade did not apply both financial after-states')
+                            break
+                        time.sleep(2)
+                    else:
+                        raise AssertionError('LOCAL Trade did not settle both positions while the peer was absent')
+                    local_receipts={}
+                    for _ in range(45):
+                        for trader,client_id in ((maker,resting),(taker,buying)):
+                            reports=ok(url,'OrderSvr','queryRuntimeExecOrder',{
+                                'securityid':'BTC003USDT','maxOrderCount':100},
+                                trader['session'],route_location=location)
+                            exact=[row for row in reports or []
+                                   if row.get('ClOrdID')==client_id and row.get('ExecType')=='Trade'
+                                   and Decimal(str(row.get('LastQty','0')))==Decimal('0.001')]
+                            if len(exact)>1:
+                                raise AssertionError('Duplicate final LOCAL execution receipt')
+                            if exact:
+                                receipt=exact[0]
+                                coordinate=receipt.get('TradeSettlementCommit','').split('/')
+                                if (receipt.get('TradeSettlementDurability')!='LOCAL_DURABLE_ASYNC'
+                                        or receipt.get('TradeSettlementQuorumDurable') is not False
+                                        or receipt.get('TradeSettlementRpoRisk') is not True
+                                        or len(coordinate)!=3 or coordinate[0] not in phase['survivor_local']
+                                        or int(coordinate[1])!=phase['survivor_local'][coordinate[0]]['epoch']
+                                        or int(coordinate[2])<=0):
+                                    raise AssertionError('Final LOCAL receipt lost its actual durability or risk')
+                                local_receipts[trader['role']]={key:receipt[key] for key in (
+                                    'ExecID','TradeSettlementDurability','TradeSettlementQuorumDurable',
+                                    'TradeSettlementRpoRisk','TradeSettlementCommit')}
+                        if len(local_receipts)==2:
+                            break
+                        time.sleep(2)
+                    else:
+                        raise AssertionError('Final LOCAL executions waited for the absent Trade replica')
+                    if local_receipts['maker']['TradeSettlementCommit']!=local_receipts['taker']['TradeSettlementCommit']:
+                        raise AssertionError('Final LOCAL execution receipts disagree on the atomic Trade commit')
+                    local_market=verify_ha_market(url,location)
+                    if local_market not in {row['ExecID'] for row in local_receipts.values()}:
+                        raise AssertionError('LOCAL public trade does not match either final execution')
+                    record('ha_trade_local_final_receipts_before_replica_return',
+                           receipts=local_receipts,public_trade_id=local_market)
+                ha_marker(ha_evidence,'business-local',location=location,client_order_id=buying,
+                          maker_client_order_id=resting,service=phase['service'],slot=phase['slot'],
+                          verified_accounts=local_accounts,
+                          final_local_receipts=local_receipts if phase['service']=='TradeSvr' else None)
+                phase=wait_ha_stage(ha_evidence,'business_readback',ha_timeout)
+                refresh_sessions()
+                refresh_price()
 
         # Actual executions must exist for each independently authenticated
         # trader; do not mistake HTTP order acknowledgement for a fill.
@@ -393,6 +680,14 @@ def accept_trade_scenario(url,location,suffix,broker_session,source_id,record,
                 assert sdk.order_history(symbol='BTC003USDT') is not None
                 assert sdk.execution_history(symbol='BTC003USDT') is not None
                 record('signed_trader_sdk_account_history',role=trader['role'])
+        if ha_evidence:
+            details=verify_ha_match(url,location,ids,phase)
+            ha_marker(ha_evidence,'business-match',location=location,**details)
+            record('ha_signed_match_exact_postings_and_market',source_epoch=details['source_epoch'],
+                   journal_seq=details['journal_seq'],partition=details['partition'])
+        else:
+            verify_unfilled_immediate_orders(url, location, maker['id'], maker['session'],
+                'BTC003USDT', suffix, 'TRADE', refresh_price, record)
         active.clear()
         return True
     finally:
@@ -419,7 +714,8 @@ def accept_trade_scenario(url,location,suffix,broker_session,source_id,record,
                 pass
 
 
-def run(url,with_traders=False,near_simultaneous=False,sdk_signed=False,verify_private_streams=False):
+def run(url,with_traders=False,near_simultaneous=False,sdk_signed=False,verify_private_streams=False,
+        ha_evidence=None,ha_timeout=1900):
     suffix=secrets.token_hex(5).upper()
     password=secrets.token_urlsafe(22)
     application_id='CUSTOM_PRODUCT_E2E_'+suffix
@@ -547,7 +843,8 @@ def run(url,with_traders=False,near_simultaneous=False,sdk_signed=False,verify_p
             accept_trade_scenario(url,location,suffix,broker_session,alt_id,record,
                                   near_simultaneous=near_simultaneous,
                                   sdk_signed=sdk_signed,broker_client=broker_sdk,
-                                  verify_private_streams=verify_private_streams)
+                                  verify_private_streams=verify_private_streams,
+                                  ha_evidence=ha_evidence,ha_timeout=ha_timeout)
         return True
     except Exception as e:
         record('FAILED',error=type(e).__name__,message=str(e)[:220])
@@ -577,7 +874,15 @@ def main():
         help='Require actual authenticated execution push to both Trader Python API sessions')
     parser.add_argument('--near-simultaneous',action='store_true',
         help='Submit opposing demo orders together; requires --execute --with-traders')
+    parser.add_argument('--ha-evidence-dir',type=Path,help='Coordinate the signed match with a real Mac voter replacement')
+    parser.add_argument('--ha-timeout',type=int,default=1900)
     args=parser.parse_args()
+    if args.ha_evidence_dir and (
+            not (args.execute and args.with_traders and args.sdk_signed)
+            or args.near_simultaneous or args.verify_private_streams
+            or not args.ha_evidence_dir.is_absolute() or not 60<=args.ha_timeout<=3900
+            or not (args.ha_evidence_dir/'evidence.json').is_file()):
+        parser.error('HA requires a sequential signed trader scenario and a live rollout evidence directory')
     if args.verify_private_streams and not (args.execute and args.with_traders and args.sdk_signed):
         parser.error('--verify-private-streams requires --execute --with-traders --sdk-signed')
     if args.sdk_signed and not (args.execute and args.with_traders):
@@ -592,6 +897,7 @@ def main():
         parser.error('--with-traders requires --execute')
     return 0 if run(url,with_traders=args.with_traders,
                     near_simultaneous=args.near_simultaneous,
-                    sdk_signed=args.sdk_signed,verify_private_streams=args.verify_private_streams) else 1
+                    sdk_signed=args.sdk_signed,verify_private_streams=args.verify_private_streams,
+                    ha_evidence=args.ha_evidence_dir,ha_timeout=args.ha_timeout) else 1
 
 if __name__=='__main__':raise SystemExit(main())
