@@ -1259,3 +1259,13 @@
 - t554-authorized-old-vm-stop-20261113-062706/state.json 确认 ha-test-sshfs Stopped，原 PID17411 和17401退出，boot disk 与 datadisk 均原 inode 和大小保留。当前默认 VM PID74900仍运行，8CPU/12GiB/150GiB。释放此前约3.5个CPU核的持续竞争及旧VM内存资源。
 - 资源背景变化发生在新代 RPO 的实际主节点故障之后、Home 追平期间。此前最新10Robot五分钟结果 robot-steady-10-222128.json 通过，427成交、426配对、1.423TPS，服务内P50/P95/P99/P99.9为69.947/107.691/130.620/279.211ms，0请求窗内未成交、1成交缺窗内入口，控制代前后2/2。该窗口仍为旧VM并存背景。后续性能结果应明确旧VM已关闭，不能把全量差值归因于新Common。
 - RPO b5a15dc9 已真实观察主本地99、备认证98，LOCAL最终回执观察0.453186秒、备暂停0.929783秒，实际杀掉Trade B主节点。当前已全256 LOCAL可写，正自动Home追平，最终财务/物理核对尚未结束，整体NO_GO。
+
+### 2026-11-13 07:32 最新 Common 的真实 RPO 与四方向业务故障通过，性能复测排队
+
+- mac-demo-20261113-060903 的 async-rpo-b5a15dc9 为 NORMAL_ASYNC_UNREPLICATED_FILL_RPO_BUSINESS_AND_HOME_PASS。Trade B 主本地99、备认证98，最终 LOCAL 回执在备暂停后0.453186秒观察，备实际暂停0.929783秒，真实主进程 SIGKILL 后按备认证水位接管，原 Order 意图重放，最终512物理对一致、26资金26持仓及9032前序关联零差异、11水位一致。同一Robot和Order进程保留，选定Robot故障全程27轮、最大间隙55.285秒。此用例的Home恢复中旧无用VM获用户授权关停，时间改善不能全归代码。恢复依赖原Order意图仍存，不等于任意已丢的异步尾都可保证重建。
+- 四方向均实际执行并得到 COMMON_PHYSICAL_MATCH_AND_FINANCIAL_CURSOR_PASS。Trade A KILL 位于 ha-trade-a-kill-gx6y_rc6，LOCAL251.212秒、Home512.916秒。Order A TERM/ORDER_ONLY 位于 ha-order-a-term-0onvz_d5，200.929/506.867秒。Order B KILL/funded 位于 ha-order-b-kill-8q6ikd8p，240.404/501.983秒。Trade B TERM/funded 位于 ha-trade-b-term-2ve0qmv_，203.033/522.361秒。持续Robot报价、故障中真实单节点业务、恢复后订单/资金持仓/MD/SQL及物理链路按现有门禁核对通过。每例的精确物理证据保留于对应目录。
+- 每例完成后正常Manager收回该夹具新增试用Robot并等待owner释放，四份 owned-extra-trial-cleanup 报告完成，保留原同一10Robot基线。07:29:02已继续六组恢复后下撤单，之后完整10Robot五分钟。当前这些postfault检查仍进行中，尚未把整轮业务控制器置为完成。
+- 用户本次明确要求提交GitHub。本轮本地已提交 Order a478e35baff86c46603c4f7b50e90a03d5827bb5、Trade aefad60d5107f9b595b20c7b20bb5008584eb3f3、Projection6f38cf6aa4ac56464d63a48f61530f7e381061a8。Order/Trade/MD/Shared源码与部署构建原始 source.sha256 逐文件完全一致，Projection源码清单亦一致。源码提交没有改变当前运行字节。
+- 7仓库统一推送研发分支 t554-mac-recovery-20261113 并逐个 ls-remote 核对完整SHA，记录 t554-github-code-checkpoint-20261113-070126/state.json。Common5b2ad4c6e305d81bf43abe1ea4ea5b82cad102ce，MD578ed2f22882b1a20b9d9c63c9333a3417956201，Shared010038a35967acbd8c9af45c0e5930564e1ebfc6，部署92f24c74dc2c15c1c4186f3fbd2d153da490a5bc，以及上述三业务仓库。部署提交限定48个本任务路径，compose仅暂存trial bootstrap和Robot认证两处，其他原有工作区修改继续保留。55项Mac Python测试重新通过。远端saas-crypto-latest存在独立演进，本轮用研发分支保存精确验收源码，后续整合仍需相应验证。
+- 第一次直连推送RPC连接超时且未成功，使用本机已在监听的既有SOCKS代理按单命令参数重试后全部成功，没有更改全局Git代理或身份。Common/MD/Shared工作流分支过滤不覆盖本研发分支，新增业务和部署提交均带skip ci，未请求或启动GitHub Actions。
+- t554-clean-capacity-after-business-20261113 已实际排队。只有完整业务控制器通过才开始，先完整归档已停用015117 Ready，再用同一精确构建串行fresh严格模式，归档已停用060903 Ready后测六组下撤单、10Robot、固定1/5/10每秒最终回执和50Robot，正常回收额外cohort。随后同构建fresh异步模式并归档退休严格Ready，重复同一矩阵。资格窗口不并行编译、归档、剖析或调整资源，旧ha-test-sshfs必须为Stopped。两模式均是独立时间段的同Mac串行干净业务代，不存在并行活跃业务环境。当前分钟级恢复和已知高负载长尾仍未达目标，整体性能NO_GO。
