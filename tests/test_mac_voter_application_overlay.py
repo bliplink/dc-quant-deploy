@@ -3,7 +3,9 @@ import copy
 import json
 from pathlib import Path
 import re
+from types import SimpleNamespace
 import unittest
+from unittest.mock import Mock, call
 
 
 TREE=ast.parse((Path(__file__).parents[1]/'scripts/roll-mac-demo-voter.py').read_text())
@@ -95,6 +97,56 @@ class LateLocalCensusTest(unittest.TestCase):
         context=self.context()
         del context['initial']['P008']
         self.assertTrue(self.rejected(context))
+
+
+class RetainedVoterLifecycleTest(unittest.TestCase):
+    def replacement_block(self):
+        branch = next(node for node in ast.walk(TREE) if isinstance(node, ast.If)
+                      and ast.unparse(node.test) == 'observing_return'
+                      and ast.unparse(node.body[0]) == "new_id = prior['replacement_id']")
+        return compile(ast.fix_missing_locations(ast.Module(body=branch.orelse, type_ignores=[])),
+                       'actual-retained-voter-replacement', 'exec')
+
+    def context(self):
+        return {'args': SimpleNamespace(robot_traffic=False), 'run': Mock(),
+                'read': Mock(return_value='replacement-id'), 'publish': Mock(),
+                'old': {'Id': 'original-id', 'HostConfig': {'RestartPolicy': {
+                    'Name': 'on-failure', 'MaximumRetryCount': 7}}},
+                'retired': 'retained-original', 'record': {}, 'flags': ['--restart', 'on-failure'],
+                'replacement_image': 'verified-image'}
+
+    def test_retained_original_cannot_restart_and_replacement_keeps_its_policy(self):
+        context = self.context()
+        exec(self.replacement_block(), context)
+        self.assertEqual([call('docker', 'rename', 'original-id', 'retained-original', capture=True),
+                          call('docker', 'update', '--restart', 'no', 'original-id', capture=True)],
+                         context['run'].call_args_list)
+        context['read'].assert_called_once_with('docker', 'run', '-d', '--restart', 'on-failure',
+                                                'verified-image')
+        self.assertEqual({'Name': 'on-failure', 'MaximumRetryCount': 7},
+                         context['record']['retained_restart_policy_before'])
+
+    def test_failed_retirement_prevents_replacement_launch(self):
+        context = self.context()
+        context['run'].side_effect = [None, RuntimeError('Retirement failed')]
+        with self.assertRaisesRegex(RuntimeError, 'Retirement failed'):
+            exec(self.replacement_block(), context)
+        context['read'].assert_not_called()
+
+    def test_failed_launch_restores_the_original_restart_policy(self):
+        rollback = next(node for node in ast.walk(TREE) if isinstance(node, ast.If)
+                        and ast.unparse(node.test) == 'renamed and inspect(name) is None')
+        context = self.context()
+        restore = Mock()
+        context.update(renamed=True, inspect=Mock(return_value=None), name='original-name',
+                       FRESH={'restore_container_restart_policy': restore})
+        code = compile(ast.fix_missing_locations(ast.Module(body=[rollback], type_ignores=[])),
+                       'actual-retained-voter-rollback', 'exec')
+        exec(code, context)
+        context['run'].assert_called_once_with('docker', 'rename', 'original-id', 'original-name',
+                                               capture=True)
+        restore.assert_called_once_with(context['old'])
+        self.assertFalse(context['renamed'])
 
 
 if __name__=='__main__':unittest.main()

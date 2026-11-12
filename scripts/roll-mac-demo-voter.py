@@ -490,6 +490,8 @@ def exercise(root, generation, kind, slot, args):
                 returning_started = utc_now()
             run("docker", "rename", old["Id"], retired, capture=True)
             renamed = True
+            record["retained_restart_policy_before"] = old["HostConfig"]["RestartPolicy"]
+            run("docker", "update", "--restart", "no", old["Id"], capture=True)
             new_id = read("docker", "run", "-d", *flags, replacement_image)
             record["replacement_id"] = new_id
             publish("replacement_started")
@@ -564,6 +566,7 @@ def exercise(root, generation, kind, slot, args):
         publish("failed")
         if renamed and inspect(name) is None:
             run("docker", "rename", old["Id"], name, capture=True)
+            FRESH["restore_container_restart_policy"](old)
             renamed = False
         raise
     finally:

@@ -1269,3 +1269,13 @@
 - 7仓库统一推送研发分支 t554-mac-recovery-20261113 并逐个 ls-remote 核对完整SHA，记录 t554-github-code-checkpoint-20261113-070126/state.json。Common5b2ad4c6e305d81bf43abe1ea4ea5b82cad102ce，MD578ed2f22882b1a20b9d9c63c9333a3417956201，Shared010038a35967acbd8c9af45c0e5930564e1ebfc6，部署92f24c74dc2c15c1c4186f3fbd2d153da490a5bc，以及上述三业务仓库。部署提交限定48个本任务路径，compose仅暂存trial bootstrap和Robot认证两处，其他原有工作区修改继续保留。55项Mac Python测试重新通过。远端saas-crypto-latest存在独立演进，本轮用研发分支保存精确验收源码，后续整合仍需相应验证。
 - 第一次直连推送RPC连接超时且未成功，使用本机已在监听的既有SOCKS代理按单命令参数重试后全部成功，没有更改全局Git代理或身份。Common/MD/Shared工作流分支过滤不覆盖本研发分支，新增业务和部署提交均带skip ci，未请求或启动GitHub Actions。
 - t554-clean-capacity-after-business-20261113 已实际排队。只有完整业务控制器通过才开始，先完整归档已停用015117 Ready，再用同一精确构建串行fresh严格模式，归档已停用060903 Ready后测六组下撤单、10Robot、固定1/5/10每秒最终回执和50Robot，正常回收额外cohort。随后同构建fresh异步模式并归档退休严格Ready，重复同一矩阵。资格窗口不并行编译、归档、剖析或调整资源，旧ha-test-sshfs必须为Stopped。两模式均是独立时间段的同Mac串行干净业务代，不存在并行活跃业务环境。当前分钟级恢复和已知高负载长尾仍未达目标，整体性能NO_GO。
+
+### 2026-11-13 07:50 最新完整业务门禁已完成，修复退休故障容器策略后继续性能复测
+
+- 六组恢复后下撤单 order-cancel-capacity-c4ce1746.json 全部通过，07:36:30结束，原测试账户无残单。funded并发4/8循环TPS分别18.974/18.809，New P99为259.974/513.964ms，cancel-absent168.128/282.218ms。此为故障后原JVM及诊断背景，独立干净两模式性能复测仍需继续。
+- postfault robot-steady-10-234145.json 通过，07:41:55完成。858成交且858配对，服务内P50/P95/P99/P99.9为41.892/82.707/120.293/196.168ms。最新Common210安全、完整原生P0、真实未复制LOCAL最终成交后主SIGKILL的RPO、四业务方向和postfault检查均通过，t554-local-progress-business-controller-20261113-0430最终状态EXACT_COMMON_P0_RPO_FOUR_FAULTS_AND_POSTFAULT_BUSINESS_PASS_CAPACITY_RECORDED_PERFORMANCE_NO_GO_REMAINS。功能门禁完成，高性能和恢复耗时仍未达目标。
+- 性能队列首次归档旧015117 Ready前被restart策略检查拒绝，没有创建归档或清理任何原数据。发现旧两次滚动故障保留的原容器仍为on-failure，正常fresh只处理当时四个当前核心，未覆盖更早故障保留的副本。失败目录t554-clean-capacity-queue-20261113-073101和原队列NO_GO完整保留。
+- 根因在roll-mac-demo-voter.py保留旧容器之后直接启动replacement，未明确关闭旧容器的Docker重启策略。已在正常替换入口保存旧策略并对退休原容器设置restart=no，新replacement继续使用已记录的正式on-failure策略。若replacement尚未创建而流程失败，原容器恢复原名时同步恢复原策略及重试次数。Common、业务镜像、Epoch、ACK或物理证明均无变更。
+- 新增3个实际生产分支AST回归，原版本3项稳定失败，修改后完整58项Mac Python测试通过。首次测试选中了另一个同名条件分支而报2个测试错误，收紧到真实replacement分支后完成旧红新绿对照，全部原日志保留于/tmp/mac-t554-retained-restart-policy-*20261113*。
+- 已对历史015117两个和当前060903四个、合计6个已停止且精确匹配hostready-retained名称/代/卷的故障保留原容器正常设restart=no。t554-stopped-retained-voter-policy-fix-20261113-074930保存每个原inspect和策略，不涉及任何正在运行的核心。当前4个正式核心仍Running/on-failure/RestartCount0。其数据保留，随后归档仍要求完整每文件与gzip校验。
+- 新性能队列t554-clean-capacity-after-business-retry-20261113已实际启动，先继续完整归档015117，再串行同构建严格/异步干净复测。原失败队列和不可用日志没有被覆盖。
