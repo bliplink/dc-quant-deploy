@@ -1308,3 +1308,14 @@
 - 09:29已通过原roll-voter正常入口对083209 Order A做TERM滚动更新，开启signed-business和持续Robot检查。证据ha-order-a-term-ou3gr8mc，当前已完成存活B全256 LOCAL、真实单节点业务与Robot成交，新A已安装精确e574类，正在原数据上追平及回主。09:35旧900单成交明细已推进592条，09:36只读P095仍由B以E3 LOCAL持有，故这段恢复不能全部归功于新A。原900单窗口NO_GO保持，最终恢复需另立原身份精确核对。
 - 同时发现失败5/s准备留下U4QGZF Robot，原1/s样本背景10，原10/s和15/s样本实际背景11。原10基线来源robot-steady-10-005138.json/runtime_status，已限定测试组织归属、通过Manager正常STOP附加U4QGZF并等待owner释放，owned-extra-trial-cleanup-failed-client-setup-before-recovery.json确认原10保留。原样本负载条件已补正，后续固定10复测。
 - code5004在现有CodeMsgEnum中为SYMBOL_NOTEXIST。测试准备创建产品后MD注册短暂滞后，原查询立即异常退出。现在沿用原60秒屏障，仅对只读queryPublicMarket的5004继续轮询，其他错误仍直接失败。将既有stop_trial_robot_after_bootstrap移到受控产品准备早期，防止后续准备失败遗留自动Robot，并在下撤单结果记录实际背景cohort。61项Mac Python测试通过。原始失败样本与所有场景数据继续保留，当前没有手工暂停责任。
+
+
+### 2026-11-13 10:35 原 900 笔恢复、Order 双向滚动与混合确认恢复阻塞
+
+- Order A TERM 滚动替换完成，ha-order-a-term-ou3gr8mc 为 COMMON_PHYSICAL_MATCH_AND_FINANCIAL_CURSOR_PASS，全量 LOCAL 199.749 秒，Home 532.409 秒。Order B KILL 加 ORDER_ONLY 和持续 Robot 的滚动替换完成，ha-order-b-kill-ka1blzkl 同为 PASS，全量 LOCAL 243.910 秒，Home 526.242 秒。两端实际 Worker.class 已核验 e57452f2333ada3249492fca71ab37e82bdb8ad4562c24def718665646142f0e。
+- 原 15/s 的 900 笔已逐原 ClOrdID、OrderID、确定性 MatchKey 和 ExecID 核对。execution-2902d25c-readonly-after-order-a.json 证明 900 taker 与 900 maker 成交明细、原已观察 169 笔成交身份、双方各 0.900 持仓、900 条公共成交及财务游标均一致，残余 maker 正常取消且资金冻结清零。ClickHouse 表为 MergeTree，核对物理原行无重复。原压测窗口 NO_GO 保持，后续恢复不能计作窗口内通过。部分恢复发生在 A 替换之前，恢复效果由原角色变更重放与候选集成共同完成，待新负载验证预防能力。
+- 10:00:01.541 对 Trade A 执行原计划 SIGKILL，B 最终 255 分区 READY LOCAL，P143 保留 E2 严格角色并长期拒绝。t554-p143-readonly-observer-20261113-102326 保存只读附加观察，P143 closed=false、poisoned=true、retired=false、pendingAsyncReplication=false，驱动拒绝 Common retained LOCAL source must be its live original primary。WAL 约 12 KiB。原始栈明确 CashIn 第 7 条严格调用在 INDEPENDENT_WAL_FSYNC_RECEIPTS 阶段遇到备节点连接拒绝，未成功确认。未伪造 ACK、Epoch 或 READY，未删除或改写尾部。
+- 全局默认 LOCAL_DURABLE_ASYNC 下，TradeStateCoordinator 未携带成交回执封装的 prepared mutation 仍走 strict commitThenApply。Common 原恢复分支仅看默认客户端策略，因而对该已隔离严格尾部误选健康本地主路径。10:26 通过 SIGINT 退出本轮演练，原脚本保存 KeyboardInterrupt NO_GO，父控制器保存 trade-a-kill failed，后续容量阶段取消。
+- Common9effc47389a56306f1ec076294b9f3cb3243c2e8 为候选。既有边界增加一个瞬态严格提交未完成标记，在进入物理追加前设置，双端认证完成后清除。严格入口已先排空此前异步复制，因此对未完成严格提交只选原认证前缀，并沿用原退休回执的严格语义。原始严格未确认尾部保留。新增验证沿用原256分区进程用例，同时验证本地异步确认保留与另一分区严格未确认尾部排除，再校验恢复后可写及 Home。未新增账本、恢复框架或业务专用 Common 分支。
+- 候选 JAR SHA256 为 72ea1f7fca91595870b12cbcda0ab29761367552678043a5552296cc24a40bf5。t554-retained-strict-p0-controller-20261113-1035 正在执行安全及完整物理门禁，尚未集成部署。旧 JAR 加增强故障用例的对照运行也在保存原始失败现场，当前观察还出现 P105 临时 WAL 安装文件缺失，需结合候选结果继续核查，尚不能报告该增强用例通过。
+- t554-p143-preserve-maintenance-20261113-102909 记录维护窗口。暂停 Robot/Liq，保存核心容器身份与重启策略，6 个核心/见证容器正常停写，故障 A 已停。原083209业务数据完整保留，停写后 fstrim 完成，host_free_after=17247145984 字节。当前 Robot/Liq 仍为受控暂停，需在后续部署恢复阶段解除。未开启平行业务环境。
