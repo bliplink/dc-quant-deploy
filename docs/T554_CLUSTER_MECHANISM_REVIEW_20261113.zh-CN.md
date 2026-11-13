@@ -255,3 +255,25 @@ Common `f1649ede`、Order `8e1de5e`、Trade `aefad60d`，新代 `134411`，原 M
 容量测量后，已停写四核心与两个Witness再回收虚拟磁盘空闲块，随后恢复原服务、原租约流程与10Robot，财务核对通过，主机约13GiB空闲。下一段稳态校验暴露测量器问题，Docker对同一容器重启后仍保留上次FinishedAt，旧筛选将正在运行的容器误排除。修正以容器Created和是否Running判断可能的日志区间，真实事件仍由Docker日志时间窗口过滤，保留重启前各进程实例的日志。
 
 新增4项生命周期回归测试，旧版其中2项失败，修复后全部通过，Root共71项Mac单测通过。真实原始日志复算后，先前通过的10Robot、50Robot全部成交数与延迟分位完全相同。校验未完成的063524窗口实际读到910笔成交，但原报告仍保留校验未完成，后续完整稳态与故障验证重新执行。
+
+
+## 15 时 10 分，证据链的实测落盘成本
+
+在全部正式严格容量窗口结束后，单独运行 25 笔每秒热点用例，并在四核心采集 JFR。诊断开启物理 FileForce 全量记录，样本包含建户、背景 10Robot 和双端副本，单独用于定位机制成本。1500 个计划槽位实际发出并确认 1482 笔，18 个槽位未发出，已确认委托全部收到最终成交且正常清理、精确成交及财务核对通过。该诊断压力报告保持 NO_GO，其分位不纳入正式性能对照。
+
+| 进程 | 记录到的物理落盘次数 | 落盘耗时中位数毫秒 | 落盘耗时 P99 毫秒 |
+|---|---|---|---|
+| Order A | 47079 | 3.921 | 8.839 |
+| Order B | 61989 | 2.174 | 10.504 |
+| Trade A | 29264 | 3.920 | 10.810 |
+| Trade B | 22902 | 0.836 | 12.648 |
+
+四节点合计 161234 次 FileForce。各线程事件累计约 526.6 秒，其中证书托管与回执账本约 69.2%，业务 WAL 约 14.5%，其余主要为提交索引等文件。这些时长在并行线程间存在重叠，不能相加为一笔交易或整个窗口的墙钟耗时。混合 ExecutionSample 与 NativeMethodSample 也不能直接解释为 CPU 占用，后者可能包含阻塞的本地 I/O。
+
+频繁出现的文件为 head.pending、custody 目录、receipt-quorum.pending、custody-ledger 目录、business.wal 和 commit-index。原代码分别持久化证书托管头、独立回执账本及其目录，主备均承担落盘。Order 热点节点还记录 4380 次至少 10 毫秒的分区屏障等待，累计约 287 秒，包含不同线程的等待重叠。由此推断，逐笔证明链的持久化成本与分区内串行推进都应进入性能优化审阅。[证书托管](https://github.com/bliplink/com.app.common/blob/f1649ede21e2bd0667f772594d2e84cd801f191f/src/main/java/com/app/common/replication/DurableWalCertificateCustody.java)、[回执账本](https://github.com/bliplink/com.app.common/blob/f1649ede21e2bd0667f772594d2e84cd801f191f/src/main/java/com/app/common/replication/DurableWalCustodyReceiptLedger.java)
+
+审阅时应把每项证明映射到其处理的具体崩溃窗口，核对既有提交索引、托管头和回执账本之间的必要关系，再评估已有持久化步骤的复用或批量化。物理 ACK、提交前缀、旧主隔离与失败尾部边界仍是验收条件。当前源码尚未因该剖面调整上述证明合同。
+
+本机为 24 GiB 内存、10 个物理 CPU 核，当前 Colima 分配 8 vCPU 与 12 GiB。已完成严格 10Robot 与 50Robot 正式窗口内，主机 Swapout 增量均为零，热点 25 笔每秒正式窗口的 Swapin 和 Swapout 增量均为零。已有样本无法把这些热点排队主要归因于主机交换内存。
+
+新代正在执行持续 10Robot 的四方向故障。Trade B 强制终止后，全部 256 分区完成合法单副本接管，耗时 250.056 秒，并在单 Trade 节点上观察到资金模式成交和原 Robot 持续业务。随后完成严格追平、自动 Home 回归及业务读回，完整原始证据保存在 ha-trade-b-kill-uzq3rmqa。其余方向继续执行。
