@@ -22,6 +22,7 @@ HERE = Path(__file__).resolve().parent
 CANCEL = runpy.run_path(str(HERE / 'verify-mac-demo-order-cancel-capacity.py'))
 CAPACITY, MEASURE = CANCEL['CAPACITY'], CANCEL['MEASURE']
 SYMBOL, QUANTITY, PRICE = 'BTC004USDT', Decimal('0.001'), '90010'
+FUNDING = Decimal('100000')
 
 
 def execution_reports(payload):
@@ -39,7 +40,7 @@ def execution_reports(payload):
 
 def signed_trader(location, run, index, accounts):
     from opentradingcore import OpenTradingCoreClient
-    trader = CANCEL['new_trader'](location, SYMBOL, 'TRADE', run, index)
+    trader = CANCEL['new_trader'](location, SYMBOL, 'TRADE', run, index, funding_amount=FUNDING)
     issued = CANCEL['api']('LoginSvr', 'updateApiKey', {
         'cid': 'EXEC_KEY_' + run + str(index), 'label': 'execution-capacity-' + run,
         'type': 'trade'}, trader[2])
@@ -75,7 +76,8 @@ def run_window(root, rate, seconds, run, report):
     with CANCEL['controlled_products'](run, report) as (location, products):
         if ('TRADE', SYMBOL) not in products:
             raise RuntimeError('Expected the funded controlled-price product')
-        report.update(location=location, symbol=SYMBOL, quantity=str(QUANTITY), price=PRICE)
+        report.update(location=location, symbol=SYMBOL, quantity=str(QUANTITY), price=PRICE,
+                      funding_per_account=str(FUNDING))
         try:
             report['background_robots_at_admission'] = CAPACITY['demo_tenants']()
             report['stage'] = 'SIGNED_MAKER_LOGIN'
@@ -244,8 +246,8 @@ def main():
     parser.add_argument('--rate', type=float, default=1)
     parser.add_argument('--seconds', type=int, default=60)
     args = parser.parse_args()
-    if not 0 < args.rate <= 15 or not 60 <= args.seconds <= 300 or args.rate * args.seconds > 900:
-        parser.error('Use 0–15 orders/s, 60–300 seconds, at most 900 planned orders')
+    if not 0 < args.rate <= 100 or not 60 <= args.seconds <= 300 or args.rate * args.seconds > 6000:
+        parser.error('Use more than 0 and at most 100 orders/s, 60–300 seconds, at most 6000 planned orders')
     os.umask(0o077)
     root = args.generation.resolve(strict=True)
     sdk = Path(os.environ.get('MAC_DEMO_SDK_ROOT', str(HERE.parent / '.work/fresh-fullflow-20261021/sdk019/deployed-install')))

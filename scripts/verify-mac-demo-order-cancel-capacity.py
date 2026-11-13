@@ -183,7 +183,10 @@ def await_order(trader, symbol, client, present):
     raise RuntimeError("Resting order state did not converge")
 
 
-def new_trader(location, symbol, mode, run, index, password=None):
+def new_trader(location, symbol, mode, run, index, password=None, funding_amount=Decimal("10000")):
+    funding_amount = Decimal(str(funding_amount))
+    if not funding_amount.is_finite() or not 0 < funding_amount <= 100000:
+        raise ValueError("Benchmark funding must be positive and at most 100000")
     username = f"cancelcap_{run}_{index}"
     password = password or secrets.token_urlsafe(24)
     user = str(api("AdminSvr", "tenantUserRegistration", {
@@ -200,13 +203,13 @@ def new_trader(location, symbol, mode, run, index, password=None):
             "userID": user, "securityID": symbol, "location": location, "leverage": 10,
         }, token)
         api("TradeSvr", "cashIn", {
-            "Amount": "10000", "UserID": user, "Location": location,
+            "Amount": str(funding_amount), "UserID": user, "Location": location,
             "Demo": "0", "Info1": username,
         }, token)
         deadline = time.monotonic() + 60
         while time.monotonic() < deadline:
             rows = balances(location, user)
-            if len(rows) == 1 and Decimal(rows[0][0]) == 10000:
+            if len(rows) == 1 and Decimal(rows[0][0]) == funding_amount:
                 break
             time.sleep(0.5)
         else:
