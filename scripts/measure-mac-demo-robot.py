@@ -56,14 +56,17 @@ def voter_containers(generation, since, until):
     if not names:
         raise RuntimeError("No physical Order or Trade voters found for this Demo generation")
     lifecycle = subprocess.check_output(
-        ["docker", "inspect", "-f", "{{.Id}} {{.State.StartedAt}} {{.State.FinishedAt}}", *names],
+        ["docker", "inspect", "-f",
+         "{{.Id}} {{.Created}} {{.State.StartedAt}} {{.State.FinishedAt}} {{.State.Running}}", *names],
         text=True, timeout=20)
     window = {"order": [], "trade": []}
     for line in lifecycle.splitlines():
-        ident, started, finished = line.split()
-        if started.startswith("0001-") or at(started) > until:
+        ident, created, started, finished, running = line.split()
+        # Docker retains logs across in-place restarts and keeps the previous
+        # FinishedAt while running. Log reads below enforce the exact window.
+        if started.startswith("0001-") or at(created) > until:
             continue
-        if not finished.startswith("0001-") and at(finished) < since:
+        if running != "true" and not finished.startswith("0001-") and at(finished) < since:
             continue
         window[voter_name.fullmatch(names[ident]).group(1)].append(ident)
     if not all(window.values()):
