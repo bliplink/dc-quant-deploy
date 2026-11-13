@@ -44,6 +44,7 @@ def controlled_products(run, report, password=None, admin_session=None):
     })["token"]
     if admin_session is not None:
         admin_session["token"] = admin
+    report["controlled_robot_stop"] = stop_trial_robot_after_bootstrap(location, admin)
     source = "QA_CANCEL_" + run.upper()
     api("AdminSvr", "tenantDataSourceAdmin", {
         "action": "CREATE", "location": location, "cid": source, "data_source_id": source,
@@ -100,8 +101,14 @@ def controlled_products(run, report, password=None, admin_session=None):
         publisher.start()
         deadline = time.monotonic() + 60
         while time.monotonic() < deadline:
-            markets = [api("MDSvr", "queryPublicMarket", {"location": location, "securityID": symbol})
-                       for _, symbol in products]
+            try:
+                markets = [api("MDSvr", "queryPublicMarket", {"location": location, "securityID": symbol})
+                           for _, symbol in products]
+            except RuntimeError as unavailable:
+                if "code=5004" not in str(unavailable):
+                    raise
+                time.sleep(1)
+                continue
             if all(market.get("ticker", {}).get("MarkPrice") == "90001" for market in markets):
                 break
             time.sleep(1)
@@ -289,6 +296,7 @@ def main():
         CAPACITY["require_strict_demo"](root)
         try:
             with controlled_products(run, report) as (location, products):
+                report["background_robots_at_admission"] = CAPACITY["demo_tenants"]()
                 for mode, symbol in products:
                     if args.mode is not None and mode != args.mode:
                         continue

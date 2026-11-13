@@ -72,14 +72,11 @@ def run_window(root, rate, seconds, run, report):
     guard = Lock()
     accounts, records, seen, stream_errors = [], {}, set(), []
     receiver = None
-    admin_session = {}
-    with CANCEL['controlled_products'](run, report, admin_session=admin_session) as (location, products):
+    with CANCEL['controlled_products'](run, report) as (location, products):
         if ('TRADE', SYMBOL) not in products:
             raise RuntimeError('Expected the funded controlled-price product')
         report.update(location=location, symbol=SYMBOL, quantity=str(QUANTITY), price=PRICE)
         try:
-            report['controlled_robot_stop'] = CANCEL['stop_trial_robot_after_bootstrap'](
-                location, admin_session['token'])
             report['background_robots_at_admission'] = CAPACITY['demo_tenants']()
             report['stage'] = 'SIGNED_MAKER_LOGIN'
             maker = signed_trader(location, run, 0, accounts)

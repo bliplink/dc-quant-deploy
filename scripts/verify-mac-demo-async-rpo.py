@@ -281,11 +281,8 @@ def main():
         since = datetime.now(timezone.utc)
         save()
         try:
-            admin_session = {}
-            with CANCEL["controlled_products"](run_id, record, password, admin_session) as (location, products):
+            with CANCEL["controlled_products"](run_id, record, password) as (location, products):
                 symbol = next(symbol for mode, symbol in products if mode == "TRADE")
-                admin = admin_session["token"]
-                record["controlled_robot_stop"] = CANCEL["stop_trial_robot_after_bootstrap"](location, admin)
                 until(lambda: set(CAPACITY["demo_tenants"]()) == set(original_robots), 60,
                       "Controlled tenant Robot did not stop without changing the original cohort")
                 until(lambda: PRODUCT["readonly_sql"]("SELECT enabled FROM dc_tenant_robot "

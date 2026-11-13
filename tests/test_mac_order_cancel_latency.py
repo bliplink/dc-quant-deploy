@@ -65,6 +65,7 @@ class OrderCancelLatencyTest(unittest.TestCase):
         admin_session = {}
         with patch.object(CAPACITY, 'api', side_effect=api) as request, \
                 patch.object(CAPACITY, 'Thread'), \
+                patch.object(CAPACITY, 'stop_trial_robot_after_bootstrap', return_value={}) as stopped, \
                 patch.dict(CAPACITY.PRODUCT, signed_login=lambda *args: {'token': 'fixture-broker-token'},
                            call=lambda *args: {'code': 0}):
             with CAPACITY.controlled_products('fixture', report, 'caller-owned-fixture-password',
@@ -75,6 +76,60 @@ class OrderCancelLatencyTest(unittest.TestCase):
         self.assertEqual('caller-owned-fixture-password', request.call_args_list[0].args[2]['admin_password'])
         self.assertTrue(report['price_source']['broker_key_deleted'])
         self.assertNotIn('fixture-admin-token', repr(report))
+        stopped.assert_called_once_with('ABC123', 'fixture-admin-token')
+
+    def test_controlled_market_waits_for_symbol_registration_after_stopping_its_robot(self):
+        market_calls = []
+        stopped = Mock(return_value={'disabled_and_owner_released': True})
+
+        def api(server, method, content, token=None):
+            if method == 'tenantApplication':
+                return {'status': 'APPROVED', 'approved_location': 'ABC123'}
+            if method == 'SYS.ATS.LOGIN':
+                return {'token': 'fixture-admin-token'}
+            if method == 'tenantApiKeyAdmin':
+                return {'api_key': 'fixture-key', 'secret_key': 'fixture-secret'}
+            if method == 'queryPublicMarket':
+                stopped.assert_called_once()
+                market_calls.append(content['securityID'])
+                if len(market_calls) == 1:
+                    raise RuntimeError('queryPublicMarket failed code=5004')
+                return {'ticker': {'MarkPrice': '90001'}}
+            return {}
+
+        report = {}
+        with patch.object(CAPACITY, 'api', side_effect=api), patch.object(CAPACITY, 'Thread'), \
+                patch.object(CAPACITY, 'stop_trial_robot_after_bootstrap', stopped), \
+                patch.object(CAPACITY.time, 'sleep') as sleep, \
+                patch.dict(CAPACITY.PRODUCT, signed_login=lambda *args: {'token': 'fixture-broker-token'},
+                           call=lambda *args: {'code': 0}):
+            with CAPACITY.controlled_products('fixture', report):
+                self.assertEqual(3, len(market_calls))
+        sleep.assert_called_once_with(1)
+        self.assertTrue(report['controlled_robot_stop']['disabled_and_owner_released'])
+
+    def test_other_market_errors_preserve_failure_and_revoke_the_fixture_key(self):
+        def api(server, method, content, token=None):
+            if method == 'tenantApplication':
+                return {'status': 'APPROVED', 'approved_location': 'ABC123'}
+            if method == 'SYS.ATS.LOGIN':
+                return {'token': 'fixture-admin-token'}
+            if method == 'tenantApiKeyAdmin':
+                return {'api_key': 'fixture-key', 'secret_key': 'fixture-secret'}
+            if method == 'queryPublicMarket':
+                raise RuntimeError('queryPublicMarket failed code=9000')
+            return {}
+
+        report = {}
+        with patch.object(CAPACITY, 'api', side_effect=api), patch.object(CAPACITY, 'Thread'), \
+                patch.object(CAPACITY, 'stop_trial_robot_after_bootstrap', return_value={}) as stopped, \
+                patch.dict(CAPACITY.PRODUCT, signed_login=lambda *args: {'token': 'fixture-broker-token'},
+                           call=lambda *args: {'code': 0}):
+            with self.assertRaisesRegex(RuntimeError, 'code=9000'):
+                with CAPACITY.controlled_products('fixture', report):
+                    self.fail('An unrelated error cannot start the load window')
+        stopped.assert_called_once()
+        self.assertTrue(report['price_source']['broker_key_deleted'])
 
     def test_observed_states_include_the_wait_after_http_ack(self):
         now = [0.0]

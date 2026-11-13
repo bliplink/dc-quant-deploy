@@ -129,6 +129,8 @@ Order 的待结算索引从 Common 日志和快照重建。重试使用原 Match
 
 当前异步 15 笔每秒用例已触发 Trade 的 `TRADE_COMMON_FILL_OVERFILL_OR_INCONSISTENT_REMAINDER` 拒绝，900 个订单状态已为 Filled，最终回执与成交明细未全部完成。该用例保持 NO_GO，正在核查连续部分成交的投递顺序、累计成交量和剩余量。该问题属于业务结算链路，Common 的物理日志一致不能单独保证跨服务经济结果完成。[Trade 余量校验](https://github.com/bliplink/com.app.dc.tradesvr/blob/aefad60d5107f9b595b20c7b20bb5008584eb3f3/src/main/java/com/app/dc/service/order/TradeCertifiedOpenFillPlan.java)
 
+在验修复 `55234c2` 让初次结算按分区内的日志前序推进，并在前一笔 Order 结算回执持久化后继续下一笔。已经本地确认的成交保留独立的补复制重试能力。该修复复用了原待结算索引和发送线程，已通过 198 项 Order 测试，含 2 项原有环境依赖跳过，正在原现场滚动验证。[候选投递实现](https://github.com/bliplink/com.app.dc.ordersvr/blob/55234c23a3ab28f65d30efb7253935c9f7f72847/src/main/java/com/app/dc/service/state/OrderSignedMatchDeliveryWorker.java)
+
 ## 异步尾部丢失后的恢复边界
 
 用户已选择按备节点认证水位立即接管，接受尚未复制的已确认尾部可能丢失。旧主返回时需要服从新 Epoch 的权威历史，恢复流程必须处理旧主额外尾部与新历史的冲突。
@@ -165,5 +167,7 @@ Order 的待结算索引从 Common 日志和快照重建。重试使用原 Match
 | 最新严格 50Robot | 8.88 笔成交每秒，服务内成交 P99 约 452 毫秒 |
 | 最新异步客户端 10 笔每秒 | 600 笔完成，最终成交 P99 约 208 毫秒 |
 | 最新异步客户端 15 笔每秒 | 60 秒窗内 165 笔最终成交，限定排空后 169 笔，已收到成交的 P99 约 70.4 秒，结算拒绝待修复 |
+
+严格固定速率样本有 10 个背景 Robot。异步 10 和 15 笔样本实际有 11 个背景 Robot，额外成员来自此前准备失败的测试租户。该成员已正常收回，准备流程已修复，后续复测固定原 10 个成员。原结果保留其实际负载条件。
 
 分钟级恢复与高负载结算问题仍阻止生产级交付。当前继续修复结算顺序并核对现场，随后补齐异步 50Robot、严格 15 笔每秒和修复后的完整对照。测试窗口、测量口径和失败记录见持续验收文档。[持续验收记录](T554_CROSS_EPOCH_BUSINESS_ACCEPTANCE_20261110.zh-CN.md)
