@@ -22,10 +22,8 @@ class StorageLifecycleTest(unittest.TestCase):
         with patch.dict(PREPARE_RUNTIME.__globals__, run=run):
             flags = PREPARE_RUNTIME('mac-demo-20261113-000000', 'order', 'A', 'sha256:fixture')
         mounts = dict(zip(flags[1::2], flags[::2]))
-        self.assertEqual(4, len(mounts))
-        for subpath, target in [('data', '/srv/dc/data'), ('log', '/srv/dc/log'),
-                                ('service-data', '/srv/dc/dc/OrderSvr/data'),
-                                ('service-log', '/srv/dc/dc/OrderSvr/log')]:
+        self.assertEqual(2, len(mounts))
+        for subpath, target in [('data', '/srv/dc/data'), ('log', '/srv/dc/log')]:
             specification = (f'type=volume,source=mac-demo-20261113-000000-order-a-runtime,'
                              f'target={target},volume-subpath={subpath}')
             self.assertEqual('--mount', mounts[specification])

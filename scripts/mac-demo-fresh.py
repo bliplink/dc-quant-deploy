@@ -202,11 +202,9 @@ def owned_mount(volume, subpath, target, read_only=False):
 
 
 def prepare_voter_runtime_storage(generation, kind, slot, image):
-    service = SERVICES[kind]
     volume = f"{generation}-{kind}-{slot.lower()}-runtime"
-    paths = {"data": "/srv/dc/data", "log": "/srv/dc/log",
-             "service-data": f"/srv/dc/dc/{service}/data",
-             "service-log": f"/srv/dc/dc/{service}/log"}
+    # The existing entrypoint links each service's data/log to these roots.
+    paths = {"data": "/srv/dc/data", "log": "/srv/dc/log"}
     run("docker", "volume", "create", "--label", f"otc.mac.demo.generation={generation}", volume,
         capture=True)
     run("docker", "run", "--rm", "--network", "none", "--entrypoint", "mkdir", "--mount",
