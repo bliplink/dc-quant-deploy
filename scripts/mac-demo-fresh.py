@@ -448,6 +448,8 @@ def main():
     checked_images = [(service, image_refs[kind]) for kind, service in SERVICES.items()]
     if "md_IMAGE" in images:
         checked_images.append(("MDSvr", images["md_IMAGE"]))
+    if "gateway_IMAGE" in images:
+        checked_images.append(("GW", images["gateway_IMAGE"]))
     for service, image in checked_images:
         for title, jar_kind, file_name in embedded_jars:
             expected_sha = images[f"{jar_kind}_sha256"]
@@ -586,6 +588,9 @@ def main():
         image = old[f"dc-saas-{name}"]["Image"]
         if name == "mdsvr" and "md_IMAGE" in images:
             image = images["md_IMAGE"]
+            reference = f"local/{generation}-{name}:built"
+        if name == "gateway" and "gateway_IMAGE" in images:
+            image = images["gateway_IMAGE"]
             reference = f"local/{generation}-{name}:built"
         run("docker", "image", "tag", image, reference)
         pinned[name] = {"image": reference}
