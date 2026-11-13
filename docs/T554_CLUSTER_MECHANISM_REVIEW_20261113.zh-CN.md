@@ -257,23 +257,38 @@ Common `f1649ede`、Order `8e1de5e`、Trade `aefad60d`，新代 `134411`，原 M
 新增4项生命周期回归测试，旧版其中2项失败，修复后全部通过，Root共71项Mac单测通过。真实原始日志复算后，先前通过的10Robot、50Robot全部成交数与延迟分位完全相同。校验未完成的063524窗口实际读到910笔成交，但原报告仍保留校验未完成，后续完整稳态与故障验证重新执行。
 
 
-## 15 时 10 分，证据链的实测落盘成本
+## 16 时 40 分，剖面计时复核与更正
 
-在全部正式严格容量窗口结束后，单独运行 25 笔每秒热点用例，并在四核心采集 JFR。诊断开启物理 FileForce 全量记录，样本包含建户、背景 10Robot 和双端副本，单独用于定位机制成本。1500 个计划槽位实际发出并确认 1482 笔，18 个槽位未发出，已确认委托全部收到最终成交且正常清理、精确成交及财务核对通过。该诊断压力报告保持 NO_GO，其分位不纳入正式性能对照。
+在正式严格容量窗口结束后，单独运行 25 笔每秒热点用例，并在四核心采集 JFR。该段包含建户、背景 10Robot 和双端副本。1500 个计划槽位实际发出并确认 1482 笔，18 个槽位未发出。1482 笔均收到最终成交，正常清理、精确成交及财务核对通过，诊断压力报告保留 NO_GO。正式性能对照采用先前的独立容量报告。
 
-| 进程 | 记录到的物理落盘次数 | 落盘耗时中位数毫秒 | 落盘耗时 P99 毫秒 |
+| 进程 | 记录到的 FileForce 调用次数 |
+|---|---|
+| Order A | 47079 |
+| Order B | 61989 |
+| Trade A | 29264 |
+| Trade B | 22902 |
+
+四节点合计 161234 次。按调用次数统计，证书托管与回执账本约占 66.5%，业务 WAL 约占 16.6%。样本包含各节点及背景流量，单笔业务的调用数需要单独按请求归因。
+
+此前公布的 69.2% 耗时占比、落盘耗时分位和累计线程耗时已撤回。原始记录中，同一线程连续的多次 FileForce 使用同一 duration，所声明的事件结束时间与随后调用发生重叠。使用独立 RecordingFile API 读取原始 JFR 也复现该现象，当前证据支持记录计时字段存在异常。下一步实际耗时以独立计时来源复核。原始 JFR 和首次统计保留，并附上无效计时字段说明。
+
+调用路径中频繁出现 head.pending、custody 目录、receipt-quorum.pending、custody-ledger 目录、business.wal 和逐条 commit-index 证书。源码显示，普通命令分别持久化 WAL、提交证书、证书托管头和回执账本，并为原子替换执行目录落盘。现有 GroupCommit 与批量证书接口支持有界批次，普通业务入口当前主要传入单条命令。分区屏障与提交锁的等待堆栈也已记录。逐笔写放大、批量接口的实际使用和串行推进需要结合有效计时继续审阅。[证书托管](https://github.com/bliplink/com.app.common/blob/f1649ede21e2bd0667f772594d2e84cd801f191f/src/main/java/com/app/common/replication/DurableWalCertificateCustody.java)、[回执账本](https://github.com/bliplink/com.app.common/blob/f1649ede21e2bd0667f772594d2e84cd801f191f/src/main/java/com/app/common/replication/DurableWalCustodyReceiptLedger.java)
+
+审阅时应将每项证明映射到其处理的具体崩溃窗口，核对既有提交索引、托管头和回执账本之间的必要关系，再评估已有持久化步骤的复用或批量化。物理 ACK、提交前缀、旧主隔离与失败尾部边界继续作为验收条件。
+
+本机为 24 GiB 内存、10 个物理 CPU 核，Colima 分配 8 vCPU 与 12 GiB。严格 10Robot 与 50Robot 正式窗口内，主机 Swapout 增量均为零，热点 25 笔每秒正式窗口的 Swapin 和 Swapout 增量均为零。后续分析将结合这些资源样本、调用次数与有效的独立计时。
+
+## 最新严格模式四方向故障结果
+
+| 故障 | 全 256 分区单副本接管秒数 | 替换节点启动后全量 Home 回归秒数 | 结果 |
 |---|---|---|---|
-| Order A | 47079 | 3.921 | 8.839 |
-| Order B | 61989 | 2.174 | 10.504 |
-| Trade A | 29264 | 3.920 | 10.810 |
-| Trade B | 22902 | 0.836 | 12.648 |
+| Trade B 强制终止 | 250.056 | 512.357 | PASS |
+| Order A 正常退出替换 | 207.731 | 527.590 | PASS |
+| Order B 强制终止 | 238.542 | 513.715 | PASS |
+| Trade A 正常退出替换 | 211.162 | 551.699 | PASS |
 
-四节点合计 161234 次 FileForce。各线程事件累计约 526.6 秒，其中证书托管与回执账本约 69.2%，业务 WAL 约 14.5%，其余主要为提交索引等文件。这些时长在并行线程间存在重叠，不能相加为一笔交易或整个窗口的墙钟耗时。混合 ExecutionSample 与 NativeMethodSample 也不能直接解释为 CPU 占用，后者可能包含阻塞的本地 I/O。
+接管计时从停止旧节点后的接管轮询开始。Home 计时从替换节点启动后的回归轮询开始，两段具有各自的计时起点。每次均核对 256 对不可变安装 WAL、256 对恢复快照、资金持仓、成交身份和公共成交。期间保持原 10 个 Robot，Trade 单节点期间观察到真实资金模式成交，Order A 单节点场景验证 ORDER_ONLY 及 Trade 资金持仓保持原值。随后故障后的六组下撤单及 10Robot 五分钟稳态也全部通过。
 
-频繁出现的文件为 head.pending、custody 目录、receipt-quorum.pending、custody-ledger 目录、business.wal 和 commit-index。原代码分别持久化证书托管头、独立回执账本及其目录，主备均承担落盘。Order 热点节点还记录 4380 次至少 10 毫秒的分区屏障等待，累计约 287 秒，包含不同线程的等待重叠。由此推断，逐笔证明链的持久化成本与分区内串行推进都应进入性能优化审阅。[证书托管](https://github.com/bliplink/com.app.common/blob/f1649ede21e2bd0667f772594d2e84cd801f191f/src/main/java/com/app/common/replication/DurableWalCertificateCustody.java)、[回执账本](https://github.com/bliplink/com.app.common/blob/f1649ede21e2bd0667f772594d2e84cd801f191f/src/main/java/com/app/common/replication/DurableWalCustodyReceiptLedger.java)
+## 异步成交的后续确认
 
-审阅时应把每项证明映射到其处理的具体崩溃窗口，核对既有提交索引、托管头和回执账本之间的必要关系，再评估已有持久化步骤的复用或批量化。物理 ACK、提交前缀、旧主隔离与失败尾部边界仍是验收条件。当前源码尚未因该剖面调整上述证明合同。
-
-本机为 24 GiB 内存、10 个物理 CPU 核，当前 Colima 分配 8 vCPU 与 12 GiB。已完成严格 10Robot 与 50Robot 正式窗口内，主机 Swapout 增量均为零，热点 25 笔每秒正式窗口的 Swapin 和 Swapout 增量均为零。已有样本无法把这些热点排队主要归因于主机交换内存。
-
-新代正在执行持续 10Robot 的四方向故障。Trade B 强制终止后，全部 256 分区完成合法单副本接管，耗时 250.056 秒，并在单 Trade 节点上观察到资金模式成交和原 Robot 持续业务。随后完成严格追平、自动 Home 回归及业务读回，完整原始证据保存在 ha-trade-b-kill-uzq3rmqa。其余方向继续执行。
+资金模式成交首先将 Trade 的本地确认回执写入 Order 的原 Common WAL，用于最终客户通知。随后取得副本确认或重新武装的证明时，Order 可以追加后续确认标记，结束原持久化重试源。正常严格确认可在首次收到双副本回执时完成该流程。因此比较两种模式时，除接口和最终成交延迟，还需核对实际 RPC 与 WAL 提交次数。[后续确认实现](https://github.com/bliplink/com.app.dc.ordersvr/blob/8e1de5e40377576dd6b92dffaa151b2cbf2f4b12/src/main/java/com/app/dc/service/state/OrderStateJournal.java)
