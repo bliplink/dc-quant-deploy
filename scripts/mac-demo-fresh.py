@@ -201,6 +201,21 @@ def owned_mount(volume, subpath, target, read_only=False):
             + (",readonly" if read_only else "")]
 
 
+def prepare_voter_runtime_storage(generation, kind, slot, image):
+    service = SERVICES[kind]
+    volume = f"{generation}-{kind}-{slot.lower()}-runtime"
+    paths = {"data": "/srv/dc/data", "log": "/srv/dc/log",
+             "service-data": f"/srv/dc/dc/{service}/data",
+             "service-log": f"/srv/dc/dc/{service}/log"}
+    run("docker", "volume", "create", "--label", f"otc.mac.demo.generation={generation}", volume,
+        capture=True)
+    run("docker", "run", "--rm", "--network", "none", "--entrypoint", "mkdir", "--mount",
+        f"type=volume,source={volume},target=/runtime,volume-nocopy", image, "-p",
+        *(f"/runtime/{path}" for path in paths), capture=True)
+    return [argument for path, target in paths.items()
+            for argument in owned_mount(volume, path, target)]
+
+
 def public_pins(node):
     paths = [m["Source"] for m in node["Mounts"] if m["Destination"] == "/read-only-original-rsa/public"
              and m["Type"] == "bind" and not m["RW"]]
@@ -610,6 +625,7 @@ def main():
         for entry in client_ack_environment(old_node["Config"]["Env"], phase_policy):
             flags.extend(["-e", entry])
         flags.extend(["--label", f"otc.common.client_ack_policy={phase_policy}"])
+        flags.extend(voter_runtime_mounts[kind, slot])
         for mount in old_node["Mounts"]:
             dest = mount["Destination"]
             if dest.startswith("/read-only-original-rsa/"):
@@ -784,6 +800,8 @@ def main():
         for key in volume_keys:
             run("docker", "volume", "create", "--label", f"otc.mac.demo.generation={generation}",
                 f"{generation}-{key}", capture=True)
+        voter_runtime_mounts = {(kind, slot): prepare_voter_runtime_storage(generation, kind, slot, image_ids[kind])
+                                for kind, slot in pairs}
         tool("T530VirginZkManifestInstaller", f"127.0.0.1:{zk_port}",
              "/tools/manifests/order-e1-recovering.manifest", "/tools/manifests/trade-e1-recovering.manifest")
         birth = start_phase("birth")

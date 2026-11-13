@@ -10,12 +10,36 @@ from unittest.mock import Mock, patch
 FRESH = runpy.run_path(str(Path(__file__).resolve().parents[1] / 'scripts/mac-demo-fresh.py'))
 SPACE = FRESH['require_docker_space']
 RESTORE = FRESH['restore_container_restart_policy']
+PREPARE_RUNTIME = FRESH['prepare_voter_runtime_storage']
 CAPACITY = runpy.run_path(str(Path(__file__).resolve().parents[1] / 'scripts/verify-mac-demo-robot-capacity.py'))
 CONTROL = CAPACITY['require_strict_demo']
 GIB = 1024 ** 3
 
 
 class StorageLifecycleTest(unittest.TestCase):
+    def test_voter_logs_and_both_runtime_data_paths_use_persistent_native_volume(self):
+        run = Mock()
+        with patch.dict(PREPARE_RUNTIME.__globals__, run=run):
+            flags = PREPARE_RUNTIME('mac-demo-20261113-000000', 'order', 'A', 'sha256:fixture')
+        mounts = dict(zip(flags[1::2], flags[::2]))
+        self.assertEqual(4, len(mounts))
+        for subpath, target in [('data', '/srv/dc/data'), ('log', '/srv/dc/log'),
+                                ('service-data', '/srv/dc/dc/OrderSvr/data'),
+                                ('service-log', '/srv/dc/dc/OrderSvr/log')]:
+            specification = (f'type=volume,source=mac-demo-20261113-000000-order-a-runtime,'
+                             f'target={target},volume-subpath={subpath}')
+            self.assertEqual('--mount', mounts[specification])
+        initializer = run.call_args_list[1].args
+        self.assertIn('volume-nocopy', initializer[initializer.index('--mount') + 1])
+
+    def test_each_physical_voter_gets_its_own_runtime_volume(self):
+        run = Mock()
+        with patch.dict(PREPARE_RUNTIME.__globals__, run=run):
+            a = PREPARE_RUNTIME('mac-demo-20261113-000000', 'trade', 'A', 'sha256:fixture')
+            b = PREPARE_RUNTIME('mac-demo-20261113-000000', 'trade', 'B', 'sha256:fixture')
+        self.assertTrue(all('-trade-a-runtime,' in value for value in a[1::2]))
+        self.assertTrue(all('-trade-b-runtime,' in value for value in b[1::2]))
+
     def test_low_host_space_rejects_before_querying_the_guest(self):
         read = Mock()
         with patch.object(FRESH['shutil'], 'disk_usage', return_value=SimpleNamespace(free=8 * GIB - 1)), \
