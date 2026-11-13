@@ -107,6 +107,21 @@ def fault_evidence(root, log, fault, since, until):
             "robot_during_return": record["robot_during_return"]}
 
 
+def burst_tenants(baseline, offset):
+    active = baseline["runtime_status"]
+    if (not active or any(not re.fullmatch(r"[A-Z0-9]{6}", location)
+                          or status != "RUNNING" for location, status in active.items())):
+        raise RuntimeError("The burst requires the measured running Robot cohort")
+    locations_sql = ",".join("'" + location + "'" for location in sorted(active))
+    locations = [row[0] for row in PRODUCT["readonly_sql"](
+        "SELECT approved_location FROM dc_tenant_application WHERE status='APPROVED' "
+        "AND organization_name LIKE 'T554 Demo Capacity %' "
+        f"AND approved_location IN ({locations_sql}) ORDER BY approved_location LIMIT 12 OFFSET {offset}")]
+    if not locations or any(location not in active for location in locations):
+        raise RuntimeError("No measured Demo capacity tenants are available for the burst")
+    return locations
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("generation", type=Path)
@@ -126,12 +141,7 @@ def main():
     CAPACITY["require_strict_demo"](root)
     if baseline.get("generation") != root.name or baseline.get("passed") is not True:
         raise RuntimeError("The steady Robot evidence must have passed in this exact generation")
-    locations = [row[0] for row in PRODUCT["readonly_sql"](
-        "SELECT approved_location FROM dc_tenant_application WHERE status='APPROVED' "
-        "AND organization_name LIKE 'T554 Demo Capacity %' ORDER BY approved_location "
-        f"LIMIT 12 OFFSET {args.cohort_offset}")]
-    if not locations or any(not re.fullmatch(r"[A-Z0-9]{6}", loc) for loc in locations):
-        raise RuntimeError("No dedicated Demo capacity tenants are available for the burst")
+    locations = burst_tenants(baseline, args.cohort_offset)
     interval = (datetime.fromisoformat(baseline["until"]) - datetime.fromisoformat(baseline["from"])).total_seconds()
     baseline_rate = (baseline["quote_requests"] + baseline["tape_requests"]) / interval
     extra_rate = (args.factor - 1) * baseline_rate
