@@ -68,6 +68,42 @@ def error_status(error):
     return {'type': type(error).__name__, 'code': code[1] if code else None}
 
 
+def cleanup_accounts(accounts, location, run, report, refresh_credentials=False):
+    for account in accounts:
+        client, trader = account['client'], account['trader']
+        if client is not None:
+            if refresh_credentials:
+                try:
+                    client.login(mode='trader')
+                except Exception as error:
+                    report.setdefault('cleanup_errors', []).append(error_status(error))
+            try:
+                client.close_stream(channel='private')
+            except Exception as error:
+                report.setdefault('cleanup_errors', []).append(error_status(error))
+            if account['order_attempted']:
+                try:
+                    scoped_trader = (location, trader[1], client.session.token)
+                    for order in CANCEL['open_orders'](scoped_trader, SYMBOL):
+                        client_id = order.get('ClOrdID') or order.get('ClOrderID')
+                        if not client_id or not client_id.startswith('T554EXEC-' + run + '-'):
+                            raise RuntimeError('Unexpected order outside this benchmark run')
+                        client.cancel_order(SYMBOL, order['OrderID'],
+                                            clord_id=client_id + '-CANCEL')
+                        CANCEL['await_order'](scoped_trader, SYMBOL, client_id, False)
+                    if CANCEL['open_orders'](scoped_trader, SYMBOL):
+                        report.setdefault('cleanup_errors', []).append('REMAINING_OWN_ORDERS')
+                except Exception as error:
+                    report.setdefault('cleanup_errors', []).append(error_status(error))
+        try:
+            removed = CANCEL['PRODUCT']['call'](CANCEL['URL'], 'LoginSvr', 'deleteApiKey', {
+                'cid': 'EXEC_KEY_DELETE_' + run, 'api_key': account['key']}, trader[2])
+            if removed.get('code') != 0:
+                report.setdefault('cleanup_errors', []).append('TRADER_KEY_REVOKE_UNCONFIRMED')
+        except Exception as error:
+            report.setdefault('cleanup_errors', []).append(error_status(error))
+
+
 def run_window(root, rate, seconds, run, report):
     stop, changed = Event(), Event()
     guard = Lock()
@@ -208,34 +244,7 @@ def run_window(root, rate, seconds, run, report):
             report['control_stable'] = report['control_generation_after'] == control_before
         finally:
             stop.set()
-            for account in accounts:
-                client, trader = account['client'], account['trader']
-                if client is not None:
-                    try:
-                        client.close_stream(channel='private')
-                    except Exception as error:
-                        report.setdefault('cleanup_errors', []).append(error_status(error))
-                    if account['order_attempted']:
-                        try:
-                            scoped_trader = (location, trader[1], client.session.token)
-                            for order in CANCEL['open_orders'](scoped_trader, SYMBOL):
-                                client_id = order.get('ClOrdID') or order.get('ClOrderID')
-                                if not client_id or not client_id.startswith('T554EXEC-' + run + '-'):
-                                    raise RuntimeError('Unexpected order outside this benchmark run')
-                                client.cancel_order(SYMBOL, order['OrderID'],
-                                                    clord_id=client_id + '-CANCEL')
-                                CANCEL['await_order'](scoped_trader, SYMBOL, client_id, False)
-                            if CANCEL['open_orders'](scoped_trader, SYMBOL):
-                                report.setdefault('cleanup_errors', []).append('REMAINING_OWN_ORDERS')
-                        except Exception as error:
-                            report.setdefault('cleanup_errors', []).append(error_status(error))
-                try:
-                    removed = CANCEL['PRODUCT']['call'](CANCEL['URL'], 'LoginSvr', 'deleteApiKey', {
-                        'cid': 'EXEC_KEY_DELETE_' + run, 'api_key': account['key']}, trader[2])
-                    if removed.get('code') != 0:
-                        report.setdefault('cleanup_errors', []).append('TRADER_KEY_REVOKE_UNCONFIRMED')
-                except Exception as error:
-                    report.setdefault('cleanup_errors', []).append(error_status(error))
+            cleanup_accounts(accounts, location, run, report)
             if receiver is not None:
                 receiver.join(timeout=5)
             if records and 'orders' not in report:
@@ -243,11 +252,50 @@ def run_window(root, rate, seconds, run, report):
                     report['orders'] = [dict(row) for row in records.values()]
 
 
+def run_tcp_window(root, rate, seconds, run, report):
+    native = runpy.run_path(str(HERE / 'mac-demo-native-tcp.py'))
+    accounts = []
+    with CANCEL['controlled_products'](run, report) as (location, products):
+        if ('TRADE', SYMBOL) not in products:
+            raise RuntimeError('Expected the funded controlled-price product')
+        report.update(location=location, symbol=SYMBOL, quantity=str(QUANTITY), price=PRICE,
+                      funding_per_account=str(FUNDING))
+        try:
+            report['background_robots_at_admission'] = CAPACITY['demo_tenants']()
+            maker = signed_trader(location, run, 0, accounts)
+            taker = signed_trader(location, run, 1, accounts)
+            planned = int(rate * seconds)
+            maker_id = 'T554EXEC-' + run + '-MAKER'
+            report['stage'] = 'MAKER_PLACEMENT'
+            accounts[0]['order_attempted'] = True
+            maker.place_limit_order(SYMBOL, 'SELL', str(QUANTITY * (planned + 1)), PRICE, clord_id=maker_id)
+            CANCEL['await_order']((location, maker.session.user_id, maker.session.token), SYMBOL, maker_id, True)
+            control_before = CAPACITY['require_strict_demo'](root)
+            report['control_generation_before'] = control_before
+            report['stage'] = 'NATIVE_TCP_FIXED_RATE_WINDOW'
+            accounts[1]['order_attempted'] = True
+            config = {'location': location, 'user_id': taker.session.user_id, 'token': taker.session.token,
+                      'symbol': SYMBOL, 'quantity': str(QUANTITY), 'price': PRICE,
+                      'port': int(CAPACITY['FRESH']['env_pairs'](root / 'demo.env')['GW_TCP_PORT']),
+                      'run': run, 'rate': rate, 'seconds': seconds}
+            work = Path(report['native_client_artifact'])
+            with MEASURE['sample_resources'](root.name) as samples:
+                measured = native['run'](work, config)
+            report.update(measured)
+            report['resource_samples'] = samples
+            report['resource_sampling_scope'] = 'Native connection, offered window and bounded tail. Native timestamps delimit the offered window.'
+            report['control_generation_after'] = CAPACITY['require_strict_demo'](root, check_space=False)
+            report['control_stable'] = report['control_generation_after'] == control_before
+        finally:
+            cleanup_accounts(accounts, location, run, report, refresh_credentials=True)
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('generation', type=Path)
     parser.add_argument('--rate', type=float, default=1)
     parser.add_argument('--seconds', type=int, default=60)
+    parser.add_argument('--transport', choices=('http', 'tcp'), default='http')
     args = parser.parse_args()
     if not 0 < args.rate <= 100 or not 60 <= args.seconds <= 300 or args.rate * args.seconds > 6000:
         parser.error('Use more than 0 and at most 100 orders/s, 60–300 seconds, at most 6000 planned orders')
@@ -267,10 +315,21 @@ def main():
               'scope': 'Single tenant/product hotspot, signed HTTP submission to authenticated WebSocket final execution receipt',
               'arrival_model': 'Fixed scheduled rate, at most 16 outstanding HTTP requests, no mutation retries',
               'target_orders_per_second': args.rate, 'target_seconds': args.seconds, 'passed': False}
+    report['transport'] = args.transport
+    if args.transport == 'tcp':
+        native = runpy.run_path(str(HERE / 'mac-demo-native-tcp.py'))
+        native_work = native['prepare'](root)
+        report.update(scope='Single tenant/product hotspot, native GateWayApi TCP submission and authenticated native TCP final execution receipt',
+                      arrival_model='Fixed scheduled rate, at most 16 outstanding native TCP requests, no mutation retries',
+                      native_client_artifact=str(native_work),
+                      native_wrapper_sha256=hashlib.sha256((HERE / 'mac-demo-native-tcp.py').read_bytes()).hexdigest(),
+                      native_client_identity=json.loads((native_work / 'identity.json').read_text()),
+                      setup_transport='Account creation, signed login and maker setup use existing HTTP API outside the measured window')
     try:
         with (root.parent / '.mac-demo-fresh.lock').open('a') as lock:
             fcntl.flock(lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
-            run_window(root, args.rate, args.seconds, run, report)
+            window = run_tcp_window if args.transport == 'tcp' else run_window
+            window(root, args.rate, args.seconds, run, report)
             rows = report.get('orders', [])
             report['responses'] = dict(Counter(row.get('outcome', 'NO_RESPONSE') for row in rows))
             for field in ['ack_ms', 'client_fill_ms', 'scheduled_fill_ms', 'dispatch_delay_ms']:
