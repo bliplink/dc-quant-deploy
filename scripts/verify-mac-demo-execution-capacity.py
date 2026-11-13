@@ -247,8 +247,8 @@ def main():
     parser.add_argument('--rate', type=float, default=1)
     parser.add_argument('--seconds', type=int, default=60)
     args = parser.parse_args()
-    if not 0 < args.rate <= 10 or not 60 <= args.seconds <= 300 or args.rate * args.seconds > 900:
-        parser.error('Use 0–10 orders/s, 60–300 seconds, at most 900 planned orders')
+    if not 0 < args.rate <= 15 or not 60 <= args.seconds <= 300 or args.rate * args.seconds > 900:
+        parser.error('Use 0–15 orders/s, 60–300 seconds, at most 900 planned orders')
     os.umask(0o077)
     root = args.generation.resolve(strict=True)
     sdk = Path(os.environ.get('MAC_DEMO_SDK_ROOT', str(HERE.parent / '.work/fresh-fullflow-20261021/sdk019/deployed-install')))
