@@ -214,6 +214,20 @@ def prepare_voter_runtime_storage(generation, kind, slot, image):
             for argument in owned_mount(volume, path, target)]
 
 
+def bounded_application_logging(content):
+    appender = re.compile(r"^log4j\.appender\.file\s*=\s*(\S+)\s*$", re.M)
+    matches = list(appender.finditer(content))
+    supported = {"org.apache.log4j." + name for name in
+                 ("FileAppender", "DailyRollingFileAppender", "RollingFileAppender")}
+    if len(matches) != 1 or matches[0].group(1) not in supported:
+        raise RuntimeError("Expected one supported application file logger")
+    content = appender.sub("log4j.appender.file=org.apache.log4j.RollingFileAppender", content)
+    content = re.sub(r"^log4j\.appender\.file\.(?:DatePattern|MaxFileSize|MaxBackupIndex)\s*=.*\n?",
+                     "", content, flags=re.M)
+    return (content.rstrip("\n") + "\nlog4j.appender.file.MaxFileSize=50MB\n"
+            "log4j.appender.file.MaxBackupIndex=5\n")
+
+
 def public_pins(node):
     paths = [m["Source"] for m in node["Mounts"] if m["Destination"] == "/read-only-original-rsa/public"
              and m["Type"] == "bind" and not m["RW"]]
@@ -487,6 +501,9 @@ def main():
     if not zk_port.isdigit():
         raise RuntimeError("Invalid ZooKeeper port")
     config_root = out / "common"
+    logging_config = {kind: bounded_application_logging(read(
+        "docker", "run", "--rm", "--network", "none", "--entrypoint", "cat", image_ids[kind],
+        f"/srv/dc/dc/{service}/config/log4j.ini")) for kind, service in SERVICES.items()}
     for phase in ("birth", "home", "install", "stage", "hostready"):
         for kind, slot in (pairs if phase != "stage" else [(kind, "A") for kind in SERVICES]):
             target = config_root / f"config-{phase}" / kind / slot / "application.properties"
@@ -513,6 +530,7 @@ def main():
                     "originalHomeLedgerDir": f"{VOLUMES['born']}/{SERVICES[kind]}/original-home",
                 }.items()})
             target.write_text(content.replace(PREVIOUS, generation))
+            target.with_name("log4j.ini").write_text(logging_config[kind])
     rotations = rotate_recovery_rsa_keys(out)
     (out / "recovery-rsa-rotation.json").write_text(json.dumps(rotations, indent=2) + "\n")
     witness_roots = {kind: configure_common_witness(config_root, kind, namespace, zk_port)
@@ -533,6 +551,8 @@ def main():
             updated = data.replace(f"/otc/{PREVIOUS}".encode(), namespace.encode())
             if re.fullmatch(r"mac-demo-[0-9]{8}-[0-9]{6}", previous_generation):
                 updated = updated.replace(f"/otc/{previous_generation}".encode(), namespace.encode())
+            if file.name == "log4j.ini":
+                updated = bounded_application_logging(updated.decode()).encode()
             if updated != data:
                 file.write_bytes(updated)
 
@@ -645,7 +665,8 @@ def main():
             for key, dest in VOLUMES.items():
                 flags.extend(["-v", f"{generation}-{key}:{dest}"])
         flags.extend(["-v", f"{runtime}/control:/srv/dc/control:ro", "-v",
-                      f"{config_file}:/srv/dc/dc/{service}/config/application.properties:ro"])
+                      f"{config_file}:/srv/dc/dc/{service}/config/application.properties:ro", "-v",
+                      f"{config_file.with_name('log4j.ini')}:/srv/dc/dc/{service}/config/log4j.ini:ro"])
         if phase == "hostready" and automatic_common:
             (config_file.parent / "voter-launch.json").write_text(json.dumps({"flags": flags, "image": image_ids[kind]}))
         run("docker", "run", "-d", *flags, image_ids[kind], capture=True)

@@ -11,12 +11,35 @@ FRESH = runpy.run_path(str(Path(__file__).resolve().parents[1] / 'scripts/mac-de
 SPACE = FRESH['require_docker_space']
 RESTORE = FRESH['restore_container_restart_policy']
 PREPARE_RUNTIME = FRESH['prepare_voter_runtime_storage']
+BOUNDED_LOGGING = FRESH['bounded_application_logging']
 CAPACITY = runpy.run_path(str(Path(__file__).resolve().parents[1] / 'scripts/verify-mac-demo-robot-capacity.py'))
 CONTROL = CAPACITY['require_strict_demo']
 GIB = 1024 ** 3
 
 
 class StorageLifecycleTest(unittest.TestCase):
+    def test_application_log_rotation_keeps_levels_and_file_path(self):
+        original = ('log4j.rootLogger=INFO,file,stdout\n'
+                    'log4j.appender.file=org.apache.log4j.DailyRollingFileAppender\n'
+                    'log4j.appender.file.File=../../log/OrderSvr.log\n'
+                    'log4j.appender.file.DatePattern=yyyy-MM-dd\n'
+                    'log4j.logger.Common=DEBUG\n')
+        bounded = BOUNDED_LOGGING(original)
+        self.assertIn('log4j.rootLogger=INFO,file,stdout\n', bounded)
+        self.assertIn('log4j.logger.Common=DEBUG\n', bounded)
+        self.assertIn('log4j.appender.file.File=../../log/OrderSvr.log\n', bounded)
+        self.assertIn('log4j.appender.file=org.apache.log4j.RollingFileAppender\n', bounded)
+        self.assertIn('log4j.appender.file.MaxFileSize=50MB\n', bounded)
+        self.assertIn('log4j.appender.file.MaxBackupIndex=5\n', bounded)
+        self.assertNotIn('DatePattern', bounded)
+        self.assertEqual(bounded, BOUNDED_LOGGING(bounded))
+
+    def test_unknown_or_duplicate_file_appenders_fail_before_deployment(self):
+        for content in ('', 'log4j.appender.file=custom.Appender\n',
+                        'log4j.appender.file=org.apache.log4j.FileAppender\n' * 2):
+            with self.subTest(content=content), self.assertRaises(RuntimeError):
+                BOUNDED_LOGGING(content)
+
     def test_voter_logs_and_both_runtime_data_paths_use_persistent_native_volume(self):
         run = Mock()
         with patch.dict(PREPARE_RUNTIME.__globals__, run=run):
