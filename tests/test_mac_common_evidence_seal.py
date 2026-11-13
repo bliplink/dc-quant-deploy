@@ -14,6 +14,14 @@ class PhysicalEvidenceSealTest(unittest.TestCase):
         self.assertIsNotNone(SEAL['NORMAL_ASYNC_BACKUP_EXPIRY'].search('..' + marker + '\n'))
         self.assertIsNone(SEAL['NORMAL_ASYNC_BACKUP_EXPIRY'].search(marker + ' pending\n'))
 
+    def test_mixed_strict_tail_proof_cannot_be_replaced_by_older_async_marker(self):
+        marker = 'T554_NORMAL_DUAL_ASYNC_BACKUP_EXPIRY_PRESERVES_ACK_AND_EXCLUDES_STRICT_TAIL_PASS'
+        older = 'T554_NORMAL_DUAL_ASYNC_BACKUP_EXPIRY_PRESERVES_ACK_AND_CONTINUES_PASS'
+        self.assertIsNotNone(SEAL['NORMAL_ASYNC_MIXED_STRICT_TAIL'].search('..' + marker + '\n'))
+        self.assertIsNone(SEAL['NORMAL_ASYNC_MIXED_STRICT_TAIL'].search(marker + ' incomplete\n'))
+        self.assertIsNone(SEAL['NORMAL_ASYNC_MIXED_STRICT_TAIL'].search(older + '\n'))
+        self.assertIsNone(SEAL['NORMAL_ASYNC_BACKUP_EXPIRY'].search(marker + '\n'))
+
     def test_normal_async_ack_and_kill_require_complete_proof_markers(self):
         markers = {
             'NORMAL_ASYNC_ACK': ('T554_NORMAL_DUAL_ASYNC_BACKUP_OUTAGE_PRESERVES_LOCAL_ACK_PASS '

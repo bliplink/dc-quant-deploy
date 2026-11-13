@@ -30,6 +30,8 @@ NORMAL_ASYNC_KILL = re.compile(
     r"backupCommittedPrefixUnchanged=true inflightTailExcluded=true home128Each=true$", re.M)
 NORMAL_ASYNC_BACKUP_EXPIRY = re.compile(
     r"^[.]*T554_NORMAL_DUAL_ASYNC_BACKUP_EXPIRY_PRESERVES_ACK_AND_CONTINUES_PASS$", re.M)
+NORMAL_ASYNC_MIXED_STRICT_TAIL = re.compile(
+    r"^[.]*T554_NORMAL_DUAL_ASYNC_BACKUP_EXPIRY_PRESERVES_ACK_AND_EXCLUDES_STRICT_TAIL_PASS$", re.M)
 
 
 def sha(file):
@@ -90,6 +92,7 @@ def main():
     poison_source = result / "source/src/test/java/com/app/common/replication/CommonCertifiedLivePoisonRecoveryTest.java"
     poison_evidence = {}
     if poison_source.is_file():
+        mixed_strict_tail = "a-async-strict-tail-home-proof" in poison_source.read_text()
         poison_tests = len(re.findall(r"^\s*@Test\s*$", poison_source.read_text(), re.M))
         poison_success = f"OK ({poison_tests} tests)"
         if poison_tests < 5 or lines.count(poison_success) != 1 or log.find(poison_success) >= both[0].start():
@@ -121,7 +124,8 @@ def main():
                 raise ValueError("Common normal async primary SIGKILL and witnessed Home proof is incomplete")
         if "normalDualAsyncBackupNodeExpiryPreservesLocalAckAndContinuesWriting" in poison_source.read_text():
             scenarios.append("normal-dual-async-backup-expiry")
-            if len(NORMAL_ASYNC_BACKUP_EXPIRY.findall(log)) != 1:
+            required_proof = NORMAL_ASYNC_MIXED_STRICT_TAIL if mixed_strict_tail else NORMAL_ASYNC_BACKUP_EXPIRY
+            if len(required_proof.findall(log)) != 1:
                 raise ValueError("Common normal async surviving owner did not retain its local committed suffix")
         for scenario in scenarios:
             directory = evidence_root / scenario
@@ -152,7 +156,10 @@ def main():
                 if (directory / "client-ack-policy.txt").read_text().strip() != "LOCAL_DURABLE_ASYNC version=0":
                     raise ValueError("Common normal async immutable client ACK pin is missing")
             if scenario == "normal-dual-async-backup-expiry":
-                for marker in ("a-async-survivor-preserved", "a-async-survivor-home-proof"):
+                markers = ["a-async-survivor-preserved", "a-async-survivor-home-proof"]
+                if mixed_strict_tail:
+                    markers.extend(["a-async-strict-tail-failed", "a-async-strict-tail-home-proof"])
+                for marker in markers:
                     if not (directory / marker).is_file():
                         raise ValueError("Common normal async surviving owner and rejoin proofs are missing")
                 events = (directory / "supervisor-events.txt").read_text().splitlines()
