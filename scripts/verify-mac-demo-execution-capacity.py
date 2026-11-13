@@ -153,6 +153,7 @@ def run_window(root, rate, seconds, run, report):
                                           'started_ns': started,
                                           'dispatch_delay_ms': round((started - scheduled) / 1e6, 3)}
                 outcome = 'ACKNOWLEDGED'
+                error_code = None
                 try:
                     taker.call('OrderSvr', 'placeOrder', {
                         'Location': location, 'UserID': taker.session.user_id, 'SecurityID': SYMBOL,
@@ -162,9 +163,11 @@ def run_window(root, rate, seconds, run, report):
                         routing_key=location + '\x1f4\x1f' + SYMBOL)
                 except Exception as error:
                     outcome = type(error).__name__
+                    error_code = error_status(error)['code']
                 finished = time.monotonic_ns()
                 with guard:
-                    records[client_id].update(outcome=outcome, ack_ms=round((finished - started) / 1e6, 3))
+                    records[client_id].update(outcome=outcome, error_code=error_code,
+                                              ack_ms=round((finished - started) / 1e6, 3))
 
             with MEASURE['sample_resources'](root.name) as samples, ThreadPoolExecutor(max_workers=16) as clients:
                 for index in range(planned):
