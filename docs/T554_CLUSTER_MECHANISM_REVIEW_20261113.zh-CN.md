@@ -1,12 +1,16 @@
 # OpenTradingCore 当前集群机制审阅
 
-更新于 2026 年 11 月 14 日 12 时 27 分。原 Mac 正顺序部署新业务版本 `mac-demo-20261114-122351`，旧环境 `mac-demo-20261114-085255` 的数据和故障证据保留。Common 仍为精确通过 P0 的 `47a1f5daee5af7a9a94920e433be2b36518e5396`，JAR SHA256 为 `ea809767b92e99fa7c1cff701d7695d5c9a0beef2cc39a7695874b27f8baebae`。新业务源码 Order `deccb4a`、Trade `ef0186f`、Projection `85dadba` 已分别提交并推送 GitHub 的 `t554-mac-recovery-20261114` 开发分支；Gateway 保留 `39d2543` 业务代码。完整业务验收仍为 NO_GO，等待新版本真实多挂单、稳态、故障及异步验证。
+更新于 2026 年 11 月 14 日 12 时 43 分。原 Mac 正顺序部署新业务版本 `mac-demo-20261114-123950`，旧环境 `mac-demo-20261114-085255` 和 `mac-demo-20261114-122351` 的数据与故障证据保留。Common 仍为精确通过 P0 的 `47a1f5daee5af7a9a94920e433be2b36518e5396`，JAR SHA256 为 `ea809767b92e99fa7c1cff701d7695d5c9a0beef2cc39a7695874b27f8baebae`。新业务源码 Order `deccb4a`、Trade `ef0186f`、Projection `101b4a0` 已分别提交并推送 GitHub 的 `t554-mac-recovery-20261114` 开发分支；Gateway 保留 `39d2543` 业务代码。完整业务验收仍为 NO_GO，等待新版本真实多挂单、稳态、故障及异步验证。
 
 上一版严格四方向故障的物理恢复、受控成交和财务检查通过；故障后逐单补查暴露 IOC 跨多个挂单未实现，可能留下 New 和资金预占。现场已保存，107 个超时 Tape 单及最初故障单通过正常 API 撤销。新修复把全部 maker/taker 成交放入同一个 Order Common 命令、同一个现有待结算项和同一个 Trade 资金批次；IOC 撤余量等待结算确认，FOK 不足不提交部分成交，GTC 余量正常入簿。Common 无业务分支改动，无新增持久化账本或恢复流程。
 
 构建 `/Users/kong/.opentradingcore/mac-demo-build-20261114-122100` 全量测试通过：Order 205 项、原有 2 项跳过；Trade 238 项；Projection 25 项。Shared 源码和全部 267 个 class 字节未变，重新构建仅使 JAR 内 Maven 绝对构建路径元数据变化，归档 SHA 为 `f508e22f19f7…`；Order、Trade、MD、Gateway 均嵌入同一新归档并逐一核验。Gateway 仅更换这些依赖，未引入用户工作区未提交的代理文件。新业务格式可读旧 V1，旧业务不能读新 V2；本次采用顺序全新升级，混合新旧业务版本的滚动升级未验收。现有恢复 Watch 配置从 200 ms 调到允许的 100 ms，实际恢复耗时待重测。
 
 可复用入口 `./mac-colima-saas.sh verify-matching RUN_DIRECTORY` 使用正常自动审批租户、签名客户端、私有成交/状态推送，覆盖 Order-only 与 Trade 各 6 种多挂单情形，核对每条 ExecID/数量/价格、SQL 投影、一个原子资金批次、逐笔公开成交及正常清理后的余额/手续费/资金预占/持仓。脚本完成不等于真实场景通过，结果将另行记录。
+
+12:39 补充：`mac-demo-20261114-122351` 基础物理和业务门禁在 331 秒通过。外层 Bash 当时因执行期间入口脚本发生编辑，在完成后报 `ward: command not found`、返回 127；这是执行一致性错误，未触发部署回滚，已保存 `fresh-wrapper-result-20261114.json`，后续执行期间保持入口脚本固定。该环境真实验证报告 `multi-maker-3326df65.json` 中 Order-only 6 场景全部通过；Trade IOC 跨两个 maker 的 4 条客户成交、一个资金 WAL 批次和两条公开成交都准确，但 `dc_orders_execorders.fee` 未填充（NULL），与实际已扣费用的资金记录不完整。另一个首轮 `multi-maker-5ab3e1ae.json` 是探针数量使用 `.0003` 被接口拒绝，未产生订单，已改为规范十进制格式。
+
+Projection `101b4a0` 从现有已提交 Trade 去重结果中的手续费和已实现盈亏补齐成交历史，使用同一投影事务，不增加业务日志、RPC、ACK 或恢复机制。Order 的无费用 after-image 通过 upsert 保留财务字段，支持两路数据任意先后到达和重复投影；不改变实际账户资金。29 项 Projection 测试通过，真实 MySQL 临时表验证 Order 先到、Trade 先到及后续重复 Order 写入均保留 `-0.01620000`，未写现有业务行。最终构建清单为 `/Users/kong/.opentradingcore/mac-demo-build-20261114-124000`，复用原核心镜像和精确 Common，仅替换 Projection；源码、费用签名结果与真实余额的完整回归继续执行。
 
 当前实现采用 ZooKeeper 管理节点授权和分区角色，A/B 保存业务日志，独立身份的 Witness 审核降级恢复。Common 提供通用持久化与恢复，Order 和 Trade 分别负责撮合与资金状态机。历史异步故障暴露的堆耗尽和冷启动缺口已修复历史读取与本机提交边界，精确 P0 通过；本版完整业务异步门禁仍待验证。严格模式原生 TCP 热点每秒 15 笔完整交付，每秒 25 笔目标出现明显积压，尚不符合高性能目标。整体生产恢复、性能及多主机故障域验收仍为 NO_GO。后文带时间的进展段落保留历史状态，最新进展见文末。
 

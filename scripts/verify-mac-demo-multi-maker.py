@@ -8,12 +8,14 @@ import fcntl
 import hashlib
 import json
 import os
+import re
 from pathlib import Path
 import runpy
 import secrets
 import sys
 from threading import Event, Lock, Thread
 import time
+import traceback
 
 HERE = Path(__file__).resolve().parent
 CANCEL = runpy.run_path(str(HERE / 'verify-mac-demo-order-cancel-capacity.py'))
@@ -75,7 +77,7 @@ def place(client, symbol, side, qty, price, tif, cid):
     return client.call('OrderSvr', 'placeOrder', {
         'Location': client.session.location, 'UserID': client.session.user_id, 'SecurityID': symbol,
         'MarketIndicator': '4', 'OCType': 'OPEN', 'Side': side, 'OrdType': 'Limit',
-        'TimeInForce': tif, 'OrderQty': qty, 'Price': price, 'ClOrdID': cid,
+        'TimeInForce': tif, 'OrderQty': str(D(qty)), 'Price': price, 'ClOrdID': cid,
         'Terminal': 'API', 'AlgoName': 'cross', 'Demo': '0'},
         routing_key=client.session.location + '\x1f4\x1f' + symbol)
 
@@ -98,7 +100,7 @@ def clean(accounts, prefix, result):
                     CANCEL['await_order'](trader(client), entry['symbol'], cid, False)
                 if result['mode'] == 'TRADE':
                     balance, position = client.balances(), client.positions(entry['symbol'])
-                    fees = PRODUCT['readonly_sql']("SELECT COALESCE(SUM(fee),0) FROM dc_orders_execorders "
+                    fees = PRODUCT['readonly_sql']("SELECT COALESCE(SUM(fee),0),COUNT(*),COUNT(fee) FROM dc_orders_execorders "
                         f"WHERE location='{client.session.location}' AND user_id='{client.session.user_id}'")
                     side = 'ShortPosition' if actor_index == 0 else 'LongPosition'
                     opposite = 'LongPosition' if actor_index == 0 else 'ShortPosition'
@@ -106,7 +108,9 @@ def clean(accounts, prefix, result):
                                  'sum_execution_fees': fees[0][0]}
                     result.setdefault('financial_after_normal_cleanup', []).append(financial)
                     if (D(str(balance['FreezedMargin'])) != 0 or D(str(balance['FreezedCommission'])) != 0
-                            or D(str(balance['Balance'])) != D('10000') - D(fees[0][0])
+                            or D(str(balance['Balance'])) != D('10000') + D(fees[0][0])
+                            or int(fees[0][1]) != (2 if D(result['expected_quantity']) > 0 else 0)
+                            or fees[0][1] != fees[0][2]
                             or D(str(position[side])) != D(result['expected_quantity'])
                             or D(str(position[opposite])) != 0
                             or D(str(balance['UsedMargin'])) != D(str(position['LongUsedMargin'])) + D(str(position['ShortUsedMargin']))):
@@ -137,6 +141,7 @@ def run_case(root, location, mode, symbol, run, index, case, result):
         result['users'] = [maker.session.user_id, taker.session.user_id]
         websocket_port = CAPACITY['FRESH']['env_pairs'](root / 'demo.env')['GW_WEBSOCKET_PORT']
         for client in (maker, taker):
+            result['stage'] = 'CONNECT_PRIVATE_' + client.session.user_id
             client.connect_stream('private', gateway_base_url='http://127.0.0.1:' + websocket_port)
             client.subscribe_executions(symbol)
             client.subscribe_order_status(symbol)
@@ -165,18 +170,21 @@ def run_case(root, location, mode, symbol, run, index, case, result):
         cids = [prefix + '-M1', prefix + '-M2', prefix + '-T']
         maker_orders = []
         for cid, price in zip(cids[:2], ['90000', '90001']):
+            result['stage'] = 'PLACE_MAKER_' + cid
             place(maker, symbol, 'Sell', '.0003', price, 'GTC', cid)
 
             def resting(cid=cid):
                 rows = CANCEL['own_order'](CANCEL['open_orders'](trader(maker), symbol), cid)
                 return rows[0] if len(rows) == 1 and str(rows[0].get('Maker')).lower() in ('true', '1') else None
             maker_orders.append(wait(resting, 'Maker did not reach the authoritative resting book'))
+        result['stage'] = 'PLACE_TAKER'
         place(taker, symbol, 'Buy', qty, '90002', tif, cids[2])
 
         def terminal():
             with guard:
                 return next((row for row in reversed(collected) if row['ClOrdID'] == cids[2]
                              and row['OrdStatus'] == expected_status and D(str(row.get('CumQty', -1))) == D(expected_qty)), None)
+        result['stage'] = 'WAIT_PRIVATE_TERMINAL'
         result['taker_final_push'] = wait(terminal, 'Expected actual private terminal/partial push did not arrive')
         live = CANCEL['own_order'](CANCEL['open_orders'](trader(taker), symbol), cids[2])
         if name == 'GTC_PARTIAL':
@@ -280,7 +288,7 @@ def main():
             fcntl.flock(lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
             before = CAPACITY['require_strict_demo'](root)
             with CANCEL['controlled_products'](run, report) as (location, products):
-                for mode, symbol in products:
+                for mode, symbol in sorted(products, key=lambda product: product[0] != 'TRADE'):
                     for case in CASES:
                         row = {}
                         report['cases'].append(row)
@@ -295,6 +303,10 @@ def main():
             report['passed'] = code == 0 and report['control_stable'] and len(report['cases']) == 12 and all(row['passed'] for row in report['cases'])
     except Exception as error:
         report['failure_type'] = type(error).__name__
+        code = re.search(r'code=([A-Za-z0-9_-]+)', str(error))
+        report['failure_code'] = code[1] if code else None
+        report['failure_stack'] = [{'file': Path(frame.filename).name, 'line': frame.lineno,
+                                    'function': frame.name} for frame in traceback.extract_tb(error.__traceback__)[-4:]]
         # Error text is deliberately bounded to our own validation messages.
         if type(error) is RuntimeError and str(error).startswith(('Expected ', 'Maker ', 'Private ', 'Immediate ', 'Order/', 'Public ', 'GTC ', 'Real ', 'Unfilled ', 'Repeated ')):
             report['failure'] = str(error)
