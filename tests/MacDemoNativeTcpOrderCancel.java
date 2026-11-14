@@ -151,7 +151,7 @@ public final class MacDemoNativeTcpOrderCancel {
                 public void onMessage(String ignored, String value) {
                     try { observe(JSON.parse(value)); }
                     catch (RuntimeException invalid) {
-                        synchronized (guard) { streamErrors.add(invalid.getClass().getSimpleName());guard.notifyAll(); }
+                        synchronized (guard) { streamErrors.add(safeReason(invalid));guard.notifyAll(); }
                     }
                 }
             }, String.class)) throw new IllegalStateException("NATIVE_ORDER_STATUS_SUBSCRIPTION_FAILED");
@@ -188,8 +188,9 @@ public final class MacDemoNativeTcpOrderCancel {
                     row.put("passed", true);
                 } catch (Exception failure) {
                     row.put("failure", failure.getClass().getSimpleName());
+                    row.put("failure_reason", safeReason(failure));
                     try { cancel(id, orderId);awaitQuery(id, false);row.put("cleanup_confirmed", true); }
-                    catch (Exception cleanup) { row.put("cleanup_failure", cleanup.getClass().getSimpleName()); }
+                    catch (Exception cleanup) { row.put("cleanup_failure", safeReason(cleanup)); }
                     break;
                 }
             }
@@ -201,6 +202,12 @@ public final class MacDemoNativeTcpOrderCancel {
             report.put("elapsed_seconds", (System.nanoTime()-begun)/1e9);
             report.put("measurement_complete", true);return report;
         } finally { gateway.disconnect(); }
+    }
+    // Retain our stable diagnostic codes without logging responses or sessions.
+    private static String safeReason(Exception failure) {
+        String reason = failure.getMessage();
+        return reason != null && reason.matches("NATIVE_[A-Z_]+")
+                ? reason : failure.getClass().getSimpleName();
     }
     private static void selfTest() {
         for (String bad : new String[]{"{\"code\":7000}", "{\"data\":[]}", "null"}) {

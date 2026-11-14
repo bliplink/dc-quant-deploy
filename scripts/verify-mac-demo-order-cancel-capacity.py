@@ -261,6 +261,17 @@ def cleanup_native_orders(traders, symbol, run, report):
             cleaned.append(record)
 
 
+@contextmanager
+def native_window_sessions(traders, symbol, run, window, report, enabled):
+    with ExitStack() as sessions:
+        native = [sessions.enter_context(native_trader_session(trader, run, window + str(i)))
+                  for i, trader in enumerate(traders)] if enabled else []
+        if enabled:
+            # Cleanup runs before key revocation, using independent WEB tokens.
+            sessions.callback(cleanup_native_orders, traders, symbol, run, report)
+        yield native
+
+
 def worker(trader, symbol, price, prefix, index, deadline, stop):
     location, user, token = trader
     records = []
@@ -349,7 +360,7 @@ def main():
                 native_work = NATIVE["prepare"](root, HERE.parent / "tests/MacDemoNativeTcpOrderCancel.java",
                                                 "MacDemoNativeTcpOrderCancel")
                 report["native_client_identity"] = json.loads((native_work / "identity.json").read_text())
-            with ExitStack() as native_sessions, controlled_products(run, report) as (location, products):
+            with controlled_products(run, report) as (location, products):
                 report["background_robots_at_admission"] = CAPACITY["demo_tenants"]()
                 for mode, symbol in products:
                     if args.mode is not None and mode != args.mode:
@@ -359,119 +370,121 @@ def main():
                     if actual != [[mode]]:
                         raise RuntimeError("Actual product mode differs from the controlled test")
                     traders = [new_trader(location, symbol, mode, run, mode.lower() + str(i)) for i in range(8)]
-                    if args.transport == "tcp":
-                        traders = [native_sessions.enter_context(native_trader_session(trader, run, mode + str(i)))
-                                   for i, trader in enumerate(traders)]
-                        native_sessions.callback(cleanup_native_orders, traders, symbol, run, report)
                     before = {user: balances(loc, user) for loc, user, _ in traders}
                     for concurrency in ((args.concurrency,) if args.concurrency is not None else (1, 4, 8)):
-                        control_before = CAPACITY["require_strict_demo"](root)
-                        market = api("MDSvr", "queryPublicMarket", {"location": location, "securityID": symbol})
-                        bids = [Decimal(row["MDEntryPx"]) for row in market["orderBook"]["NoMDEntries"]
-                                if row["MDEntryType"] == "0"]
-                        trades = [Decimal(row["MDEntryPx"])
-                                  for row in market.get("recentTrades", {}).get("NoMDEntries", [])]
-                        if bids:
-                            reference = max(bids)
-                        elif trades:
-                            reference = max(trades)
-                        else:
-                            reference = Decimal(market["ticker"]["MarkPrice"])
-                        price = str((reference / 2).quantize(Decimal("1"), rounding=ROUND_DOWN))
-                        phase = {"mode": mode, "symbol": symbol, "location": location,
-                                 "concurrency": concurrency, "price": price,
-                                 "started_at": datetime.now(timezone.utc).isoformat()}
-                        report["phases"].append(phase)
-                        prefix = f"T554CC-{run}-{mode}-{concurrency}"
-                        begun = time.monotonic()
-                        deadline = begun + args.seconds
-                        stop = Event()
-                        with MEASURE["sample_resources"](root.name) as resources, \
-                                ThreadPoolExecutor(max_workers=concurrency) as clients:
-                            if args.transport == "tcp":
-                                common_start = int(time.time() * 1000) + 8000
-                                port = int(CAPACITY["FRESH"]["env_pairs"](root / "demo.env")["GW_TCP_PORT"])
-                                tasks = [clients.submit(NATIVE["run"], native_work, {
-                                    "location": loc, "user_id": user, "token": token, "symbol": symbol,
-                                    "port": port, "price": price, "prefix": prefix + "-" + str(i),
-                                    "seconds": args.seconds, "start_at_epoch_ms": common_start,
-                                }) for i, (loc, user, token) in enumerate(traders[:concurrency])]
-                                measurements = [task.result() for task in tasks]
-                                records = [row for measured in measurements for row in measured["orders"]]
-                                starts = [datetime.fromisoformat(row["actual_start"].replace("Z", "+00:00")).timestamp()
-                                          for row in measurements]
-                                phase["native_start_spread_ms"] = round((max(starts) - min(starts)) * 1000, 3)
-                                if (phase["native_start_spread_ms"] > 250
-                                        or not all(row.get("measurement_complete") is True for row in measurements)
-                                        or any(row.get("stream_errors") for row in measurements)
-                                        or any(not row["passed"] for row in records)):
-                                    stop.set()
+                        # TOKEN resume consumes the signed session. Keep the
+                        # independent WEB session for post-window reconciliation,
+                        # and obtain fresh native sessions for every window.
+                        with native_window_sessions(traders[:concurrency], symbol, run,
+                                                    mode + str(concurrency), report,
+                                                    args.transport == "tcp") as native_traders:
+                            control_before = CAPACITY["require_strict_demo"](root)
+                            market = api("MDSvr", "queryPublicMarket", {"location": location, "securityID": symbol})
+                            bids = [Decimal(row["MDEntryPx"]) for row in market["orderBook"]["NoMDEntries"]
+                                    if row["MDEntryType"] == "0"]
+                            trades = [Decimal(row["MDEntryPx"])
+                                      for row in market.get("recentTrades", {}).get("NoMDEntries", [])]
+                            if bids:
+                                reference = max(bids)
+                            elif trades:
+                                reference = max(trades)
                             else:
-                                tasks = [clients.submit(worker, trader, symbol, price, prefix, i, deadline, stop)
-                                         for i, trader in enumerate(traders[:concurrency])]
-                                records = [record for task in tasks for record in task.result()]
-                        elapsed = time.monotonic() - begun
-                        if args.transport == "tcp":
-                            phase["host_elapsed_including_native_login_and_barrier_seconds"] = round(elapsed, 3)
-                            elapsed = max(row["elapsed_seconds"] for row in measurements)
-                        control_after = CAPACITY["require_strict_demo"](root)
-                        phase.update(elapsed_seconds=round(elapsed, 3), records=records, resources=resources,
-                                     control_generation_before=control_before, control_generation_after=control_after,
-                                     complete_cycles_per_second=round(sum(r["passed"] for r in records) / elapsed, 3),
-                                     place_ack_ms=distribution(records, "place_ack_ms"),
-                                     place_new_ms=distribution(records, "place_new_ms"),
-                                     cancel_ack_ms=distribution(records, "cancel_ack_ms"),
-                                     cancel_absent_ms=distribution(records, "cancel_absent_ms"),
-                                     cycle_ms=distribution(records, "cycle_ms"))
-                        if args.transport == "tcp":
-                            phase.pop("cancel_absent_ms")
-                            phase["cancel_terminal_ms"] = distribution(records, "cancel_terminal_ms")
-                        # An asynchronous maker publication can follow an earlier
-                        # absent query. Recheck after the clients have drained.
-                        time.sleep(3)
-                        sql_deadline = time.monotonic() + 90
-                        while time.monotonic() < sql_deadline:
-                            rows = PRODUCT["readonly_sql"](
-                                "SELECT o.clord_id,o.order_id,o.ord_status,COUNT(e.exec_id) FROM dc_orders o "
-                                "LEFT JOIN dc_orders_execorders e ON e.location=o.location "
-                                "AND e.user_id=o.user_id AND e.order_id=o.order_id "
-                                f"WHERE o.location='{location}' AND o.clord_id LIKE '{prefix}-%' "
-                                "GROUP BY o.clord_id,o.order_id,o.ord_status")
-                            actual = {row[0] for row in rows}
-                            expected = {record["client_order_id"] for record in records}
-                            funds = {user: balances(loc, user) for loc, user, _ in traders}
-                            remaining = [row for trader in traders for row in open_orders(trader, symbol)]
-                            phase["passed"] = (bool(records) and not stop.is_set() and all(r["passed"] for r in records)
-                                               and control_before == control_after
-                                               and actual == expected and len(rows) == len(expected)
-                                               and all(row[2] in ("Cancelled", "Canceled") and row[3] == "0"
-                                                       for row in rows) and funds == before and not remaining)
-                            if phase["passed"] or stop.is_set():
-                                break
-                            time.sleep(1)
-                        phase.update(sql_orders=rows, balances_before=before, balances_after=funds,
-                                     remaining_open_order_ids=[row.get("OrderID") for row in remaining])
-                        output.write_text(json.dumps(report, indent=2) + "\n")
-                        print(json.dumps({key: value for key, value in phase.items()
-                                          if key not in ("records", "resources", "sql_orders",
-                                                         "balances_before", "balances_after")}), flush=True)
-                        if not phase["passed"]:
-                            cleanup = []
-                            for trader in traders:
-                                for row in open_orders(trader, symbol):
-                                    client = row.get("ClOrdID") or row.get("ClOrderID")
-                                    if not client or not client.startswith(f"T554CC-{run}-"):
-                                        raise RuntimeError("Unexpected order in an isolated test account")
-                                    record = {"client_order_id": client, "order_id": row["OrderID"]}
-                                    try:
-                                        cancel(trader, symbol, record)
-                                        await_order(trader, symbol, client, False)
-                                        record["cleanup_confirmed"] = True
-                                    except Exception as exc:
-                                        record["cleanup_failure"] = type(exc).__name__
-                                    cleanup.append(record)
-                            phase["failure_cleanup"] = cleanup
-                            raise RuntimeError("Order/cancel phase did not reconcile")
+                                reference = Decimal(market["ticker"]["MarkPrice"])
+                            price = str((reference / 2).quantize(Decimal("1"), rounding=ROUND_DOWN))
+                            phase = {"mode": mode, "symbol": symbol, "location": location,
+                                     "concurrency": concurrency, "price": price,
+                                     "started_at": datetime.now(timezone.utc).isoformat()}
+                            report["phases"].append(phase)
+                            prefix = f"T554CC-{run}-{mode}-{concurrency}"
+                            begun = time.monotonic()
+                            deadline = begun + args.seconds
+                            stop = Event()
+                            with MEASURE["sample_resources"](root.name) as resources, \
+                                    ThreadPoolExecutor(max_workers=concurrency) as clients:
+                                if args.transport == "tcp":
+                                    common_start = int(time.time() * 1000) + 8000
+                                    port = int(CAPACITY["FRESH"]["env_pairs"](root / "demo.env")["GW_TCP_PORT"])
+                                    tasks = [clients.submit(NATIVE["run"], native_work, {
+                                        "location": loc, "user_id": user, "token": token, "symbol": symbol,
+                                        "port": port, "price": price, "prefix": prefix + "-" + str(i),
+                                        "seconds": args.seconds, "start_at_epoch_ms": common_start,
+                                    }) for i, (loc, user, token) in enumerate(native_traders)]
+                                    measurements = [task.result() for task in tasks]
+                                    records = [row for measured in measurements for row in measured["orders"]]
+                                    starts = [datetime.fromisoformat(row["actual_start"].replace("Z", "+00:00")).timestamp()
+                                              for row in measurements]
+                                    phase["native_start_spread_ms"] = round((max(starts) - min(starts)) * 1000, 3)
+                                    if (phase["native_start_spread_ms"] > 250
+                                            or not all(row.get("measurement_complete") is True for row in measurements)
+                                            or any(row.get("stream_errors") for row in measurements)
+                                            or any(not row["passed"] for row in records)):
+                                        stop.set()
+                                else:
+                                    tasks = [clients.submit(worker, trader, symbol, price, prefix, i, deadline, stop)
+                                             for i, trader in enumerate(native_traders)]
+                                    records = [record for task in tasks for record in task.result()]
+                            elapsed = time.monotonic() - begun
+                            if args.transport == "tcp":
+                                phase["host_elapsed_including_native_login_and_barrier_seconds"] = round(elapsed, 3)
+                                elapsed = max(row["elapsed_seconds"] for row in measurements)
+                            control_after = CAPACITY["require_strict_demo"](root)
+                            phase.update(elapsed_seconds=round(elapsed, 3), records=records, resources=resources,
+                                         control_generation_before=control_before, control_generation_after=control_after,
+                                         complete_cycles_per_second=round(sum(r["passed"] for r in records) / elapsed, 3),
+                                         place_ack_ms=distribution(records, "place_ack_ms"),
+                                         place_new_ms=distribution(records, "place_new_ms"),
+                                         cancel_ack_ms=distribution(records, "cancel_ack_ms"),
+                                         cancel_absent_ms=distribution(records, "cancel_absent_ms"),
+                                         cycle_ms=distribution(records, "cycle_ms"))
+                            if args.transport == "tcp":
+                                phase.pop("cancel_absent_ms")
+                                phase["cancel_terminal_ms"] = distribution(records, "cancel_terminal_ms")
+                            # An asynchronous maker publication can follow an earlier
+                            # absent query. Recheck after the clients have drained.
+                            time.sleep(3)
+                            sql_deadline = time.monotonic() + 90
+                            while time.monotonic() < sql_deadline:
+                                rows = PRODUCT["readonly_sql"](
+                                    "SELECT o.clord_id,o.order_id,o.ord_status,COUNT(e.exec_id) FROM dc_orders o "
+                                    "LEFT JOIN dc_orders_execorders e ON e.location=o.location "
+                                    "AND e.user_id=o.user_id AND e.order_id=o.order_id "
+                                    f"WHERE o.location='{location}' AND o.clord_id LIKE '{prefix}-%' "
+                                    "GROUP BY o.clord_id,o.order_id,o.ord_status")
+                                actual = {row[0] for row in rows}
+                                expected = {record["client_order_id"] for record in records}
+                                funds = {user: balances(loc, user) for loc, user, _ in traders}
+                                remaining = [row for trader in traders for row in open_orders(trader, symbol)]
+                                phase["passed"] = (bool(records) and not stop.is_set() and all(r["passed"] for r in records)
+                                                   and control_before == control_after
+                                                   and actual == expected and len(rows) == len(expected)
+                                                   and all(row[2] in ("Cancelled", "Canceled") and row[3] == "0"
+                                                           for row in rows) and funds == before and not remaining)
+                                if phase["passed"] or stop.is_set():
+                                    break
+                                time.sleep(1)
+                            phase.update(sql_orders=rows, balances_before=before, balances_after=funds,
+                                         remaining_open_order_ids=[row.get("OrderID") for row in remaining])
+                            output.write_text(json.dumps(report, indent=2) + "\n")
+                            print(json.dumps({key: value for key, value in phase.items()
+                                              if key not in ("records", "resources", "sql_orders",
+                                                             "balances_before", "balances_after")}), flush=True)
+                            if not phase["passed"]:
+                                cleanup = []
+                                for trader in traders:
+                                    for row in open_orders(trader, symbol):
+                                        client = row.get("ClOrdID") or row.get("ClOrderID")
+                                        if not client or not client.startswith(f"T554CC-{run}-"):
+                                            raise RuntimeError("Unexpected order in an isolated test account")
+                                        record = {"client_order_id": client, "order_id": row["OrderID"]}
+                                        try:
+                                            cancel(trader, symbol, record)
+                                            await_order(trader, symbol, client, False)
+                                            record["cleanup_confirmed"] = True
+                                        except Exception as exc:
+                                            record["cleanup_failure"] = type(exc).__name__
+                                        cleanup.append(record)
+                                phase["failure_cleanup"] = cleanup
+                                raise RuntimeError("Order/cancel phase did not reconcile")
             CAPACITY["require_strict_demo"](root)
             report["passed"] = True
         except Exception as exc:

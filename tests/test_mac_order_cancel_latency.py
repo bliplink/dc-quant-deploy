@@ -1,4 +1,5 @@
 import importlib.util
+from contextlib import contextmanager
 from pathlib import Path
 from threading import Event
 import unittest
@@ -12,6 +13,34 @@ SPEC.loader.exec_module(CAPACITY)
 
 
 class OrderCancelLatencyTest(unittest.TestCase):
+    def test_each_native_window_uses_fresh_tokens_and_cleans_with_independent_web_tokens(self):
+        original = [('ABC123', 'user-1', 'web-token')]
+        issued = []
+        lifecycle = []
+
+        @contextmanager
+        def session(trader, run, index):
+            self.assertEqual(original[0], trader)
+            token = 'native-' + str(len(issued))
+            issued.append(token)
+            try:
+                yield trader[:2] + (token,)
+            finally:
+                lifecycle.append('revoked-' + token)
+
+        def cleanup(traders, *args):
+            self.assertEqual(original, traders)
+            lifecycle.append('cleaned-with-web')
+
+        with patch.object(CAPACITY, 'native_trader_session', side_effect=session), \
+                patch.object(CAPACITY, 'cleanup_native_orders', side_effect=cleanup):
+            for index, window in enumerate(('1', '4')):
+                with CAPACITY.native_window_sessions(original, 'BTCUSDT', 'fixture', window, {}, True) as actors:
+                    self.assertEqual('native-' + str(index), actors[0][2])
+        self.assertEqual(['native-0', 'native-1'], issued)
+        self.assertEqual(['cleaned-with-web', 'revoked-native-0', 'cleaned-with-web', 'revoked-native-1'], lifecycle)
+        self.assertEqual('web-token', original[0][2])
+
     def test_native_login_failure_still_revokes_the_temporary_key(self):
         with patch.object(CAPACITY, 'api', return_value={'api_key': 'key', 'secret_key': 'secret'}), \
                 patch.dict(CAPACITY.PRODUCT, signed_login=Mock(side_effect=RuntimeError('login rejected')),
