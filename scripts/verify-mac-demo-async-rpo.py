@@ -165,17 +165,17 @@ def require_pause_lease_budget(properties):
     return lease_ttl_ms
 
 
-def observe_physical_head(node, target_pid, tools_path, partition, sequence, prefix):
+def observe_physical_head(node, target_pid, tools_path, partition, sequence, prefix, epoch=2):
     output = tools_path + "/physical-head-" + secrets.token_hex(4) + ".txt"
     run("docker", "exec", node, "/opt/java/openjdk/bin/java", "-cp",
         "/opt/java/openjdk/lib/tools.jar:" + tools_path, "T554RpoAttach", target_pid,
-        tools_path + "/head-observer.jar", f"{output},{partition},2,{sequence},{prefix}")
+        tools_path + "/head-observer.jar", f"{output},{partition},{epoch},{sequence},{prefix}")
     return run("docker", "exec", node, "cat", output)
 
 
-def copy_wal(node, slot, partition, target):
+def copy_wal(node, slot, partition, target, epoch=2):
     base = FRESH["VOLUMES"]["ready"]
-    source = f"{base}/TradeSvr/TradeSvr{slot}/TradeSvr/TradeSvr{slot}/{partition}/epoch-2/business.wal"
+    source = f"{base}/TradeSvr/TradeSvr{slot}/TradeSvr/TradeSvr{slot}/{partition}/epoch-{epoch}/business.wal"
     run("docker", "cp", node + ":" + source, str(target))
     target.chmod(0o600)
     if target.stat().st_size > 64 * 1024 * 1024:
@@ -186,12 +186,12 @@ def copy_wal(node, slot, partition, target):
     while offset < len(raw):
         if len(raw) - offset < 28:
             raise IncompleteWalObservation("Physical test observation caught an incomplete WAL header")
-        magic, epoch, sequence, size, checksum = struct.unpack_from(">IqqII", raw, offset)
+        magic, frame_epoch, sequence, size, checksum = struct.unpack_from(">IqqII", raw, offset)
         payload = raw[offset + 28:offset + 28 + size]
         if len(payload) != size:
             raise IncompleteWalObservation("Physical test observation caught an incomplete WAL payload")
-        if (magic != 0x43425731 or epoch != 2 or sequence != count + 1 or not 0 < size <= 1024 * 1024
-                or zlib.crc32(struct.pack(">qq", epoch, sequence) + payload) != checksum):
+        if (magic != 0x43425731 or frame_epoch != epoch or sequence != count + 1 or not 0 < size <= 1024 * 1024
+                or zlib.crc32(struct.pack(">qq", frame_epoch, sequence) + payload) != checksum):
             raise RuntimeError("Physical test WAL CRC or coordinate is invalid")
         offset += 28 + size
         count += 1

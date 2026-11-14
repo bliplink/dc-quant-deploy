@@ -36,9 +36,26 @@ class AsyncRpoEvidenceTest(unittest.TestCase):
         self.assertEqual(2, read.call_count)
         self.assertLess(RPO.RECEIPT_OBSERVATION_SECONDS, RPO.REPLICA_PAUSE_WATCHDOG_SECONDS)
 
-    def frame(self, sequence, payload=b'fixture'):
-        checksum = zlib.crc32(struct.pack('>qq', 2, sequence) + payload)
-        return struct.pack('>IqqII', 0x43425731, 2, sequence, len(payload), checksum) + payload
+    def frame(self, sequence, payload=b'fixture', epoch=2):
+        checksum = zlib.crc32(struct.pack('>qq', epoch, sequence) + payload)
+        return struct.pack('>IqqII', 0x43425731, epoch, sequence, len(payload), checksum) + payload
+
+    def test_later_epoch_observation_requires_the_exact_requested_epoch(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            target = Path(temporary) / 'original.wal'
+            raw = self.frame(1, epoch=7) + self.frame(2, epoch=7)
+            target.write_bytes(raw)
+            with patch.object(RPO, 'run') as run:
+                self.assertEqual((raw, 2), RPO.copy_wal('fixture-node', 'B', 'P200', target, epoch=7))
+                self.assertIn('/epoch-7/business.wal', run.call_args.args[2])
+                with self.assertRaisesRegex(RuntimeError, 'CRC or coordinate'):
+                    RPO.copy_wal('fixture-node', 'B', 'P200', target, epoch=6)
+
+    def test_later_epoch_head_observer_does_not_silently_check_epoch_two(self):
+        with patch.object(RPO, 'run', return_value='READY') as run:
+            RPO.observe_physical_head('fixture-node', '1', '/tmp/tools', 'P200', 17, 'a' * 64, epoch=7)
+            arguments = run.call_args_list[0].args[-1]
+            self.assertIn(',P200,7,17,', arguments)
 
     def test_actual_wal_observation_checks_crc_and_contiguous_coordinates(self):
         with tempfile.TemporaryDirectory() as temporary:
