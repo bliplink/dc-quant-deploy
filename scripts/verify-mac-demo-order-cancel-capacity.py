@@ -343,6 +343,7 @@ def main():
         fcntl.flock(lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
         CAPACITY["require_strict_demo"](root)
         try:
+            report["background_settlement_admission"] = CAPACITY["require_robot_settlements_ready"](root)
             native_work = None
             if args.transport == "tcp":
                 native_work = NATIVE["prepare"](root, HERE.parent / "tests/MacDemoNativeTcpOrderCancel.java",

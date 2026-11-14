@@ -308,6 +308,7 @@ def main():
     except ImportError:
         parser.error('Install the deployed SDK realtime extra before creating benchmark tenants')
     CAPACITY['require_strict_demo'](root)
+    settlement_admission=CAPACITY['require_robot_settlements_ready'](root)
     run = secrets.token_hex(4)
     output = root / ('execution-capacity-' + run + '.json')
     report = {'generation': root.name, 'common_release': CAPACITY['common_release_identity'](root),
@@ -316,6 +317,7 @@ def main():
               'arrival_model': 'Fixed scheduled rate, at most 16 outstanding HTTP requests, no mutation retries',
               'target_orders_per_second': args.rate, 'target_seconds': args.seconds, 'passed': False}
     report['transport'] = args.transport
+    report['background_settlement_admission']=settlement_admission
     if args.transport == 'tcp':
         native = runpy.run_path(str(HERE / 'mac-demo-native-tcp.py'))
         native_work = native['prepare'](root)

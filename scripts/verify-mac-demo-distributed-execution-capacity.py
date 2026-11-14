@@ -153,6 +153,7 @@ def main():
             if len(baseline) != 10 or any(value != 'RUNNING' for value in baseline.values()):
                 raise RuntimeError('Distributed measurement requires the original ten healthy Robots')
             report['background_robots_before'] = baseline
+            report['background_settlement_admission'] = CAPACITY['require_robot_settlements_ready'](root)
             manifest = {kind: RPO['manifest'](root, kind) for kind in ('order', 'trade')}
             work = NATIVE['prepare'](root)
             report['native_client_artifact'] = str(work)

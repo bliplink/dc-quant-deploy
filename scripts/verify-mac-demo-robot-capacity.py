@@ -163,6 +163,37 @@ def reconcile_financial_cursor(max_wait=120):
         time.sleep(1)
 
 
+def audit_settlement_backlog(root, locations):
+    result=subprocess.run([sys.executable,str(HERE/'verify-mac-demo-settlement-backlog.py'),
+                           str(root),'--locations',*sorted(locations)],
+                          capture_output=True,text=True,timeout=240)
+    matches=re.findall(r'^(?:PASS|NO_GO) (.+/proof\.json)$',result.stdout,re.M)
+    if result.returncode not in (0,2) or len(matches)!=1:
+        raise RuntimeError('Complete actual Primary settlement backlog observation failed')
+    proof=Path(matches[0]);report=json.loads(proof.read_text())
+    if report['passed']!=(result.returncode==0):
+        raise RuntimeError('Settlement backlog result differs from retained proof')
+    report['evidence']=str(proof)
+    return report
+
+
+def require_robot_settlements_ready(root):
+    locations=set(demo_tenants())
+    baselines=sorted(Path(root).glob('business-baseline-robots-*.json'))
+    if len(baselines)>1:
+        raise RuntimeError('Multiple original Robot cohort baselines require reconciliation')
+    if baselines:
+        original=json.loads(baselines[0].read_text())['locations']
+        if not original or len(original)!=len(set(original)):
+            raise RuntimeError('Invalid original Robot cohort baseline')
+        locations.update(original)
+    if not locations:return {'passed':True,'scope':'No enabled Robot cohort at admission'}
+    report=audit_settlement_backlog(root,locations)
+    if not report['passed']:
+        raise RuntimeError('Aged original Robot settlements block pressure: '+report['evidence'])
+    return report
+
+
 def audit_tape_immediate_terminals(locations, max_age_seconds=30):
     """Query the real Tape accounts; SQL history may omit still-unsettled orders."""
     selected=set(locations)
@@ -264,6 +295,7 @@ def main():
         sample["financial_cursor"] = financial_report
         sample["financial_cursor_checks"] = financial_checks
         sample["tape_terminal_audit"] = audit_tape_immediate_terminals(locations)
+        sample["settlement_backlog_audit"] = audit_settlement_backlog(root,locations)
         posting = sample["posting_window"]
         sample["passed"] = (sample["runtime_status"].keys() == locations
                             and control_before == control_after
@@ -272,7 +304,8 @@ def main():
                             and any(point.get("containers") for point in resource_samples)
                             and posting["posting_locations"] >= args.target
                             and posting["bad_posting_pairs"] == 0 and financial_code == 0
-                            and sample["tape_terminal_audit"]["passed"])
+                            and sample["tape_terminal_audit"]["passed"]
+                            and sample["settlement_backlog_audit"]["passed"])
         pending = output.with_suffix(".pending")
         with pending.open("x") as evidence:
             json.dump(sample, evidence, indent=2)
