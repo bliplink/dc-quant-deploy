@@ -201,6 +201,32 @@ def owned_mount(volume, subpath, target, read_only=False):
             + (",readonly" if read_only else "")]
 
 
+def require_witness_runtime_storage(root, common_sha256):
+    """Docker's flattened Mounts omits VolumeOptions.Subpath; inspect both views."""
+    names = [root.name + "-" + kind + "-witness" for kind in SERVICES]
+    witnesses = json.loads(read("docker", "inspect", *names))
+    if len(witnesses) != len(names):
+        raise RuntimeError("Missing Common witness before fault or capacity verification")
+    for (kind, service), name, witness in zip(SERVICES.items(), names, witnesses):
+        if (witness["Name"] != "/" + name or not witness["State"]["Running"]
+                or witness["Config"]["Labels"].get("dc.common.jar.sha256") != common_sha256):
+            raise RuntimeError("Witness runtime identity differs from the qualified Common release")
+        configured = witness["HostConfig"].get("Mounts") or []
+        actual = witness["Mounts"]
+        for slot in SLOTS:
+            target = "/srv/dc/data/t554-voter-" + slot.lower()
+            settings = [m for m in configured if m.get("Target") == target]
+            visible = [m for m in actual if m.get("Destination") == target]
+            if (len(settings) != 1 or len(visible) != 1
+                    or settings[0].get("Type") != "volume"
+                    or settings[0].get("Source") != root.name + "-ready"
+                    or settings[0].get("ReadOnly") is not True
+                    or (settings[0].get("VolumeOptions") or {}).get("Subpath") != service + "/" + service + slot
+                    or visible[0].get("Type") != "volume"
+                    or visible[0].get("Name") != root.name + "-ready" or visible[0].get("RW") is not False):
+                raise RuntimeError("Witness original read-only voter volume subpath differs: " + kind + "/" + slot)
+
+
 def prepare_voter_runtime_storage(generation, kind, slot, image):
     volume = f"{generation}-{kind}-{slot.lower()}-runtime"
     # The existing entrypoint links each service's data/log to these roots.

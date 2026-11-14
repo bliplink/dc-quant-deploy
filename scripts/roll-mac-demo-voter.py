@@ -109,6 +109,7 @@ def exercise(root, generation, kind, slot, args):
         raise RuntimeError("A passed Common build is required for a real Mac voter replacement")
     client_ack_policy = FRESH["selected_client_ack_policy"](
         image_meta, image_meta.get("client_ack_policy", "STRICT_QUORUM"))
+    FRESH["require_witness_runtime_storage"](root, image_meta["common_sha256"])
     for service in ("zookeeper", "gateway"):
         item = inspect("dc-saas-" + service)
         if not item or not item["State"]["Running"] or item["Config"]["Labels"].get("com.docker.compose.project") != generation:

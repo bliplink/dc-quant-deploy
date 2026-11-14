@@ -84,6 +84,7 @@ def require_strict_demo(root, check_space=True):
     if active != [root.name] * 3 or not FRESH["verified_common_release"](release):
         raise RuntimeError("The exact verified Mac Demo must be active")
     require_client_ack_policy(root, release)
+    FRESH["require_witness_runtime_storage"](root, release["common_sha256"])
     if FRESH["read"]("uname", "-s") != "Darwin" or FRESH["read"]("docker", "context", "show") != "colima":
         raise RuntimeError("Expected the original Mac Colima context")
     if check_space:

@@ -2,6 +2,8 @@ from pathlib import Path
 from contextlib import contextmanager
 import runpy
 import tempfile
+import json
+import copy
 from types import SimpleNamespace
 import unittest
 from unittest.mock import Mock, patch
@@ -114,10 +116,12 @@ class CompletedWindowControlTest(unittest.TestCase):
         self.root = Path('/tmp').resolve() / 'mac-demo-20261112-000000'
         self.storage = Mock(side_effect=RuntimeError('New deployment needs more storage'))
         self.policy = Mock()
+        self.witness = Mock()
         self.manifest = {f'P{index:03d}': {'state': 'READY', 'policy': 'STRICT_QUORUM'}
                          for index in range(256)}
         self.fresh = {'LOCAL': self.root.parent,
-                      'env_pairs': Mock(return_value={'ZOOKEEPER_PORT': '2181'}),
+                      'env_pairs': Mock(return_value={'ZOOKEEPER_PORT': '2181', 'common_sha256': 'fixture-sha'}),
+                      'require_witness_runtime_storage': self.witness,
                       'verified_common_release': Mock(return_value=True),
                       'require_docker_space': self.storage,
                       'read': Mock(side_effect=['Darwin', 'colima'])}
@@ -152,6 +156,13 @@ class CompletedWindowControlTest(unittest.TestCase):
         with self.assertRaisesRegex(RuntimeError, 'Actual voter policy differs'):
             self.check(check_space=False)
 
+    def test_bad_witness_storage_rejects_before_the_pressure_window(self):
+        self.witness.side_effect = RuntimeError('Witness original read-only voter volume subpath differs')
+        with self.assertRaisesRegex(RuntimeError, 'volume subpath'):
+            self.check(check_space=False)
+        self.witness.assert_called_once_with(self.root, 'fixture-sha')
+
+
     def test_completed_samples_survive_a_later_control_failure(self):
         @contextmanager
         def resources(generation):
@@ -181,6 +192,50 @@ class CompletedWindowControlTest(unittest.TestCase):
             self.assertEqual({'order': 2, 'trade': 2}, saved['control_generation_before'])
             self.assertIn('from', saved)
             self.assertIn('until', saved)
+
+
+class WitnessMountFidelityTest(unittest.TestCase):
+    def setUp(self):
+        self.root = Path('/tmp/mac-demo-20261115-000000')
+        self.witnesses = []
+        for kind, service in FRESH['SERVICES'].items():
+            configured = []
+            visible = []
+            for slot in FRESH['SLOTS']:
+                target = '/srv/dc/data/t554-voter-' + slot.lower()
+                configured.append({'Type': 'volume', 'Source': self.root.name + '-ready', 'Target': target,
+                                   'ReadOnly': True, 'VolumeOptions': {'Subpath': service + '/' + service + slot}})
+                visible.append({'Type': 'volume', 'Name': self.root.name + '-ready', 'Destination': target, 'RW': False})
+            self.witnesses.append({'Name': '/' + self.root.name + '-' + kind + '-witness',
+                                   'State': {'Running': True}, 'Config': {'Labels': {'dc.common.jar.sha256': 'exact'}},
+                                   'HostConfig': {'Mounts': configured}, 'Mounts': visible})
+
+    def check(self, values):
+        function = FRESH['require_witness_runtime_storage']
+        with patch.dict(function.__globals__, read=Mock(return_value=json.dumps(values))):
+            function(self.root, 'exact')
+
+    def test_exact_original_subpaths_are_accepted(self):
+        self.check(self.witnesses)
+
+    def test_flattening_to_the_whole_volume_is_rejected_even_when_read_only(self):
+        changed = copy.deepcopy(self.witnesses)
+        changed[0]['HostConfig']['Mounts'][0].pop('VolumeOptions')
+        with self.assertRaisesRegex(RuntimeError, 'volume subpath'):
+            self.check(changed)
+
+    def test_wrong_voter_and_writable_data_are_rejected(self):
+        for key, value in [('Subpath', 'TradeSvr/TradeSvrB'), ('ReadOnly', False), ('RW', True)]:
+            changed = copy.deepcopy(self.witnesses)
+            if key == 'Subpath':
+                changed[0]['HostConfig']['Mounts'][0]['VolumeOptions'][key] = value
+            elif key == 'ReadOnly':
+                changed[0]['HostConfig']['Mounts'][0][key] = value
+            else:
+                changed[0]['Mounts'][0][key] = value
+            with self.subTest(key=key), self.assertRaisesRegex(RuntimeError, 'volume subpath'):
+                self.check(changed)
+
 
 
 if __name__ == '__main__':

@@ -331,8 +331,13 @@ def main():
                   "state_query_retry_seconds": 0.05,
               }}
     if args.transport == "tcp":
+        report["scope"] = "Closed-loop native TCP place/New-status-push/cancel/Cancelled-status-push; SQL and balances checked after the window"
         report["latency_measurement"]["place_ack_ms"] = "Native TCP request to success response"
+        report["latency_measurement"]["place_new_ms"] = "Request to authenticated native New status push"
         report["latency_measurement"]["cancel_ack_ms"] = "Native TCP cancel to success response"
+        report["latency_measurement"].pop("cancel_absent_ms")
+        report["latency_measurement"].pop("state_query_retry_seconds")
+        report["latency_measurement"]["cancel_terminal_ms"] = "Cancel request to authenticated native Cancelled status push"
     output = root / f"order-cancel-capacity-{run}.json"
     with (root.parent / ".mac-demo-fresh.lock").open("a") as lock:
         fcntl.flock(lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
@@ -397,6 +402,7 @@ def main():
                                 phase["native_start_spread_ms"] = round((max(starts) - min(starts)) * 1000, 3)
                                 if (phase["native_start_spread_ms"] > 250
                                         or not all(row.get("measurement_complete") is True for row in measurements)
+                                        or any(row.get("stream_errors") for row in measurements)
                                         or any(not row["passed"] for row in records)):
                                     stop.set()
                             else:
@@ -416,6 +422,9 @@ def main():
                                      cancel_ack_ms=distribution(records, "cancel_ack_ms"),
                                      cancel_absent_ms=distribution(records, "cancel_absent_ms"),
                                      cycle_ms=distribution(records, "cycle_ms"))
+                        if args.transport == "tcp":
+                            phase.pop("cancel_absent_ms")
+                            phase["cancel_terminal_ms"] = distribution(records, "cancel_terminal_ms")
                         # An asynchronous maker publication can follow an earlier
                         # absent query. Recheck after the clients have drained.
                         time.sleep(3)

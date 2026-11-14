@@ -2,6 +2,7 @@ import com.alibaba.fastjson2.JSON;
 import com.alibaba.fastjson2.JSONArray;
 import com.alibaba.fastjson2.JSONObject;
 import com.gateway.connector.tcp.client.GateWayApi;
+import com.gateway.connector.tcp.client.IMessage;
 import com.gateway.connector.utils.Consts;
 import java.io.BufferedReader;
 import java.io.InputStreamReader;
@@ -16,6 +17,9 @@ import java.util.concurrent.TimeUnit;
 public final class MacDemoNativeTcpOrderCancel {
     private final JSONObject config;
     private final GateWayApi gateway = new GateWayApi();
+    private final Object guard = new Object();
+    private final Map<String,Map<String,Object>> observed = new LinkedHashMap<>();
+    private final List<String> streamErrors = new ArrayList<>();
     private MacDemoNativeTcpOrderCancel(JSONObject config) { this.config = config; }
     private static double ms(long since) { return Math.round((System.nanoTime() - since) / 1000.0) / 1000.0; }
 
@@ -50,7 +54,7 @@ public final class MacDemoNativeTcpOrderCancel {
         }
         return found;
     }
-    private String await(String id, boolean present) throws Exception {
+    private String awaitQuery(String id, boolean present) throws Exception {
         long end = System.nanoTime() + TimeUnit.SECONDS.toNanos(30);
         while (System.nanoTime() < end) {
             JSONObject body = content();
@@ -71,6 +75,54 @@ public final class MacDemoNativeTcpOrderCancel {
             Thread.sleep(50);
         }
         throw new IllegalStateException("NATIVE_ORDER_STATE_TIMEOUT");
+    }
+    private void observe(Object payload) {
+        if (payload instanceof JSONArray) {
+            for (Object row : (JSONArray) payload) observe(row);
+            return;
+        }
+        if (!(payload instanceof JSONObject)) return;
+        JSONObject event = (JSONObject) payload;
+        long received = System.nanoTime();
+        synchronized (guard) {
+            Map<String,Object> row = observed.get(event.getString("ClOrdID"));
+            if (row == null) return;
+            if (!config.getString("location").equals(event.getString("Location"))
+                    || !config.getString("user_id").equals(event.getString("UserID"))
+                    || !config.getString("symbol").equals(event.getString("SecurityID"))
+                    || event.getString("OrderID") == null)
+                throw new IllegalStateException("NATIVE_STATUS_IDENTITY_MISMATCH");
+            String id = event.getString("OrderID"), status = event.getString("OrdStatus");
+            if (row.containsKey("order_id") && !id.equals(row.get("order_id")))
+                throw new IllegalStateException("NATIVE_STATUS_ORDER_ID_CHANGED");
+            row.put("order_id", id);
+            if ("New".equals(status)) {
+                if (row.containsKey("cancel_received_ns"))
+                    throw new IllegalStateException("NATIVE_NEW_AFTER_CANCELLED");
+                if (!row.containsKey("new_received_ns")) row.put("new_received_ns", received);
+            } else if ("Cancelled".equals(status) || "Canceled".equals(status)) {
+                if (!row.containsKey("new_received_ns"))
+                    throw new IllegalStateException("NATIVE_CANCELLED_WITHOUT_NEW");
+                if (!row.containsKey("cancel_received_ns")) row.put("cancel_received_ns", received);
+            } else if ("Rejected".equals(status) || "Filled".equals(status) || "Partially_Filled".equals(status)) {
+                throw new IllegalStateException("NATIVE_UNEXPECTED_ORDER_TERMINAL_STATE");
+            }
+            guard.notifyAll();
+        }
+    }
+    private long awaitStatus(Map<String,Object> row, String key) throws Exception {
+        long deadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(30);
+        synchronized (guard) {
+            while (!row.containsKey(key) && streamErrors.isEmpty() && System.nanoTime() < deadline)
+                guard.wait(50);
+            if (!streamErrors.isEmpty()) throw new IllegalStateException("NATIVE_ORDER_STREAM_INVALID");
+            if (!row.containsKey(key)) throw new IllegalStateException("NATIVE_ORDER_STATUS_TIMEOUT");
+            return (Long) row.get(key);
+        }
+    }
+    private static double between(long end, long start) {
+        if (end < start) throw new IllegalStateException("NATIVE_STATUS_PRECEDES_REQUEST");
+        return Math.round((end-start)/1000.0)/1000.0;
     }
     private void cancel(String id, String orderId) throws Exception {
         JSONObject body = content();body.put("ClOrdID", id);body.put("OrderID", orderId == null ? "" : orderId);
@@ -93,6 +145,16 @@ public final class MacDemoNativeTcpOrderCancel {
                     || !config.getString("location").equals(identity.getString("location"))
                     || !config.getString("user_id").equals(identity.getString("user_id")))
                 throw new IllegalStateException("NATIVE_LOGIN_IDENTITY_MISMATCH");
+            String topic = "dc.order.status." + config.getString("symbol") + "."
+                    + config.getString("user_id") + "." + config.getString("location");
+            if (!gateway.subscribe(topic, new IMessage<String>() {
+                public void onMessage(String ignored, String value) {
+                    try { observe(JSON.parse(value)); }
+                    catch (RuntimeException invalid) {
+                        synchronized (guard) { streamErrors.add(invalid.getClass().getSimpleName());guard.notifyAll(); }
+                    }
+                }
+            }, String.class)) throw new IllegalStateException("NATIVE_ORDER_STATUS_SUBSCRIPTION_FAILED");
             long target = config.getLongValue("start_at_epoch_ms");
             long delay = target - System.currentTimeMillis();
             if (delay < 0 || delay > 30000) throw new IllegalStateException("NATIVE_START_BARRIER_OUT_OF_RANGE");
@@ -105,6 +167,8 @@ public final class MacDemoNativeTcpOrderCancel {
                 Map<String,Object> row = new LinkedHashMap<>();orders.add(row);
                 row.put("client_order_id", id);row.put("location", config.getString("location"));
                 row.put("user_id", config.getString("user_id"));row.put("passed", false);
+                Map<String,Object> observation = new LinkedHashMap<>();
+                synchronized (guard) { observed.put(id, observation); }
                 String orderId = null;
                 try {
                     long start = System.nanoTime();
@@ -114,18 +178,27 @@ public final class MacDemoNativeTcpOrderCancel {
                     body.put("Price", config.getString("price"));body.put("TimeInForce", "GTC");
                     body.put("ReduceOnly", "false");body.put("Demo", "0");
                     request("placeOrder", body);row.put("place_ack_ms", ms(start));
-                    orderId = await(id, true);row.put("order_id", orderId);row.put("place_new_ms", ms(start));
+                    long newAt = awaitStatus(observation, "new_received_ns");
+                    synchronized (guard) { orderId = (String) observation.get("order_id"); }
+                    row.put("order_id", orderId);
+                    row.put("place_new_ms", between(newAt, start));
                     long cancelStart = System.nanoTime();cancel(id, orderId);row.put("cancel_ack_ms", ms(cancelStart));
-                    await(id, false);row.put("cancel_absent_ms", ms(cancelStart));row.put("cycle_ms", ms(start));
+                    long cancelledAt = awaitStatus(observation, "cancel_received_ns");
+                    row.put("cancel_terminal_ms", between(cancelledAt, cancelStart));row.put("cycle_ms", ms(start));
                     row.put("passed", true);
                 } catch (Exception failure) {
                     row.put("failure", failure.getClass().getSimpleName());
-                    try { cancel(id, orderId);await(id, false);row.put("cleanup_confirmed", true); }
+                    try { cancel(id, orderId);awaitQuery(id, false);row.put("cleanup_confirmed", true); }
                     catch (Exception cleanup) { row.put("cleanup_failure", cleanup.getClass().getSimpleName()); }
                     break;
                 }
             }
-            report.put("orders", orders);report.put("elapsed_seconds", (System.nanoTime()-begun)/1e9);
+            synchronized (guard) {
+                List<Map<String,Object>> copy = new ArrayList<>();
+                for (Map<String,Object> row : orders) copy.add(new LinkedHashMap<>(row));
+                report.put("orders", copy);report.put("stream_errors", new ArrayList<>(streamErrors));
+            }
+            report.put("elapsed_seconds", (System.nanoTime()-begun)/1e9);
             report.put("measurement_complete", true);return report;
         } finally { gateway.disconnect(); }
     }
@@ -139,11 +212,28 @@ public final class MacDemoNativeTcpOrderCancel {
         rows.add(rows.get(0));
         try { own(rows,"a");throw new AssertionError("Duplicate order accepted"); }
         catch (IllegalStateException expected) { }
+        MacDemoNativeTcpOrderCancel client = new MacDemoNativeTcpOrderCancel(JSON.parseObject(
+                "{\"location\":\"TEST01\",\"user_id\":\"u1\",\"symbol\":\"BTC004USDT\"}"));
+        Map<String,Object> observation = new LinkedHashMap<>();client.observed.put("a", observation);
+        client.observe(JSON.parse("{\"code\":0}"));
+        if (observation.containsKey("new_received_ns")) throw new AssertionError("RPC counted as New");
+        JSONObject event = JSON.parseObject("{\"ClOrdID\":\"a\",\"OrderID\":\"1\",\"Location\":\"TEST01\","
+                + "\"UserID\":\"u1\",\"SecurityID\":\"BTC004USDT\",\"OrdStatus\":\"New\"}");
+        client.observe(event);
+        if (!observation.containsKey("new_received_ns")) throw new AssertionError("New push not observed");
+        event.put("OrdStatus", "Cancelled");client.observe(event);
+        if (!observation.containsKey("cancel_received_ns")) throw new AssertionError("Cancelled push not observed");
+        event.put("OrdStatus", "New");
+        try { client.observe(event);throw new AssertionError("New after cancellation accepted"); }
+        catch (IllegalStateException expected) { }
+        event.put("Location", "OTHER1");
+        try { client.observe(event);throw new AssertionError("Wrong owner accepted"); }
+        catch (IllegalStateException expected) { }
         System.out.println("NATIVE_TCP_ORDER_CANCEL_OBSERVATION_SELF_TEST_PASS");
     }
     public static void main(String[] args) throws Exception {
         org.apache.log4j.Logger.getRootLogger().setLevel(org.apache.log4j.Level.OFF);
-        if (args.length==1 && "--self-test".equals(args[0])) { selfTest();return; }
+        if (args.length==1 && "--self-test".equals(args[0])) { selfTest();System.exit(0); }
         JSONObject input=JSON.parseObject(new BufferedReader(new InputStreamReader(System.in,"UTF-8")).readLine());
         try {
             System.out.println("T554_NATIVE_TCP_REPORT "+JSON.toJSONString(new MacDemoNativeTcpOrderCancel(input).run()));
