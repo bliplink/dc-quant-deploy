@@ -1021,6 +1021,9 @@ Common8bf879d360d1844d3e9a3423f4405119440381e0 在不可变回执验签复用之
 
 前候选8bf 的完整门禁 v6 因测试在写入编码前遇到短暂认证 census 不可用而退出，保持 NO_GO，未部署。测试现在仅在该明确的编码前拒绝时重试，并断言整个逻辑探针只编码一次；不重试不确定提交。当前精确候选 Common3d239e57c5cfdd54556fbc00483205997bb49d48，JAR SHA256=35fa0fe934d6e9b261b5c7af19e79b8d3b4085e7c18b058bab4a54cc5737ab5b，243 项安全通过，完整 P0 尚未完成。八个参与镜像仅预构建核验，安装仍受完整 P0 门禁约束。
 
-新增 verify-mac-demo-settlement-backlog.py 读取实际 Order Primary 的原有待结算索引，覆盖已经 Filled 但未财务结算的项，并独立区分本地最终确认等待复制。十租户只读实跑正确拒绝 2803 条超龄积压；三项解析/完整性回归通过。原生下撤单、热点与分布式压测入口均在加压前检查原 Robot 的超龄结算，五分钟稳态也加入该检查。财务游标相等仍独立要求，不能替代全部原始意图已结算的判断。
+新增 verify-mac-demo-settlement-backlog.py 读取实际 Order Primary 的原有待结算索引，覆盖已经 Filled 但未财务结算的项，并独立区分本地最终确认等待复制。十租户只读实跑正确拒绝 2803 条超龄积压；四项解析/完整性回归通过。原生下撤单、热点与分布式压测入口均在加压前检查原 Robot 的超龄结算，五分钟稳态也加入该检查。财务游标相等仍独立要求，不能替代全部原始意图已结算的判断。
 
 主机空间维护：正常 STOP 原十 Robot 后，仅对 Colima ext4 已释放块执行在线 FITRIM，未删除文件或重启服务。主机空闲由1209225216增至14514737152字节；四核心进程 ID 未变、RestartCount=0、无 OOM。原 WAL、业务数据和旧镜像仍保留。新压力测试尚未开始，当前整体 NO_GO。
+
+
+05:52: The new exact candidate passed mixed cold-owner restart and automatic 256 Home WAL/snapshot agreement with no pending installation reservation on either voter. Full remaining P0 is still running. Capacity admission regression: 21 tests PASS; original stopped-Robot backlog policy: 4 tests PASS. One-click `verify-settlements RUN_DIRECTORY --locations LOCATION...` exposes the complete pending-index check. `verify-order-cancel` now forwards measurement arguments and defaults to native TCP; an explicit transport argument remains available for diagnostics.
