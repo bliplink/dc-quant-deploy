@@ -11,6 +11,7 @@ import hashlib
 import json
 import os
 from pathlib import Path
+import re
 import runpy
 import secrets
 import signal
@@ -23,6 +24,25 @@ EXEC = runpy.run_path(str(HERE / 'verify-mac-demo-execution-capacity.py'))
 CANCEL, CAPACITY, MEASURE = (EXEC[key] for key in ('CANCEL', 'CAPACITY', 'MEASURE'))
 NATIVE = runpy.run_path(str(HERE / 'mac-demo-native-tcp.py'))
 RPO = runpy.run_path(str(HERE / 'verify-mac-demo-async-rpo.py'))
+
+
+def reviewed_replication_lanes(root):
+    """Describe only the lane formula present in this release's verified source."""
+    release = CAPACITY['FRESH']['env_pairs'](root / 'common-release.env')
+    source = Path(release['common_fault_result']) / 'source/src/main/java/com/app/common/replication/DirectNettyReplicationTransport.java'
+    try:
+        raw = source.read_bytes()
+    except OSError:
+        return {'available': False}
+    text = raw.decode('utf-8')
+    match = re.search(r'PARTITION_REPLICATION_LANES\s*=\s*([1-9][0-9]*)\s*;', text)
+    compact = re.sub(r'\s+', '', text)
+    if (not match or not 1 <= int(match[1]) <= 64
+            or 'Math.floorMod(batch.getPartitionId().hashCode(),PARTITION_REPLICATION_LANES)' not in compact
+            or 'request.getPartitionId().hashCode(),PARTITION_REPLICATION_LANES' not in compact):
+        return {'available': False}
+    return {'available': True, 'count': int(match[1]), 'source_sha256': hashlib.sha256(raw).hexdigest(),
+            'scope': 'Derived connection affinity from exact verified Common source; not a worker utilization measurement'}
 
 
 def summarize_streams(streams, seconds, expected_policy=None):
@@ -126,6 +146,7 @@ def main():
             fcntl.flock(lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
             before = CAPACITY['require_strict_demo'](root)
             report['common_release'] = CAPACITY['common_release_identity'](root)
+            report['reviewed_replication_lanes'] = reviewed_replication_lanes(root)
             baseline = CAPACITY['demo_tenants']()
             if len(baseline) != 10 or any(value != 'RUNNING' for value in baseline.values()):
                 raise RuntimeError('Distributed measurement requires the original ten healthy Robots')
@@ -154,6 +175,12 @@ def main():
                             part = 'P%03d' % (zlib.crc32(key.encode()) % 256)
                             stream[kind + '_partition'] = part
                             stream[kind + '_primary'] = manifest[kind][part]['primary']
+                            layout = report['reviewed_replication_lanes']
+                            if layout['available']:
+                                lane = 0
+                                for character in part:
+                                    lane = (31 * lane + ord(character)) % layout['count']
+                                stream[kind + '_replication_lane'] = lane
                         used = report['streams']
                         collision = any(any(row[kind + '_partition'] == stream[kind + '_partition']
                                             for row in used) for kind in ('order', 'trade'))
