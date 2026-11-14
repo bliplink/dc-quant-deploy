@@ -24,6 +24,8 @@ Usage:
   ./mac-colima-saas.sh verify-common COMMON_REVISION
   ./mac-colima-saas.sh verify-fresh RUN_DIRECTORY
   ./mac-colima-saas.sh verify-order-cancel RUN_DIRECTORY
+  ./mac-colima-saas.sh verify-execution RUN_DIRECTORY --transport tcp --rate RATE --seconds SECONDS
+  ./mac-colima-saas.sh verify-async-recovery RUN_DIRECTORY
   ./mac-colima-saas.sh verify-ha RUN_DIRECTORY {term,kill} [FIRST_ORDER_SLOT [FIRST_ORDER_ROBOT_LOCATION]]
   ./mac-colima-saas.sh roll-voter RUN_DIRECTORY {order,trade} {A,B} [--fault term|kill] [--signed-business|--order-only-business] [--robot-traffic]
   ./mac-colima-saas.sh acceptance [acceptance-saas.sh args...]
@@ -225,6 +227,15 @@ main() {
     verify-order-cancel)
       [[ "$#" == 1 ]] || die "Usage: ./mac-colima-saas.sh verify-order-cancel RUN_DIRECTORY"
       python3 "${SCRIPT_DIR}/scripts/verify-mac-demo-order-cancel-capacity.py" "$1"
+      ;;
+    verify-execution)
+      [[ "$#" -ge 1 ]] || die "Usage: ./mac-colima-saas.sh verify-execution RUN_DIRECTORY --transport tcp --rate RATE --seconds SECONDS"
+      python3 "${SCRIPT_DIR}/scripts/verify-mac-demo-execution-capacity.py" "$@"
+      ;;
+    verify-async-recovery)
+      [[ "$#" -eq 1 ]] || die "Usage: ./mac-colima-saas.sh verify-async-recovery RUN_DIRECTORY"
+      python3 "${SCRIPT_DIR}/scripts/verify-mac-demo-async-rpo.py" "$1"
+      python3 "${SCRIPT_DIR}/scripts/verify-mac-demo-async-reservation-loss.py" "$1"
       ;;
     verify-ha)
       [[ "$#" -ge 2 && "$#" -le 4 && "$2" =~ ^(term|kill)$ && "${3:-A}" =~ ^[AB]$ ]] ||
