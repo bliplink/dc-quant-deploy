@@ -1,6 +1,6 @@
 # OpenTradingCore 当前集群机制审阅
 
-更新于 2026 年 11 月 14 日 15 时 52 分。原 Mac 现役环境已顺序切换为异步模式 `mac-demo-20261114-145043`，严格模式 `mac-demo-20261114-133826` 及此前环境的数据和证据保留。Common 仍为精确通过 P0 的 `47a1f5daee5af7a9a94920e433be2b36518e5396`，JAR SHA256 为 `ea809767b92e99fa7c1cff701d7695d5c9a0beef2cc39a7695874b27f8baebae`。业务源码为 Order `deccb4a`、Trade `ef0186f`、Projection `17eaa31`；通知库修复为 gateway-api `1a95b80`；Gateway 保留 `39d2543` 业务代码。这些源码已分别提交并推送 GitHub 开发分支。严格模式已通过 12 撮合场景、10 Robot 故障前后稳态、六档正常下单/撤单、有效 TCP 容量阶梯与四向故障恢复。本机功能范围通过，15/s 档完整交付、25/s 档明显积压；高性能生产验收仍为 NO_GO。异步已完成同条件容量测量及受控未复制成交故障恢复；10/s 档完整交付，15/s 档出现积压。后续预占丢失测试被一个原 Robot 报价替换不能收敛挡住，正在修复业务逻辑；异步四向故障尚未完成。
+更新于 2026 年 11 月 14 日 16 时 40 分。原 Mac 现役环境已顺序切换为异步模式 `mac-demo-20261114-145043`，严格模式 `mac-demo-20261114-133826` 及此前环境的数据和证据保留。Common 仍为精确通过 P0 的 `47a1f5daee5af7a9a94920e433be2b36518e5396`，JAR SHA256 为 `ea809767b92e99fa7c1cff701d7695d5c9a0beef2cc39a7695874b27f8baebae`。已测容量批次的业务源码为 Order `deccb4a`、Trade `ef0186f`、Projection `17eaa31`；通知库为 gateway-api `1a95b80`。后续 Robot `9f25597` 已更新，Gateway 在 `39d2543` 基础上仅更新入口检查为 `abb0b9b`，Trade `2cf5fdc` 正在真实滚动更新，尚不能把两节点都标为新版。这些源码已分别提交并推送 GitHub 开发分支。严格模式已通过 12 撮合场景、10 Robot 故障前后稳态、六档正常下单/撤单、有效 TCP 容量阶梯与四向故障恢复。本机功能范围通过，15/s 档完整交付、25/s 档明显积压；高性能生产验收仍为 NO_GO。异步已完成同条件容量测量及受控未复制成交故障恢复；10/s 档完整交付，15/s 档出现积压。后续预占丢失测试被一个原 Robot 报价替换不能收敛挡住，正在修复业务逻辑；异步四向故障尚未完成。
 
 上一版严格四方向故障的物理恢复、受控成交和财务检查通过；故障后逐单补查暴露 IOC 跨多个挂单未实现，可能留下 New 和资金预占。现场已保存，107 个超时 Tape 单及最初故障单通过正常 API 撤销。新修复把全部 maker/taker 成交放入同一个 Order Common 命令、同一个现有待结算项和同一个 Trade 资金批次；IOC 撤余量等待结算确认，FOK 不足不提交部分成交，GTC 余量正常入簿。Common 无业务分支改动，无新增持久化账本或恢复流程。
 
@@ -778,3 +778,16 @@ Robot 修复 `9f25597` 已推送开发分支。现役原 Robot 的 `RobotWorker`
 
 
 16:09 对已有压测日志只读补查，未重新发单或改变服务。严格 25/s 原 1500 单匹配到 1500 个订单，其中 1499 单具有完整 Newing 四阶段日志；风控回调入队至开始处理 P50/P95/P99/最大为 3367/7008/7340/7429 ms，而处理内订单提交段为 41/68/88/372 ms。异步 15/s 全 900 单具备四阶段：排队 53/4834/5157/5222 ms，处理内提交 37/132/369/863 ms。缺失日志不补造；提交段包含业务操作和等待，不是纯 fsync。两份 `historical-newing-callback-profile-execution-capacity-*.json` 记录原始容器、时间界限、阶段数量及最慢样本。这把队列积压从单个样本扩展为整档证据，仍不能仅靠该统计决定增加线程数：同用户、同分区及业务提交后的先后关系必须保持。
+
+
+## 2026-11-14 16:40 预占用例检查修正与真实 TCP 空会话边界修复
+
+`async-reservation-loss-f870be41/evidence.json` 原始 NO_GO 保留。首要失败来自探针在 Common 原始 WAL 中直接搜索明文订单号，而既有 TradeJournalRecord 的分区、事件 ID、载荷均为 Base64。保存的单帧经 CRC、P079/4/118 和既有七列日志信封解码，确为 `1571193126670876672:Newing` 的 `NEWING_OPEN_PREPARED`，OPEN_ORDER 精确属于受控账号。修复后的探针严格检查物理坐标、CRC、信封与业务事件/账户，不接受字节子串误匹配。三项回归覆盖真实编码、错订单/账号和坏 CRC/Epoch；Mac 总回归 103 项通过。
+
+原用例在完成 LOCAL 撤单前即失败，finally 中“订单复活”错误是后置检查口径错误：那张订单根本没有执行 LOCAL 撤销。原错误保留，另存审计说明；没有把它改成 PASS。随后通过正常 API 清理时实际发现 `TRADE_CANCEL_ORIGINAL_RESERVATION_NOT_FOUND`。资金回归后仍与故障前完全一致；订单进入现有 Pending_Cancel 重试，未直接修改资金、订单或 WAL。
+
+根因是实际 GateWayApi 把缺省转发用户写成 `serverSession=NOP=null`，Trade handler 仅把 Java null/空串视为内部调用，字符串 `null` 被当成用户会话。Trade 已有安全的“无原预占、无历史 lifecycle、未成交、内部服务请求”两项终态 Common 提交实现，但线上真实调用进不到该分支。Trade `2cf5fdc` 补齐这个精确线上信号，不放宽已有金额、数量、生命周期或持久化校验。Gateway `abb0b9b` 同时在公共入口拒绝保留用户会话 `null`，继续拒绝客户端转发封套，避免公共调用冒充内部调用；签名入口本来只允许登录交换。修复没有改变 Common。
+
+验证：Trade 239 项全通过，Gateway 入口 11 项全通过；各自旧代码针对性回归失败，新代码通过。Gateway 干净源码导出完整套件 27 项仍有原有代理/配置测试失败，及一次 CSV 毫秒时间戳刷新的测试失败，未称全量通过，也未编译用户未提交的 SaasGWProxy 与对应测试。发布字节码比较确认 Trade 仅 handler 方法、Gateway 仅 check 方法变化；其它方法、原内部类、Common 和 Shared 原样保留。证据 `~/.opentradingcore/t554-internal-cancel-wire-20261114-1625/overlay-proof.json`。
+
+16:38 Gateway 正常更新完毕，四核心和 Robot 的容器 ID、进程起点与重启计数未变。真实 HTTP API 携带 `null` 会话返回 `10004 AUTHENTICATED_SESSION_REQUIRED`，证据 `gateway-update.json`。随后启动 Trade A KILL，并以相同 Common/Shared 的单类镜像正常替换。控制器依次验证四向故障（两 Trade 节点在回归时更新），再重跑预占丢失和故障后十 Robot 稳态。当前全部新版本门禁尚未完成，功能验收维持 NO_GO；严格模式此前通过记录仍对应 ef0186f 批次，不能混写成当前新补丁全验通过。
