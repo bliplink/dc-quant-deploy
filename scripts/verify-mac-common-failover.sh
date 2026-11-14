@@ -102,6 +102,7 @@ if [[ "${MAC_DEMO_COMMON_PARALLEL_P0_JVMS:-false}" == true ]]; then
   # The complete 256-partition exercise runs unchanged in a second JVM.
   mkdir "$out/tmp/native" "$out/tmp/home"
   "$JAVA_HOME/bin/java" "-Djava.io.tmpdir=$out/tmp/native" -Dcommon.node.control.debug=true \
+    "-Dt554.fixture.evidence.directory=$out/process-evidence" \
     -cp "$classpath" VerifyCommonFailover native > "$out/native-faults.log" 2>&1 &
   native_pid=$!
   "$JAVA_HOME/bin/java" "-Djava.io.tmpdir=$out/tmp/home" -Dcommon.node.control.debug=true \
