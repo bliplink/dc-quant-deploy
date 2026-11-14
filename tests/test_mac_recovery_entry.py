@@ -55,11 +55,16 @@ class RecoveryEntryTest(unittest.TestCase):
         self.assertEqual([[str(REPO / 'scripts/verify-mac-demo-execution-capacity.py'), *arguments]], calls)
 
     def test_missing_generation_does_not_launch_a_case(self):
-        for action in ('verify-execution', 'verify-async-recovery'):
+        for action in ('verify-execution', 'verify-async-recovery', 'verify-matching'):
             with self.subTest(action=action):
                 result, calls = self.entry([action])
                 self.assertNotEqual(0, result.returncode)
                 self.assertEqual([], calls)
+
+    def test_matching_entry_uses_real_account_and_execution_verifier(self):
+        result, calls = self.entry(['verify-matching', '/tmp/fixture generation'])
+        self.assertEqual(0, result.returncode, result.stderr)
+        self.assertEqual([[str(REPO / 'scripts/verify-mac-demo-multi-maker.py'), '/tmp/fixture generation']], calls)
 
 
 if __name__ == '__main__':

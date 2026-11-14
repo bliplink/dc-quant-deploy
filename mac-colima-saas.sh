@@ -224,6 +224,10 @@ main() {
       [[ "$#" == 1 ]] || die "Usage: ./mac-colima-saas.sh verify-fresh RUN_DIRECTORY"
       bash "${SCRIPT_DIR}/scripts/verify-mac-demo-fresh.sh" "$1"
       ;;
+    verify-matching)
+      [[ "$#" == 1 ]] || die "Usage: ./mac-colima-saas.sh verify-matching RUN_DIRECTORY"
+      python3 "${SCRIPT_DIR}/scripts/verify-mac-demo-multi-maker.py" "$1"
+      ;;
     verify-order-cancel)
       [[ "$#" == 1 ]] || die "Usage: ./mac-colima-saas.sh verify-order-cancel RUN_DIRECTORY"
       python3 "${SCRIPT_DIR}/scripts/verify-mac-demo-order-cancel-capacity.py" "$1"

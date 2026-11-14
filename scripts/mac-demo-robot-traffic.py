@@ -128,8 +128,9 @@ def require_posting_pairs(traffic):
     sql = ("SELECT partition_id,source_epoch,journal_seq,event_id,COUNT(*),"
            "GROUP_CONCAT(JSON_UNQUOTE(JSON_EXTRACT(payload,'$.sourceID'))) "
            "FROM dc_trade_projection_mutation "
-           f"WHERE location='{location}' AND entity_type='POSTING' AND source_type='TRADE_ATOMIC_MATCH_PAIR_PREPARED' "
-           "GROUP BY partition_id,source_epoch,journal_seq,event_id HAVING "
+           f"WHERE location='{location}' AND entity_type='POSTING' "
+           "AND source_type IN ('TRADE_ATOMIC_MATCH_PAIR_PREPARED','TRADE_ATOMIC_MATCH_GROUP_PREPARED') "
+           "GROUP BY partition_id,source_epoch,journal_seq,event_id,FLOOR(mutation_index/10) HAVING "
            f"SUM(JSON_UNQUOTE(JSON_EXTRACT(payload,'$.sourceID')) IN ({requested}))>0 "
            "OR (partition_id,source_epoch,journal_seq) IN (" + (
                ",".join(f"('{part}',{epoch},{seq})" for part, epoch, seq in sorted(commits)) or "('',0,0)") + ")")

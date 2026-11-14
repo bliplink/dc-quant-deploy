@@ -27,7 +27,7 @@ def sql_for(minutes):
     # Under live Tape writes, independent NOW()/SELECT queries race each other
     # and may report posting_rows!=2*event_ids despite zero bad posting pairs.
     matching = ("entity_type='POSTING' AND "
-                "source_type='TRADE_ATOMIC_MATCH_PAIR_PREPARED' "
+                "source_type IN ('TRADE_ATOMIC_MATCH_PAIR_PREPARED','TRADE_ATOMIC_MATCH_GROUP_PREPARED') "
                 "AND create_time>=@gate_window_start")
     return "\n".join([
         "SET TRANSACTION ISOLATION LEVEL REPEATABLE READ;",
@@ -40,13 +40,16 @@ def sql_for(minutes):
         "SELECT 'robot_quote_orders',COALESCE(SUM(open_order_count),0) FROM dc_tenant_robot WHERE enabled=1 AND runtime_status='RUNNING';",
         # MySQL materializes the grouped CTE. Derive all four posting counts
         # from one read of the growing mutation table and the same cutoff.
-        "WITH posting_buckets AS (SELECT event_id,location,COUNT(*) AS n FROM dc_trade_projection_mutation "
-        "WHERE " + matching + " GROUP BY event_id,location), "
-        "posting_pairs AS (SELECT event_id,SUM(n) AS n FROM posting_buckets GROUP BY event_id), "
-        "posting_totals AS (SELECT COALESCE(SUM(n),0) AS row_count,COUNT(event_id) AS event_count,"
+        "WITH posting_buckets AS (SELECT partition_id,source_epoch,journal_seq,event_id,FLOOR(mutation_index/10) AS pair_index,location,COUNT(*) AS n FROM dc_trade_projection_mutation "
+        "WHERE " + matching + " GROUP BY partition_id,source_epoch,journal_seq,event_id,FLOOR(mutation_index/10),location), "
+        "posting_pairs AS (SELECT partition_id,source_epoch,journal_seq,event_id,pair_index,SUM(n) AS n FROM posting_buckets "
+        "GROUP BY partition_id,source_epoch,journal_seq,event_id,pair_index), "
+        "posting_totals AS (SELECT COALESCE(SUM(n),0) AS row_count,COUNT(*) AS event_count,"
+        "COUNT(DISTINCT partition_id,source_epoch,journal_seq) AS wal_count,"
         "COUNT(CASE WHEN n<>2 THEN 1 END) AS bad_count FROM posting_pairs) "
         "SELECT 'posting_rows',row_count FROM posting_totals "
         "UNION ALL SELECT 'posting_event_ids',event_count FROM posting_totals "
+        "UNION ALL SELECT 'posting_wal_events',wal_count FROM posting_totals "
         "UNION ALL SELECT 'posting_locations',COUNT(DISTINCT location) FROM posting_buckets "
         "UNION ALL SELECT 'bad_posting_pairs',bad_count FROM posting_totals;",
         "SELECT 'balance_locations',COUNT(DISTINCT location) FROM dc_users_balance WHERE location<>'PLATFORM' "
@@ -71,9 +74,9 @@ def query_counts(mysql_container, lookback_minutes):
     observed = {}
     for line in result.stdout.splitlines():
         values = line.split("\t")
-        if len(values) == 2 and values[0] in expected:
+        if len(values) == 2 and values[0] in expected | {"posting_wal_events"}:
             observed[values[0]] = int(values[1])
-    if set(observed) != expected:
+    if not expected <= set(observed):
         raise RuntimeError("READONLY_MYSQL_CENSUS_INCOMPLETE")
     return observed
 

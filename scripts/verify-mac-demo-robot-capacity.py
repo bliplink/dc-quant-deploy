@@ -162,6 +162,53 @@ def reconcile_financial_cursor(max_wait=120):
         time.sleep(1)
 
 
+def audit_tape_immediate_terminals(locations, max_age_seconds=30):
+    """Query the real Tape accounts; SQL history may omit still-unsettled orders."""
+    selected=set(locations)
+    if not selected or any(not re.fullmatch(r'[A-Z0-9]{6}', value) for value in selected):
+        raise RuntimeError('Expected the exact observed Robot cohort')
+    quoted=','.join("'"+value+"'" for value in sorted(selected))
+    rows=PRODUCT['readonly_sql'](
+        "SELECT location,tape_user_id FROM dc_tenant_liquidity_bootstrap "
+        "WHERE status='COMPLETE' AND tape_enabled=1 AND location IN ("+quoted+")")
+    actors=dict(rows)
+    if set(actors)!=selected or any(not value for value in actors.values()):
+        raise RuntimeError('The exact Robot Tape accounts are not available for terminal verification')
+    audit={'max_nonterminal_age_seconds':max_age_seconds,'queried_accounts':[], 'aged_nonterminal_orders':[],
+           'checked_at':datetime.now(timezone.utc).isoformat()}
+    for location,user in sorted(actors.items()):
+        if not re.fullmatch(r'[A-Za-z0-9_-]{1,64}',user):
+            raise RuntimeError('Unexpected Tape account identity')
+        sessions=PRODUCT['readonly_sql']("SELECT token FROM dc_users_session WHERE location='"+location+"' AND user_id='"+user+"'")
+        orders=None
+        for token, in sessions:
+            reply=PRODUCT['call']('http://127.0.0.1:49502/httpapi/','OrderSvr','queryOpenOrder',{
+                'location':location,'userid':user,'securityid':'BTCUSDT','SecurityID':'BTCUSDT',
+                'marketIndicator':'4','maxOrderCount':100},token)
+            if reply.get('code')==0:
+                orders=reply.get('data');break
+        if not isinstance(orders,list):
+            raise RuntimeError('Live Tape account open-order query failed')
+        if len(orders)>=100:
+            raise RuntimeError('Tape terminal audit exceeded the complete bounded query window')
+        audit['queried_accounts'].append({'location':location,'user_id':user})
+        for order in orders:
+            if order.get('Terminal')!='RobotSvr-Tape' or order.get('TimeInForce') not in ('IOC','FOK'):
+                continue
+            raw=order.get('UpdateTime')
+            if not isinstance(raw,str):
+                raise RuntimeError('A live Tape immediate order has no age timestamp')
+            stamp=datetime.strptime(raw,'%Y-%m-%d %H:%M:%S.%f')
+            age=(datetime.now()-stamp).total_seconds()
+            if age>=max_age_seconds:
+                audit['aged_nonterminal_orders'].append({
+                    'location':location,'user_id':user,'order_id':order.get('OrderID'),
+                    'client_order_id':order.get('ClOrdID'),'status':order.get('OrdStatus'),
+                    'time_in_force':order.get('TimeInForce'),'age_seconds':round(age,3)})
+    audit['passed']=not audit['aged_nonterminal_orders']
+    return audit
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("generation", type=Path)
@@ -215,6 +262,7 @@ def main():
         financial_code, financial_report, financial_checks = reconcile_financial_cursor()
         sample["financial_cursor"] = financial_report
         sample["financial_cursor_checks"] = financial_checks
+        sample["tape_terminal_audit"] = audit_tape_immediate_terminals(locations)
         posting = sample["posting_window"]
         sample["passed"] = (sample["runtime_status"].keys() == locations
                             and control_before == control_after
@@ -222,7 +270,8 @@ def main():
                             and all(gap < 300 for gap in sample["largest_tape_fill_gap_seconds_by_tenant"].values())
                             and any(point.get("containers") for point in resource_samples)
                             and posting["posting_locations"] >= args.target
-                            and posting["bad_posting_pairs"] == 0 and financial_code == 0)
+                            and posting["bad_posting_pairs"] == 0 and financial_code == 0
+                            and sample["tape_terminal_audit"]["passed"])
         pending = output.with_suffix(".pending")
         with pending.open("x") as evidence:
             json.dump(sample, evidence, indent=2)
