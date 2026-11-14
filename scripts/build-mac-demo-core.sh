@@ -15,6 +15,8 @@ verified_run="${MAC_DEMO_VERIFIED_COMMON_RESULT:-}"
 common_ref="${MAC_DEMO_COMMON_REVISION:-}"
 require_interrupted="${MAC_DEMO_REQUIRE_INTERRUPTED_RETURN:-false}"
 projection="${MAC_DEMO_PROJECTION_HISTORY_SOURCE:-}"
+gateway_base="${MAC_DEMO_GATEWAY_BASE:-}"
+gateway_api="${MAC_DEMO_GATEWAY_API_SOURCE:-${repo}/.work/t407-gateway-api-readonly}"
 out="${1:?usage: build-mac-demo-core.sh NEW_ABSOLUTE_ARTIFACT_DIRECTORY}"
 [[ "$out" == /* && ! -e "$out" ]] || { echo "Choose a new absolute build directory" >&2; exit 2; }
 [[ "$(uname -s)" == Darwin && "$(docker context show)" == colima ]] ||
@@ -262,4 +264,16 @@ fi
   if [[ -n "$md" ]]; then cat "$out/md.result"; fi
   if [[ -n "$projection" ]]; then cat "$out/projection/projection.env"; fi
 } > "$out/images.env"
+# Keep the already-qualified Gateway code; only align its exact dependencies.
+# Never compile unrelated uncommitted proxy work from the Gateway checkout.
+gateway_base="${gateway_base:-$(docker inspect -f '{{.Image}}' dc-saas-gateway)}"
+python3 "$repo/scripts/build-mac-demo-gateway-dependencies.py" "$gateway_base" "$out" \
+  "$out/gateway-dependencies" > "$out/gateway-dependencies.env"
+cat "$out/gateway-dependencies.env" >> "$out/images.env"
+# The notification fix is independent of Common HA and changes only one
+# existing connector method. Its ABI, original dependencies and real class
+# bytes are checked before all producing images are selected for deployment.
+python3 "$repo/scripts/build-mac-demo-notification-fanout.py" "$out" "$gateway_api" \
+  "$out/notification-release" > "$out/notification-build.log" 2>&1
+cp "$out/notification-release/images.env" "$out/images.env"
 cat "$out/images.env"
