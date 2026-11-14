@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Measure Demo order/cancel round trips using authenticated CUSTOM price products."""
 import argparse
-from contextlib import contextmanager
+from contextlib import contextmanager, ExitStack
 from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime, timezone
 from decimal import Decimal, ROUND_DOWN
@@ -18,6 +18,7 @@ HERE = Path(__file__).resolve().parent
 CAPACITY = runpy.run_path(str(HERE / "verify-mac-demo-robot-capacity.py"))
 PRODUCT = CAPACITY["PRODUCT"]
 MEASURE = CAPACITY["MEASURE"]
+NATIVE = runpy.run_path(str(HERE / "mac-demo-native-tcp.py"))
 URL = "http://127.0.0.1:49502/httpapi/"
 
 
@@ -226,6 +227,40 @@ def cancel(trader, symbol, record):
     }, token)
 
 
+@contextmanager
+def native_trader_session(trader, run, index):
+    location, user, web_token = trader
+    issued = api("LoginSvr", "updateApiKey", {
+        "cid": "CC_TCP_" + run + str(index), "label": "native-order-cancel-" + run, "type": "trade",
+    }, web_token)
+    try:
+        session = PRODUCT["signed_login"](URL, issued["api_key"], issued["secret_key"], location)
+        if session.get("user_id") != user or not session.get("token"):
+            raise RuntimeError("Signed native order/cancel identity differs")
+        yield location, user, session["token"]
+    finally:
+        removed = PRODUCT["call"](URL, "LoginSvr", "deleteApiKey", {
+            "cid": "CC_TCP_DELETE_" + run + str(index), "api_key": issued["api_key"],
+        }, web_token)
+        if removed.get("code") != 0:
+            raise RuntimeError("Native order/cancel key revocation did not complete")
+
+
+def cleanup_native_orders(traders, symbol, run, report):
+    cleaned = []
+    report.setdefault("native_normal_cleanup", []).append({"symbol": symbol, "orders": cleaned})
+    for trader in traders:
+        for row in open_orders(trader, symbol):
+            client = row.get("ClOrdID") or row.get("ClOrderID")
+            if not client or not client.startswith("T554CC-" + run + "-"):
+                raise RuntimeError("Unexpected order in native order/cancel account")
+            record = {"client_order_id": client, "order_id": row["OrderID"]}
+            cancel(trader, symbol, record)
+            await_order(trader, symbol, client, False)
+            record["cleanup_confirmed"] = True
+            cleaned.append(record)
+
+
 def worker(trader, symbol, price, prefix, index, deadline, stop):
     location, user, token = trader
     records = []
@@ -277,6 +312,7 @@ def main():
     parser.add_argument("--seconds", type=int, default=60)
     parser.add_argument("--mode", choices=("ORDER_ONLY", "TRADE"))
     parser.add_argument("--concurrency", choices=(1, 4, 8), type=int)
+    parser.add_argument("--transport", choices=("http", "tcp"), default="http")
     args = parser.parse_args()
     if not 30 <= args.seconds <= 300:
         parser.error("Use a 30 to 300 second window per concurrency level")
@@ -285,7 +321,8 @@ def main():
     report = {"generation": root.name, "common_release": CAPACITY["common_release_identity"](root),
               "run": run, "passed": False, "phases": [],
               "requested_mode": args.mode, "requested_concurrency": args.concurrency,
-              "scope": "Closed-loop place/New/cancel/absent via HTTP, with live Robots in background",
+              "transport": args.transport,
+              "scope": "Closed-loop place/New/cancel/absent via " + args.transport.upper() + ", with live Robots in background",
               "latency_measurement": {
                   "place_ack_ms": "Request to HTTP success response",
                   "place_new_ms": "Request to New observed through authenticated order query",
@@ -293,12 +330,20 @@ def main():
                   "cancel_absent_ms": "Cancel request to absence observed through authenticated open-order query",
                   "state_query_retry_seconds": 0.05,
               }}
+    if args.transport == "tcp":
+        report["latency_measurement"]["place_ack_ms"] = "Native TCP request to success response"
+        report["latency_measurement"]["cancel_ack_ms"] = "Native TCP cancel to success response"
     output = root / f"order-cancel-capacity-{run}.json"
     with (root.parent / ".mac-demo-fresh.lock").open("a") as lock:
         fcntl.flock(lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
         CAPACITY["require_strict_demo"](root)
         try:
-            with controlled_products(run, report) as (location, products):
+            native_work = None
+            if args.transport == "tcp":
+                native_work = NATIVE["prepare"](root, HERE.parent / "tests/MacDemoNativeTcpOrderCancel.java",
+                                                "MacDemoNativeTcpOrderCancel")
+                report["native_client_identity"] = json.loads((native_work / "identity.json").read_text())
+            with ExitStack() as native_sessions, controlled_products(run, report) as (location, products):
                 report["background_robots_at_admission"] = CAPACITY["demo_tenants"]()
                 for mode, symbol in products:
                     if args.mode is not None and mode != args.mode:
@@ -308,6 +353,10 @@ def main():
                     if actual != [[mode]]:
                         raise RuntimeError("Actual product mode differs from the controlled test")
                     traders = [new_trader(location, symbol, mode, run, mode.lower() + str(i)) for i in range(8)]
+                    if args.transport == "tcp":
+                        traders = [native_sessions.enter_context(native_trader_session(trader, run, mode + str(i)))
+                                   for i, trader in enumerate(traders)]
+                        native_sessions.callback(cleanup_native_orders, traders, symbol, run, report)
                     before = {user: balances(loc, user) for loc, user, _ in traders}
                     for concurrency in ((args.concurrency,) if args.concurrency is not None else (1, 4, 8)):
                         control_before = CAPACITY["require_strict_demo"](root)
@@ -333,10 +382,31 @@ def main():
                         stop = Event()
                         with MEASURE["sample_resources"](root.name) as resources, \
                                 ThreadPoolExecutor(max_workers=concurrency) as clients:
-                            tasks = [clients.submit(worker, trader, symbol, price, prefix, i, deadline, stop)
-                                     for i, trader in enumerate(traders[:concurrency])]
-                            records = [record for task in tasks for record in task.result()]
+                            if args.transport == "tcp":
+                                common_start = int(time.time() * 1000) + 8000
+                                port = int(CAPACITY["FRESH"]["env_pairs"](root / "demo.env")["GW_TCP_PORT"])
+                                tasks = [clients.submit(NATIVE["run"], native_work, {
+                                    "location": loc, "user_id": user, "token": token, "symbol": symbol,
+                                    "port": port, "price": price, "prefix": prefix + "-" + str(i),
+                                    "seconds": args.seconds, "start_at_epoch_ms": common_start,
+                                }) for i, (loc, user, token) in enumerate(traders[:concurrency])]
+                                measurements = [task.result() for task in tasks]
+                                records = [row for measured in measurements for row in measured["orders"]]
+                                starts = [datetime.fromisoformat(row["actual_start"].replace("Z", "+00:00")).timestamp()
+                                          for row in measurements]
+                                phase["native_start_spread_ms"] = round((max(starts) - min(starts)) * 1000, 3)
+                                if (phase["native_start_spread_ms"] > 250
+                                        or not all(row.get("measurement_complete") is True for row in measurements)
+                                        or any(not row["passed"] for row in records)):
+                                    stop.set()
+                            else:
+                                tasks = [clients.submit(worker, trader, symbol, price, prefix, i, deadline, stop)
+                                         for i, trader in enumerate(traders[:concurrency])]
+                                records = [record for task in tasks for record in task.result()]
                         elapsed = time.monotonic() - begun
+                        if args.transport == "tcp":
+                            phase["host_elapsed_including_native_login_and_barrier_seconds"] = round(elapsed, 3)
+                            elapsed = max(row["elapsed_seconds"] for row in measurements)
                         control_after = CAPACITY["require_strict_demo"](root)
                         phase.update(elapsed_seconds=round(elapsed, 3), records=records, resources=resources,
                                      control_generation_before=control_before, control_generation_after=control_after,
@@ -361,7 +431,7 @@ def main():
                             expected = {record["client_order_id"] for record in records}
                             funds = {user: balances(loc, user) for loc, user, _ in traders}
                             remaining = [row for trader in traders for row in open_orders(trader, symbol)]
-                            phase["passed"] = (bool(records) and all(r["passed"] for r in records)
+                            phase["passed"] = (bool(records) and not stop.is_set() and all(r["passed"] for r in records)
                                                and control_before == control_after
                                                and actual == expected and len(rows) == len(expected)
                                                and all(row[2] in ("Cancelled", "Canceled") and row[3] == "0"

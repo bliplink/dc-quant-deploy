@@ -37,6 +37,16 @@ class NativeTcpClientTest(unittest.TestCase):
         self.assertNotIn('private-session', str(caught.exception))
         self.assertIn('IOException', str(caught.exception))
 
+    def test_recorded_cancel_client_is_selected_without_exposing_credentials(self):
+        work = Path('/test-native-client')
+        with patch.object(Path, 'read_text', return_value=json.dumps({
+                'java_home': '/test-java', 'class_name': 'MacDemoNativeTcpOrderCancel'})), \
+                patch.object(NATIVE['subprocess'], 'run', return_value=SimpleNamespace(
+                    returncode=0, stdout='T554_NATIVE_TCP_REPORT {"orders": []}\n')) as process:
+            NATIVE['run'](work, {'seconds': 60, 'token': 'private-session'})
+        self.assertEqual('MacDemoNativeTcpOrderCancel', process.call_args.args[0][-1])
+        self.assertNotIn('private-session', repr(process.call_args.args))
+
 
 if __name__ == '__main__':
     unittest.main()

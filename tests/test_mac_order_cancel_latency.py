@@ -12,6 +12,17 @@ SPEC.loader.exec_module(CAPACITY)
 
 
 class OrderCancelLatencyTest(unittest.TestCase):
+    def test_native_login_failure_still_revokes_the_temporary_key(self):
+        with patch.object(CAPACITY, 'api', return_value={'api_key': 'key', 'secret_key': 'secret'}), \
+                patch.dict(CAPACITY.PRODUCT, signed_login=Mock(side_effect=RuntimeError('login rejected')),
+                           call=Mock(return_value={'code': 0})):
+            with self.assertRaisesRegex(RuntimeError, 'login rejected'):
+                with CAPACITY.native_trader_session(('ABC123', 'user-1', 'web-token'), 'fixture', 0):
+                    self.fail('Failed signed login reached a TCP window')
+            request = CAPACITY.PRODUCT['call'].call_args
+            self.assertEqual('deleteApiKey', request.args[2])
+            self.assertEqual('key', request.args[3]['api_key'])
+
     def test_controlled_robot_stop_waits_past_bootstrap_enable_and_owner_release(self):
         read = CAPACITY.PRODUCT['readonly_sql']
         with patch.dict(CAPACITY.PRODUCT, readonly_sql=Mock(side_effect=[
