@@ -87,15 +87,17 @@ def summarize_streams(streams, seconds, expected_policy=None):
         protocol.append('DUPLICATE_CLIENT_REQUEST_ACROSS_STREAMS')
     spread = 1000 * (max(starts) - min(starts))
     responses = dict(Counter(row.get('outcome', 'NO_RESPONSE') for row in rows))
-    semantic_pass = (complete and spread <= 250 and len(rows) == planned and drops == 0
-                     and responses == {'ACKNOWLEDGED': planned} and len(fills) == planned and not protocol)
+    accounted = len(rows) + drops == planned
+    semantic_pass = (complete and spread <= 250 and accounted and len(rows) > 0
+                     and responses == {'ACKNOWLEDGED': len(rows)} and len(fills) == len(rows) and not protocol)
     result = {'planned_orders': planned, 'sent_orders': len(rows), 'final_executions': len(fills),
               'fills_inside_offered_window': count_inside, 'scheduler_drops': drops,
               'responses': responses, 'stream_errors': protocol, 'start_spread_ms': round(spread, 3),
+              'generator_accounting_pass': accounted,
               'observed_window_execution_rate': count_inside / seconds,
               'window_delivery_fraction': count_inside / planned if planned else 0,
               'all_accepted_final_receipts_pass': semantic_pass,
-              'window_capacity_pass': semantic_pass and count_inside == planned}
+              'window_capacity_pass': semantic_pass and drops == 0 and count_inside == planned}
     for field in ('ack_ms', 'client_fill_ms', 'scheduled_fill_ms', 'dispatch_delay_ms'):
         result[field] = EXEC['summary_ms'](rows, field)
     return result

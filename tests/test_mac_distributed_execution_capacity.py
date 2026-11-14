@@ -61,6 +61,26 @@ class DistributedReceiptTest(unittest.TestCase):
         self.assertIn('DUPLICATE_FINAL_EXECUTION_ACROSS_STREAMS', result['stream_errors'])
         self.assertFalse(result['all_accepted_final_receipts_pass'])
 
+    def test_accounted_unsent_slot_is_capacity_failure_while_sent_orders_finish(self):
+        streams = self.streams()
+        streams[0]['measurement'].update(planned_orders=2, scheduler_drops=1)
+        result = DRIVER['summarize_streams'](streams, 60)
+        self.assertEqual((3, 2, 1), (result['planned_orders'], result['sent_orders'], result['scheduler_drops']))
+        self.assertTrue(result['generator_accounting_pass'])
+        self.assertTrue(result['all_accepted_final_receipts_pass'])
+        self.assertFalse(result['window_capacity_pass'])
+
+    def test_unsent_slot_cannot_hide_a_missing_final_execution_or_missing_accounting(self):
+        streams = self.streams()
+        streams[0]['measurement'].update(planned_orders=2, scheduler_drops=1)
+        del streams[1]['measurement']['orders'][0]['execution_id']
+        self.assertFalse(DRIVER['summarize_streams'](streams, 60)['all_accepted_final_receipts_pass'])
+        streams = self.streams()
+        streams[0]['measurement']['planned_orders'] = 2
+        result = DRIVER['summarize_streams'](streams, 60)
+        self.assertFalse(result['generator_accounting_pass'])
+        self.assertFalse(result['all_accepted_final_receipts_pass'])
+
     def test_shared_or_unbalanced_partitions_are_not_a_distributed_measurement(self):
         for key in ['order_partition', 'trade_partition', 'order_primary', 'trade_primary']:
             streams = self.streams()
