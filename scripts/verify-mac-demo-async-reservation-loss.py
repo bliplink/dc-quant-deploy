@@ -192,6 +192,8 @@ def main():
                 record['survivor_local'] = local
                 if inspect(backup)['State']['StartedAt'] != backup_before['State']['StartedAt']:
                     raise RuntimeError('The surviving backup unexpectedly restarted')
+                record['robot_while_local'] = ROBOT['wait_traffic'](
+                    order_nodes, [backup], datetime.now(timezone.utc), robot_location, local)
                 trader = RPO['refresh_trader'](trader, run_id, 0, password)
                 record['account_after_certified_takeover_before_cancel'] = account(trader)
                 if record['account_after_certified_takeover_before_cancel'] != record['account_before']:
@@ -218,8 +220,6 @@ def main():
                 record['account_after_cancel'] = account(trader)
                 if record['account_after_cancel'] != record['account_before']:
                     raise RuntimeError('Cancellation fabricated a second financial release')
-                record['robot_while_local'] = ROBOT['wait_traffic'](
-                    order_nodes, [backup], datetime.now(timezone.utc), robot_location, local)
                 record['local_business_consistent'] = True
                 save()
         except BaseException as error:
