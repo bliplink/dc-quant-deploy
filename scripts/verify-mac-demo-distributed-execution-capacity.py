@@ -142,8 +142,8 @@ def main():
                     for attempt in range(args.streams + 12):
                         if len(private) == args.streams:
                             break
-                        run = run_id + format(attempt, '02x')
-                        stream = {'run': run}
+                        run = secrets.token_hex(4)
+                        stream = {'run': run, 'setup_attempt': attempt}
                         candidate = setup.enter_context(ExitStack())
                         location, products = candidate.enter_context(CANCEL['controlled_products'](run, stream))
                         symbol = EXEC['SYMBOL']
@@ -170,6 +170,7 @@ def main():
                         report['streams'].append(stream)
                         maker = EXEC['signed_trader'](location, run, 0, accounts)
                         taker = EXEC['signed_trader'](location, run, 1, accounts)
+                        stream.update(maker_user_id=maker.session.user_id, taker_user_id=taker.session.user_id)
                         planned = int(args.rate_per_stream * args.seconds)
                         maker_id = 'T554EXEC-' + run + '-MAKER'
                         accounts[0]['order_attempted'] = True
