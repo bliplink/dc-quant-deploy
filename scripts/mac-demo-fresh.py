@@ -27,7 +27,7 @@ APPS = ("gateway", "loginsvr", "managersvr", "adminsvr", "mdsvr", "apssvr")
 PROJECTION = "projectionsvr"
 SUPPORT_IMAGES = {
     PROJECTION: ("MAC_DEMO_PROJECTION_IMAGE", "local/otc-t454-projectionsvr:common-zk-rejoin"),
-    "robotsvr": ("MAC_DEMO_ROBOT_IMAGE", "local/otc-t438-robotsvr:prewal-auth-refresh"),
+    "robotsvr": ("MAC_DEMO_ROBOT_IMAGE", "local/otc-t554-robotsvr:turnover-9f25597-e3dfc3bb7904"),
     "liqsvr": ("MAC_DEMO_LIQ_IMAGE", "local/otc-t252-liqsvr:installed-image"),
 }
 VOLUMES = {"born": "/srv/dc/data/t549-born", "ready": "/srv/dc/data/t549-ready-v1",

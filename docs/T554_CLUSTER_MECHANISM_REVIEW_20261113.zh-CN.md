@@ -767,3 +767,14 @@ Trade 提交 `645c9a9` 通过现有业务提交入口处理可信内部发起的
 可以继续开发新的业务服务，并复用 Common。现有 Order、Trade 已使用同一精确 Common JAR，各自通过 `OrderCommonRecoveryBinding`、`TradeCommonRecoveryBinding` 实现 `CommonCertifiedProductionPhysicalRecovery.BusinessPorts`。新服务应自行提供业务校验、byte[] 编解码、确定性提交后应用、重放和快照；Common 统一承担 WAL、提交水位、复制、隔离、接管及回归。每个新服务必须单独验证业务一致性及相同 Common 生命周期。
 
 增加服务种类与扩大同一个集群的数据节点数量是两项验收。本机目前验证的是每个服务 A/B 两数据节点、RF2、各 128 Home 主分区；尚未证明三个以上数据节点的在线加入、分区迁移、负载再平衡或线性扩容。也尚未覆盖独立主机、独立磁盘及网络分区。可以推进业务接入开发，不能据此宣告生产横向扩容和多故障域稳定性已经通过。
+
+
+15:59 性能实现核对：精确 Common 47a 的 `CertifiedBusinessCommandBoundary.commitThenApplyAsync` 在下一条提交入口调用 `awaitAsyncReplication()`，每分区同时只允许一条尚未完成物理认证的命令。前一条后台复制/认证完成前，后续本机追加也被背压。严格和异步实际提交均将单元素列表传入 force 屏障；`certifyAndPersistBatch` 有接口，但没有现役生产调用点。Order 的风控响应以 userID 分配到 5 条串行处理通道。这些是源码事实，说明“本机先确认”并不等于持续批量异步管线，不能把成本占比或所有长延迟直接归因于它。记录 `notification-fixed-capacity-implementation-findings-20261114.json`；后续优化应在同一 Common 提交路径实现有界批量/流水并保留本机提交边界、真实物理 ACK 与隔离，再以同版 P0 和业务故障重验，不能直接删除等待或认证。
+
+Robot 修复 `9f25597` 已推送开发分支。现役原 Robot 的 `RobotWorker` 修复前源码重建 class 与现役 class SHA256 完全相同，修复仅覆盖这个外部类，原内部类、依赖和其它服务镜像不变。129 项测试通过，旧版针对性回归失败、新版通过。15:54 完成一次有计划的 Robot 正常更新，四个核心节点容器 ID、镜像和重启计数逐一保持；原十租户全部 RUNNING，含 KEM5EN。新 Robot 进程的完整五分钟门禁与后续故障仍在运行，不能将更新前后的 Robot 进程宣称为同一个。证据 `~/.opentradingcore/t554-robot-quote-turnover-20261114-1550/release.json`。
+
+
+16:02 Robot 更新后 `robot-steady-10-075931.json` 五分钟稳态通过：535 请求/535 窗口内完整成交、0 超时未终结 Tape 单，70 份余额、70 份持仓与全部财务游标核对 PASS。自然流量 P99=661.345 ms，不能视为高性能达标或新的容量阶梯。四个核心进程未变化，后续预占丢失专项已实际故障并进入自动接管。Mac 新安装无现役可继承 Robot 镜像时的默认值更新为这份已验收单类修复；顺序 fresh 仍优先继承当前正常 Robot 镜像。容量对比表来自本次 Robot 更新之前，两种模式当时使用相同旧 Robot，保留原始条件，不改写为更新后性能。
+
+
+16:09 对已有压测日志只读补查，未重新发单或改变服务。严格 25/s 原 1500 单匹配到 1500 个订单，其中 1499 单具有完整 Newing 四阶段日志；风控回调入队至开始处理 P50/P95/P99/最大为 3367/7008/7340/7429 ms，而处理内订单提交段为 41/68/88/372 ms。异步 15/s 全 900 单具备四阶段：排队 53/4834/5157/5222 ms，处理内提交 37/132/369/863 ms。缺失日志不补造；提交段包含业务操作和等待，不是纯 fsync。两份 `historical-newing-callback-profile-execution-capacity-*.json` 记录原始容器、时间界限、阶段数量及最慢样本。这把队列积压从单个样本扩展为整档证据，仍不能仅靠该统计决定增加线程数：同用户、同分区及业务提交后的先后关系必须保持。
