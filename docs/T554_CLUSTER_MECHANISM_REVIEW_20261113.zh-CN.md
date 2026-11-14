@@ -1,17 +1,17 @@
 # OpenTradingCore 当前集群机制审阅
 
-更新于 2026 年 11 月 14 日 18 时 47 分。现役仍为原 Mac 异步环境 `mac-demo-20261114-145043`，未新建平行业务环境。Common 仍为精确通过 P0 的 `47a1f5daee5af7a9a94920e433be2b36518e5396`，JAR SHA256 `ea809767b92e99fa7c1cff701d7695d5c9a0beef2cc39a7695874b27f8baebae`。当前 Order `deccb4a`、两个 Trade 均为 `2cf5fdc` 单类修复、Gateway `abb0b9b` 入口修复、Robot `9f25597`、Projection `17eaa31`、通知库 gateway-api `1a95b80`；均已归档到 GitHub 开发分支。最新异步四向物理故障、512 对 WAL/快照及财务游标通过，但随后未复制预占丢失测试暴露原 Robot 的结算阻塞，整体功能仍为 **NO_GO**。受影响的 LJ0M5U 已通过正常管理 API 停用，九个其它原 Robot RUNNING；故障后十 Robot 完整稳态尚未执行。严格与异步现有容量均有数秒级尾延迟，高性能生产验收仍为 NO_GO。
+更新于 2026 年 11 月 14 日 19 时 14 分。**当前整体 NO_GO：最新演练暴露 Trade A Java 堆耗尽及原集群冷恢复缺口，两个原 Trade 节点已在反复拒绝启动后正常停下、原十个 Robot 及本轮受控测试 Robot 通过正常管理接口停用。** Order 保留运行，原数据、堆转储及日志保留。此次失败发生于原 Common47 和 Trade2cf5fdc，获批准的业务恢复补丁 a734572 尚未部署。此前四向故障及资金快照 PASS 是历史样本，不能覆盖本次失败。严格/异步容量均未达到高性能要求。
 
 
 | 审阅问题 | 当前结论与实际边界 |
 |---|---|
-| 本机是否恢复交易 | 九个原 Robot RUNNING；一个因丢失预占后的结算阻塞正常停用，整体尚未恢复完成 |
+| 本机是否恢复交易 | 否。Trade 崩溃后冷恢复被拒绝；两个原节点及 Demo Robot 已正常暂停，保留现场等待机制修复 |
 | 性能是否达到高性能交易要求 | 否。严格热点 15/s 完整交付、25/s 积压；异步 10/s 完整交付、15/s 积压。不是全 256 分区聚合容量，也不是生产硬件结果 |
-| 集群是否稳定 | 严格及最新异步四向物理故障均通过；异步业务 RPO 恢复仍有缺口。接管、追平耗时以分钟计，不能称生产稳定达标 |
+| 集群是否稳定 | 否。除分钟级恢复和预占丢失缺口，本轮还出现堆耗尽后无法自动冷恢复的问题；历史故障 PASS 不代表本轮通过 |
 | 能否继续扩业务服务 | 可以开发接入；每个服务独立提供业务状态机并走同一 Common 提交/恢复合同，再单独验收 |
 | 能否直接扩大同集群节点数 | 三个以上数据节点、在线分区迁移、再平衡与线性扩容尚未验证 |
 | Common 是否能供其它服务用 | 可以，已被 Demo、Order、Trade 复用；不能把当前单 Mac A/B 验收外推为任意服务、任意故障域均生产可用 |
-| 下一项修复重点 | 待负责人明确确认资金恢复语义后补齐丢失预占的撮合恢复；恢复十 Robot 并重验 RPO，再做多分区容量和性能修复 |
+| 下一项修复重点 | 负责人已明确批准，正在接入并验证丢失预占的撮合恢复；恢复十 Robot 并重验 RPO，再做多分区容量和性能修复 |
 
 上一版严格四方向故障的物理恢复、受控成交和财务检查通过；故障后逐单补查暴露 IOC 跨多个挂单未实现，可能留下 New 和资金预占。现场已保存，107 个超时 Tape 单及最初故障单通过正常 API 撤销。新修复把全部 maker/taker 成交放入同一个 Order Common 命令、同一个现有待结算项和同一个 Trade 资金批次；IOC 撤余量等待结算确认，FOK 不足不提交部分成交，GTC 余量正常入簿。Common 无业务分支改动，无新增持久化账本或恢复流程。
 
@@ -846,3 +846,36 @@ Trade 两节点已完成 `2cf5fdc` 更新，Common/Shared 字节不变。最新�
 本次只读健康补查：九个已启用原 Robot 仍为 RUNNING，正常查询的 Tape IOC/FOK 无超过 30 秒未终结订单。首轮完整一致快照检查中，90 份余额和 88 份持仓在财务消费游标上均为零字段差异，371,792 条前驱链接无断裂，但有两分区财务游标落后源投影，原报告保留 `NO_GO / FINANCIAL_CURSOR_DIFFERS_FROM_SOURCE`。随后七次短间隔坐标采样中三次全部分区追平，其余差异分区及消费坐标持续推进，支持短暂消费滞后的判断；不把不同时间的坐标和余额观察拼成同一快照 PASS。完整一致快照复核另行保存。相关文件 `post-containment-readonly-health-20261114-1840.json`、`post-containment-readonly-cursor-samples-20261114-1845.json`；均无业务写入。
 
 后续完整一致快照复核返回 `PASS_FINANCIAL_CURSOR`：90 份余额、88 份持仓零差异，全部财务游标与源水位相等、前驱链无断裂，且无非零无来源财务行。证据 `post-containment-full-financial-recheck-20261114-1847.json`。前轮游标滞后 NO_GO 原样保留。此 PASS 证明当次资金投影一致，不代表 Order 的丢失预占撮合已完成；LJ0M5U 仍停用、整体业务恢复仍 NO_GO。
+
+
+## 2026-11-14 原预占恢复已获批准，开始真实接线验证
+
+负责人已明确选择“允许核验后自动重新预占并继续结算”，此前等待批准的状态结束。Trade `a734572` 已提交并推送；在原签名撮合 admission 中，仅准确捕获原预占缺失，重新取得现有分区业务锁，重查幂等结算，再认证原 Order WAL 内的 LOCAL 坐标和后续全部已接受历史。恢复出的 Newing 使用原始委托价和原数量，经原五项风险检查、当前余额、Common 提交及 after-apply 冻结，随后重试原原子双边/多挂单结算。未知历史、已有生命周期、非首次成交和资金不足继续拒绝。
+
+干净源码全套 256 项测试通过；新增真实 RSA→原风险/Newing→原结算回归验证重复投递不重复扣款、历史不明不写、资金不足不补钱、无 Common 提交不 apply、旧主失权不进入恢复。业务补丁以当前 Trade 镜像为底，仅覆盖十个相关 class；原有未改方法字节码逐一核对，Common/Shared 精确 SHA 不变。镜像 `local/otc-t554-trade:reservation-reconcile-a734572-e5b5356d3887`，证明 `~/.opentradingcore/t554-signed-reservation-readmission-20261114-v2/overlay-proof.json`。已开始 Trade B 正常 TERM、A 自动接管、带补丁回归，尚未把源码/单测当作现场恢复 PASS。
+
+性能实现进一步核对：严格单条提交除 WAL 复制外，依次执行备节点安装证书、备节点保存双物理安装回执，之后本机保存回执账本并验证 ACK；这不是一次单向网络发送即可完成的成本。当前所有步骤均真实保留，不以减少必要 ACK 或删掉安全证明作为优化。需以逐阶段实测区分该成本与回调排队，再优先复用现有批量提交能力。Common47 尚无性能代码变更。
+
+
+## 2026-11-14 19:14 新故障：原 Trade 堆耗尽及冷恢复拒绝
+
+`ha-trade-b-term-xfn672_n` 在 19:05 正常停止旧 Trade B 后，原 Trade A 出现 `OutOfMemoryError: GC overhead limit exceeded / Java heap space`。容器内存上限 2 GiB、Java `-Xmx1g`；Docker OOMKilled=false 不能排除 JVM 堆耗尽。此前设置的监控成功保存 1,145,970,389 字节真实堆转储。GC/堆压力期间节点租约续期失败，原 Common 按已批准的隔离合同自动退出；随后原 A 冷启动反复被 `receipt ledger head != physical custody` 拒绝。
+
+已中断后续演练，原 NO_GO 现场保留。正常启动刚停下的旧 B 后，B 又反复被 `Common interrupted rearm does not follow the exact witnessed LOCAL role` 拒绝。本轮尚未启动补丁镜像，新增业务恢复代码没有进入运行现场。不得通过改水位、删证书、伪造 READY 或清数据让启动通过。
+
+因重复启动无法推进，已保存两个原容器 ID、镜像、重启计数及原重启策略，通过正常 Manager STOP 暂停九个此前运行中的原 Robot 和本轮自建 G0DJSF（LJ0M5U 此前已停用），随后正常停止两 Trade 节点的重启循环。所有原业务/WAL/证明数据保留，Order 未停。证明 `trade-oom-incident-containment-20261114.json`、私有日志目录 `~/.opentradingcore/t554-trade-oom-incident-20261114`。正在只读解析真实堆转储和核对故障窗口；新 Common 修复必须先 Demo+Common P0，再同版业务集成。此前 19:05 前的九 Robot/资金快照结论不得冒充当前仍可交易。
+
+
+## Common101 内存与冷恢复候选：已完成的证据及待验项目
+
+Common `101ebba` 已提交并推送 GitHub，精确候选 JAR SHA256 `793ca307d3de76c34377ed8f46a81111cdf28016c6a5e49a23198be761d608b3`，尚未安装到业务环境。
+
+真实 HPROF 全流解析覆盖 1,145,970,389 字节；约 438 MB 字节数组，约 310 MB 字符数组，约 40.6 万个 PResult、309 万个 String。最大数组的只读引用追踪发现 37 个大数组由 `CommonCertifiedGenesisQuorum.Verified.image` 持有；这是直接引用证据，未把浅大小当成完整支配树保留大小。其它大数组由 ConcurrentHashMap 表持有，业务幂等工作集也需纳入堆预算。
+
+修复让已落盘、双 RSA 认证的快照只保留原哈希、长度、Epoch 和不可变文件位置，实际使用时重新按原哈希读取和校验；未落盘的纯内存验证仍返回隔离副本。它不改变文件、签名、ACK、READY 或业务数据格式。用完全相同的 144 MiB 历史快照、96 MiB 子进程堆预算验证：精确原 Common47 出现 OOM，新版完成全部读取及隔离副本检查；后续篡改、删除文件均被拒绝。证明 `~/.opentradingcore/t554-trade-oom-incident-20261114/sealed-image-memory-red-green-proof.json`。
+
+冷恢复修复保留原认证回执边界：WAL=2、已安装双 RSA 证书=2、独立回执账本=1 时，识别为原未决尾部并交现有隔离恢复处理，既不晋升为已确认，也不删除尾部。返回备节点可核验同一份“原主保留所有者”的严格恢复 Stage 并保持预留，只有 Stage 原主恢复其 writer；避免误读成 LOCAL 转 STRICT。真实 ZooKeeper、签名 Stage、返回备节点认证和原主冷重启的专项通过。
+
+截至本次记录，232 项安全回归及一项真实单节点冷重启通过，其余冷恢复专项和完整 256 分区物理故障门禁仍在进行；最终 P0 以 `~/.opentradingcore/t554-local-owner-p0-controller-20261114-memory-custody-101.json` 为准，未通过前不替换业务 Common。Trade `a734572` 原预占恢复的 256 项单测已通过；重新按精确候选 JAR 编译业务单测只作构建兼容性核验，不作为 P1/P2 上线通过。
+
+现役 MySQL 的五个已关闭旧二进制日志已在确认无复制客户端后逐文件归档，完整解压 SHA256 与原件相等，再通过 `PURGE BINARY LOGS TO` 正常清理；保留最近一个关闭日志和当前写入日志。无业务表修改、无文件强删。证明 `~/.opentradingcore/t554-active-mysql-closed-binlog-archive-20261114-193734/state.json`，主机空间回到约 11 GiB。Trade 和 Robot 仍按事故收敛记录暂停，未以新环境掩盖原未结算意图。
