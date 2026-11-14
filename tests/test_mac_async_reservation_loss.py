@@ -1,8 +1,12 @@
 import importlib.util
+import base64
+import json
 from pathlib import Path
+import struct
 import sys
 import tempfile
 import unittest
+import zlib
 from unittest.mock import Mock, patch
 
 
@@ -13,6 +17,37 @@ SPEC.loader.exec_module(LOSS)
 
 
 class ReservationLossPreflightTest(unittest.TestCase):
+    def reservation_frame(self, request='1234567890123456789:Newing', user='fixture-user'):
+        batch = {'location': 'ABC123', 'requestId': request, 'sourceType': 'NEWING_OPEN_PREPARED',
+                 'mutations': [{'entityType': 'OPEN_ORDER', 'operation': 'UPSERT',
+                                'entityKey': 'ABC123\x1f' + user + '\x1f1234567890123456789'}]}
+        b64 = lambda value: base64.b64encode(value.encode()).decode()
+        payload = '\t'.join([b64('P079'), '4', '118', b64('STATE_BATCH'), b64(request),
+                             '1794643232773', b64(json.dumps(batch))]).encode()
+        crc = zlib.crc32(struct.pack('>qq', 4, 118) + payload)
+        return struct.pack('>IqqII', 0x43425731, 4, 118, len(payload), crc) + payload
+
+    def test_base64_journal_identifies_the_real_reservation_without_plaintext_search(self):
+        frame = self.reservation_frame()
+        self.assertNotIn(b'1234567890123456789', frame)
+        result = LOSS.lost_reservation_identity(
+            frame, 'P079', 4, 118, 'ABC123', 'fixture-user', '1234567890123456789')
+        self.assertEqual('1234567890123456789:Newing', result['event_id'])
+        self.assertEqual(118, result['sequence'])
+
+    def test_another_order_or_account_cannot_satisfy_the_loss_proof(self):
+        for frame in [self.reservation_frame('OTHER:Newing'), self.reservation_frame(user='other-user')]:
+            with self.assertRaisesRegex(RuntimeError, 'does not identify'):
+                LOSS.lost_reservation_identity(
+                    frame, 'P079', 4, 118, 'ABC123', 'fixture-user', '1234567890123456789')
+
+    def test_lost_reservation_rejects_wrong_physical_epoch_and_damaged_crc(self):
+        frame = self.reservation_frame()
+        for candidate, epoch in [(frame, 5), (frame[:-1] + bytes([frame[-1] ^ 1]), 4)]:
+            with self.assertRaisesRegex(RuntimeError, 'coordinate or CRC'):
+                LOSS.lost_reservation_identity(
+                    candidate, 'P079', epoch, 118, 'ABC123', 'fixture-user', '1234567890123456789')
+
     def test_strict_confirmation_refuses_to_mutate_or_inject_a_loss(self):
         with tempfile.TemporaryDirectory() as temporary:
             local = Path(temporary)

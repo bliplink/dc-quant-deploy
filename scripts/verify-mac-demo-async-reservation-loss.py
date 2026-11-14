@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """Verify normal cancellation after a genuinely unreplicated Trade reservation is lost."""
 import argparse
+import base64
 from datetime import datetime, timezone
 from decimal import Decimal
 import fcntl
@@ -11,6 +12,7 @@ from pathlib import Path
 import runpy
 import secrets
 import signal
+import struct
 import time
 import zlib
 
@@ -19,6 +21,38 @@ RPO = runpy.run_path(str(HERE / 'verify-mac-demo-async-rpo.py'))
 CANCEL, CAPACITY, PRODUCT = RPO['CANCEL'], RPO['CAPACITY'], RPO['PRODUCT']
 run, inspect, until, manifest = (RPO[key] for key in ('run', 'inspect', 'until', 'manifest'))
 ROBOT = RPO['ROBOT']
+
+
+def lost_reservation_identity(frame, partition, epoch, sequence, location, user, order_id):
+    """Decode the existing TradeJournalRecord inside one CRC-verified Common frame."""
+    if len(frame) < 28:
+        raise RuntimeError('Lost reservation frame is incomplete')
+    magic, observed_epoch, observed_seq, size, crc = struct.unpack_from('>IqqII', frame)
+    payload = frame[28:]
+    if (magic != 0x43425731 or observed_epoch != epoch or observed_seq != sequence
+            or size != len(payload) or not 0 < size <= 1024 * 1024
+            or zlib.crc32(struct.pack('>qq', epoch, sequence) + payload) != crc):
+        raise RuntimeError('Lost reservation physical coordinate or CRC differs')
+    try:
+        fields = payload.decode('utf-8').split('\t')
+        if len(fields) != 7:
+            raise ValueError('Trade journal envelope must have seven fields')
+        decode = lambda value: base64.b64decode(value, validate=True).decode('utf-8')
+        observed_partition, event_type, event_id = (decode(fields[i]) for i in (0, 3, 4))
+        batch = json.loads(decode(fields[6]))
+        request = str(order_id) + ':Newing'
+        open_key = location + '\x1f' + user + '\x1f' + str(order_id)
+        if (observed_partition != partition or int(fields[1]) != epoch or int(fields[2]) != sequence
+                or event_type != 'STATE_BATCH' or event_id != request
+                or batch.get('location') != location or batch.get('requestId') != request
+                or batch.get('sourceType') != 'NEWING_OPEN_PREPARED'
+                or sum(m.get('entityType') == 'OPEN_ORDER' and m.get('operation') == 'UPSERT'
+                       and m.get('entityKey') == open_key for m in batch['mutations']) != 1):
+            raise ValueError('Observed reservation belongs to a different order or account')
+    except (ValueError, TypeError, KeyError, UnicodeError) as error:
+        raise RuntimeError('Lost physical reservation does not identify the observed Order') from error
+    return {'partition': partition, 'epoch': epoch, 'sequence': sequence, 'event_id': event_id,
+            'source_type': batch['sourceType'], 'frame_sha256': hashlib.sha256(frame).hexdigest()}
 
 
 def account(trader):
@@ -185,8 +219,9 @@ def main():
                 primary_raw, primary_head = RPO['copy_wal'](primary, primary_slot, partition, output / 'primary-local-acked.wal', epoch)
                 if primary_head != before_head + 1 or not primary_raw.startswith(before_raw):
                     raise RuntimeError('Expected exactly one genuine locally acknowledged reservation frame')
-                if order['OrderID'].encode() not in primary_raw[len(before_raw):]:
-                    raise RuntimeError('Lost physical reservation does not identify the observed Order')
+                record['lost_reservation_identity'] = lost_reservation_identity(
+                    primary_raw[len(before_raw):], partition, epoch, primary_head,
+                    location, trader[1], order['OrderID'])
                 record['primary_local_acked_head'] = primary_head
                 local = RPO['wait_roles'](root, 'TradeSvr' + backup_slot)
                 record['survivor_local'] = local
@@ -248,13 +283,26 @@ def main():
                     record['account_after_home'] = account(trader)
                     if record['account_after_home'] != record['account_before']:
                         raise RuntimeError('Original primary return resurrected or released the lost reservation')
-                    if CANCEL['own_order'](CANCEL['open_orders'](trader, record['symbol']), record['client_order_id']):
-                        raise RuntimeError('Cancelled order resurrected after the original primary returned')
+                    remaining = CANCEL['own_order'](
+                        CANCEL['open_orders'](trader, record['symbol']), record['client_order_id'])
+                    if remaining:
+                        if record.get('local_cancel_mutations'):
+                            raise RuntimeError('Cancelled order resurrected after the original primary returned')
+                        # An earlier probe failure may have prevented the intended
+                        # LOCAL cancellation. Clean up only our order via the normal
+                        # API after recovery, without claiming that LOCAL gate passed.
+                        CANCEL['cancel'](trader, record['symbol'], {
+                            'order_id': record['order_id'], 'client_order_id': record['client_order_id']})
+                        CANCEL['await_order'](trader, record['symbol'], record['client_order_id'], False)
+                        record['failed_case_owned_order_cleanup'] = 'NORMAL_API_CANCEL_AFTER_HOME'
+                        if account(trader) != record['account_before']:
+                            raise RuntimeError('Failed-case cleanup altered funds')
                     code, financial, checks = CAPACITY['reconcile_financial_cursor']()
                     record.update(financial_cursor=financial, financial_checks=checks)
                     if code:
                         raise RuntimeError('Certified financial source and projection differ after return')
-                    record['robot_local_postings'] = ROBOT['require_posting_pairs'](record['robot_while_local'])
+                    if record.get('robot_while_local'):
+                        record['robot_local_postings'] = ROBOT['require_posting_pairs'](record['robot_while_local'])
                     robot_after = inspect('dc-saas-robotsvr')
                     record['same_robot_process'] = (robot_before['Id'] == robot_after['Id']
                         and robot_before['State']['StartedAt'] == robot_after['State']['StartedAt'])
