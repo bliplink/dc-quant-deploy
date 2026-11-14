@@ -9,6 +9,24 @@ SEAL = runpy.run_path(str(Path(__file__).resolve().parents[1] / 'scripts/finaliz
 
 
 class PhysicalEvidenceSealTest(unittest.TestCase):
+    def test_returned_voters_need_distinct_live_actual_roles(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            (root / 'DemoSvrA.actual-role-proof').write_text('session=1 roles=256 writers=128\n')
+            (root / 'DemoSvrB.actual-role-proof').write_text('session=2 roles=256 writers=128\n')
+            state = root / 'voter-states-before-cleanup.txt'
+            state.write_text('survivor=alive returned=alive stableMillis=2000\n')
+            SEAL['verify_live_role_census'](root)
+            for bad in ('session=1 roles=256 writers=128\n', 'session=2 roles=255 writers=128\n',
+                        'session=2 roles=256 writers=127\n'):
+                (root / 'DemoSvrB.actual-role-proof').write_text(bad)
+                with self.assertRaises(ValueError):
+                    SEAL['verify_live_role_census'](root)
+            (root / 'DemoSvrB.actual-role-proof').write_text('session=2 roles=256 writers=128\n')
+            state.write_text('survivor=alive returned=dead stableMillis=2000\n')
+            with self.assertRaises(ValueError):
+                SEAL['verify_live_role_census'](root)
+
     def test_normal_async_backup_expiry_requires_exact_survivor_proof(self):
         marker = 'T554_NORMAL_DUAL_ASYNC_BACKUP_EXPIRY_PRESERVES_ACK_AND_CONTINUES_PASS'
         self.assertIsNotNone(SEAL['NORMAL_ASYNC_BACKUP_EXPIRY'].search('..' + marker + '\n'))

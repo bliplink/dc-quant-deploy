@@ -58,6 +58,20 @@ def verify_normal_async_primary_prefixes(directory):
         raise ValueError("Common async original committed prefix or excluded in-flight tail proof is invalid")
 
 
+def verify_live_role_census(directory):
+    sessions = []
+    for node in ("DemoSvrA", "DemoSvrB"):
+        proof = (directory / (node + ".actual-role-proof")).read_text()
+        match = re.fullmatch(r"session=([1-9]\d*) roles=256 writers=128\n", proof)
+        if not match:
+            raise ValueError("Returned Common voter lacks all actual physical roles and writers")
+        sessions.append(match[1])
+    if (sessions[0] == sessions[1]
+            or (directory / "voter-states-before-cleanup.txt").read_text()
+               != "survivor=alive returned=alive stableMillis=2000\n"):
+        raise ValueError("Returned Common voters did not retain independent stable live processes")
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("candidate", type=Path)
@@ -132,6 +146,9 @@ def main():
             for required in ("DemoSvrA.log", "DemoSvrB.log", "final-manifest.txt"):
                 if not (directory / required).is_file():
                     raise ValueError("Common live poison physical process evidence is missing")
+            if ('require-final-actual-roles' in poison_source.read_text()
+                    and scenario in {"node-lease-expiry", "graceful-shutdown"}):
+                verify_live_role_census(directory)
             if scenario == "node-lease-expiry":
                 events = (directory / "supervisor-events.txt").read_text().splitlines()
                 original = (directory / "DemoSvrB.attempt-0.log").read_text()
