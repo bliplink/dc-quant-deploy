@@ -65,6 +65,16 @@ def rounds(location, since, until):
     return {"rounds": len(ticks), "max_gap_seconds": round(gap, 3)}
 
 
+def running_robot_locations():
+    sql = ("SELECT DISTINCT location FROM dc_tenant_robot WHERE enabled=1 "
+           "AND runtime_status='RUNNING' AND COALESCE(runtime_owner,'')<>'' "
+           "AND last_heartbeat_time>=DATE_SUB(NOW(3),INTERVAL 30 SECOND)")
+    command = ["docker", "exec", "dc-saas-mysql", "sh", "-c",
+               'MYSQL_PWD="$MYSQL_ROOT_PASSWORD" exec mysql -uroot -N dc -e "$1"', "--", sql]
+    result = subprocess.run(command, capture_output=True, text=True, check=True, timeout=25)
+    return {row.strip() for row in result.stdout.splitlines() if SAFE.fullmatch(row.strip())}
+
+
 def wait_traffic(order, trade, since, location=None, local_routes=None, previous_quotes=(), seconds=160,
                  prefer_location=None):
     deadline = time.monotonic() + seconds
@@ -73,10 +83,13 @@ def wait_traffic(order, trade, since, location=None, local_routes=None, previous
         now = utc_now()
         begin = since if location else now - timedelta(seconds=180)
         quotes, requests, local, fills = snapshot(order, trade, begin, now)
+        running = running_robot_locations()
         candidates = [location] if location else sorted(
-            {tenant for tenant, _ in fills},
+            {tenant for tenant, _ in fills if tenant in running},
             key=lambda tenant: (prefer_location is not None and not prefer_location(tenant), tenant))
         for tenant in candidates:
+            if tenant not in running:
+                continue
             fresh_quotes = sorted((side, request) for t, side, request in quotes if t == tenant and request not in known)
             fresh_requests = sorted(r for t, r in requests if t == tenant)
             tape = [exec_id for t, exec_id in fills if t == tenant]
