@@ -2,6 +2,17 @@
 
 更新于 2026 年 11 月 14 日 16 时 40 分。原 Mac 现役环境已顺序切换为异步模式 `mac-demo-20261114-145043`，严格模式 `mac-demo-20261114-133826` 及此前环境的数据和证据保留。Common 仍为精确通过 P0 的 `47a1f5daee5af7a9a94920e433be2b36518e5396`，JAR SHA256 为 `ea809767b92e99fa7c1cff701d7695d5c9a0beef2cc39a7695874b27f8baebae`。已测容量批次的业务源码为 Order `deccb4a`、Trade `ef0186f`、Projection `17eaa31`；通知库为 gateway-api `1a95b80`。后续 Robot `9f25597` 已更新，Gateway 在 `39d2543` 基础上仅更新入口检查为 `abb0b9b`，Trade `2cf5fdc` 正在真实滚动更新，尚不能把两节点都标为新版。这些源码已分别提交并推送 GitHub 开发分支。严格模式已通过 12 撮合场景、10 Robot 故障前后稳态、六档正常下单/撤单、有效 TCP 容量阶梯与四向故障恢复。本机功能范围通过，15/s 档完整交付、25/s 档明显积压；高性能生产验收仍为 NO_GO。异步已完成同条件容量测量及受控未复制成交故障恢复；10/s 档完整交付，15/s 档出现积压。后续预占丢失测试被一个原 Robot 报价替换不能收敛挡住，正在修复业务逻辑；异步四向故障尚未完成。
 
+
+| 审阅问题 | 当前结论与实际边界 |
+|---|---|
+| 本机是否恢复交易 | 现役异步持续真实交易；新增撤单边界补丁正在四向故障和 RPO 重验，整体新版本功能尚未最终验收 |
+| 性能是否达到高性能交易要求 | 否。严格热点 15/s 完整交付、25/s 积压；异步 10/s 完整交付、15/s 积压。不是全 256 分区聚合容量，也不是生产硬件结果 |
+| 集群是否稳定 | 精确 Common P0 和此前严格四向故障通过；当前异步新版仍在验收。接管、追平耗时以分钟计，不能称生产恢复达标 |
+| 能否继续扩业务服务 | 可以开发接入；每个服务独立提供业务状态机并走同一 Common 提交/恢复合同，再单独验收 |
+| 能否直接扩大同集群节点数 | 三个以上数据节点、在线分区迁移、再平衡与线性扩容尚未验证 |
+| Common 是否能供其它服务用 | 可以，已被 Demo、Order、Trade 复用；不能把当前单 Mac A/B 验收外推为任意服务、任意故障域均生产可用 |
+| 下一项修复重点 | 完成当前真实恢复门禁；优化业务回调排队与 Common 有界批量提交，再重测容量和 P99 |
+
 上一版严格四方向故障的物理恢复、受控成交和财务检查通过；故障后逐单补查暴露 IOC 跨多个挂单未实现，可能留下 New 和资金预占。现场已保存，107 个超时 Tape 单及最初故障单通过正常 API 撤销。新修复把全部 maker/taker 成交放入同一个 Order Common 命令、同一个现有待结算项和同一个 Trade 资金批次；IOC 撤余量等待结算确认，FOK 不足不提交部分成交，GTC 余量正常入簿。Common 无业务分支改动，无新增持久化账本或恢复流程。
 
 构建 `/Users/kong/.opentradingcore/mac-demo-build-20261114-122100` 全量测试通过：Order 205 项、原有 2 项跳过；Trade 238 项；Projection 25 项。Shared 源码和全部 267 个 class 字节未变，重新构建仅使 JAR 内 Maven 绝对构建路径元数据变化，归档 SHA 为 `f508e22f19f7…`；Order、Trade、MD、Gateway 均嵌入同一新归档并逐一核验。Gateway 仅更换这些依赖，未引入用户工作区未提交的代理文件。新业务格式可读旧 V1，旧业务不能读新 V2；本次采用顺序全新升级，混合新旧业务版本的滚动升级未验收。现有恢复 Watch 配置从 200 ms 调到允许的 100 ms，实际恢复耗时待重测。
@@ -791,3 +802,14 @@ Robot 修复 `9f25597` 已推送开发分支。现役原 Robot 的 `RobotWorker`
 验证：Trade 239 项全通过，Gateway 入口 11 项全通过；各自旧代码针对性回归失败，新代码通过。Gateway 干净源码导出完整套件 27 项仍有原有代理/配置测试失败，及一次 CSV 毫秒时间戳刷新的测试失败，未称全量通过，也未编译用户未提交的 SaasGWProxy 与对应测试。发布字节码比较确认 Trade 仅 handler 方法、Gateway 仅 check 方法变化；其它方法、原内部类、Common 和 Shared 原样保留。证据 `~/.opentradingcore/t554-internal-cancel-wire-20261114-1625/overlay-proof.json`。
 
 16:38 Gateway 正常更新完毕，四核心和 Robot 的容器 ID、进程起点与重启计数未变。真实 HTTP API 携带 `null` 会话返回 `10004 AUTHENTICATED_SESSION_REQUIRED`，证据 `gateway-update.json`。随后启动 Trade A KILL，并以相同 Common/Shared 的单类镜像正常替换。控制器依次验证四向故障（两 Trade 节点在回归时更新），再重跑预占丢失和故障后十 Robot 稳态。当前全部新版本门禁尚未完成，功能验收维持 NO_GO；严格模式此前通过记录仍对应 ef0186f 批次，不能混写成当前新补丁全验通过。
+
+
+## 2026-11-14 17:10 新版故障进展与多分区容量入口
+
+Trade A KILL `ha-trade-a-kill-rf77wpva/evidence.json` 已通过：单节点接管观察 207.623 秒、替换节点启动后追平及 Home 观察 433.887 秒。Order A TERM `ha-order-a-term-tanzra_k/evidence.json` 已通过：152.847 秒、434.389 秒。两项实际单节点业务、原 Robot 报单成交、资金与持仓、全部物理 WAL/快照比对均通过。数据与 Epoch 已积累多次 RPO 演练，不能单凭这些耗时与此前严格模式环境差异断言确认策略改变了恢复速度。当前在 Order B KILL 回归阶段；Trade B 更新和预占专项重跑未完成。
+
+此前失败用例中的那张订单，在新版 Trade A 回归后由原有 Pending_Cancel 重试自动收尾，无人工状态/资金修改：P079/10/1 的 `CANCEL_OPEN_PREPARED` 仅 OPEN_ORDER REMOVE、DEDUPE_RESULT UPSERT 两项。真实查询确认订单不再开放，余额、已用保证金、冻结保证金和冻结费用等于故障前。补充证明 `async-reservation-loss-f870be41/postfix-existing-cancel-retry-audit-20261114.json`；原用例仍保留 NO_GO，不能代替尚未重跑的完整 LOCAL 预占丢失专项。
+
+已准备的新入口：`./mac-colima-saas.sh verify-distributed-execution RUN_DIRECTORY --streams 4 --rate-per-stream 5 --seconds 60`。它在同一现役环境正常注册受控租户、使用独立资金账户和不同 Order/Trade 分区，覆盖 A/B 两端，同时启动原生 TCP 流。各流使用共同的 60 秒发单时钟，单列真实启动偏差、调度丢弃、窗口内成交、尾部补齐与最终成交 P50/P95/P99/P99.9。还要求每条最终回执的严格/异步持久化标记与实际配置相符、SQL 逐单/逐笔一致、正常清理后的财务源/投影一致，以及原十 Robot 窗口内真实成交和终态核对。没有新建平行服务环境，也未改 Common。
+
+客户端缓存身份现在包含源码 hash 和实际 Robot 镜像 ID，Robot 正常更新后不会因命中旧缓存而无法测试。111 项 Mac 回归通过，原生客户端实际 Java 8 编译和自检通过；新增多分区负载尚未在机器上运行，不能把入口或单测当作容量结果。将在当前恢复门禁完成、磁盘余量核对后运行，随后同条件比较严格模式。

@@ -25,6 +25,7 @@ Usage:
   ./mac-colima-saas.sh verify-fresh RUN_DIRECTORY
   ./mac-colima-saas.sh verify-order-cancel RUN_DIRECTORY
   ./mac-colima-saas.sh verify-execution RUN_DIRECTORY --transport tcp --rate RATE --seconds SECONDS
+  ./mac-colima-saas.sh verify-distributed-execution RUN_DIRECTORY --streams 4 --rate-per-stream RATE --seconds 60
   ./mac-colima-saas.sh verify-async-recovery RUN_DIRECTORY
   ./mac-colima-saas.sh verify-ha RUN_DIRECTORY {term,kill} [FIRST_ORDER_SLOT [FIRST_ORDER_ROBOT_LOCATION]]
   ./mac-colima-saas.sh roll-voter RUN_DIRECTORY {order,trade} {A,B} [--fault term|kill] [--signed-business|--order-only-business] [--robot-traffic]
@@ -235,6 +236,10 @@ main() {
     verify-execution)
       [[ "$#" -ge 1 ]] || die "Usage: ./mac-colima-saas.sh verify-execution RUN_DIRECTORY --transport tcp --rate RATE --seconds SECONDS"
       python3 "${SCRIPT_DIR}/scripts/verify-mac-demo-execution-capacity.py" "$@"
+      ;;
+    verify-distributed-execution)
+      [[ "$#" -ge 1 ]] || die "Usage: ./mac-colima-saas.sh verify-distributed-execution RUN_DIRECTORY --streams 4 --rate-per-stream RATE --seconds 60"
+      python3 "${SCRIPT_DIR}/scripts/verify-mac-demo-distributed-execution-capacity.py" "$@"
       ;;
     verify-async-recovery)
       [[ "$#" -eq 1 ]] || die "Usage: ./mac-colima-saas.sh verify-async-recovery RUN_DIRECTORY"

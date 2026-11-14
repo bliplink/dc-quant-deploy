@@ -153,8 +153,15 @@ public final class MacDemoNativeTcpLoad {
             double rate = config.getDoubleValue("rate");
             int planned = (int) (rate * seconds);
             Map<String, Object> result = new LinkedHashMap<>();
-            result.put("from", Instant.now().toString());
+            awaitScheduledStart();
+            Instant admitted = Instant.now();
+            result.put("actual_start", admitted.toString());
             long begun = System.nanoTime();
+            long barrier = config.getLongValue("start_at_epoch_ms");
+            Instant offeredStart = barrier == 0L ? admitted : Instant.ofEpochMilli(barrier);
+            if (barrier != 0L)
+                begun -= java.time.Duration.between(offeredStart, admitted).toNanos();
+            result.put("from", offeredStart.toString());
             long end = begun + TimeUnit.SECONDS.toNanos(seconds);
             int dropped = 0;
             for (int index = 0; index < planned; index++) {
@@ -198,9 +205,37 @@ public final class MacDemoNativeTcpLoad {
         }
     }
 
+    private void awaitScheduledStart() {
+        long target = config.getLongValue("start_at_epoch_ms");
+        if (target == 0L) return;
+        long delay = target - System.currentTimeMillis();
+        if (delay < 0L || delay > 30_000L)
+            throw new IllegalArgumentException("Native synchronized start is late or unbounded");
+        while (System.currentTimeMillis() < target) {
+            LockSupport.parkNanos(TimeUnit.MILLISECONDS.toNanos(
+                    Math.min(20L, target - System.currentTimeMillis())));
+        }
+        if (System.currentTimeMillis() - target > 250L)
+            throw new IllegalStateException("Native synchronized start missed its bound");
+    }
+
     private static void selfTest() {
         JSONObject config = JSON.parseObject("{\"location\":\"TEST01\",\"quantity\":\"0.001\"}");
         MacDemoNativeTcpLoad client = new MacDemoNativeTcpLoad(config);
+        client.awaitScheduledStart(); // Existing one-stream clients do not set a barrier.
+        for (long invalid : new long[]{System.currentTimeMillis() - 2000L,
+                System.currentTimeMillis() + 60_000L}) {
+            config.put("start_at_epoch_ms", invalid);
+            try {
+                client.awaitScheduledStart();
+                throw new AssertionError("Late/unbounded synchronized start was accepted");
+            } catch (IllegalArgumentException expected) { }
+        }
+        long synchronizedStart = System.currentTimeMillis() + 20L;
+        config.put("start_at_epoch_ms", synchronizedStart);
+        client.awaitScheduledStart();
+        if (System.currentTimeMillis() < synchronizedStart)
+            throw new AssertionError("Native load started before its common barrier");
         Map<String, Object> row = new LinkedHashMap<>();
         row.put("started_ns", System.nanoTime());
         row.put("scheduled_ns", row.get("started_ns"));

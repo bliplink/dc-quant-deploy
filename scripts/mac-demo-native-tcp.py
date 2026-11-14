@@ -13,7 +13,7 @@ SOURCE = HERE.parent / 'tests/MacDemoNativeTcpLoad.java'
 def prepare(root):
     image = subprocess.check_output(['docker', 'inspect', '-f', '{{.Image}}', 'dc-saas-robotsvr'], text=True).strip()
     source_hash = hashlib.sha256(SOURCE.read_bytes()).hexdigest()
-    work = root / ('native-tcp-client-' + source_hash[:12])
+    work = root / ('native-tcp-client-' + source_hash[:12] + '-' + image.split(':')[-1][:12])
     identity = work / 'identity.json'
     if identity.exists():
         recorded = json.loads(identity.read_text())
