@@ -1,17 +1,17 @@
 # OpenTradingCore 当前集群机制审阅
 
-更新于 2026 年 11 月 14 日 16 时 40 分。原 Mac 现役环境已顺序切换为异步模式 `mac-demo-20261114-145043`，严格模式 `mac-demo-20261114-133826` 及此前环境的数据和证据保留。Common 仍为精确通过 P0 的 `47a1f5daee5af7a9a94920e433be2b36518e5396`，JAR SHA256 为 `ea809767b92e99fa7c1cff701d7695d5c9a0beef2cc39a7695874b27f8baebae`。已测容量批次的业务源码为 Order `deccb4a`、Trade `ef0186f`、Projection `17eaa31`；通知库为 gateway-api `1a95b80`。后续 Robot `9f25597` 已更新，Gateway 在 `39d2543` 基础上仅更新入口检查为 `abb0b9b`，Trade `2cf5fdc` 正在真实滚动更新，尚不能把两节点都标为新版。这些源码已分别提交并推送 GitHub 开发分支。严格模式已通过 12 撮合场景、10 Robot 故障前后稳态、六档正常下单/撤单、有效 TCP 容量阶梯与四向故障恢复。本机功能范围通过，15/s 档完整交付、25/s 档明显积压；高性能生产验收仍为 NO_GO。异步已完成同条件容量测量及受控未复制成交故障恢复；10/s 档完整交付，15/s 档出现积压。后续预占丢失测试被一个原 Robot 报价替换不能收敛挡住，正在修复业务逻辑；异步四向故障尚未完成。
+更新于 2026 年 11 月 14 日 18 时 47 分。现役仍为原 Mac 异步环境 `mac-demo-20261114-145043`，未新建平行业务环境。Common 仍为精确通过 P0 的 `47a1f5daee5af7a9a94920e433be2b36518e5396`，JAR SHA256 `ea809767b92e99fa7c1cff701d7695d5c9a0beef2cc39a7695874b27f8baebae`。当前 Order `deccb4a`、两个 Trade 均为 `2cf5fdc` 单类修复、Gateway `abb0b9b` 入口修复、Robot `9f25597`、Projection `17eaa31`、通知库 gateway-api `1a95b80`；均已归档到 GitHub 开发分支。最新异步四向物理故障、512 对 WAL/快照及财务游标通过，但随后未复制预占丢失测试暴露原 Robot 的结算阻塞，整体功能仍为 **NO_GO**。受影响的 LJ0M5U 已通过正常管理 API 停用，九个其它原 Robot RUNNING；故障后十 Robot 完整稳态尚未执行。严格与异步现有容量均有数秒级尾延迟，高性能生产验收仍为 NO_GO。
 
 
 | 审阅问题 | 当前结论与实际边界 |
 |---|---|
-| 本机是否恢复交易 | 现役异步持续真实交易；新增撤单边界补丁正在四向故障和 RPO 重验，整体新版本功能尚未最终验收 |
+| 本机是否恢复交易 | 九个原 Robot RUNNING；一个因丢失预占后的结算阻塞正常停用，整体尚未恢复完成 |
 | 性能是否达到高性能交易要求 | 否。严格热点 15/s 完整交付、25/s 积压；异步 10/s 完整交付、15/s 积压。不是全 256 分区聚合容量，也不是生产硬件结果 |
-| 集群是否稳定 | 精确 Common P0 和此前严格四向故障通过；当前异步新版仍在验收。接管、追平耗时以分钟计，不能称生产恢复达标 |
+| 集群是否稳定 | 严格及最新异步四向物理故障均通过；异步业务 RPO 恢复仍有缺口。接管、追平耗时以分钟计，不能称生产稳定达标 |
 | 能否继续扩业务服务 | 可以开发接入；每个服务独立提供业务状态机并走同一 Common 提交/恢复合同，再单独验收 |
 | 能否直接扩大同集群节点数 | 三个以上数据节点、在线分区迁移、再平衡与线性扩容尚未验证 |
 | Common 是否能供其它服务用 | 可以，已被 Demo、Order、Trade 复用；不能把当前单 Mac A/B 验收外推为任意服务、任意故障域均生产可用 |
-| 下一项修复重点 | 完成当前真实恢复门禁；优化业务回调排队与 Common 有界批量提交，再重测容量和 P99 |
+| 下一项修复重点 | 待负责人明确确认资金恢复语义后补齐丢失预占的撮合恢复；恢复十 Robot 并重验 RPO，再做多分区容量和性能修复 |
 
 上一版严格四方向故障的物理恢复、受控成交和财务检查通过；故障后逐单补查暴露 IOC 跨多个挂单未实现，可能留下 New 和资金预占。现场已保存，107 个超时 Tape 单及最初故障单通过正常 API 撤销。新修复把全部 maker/taker 成交放入同一个 Order Common 命令、同一个现有待结算项和同一个 Trade 资金批次；IOC 撤余量等待结算确认，FOK 不足不提交部分成交，GTC 余量正常入簿。Common 无业务分支改动，无新增持久化账本或恢复流程。
 
@@ -813,3 +813,36 @@ Trade A KILL `ha-trade-a-kill-rf77wpva/evidence.json` 已通过：单节点接�
 已准备的新入口：`./mac-colima-saas.sh verify-distributed-execution RUN_DIRECTORY --streams 4 --rate-per-stream 5 --seconds 60`。它在同一现役环境正常注册受控租户、使用独立资金账户和不同 Order/Trade 分区，覆盖 A/B 两端，同时启动原生 TCP 流。各流使用共同的 60 秒发单时钟，单列真实启动偏差、调度丢弃、窗口内成交、尾部补齐与最终成交 P50/P95/P99/P99.9。还要求每条最终回执的严格/异步持久化标记与实际配置相符、SQL 逐单/逐笔一致、正常清理后的财务源/投影一致，以及原十 Robot 窗口内真实成交和终态核对。没有新建平行服务环境，也未改 Common。
 
 客户端缓存身份现在包含源码 hash 和实际 Robot 镜像 ID，Robot 正常更新后不会因命中旧缓存而无法测试。111 项 Mac 回归通过，原生客户端实际 Java 8 编译和自检通过；新增多分区负载尚未在机器上运行，不能把入口或单测当作容量结果。将在当前恢复门禁完成、磁盘余量核对后运行，随后同条件比较严格模式。
+
+
+## 2026-11-14 18:38 最新现场、真实业务恢复缺口与批准边界
+
+Trade 两节点已完成 `2cf5fdc` 更新，Common/Shared 字节不变。最新异步四方向故障均为 `COMMON_PHYSICAL_MATCH_AND_FINANCIAL_CURSOR_PASS`；每项均包含受影响路由上的原 Robot 单节点持续真实成交、财务游标及 512 对最终 WAL/快照相等：
+
+| 故障 | 自动接管观察秒 | 替换节点启动后追平/Home 观察秒 |
+|---|---:|---:|
+| Trade A KILL | 207.623 | 433.887 |
+| Order A TERM | 152.847 | 434.389 |
+| Order B KILL | 187.489 | 373.851 |
+| Trade B TERM | 185.456 | 435.137 |
+
+两列是不同起点的观测时钟，不能把第二列当作故障发生至完全恢复的总 RTO。证据汇总 `notification-fixed-async-four-fault-summary-20261114.json`。当前数据、Epoch 和累积故障历史不同于严格模式，不将差异归因于异步确认策略。
+
+随后 `async-reservation-loss-89c6ef17/evidence.json` 仍为 NO_GO：受控 P253 的 LOCAL 预占先于备节点复制确认；整 Trade 节点暂停期间，原 Robot LJ0M5U 所在 P163 也丢失一笔预占。Order 已持久撮合，但 Trade 对该原撮合返回 `TRADE_COMMON_MATCH_SIGNED_RESERVATION_NOT_FOUND`；原有逐分区待结算顺序将后续撮合挡在其后。它是业务恢复缺口，不能用“物理集群回到 READY”掩盖，也不能绕过资金冻结直接结算。测试 finally 已恢复物理节点、Home、全部 512 对物理一致性和财务游标，受控测试订单通过正常 API 撤销；这些清理通过不改变测试 NO_GO。
+
+首笔缺失预占的原订单 `1571215085894963200`，原 Common 坐标 `P163/12/400`。直接调用当前 Common 的认证历史读取 API 得到 `EXCLUDED_AFTER_CERTIFIED_PREFIX origin=12/400 acceptedHead=399 nextEpoch=13 nextSequence=1 currentEpoch=15`，确认它确实被新历史排除，非单纯 SQL 投影缺行。观察器无业务 apply、WAL 写入、ACK 或角色改写。证据 `rpo-certified-original-coordinate-400-read-audit-20261114.json`。
+
+18:01 通过正常管理 API 停用唯一受影响 Robot LJ0M5U，防止继续累积未结算意图；18:38 实查其它九个原 Robot 均 RUNNING。四核心未为此停机、重启或清数据。原始撮合、资金和故障证据保留，未补钱、未直接改 SQL 业务行。
+
+拟议处理是在原签名撮合重试中，先认证原持久撮合及原预占坐标，再正向证明该坐标被已接受历史排除、完整核对后续已接受历史没有重用该订单，最后通过现有 Newing 路径按当前可用资金重新预占，继续原原子撮合结算。仅首笔未结算成交可进入，余额不足、历史不全、已有生命周期和未知认证继续拒绝；不新增账本、不伪造物理 ACK、不解除 Fencing。该资金恢复语义已向负责人提出明确确认，**尚未收到答复，未接线、未部署、未执行**。依据 AGENTS.md：`Do not add recovery workflows ... without an explicit necessity approved by the project owner.`
+
+四个候选准备/只读历史核验类及测试保留在 Trade 工作区，干净私有构建使用精确 Common47/Shared 后全套 250 项测试通过；这些不是上线验收。现有 Common47 公开认证历史接口要求物理双副本 writer，单节点 LOCAL 历史读取仍需通用层补齐并先走 Demo+Common P0；不能把 STRICT 接口伪装成 LOCAL，也不能在 Trade 自建认证链。目前多分区压测入口已准备但未运行，顺序 fresh 不得用于掩盖当前未结算意图。
+
+### 旧环境日志回收
+
+仅对已停用且重启策略为 no 的四个旧命名空间执行压缩：183330、085255、133826、124845。七个 MySQL binlog 原共 5,826,593,202 字节，压缩为 793,492,843 字节，净回收 5,033,100,359 字节（约 4.69 GiB）。每个文件完整解压 SHA256 与原件一致、再次确认引用容器停用并写入离线恢复说明后才移除原件；压缩文件保留原目录。现役 binlog、Common WAL 和业务数据未动。清理证明 `/Users/kong/.opentradingcore/t554-inactive-host-binlog-archive-20261114-183235/state.json`；18:36 主机可用约 15.8 GiB。
+
+
+本次只读健康补查：九个已启用原 Robot 仍为 RUNNING，正常查询的 Tape IOC/FOK 无超过 30 秒未终结订单。首轮完整一致快照检查中，90 份余额和 88 份持仓在财务消费游标上均为零字段差异，371,792 条前驱链接无断裂，但有两分区财务游标落后源投影，原报告保留 `NO_GO / FINANCIAL_CURSOR_DIFFERS_FROM_SOURCE`。随后七次短间隔坐标采样中三次全部分区追平，其余差异分区及消费坐标持续推进，支持短暂消费滞后的判断；不把不同时间的坐标和余额观察拼成同一快照 PASS。完整一致快照复核另行保存。相关文件 `post-containment-readonly-health-20261114-1840.json`、`post-containment-readonly-cursor-samples-20261114-1845.json`；均无业务写入。
+
+后续完整一致快照复核返回 `PASS_FINANCIAL_CURSOR`：90 份余额、88 份持仓零差异，全部财务游标与源水位相等、前驱链无断裂，且无非零无来源财务行。证据 `post-containment-full-financial-recheck-20261114-1847.json`。前轮游标滞后 NO_GO 原样保留。此 PASS 证明当次资金投影一致，不代表 Order 的丢失预占撮合已完成；LJ0M5U 仍停用、整体业务恢复仍 NO_GO。
