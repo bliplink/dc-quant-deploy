@@ -16,6 +16,10 @@ class RecoveryEntryTest(unittest.TestCase):
             calls = root / 'calls.jsonl'
             config = root / 'ssh.config'
             config.write_text('fixture\n')
+            for name, body in {'uname': 'echo Darwin', 'ssh': 'exit 0', 'curl': 'exit 0'}.items():
+                command = root / name
+                command.write_text('#!/bin/sh\n' + body + '\n')
+                command.chmod(0o700)
             python = root / 'python3'
             python.write_text('#!/usr/bin/env python3-real\nimport json,os,sys\n'
                               'with open(os.environ["ENTRY_CALLS"],"a") as f:f.write(json.dumps(sys.argv[1:])+"\\n")\n'
