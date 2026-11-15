@@ -28,10 +28,10 @@ COLD = (
     ('mixed-cold-full-home', 'localOwnerColdRestartAfterPartialTakeoverKeepsAcknowledgedCommands'),
 )
 LIVE_LOCAL = (
-    ('live-local-published-head', 'poisonedLocalOwnerReplaysItsPublishedHeadWithoutRestartOrPeer'),
-    ('live-local-private-tail', 'poisonedLocalOwnerExcludesItsUnpublishedTailWithoutRestartOrPeer'),
     ('live-local-permanent-fence', 'poisonedLocalOwnerReplayCannotReopenAPermanentlyFencedEpoch'),
     ('live-local-repeated-heads', 'poisonedLocalOwnerReplaysRepeatedPublishedHeadsInTheSameEpoch'),
+    ('live-local-published-head', 'poisonedLocalOwnerReplaysItsPublishedHeadWithoutRestartOrPeer'),
+    ('live-local-private-tail', 'poisonedLocalOwnerExcludesItsUnpublishedTailWithoutRestartOrPeer'),
 )
 
 
@@ -143,8 +143,11 @@ def main():
     fcntl.flock(lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
     work.mkdir()
     (work / 'runner').mkdir()
+    qualifier_source = work / 'qualifier-source.py'
+    shutil.copy2(Path(__file__).resolve(), qualifier_source)
     state = {'status': 'RUNNING', 'started_at': datetime.now(timezone.utc).isoformat(),
              'common_revision': revision, 'common_sha256': expected, 'physical_result': str(results),
+             'qualifier_source_sha256': sha(qualifier_source),
              'business_mutations': False, 'stages': [], 'production_go': False}
     # Existing verifier supports independent native and Home JVMs. Their
     # private directories and control sessions share only this frozen JAR.
