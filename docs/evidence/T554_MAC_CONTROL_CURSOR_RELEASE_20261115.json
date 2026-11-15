@@ -408,12 +408,41 @@
       "proof": "/Users/kong/.opentradingcore/t554-common-live-local-owner-unit-evidence-20261116/proof.json"
     },
     "full_physical_qualification_passed": false,
-    "production_go": false
+    "production_go": false,
+    "common_revision": "7801764504498a2fcc1e827a19c8b09e720ec9e9",
+    "common_sha256": "077563ca71340146d4d64fe70b8fea7761401c99905448697d6d573f157df2eb",
+    "qualification_status": "V1_NO_GO_LIVE_LOCAL_FILE_LOCK_CONFLICT_V2_TESTING",
+    "safety": {
+      "executed": 314,
+      "failed": 0,
+      "ignored": 0,
+      "optional_external_historical_skips": 3
+    },
+    "qualification": "/Users/kong/.opentradingcore/t554-common-candidates/20261116-live-local-owner-replay-v1/qualification/state.json",
+    "early_fixture_failure_preserved": "/Users/kong/.opentradingcore/t554-common-live-local-owner-published-v1-evidence-20261116/attempt-context.json",
+    "failed_qualification_preserved": "/Users/kong/.opentradingcore/t554-common-candidates/20261116-live-local-owner-replay-v1/qualification/state.json",
+    "failure": "Live recovery triggered, but reopening the already retained authenticated predecessor raised OverlappingFileLockException. No writer admitted; no business deployment.",
+    "successor_revision": "4fd04b1",
+    "successor_change": "Reuse existing binding.retainedOriginalPhysicalSource during the same original signed predecessor verification/replay; retain OS WAL locks and all grants/fences."
   },
   "github_recovery_branch_update_20261116": {
     "branch": "t554-mac-recovery-20261115",
     "common": "95ed51d",
     "deploy": "a967d2c",
     "verified_push": true
+  },
+  "latest_readonly_live_state_20261116_0528": {
+    "proof": "/Users/kong/.opentradingcore/t554-live-readonly-state-20261116-0528.json",
+    "order": "255 STRICT READY on B, 1 LOCAL READY P135 on B; not Home; closed P135 actual writer remains uncorrected",
+    "trade": "128 STRICT READY A and 128 STRICT READY B Home",
+    "original_background_robots": {
+      "RUNNING": 9,
+      "ERROR": 1,
+      "error_partition": "P135",
+      "error": "COMMON_LOCAL_COMMIT_NOT_CERTIFIED_OR_POISONED on cancelBatchOrder; cleanup unconfirmed"
+    },
+    "additional_test_robot_running": 1,
+    "control_metadata_is_not_physical_writer_or_business_proof": true,
+    "production_go": false
   }
 }
