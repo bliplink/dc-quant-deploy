@@ -147,9 +147,13 @@ def main():
     parser.add_argument('--require-performance-target', action='store_true')
     parser.add_argument('--diagnostic-only', action='store_true',
                         help='Retain integrity results but exclude an observed/profiled window from performance acceptance')
+    parser.add_argument('--diagnostic-jfr', action='store_true',
+                        help='Record bounded JDK profiles; requires --diagnostic-only')
     args = parser.parse_args()
     if args.diagnostic_only and args.require_performance_target:
         parser.error('A diagnostic window cannot be used for performance acceptance')
+    if args.diagnostic_jfr and not args.diagnostic_only:
+        parser.error('JFR requires --diagnostic-only; profiled performance cannot pass acceptance')
     try:
         admission_budget = validate_offered_load(args.streams, args.rate_per_stream, args.seconds)
     except ValueError as error:
@@ -250,10 +254,14 @@ def main():
                     report['control_generation_before'] = CAPACITY['require_strict_demo'](root)
                     if report['control_generation_before'] != before:
                         raise RuntimeError('Common control changed before the offered window')
-                    start = int(time.time() * 1000) + 15000
-                    report['scheduled_start_epoch_ms'] = start
-                    report['stage'] = 'SYNCHRONIZED_NATIVE_TCP_WINDOW'
-                    with MEASURE['sample_resources'](root.name) as samples:
+                    with ExitStack() as diagnostics:
+                        if args.diagnostic_jfr:
+                            diagnostics.enter_context(runpy.run_path(str(HERE / 'mac-demo-jfr.py'))['observe'](
+                                root, args.seconds + 180, report))
+                        start = int(time.time() * 1000) + 15000
+                        report['scheduled_start_epoch_ms'] = start
+                        report['stage'] = 'SYNCHRONIZED_NATIVE_TCP_WINDOW'
+                        samples = diagnostics.enter_context(MEASURE['sample_resources'](root.name))
                         with ThreadPoolExecutor(max_workers=args.streams) as pool:
                             jobs = {}
                             for stream, accounts, config in private:
