@@ -137,6 +137,10 @@ class ReservationLossPreflightTest(unittest.TestCase):
                 return LOSS.matched_accounts(traders, 'BTC004USDT', before, accepted_fees)
         self.assertEqual(2, len(verify(balance)))
         self.assertEqual(2, len(verify(balance, {'buyer': '-.02', 'seller': '-.02'})))
+        with patch.object(LOSS, 'account', return_value=balance), \
+                patch.dict(LOSS.PRODUCT, ok=Mock(side_effect=positions),
+                           readonly_sql=Mock(return_value=[['-.02', '2', '2']])):
+            self.assertIsNone(LOSS.matched_accounts(traders, 'BTC004USDT', before))
         for key, value in [('Balance', '10000'), ('UsedMargin', '8'), ('FreezedMargin', '9')]:
             with self.subTest(field=key):
                 self.assertIsNone(verify(dict(balance, **{key: value})))
