@@ -439,7 +439,12 @@
       "production_source_unchanged_from": "25466872e798376057f5021961efd85094bd9946",
       "selected_regression": "PASS 1 test, zero failures/errors/skips",
       "current_full_verification": "/Users/kong/.opentradingcore/t554-common-verifications/20261115-170232",
-      "current_full_status": "RUNNING_NOT_SEALED"
+      "current_full_status": "RUNNING_NOT_SEALED",
+      "current_full_native_tests": {
+        "executed_passed": 14,
+        "failures": 0,
+        "full_256_home_still_running": true
+      }
     }
   },
   "read_only_current_control_recheck": {
@@ -474,6 +479,16 @@
     "unresolved_gg_history_retained": true,
     "source_repositories_retained": true,
     "retired_paths_marked_against_accidental_empty_restart": true,
-    "note": "Free-space delta includes concurrent writes and APFS reclamation. Earlier retained-volume statements are historical; obsolete volumes were deleted under the new authorization."
+    "note": "Free-space delta includes concurrent writes and APFS reclamation. Earlier retained-volume statements are historical; obsolete volumes were deleted under the new authorization.",
+    "retired_stopped_demo_containers_deleted": 633,
+    "unreferenced_local_docker_volumes_deleted": 383,
+    "unreferenced_images_reclaimed_reported": "1.099GB",
+    "host_free_after_final_bytes": 140071718912,
+    "docker_guest_available_kib": 34472816,
+    "docker_guest_used_percent": 78,
+    "online_trim_observation": "Remote fstrim completed after local 60s wrapper timeout; remote exit status unavailable. Independent host free-space gain measured. No service restart.",
+    "pre_release_readonly_runtime": "PASS all four current Order/Trade physical runtimes",
+    "pre_release_original_robot_settlement_backlog": "PASS 10 original locations",
+    "pre_release_financial_cursor": "PASS_FINANCIAL_CURSOR with exact predecessor checks; no reasons"
   }
 }
