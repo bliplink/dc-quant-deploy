@@ -1,5 +1,5 @@
 {
-  "observed_at": "2026-11-16T03:15:48.459589+08:00",
+  "observed_at": "2026-11-16T03:35:39.653765+08:00",
   "status": "CURRENT_ASYNC_BASELINES_AND_TRUE_SETTLEMENT_RPO_PASS_RESERVATION_GATES_IN_PROGRESS_PERFORMANCE_NO_GO",
   "production_acceptance": "NO_GO",
   "generation": "/Users/kong/.opentradingcore/mac-demo-20261116-020105",
@@ -181,12 +181,15 @@
     "ten_robot_steady_status": "PASS_5_MINUTES_1346_PAIRED_FILLS",
     "current_same_jar_four_way_robot_sigkill_pending": true,
     "current_true_async_settlement_loss_pending": false,
-    "current_lost_reservation_cancel_pending": true,
+    "current_lost_reservation_cancel_pending": false,
     "current_lost_reservation_matched_readmission_pending": true,
     "current_trade_single_node_pending": true,
     "current_true_async_settlement_loss_evidence": "/Users/kong/.opentradingcore/mac-demo-20261116-020105/async-rpo-718d5943/evidence.json",
     "lost_reservation_cancel_previous_no_go": "/Users/kong/.opentradingcore/mac-demo-20261116-020105/async-reservation-loss-53bae266/evidence.json",
-    "lost_reservation_cancel_retry": "LOCAL_SOURCE_ACCEPTED_WINDOW_SQL_MATCH_AFTER_HOME_RUNNING"
+    "lost_reservation_cancel_composite_status": "LOCAL_TRUE_LOSS_CANCEL_PROVEN_IN_ORIGINAL_EXECUTION_AND_POST_HOME_READONLY_AUDIT_PASS_ORIGINAL_NO_GO_RETAINED",
+    "lost_reservation_cancel_original": "/Users/kong/.opentradingcore/mac-demo-20261116-020105/async-reservation-loss-c70fdcd6/evidence.json",
+    "lost_reservation_cancel_audit": "/Users/kong/.opentradingcore/mac-demo-20261116-020105/async-reservation-loss-c70fdcd6/independent-home-byte-audit-20261116.json",
+    "current_lost_reservation_matched_readmission_status": "RUNNING"
   },
   "current_performance": {
     "status": "ASYNC_2_AND_40_NATIVE_TCP_AND_SIX_PLACE_CANCEL_BASELINES_COMPLETE_TARGET_NO_GO",
@@ -208,7 +211,8 @@
       "maximum_capacity_claimed": false
     },
     "place_cancel_evidence": "/Users/kong/.opentradingcore/mac-demo-20261116-020105/order-cancel-capacity-bc519ec8.json",
-    "smaller_client_memory": "96MiB standalone stress selftests passed; live comparison pending"
+    "smaller_client_memory": "96MiB standalone stress selftests passed; live comparison pending",
+    "jfr_diagnostic": "Bounded excluded-only entry validated against actual Java8 image; real business profile pending"
   },
   "last_completed_business_performance": {
     "generation": "mac-demo-20261115-232443",
