@@ -1,5 +1,5 @@
 {
-  "observed_at": "2026-11-15T09:46:59.485600",
+  "observed_at": "2026-11-15T10:22:54.553478",
   "status": "EXACT_COMMON_FUNCTIONAL_PASS_REAL_LOAD_PHYSICAL_ACK_TIMEOUT_PERFORMANCE_AND_STABILITY_NO_GO",
   "production_acceptance": "NO_GO",
   "generation": "mac-demo-20261115-065831",
@@ -144,7 +144,7 @@
     "post_recovery_original_cohort_local_final_pending": 0,
     "post_recovery_control_generation": {
       "order": 26,
-      "trade": 22
+      "trade": 58
     }
   },
   "open_findings": [
@@ -153,7 +153,8 @@
     "Independent 69-second storage bracket saw about 4.47 GiB written; includes setup, tail and background traffic, not a per-trade cost or established WAL/log attribution.",
     "Serialized persistence and one outstanding asynchronous copy per partition still bound hotspot throughput.",
     "Full-partition takeover and return remain minutes.",
-    "Original retired generation GG2803 unsettled matches remain separate retained evidence."
+    "Original retired generation GG2803 unsettled matches remain separate retained evidence.",
+    "Normal strict Common path is serial: three peer request/response exchanges; source has seven file/directory force calls and replica five, per singleton Common commit. Physical writer does not yet implement real multi-command group commit. This is a structural performance limit, not a measured production throughput formula."
   ],
   "application_data_or_credentials_included": false,
   "current_version_measurements": {
@@ -193,5 +194,52 @@
       "order_only_concurrency_4": "Physical ACK failure and changing control generation; no valid capacity conclusion. Client results were lost by a post-window reporting bug, now fixed; counts must not be inferred.",
       "later_windows": "NOT_RUN_BLOCKED_BY_FAILURE"
     }
+  },
+  "current_maintenance": "Original ten Robots normally STOPPED after storage gate. Original business and rollback data retained. No unprofiled pressure started below the 4 GiB storage guard.",
+  "candidate_not_deployed": {
+    "common_revision": "b1214be",
+    "common_jar_sha256": "a5f40512f9e1a17a9f96d473c6737d9fbed7ea716f4c7419584c2a67171cd0b0",
+    "change": "Reuse one exact canonical immutable manifest parse; no cached authorization, grant or signature result.",
+    "targeted_tests": 36,
+    "full_safety_tests": 256,
+    "large_genesis_72_mib_under_96_mib_heap": "PASS",
+    "full_physical_and_cold_home": "RUNNING_NOT_YET_QUALIFIED",
+    "deployed": false
+  },
+  "ordinary_logging_layout": {
+    "deploy_source_revision": "b9c800d",
+    "four_voter_files_installed": true,
+    "same_processes_and_restart_counts": true,
+    "runtime_reload": "TO_BE_OBSERVED_UNDER_NORMAL_TRAFFIC",
+    "change": "Ordinary layout caller class+line replaced with logger category. Same log levels, messages, appenders and volume/rotation configuration.",
+    "tests": 19
+  },
+  "separate_diagnostics": {
+    "robots_stopped_four_native_clients": {
+      "native_place_cancel_cycles": 1376,
+      "sql_after_drain": "ALL_CANCELLED",
+      "executions": 0,
+      "balances_unchanged": true,
+      "financial_cursor": "PASS",
+      "control_stable": true,
+      "diagnostic_only": true,
+      "order_b_fsync_complete_calls": 8942,
+      "order_b_fsync_p99_ms": 1.585,
+      "order_b_fsync_max_ms": 44.952,
+      "censored_at_detach": 1
+    },
+    "robots_running_profiled_window": {
+      "native_place_cancel_cycles": 382,
+      "sql_after_drain": "ALL_CANCELLED",
+      "executions": 0,
+      "balances_unchanged": true,
+      "original_cohort_pending": 0,
+      "financial_cursor": "PASS",
+      "capacity_qualified": false,
+      "failure_interpretation": "Full Thread.print VM operations lasted about 5-6 seconds and induced physical ACK timeouts. Excluded as diagnostic-tool-induced; does not supersede the independent unprofiled formal failure.",
+      "order_control_after_recovery": 26,
+      "trade_control_after_recovery": 58
+    },
+    "unprofiled_followup": "BLOCKED_BEFORE_SENDING_BY_STORAGE_GUARD"
   }
 }
