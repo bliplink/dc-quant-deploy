@@ -1,4 +1,5 @@
 from pathlib import Path
+import json
 import os
 import runpy
 import subprocess
@@ -34,6 +35,69 @@ class QualificationResultTest(unittest.TestCase):
                 self.parse(bad)
         with self.assertRaises(ValueError):
             self.parse(valid, True)  # A tiny subset is not the mandatory safety suite.
+
+
+class CompleteReleaseCheckTest(unittest.TestCase):
+    def fixture(self, directory):
+        candidate, results = directory / 'candidate', directory / 'physical'
+        work = candidate / 'qualification'
+        work.mkdir(parents=True)
+        results.mkdir()
+        jar = b'unit-test-only-placeholder-not-a-production-JAR'
+        (candidate / 'common-tested-class-bytes.jar').write_bytes(jar)
+        (results / 'common.jar').write_bytes(jar)
+        digest = QUALIFY['sha'](results / 'common.jar')
+        (candidate / 'jar.sha').write_text(digest)
+        (candidate / 'commit.sha').write_text('a' * 40)
+        (results / 'status').write_text('PASS')
+        (results / 'verification.seal.json').write_text('{"unit_test_only":true}')
+        state = dict(status='PASS_COMMON_QUALIFICATION_BUSINESS_AND_PERFORMANCE_STILL_REQUIRED',
+                     finished_at='unit-test-finished', common_revision='a' * 40,
+                     common_sha256=digest, physical_result=str(results), business_mutations=False,
+                     production_go=False, stages=[], cold={}, live_local={},
+                     physical_seal_sha256=QUALIFY['sha'](results / 'verification.seal.json'))
+        names = ['compile-fixtures', 'compile-runner', 'safety', 'large-genesis-96m', 'historical-prefix']
+        names.extend(name for name, _ in QUALIFY['COLD'] + QUALIFY['LIVE_LOCAL'])
+        for name in names:
+            log = work / (name + '.log')
+            text = '' if name.startswith('compile-') else (
+                'COMMON_QUALIFICATION_RESULT discovered=317 executed=314 failures=0 ignored=0 skipped=3 passed=true\n'
+                if name == 'safety' else
+                'COMMON_QUALIFICATION_RESULT discovered=1 executed=1 failures=0 ignored=0 skipped=0 passed=true\n')
+            log.write_text(text)
+            state['stages'].append(dict(name=name, log=str(log), exit_code=0,
+                                        finished_at='unit-test-finished', log_sha256=QUALIFY['sha'](log)))
+        state['safety'] = QUALIFY['checked_result'](work / 'safety.log', True)
+        for group, cases in [('cold', QUALIFY['COLD']), ('live_local', QUALIFY['LIVE_LOCAL'])]:
+            state[group] = {name: QUALIFY['checked_result'](work / (name + '.log')) for name, _ in cases}
+        (work / 'state.json').write_text(json.dumps(state))
+        return candidate, results, state
+
+    def test_complete_record_is_required_and_old_partial_or_changed_artifacts_fail_closed(self):
+        for change in ('none', 'running', 'missing-live', 'missing-stage', 'duplicate-stage',
+                       'log-changed', 'jar-changed', 'seal-changed', 'safety-too-small'):
+            with self.subTest(change=change), tempfile.TemporaryDirectory() as temporary:
+                candidate, results, state = self.fixture(Path(temporary))
+                work = candidate / 'qualification'
+                if change == 'running': state['status'] = 'RUNNING'
+                elif change == 'missing-live': state['live_local'].pop(QUALIFY['LIVE_LOCAL'][0][0])
+                elif change == 'missing-stage': state['stages'].pop()
+                elif change == 'duplicate-stage': state['stages'].append(state['stages'][0])
+                elif change == 'log-changed': (work / 'safety.log').write_text('changed')
+                elif change == 'jar-changed': (results / 'common.jar').write_bytes(b'different')
+                elif change == 'seal-changed': (results / 'verification.seal.json').write_text('{}')
+                elif change == 'safety-too-small':
+                    log = work / 'safety.log'
+                    log.write_text('COMMON_QUALIFICATION_RESULT discovered=311 executed=308 failures=0 '
+                                   'ignored=0 skipped=3 passed=true\n')
+                    for row in state['stages']:
+                        if row['name'] == 'safety': row['log_sha256'] = QUALIFY['sha'](log)
+                (work / 'state.json').write_text(json.dumps(state))
+                if change == 'none':
+                    self.assertEqual(state, QUALIFY['require_complete_qualification'](candidate, results))
+                else:
+                    with self.assertRaises(ValueError):
+                        QUALIFY['require_complete_qualification'](candidate, results)
 
 
 class QualificationRunnerTest(unittest.TestCase):

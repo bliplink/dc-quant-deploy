@@ -42,6 +42,13 @@ if [[ -n "$verified_common" || -n "$verified_sha" || -n "$verified_run" ]]; then
     echo "Verified Common requires its candidate directory, fault verification result, exact SHA256 and source revision" >&2
     exit 2
   }
+  python3 - "$repo/scripts/qualify-mac-common-candidate.py" "$verified_common" "$verified_run" <<'PY_QUALIFICATION'
+from pathlib import Path
+import runpy
+import sys
+
+runpy.run_path(sys.argv[1])["require_complete_qualification"](Path(sys.argv[2]), Path(sys.argv[3]))
+PY_QUALIFICATION
 fi
 if [[ "$require_interrupted" == true ]]; then
   [[ -n "$verified_run" ]] || { echo "An interrupted return verification result is required" >&2; exit 2; }

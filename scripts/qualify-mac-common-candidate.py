@@ -52,6 +52,51 @@ def checked_result(path, safety=False):
                 ignored=ignored, optional_external_historical_skips=skipped, log_sha256=sha(path))
 
 
+def require_complete_qualification(candidate, results):
+    """Read-only release check; physical Home alone cannot omit other gates."""
+    candidate, results = candidate.resolve(strict=True), results.resolve(strict=True)
+    work = candidate / 'qualification'
+    state = json.loads((work / 'state.json').read_text())
+    digest = (candidate / 'jar.sha').read_text().strip()
+    revision = (candidate / 'commit.sha').read_text().strip()
+    if (state.get('status') != 'PASS_COMMON_QUALIFICATION_BUSINESS_AND_PERFORMANCE_STILL_REQUIRED'
+            or not state.get('finished_at') or state.get('business_mutations') is not False
+            or state.get('production_go') is not False
+            or not re.fullmatch('[a-f0-9]{64}', digest)
+            or not re.fullmatch('[a-f0-9]{40}', revision)
+            or state.get('common_sha256') != digest or state.get('common_revision') != revision
+            or sha(candidate / 'common-tested-class-bytes.jar') != digest
+            or Path(state.get('physical_result', '')).resolve() != results
+            or (results / 'status').read_text().strip() != 'PASS'
+            or sha(results / 'common.jar') != digest
+            or state.get('physical_seal_sha256') != sha(results / 'verification.seal.json')):
+        raise ValueError('Complete exact-JAR Common qualification is required before business build')
+    required = {'compile-fixtures', 'compile-runner', 'safety', 'large-genesis-96m', 'historical-prefix'}
+    required.update(name for name, _ in COLD + LIVE_LOCAL)
+    stages = state.get('stages', [])
+    names = [row.get('name') for row in stages]
+    if len(names) != len(set(names)) or not required.issubset(names):
+        raise ValueError('Common qualification stages are incomplete or duplicated')
+    for row in stages:
+        name = row['name']
+        if not re.fullmatch('[a-z0-9-]+', name):
+            raise ValueError('Invalid Common qualification stage')
+        log = work / (name + '.log')
+        if (row.get('exit_code') != 0 or not row.get('finished_at')
+                or Path(row.get('log', '')).resolve() != log.resolve()
+                or row.get('log_sha256') != sha(log)):
+            raise ValueError('Common qualification log changed or did not finish: ' + name)
+    if state.get('safety') != checked_result(work / 'safety.log', safety=True):
+        raise ValueError('Common safety result differs from its complete original log')
+    for name in ('large-genesis-96m', 'historical-prefix'):
+        checked_result(work / (name + '.log'))
+    for group, cases in (('cold', COLD), ('live_local', LIVE_LOCAL)):
+        for name, _ in cases:
+            if state.get(group, {}).get(name) != checked_result(work / (name + '.log')):
+                raise ValueError('Common ' + name + ' result is incomplete')
+    return state
+
+
 def stop(process):
     if process.poll() is None:
         os.killpg(process.pid, signal.SIGTERM)
@@ -150,6 +195,22 @@ def main():
                                 str(runner / 'QualifiedCommonChecks.java')])
         command = [str(java / 'bin/java'), '-Xms32m', '-Xmx512m',
                    '-Dotc.demo.existing.keys=' + str(keys), '-cp', classpath, 'QualifiedCommonChecks']
+        # Exercise the newly repaired availability boundary first so a
+        # regression stops before the longer unchanged physical suite.
+        # Every existing safety, cold and native gate remains mandatory.
+        state['live_local'] = {}
+        for name, method in LIVE_LOCAL:
+            live_command = command[:]
+            live_command.insert(1, '-Dt554.fixture.evidence.directory=' + str(work / (name + '-evidence')))
+            log = phase(name, live_command + ['--method',
+                        'com.app.common.replication.CommonCertifiedFirstReadyE2AutomaticRecoveryTest', method])
+            state['live_local'][name] = checked_result(log)
+            marker = ('T554_LIVE_LOCAL_POISON_PERMANENT_FENCE_REJECTED_HEALTHY_SHARD_CONTINUES'
+                      if name == 'live-local-permanent-fence' else
+                      'T554_LIVE_LOCAL_POISON_AUTHENTICATED_REPLAY_SAME_RUNTIME_NO_PEER_AND_EXPORT_PASS')
+            if marker not in log.read_text():
+                raise ValueError('Missing live LOCAL recovery evidence: ' + name)
+            save()
         classes = (work / 'safety-tests.list').read_text().splitlines()
         state['safety'] = checked_result(phase('safety', command + ['--safety', *classes]), safety=True)
         save()
@@ -166,19 +227,6 @@ def main():
             'com.app.common.replication.CommonHistoricalCertifiedPrefixWithTailTest',
             'com.app.common.replication.CommonCertifiedOpaqueHistoricalReplayTest',
             'com.app.common.replication.CommonCertifiedE2LargeColdHistoryTest']))
-        state['live_local'] = {}
-        for name, method in LIVE_LOCAL:
-            live_command = command[:]
-            live_command.insert(1, '-Dt554.fixture.evidence.directory=' + str(work / (name + '-evidence')))
-            log = phase(name, live_command + ['--method',
-                        'com.app.common.replication.CommonCertifiedFirstReadyE2AutomaticRecoveryTest', method])
-            state['live_local'][name] = checked_result(log)
-            marker = ('T554_LIVE_LOCAL_POISON_PERMANENT_FENCE_REJECTED_HEALTHY_SHARD_CONTINUES'
-                      if name == 'live-local-permanent-fence' else
-                      'T554_LIVE_LOCAL_POISON_AUTHENTICATED_REPLAY_SAME_RUNTIME_NO_PEER_AND_EXPORT_PASS')
-            if marker not in log.read_text():
-                raise ValueError('Missing live LOCAL recovery evidence: ' + name)
-            save()
         # Private fixture directories and independent ZK sessions; the same
         # immutable JAR remains first in every parent and child classpath.
         full_output = (work / 'full-physical.log').open('x')
