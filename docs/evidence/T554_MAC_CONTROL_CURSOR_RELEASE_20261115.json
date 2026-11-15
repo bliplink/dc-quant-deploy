@@ -1,5 +1,5 @@
 {
-  "observed_at": "2026-11-16T01:27:00.436605+08:00",
+  "observed_at": "2026-11-16T01:49:07.243896+08:00",
   "status": "COMMON_BOUNDED_WAIT_SAME_JAR_REQUALIFICATION_RUNNING_BUSINESS_NO_GO",
   "production_acceptance": "NO_GO",
   "generation": "/Users/kong/.opentradingcore/mac-demo-20261115-232443",
@@ -212,7 +212,10 @@
     "business_services_or_data_mutated": false,
     "end_to_end_new_wrapper_full_run_claimed": false,
     "regression_tests_passed": 4,
-    "test_scope": "Real JUnit pass/fail/ignore/assumption handling and actual entry failure propagation; no live business faults in tool tests"
+    "test_scope": "Real JUnit pass/fail/ignore/assumption handling and actual entry failure propagation; no live business faults in tool tests",
+    "combined_qualification_and_fresh_entry": "bash mac-colima-saas.sh verify-and-fresh COMMON_REVISION",
+    "independent_private_native_home_jvms": true,
+    "combined_entry_failure_propagation_tested": true
   },
   "old_40_per_second_service_log_diagnostic": {
     "evidence": "/Users/kong/.opentradingcore/mac-demo-20261115-213528/native-40-service-stage-diagnostic-20261115/summary-normalized-categories.json",
@@ -1154,14 +1157,17 @@
     "candidate": "/Users/kong/.opentradingcore/t554-common-candidates/20261116-bounded-async-recovery-waits-native-retry",
     "focused_actual_tests_passed": 52,
     "focused_skipped": 0,
-    "status": "REQUALIFYING_SAME_PRODUCTION_JAR_WITH_BOUNDED_STRICT_READ_RETRY_FIXTURE",
+    "status": "RETRY_308_SAFETY_AND4_COLD_PASS_FULL_NATIVE_AND_HOME_RUNNING_NOT_DEPLOYED",
     "scope": "Reuse existing two-second admission budget; recheck grant/fencing while waiting; reject before encoding/append or strict snapshot publication. Existing signed LOCAL64 and real physical catchup unchanged.",
     "first_full_attempt_status": "NO_GO_NATIVE_BACKUP_OUTAGE_FIXTURE_EXITED_ON_NEW_BOUNDED_STRICT_READ_ERROR",
     "first_full_attempt_safety_executed": 308,
     "first_full_attempt_cold_cases_passed": 4,
     "first_full_attempt_evidence": "/Users/kong/.opentradingcore/t554-common-candidates/20261116-bounded-async-recovery-waits/qualification/state.json",
     "native_fixture_revision": "c308774f253b8efc02d51756a5c35de6ea69b3ed",
-    "native_backup_outage_retry_focused_passed": true
+    "native_backup_outage_retry_focused_passed": true,
+    "actual_safety_executed_passed": 308,
+    "cold_restart_cases_passed": 4,
+    "full_qualification_state": "/Users/kong/.opentradingcore/t554-common-candidates/20261116-bounded-async-recovery-waits-native-retry/qualification/state.json"
   },
   "synthetic_storage_diagnostic": {
     "observed_at": "2026-11-16T01:36:21.884747+08:00",
