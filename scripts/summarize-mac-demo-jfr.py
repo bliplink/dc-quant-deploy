@@ -13,7 +13,7 @@ import threading
 import xml.etree.ElementTree as ET
 
 
-EVENTS = ('jdk.ExecutionSample', 'jdk.NativeMethodSample', 'jdk.JavaMonitorEnter',
+EVENTS = ('jdk.ExecutionSample', 'jdk.NativeMethodSample', 'jdk.JavaMonitorEnter', 'jdk.JavaMonitorWait',
           'jdk.ThreadPark', 'jdk.FileRead', 'jdk.FileWrite', 'jdk.SocketRead',
           'jdk.SocketWrite', 'jdk.GarbageCollection', 'jdk.GCPhasePause', 'jdk.DataLoss')
 
