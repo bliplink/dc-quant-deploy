@@ -1,6 +1,6 @@
 # OpenTradingCore 当前集群机制审阅
 
-更新：2026-11-16 03:35（Asia/Shanghai）。**新安装已恢复基础交易；性能与完整业务稳定性门禁尚未通过，整体 NO-GO。**
+更新：2026-11-16 03:54（Asia/Shanghai）。**新安装已恢复基础交易；性能与完整业务稳定性门禁尚未通过，整体 NO-GO。**
 
 ## 当前真实状态
 
@@ -132,3 +132,7 @@ Common已有最多64条、4MiB的严格批量入口，每条成功必须被真�
 当前结构化证据：[T554_MAC_CONTROL_CURSOR_RELEASE_20261115.json](evidence/T554_MAC_CONTROL_CURSOR_RELEASE_20261115.json)。完整上一版资料：[原审阅文档](archive/T554_CLUSTER_MECHANISM_REVIEW_PRE_20261116_0210.zh-CN.md)、[原结构化证据](evidence/archive/T554_MAC_CONTROL_CURSOR_RELEASE_PRE_20261116_0210.json)。
 
 JDK自带JFR诊断已接入原生分布压测的`--diagnostic-only --diagnostic-jfr`入口，时长和文件大小受限，结束后收集原四个进程身份与记录。16项既有容量／达标逻辑检查及当前Java8镜像真实启动／检查／停止／读取录制自测通过；四业务进程的实际采样尚未执行，不能作为热点结论或性能达标证据。
+
+原订单撮合首轮`async-reservation-readmission-c5a30715`仍为NO-GO：主94／真实备93，自动重新预占和双边最终LOCAL回执已观察到；认证Common原文中费用分别为0.018／0.054、余额9999.982／9999.946、相反方向持仓各0.001且冻结归零。失败的LOCAL核对错误地要求尚未发布的SQL费用（当时每边仅一行、fee为空），故未得到两账户实时API全项通过证明。原节点自动回主后512对文件一致；后续成交前余额断言也不适用于已完成成交，两个原始失败均保留。改为LOCAL费用与原始两客户回执、Common同一坐标和原Order撮合精确绑定，实时核对两账户；Home后仍等待SQL完整费用、流水及资金一致。24项相关回归通过，`async-reservation-readmission-99b035e3`正在完整重测。不能把原文中的正确经济结果直接替代未完成的现场验收。
+
+投影JSON比较保留精确Decimal数值，9与9.0可按同值比较，但不会把大数末位金额差异或布尔值混为金额。JFR汇总使用限定内存、时长及输入大小的JDK/XML流式读取；真实Java8独立小样本捕获152条CPU栈并成功汇总，仅验证工具，不是业务热点或容量结论。

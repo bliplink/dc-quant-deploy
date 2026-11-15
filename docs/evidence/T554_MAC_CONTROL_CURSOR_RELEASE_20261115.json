@@ -1,5 +1,5 @@
 {
-  "observed_at": "2026-11-16T03:35:39.653765+08:00",
+  "observed_at": "2026-11-16T03:54:02.623001+08:00",
   "status": "CURRENT_ASYNC_BASELINES_AND_TRUE_SETTLEMENT_RPO_PASS_RESERVATION_GATES_IN_PROGRESS_PERFORMANCE_NO_GO",
   "production_acceptance": "NO_GO",
   "generation": "/Users/kong/.opentradingcore/mac-demo-20261116-020105",
@@ -189,7 +189,10 @@
     "lost_reservation_cancel_composite_status": "LOCAL_TRUE_LOSS_CANCEL_PROVEN_IN_ORIGINAL_EXECUTION_AND_POST_HOME_READONLY_AUDIT_PASS_ORIGINAL_NO_GO_RETAINED",
     "lost_reservation_cancel_original": "/Users/kong/.opentradingcore/mac-demo-20261116-020105/async-reservation-loss-c70fdcd6/evidence.json",
     "lost_reservation_cancel_audit": "/Users/kong/.opentradingcore/mac-demo-20261116-020105/async-reservation-loss-c70fdcd6/independent-home-byte-audit-20261116.json",
-    "current_lost_reservation_matched_readmission_status": "RUNNING"
+    "current_lost_reservation_matched_readmission_status": "RUNNING",
+    "lost_reservation_matched_readmission_first_no_go": "/Users/kong/.opentradingcore/mac-demo-20261116-020105/async-reservation-readmission-c5a30715/evidence.json",
+    "lost_reservation_matched_readmission_first_failure": "LOCAL fee predicate incorrectly depended on certified-only SQL financial enrichment; final LOCAL receipts and authenticated pair economics observed, complete live API gate not proved",
+    "lost_reservation_matched_readmission_retry": "/Users/kong/.opentradingcore/mac-demo-20261116-020105/async-reservation-readmission-99b035e3/evidence.json"
   },
   "current_performance": {
     "status": "ASYNC_2_AND_40_NATIVE_TCP_AND_SIX_PLACE_CANCEL_BASELINES_COMPLETE_TARGET_NO_GO",
