@@ -116,6 +116,120 @@ def verify_live_role_census(directory):
         raise ValueError("Returned Common voters did not retain independent stable live processes")
 
 
+def cumulative_record_metadata(raw, epoch, partition, nodes):
+    """Check the actual model and chain after Java's RSA verification.
+    This metadata audit cannot authorize a commit, an ACK or READY."""
+    if len(raw) < 8 or struct.unpack_from(">II", raw) != (0x4f544353, 2):
+        raise ValueError("Actual runtime did not use the cumulative V2 stream")
+    def utf(data, offset):
+        if len(data) - offset < 2:
+            raise ValueError("Truncated cumulative metadata string")
+        size = struct.unpack_from(">H", data, offset)[0]
+        if len(data) - offset - 2 < size:
+            raise ValueError("Truncated cumulative metadata value")
+        return data[offset + 2:offset + 2 + size].decode("ascii"), offset + 2 + size
+    position, previous, previous_hash, records = 8, 0, "GENESIS", []
+    while position < len(raw):
+        if len(raw) - position < 8:
+            raise ValueError("Incomplete actual runtime commit stream")
+        size, crc = struct.unpack_from(">II", raw, position)
+        body = raw[position + 8:position + 8 + size]
+        if not 10 <= size <= 32768 or len(body) != size or zlib.crc32(body) != crc:
+            raise ValueError("Changed actual cumulative frame")
+        if struct.unpack_from(">II", body) != (0x4f544357, 2):
+            raise ValueError("Legacy evidence found in cumulative runtime")
+        member, offset = utf(body, 8)
+        if not re.fullmatch(r"[a-f0-9]{64}", member) or len(body) - offset < 24:
+            raise ValueError("Invalid cumulative runtime membership")
+        e, seq, prior = struct.unpack_from(">qqq", body, offset)
+        prefix, offset = utf(body, offset + 24)
+        prior_hash, offset = utf(body, offset)
+        if (e != epoch or not previous < seq <= previous + 64 or prior != previous
+                or prior_hash != previous_hash or not re.fullmatch(r"[a-f0-9]{64}", prefix)
+                or len(body) - offset < 4 or struct.unpack_from(">I", body, offset)[0] != 2):
+            raise ValueError("Cumulative runtime chain or original frontier mismatch")
+        offset += 4
+        voters = set()
+        for _ in range(2):
+            if len(body) - offset < 4:
+                raise ValueError("Missing actual cumulative voter")
+            count = struct.unpack_from(">I", body, offset)[0]
+            vote = body[offset + 4:offset + 4 + count]
+            offset += 4 + count
+            if not 4 <= count <= 4096 or len(vote) != count or struct.unpack_from(">I", vote)[0] != 2:
+                raise ValueError("Actual cumulative WAL vote has another signing model")
+            node, at = utf(vote, 4)
+            part, at = utf(vote, at)
+            if len(vote) - at < 16:
+                raise ValueError("Truncated cumulative voter frontier")
+            ve, vs = struct.unpack_from(">qq", vote, at)
+            vh, at = utf(vote, at + 16)
+            vm, at = utf(vote, at)
+            if len(vote) - at < 4:
+                raise ValueError("Missing original cumulative voter signature")
+            signature = struct.unpack_from(">I", vote, at)[0]
+            if (node not in nodes or node in voters or part != partition or (ve, vs) != (epoch, seq)
+                    or vh != prefix or vm != member or not 0 < signature <= 1024
+                    or len(vote) != at + 4 + signature):
+                raise ValueError("Actual cumulative voter metadata does not bind its original commit")
+            voters.add(node)
+        if voters != nodes or offset != len(body):
+            raise ValueError("Incomplete or trailing cumulative physical evidence")
+        records.append((seq, prefix))
+        previous, previous_hash = seq, hashlib.sha256(body).hexdigest()
+        position += size + 8
+    return records
+
+
+def verify_cumulative_runtime_evidence(directory):
+    indexes = {}
+    for side in ("a", "b"):
+        files = list(directory.glob("data-" + side + "/*/*/P[0-9][0-9][0-9]/epoch-2/commit-index/commits.wal"))
+        if ({p.parents[2].name for p in files} != {"P%03d" % i for i in range(256)}
+                or len(files) != 256 or len({p.parents[3].name for p in files}) != 1):
+            raise ValueError("Full actual runtime lacks 256 original cumulative indexes per voter")
+        indexes[side] = files
+    nodes = {files[0].parents[3].name for files in indexes.values()}
+    if len(nodes) != 2:
+        raise ValueError("Cumulative runtime needs two actual physical voter identities")
+    nonempty, record_count = 0, 0
+    for files in indexes.values():
+        for stream in files:
+            epoch, part = stream.parents[1], stream.parents[2].name
+            if (stream.is_symlink() or {p.name for p in stream.parent.iterdir()} != {".commit-writer.lock", "commits.wal"}
+                    or any((epoch / old).exists() for old in ("custody/head.bin", "custody-ledger/receipt-quorum.bin"))):
+                raise ValueError("Cumulative runtime mixed legacy commit evidence")
+            records = cumulative_record_metadata(stream.read_bytes(), 2, part, nodes)
+            nonempty += bool(records)
+            record_count += len(records)
+            remaining = dict(records)
+            digest, sequence = hashlib.sha256(), 0
+            with (epoch / "business.wal").open("rb") as original:
+                while True:
+                    header = original.read(28)
+                    if not header:
+                        break
+                    if len(header) != 28:
+                        raise ValueError("Actual original runtime WAL has an incomplete frame")
+                    magic, e, seq, size, crc = struct.unpack(">IqqII", header)
+                    if magic != 0x43425731 or e != 2 or seq != sequence + 1 or not 0 < size <= 1024 * 1024:
+                        raise ValueError("Actual original runtime WAL framing changed")
+                    payload = original.read(size)
+                    if len(payload) != size or zlib.crc32(struct.pack(">qq", e, seq) + payload) != crc:
+                        raise ValueError("Actual original runtime WAL CRC changed")
+                    digest.update(header); digest.update(payload); sequence = seq
+                    if seq in remaining and remaining.pop(seq) != digest.hexdigest():
+                        raise ValueError("Actual cumulative runtime index differs from original WAL")
+            if remaining:
+                raise ValueError("Actual cumulative runtime index exceeds its physical WAL")
+    if nonempty < 2:
+        raise ValueError("Actual cumulative runtime has not physically committed business on both copies")
+    return {"model": "CUMULATIVE_V2", "original_epoch2_indexes": 512,
+            "nonempty_indexes": nonempty, "verified_metadata_records": record_count,
+            "nodes": sorted(nodes), "raw_wal_prefixes_matched": True,
+            "scope": "Actual process artifacts; RSA/role/fencing proof remains the preceding real Java drill."}
+
+
 def verify_cold_batch_prefixes(directory):
     """Consistency audit after the real Java RSA/fencing drill, not an
     independent signature verifier or a substitute for that successful drill."""
@@ -306,6 +420,9 @@ def main():
     interrupted = lines.count(INTERRUPTED) == 1 and log.find(INTERRUPTED) < both[0].start()
     if os.environ.get("MAC_DEMO_REQUIRE_INTERRUPTED_RETURN") == "true" and not interrupted:
         raise ValueError("Common physical test is missing the interrupted signed Stage recovery")
+    cumulative_model = None
+    if (result / "source/src/main/java/com/app/common/replication/DurableWalCumulativeCommitProtocol.java").is_file():
+        cumulative_model = verify_cumulative_runtime_evidence(result / "process-evidence")
     seal = {"common_revision": revision, "common_sha256": digest,
             "fixture_revision": identity_lines[2].split("=", 1)[1],
             "transcript_sha256": hashlib.sha256(log_bytes).hexdigest(),
@@ -316,7 +433,8 @@ def main():
             "normal_dual_async_max_pending_per_partition": 1,
             "normal_dual_async_recovery_head": "backup_certified_committed",
             "live_poison_recovery_evidence": poison_evidence,
-            "full_recovery_physical_evidence": recovery_evidence}
+            "full_recovery_physical_evidence": recovery_evidence,
+            "actual_cumulative_runtime_evidence": cumulative_model}
     if (result / "status").read_text().strip() not in {"NO_GO", "PASS"}:
         raise ValueError("Unexpected initial Common verification status")
     temporary = result / "seal.tmp"

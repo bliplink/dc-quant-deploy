@@ -11,6 +11,30 @@ SEAL = runpy.run_path(str(Path(__file__).resolve().parents[1] / 'scripts/finaliz
 
 
 class PhysicalEvidenceSealTest(unittest.TestCase):
+    def test_actual_cumulative_model_rejects_legacy_or_mismatched_vote_metadata(self):
+        # Format/chain checks only; dummy signatures never supply RSA authority.
+        member, prefix, nodes = 'a' * 64, 'b' * 64, {'A', 'B'}
+        def utf(value):
+            raw = value.encode('ascii')
+            return struct.pack('>H', len(raw)) + raw
+        def vote(node, version=2, part='P000', digest=prefix):
+            return (struct.pack('>I', version) + utf(node) + utf(part) + struct.pack('>qq', 2, 1)
+                    + utf(digest) + utf(member) + struct.pack('>I', 256) + bytes(256))
+        def stream(first, second, version=2):
+            body = (struct.pack('>II', 0x4f544357, version) + utf(member) + struct.pack('>qqq', 2, 1, 0)
+                    + utf(prefix) + utf('GENESIS') + struct.pack('>I', 2)
+                    + struct.pack('>I', len(first)) + first + struct.pack('>I', len(second)) + second)
+            return struct.pack('>II', 0x4f544353, 2) + struct.pack('>II', len(body), zlib.crc32(body)) + body
+        good = stream(vote('A'), vote('B'))
+        self.assertEqual([(1, prefix)], SEAL['cumulative_record_metadata'](good, 2, 'P000', nodes))
+        bad_cases = [stream(vote('A'), vote('B'), version=1),
+                     stream(vote('A', version=1), vote('B')), stream(vote('A'), vote('A')),
+                     stream(vote('A'), vote('B', part='P001')),
+                     stream(vote('A'), vote('B', digest='c' * 64)), good + b'partial']
+        for raw in bad_cases:
+            with self.subTest(length=len(raw)), self.assertRaises(ValueError):
+                SEAL['cumulative_record_metadata'](raw, 2, 'P000', nodes)
+
     def test_cold_batch_consistency_requires_exact_retained_tail_and_committed_frontier(self):
         # Synthetic local files exercise only the post-drill consistency
         # checker. They carry no RSA authority and cannot qualify a real P0.
