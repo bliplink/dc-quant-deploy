@@ -1,6 +1,6 @@
 {
-  "observed_at": "2026-11-16T02:12:46.959423+08:00",
-  "status": "BOUNDED_WAIT_COMMON_FULL_P0_AND_NEW_BUSINESS_BASELINE_PASS_TEN_ROBOT_STEADY_RUNNING",
+  "observed_at": "2026-11-16T03:15:48.459589+08:00",
+  "status": "CURRENT_ASYNC_BASELINES_AND_TRUE_SETTLEMENT_RPO_PASS_RESERVATION_GATES_IN_PROGRESS_PERFORMANCE_NO_GO",
   "production_acceptance": "NO_GO",
   "generation": "/Users/kong/.opentradingcore/mac-demo-20261116-020105",
   "client_ack_policy": "LOCAL_DURABLE_ASYNC",
@@ -178,19 +178,37 @@
     "initial_exact_financial_cursor_passed": true,
     "actual_all_four_256_partition_role_runtime_passed": true,
     "runtime_proof": "/Users/kong/.opentradingcore/mac-demo-20261116-020105/physical-runtime-d2kh6u1e/proof.json",
-    "ten_robot_steady_status": "RUNNING",
+    "ten_robot_steady_status": "PASS_5_MINUTES_1346_PAIRED_FILLS",
     "current_same_jar_four_way_robot_sigkill_pending": true,
-    "current_true_async_settlement_loss_pending": true,
+    "current_true_async_settlement_loss_pending": false,
     "current_lost_reservation_cancel_pending": true,
     "current_lost_reservation_matched_readmission_pending": true,
-    "current_trade_single_node_pending": true
+    "current_trade_single_node_pending": true,
+    "current_true_async_settlement_loss_evidence": "/Users/kong/.opentradingcore/mac-demo-20261116-020105/async-rpo-718d5943/evidence.json",
+    "lost_reservation_cancel_previous_no_go": "/Users/kong/.opentradingcore/mac-demo-20261116-020105/async-reservation-loss-53bae266/evidence.json",
+    "lost_reservation_cancel_retry": "LOCAL_SOURCE_ACCEPTED_WINDOW_SQL_MATCH_AFTER_HOME_RUNNING"
   },
   "current_performance": {
-    "status": "NATIVE_BASELINES_QUEUED_AFTER_TEN_ROBOT_STEADY_NOT_ACCEPTED",
+    "status": "ASYNC_2_AND_40_NATIVE_TCP_AND_SIX_PLACE_CANCEL_BASELINES_COMPLETE_TARGET_NO_GO",
     "strict_measured_on_this_release": false,
-    "async_measured_on_this_release": false,
+    "async_measured_on_this_release": true,
     "pipeline_state": "/Users/kong/.opentradingcore/t554-bounded-waits-sequential-business-v2-20261116.json",
-    "qualified_windows_cannot_overlap_faults_or_diagnostic_attach": true
+    "qualified_windows_cannot_overlap_faults_or_diagnostic_attach": true,
+    "native_2": {
+      "evidence": "/Users/kong/.opentradingcore/mac-demo-20261116-020105/distributed-execution-capacity-4973f405.json",
+      "sent_final_in_window": 120,
+      "final_p99_ms": 323.075
+    },
+    "native_40": {
+      "evidence": "/Users/kong/.opentradingcore/mac-demo-20261116-020105/distributed-execution-capacity-36eae3d1.json",
+      "sent_final_in_window": 2400,
+      "final_p99_ms": 1404.298,
+      "scheduled_final_p99_ms": 1425.073,
+      "actual_rate": 40,
+      "maximum_capacity_claimed": false
+    },
+    "place_cancel_evidence": "/Users/kong/.opentradingcore/mac-demo-20261116-020105/order-cancel-capacity-bc519ec8.json",
+    "smaller_client_memory": "96MiB standalone stress selftests passed; live comparison pending"
   },
   "last_completed_business_performance": {
     "generation": "mac-demo-20261115-232443",
@@ -248,7 +266,7 @@
     "Sustained1000/s and end-to-endP99<=20ms remain unproved on both modes.",
     "Complete256-partition takeover/Home remains minutes; functional evidence is not an isolatedRTO benchmark.",
     "Common strict batching exists but business calls remain singleton.",
-    "Previous real RPO exposed infinite async waits holding business locks; new Common fullP0 passed, exact failure still requires live business retest.",
+    "Previous real RPO exposed infinite async waits holding business locks; new Common fullP0 passed, true settlement RPO retest now passed; reservation and four-way gates remain.",
     "Robot under all four process faults, single Trade node, genuine async loss/readmission and exact finance gates remain incomplete on new release.",
     "Retired originalGG2803 unsettled matches remain separate retained evidence."
   ],
