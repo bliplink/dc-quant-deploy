@@ -351,6 +351,10 @@ def main():
         report["latency_measurement"].pop("cancel_absent_ms")
         report["latency_measurement"].pop("state_query_retry_seconds")
         report["latency_measurement"]["cancel_terminal_ms"] = "Cancel request to authenticated native Cancelled status push"
+        report["native_session_request_budget_per_second"] = 80
+        report["native_session_request_budget_scope"] = (
+            "Pace each authenticated API session below its existing 100 RPC/s profile; "
+            "pacing remains included in request latency. Use multiple sessions for aggregate load.")
     output = root / f"order-cancel-capacity-{run}.json"
     with (root.parent / ".mac-demo-fresh.lock").open("a") as lock:
         fcntl.flock(lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
@@ -416,6 +420,7 @@ def main():
                                         "location": loc, "user_id": user, "token": token, "symbol": symbol,
                                         "port": port, "price": price, "prefix": prefix + "-" + str(i),
                                         "seconds": args.seconds, "start_at_epoch_ms": common_start,
+                                        "max_requests_per_second": 80,
                                     }) for i, (loc, user, token) in enumerate(native_traders)]
                                     measurements = [task.result() for task in tasks]
                                     records = [row for measured in measurements for row in measured["orders"]]
@@ -445,6 +450,9 @@ def main():
                             if args.transport == "tcp":
                                 phase["native_process_evidence"] = [row["native_process_evidence"]
                                                                     for row in measurements]
+                                phase["native_request_pacing"] = [{key: row[key] for key in (
+                                    "max_requests_per_second", "paced_requests", "pacing_wait_ms",
+                                    "pacing_included_in_request_latency")} for row in measurements]
                             output.write_text(json.dumps(report, indent=2) + "\n")
                             control_after = CAPACITY["require_strict_demo"](root)
                             phase.update(elapsed_seconds=round(elapsed, 3), records=records, resources=resources,

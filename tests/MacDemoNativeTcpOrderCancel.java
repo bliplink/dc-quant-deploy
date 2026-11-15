@@ -34,13 +34,34 @@ public final class MacDemoNativeTcpOrderCancel {
     }
     private static JSONObject successful(String raw) {
         JSONObject reply = raw == null ? null : JSON.parseObject(raw);
-        if (reply == null || !"0".equals(reply.getString("code")))
-            throw new IllegalStateException("NATIVE_REQUEST_NOT_ACKNOWLEDGED");
+        if (reply == null) throw new IllegalStateException("NATIVE_RESPONSE_MISSING");
+        String code = reply.getString("code");
+        if (!"0".equals(code))
+            throw new IllegalStateException(code != null && code.matches("[0-9]{1,9}")
+                    ? "NATIVE_REQUEST_REJECTED_CODE_" + code : "NATIVE_REQUEST_REJECTED_UNKNOWN_CODE");
         return reply;
     }
     private JSONObject request(String method, JSONObject body) throws Exception {
+        paceRequest();
         String key = config.getString("location") + '\u001f' + "4" + '\u001f' + config.getString("symbol");
         return successful(gateway.requestSyncWithKey(key, "OrderSvr", method, JSON.toJSONString(body), String.class, 8000L));
+    }
+    private long nextRequest, pacedRequests, pacingWaitNanos;
+    private static long requestInterval(double rate) {
+        if (!Double.isFinite(rate) || rate <= 0 || rate > 100)
+            throw new IllegalArgumentException("NATIVE_SESSION_REQUEST_RATE_INVALID");
+        return (long)Math.ceil(1_000_000_000.0 / rate);
+    }
+    private void paceRequest() throws InterruptedException {
+        double rate = config.containsKey("max_requests_per_second")
+                ? config.getDoubleValue("max_requests_per_second") : 80.0;
+        long interval = requestInterval(rate), before = System.nanoTime();
+        while (System.nanoTime() < nextRequest) {
+            if (Thread.currentThread().isInterrupted()) throw new InterruptedException();
+            java.util.concurrent.locks.LockSupport.parkNanos(nextRequest-System.nanoTime());
+        }
+        long sent = System.nanoTime();
+        pacingWaitNanos += sent-before; pacedRequests++;nextRequest=sent+interval;
     }
     private static JSONObject own(JSONArray rows, String id) {
         if (rows == null) throw new IllegalStateException("NATIVE_ORDER_QUERY_MISSING_ARRAY");
@@ -200,16 +221,31 @@ public final class MacDemoNativeTcpOrderCancel {
                 report.put("orders", copy);report.put("stream_errors", new ArrayList<>(streamErrors));
             }
             report.put("elapsed_seconds", (System.nanoTime()-begun)/1e9);
+            report.put("max_requests_per_second", config.containsKey("max_requests_per_second")
+                    ? config.getDoubleValue("max_requests_per_second") : 80.0);
+            report.put("paced_requests", pacedRequests);
+            report.put("pacing_wait_ms", pacingWaitNanos/1_000_000.0);
+            report.put("pacing_included_in_request_latency", true);
             report.put("measurement_complete", true);return report;
         } finally { gateway.disconnect(); }
     }
     // Retain our stable diagnostic codes without logging responses or sessions.
     private static String safeReason(Exception failure) {
         String reason = failure.getMessage();
-        return reason != null && reason.matches("NATIVE_[A-Z_]+")
+        return reason != null && reason.matches("NATIVE_[A-Z0-9_]+")
                 ? reason : failure.getClass().getSimpleName();
     }
     private static void selfTest() {
+        if(requestInterval(80)!=12_500_000L)throw new AssertionError("Wrong session request budget");
+        for(double rate:new double[]{0,-1,Double.NaN,Double.POSITIVE_INFINITY,101}){
+            try{requestInterval(rate);throw new AssertionError("Invalid session budget accepted");}
+            catch(IllegalArgumentException expected){}
+        }
+        try{successful("{\"code\":10003}");throw new AssertionError("Rate refusal counted as ACK");}
+        catch(IllegalStateException expected){
+            if(!"NATIVE_REQUEST_REJECTED_CODE_10003".equals(safeReason(expected)))
+                throw new AssertionError("Safe numeric refusal code was discarded");
+        }
         for (String bad : new String[]{"{\"code\":7000}", "{\"data\":[]}", "null"}) {
             try { successful(bad);throw new AssertionError("Failed request counted as ACK"); }
             catch (IllegalStateException expected) { }
