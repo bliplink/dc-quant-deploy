@@ -384,8 +384,14 @@
     "production_deployed": false,
     "new_protocol_performance_claimed": false,
     "formal_runtime_focused_tests_passed": 72,
-    "formal_runtime_full_safety": "Previous 8cf143a: 293 executed passed; 3 optional external historical fixture tests skipped. Latest exact candidate selection still pending.",
-    "formal_runtime_independent_physical_p0": "LATEST EXACT JAR FULL GATE PENDING; individual real cold64, async outage and async primary-kill cases passed in bounded working-source runs",
+    "formal_runtime_full_safety": {
+      "discovered": 305,
+      "executed_passed": 302,
+      "failures": 0,
+      "optional_external_historical_skipped": 3,
+      "jar_sha256": "a60aea73b59658ff6d5ec1cd63bf7671be21aee847f9daceb3ce969137e545cb"
+    },
+    "formal_runtime_independent_physical_p0": "RUNNING full 14 independent voter cases and 256-partition bidirectional/third-crash/repeated/interrupted return. Production remains NO_GO until sealed.",
     "bounded_source_pipeline_and_business_batch_integration": "STRICT COMMON BATCH CONNECTED; NORMAL ASYNC ONE OUTSTANDING AND BUSINESS BATCH CONNECTION REMAIN",
     "formal_runtime_revision": "2546687",
     "formal_runtime_jar_sha256": "a60aea73b59658ff6d5ec1cd63bf7671be21aee847f9daceb3ce969137e545cb",
@@ -406,6 +412,26 @@
       "real_backup_committed_head": 2,
       "original_local_head": 2,
       "actual_loss_in_this_run": false
+    },
+    "latest_jar_cold_gates": {
+      "clean_local_owner": true,
+      "interrupted_retained_owner": true,
+      "private_unpublished_local_tail": true,
+      "mixed_cold_owner_full_256_home": true
+    },
+    "large_historical_streaming": {
+      "original_wal_mib": 72,
+      "heap_limit_mib": 96,
+      "passed": true,
+      "scope": "Historical proof compatibility and bounded-memory recovery; not a V2 throughput claim."
+    },
+    "actual_cumulative_mode_crosscheck": {
+      "separately_passed_on_async_primary_drill": true,
+      "epoch2_indexes": 512,
+      "nonempty_indexes": 2,
+      "metadata_records": 3,
+      "raw_prefixes_match": true,
+      "scope": "Actual process artifacts from the completed individual drill; full current P0 still pending."
     }
   },
   "read_only_current_control_recheck": {
