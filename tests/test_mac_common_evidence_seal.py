@@ -54,6 +54,29 @@ class PhysicalEvidenceSealTest(unittest.TestCase):
             (paths[1] / 'commit-index/commits.wal').write_bytes(struct.pack('>II', 0x4f544353, 2))
             with self.assertRaises(ValueError):
                 SEAL['verify_async_pipeline_prefixes'](root)
+            # Full-queue crash audit accepts the actual retained frontier,
+            # including legal late delivery, and rejects a claimed longer head.
+            first_end = 16 + struct.unpack_from('>I', stream, 8)[0]
+            first_stream = stream[:first_end]
+            (paths[0] / 'commit-index/commits.wal').write_bytes(first_stream)
+            (root / 'a-original-local-acked.wal').write_bytes(wal)
+            (root / 'b-original-committed-prefix.wal').write_bytes(frames[0])
+            (root / 'a-home-business-proof').touch()
+            (root / 'a-local-acked-before-peer').write_text('LOCAL_DURABLE_ASYNC P000 2 65 rpoRisk=true\n')
+            for head, committed in ((1, first_stream), (65, stream)):
+                raw = b''.join(frames[:head])
+                (paths[1] / 'business.wal').write_bytes(raw)
+                (paths[1] / 'commit-index/commits.wal').write_bytes(committed)
+                frontier = root / 'authenticated-fixture-frontier-P000-2.txt'
+                frontier.write_text('head=' + str(head) + ' sha256=' + hashlib.sha256(raw).hexdigest() + '\n')
+                SEAL['verify_async_pipeline_primary_prefixes'](root)
+                frontier.write_text('head=66 sha256=' + hashlib.sha256(raw).hexdigest() + '\n')
+                with self.assertRaises(ValueError):
+                    SEAL['verify_async_pipeline_primary_prefixes'](root)
+                frontier.write_text('head=' + str(head) + ' sha256=' + hashlib.sha256(raw).hexdigest() + '\n')
+                (paths[1] / 'business.wal').write_bytes(raw[:-1])
+                with self.assertRaises(ValueError):
+                    SEAL['verify_async_pipeline_primary_prefixes'](root)
 
     def test_actual_cumulative_model_rejects_legacy_or_mismatched_vote_metadata(self):
         # Format/chain checks only; dummy signatures never supply RSA authority.

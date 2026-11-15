@@ -39,6 +39,10 @@ NORMAL_ASYNC_KILL_CUMULATIVE = re.compile(
     r"^[.]*T554_NORMAL_DUAL_ASYNC_PRIMARY_SIGKILL_AFTER_LOCAL_ACK_REAL_WITNESS_HOME_PASS "
     r"backupCommittedHead=[12] originalLocalHead=2 originalPrimaryWalUnchanged=true "
     r"backupCommittedPrefixUnchanged=true uncommittedTailExcluded=true home128Each=true$", re.M)
+NORMAL_ASYNC_PIPELINE_KILL = re.compile(
+    r"^[.]*T554_NORMAL_DUAL_ASYNC_64_PRIMARY_SIGKILL_REAL_WITNESS_HOME_PASS "
+    r"backupCommittedHead=([1-9][0-9]*) originalLocalHead=65 originalPrimaryWalUnchanged=true "
+    r"backupCommittedPrefixUnchanged=true uncommittedTailExcluded=true home128Each=true$", re.M)
 NORMAL_ASYNC_BACKUP_EXPIRY = re.compile(
     r"^[.]*T554_NORMAL_DUAL_ASYNC_BACKUP_EXPIRY_PRESERVES_ACK_AND_CONTINUES_PASS$", re.M)
 NORMAL_ASYNC_MIXED_STRICT_TAIL = re.compile(
@@ -284,26 +288,30 @@ def verify_cold_batch_prefixes(directory):
             raise ValueError("Cold batch did not prove both actual recovered business roles")
 
 
+def async_pipeline_frame_ends(raw, expected_frames=65):
+    position, ends = 0, {}
+    for sequence in range(1, expected_frames + 1):
+        if len(raw) - position < 28:
+            raise ValueError("Incomplete original async pipeline WAL")
+        magic, e, seq, size, crc = struct.unpack_from(">IqqII", raw, position)
+        payload = raw[position + 28:position + 28 + size]
+        if (magic != 0x43425731 or e != 2 or seq != sequence or not 0 < size <= 1024 * 1024
+                or len(payload) != size or zlib.crc32(struct.pack(">qq", e, seq) + payload) != crc
+                or payload != (bytes((5, 3, 5)) if sequence == 1 else bytes((99, 98, 97)))):
+            raise ValueError("Async pipeline original sequence or payload changed")
+        position += 28 + size
+        ends[sequence] = position
+    if position != len(raw):
+        raise ValueError("Async pipeline exceeded its original 64-command suffix")
+    return ends
+
 def verify_async_pipeline_prefixes(directory):
     """Post-drill byte/model audit only; original Java validates RSA and grants."""
     originals = []
     for side, node in (("a", "DemoSvrA"), ("b", "DemoSvrB")):
         epoch = directory / ("data-" + side) / "DemoSvr" / node / "P000/epoch-2"
         raw = (epoch / "business.wal").read_bytes()
-        position, ends = 0, {}
-        for sequence in range(1, 66):
-            if len(raw) - position < 28:
-                raise ValueError("Incomplete original async pipeline WAL")
-            magic, e, seq, size, crc = struct.unpack_from(">IqqII", raw, position)
-            payload = raw[position + 28:position + 28 + size]
-            if (magic != 0x43425731 or e != 2 or seq != sequence or not 0 < size <= 1024 * 1024
-                    or len(payload) != size or zlib.crc32(struct.pack(">qq", e, seq) + payload) != crc
-                    or payload != (bytes((5, 3, 5)) if sequence == 1 else bytes((99, 98, 97)))):
-                raise ValueError("Async pipeline original sequence or payload changed")
-            position += 28 + size
-            ends[sequence] = position
-        if position != len(raw):
-            raise ValueError("Async pipeline exceeded its original 64-command suffix")
+        ends = async_pipeline_frame_ends(raw)
         commit = (epoch / "commit-index/commits.wal").read_bytes()
         heads = cumulative_record_metadata(commit, 2, "P000", {"DemoSvrA", "DemoSvrB"})
         if (not heads or heads[-1][0] != 65
@@ -313,6 +321,39 @@ def verify_async_pipeline_prefixes(directory):
         originals.append((raw, commit))
     if originals[0] != originals[1]:
         raise ValueError("Async pipeline actual physical copies differ")
+
+
+def verify_async_pipeline_primary_prefixes(directory):
+    """Supplement the real Java full-queue crash proof with original-byte checks."""
+    original = (directory / 'a-original-local-acked.wal').read_bytes()
+    ends = async_pipeline_frame_ends(original)
+    prefix = (directory / 'b-original-committed-prefix.wal').read_bytes()
+    if prefix != original[:ends[1]] or not (directory / 'a-home-business-proof').is_file():
+        raise ValueError('Full queue lacks its original quorum prefix or recovered business proof')
+    receipt = (directory / 'a-local-acked-before-peer').read_text().strip()
+    if receipt != 'LOCAL_DURABLE_ASYNC P000 2 65 rpoRisk=true':
+        raise ValueError('Full queue lacks all 64 original LOCAL acknowledgments')
+    frontier = re.fullmatch(r'head=([1-9][0-9]*) sha256=([a-f0-9]{64})\n',
+                            (directory / 'authenticated-fixture-frontier-P000-2.txt').read_text())
+    if not frontier or int(frontier[1]) not in ends:
+        raise ValueError('Full queue lacks an authenticated bounded backup frontier')
+    for side, node in (('a', 'DemoSvrA'), ('b', 'DemoSvrB')):
+        epoch = directory / ('data-' + side) / 'DemoSvr' / node / 'P000/epoch-2'
+        raw = (epoch / 'business.wal').read_bytes()
+        if side == 'a':
+            if raw != original:
+                raise ValueError('Full queue original primary WAL changed after its crash')
+        elif (len(raw) not in ends.values() or raw != original[:len(raw)]
+              or len(raw) < ends[int(frontier[1])]):
+            raise ValueError('Full queue backup has a foreign, incomplete or missing original prefix')
+        records = cumulative_record_metadata((epoch / 'commit-index/commits.wal').read_bytes(),
+                                              2, 'P000', {'DemoSvrA', 'DemoSvrB'})
+        if (not records or any(seq not in ends or ends[seq] > len(raw)
+                              or hashlib.sha256(raw[:ends[seq]]).hexdigest() != digest
+                              for seq, digest in records)):
+            raise ValueError('Full queue actual commit index differs from its original WAL')
+        if side == 'b' and records[-1] != (int(frontier[1]), frontier[2]):
+            raise ValueError('Full queue recovery frontier differs from its original persisted head')
 
 
 def main():
@@ -389,6 +430,11 @@ def main():
             expected_kill_marker = NORMAL_ASYNC_KILL_CUMULATIVE if cumulative_marker else NORMAL_ASYNC_KILL
             if len(expected_kill_marker.findall(log)) != 1:
                 raise ValueError("Common normal async primary SIGKILL and witnessed Home proof is incomplete")
+        if "normalDualAsyncFullQueuePrimaryKilledReturnsOnlyTheAuthenticatedBackupPrefix" in poison_source.read_text():
+            scenarios.append("normal-dual-async-pipeline-64-primary-kill")
+            markers = NORMAL_ASYNC_PIPELINE_KILL.findall(log)
+            if len(markers) != 1 or not 1 <= int(markers[0]) <= 65:
+                raise ValueError("Common full async queue primary crash proof is incomplete")
         if "normalDualAsyncBackupNodeExpiryPreservesLocalAckAndContinuesWriting" in poison_source.read_text():
             scenarios.append("normal-dual-async-backup-expiry")
             required_proof = NORMAL_ASYNC_MIXED_STRICT_TAIL if mixed_strict_tail else NORMAL_ASYNC_BACKUP_EXPIRY
@@ -418,7 +464,7 @@ def main():
                     raise ValueError("Common survivor did not continue durably before graceful voter return")
             if scenario.startswith("normal-dual-async"):
                 receipt = (directory / "a-local-acked-before-peer").read_text().strip()
-                expected_head = 65 if scenario == "normal-dual-async-pipeline-64" else 2
+                expected_head = 65 if scenario.startswith("normal-dual-async-pipeline-64") else 2
                 if receipt != f"LOCAL_DURABLE_ASYNC P000 2 {expected_head} rpoRisk=true":
                     raise ValueError("Common normal async original LOCAL receipt is missing")
                 if scenario == "normal-dual-async-pipeline-64":
@@ -426,7 +472,9 @@ def main():
                 if (scenario.endswith("primary-kill")
                         and not (directory / "DemoSvrA.attempt-0.log").is_file()):
                     raise ValueError("Common normal async killed primary log is missing")
-                if scenario.endswith("primary-kill"):
+                if scenario == "normal-dual-async-pipeline-64-primary-kill":
+                    verify_async_pipeline_primary_prefixes(directory)
+                elif scenario.endswith("primary-kill"):
                     if cumulative_marker and not (directory / "authenticated-fixture-frontier-P000-2.txt").is_file():
                         raise ValueError("Common cumulative async recovery lacks its actual authenticated frontier")
                     verify_normal_async_primary_prefixes(directory)
@@ -473,6 +521,7 @@ def main():
                                   "normal-dual-async-backup-expiry"}.issubset(poison_evidence),
             "normal_dual_async_max_pending_per_partition": 64 if "normal-dual-async-pipeline-64" in poison_evidence else 1,
             "normal_dual_async_pipeline_physical_proof": "normal-dual-async-pipeline-64" in poison_evidence,
+            "normal_dual_async_full_queue_primary_crash": "normal-dual-async-pipeline-64-primary-kill" in poison_evidence,
             "normal_dual_async_recovery_head": "backup_certified_committed",
             "live_poison_recovery_evidence": poison_evidence,
             "full_recovery_physical_evidence": recovery_evidence,

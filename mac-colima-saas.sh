@@ -258,8 +258,15 @@ main() {
       ;;
     verify-async-recovery)
       [[ "$#" -eq 1 ]] || die "Usage: ./mac-colima-saas.sh verify-async-recovery RUN_DIRECTORY"
-      python3 "${SCRIPT_DIR}/scripts/verify-mac-demo-async-rpo.py" "$1"
-      python3 "${SCRIPT_DIR}/scripts/verify-mac-demo-async-reservation-loss.py" "$1"
+      local rpo_generation rpo_image rpo_tools
+      rpo_generation="$(basename "$1")"
+      [[ -d "$1" && "$rpo_generation" =~ ^mac-demo-[0-9]{8}-[0-9]{6}$ ]] ||
+        die "Expected an existing original Mac Demo generation directory"
+      rpo_image="$(docker inspect --format '{{.Image}}' "${rpo_generation}-trade-a-hostready")"
+      rpo_tools="$1/async-recovery-tools-$(date -u +%Y%m%d-%H%M%S)-$$"
+      python3 "${SCRIPT_DIR}/scripts/build-mac-demo-rpo-fault-tools.py" "$rpo_tools" --linux-image "$rpo_image"
+      python3 "${SCRIPT_DIR}/scripts/verify-mac-demo-async-rpo.py" "$1" --tools "$rpo_tools"
+      python3 "${SCRIPT_DIR}/scripts/verify-mac-demo-async-reservation-loss.py" "$1" --tools "$rpo_tools"
       ;;
     verify-ha)
       [[ "$#" -ge 2 && "$#" -le 4 && "$2" =~ ^(term|kill)$ && "${3:-A}" =~ ^[AB]$ ]] ||
