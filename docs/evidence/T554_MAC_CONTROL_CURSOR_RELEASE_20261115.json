@@ -411,7 +411,7 @@
     "production_go": false,
     "common_revision": "f7bb1e4",
     "common_sha256": "4a966ced261fe2105cda18782c140717dc1ab0c773ee788a7948243713e1747c",
-    "qualification_status": "V3_RUNNING_STABLE_TAKEOVER_PRECONDITION_PERMANENT_FENCE_FIRST",
+    "qualification_status": "V3_ALL_FOUR_LIVE_LOCAL_PASS_SAFETY_AND_FULL_PHYSICAL_RUNNING",
     "qualification": "/Users/kong/.opentradingcore/t554-common-candidates/20261116-live-local-owner-replay-v3/qualification/state.json",
     "early_fixture_failure_preserved": "/Users/kong/.opentradingcore/t554-common-live-local-owner-published-v1-evidence-20261116/attempt-context.json",
     "failed_qualification_preserved": "/Users/kong/.opentradingcore/t554-common-candidates/20261116-live-local-owner-replay-v1/qualification/state.json",
@@ -441,7 +441,41 @@
       "permanent_fence_not_tested": true,
       "reason": "Preflight rejection during continuing retained-owner control updates; original private WAL still one frame. Test now waits for all256 E3 LOCAL and retries only before encoder."
     },
-    "production_classes_unchanged_from_v2": 801
+    "production_classes_unchanged_from_v2": 801,
+    "v3_live_local_results": {
+      "live-local-permanent-fence": {
+        "discovered": 1,
+        "executed": 1,
+        "failures": 0,
+        "ignored": 0,
+        "optional_external_historical_skips": 0,
+        "log_sha256": "508bfbf8f21185655213677757011256cef67dbda36203dd8bb4d6a1ec984cc5"
+      },
+      "live-local-repeated-heads": {
+        "discovered": 1,
+        "executed": 1,
+        "failures": 0,
+        "ignored": 0,
+        "optional_external_historical_skips": 0,
+        "log_sha256": "8d68e5ba0f19f67a5295c6c80adae81e710708871a5910a405bf76d533959508"
+      },
+      "live-local-published-head": {
+        "discovered": 1,
+        "executed": 1,
+        "failures": 0,
+        "ignored": 0,
+        "optional_external_historical_skips": 0,
+        "log_sha256": "247de72dac5083575b6c1e9b1681d37cc5113b9ebc98a973fc7d07b2af7e4c0b"
+      },
+      "live-local-private-tail": {
+        "discovered": 1,
+        "executed": 1,
+        "failures": 0,
+        "ignored": 0,
+        "optional_external_historical_skips": 0,
+        "log_sha256": "556a0b1725c90d91eaff885ecbc86afad80a94eb315520f8bda3d3c605dd8f53"
+      }
+    }
   },
   "github_recovery_branch_update_20261116": {
     "branch": "t554-mac-recovery-20261115",
@@ -462,5 +496,19 @@
     "additional_test_robot_running": 1,
     "control_metadata_is_not_physical_writer_or_business_proof": true,
     "production_go": false
+  },
+  "sequential_followthrough_20261116": {
+    "journal": "/Users/kong/.opentradingcore/t554-live-local-followthrough-v3-20261116.json",
+    "source": "/Users/kong/.opentradingcore/t554-live-local-followthrough-v3-20261116.py",
+    "scope": "Wait for complete exact-JAR qualification; recheck unchanged core source and original generation; sequential strict fresh with retained rollback; ten Robots and native TCP baselines. Stop on any failed integrity stage. Not owner acceptance.",
+    "production_go": false
+  },
+  "future_fault_log_retention": {
+    "source": "scripts/roll-mac-demo-voter.py",
+    "diagnostic_only": true,
+    "maximum_per_stream_bytes": 67108864,
+    "captures": "original, survivor, witness and returning voter first logs from five seconds before each collector starts",
+    "business_container_unchanged_readonly_proof": "/Users/kong/.opentradingcore/t554-bounded-readonly-fault-log-d6ah1mb9/proof.json",
+    "actual_read_client_cap_and_stop_proof": "/Users/kong/.opentradingcore/t554-bounded-fault-log-cap-proof-15e7bfwh/proof.json"
   }
 }
