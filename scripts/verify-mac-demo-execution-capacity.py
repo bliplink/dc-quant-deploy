@@ -38,14 +38,14 @@ def execution_reports(payload):
     return []
 
 
-def signed_trader(location, run, index, accounts):
+def signed_trader(location, run, index, accounts, symbol=SYMBOL):
     from opentradingcore import OpenTradingCoreClient
-    trader = CANCEL['new_trader'](location, SYMBOL, 'TRADE', run, index, funding_amount=FUNDING)
+    trader = CANCEL['new_trader'](location, symbol, 'TRADE', run, index, funding_amount=FUNDING)
     issued = CANCEL['api']('LoginSvr', 'updateApiKey', {
         'cid': 'EXEC_KEY_' + run + str(index), 'label': 'execution-capacity-' + run,
         'type': 'trade'}, trader[2])
     # Keep credentials only in this process, never in reports or console output.
-    account = {'trader': trader, 'key': issued['api_key'], 'client': None, 'order_attempted': False}
+    account = {'trader': trader, 'key': issued['api_key'], 'client': None, 'order_attempted': False, 'symbol': symbol}
     accounts.append(account)
     client = OpenTradingCoreClient.from_api_key(
         base_url=CANCEL['URL'].rsplit('/httpapi/', 1)[0], location=location,
@@ -71,6 +71,7 @@ def error_status(error):
 def cleanup_accounts(accounts, location, run, report, refresh_credentials=False):
     for account in accounts:
         client, trader = account['client'], account['trader']
+        symbol = account.get('symbol', SYMBOL)
         if client is not None:
             if refresh_credentials:
                 try:
@@ -84,14 +85,14 @@ def cleanup_accounts(accounts, location, run, report, refresh_credentials=False)
             if account['order_attempted']:
                 try:
                     scoped_trader = (location, trader[1], client.session.token)
-                    for order in CANCEL['open_orders'](scoped_trader, SYMBOL):
+                    for order in CANCEL['open_orders'](scoped_trader, symbol):
                         client_id = order.get('ClOrdID') or order.get('ClOrderID')
                         if not client_id or not client_id.startswith('T554EXEC-' + run + '-'):
                             raise RuntimeError('Unexpected order outside this benchmark run')
-                        client.cancel_order(SYMBOL, order['OrderID'],
+                        client.cancel_order(symbol, order['OrderID'],
                                             clord_id=client_id + '-CANCEL')
-                        CANCEL['await_order'](scoped_trader, SYMBOL, client_id, False)
-                    if CANCEL['open_orders'](scoped_trader, SYMBOL):
+                        CANCEL['await_order'](scoped_trader, symbol, client_id, False)
+                    if CANCEL['open_orders'](scoped_trader, symbol):
                         report.setdefault('cleanup_errors', []).append('REMAINING_OWN_ORDERS')
                 except Exception as error:
                     report.setdefault('cleanup_errors', []).append(error_status(error))

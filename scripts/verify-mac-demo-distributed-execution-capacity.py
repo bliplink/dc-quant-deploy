@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Measure simultaneous native TCP execution streams on distinct certified partitions."""
+"""Measure native TCP sessions across declared tenant/symbol matching queues."""
 import argparse
 from collections import Counter
 from concurrent.futures import ThreadPoolExecutor, as_completed
@@ -35,10 +35,10 @@ def validate_offered_load(streams, rate, seconds):
     eight sessions at 130/s would test admission rejection instead of capacity.
     The session cap includes headroom below the current 100 RPC/s profile.
     """
-    if (streams not in (2, 4, 8, 16) or not math.isfinite(rate)
+    if (streams not in (1, 2, 4, 8, 16) or not math.isfinite(rate)
             or not 0 < rate <= 80 or not 60 <= seconds <= 120
             or rate * seconds > 10000):
-        raise ValueError('Use 2/4/8/16 independent streams, at most 80 orders/s per session, '
+        raise ValueError('Use 1/2/4/8/16 independent sessions, at most 80 orders/s per session, '
                          '60–120 seconds and at most 10000 orders per funded stream')
     return {'sessions': streams, 'per_session_offered_requests_per_second': rate,
             'per_session_request_budget_per_second': 80,
@@ -65,16 +65,63 @@ def reviewed_replication_lanes(root):
             'scope': 'Derived connection affinity from exact verified Common source; not a worker utilization measurement'}
 
 
-def summarize_streams(streams, seconds, expected_policy=None):
+def matching_layout(streams, tenants=None, symbols_per_tenant=None):
+    explicit = tenants is not None or symbols_per_tenant is not None
+    tenants = (1 if tenants is None else tenants) if explicit else streams
+    symbols = 1 if symbols_per_tenant is None else symbols_per_tenant
+    queues = tenants * symbols
+    if (not 1 <= tenants <= 16 or not 1 <= symbols <= 16
+            or queues > streams or streams % queues):
+        raise ValueError('Native sessions must be divisible by tenants times symbols per tenant')
+    return {'explicit_matrix': explicit, 'tenants': tenants, 'symbols_per_tenant': symbols,
+            'sessions_per_queue': streams // queues, 'matching_queues': queues,
+            'native_sessions': streams,
+            'placement': 'NATURAL_HASH_MATRIX' if explicit else 'DISTINCT_PARTITIONS_BALANCED'}
+
+
+def summarize_streams(streams, seconds, expected_policy=None, layout=None):
+    if not streams or any(not isinstance(row.get('measurement'), dict) for row in streams):
+        raise RuntimeError('Every admitted native session requires its own complete report')
+    layout = layout or matching_layout(len(streams))
+    if not layout['explicit_matrix']:
+        for key in ('order_partition', 'trade_partition'):
+            if len({row[key] for row in streams}) != len(streams):
+                raise RuntimeError('Distributed load requires distinct ' + key)
+        for key in ('order_primary', 'trade_primary'):
+            if len(streams) > 1 and len({row[key] for row in streams}) != 2:
+                raise RuntimeError('Distributed load must exercise both physical primaries for ' + key)
+    groups = {}
+    for stream in streams:
+        key = (stream['location'], stream.get('symbol', EXEC['SYMBOL']))
+        groups.setdefault(key, []).append(stream)
+    tenant_symbols = {}
+    for location, symbol in groups:
+        tenant_symbols.setdefault(location, set()).add(symbol)
+    if (len(tenant_symbols) != layout['tenants'] or len(groups) != layout['matching_queues']
+            or any(len(symbols) != layout['symbols_per_tenant'] for symbols in tenant_symbols.values())
+            or any(len(group) != layout['sessions_per_queue'] for group in groups.values())
+            or len(streams) != layout['native_sessions']):
+        raise RuntimeError('Measured matching queues or sessions differ from the declared tenant/symbol matrix')
+    result = _summarize_receipts(streams, seconds, expected_policy)
+    queues = []
+    for (location, symbol), group in sorted(groups.items()):
+        keys = ('order_partition', 'trade_partition', 'order_primary', 'trade_primary')
+        if any(len({row[key] for row in group}) != 1 for key in keys):
+            raise RuntimeError('One matching queue changed physical placement during setup')
+        queues.append(dict(location=location, symbol=symbol, market_indicator='4',
+                           native_sessions=len(group), **{key: group[0][key] for key in keys},
+                           measurement=_summarize_receipts(group, seconds, expected_policy)))
+    result.update(matching_queue_count=len(queues), tenant_count=len(tenant_symbols),
+                  queue_layout=layout, queues=queues,
+                  queues_by_order_partition=dict(Counter(q['order_partition'] for q in queues)),
+                  queues_by_trade_partition=dict(Counter(q['trade_partition'] for q in queues)))
+    return result
+
+
+def _summarize_receipts(streams, seconds, expected_policy=None):
     """Keep missing replies, duplicate fills, skew and tail completion visible."""
     if not streams or any(not isinstance(row.get('measurement'), dict) for row in streams):
         raise RuntimeError('Every admitted native stream requires its own complete report')
-    for key in ('order_partition', 'trade_partition'):
-        if len({row[key] for row in streams}) != len(streams):
-            raise RuntimeError('Distributed load requires distinct ' + key)
-    for key in ('order_primary', 'trade_primary'):
-        if len({row[key] for row in streams}) != 2:
-            raise RuntimeError('Distributed load must exercise both physical primaries for ' + key)
     rows = []
     starts = []
     count_inside = 0
@@ -127,21 +174,26 @@ def projected_stream(stream):
     expected = {row['client_order_id'] for row in stream['measurement']['orders']}
     run = stream['run']
     rows = CANCEL['PRODUCT']['readonly_sql'](
-        'SELECT o.clord_id,o.ord_status,COUNT(e.exec_id),COALESCE(SUM(e.last_qty),0) '
+        'SELECT o.clord_id,o.ord_status,COUNT(e.exec_id),COALESCE(SUM(e.last_qty),0),o.security_id,o.market_indicator '
         'FROM dc_orders o LEFT JOIN dc_orders_execorders e '
         'ON e.location=o.location AND e.order_id=o.order_id '
         f"WHERE o.location='{stream['location']}' AND o.clord_id LIKE 'T554EXEC-{run}-%' "
-        f"AND o.clord_id<>'T554EXEC-{run}-MAKER' GROUP BY o.clord_id,o.order_id,o.ord_status")
-    return {'rows': len(rows), 'expected_rows': len(expected), 'consistent':
+        f"AND o.clord_id<>'T554EXEC-{run}-MAKER' GROUP BY o.clord_id,o.order_id,o.ord_status,o.security_id,o.market_indicator")
+    return {'rows': len(rows), 'expected_rows': len(expected),
+            'observed_symbols': sorted({row[4] for row in rows}), 'consistent':
             len(rows) == len(expected) and {row[0] for row in rows} == expected
             and all(row[1] == 'Filled' and int(row[2]) == 1
-                    and Decimal(row[3]) == EXEC['QUANTITY'] for row in rows)}
+                    and Decimal(row[3]) == EXEC['QUANTITY'] and row[4] == stream['symbol']
+                    and row[5] == '4' for row in rows)}
 
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('generation', type=Path)
-    parser.add_argument('--streams', type=int, choices=(2, 4, 8, 16), default=4)
+    parser.add_argument('--streams', type=int, choices=(1, 2, 4, 8, 16), default=4,
+                        help='Authenticated native sessions; several may share one matching queue')
+    parser.add_argument('--tenants', type=int, help='Explicit tenant/symbol matrix; default uses independent tenants')
+    parser.add_argument('--symbols-per-tenant', type=int, help='Matching books per tenant; sessions may share a book')
     parser.add_argument('--rate-per-stream', type=float, default=1)
     parser.add_argument('--seconds', type=int, default=60)
     parser.add_argument('--require-performance-target', action='store_true')
@@ -156,6 +208,7 @@ def main():
         parser.error('JFR requires --diagnostic-only; profiled performance cannot pass acceptance')
     try:
         admission_budget = validate_offered_load(args.streams, args.rate_per_stream, args.seconds)
+        queue_layout = matching_layout(args.streams, args.tenants, args.symbols_per_tenant)
     except ValueError as error:
         parser.error(str(error))
     os.umask(0o077)
@@ -169,12 +222,17 @@ def main():
               'stage': 'ADMISSION',
               'scope': 'Independent funded tenants, distinct Order and Trade partitions, both A/B primaries; original live Robot background',
               'target_streams': args.streams, 'target_orders_per_second': args.streams * args.rate_per_stream,
+              'matching_queue_layout': queue_layout,
               'target_seconds': args.seconds, 'streams': [], 'excluded_setup': [],
               'diagnostic_only': args.diagnostic_only,
               'native_session_admission_budget': admission_budget,
               'measurement_source_sha256': hashlib.sha256(Path(__file__).read_bytes()).hexdigest(),
               'native_wrapper_sha256': hashlib.sha256((HERE / 'mac-demo-native-tcp.py').read_bytes()).hexdigest(),
               'started_at': datetime.now(timezone.utc).isoformat()}
+    if queue_layout['explicit_matrix']:
+        report['scope'] = 'Native TCP tenant/symbol matching-queue matrix; natural hash placement and per-queue final latency; original live Robot background'
+    elif args.streams == 1:
+        report['scope'] = 'One funded tenant/product hotspot, native TCP submission and final execution; original live Robot background'
     try:
         with (root.parent / '.mac-demo-fresh.lock').open('a') as lock:
             fcntl.flock(lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
@@ -193,18 +251,38 @@ def main():
             # Credentials remain in these local variables, never in report/config files or command lines.
             private = []
             with ExitStack() as setup:
+                def candidates():
+                    if queue_layout['explicit_matrix']:
+                        products = tuple(('TRADE', 'BTC%03dUSDT' % (4 + i))
+                                         for i in range(queue_layout['symbols_per_tenant']))
+                        for tenant_index in range(queue_layout['tenants']):
+                            tenant_report = {'run': secrets.token_hex(4), 'tenant_index': tenant_index}
+                            report.setdefault('controlled_tenant_setup', []).append(tenant_report)
+                            location, actual_products = setup.enter_context(CANCEL['controlled_products'](
+                                tenant_report['run'], tenant_report, products=products))
+                            tenant_report['location'] = location
+                            if actual_products != products:
+                                raise RuntimeError('Controlled tenant products differ from the declared matrix')
+                            for _, symbol in products:
+                                for session_index in range(queue_layout['sessions_per_queue']):
+                                    stream = {'run': secrets.token_hex(4), 'tenant_index': tenant_index,
+                                              'session_index_in_queue': session_index,
+                                              'price_source': tenant_report['price_source']}
+                                    yield stream, location, symbol, None
+                    else:
+                        for attempt in range(args.streams + 12):
+                            if len(private) == args.streams:
+                                return
+                            stream = {'run': secrets.token_hex(4), 'setup_attempt': attempt}
+                            candidate = setup.enter_context(ExitStack())
+                            location, products = candidate.enter_context(CANCEL['controlled_products'](stream['run'], stream))
+                            if ('TRADE', EXEC['SYMBOL']) not in products:
+                                raise RuntimeError('Controlled funded Trade product is absent')
+                            yield stream, location, EXEC['SYMBOL'], candidate
                 try:
                     report['stage'] = 'CONTROLLED_TENANT_AND_ACCOUNT_SETUP'
-                    for attempt in range(args.streams + 12):
-                        if len(private) == args.streams:
-                            break
-                        run = secrets.token_hex(4)
-                        stream = {'run': run, 'setup_attempt': attempt}
-                        candidate = setup.enter_context(ExitStack())
-                        location, products = candidate.enter_context(CANCEL['controlled_products'](run, stream))
-                        symbol = EXEC['SYMBOL']
-                        if ('TRADE', symbol) not in products:
-                            raise RuntimeError('Controlled funded Trade product is absent')
+                    for stream, location, symbol, candidate in candidates():
+                        run = stream['run']
                         stream.update(location=location, symbol=symbol)
                         for kind, key in [('trade', location), ('order', location + '\x1f4\x1f' + symbol)]:
                             part = 'P%03d' % (zlib.crc32(key.encode()) % 256)
@@ -222,7 +300,7 @@ def main():
                         unbalanced = len(private) == args.streams - 1 and any(
                             len({row[kind + '_primary'] for row in used} | {stream[kind + '_primary']}) != 2
                             for kind in ('order', 'trade'))
-                        if collision or unbalanced:
+                        if not queue_layout['explicit_matrix'] and args.streams > 1 and (collision or unbalanced):
                             report['excluded_setup'].append({'location': location,
                                 'reason': 'PARTITION_COLLISION' if collision else 'PRIMARY_BALANCE'})
                             candidate.close()
@@ -230,8 +308,8 @@ def main():
                         accounts = []
                         private.append((stream, accounts, None))
                         report['streams'].append(stream)
-                        maker = EXEC['signed_trader'](location, run, 0, accounts)
-                        taker = EXEC['signed_trader'](location, run, 1, accounts)
+                        maker = EXEC['signed_trader'](location, run, 0, accounts, symbol=symbol)
+                        taker = EXEC['signed_trader'](location, run, 1, accounts, symbol=symbol)
                         stream.update(maker_user_id=maker.session.user_id, taker_user_id=taker.session.user_id)
                         planned = int(args.rate_per_stream * args.seconds)
                         maker_id = 'T554EXEC-' + run + '-MAKER'
@@ -247,7 +325,7 @@ def main():
                                   'run': run, 'rate': args.rate_per_stream, 'seconds': args.seconds}
                         private[-1] = (stream, accounts, config)
                     if len(private) != args.streams:
-                        raise RuntimeError('Bounded setup did not find balanced distinct partitions')
+                        raise RuntimeError('Bounded setup did not complete the declared native session layout')
                     report['background_robots_at_admission'] = CAPACITY['demo_tenants']()
                     if report['background_robots_at_admission'] != baseline:
                         raise RuntimeError('Original Robot cohort changed during setup')
@@ -280,7 +358,7 @@ def main():
                     report['resource_samples'] = samples
                     report['stage'] = 'CLIENT_AND_PROJECTION_VERIFICATION'
                     report['aggregate'] = summarize_streams(
-                        report['streams'], args.seconds, report['common_release']['client_ack_policy'])
+                        report['streams'], args.seconds, report['common_release']['client_ack_policy'], queue_layout)
                     report['control_generation_after'] = CAPACITY['require_strict_demo'](root, check_space=False)
                     report['control_stable'] = report['control_generation_after'] == before
                     deadline = time.monotonic() + 45

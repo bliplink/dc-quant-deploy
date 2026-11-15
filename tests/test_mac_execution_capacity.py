@@ -70,6 +70,59 @@ class ExecutionCapacityTest(unittest.TestCase):
         self.assertEqual(21, fills['p99'])
         self.assertIsNone(CAPACITY['summary_ms']([], 'client_fill_ms')['p99'])
 
+    def test_matrix_product_validation_precedes_tenant_creation(self):
+        control = CAPACITY['CANCEL']['controlled_products']
+        for products in [[], [('TRADE', 'BTC005USDT')] * 2, [('INVALID', 'BTC005USDT')],
+                         [('TRADE', 'BTC005USDT')] * 17]:
+            with self.subTest(products=products), patch.dict(control.__wrapped__.__globals__,
+                    api=lambda *args: self.fail('Created tenant before invalid product rejection')):
+                with self.assertRaises(ValueError), control('fixture', {}, products=products):
+                    self.fail('Invalid product layout was admitted')
+
+    def test_matrix_cleanup_cancels_only_its_actual_symbol(self):
+        calls = []
+        client = SimpleNamespace(session=SimpleNamespace(token='current'),
+                                 close_stream=lambda **kwargs: None,
+                                 cancel_order=lambda symbol, order, **kwargs: calls.append((symbol, order)))
+        accounts = [{'client': client, 'trader': ('TEST01', 'user', 'original'),
+                     'key': 'test-key', 'symbol': 'BTC005USDT', 'order_attempted': True}]
+        pending = [[{'ClOrdID': 'T554EXEC-fixture-MAKER', 'OrderID': 'order'}], []]
+        def open_orders(trader, symbol):
+            self.assertEqual('BTC005USDT', symbol)
+            return pending.pop(0)
+        report = {}
+        with patch.dict(CAPACITY['CANCEL'], open_orders=open_orders,
+                        await_order=lambda trader, symbol, *args: self.assertEqual('BTC005USDT', symbol)), \
+                patch.dict(CAPACITY['CANCEL']['PRODUCT'], call=lambda *args: {'code': 0}):
+            CAPACITY['cleanup_accounts'](accounts, 'TEST01', 'fixture', report)
+        self.assertEqual([('BTC005USDT', 'order')], calls)
+        self.assertNotIn('cleanup_errors', report)
+
+    def test_controlled_multi_product_setup_registers_and_checks_each_real_symbol(self):
+        control = CAPACITY['CANCEL']['controlled_products']
+        wanted = (('TRADE', 'BTC004USDT'), ('TRADE', 'BTC005USDT'))
+        calls = []
+        def api(service, method, content, token=None):
+            calls.append((service, method, content))
+            if method == 'tenantApplication': return {'status': 'APPROVED', 'approved_location': 'TEST01'}
+            if method == 'SYS.ATS.LOGIN': return {'token': 'fixture-admin'}
+            if method == 'tenantApiKeyAdmin': return {'api_key': 'fixture-key', 'secret_key': 'fixture-secret'}
+            if method == 'queryPublicMarket': return {'ticker': {'MarkPrice': '90001'}}
+            return {}
+        no_thread = lambda **kwargs: SimpleNamespace(start=lambda: None, join=lambda: None)
+        report = {}
+        with patch.dict(control.__wrapped__.__globals__, api=api, Thread=no_thread,
+                        stop_trial_robot_after_bootstrap=lambda *args: {'stopped': True}), \
+                patch.dict(CAPACITY['CANCEL']['PRODUCT'], signed_login=lambda *args: {'token': 'fixture-broker'},
+                           call=lambda *args: {'code': 0}):
+            with control('fixture', report, products=wanted) as (location, products):
+                self.assertEqual(('TEST01', wanted), (location, products))
+        created = [row[2]['security_id'] for row in calls if row[1] == 'tenantProductDataSource']
+        checked = [row[2]['securityID'] for row in calls if row[1] == 'queryPublicMarket']
+        self.assertEqual(['BTC004USDT', 'BTC005USDT'], created)
+        self.assertEqual(created, checked)
+        self.assertTrue(report['price_source']['broker_key_deleted'])
+
 
 if __name__ == '__main__':
     unittest.main()

@@ -7,6 +7,7 @@ from datetime import datetime, timezone
 from decimal import Decimal, ROUND_DOWN
 import fcntl
 import json
+import re
 from pathlib import Path
 import runpy
 import secrets
@@ -28,7 +29,12 @@ def api(service, method, content, token=None):
 
 
 @contextmanager
-def controlled_products(run, report, password=None, admin_session=None):
+def controlled_products(run, report, password=None, admin_session=None, products=None):
+    products = tuple(products) if products is not None else (("ORDER_ONLY", "BTC003USDT"), ("TRADE", "BTC004USDT"))
+    if (not 1 <= len(products) <= 16 or len({symbol for _, symbol in products}) != len(products)
+            or any(mode not in ("ORDER_ONLY", "TRADE") or not re.fullmatch(r"[A-Z0-9]{3,24}", symbol)
+                   for mode, symbol in products)):
+        raise ValueError("Expected unique bounded controlled products before tenant creation")
     password = password or secrets.token_urlsafe(24)
     application = api("ManagerSvr", "tenantApplication", {
         "action": "SUBMIT", "cid": "CANCELCAP_" + run, "request_id": "CANCELCAP_" + run,
@@ -53,7 +59,6 @@ def controlled_products(run, report, password=None, admin_session=None):
         "source_name": "Order cancel acceptance price", "source_type": "CUSTOM",
         "source_symbol": "BTC_CANCEL",
     }, admin)
-    products = (("ORDER_ONLY", "BTC003USDT"), ("TRADE", "BTC004USDT"))
     for mode, symbol in products:
         api("AdminSvr", "tenantProductDataSource", {
             "action": "CREATE", "location": location, "cid": source + symbol,

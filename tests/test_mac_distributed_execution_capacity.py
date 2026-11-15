@@ -4,6 +4,7 @@ import runpy
 import subprocess
 import tempfile
 import unittest
+from unittest.mock import patch
 
 DRIVER = runpy.run_path(str(Path(__file__).resolve().parents[1] /
                               'scripts/verify-mac-demo-distributed-execution-capacity.py'))
@@ -104,6 +105,61 @@ class DistributedReceiptTest(unittest.TestCase):
         result = DRIVER['summarize_streams'](streams, 60)
         self.assertEqual(300, result['start_spread_ms'])
         self.assertFalse(result['window_capacity_pass'])
+
+    def test_many_sessions_on_one_book_are_one_matching_queue(self):
+        streams = self.streams()
+        streams[1].update(location=streams[0]['location'], symbol='BTC004USDT',
+                          order_partition=streams[0]['order_partition'], trade_partition=streams[0]['trade_partition'],
+                          order_primary=streams[0]['order_primary'], trade_primary=streams[0]['trade_primary'])
+        layout = DRIVER['matching_layout'](2, tenants=1, symbols_per_tenant=1)
+        result = DRIVER['summarize_streams'](streams, 60, 'STRICT_QUORUM', layout)
+        self.assertEqual((1, 1, 2), (result['tenant_count'], result['matching_queue_count'],
+                                   result['queues'][0]['native_sessions']))
+        self.assertEqual(2, result['queues'][0]['measurement']['client_fill_ms']['samples'])
+        self.assertTrue(result['window_capacity_pass'])
+
+    def test_one_tenant_many_symbols_share_trade_partition_but_keep_queue_tails(self):
+        streams = self.streams()
+        streams[0]['symbol'] = 'BTC004USDT'
+        streams[1].update(location=streams[0]['location'], symbol='BTC005USDT',
+                          trade_partition=streams[0]['trade_partition'], trade_primary=streams[0]['trade_primary'])
+        streams[1]['measurement']['orders'][0]['client_fill_ms'] = 900
+        streams[1]['measurement']['fills_inside_offered_window'] = 0
+        layout = DRIVER['matching_layout'](2, tenants=1, symbols_per_tenant=2)
+        result = DRIVER['summarize_streams'](streams, 60, 'STRICT_QUORUM', layout)
+        self.assertEqual((1, 2), (result['tenant_count'], result['matching_queue_count']))
+        self.assertEqual({'P001': 2}, result['queues_by_trade_partition'])
+        self.assertEqual([10, 900], [q['measurement']['client_fill_ms']['p99'] for q in result['queues']])
+        self.assertFalse(result['window_capacity_pass'])
+
+    def test_natural_partition_collision_is_visible_only_in_declared_matrix(self):
+        streams = self.streams()
+        streams[1].update(trade_partition=streams[0]['trade_partition'], trade_primary=streams[0]['trade_primary'])
+        with self.assertRaises(RuntimeError):
+            DRIVER['summarize_streams'](streams, 60)
+        layout = DRIVER['matching_layout'](2, tenants=2, symbols_per_tenant=1)
+        result = DRIVER['summarize_streams'](streams, 60, 'STRICT_QUORUM', layout)
+        self.assertEqual({'P001': 2}, result['queues_by_trade_partition'])
+        self.assertTrue(result['window_capacity_pass'])
+
+    def test_mislabeled_matrix_and_non_divisible_plan_fail_before_acceptance(self):
+        for tenants, symbols in [(0, 1), (1, 0), (3, 1), (1, 3), (2, 2)]:
+            with self.subTest(tenants=tenants, symbols=symbols), self.assertRaises(ValueError):
+                DRIVER['matching_layout'](2, tenants, symbols)
+        layout = DRIVER['matching_layout'](2, tenants=1, symbols_per_tenant=1)
+        with self.assertRaises(RuntimeError):
+            DRIVER['summarize_streams'](self.streams(), 60, 'STRICT_QUORUM', layout)
+
+    def test_projected_execution_must_belong_to_the_requested_real_product(self):
+        stream = {'run': 'fixture', 'location': 'TEST01', 'symbol': 'BTC005USDT',
+                  'measurement': {'orders': [{'client_order_id': 'order'}]}}
+        for symbol, market, passed in [('BTC005USDT', '4', True), ('BTC004USDT', '4', False),
+                                       ('BTC005USDT', '5', False)]:
+            rows = [['order', 'Filled', '1', '0.001', symbol, market]]
+            with self.subTest(symbol=symbol, market=market), \
+                    patch.dict(DRIVER['CANCEL']['PRODUCT'], readonly_sql=lambda sql: rows):
+                result = DRIVER['projected_stream'](stream)
+                self.assertEqual(passed, result['consistent'])
 
 
 class DistributedEntryTest(unittest.TestCase):
