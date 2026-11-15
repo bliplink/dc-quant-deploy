@@ -253,6 +253,29 @@ public final class MacDemoNativeTcpLoad {
         client.execution(event);
         if (!client.streamErrors.contains("EXECUTION_IDENTITY_OR_QUANTITY_MISMATCH"))
             throw new AssertionError("Wrong financial identity accepted");
+        // The public driver permits up to10,000 results per stream. Exercise
+        // actual final-receipt accounting and complete export under the same
+        // bounded heap/Netty profile used by the real generator.
+        client.orders.clear();client.streamErrors.clear();
+        for(int index=0;index<10000;index++){
+            String id="memory-order-"+index;
+            Map<String,Object> retained=new LinkedHashMap<>();
+            retained.put("client_order_id",id);
+            retained.put("started_ns",System.nanoTime());
+            retained.put("scheduled_ns",retained.get("started_ns"));
+            retained.put("ack_ms",1.0);retained.put("outcome","ACKNOWLEDGED");
+            client.orders.put(id,retained);
+            JSONObject fill=JSON.parseObject("{\"ExecType\":\"Trade\",\"OrdStatus\":\"Filled\","
+                    +"\"Location\":\"TEST01\",\"LastQty\":\"0.001\"}");
+            fill.put("ClOrdID",id);fill.put("ExecID","memory-execution-"+index);
+            client.execution(fill);
+        }
+        String complete=JSON.toJSONString(client.orders.values());
+        if(client.orders.size()!=10000 ||!client.streamErrors.isEmpty()
+                ||client.orders.values().stream().anyMatch(value->!value.containsKey("execution_id")
+                    ||!value.containsKey("received_ns") ||!value.containsKey("client_fill_ms"))
+                ||!complete.contains("memory-execution-9999"))
+            throw new AssertionError("Bounded client lost a retained receipt or its complete export");
         System.out.println("NATIVE_TCP_EXECUTION_OBSERVATION_SELF_TEST_PASS");
     }
 

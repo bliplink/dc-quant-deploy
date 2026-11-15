@@ -18,7 +18,8 @@ class NativeEvidenceTest(unittest.TestCase):
         self.temporary = tempfile.TemporaryDirectory()
         self.addCleanup(self.temporary.cleanup)
         self.root = Path(self.temporary.name)
-        (self.root / 'identity.json').write_text(json.dumps({'java_home': '/unused-jdk'}))
+        (self.root / 'identity.json').write_text(json.dumps({
+            'java_home': '/unused-jdk', 'client_jvm_args': native.CLIENT_JVM_ARGS}))
         self.config = {'seconds': 60, 'prefix': 'TEST', 'token': 'INPUT_SECRET_NOT_FOR_EVIDENCE'}
 
     def test_success_kept_before_caller_control_rejection(self):
@@ -27,6 +28,7 @@ class NativeEvidenceTest(unittest.TestCase):
             result = native.run(self.root, self.config)
         proof = Path(result['native_process_evidence'])
         self.assertEqual(json.loads(proof.read_text())['returncode'], 0)
+        self.assertEqual(json.loads(proof.read_text())['client_jvm_args'], native.CLIENT_JVM_ARGS)
         self.assertNotIn(self.config['token'], proof.read_text())
         self.assertIn('SDK_SESSION_PRIVATE', (proof.parent / 'stdout.txt').read_text())
         self.assertEqual(stat.S_IMODE(proof.parent.stat().st_mode), 0o700)

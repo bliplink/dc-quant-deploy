@@ -272,6 +272,32 @@ public final class MacDemoNativeTcpOrderCancel {
         event.put("Location", "OTHER1");
         try { client.observe(event);throw new AssertionError("Wrong owner accepted"); }
         catch (IllegalStateException expected) { }
+        // At80 requests/s, a300s window can retain12,000 complete two-command
+        // cycles. Cover actual status observation plus the final copied
+        // report/export under the generator's bounded heap.
+        client.observed.clear();
+        List<Map<String,Object>> retained=new ArrayList<>();
+        for(int index=0;index<12000;index++){
+            String id="memory-cancel-"+index;
+            Map<String,Object> status=new LinkedHashMap<>();client.observed.put(id,status);
+            JSONObject update=JSON.parseObject("{\"Location\":\"TEST01\",\"UserID\":\"u1\","
+                    +"\"SecurityID\":\"BTC004USDT\",\"OrdStatus\":\"New\"}");
+            update.put("ClOrdID",id);update.put("OrderID",String.valueOf(100000000L+index));
+            client.observe(update);update.put("OrdStatus","Cancelled");client.observe(update);
+            if(!status.containsKey("new_received_ns") ||!status.containsKey("cancel_received_ns"))
+                throw new AssertionError("Bounded client lost an actual terminal status");
+            Map<String,Object> record=new LinkedHashMap<>();
+            record.put("client_order_id",id);record.put("location","TEST01");record.put("user_id","u1");
+            record.put("order_id",update.getString("OrderID"));record.put("passed",true);
+            for(String field:new String[]{"place_ack_ms","place_new_ms","cancel_ack_ms","cancel_terminal_ms","cycle_ms"})
+                record.put(field,1.0);
+            retained.add(record);
+        }
+        List<Map<String,Object>> exported=new ArrayList<>();
+        for(Map<String,Object> record:retained)exported.add(new LinkedHashMap<>(record));
+        String complete=JSON.toJSONString(exported);
+        if(exported.size()!=12000 ||!complete.contains("memory-cancel-11999"))
+            throw new AssertionError("Bounded client truncated its final report");
         System.out.println("NATIVE_TCP_ORDER_CANCEL_OBSERVATION_SELF_TEST_PASS");
     }
     public static void main(String[] args) throws Exception {

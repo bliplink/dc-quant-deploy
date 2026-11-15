@@ -19,7 +19,7 @@ class NativeTcpClientTest(unittest.TestCase):
         return work
 
     def run_client(self, completed):
-        identity = {'java_home': '/test-java'}
+        identity = {'java_home': '/test-java', 'client_jvm_args': NATIVE['CLIENT_JVM_ARGS']}
         work = self.work(identity)
         completed.stderr = ''
         with patch.object(NATIVE['subprocess'], 'run', return_value=completed) as process:
@@ -28,6 +28,7 @@ class NativeTcpClientTest(unittest.TestCase):
         self.assertNotIn('private-session', ' '.join(arguments[0]))
         self.assertEqual('private-session', json.loads(options['input'])['token'])
         self.assertEqual(210, options['timeout'])
+        self.assertEqual(NATIVE['CLIENT_JVM_ARGS'], arguments[0][1:1 + len(NATIVE['CLIENT_JVM_ARGS'])])
         return result
 
     def test_only_the_complete_native_report_is_accepted(self):
@@ -47,12 +48,24 @@ class NativeTcpClientTest(unittest.TestCase):
         self.assertIn('IOException', str(caught.exception))
 
     def test_recorded_cancel_client_is_selected_without_exposing_credentials(self):
-        work = self.work({'java_home': '/test-java', 'class_name': 'MacDemoNativeTcpOrderCancel'})
+        work = self.work({'java_home': '/test-java', 'class_name': 'MacDemoNativeTcpOrderCancel',
+                          'client_jvm_args': NATIVE['CLIENT_JVM_ARGS']})
         with patch.object(NATIVE['subprocess'], 'run', return_value=SimpleNamespace(
                     returncode=0, stdout='T554_NATIVE_TCP_REPORT {"orders": []}\n', stderr='')) as process:
             NATIVE['run'](work, {'seconds': 60, 'token': 'private-session'})
         self.assertEqual('MacDemoNativeTcpOrderCancel', process.call_args.args[0][-1])
         self.assertNotIn('private-session', repr(process.call_args.args))
+
+    def test_an_unqualified_or_changed_memory_profile_cannot_run_silently(self):
+        for profile in (None, ['-Xmx256m']):
+            identity = {'java_home': '/test-java'}
+            if profile is not None:
+                identity['client_jvm_args'] = profile
+            work = self.work(identity)
+            with patch.object(NATIVE['subprocess'], 'run') as process:
+                with self.assertRaisesRegex(RuntimeError, 'must pass preparation'):
+                    NATIVE['run'](work, {'seconds': 60, 'token': 'private-session'})
+            process.assert_not_called()
 
 
 if __name__ == '__main__':
