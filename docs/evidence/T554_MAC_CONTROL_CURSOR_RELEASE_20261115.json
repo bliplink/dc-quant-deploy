@@ -1,6 +1,6 @@
 {
-  "observed_at": "2026-11-15T22:36:19.938757+08:00",
-  "status": "FUNCTIONAL_BASELINES_PASS_PERFORMANCE_NO_GO_NEW_EXACT_COMMON_P0_RUNNING",
+  "observed_at": "2026-11-15T22:41:29.438099+08:00",
+  "status": "PERFORMANCE_NO_GO_NEW_COMMON_INTERRUPTED_COLD_GATE_FAILED_UNDEPLOYED",
   "production_acceptance": "NO_GO",
   "generation": "/Users/kong/.opentradingcore/mac-demo-20261115-213528",
   "client_ack_policy": "LOCAL_DURABLE_ASYNC",
@@ -110,11 +110,11 @@
     "trade_single_node_current_same_jar_pending": true
   },
   "current_maintenance": {
-    "status": "TEN_ROBOTS_NORMAL_STOP_ZERO_PENDING_EXACT_FINANCE_FOR_NEW_COMMON_P0",
+    "status": "TEN_ROBOTS_NORMAL_RESTORED_FINANCIAL_CURSOR_PASS",
     "business_processes_restarted_for_this_common_test": false,
     "normal_stop_controller": "/Users/kong/.opentradingcore/t554-local-reader-p0-controller-v3-20261115.json",
-    "settlement_backlog_zero": true,
-    "financial_cursor": "PASS_FINANCIAL_CURSOR"
+    "financial_cursor": "PASS_FINANCIAL_CURSOR",
+    "settlement_backlog_zero_before_stop": true
   },
   "strict_measurements": {
     "order_cancel": {
@@ -677,7 +677,7 @@
     "revision": "c91e4436fe0c72260bbd722116037b6ce91cb074",
     "sha256": "8ded633702ec41e3506d5ce820eb532e88c9be4bbc045593a33550bd742c3742",
     "deployed": false,
-    "status": "EXACT_JAR_305_SAFETY_PASS_COLD_AND_FULL_PHYSICAL_P0_RUNNING",
+    "status": "NO_GO_INTERRUPTED_RETAINED_COLD_EXPECTED_STAGE_TIMEOUT",
     "safety_executed_passed": 305,
     "optional_external_historical_skips": 3,
     "focused_reader_tests_executed_passed": 41,
@@ -689,7 +689,11 @@
       "full256 bidirectional, third crash, repeated Home, interrupted signed return",
       "P1 exact-JAR business integration",
       "P2 business faults, exact financial consistency and 1000/s P99<=20ms"
-    ]
+    ],
+    "failure": "RuntimeError: interrupted-retained-cold failed with exit 2",
+    "clean_local_owner_cold_passed": true,
+    "failure_evidence": "/Users/kong/.opentradingcore/t554-common-candidates/20261115-local-accepted-reader-work-conserving/serial-cold/interrupted-retained-cold.log",
+    "robot_restore_status": "TEN_ORIGINAL_ROBOTS_NORMALLY_RESTORED_AND_FINANCIAL_CURSOR_PASS"
   },
   "gc_readonly_diagnostic": {
     "evidence": "/Users/kong/.opentradingcore/mac-demo-20261115-213528/readonly-gc-log-diagnostic-after-load-20261115/capture.json",
@@ -752,5 +756,12 @@
     "current_two_test_generations_and_unresolved_reference_preserved": true
   },
   "historical_evidence": "archive/T554_MAC_CONTROL_CURSOR_RELEASE_PRE_20261115_2235.json",
-  "application_data_or_credentials_included": false
+  "application_data_or_credentials_included": false,
+  "native_capacity_driver": {
+    "max_independent_sessions": 16,
+    "per_session_max_offered_rpc_per_second": 80,
+    "target_plan": "16x65=1040/s; not executed; current40/s accumulation must be fixed first",
+    "gateway_profile_changed": false,
+    "regression_tests_passed": 11
+  }
 }
