@@ -1,15 +1,15 @@
 {
-  "observed_at": "2026-11-15T10:52:03.597626",
-  "status": "EXACT_COMMON_FUNCTIONAL_PASS_REAL_LOAD_PHYSICAL_ACK_TIMEOUT_PERFORMANCE_AND_STABILITY_NO_GO",
+  "observed_at": "2026-11-15T11:42:43.499787",
+  "status": "EXACT_COMBINED_COMMON_P0_AND_RETAINED_DATA_FUNCTIONAL_PASS_REAL_NATIVE_LOAD_IN_PROGRESS",
   "production_acceptance": "NO_GO",
   "generation": "mac-demo-20261115-065831",
   "original_volumes_preserved": true,
   "client_ack_policy": "STRICT_QUORUM",
   "common": {
-    "revision": "99a91b9bd9039bdc40f11bc87192a5e4f25f28b9",
-    "jar_sha256": "60ede5a9bf142b3fcdd8b2420d3cdcd37ead0912b40bc2dbeeb581fb05e55d98",
-    "verification_run": "20261115-081811",
-    "safety_tests": 252,
+    "revision": "4f28c95245387a2e18f0afe6d2b1bc816f6484ba",
+    "jar_sha256": "71b4ce7dac4b2a51fe134a694f9f9f1c3654c1668f89f92f20bf731096ed264d",
+    "verification_run": "20261115-104903",
+    "safety_tests": 261,
     "native_physical_cases": 13,
     "cold_restart_cases": 4,
     "complete_256_home_both_directions_and_repeat": true,
@@ -17,12 +17,12 @@
     "equal_wal_pairs_per_verification": 256,
     "equal_snapshot_pairs_per_verification": 256,
     "controlled_fixture_phase_observations_ms": {
-      "a_takeover": 167675,
-      "a_home": 310313,
-      "b_takeover": 164815,
-      "b_home": 239668
+      "a_takeover": 163347,
+      "a_home": 324483,
+      "b_takeover": 164196,
+      "b_home": 227675
     },
-    "phase_timing_scope": "Functional fixture observations under independent test load. Distinct phases, not whole production RTO or a production SLO."
+    "phase_timing_scope": "Functional independent fixtures, distinct phases; not production RTO or a causal performance comparison. All original physical proofs retained."
   },
   "sources": {
     "shared": {
@@ -73,72 +73,72 @@
   "images": [
     {
       "name": "mac-demo-20261115-065831-order-a-hostready",
-      "image_id": "sha256:9fc5c46354a300350c1079584a0c90a091f2fe8488e2a41707bd8b70136c656d",
-      "container_id": "62261697b0f318e9f41c3bf139f11b3383cc1647f78dfafcf5fe5ff37fba0e74",
-      "common_sha256": "60ede5a9bf142b3fcdd8b2420d3cdcd37ead0912b40bc2dbeeb581fb05e55d98",
+      "image_id": "sha256:4db16a41427d399e233a47736fb05fe7aca4d1be427809a36625996587349738",
+      "container_id": "5caa7f7baca91d86f0cea7397db58d024c12ffcf77b09c2454bbecffd936b2bd",
+      "common_sha256": "71b4ce7dac4b2a51fe134a694f9f9f1c3654c1668f89f92f20bf731096ed264d",
       "restart_count_at_observation": 0
     },
     {
       "name": "mac-demo-20261115-065831-order-b-hostready",
-      "image_id": "sha256:9fc5c46354a300350c1079584a0c90a091f2fe8488e2a41707bd8b70136c656d",
-      "container_id": "8a6e9d5835dfefdcf55731251eaf20f06ad8803b3f4035c1be591897e0ce4fb6",
-      "common_sha256": "60ede5a9bf142b3fcdd8b2420d3cdcd37ead0912b40bc2dbeeb581fb05e55d98",
+      "image_id": "sha256:4db16a41427d399e233a47736fb05fe7aca4d1be427809a36625996587349738",
+      "container_id": "646e7f056b9328061888208aba457895831e1c733e9373819db6692ac6a6b402",
+      "common_sha256": "71b4ce7dac4b2a51fe134a694f9f9f1c3654c1668f89f92f20bf731096ed264d",
       "restart_count_at_observation": 0
     },
     {
       "name": "mac-demo-20261115-065831-trade-a-hostready",
-      "image_id": "sha256:fb262926fd497770ee3679ec548864684d437ece677ae927a1d64c722f60c3b2",
-      "container_id": "2508c594cfe9aac3448064fd38e7de41b15efbbe0a860a04d6789e85d4efc614",
-      "common_sha256": "60ede5a9bf142b3fcdd8b2420d3cdcd37ead0912b40bc2dbeeb581fb05e55d98",
+      "image_id": "sha256:56b9b40e72a0dff67600c8ac16f466a07138955fa5f9f2360012a8e6ac6aeb09",
+      "container_id": "83ed53e72defd2b5c8a88cad98c70ebcaaba7e5b9f82e12b24b45baee1314807",
+      "common_sha256": "71b4ce7dac4b2a51fe134a694f9f9f1c3654c1668f89f92f20bf731096ed264d",
       "restart_count_at_observation": 0
     },
     {
       "name": "mac-demo-20261115-065831-trade-b-hostready",
-      "image_id": "sha256:fb262926fd497770ee3679ec548864684d437ece677ae927a1d64c722f60c3b2",
-      "container_id": "a333a18b2d5858446a7b594f672241cc5ec126f970b8525b7ed9e04d71d3bb02",
-      "common_sha256": "60ede5a9bf142b3fcdd8b2420d3cdcd37ead0912b40bc2dbeeb581fb05e55d98",
+      "image_id": "sha256:56b9b40e72a0dff67600c8ac16f466a07138955fa5f9f2360012a8e6ac6aeb09",
+      "container_id": "71cad454e721d1577577234f99509c184c6151e395f1fe5e19ce3c9ad7d22798",
+      "common_sha256": "71b4ce7dac4b2a51fe134a694f9f9f1c3654c1668f89f92f20bf731096ed264d",
       "restart_count_at_observation": 0
     },
     {
       "name": "mac-demo-20261115-065831-order-witness",
-      "image_id": "sha256:9fc5c46354a300350c1079584a0c90a091f2fe8488e2a41707bd8b70136c656d",
-      "container_id": "a9df9e09d3167c372e9cb87b13863dfdc0bac7aaf8b73051890f25a10c8d288b",
-      "common_sha256": "60ede5a9bf142b3fcdd8b2420d3cdcd37ead0912b40bc2dbeeb581fb05e55d98",
+      "image_id": "sha256:4db16a41427d399e233a47736fb05fe7aca4d1be427809a36625996587349738",
+      "container_id": "948ad56b582a254cb21952ba6c5b6714928f74dd240bbf2153488624da05093e",
+      "common_sha256": "71b4ce7dac4b2a51fe134a694f9f9f1c3654c1668f89f92f20bf731096ed264d",
       "restart_count_at_observation": 0
     },
     {
       "name": "mac-demo-20261115-065831-trade-witness",
-      "image_id": "sha256:fb262926fd497770ee3679ec548864684d437ece677ae927a1d64c722f60c3b2",
-      "container_id": "d6a9281ddd924947c16b4a4f3f9713957abb10cc85573062d9bb5855f2f437b1",
-      "common_sha256": "60ede5a9bf142b3fcdd8b2420d3cdcd37ead0912b40bc2dbeeb581fb05e55d98",
+      "image_id": "sha256:56b9b40e72a0dff67600c8ac16f466a07138955fa5f9f2360012a8e6ac6aeb09",
+      "container_id": "9b283392811b07ea7ab5e461f9bf02d80758342fcf733bb1c6a050aeb0b562f0",
+      "common_sha256": "71b4ce7dac4b2a51fe134a694f9f9f1c3654c1668f89f92f20bf731096ed264d",
       "restart_count_at_observation": 0
     },
     {
       "name": "dc-saas-gateway",
-      "image_id": "sha256:a97a4f82e8020a81a6be8174fad9ccd2b3984ee36b6f1dd353ee7194e388eeb8",
-      "container_id": "310a9aaa865b7b3f67fcc0db3d47fb12df75572b7b6b042d04343eb9fe923dad",
-      "common_sha256": "60ede5a9bf142b3fcdd8b2420d3cdcd37ead0912b40bc2dbeeb581fb05e55d98",
+      "image_id": "sha256:37ae902bcc4faaf649dd90d5ad8525881084fcdac40d5d92ac436ec0dd4e00a3",
+      "container_id": "36233cf0808b49a43758d4043adc301aa4eb38160cbefffa6cc3829d998b1a72",
+      "common_sha256": "71b4ce7dac4b2a51fe134a694f9f9f1c3654c1668f89f92f20bf731096ed264d",
       "restart_count_at_observation": 0
     },
     {
       "name": "dc-saas-mdsvr",
-      "image_id": "sha256:f4432931b2e7b03111760a438333b617f297638a6c2cbc0af8c9bc24d189675d",
-      "container_id": "324cb083c3c4190ff5fd3ffa8439e644c7b653cb569d2c32b9f7bf14a86734a8",
-      "common_sha256": "60ede5a9bf142b3fcdd8b2420d3cdcd37ead0912b40bc2dbeeb581fb05e55d98",
+      "image_id": "sha256:c1f653a5618ba11fa756ce6e4f9c123923167f18951ac523054cca90468fba59",
+      "container_id": "3bb65a94080c0fce9939f6ced5c84771a498c7ef8e34b0cd2dfbf7317e5f5fa5",
+      "common_sha256": "71b4ce7dac4b2a51fe134a694f9f9f1c3654c1668f89f92f20bf731096ed264d",
       "restart_count_at_observation": 0
     }
   ],
   "functional": {
-    "multi_maker_report": "multi-maker-addfc9a1.json",
+    "multi_maker_report": "multi-maker-f952aa4c.json",
     "cases": 12,
     "actual_physical_roles": 256,
     "actual_primary_writers_per_node": 128,
     "original_cohort_count": 10,
     "original_cohort_financial_unsettled_before_resume": 0,
     "original_cohort_local_final_pending_before_resume": 0,
-    "financial_cursor_before_resume": "PASS",
+    "financial_cursor_before_resume": "PASS_FINANCIAL_CURSOR",
     "original_robots_normally_restarted": true,
-    "original_robots_current_state": "STOPPED_BY_NORMAL_MANAGER_FOR_STORAGE_MAINTENANCE_AND_DIAGNOSIS",
+    "original_robots_current_state": "RUNNING",
     "post_recovery_financial_cursor": "PASS",
     "post_recovery_original_cohort_financial_unsettled": 0,
     "post_recovery_original_cohort_local_final_pending": 0,
@@ -148,7 +148,7 @@
     }
   },
   "open_findings": [
-    "Current exact Common under normal four-client cancel load again suffered WAL receipt/custody receipt-ledger physical ACK timeouts across multiple Order and Trade partitions. Automatic isolation/recovery advanced Order 10 to 26, Trade 2 to 22; financial reconciliation passed, but load stability remains NO_GO.",
+    "Previous unprofiled 99a91b9 four-client load caused physical ACK timeouts. The confirmed cold-server executor defect is fixed and exactly qualified; same-version real load must close the previous failure.",
     "Native client final P99 1755.737 ms at two partitions each 1/s is unacceptable; no current-version performance improvement proven.",
     "Independent 69-second storage bracket saw about 4.47 GiB written; includes setup, tail and background traffic, not a per-trade cost or established WAL/log attribution.",
     "Serialized persistence and one outstanding asynchronous copy per partition still bound hotspot throughput.",
@@ -157,63 +157,7 @@
     "Normal strict Common path is serial: three peer request/response exchanges; source has seven file/directory force calls and replica five, per singleton Common commit. Physical writer does not yet implement real multi-command group commit. This is a structural performance limit, not a measured production throughput formula."
   ],
   "application_data_or_credentials_included": false,
-  "current_version_measurements": {
-    "background": "Original ten Robots; same volumes and images. Observations are not isolated causal before/after comparisons.",
-    "robot_steady": {
-      "report": "robot-steady-10-011005.json",
-      "seconds": 300,
-      "quotes": 7593,
-      "tape_requests": 465,
-      "fills": 465,
-      "service_final_publish_p99_ms": 705.523,
-      "service_final_publish_p999_ms": 1162.85
-    },
-    "native_two_partitions": {
-      "report": "distributed-execution-capacity-f16bed43.json",
-      "offered_per_partition_per_second": 1,
-      "planned": 120,
-      "sent": 120,
-      "final": 120,
-      "final_in_window": 120,
-      "send_drops": 0,
-      "stream_errors": 0,
-      "ack_p99_ms": 398.707,
-      "client_final_p50_ms": 218.972,
-      "client_final_p99_ms": 1755.737,
-      "client_final_p999_ms": 1881.616
-    },
-    "native_place_cancel": {
-      "report": "order-cancel-capacity-6f5d737f.json",
-      "status": "NO_GO",
-      "order_only_concurrency_1": {
-        "cycles_per_second": 8.788,
-        "new_p99_ms": 120.735,
-        "cancel_terminal_p99_ms": 179.664,
-        "cycle_p99_ms": 273.053
-      },
-      "order_only_concurrency_4": "Physical ACK failure and changing control generation; no valid capacity conclusion. Client results were lost by a post-window reporting bug, now fixed; counts must not be inferred.",
-      "later_windows": "NOT_RUN_BLOCKED_BY_FAILURE"
-    }
-  },
-  "current_maintenance": "Original ten Robots normally STOPPED after storage gate. Original business and rollback data retained. No unprofiled pressure started below the 4 GiB storage guard.",
-  "candidate_not_deployed": {
-    "common_revision": "4f28c95245387a2e18f0afe6d2b1bc816f6484ba",
-    "common_jar_sha256": "71b4ce7dac4b2a51fe134a694f9f9f1c3654c1668f89f92f20bf731096ed264d",
-    "changes": [
-      "Reuse exact immutable canonical manifest parses.",
-      "Use separate bounded server executors for the existing cold recovery connection and physical durability connections, preserving per-channel wire order."
-    ],
-    "transport_and_framing_tests": 11,
-    "full_safety_tests": "RUNNING_EXPECTED_261",
-    "full_physical_and_cold_home": "RUNNING_NOT_YET_QUALIFIED",
-    "deployed": false,
-    "previous_parse_only_candidate": {
-      "revision": "b1214be",
-      "safety_tests_passed": 256,
-      "all_four_cold_cases_passed": true,
-      "full_p0": "CANCELLED_SUPERSEDED_BEFORE_COMPLETION_NOT_QUALIFIED"
-    }
-  },
+  "current_maintenance": "Complete. Original ten Robots normally RUNNING, no COW/du/storage maintenance overlaps qualified pressure.",
   "ordinary_logging_layout": {
     "deploy_source_revision": "b9c800d",
     "four_voter_files_installed": true,
@@ -252,13 +196,15 @@
   },
   "bounded_jvm_pause_observation": {
     "source_revision": "b73ac85",
-    "runtime_deployed": false,
+    "runtime_deployed": true,
     "java8_flags_accepted_in_same_image": true,
     "dated_pause_records_observed_in_offline_process": true,
     "rotation_files": 5,
     "max_file_mib": 10,
     "diagnostic_children_options_unchanged": true,
-    "heap_gc_algorithm_ack_unchanged": true
+    "heap_gc_algorithm_ack_unchanged": true,
+    "collector_source_revision": "c968722",
+    "real_functional_window_max_completed_pause_ms": 67.6342
   },
   "confirmed_common_executor_finding": {
     "old_reproduction": "One blocked cold recovery TCP request caused only 7 of 8 healthy WAL stripes to finish, despite idle durability executors.",
@@ -268,7 +214,7 @@
       "Legacy mixed TCP connection retains response/frame order.",
       "Header peeking is bounded, non-consuming and does not replace full validation."
     ],
-    "qualification": "Exact combined Common complete P0 is pending; no production stability or performance closure claimed."
+    "qualification": "Exact 4f28c95 complete Common P0 and real retained-data P1 functional gates passed; native load and business HA qualification pending."
   },
   "storage_maintenance": {
     "unused_generated_fixture_runs_archived": 39,
@@ -277,5 +223,67 @@
     "compressed_zk_archive_bytes": 402139031,
     "all_archive_contents_compared_to_unchanged_originals_before_reclaim": true,
     "all_current_and_rollback_business_volumes_retained": true
+  },
+  "previous_version_measurements_99a91b9": {
+    "background": "Original ten Robots; same volumes and images. Observations are not isolated causal before/after comparisons.",
+    "robot_steady": {
+      "report": "robot-steady-10-011005.json",
+      "seconds": 300,
+      "quotes": 7593,
+      "tape_requests": 465,
+      "fills": 465,
+      "service_final_publish_p99_ms": 705.523,
+      "service_final_publish_p999_ms": 1162.85
+    },
+    "native_two_partitions": {
+      "report": "distributed-execution-capacity-f16bed43.json",
+      "offered_per_partition_per_second": 1,
+      "planned": 120,
+      "sent": 120,
+      "final": 120,
+      "final_in_window": 120,
+      "send_drops": 0,
+      "stream_errors": 0,
+      "ack_p99_ms": 398.707,
+      "client_final_p50_ms": 218.972,
+      "client_final_p99_ms": 1755.737,
+      "client_final_p999_ms": 1881.616
+    },
+    "native_place_cancel": {
+      "report": "order-cancel-capacity-6f5d737f.json",
+      "status": "NO_GO",
+      "order_only_concurrency_1": {
+        "cycles_per_second": 8.788,
+        "new_p99_ms": 120.735,
+        "cancel_terminal_p99_ms": 179.664,
+        "cycle_p99_ms": 273.053
+      },
+      "order_only_concurrency_4": "Physical ACK failure and changing control generation; no valid capacity conclusion. Client results were lost by a post-window reporting bug, now fixed; counts must not be inferred.",
+      "later_windows": "NOT_RUN_BLOCKED_BY_FAILURE"
+    },
+    "common_revision": "99a91b9bd9039bdc40f11bc87192a5e4f25f28b9"
+  },
+  "qualified_optimization_release": {
+    "common_revision": "4f28c95245387a2e18f0afe6d2b1bc816f6484ba",
+    "common_jar_sha256": "71b4ce7dac4b2a51fe134a694f9f9f1c3654c1668f89f92f20bf731096ed264d",
+    "changes": [
+      "Reuse exact immutable canonical manifest parses.",
+      "Use separate bounded server executors for the existing cold recovery connection and physical durability connections, preserving per-channel wire order."
+    ],
+    "transport_and_framing_tests": 11,
+    "full_safety_tests": 261,
+    "full_physical_and_cold_home": "PASS",
+    "deployed": true,
+    "previous_parse_only_candidate": {
+      "revision": "b1214be",
+      "safety_tests_passed": 256,
+      "all_four_cold_cases_passed": true,
+      "full_p0": "CANCELLED_SUPERSEDED_BEFORE_COMPLETION_NOT_QUALIFIED"
+    }
+  },
+  "current_version_measurements": {
+    "status": "FIVE_MINUTE_ORIGINAL_TEN_ROBOT_STEADY_IN_PROGRESS_NATIVE_WINDOWS_PENDING",
+    "common_revision": "4f28c95245387a2e18f0afe6d2b1bc816f6484ba",
+    "native_capacity_or_latency_improvement_claimed": false
   }
 }
