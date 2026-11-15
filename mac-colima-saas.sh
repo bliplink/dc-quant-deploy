@@ -221,8 +221,8 @@ main() {
       candidate_dir="${HOME}/.opentradingcore/t554-common-candidates/${common_stamp}"
       common_result_dir="${HOME}/.opentradingcore/t554-common-verifications/${common_stamp}"
       log "Common fault verification: ${common_result_dir}"
-      MAC_DEMO_REQUIRE_INTERRUPTED_RETURN="${MAC_DEMO_REQUIRE_INTERRUPTED_RETURN:-true}" \
-        bash "${SCRIPT_DIR}/scripts/build-mac-common-candidate.sh" "$1" "$candidate_dir" "$common_result_dir"
+      bash "${SCRIPT_DIR}/scripts/build-mac-common-candidate.sh" "$1" "$candidate_dir"
+      python3 "${SCRIPT_DIR}/scripts/qualify-mac-common-candidate.py" "$candidate_dir" "$common_result_dir"
       ;;
     verify-fresh)
       [[ "$#" == 1 ]] || die "Usage: ./mac-colima-saas.sh verify-fresh RUN_DIRECTORY"

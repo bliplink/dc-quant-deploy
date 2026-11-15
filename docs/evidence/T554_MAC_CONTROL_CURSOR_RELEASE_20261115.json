@@ -1,5 +1,5 @@
 {
-  "observed_at": "2026-11-15T22:55:12.584656+08:00",
+  "observed_at": "2026-11-15T23:13:40.082711+08:00",
   "status": "PERFORMANCE_NO_GO_NONDRAINING_CERTIFIED_PREFIX_EXACT_P0_RUNNING",
   "production_acceptance": "NO_GO",
   "generation": "/Users/kong/.opentradingcore/mac-demo-20261115-213528",
@@ -677,11 +677,19 @@
     "revision": "550717497462c76453216d7dd7161faec23d1f52",
     "sha256": "2492f6933696a242d39d7dbaa295b046feb9c4ec653f18d9cce5becf6b86428e",
     "deployed": false,
-    "status": "EXACT_JAR_SAFETY_RUNNING_COLD_AND_NATIVE_HOME_REQUIRED",
+    "status": "EXACT_JAR_306_SAFETY_FOUR_COLD_NATIVE_COPIED_PREFIX_SUPPLEMENT_PASS_COMPLETE_PHYSICAL_P0_STILL_RUNNING",
     "focused_tests_executed_passed": 50,
     "focused_skips": 0,
     "controller": "/Users/kong/.opentradingcore/t554-local-reader-p0-controller-v4-20261115.json",
-    "scope": "Pinned async clients read only the already physically certified prefix without draining newer LOCAL writes. Existing dual signatures, copied commit index, same-owner captured original force, current grant and WAL CRC remain required. Existing strict readers and snapshots retain their drain barriers. Original local accepted-reader fix retained. No scheduler acceleration."
+    "scope": "Pinned async clients read only the already physically certified prefix without draining newer LOCAL writes. Existing dual signatures, copied commit index, same-owner captured original force, current grant and WAL CRC remain required. Existing strict readers and snapshots retain their drain barriers. Original local accepted-reader fix retained. No scheduler acceleration.",
+    "safety_executed_passed": 306,
+    "safety_discovered": 309,
+    "optional_external_historical_skips": 3,
+    "cold_restart_gates_passed": 4,
+    "native_copied_prefix_supplement": "/Users/kong/.opentradingcore/t554-common-nondraining-quorum-read-native-supplement-20261115/state.json",
+    "supplement_fixture_revision": "bbefaa1",
+    "supplement_production_source_unchanged": true,
+    "full_physical_p0_passed": false
   },
   "gc_readonly_diagnostic": {
     "evidence": "/Users/kong/.opentradingcore/mac-demo-20261115-213528/readonly-gc-log-diagnostic-after-load-20261115/capture.json",
@@ -775,5 +783,19 @@
     "robot_restore_status": "TEN_ORIGINAL_ROBOTS_NORMALLY_RESTORED_AND_FINANCIAL_CURSOR_PASS",
     "diagnostic": "Reproduced twice: all128 retained-owner partitions already LOCAL when the fixture armed its interrupt; no stage existed to interrupt. No cold pass claimed. Recovery wake optimization reverted in6c985aa.",
     "diagnostic_state": "/Users/kong/.opentradingcore/t554-retained-cold-c91-diagnostic-20261115/state.json"
+  },
+  "one_click_common_qualification": {
+    "entry": "bash mac-colima-saas.sh verify-common COMMON_REVISION",
+    "source": "scripts/qualify-mac-common-candidate.py",
+    "runner": "tests/fixtures/common-release/QualifiedCommonChecks.java",
+    "minimum_actual_safety_tests": 306,
+    "cold_restarts": 4,
+    "snapshot_streaming_heap_mib": 96,
+    "large_original_history_mib": 72,
+    "uses_existing_independent_physical_failover_verifier": true,
+    "business_services_or_data_mutated": false,
+    "end_to_end_new_wrapper_full_run_claimed": false,
+    "regression_tests_passed": 4,
+    "test_scope": "Real JUnit pass/fail/ignore/assumption handling and actual entry failure propagation; no live business faults in tool tests"
   }
 }
