@@ -1,6 +1,6 @@
 {
-  "observed_at": "2026-11-16T07:22:06.517163+08:00",
-  "status": "NO_GO_NEW_COMMON_DEPLOYED_STRICT_BASELINES_INTEGRITY_PASS_PERFORMANCE_AND_BUSINESS_HA_PENDING",
+  "observed_at": "2026-11-16T07:37:04.194533+08:00",
+  "status": "NO_GO_HOTBOOK_QUEUED_IOC_CANCEL_REGRESSION_ORDER_FIX_BUILD_AND_ACTUAL_RETEST_PENDING",
   "production_acceptance": "NO_GO",
   "generation": "mac-demo-20261116-065052",
   "client_ack_policy": "STRICT_QUORUM",
@@ -238,7 +238,7 @@
     "old_020105_auto_recovered": false
   },
   "current_performance": {
-    "status": "STRICT_BASELINE_INTEGRITY_PASS_SLO_FAIL_MATRIX_RUNNING_ASYNC_SEQUENTIAL_QUEUED",
+    "status": "HOTBOOK_FAILED_32_PERSISTED_IOC_CANCELS_AND_SEVERE_BACKLOG_NEW_ORDER_RETEST_PENDING",
     "strict_measured_on_this_release": true,
     "async_measured_on_this_release": false,
     "qualified_windows_cannot_overlap_faults_or_diagnostic_attach": true,
@@ -984,7 +984,85 @@
     "related_checks_executed": 33,
     "matrix_actual_acceptance_pending": true,
     "native_order_cancel_evidence": "/Users/kong/.opentradingcore/mac-demo-20261116-065052/order-cancel-capacity-ff8a1726.json",
-    "native_order_cancel_integrity": true
+    "native_order_cancel_integrity": true,
+    "strict_hotbook_40": {
+      "evidence": "/Users/kong/.opentradingcore/mac-demo-20261116-065052/distributed-execution-capacity-1b3fd689.json",
+      "aggregate": {
+        "planned_orders": 2400,
+        "sent_orders": 2400,
+        "final_executions": 2368,
+        "fills_inside_offered_window": 1715,
+        "scheduler_drops": 0,
+        "responses": {
+          "ACKNOWLEDGED": 2400
+        },
+        "stream_errors": [],
+        "start_spread_ms": 7.0,
+        "generator_accounting_pass": true,
+        "observed_window_execution_rate": 28.583333333333332,
+        "window_delivery_fraction": 0.7145833333333333,
+        "all_accepted_final_receipts_pass": false,
+        "window_capacity_pass": false,
+        "ack_ms": {
+          "samples": 2400,
+          "p50": 102.899,
+          "p95": 421.212,
+          "p99": 754.886,
+          "p99_9": 917.243
+        },
+        "client_fill_ms": {
+          "samples": 2368,
+          "p50": 10652.493,
+          "p95": 16955.326,
+          "p99": 17531.413,
+          "p99_9": 18094.715
+        },
+        "scheduled_fill_ms": {
+          "samples": 2368,
+          "p50": 10652.762,
+          "p95": 16957.655,
+          "p99": 17533.207,
+          "p99_9": 18097.91
+        },
+        "dispatch_delay_ms": {
+          "samples": 2400,
+          "p50": 1.32,
+          "p95": 5.109,
+          "p99": 21.594,
+          "p99_9": 32.03
+        },
+        "matching_queue_count": 1,
+        "tenant_count": 1,
+        "queues_by_order_partition": {
+          "P109": 1
+        },
+        "queues_by_trade_partition": {
+          "P228": 1
+        }
+      },
+      "integrity_passed": false,
+      "postfailure_readonly_audit": "/Users/kong/.opentradingcore/t554-strict-hot-book-postfailure-audit-20261116.json",
+      "persisted_final_status": {
+        "Filled": 2368,
+        "Cancelled": 32
+      },
+      "cancel_reason": "IOC remaining quantity",
+      "financial_cursor_eventually_passed": true,
+      "original_NO_GO_unchanged": true
+    },
+    "first_real_multi_symbol": {
+      "evidence": "/Users/kong/.opentradingcore/mac-demo-20261116-065052/distributed-execution-capacity-20eb2f56.json",
+      "integrity_passed": true,
+      "layout": "1 tenant,2 symbols,4 sessions",
+      "planned_final_inside_window": 120,
+      "client_fill_p99_ms": 121.138,
+      "order_partitions": [
+        "P174",
+        "P030"
+      ],
+      "shared_trade_partition": "P113"
+    },
+    "same_window_jvm_pause_log_observation": "/Users/kong/.opentradingcore/mac-demo-20261116-065052/jvm-pauses-n8uc0fo1/proof.json"
   },
   "last_completed_business_performance": {
     "generation": "mac-demo-20261115-232443",
@@ -1039,6 +1117,7 @@
     "async_match_readmission_driver_regressions_passed": 9
   },
   "open_findings": [
+    "Real hotbook strict40 test cancels32 acknowledged IOC orders while contra quantity remains; existing15s scanner bypasses first matching opportunity. Order1829560 unit regression fixed; new actual retest pending.",
     "New strict native40/s completes all2400 inside60s with financial and ten-Robot integrity, but client finalP99=1320.248ms; both strict and async1000/s and20ms remain unaccepted.",
     "Same-JAR business four-direction SIGKILL, Trade single-node, and async accepted-loss regressions remain pending; old020105 P135 failure was retained and replaced sequentially, not automatically recovered.",
     "Common all256-partition takeover and Home remain minutes in the private fixture; no recovery-speed qualification claimed.",
@@ -1510,5 +1589,16 @@
       "full_business_faults_on_this_jar_passed": false,
       "original_failed_020105_recovered": false
     }
+  },
+  "order_queued_immediate_reconciliation_fix": {
+    "revision": "1829560",
+    "actual_old_source_regression_failed": true,
+    "fixed_targeted_checks": 11,
+    "targeted_skips": 0,
+    "proof": "/Users/kong/.opentradingcore/t554-order-queued-immediate-regression-20261116/proof.json",
+    "business_fix_actual_retest_passed": false,
+    "same_qualified_common_jar": true,
+    "build": "/Users/kong/.opentradingcore/mac-demo-build-20261116-073439",
+    "sequential_fresh_log": "/Users/kong/.opentradingcore/t554-queued-immediate-strict-fresh-20261116.log"
   }
 }
