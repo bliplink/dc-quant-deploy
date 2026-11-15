@@ -1,25 +1,15 @@
 {
-  "observed_at": "2026-11-15T20:42:42.820557+08:00",
+  "observed_at": "2026-11-15T21:18:55.155947+08:00",
   "status": "STRICT_AND_ASYNC_NATIVE_BASELINES_PASS_PERFORMANCE_NO_GO_BUSINESS_FAULT_GATES_RUNNING",
   "production_acceptance": "NO_GO",
-  "generation": "mac-demo-20261115-180803",
+  "generation": "/Users/kong/.opentradingcore/mac-demo-20261115-210937",
   "original_volumes_preserved": true,
-  "client_ack_policy": "LOCAL_DURABLE_ASYNC",
+  "client_ack_policy": "STRICT_QUORUM",
   "common": {
-    "revision": "25466872e798376057f5021961efd85094bd9946",
-    "jar_sha256": "a60aea73b59658ff6d5ec1cd63bf7671be21aee847f9daceb3ce969137e545cb",
-    "verification_run": "20261115-170232",
-    "fixture_revision": "38242d87382a7c625b74b844921eb0119b0b2b4d",
-    "safety_tests_discovered": 305,
-    "safety_tests_executed_passed": 302,
-    "optional_historical_skipped": 3,
-    "native_physical_cases": 14,
-    "cold_restart_cases": 4,
-    "complete_256_home_both_directions_and_repeat": true,
-    "interrupted_signed_return": true,
-    "equal_wal_pairs_per_verification": 256,
-    "equal_snapshot_pairs_per_verification": 256,
-    "phase_timing_scope": "Disk cleanup overlapped native P0. Correctness qualified; timings retained for diagnostic purposes only."
+    "revision": "a83e98ab8a17c5746c7840d4f1e5d0d014758b2e",
+    "sha256": "4482c1d5af0d3c6b669aabea0f42d6cfe9fc8388b0c20765f731381516d390d1",
+    "full_p0": "/Users/kong/.opentradingcore/t554-common-verifications/20261115-195035",
+    "full_queue_primary_crash_supplement": "/Users/kong/.opentradingcore/t554-common-full-async-queue-primary-crash-v2-20261115/state.json"
   },
   "sources": {
     "shared": {
@@ -67,79 +57,17 @@
       "tests": 29
     }
   },
-  "images": [
-    {
-      "name": "mac-demo-20261115-065831-order-a-hostready",
-      "image_id": "sha256:4db16a41427d399e233a47736fb05fe7aca4d1be427809a36625996587349738",
-      "container_id": "5caa7f7baca91d86f0cea7397db58d024c12ffcf77b09c2454bbecffd936b2bd",
-      "common_sha256": "71b4ce7dac4b2a51fe134a694f9f9f1c3654c1668f89f92f20bf731096ed264d",
-      "restart_count_at_observation": 0
-    },
-    {
-      "name": "mac-demo-20261115-065831-order-b-hostready",
-      "image_id": "sha256:4db16a41427d399e233a47736fb05fe7aca4d1be427809a36625996587349738",
-      "container_id": "646e7f056b9328061888208aba457895831e1c733e9373819db6692ac6a6b402",
-      "common_sha256": "71b4ce7dac4b2a51fe134a694f9f9f1c3654c1668f89f92f20bf731096ed264d",
-      "restart_count_at_observation": 0
-    },
-    {
-      "name": "mac-demo-20261115-065831-trade-a-hostready",
-      "image_id": "sha256:56b9b40e72a0dff67600c8ac16f466a07138955fa5f9f2360012a8e6ac6aeb09",
-      "container_id": "83ed53e72defd2b5c8a88cad98c70ebcaaba7e5b9f82e12b24b45baee1314807",
-      "common_sha256": "71b4ce7dac4b2a51fe134a694f9f9f1c3654c1668f89f92f20bf731096ed264d",
-      "restart_count_at_observation": 0
-    },
-    {
-      "name": "mac-demo-20261115-065831-trade-b-hostready",
-      "image_id": "sha256:56b9b40e72a0dff67600c8ac16f466a07138955fa5f9f2360012a8e6ac6aeb09",
-      "container_id": "71cad454e721d1577577234f99509c184c6151e395f1fe5e19ce3c9ad7d22798",
-      "common_sha256": "71b4ce7dac4b2a51fe134a694f9f9f1c3654c1668f89f92f20bf731096ed264d",
-      "restart_count_at_observation": 0
-    },
-    {
-      "name": "mac-demo-20261115-065831-order-witness",
-      "image_id": "sha256:4db16a41427d399e233a47736fb05fe7aca4d1be427809a36625996587349738",
-      "container_id": "948ad56b582a254cb21952ba6c5b6714928f74dd240bbf2153488624da05093e",
-      "common_sha256": "71b4ce7dac4b2a51fe134a694f9f9f1c3654c1668f89f92f20bf731096ed264d",
-      "restart_count_at_observation": 0
-    },
-    {
-      "name": "mac-demo-20261115-065831-trade-witness",
-      "image_id": "sha256:56b9b40e72a0dff67600c8ac16f466a07138955fa5f9f2360012a8e6ac6aeb09",
-      "container_id": "9b283392811b07ea7ab5e461f9bf02d80758342fcf733bb1c6a050aeb0b562f0",
-      "common_sha256": "71b4ce7dac4b2a51fe134a694f9f9f1c3654c1668f89f92f20bf731096ed264d",
-      "restart_count_at_observation": 0
-    },
-    {
-      "name": "dc-saas-gateway",
-      "image_id": "sha256:37ae902bcc4faaf649dd90d5ad8525881084fcdac40d5d92ac436ec0dd4e00a3",
-      "container_id": "36233cf0808b49a43758d4043adc301aa4eb38160cbefffa6cc3829d998b1a72",
-      "common_sha256": "71b4ce7dac4b2a51fe134a694f9f9f1c3654c1668f89f92f20bf731096ed264d",
-      "restart_count_at_observation": 0
-    },
-    {
-      "name": "dc-saas-mdsvr",
-      "image_id": "sha256:c1f653a5618ba11fa756ce6e4f9c123923167f18951ac523054cca90468fba59",
-      "container_id": "3bb65a94080c0fce9939f6ced5c84771a498c7ef8e34b0cd2dfbf7317e5f5fa5",
-      "common_sha256": "71b4ce7dac4b2a51fe134a694f9f9f1c3654c1668f89f92f20bf731096ed264d",
-      "restart_count_at_observation": 0
-    }
-  ],
+  "images": {
+    "mac-demo-20261115-210937-order-a-hostready": "sha256:34c54fd5a74eda11003cc01011dca4571592b0f1debbbe4beda305737aef1ca2",
+    "mac-demo-20261115-210937-order-b-hostready": "sha256:34c54fd5a74eda11003cc01011dca4571592b0f1debbbe4beda305737aef1ca2",
+    "mac-demo-20261115-210937-trade-a-hostready": "sha256:e4a54c9747edceda9203cdec745fc10a44766e463fdcf5cda902c365fa5f3cd5",
+    "mac-demo-20261115-210937-trade-b-hostready": "sha256:e4a54c9747edceda9203cdec745fc10a44766e463fdcf5cda902c365fa5f3cd5"
+  },
   "functional": {
-    "fresh_order_only_trade_and_no_trade_balance_mutation": "PASS",
-    "fresh_funded_signed_trade_and_balance_position_audit": "PASS",
-    "customer_execution_to_public_trade_match": "PASS",
-    "initial_trial_robot_quotes_and_real_tape_trade": "PASS",
-    "certified_trade_financial_cursor": "PASS",
-    "four_actual_physical_runtimes": "PASS_256_ROLES_128_HOME_PRIMARY_EACH",
-    "verification_directory": "/Users/kong/.opentradingcore/mac-demo-20261115-180803/verification.ZWuCFv",
-    "ten_robot_steady": "PASS_10_ROBOTS_5_MINUTES_BOTH_MODES",
-    "native_order_cancel": "PASS_SIX_TCP_WINDOWS_CONTROL_GENERATIONS_UNCHANGED",
-    "native_distributed_execution": "PASS_TWO_STREAMS_ONE_PER_SECOND",
-    "same_version_async_capacity": "PASS_SIX_TCP_WINDOWS_AND_TWO_STREAM_LOW_RATE_INTEGRITY",
-    "continuous_robot_business_failover": "RUNNING_AFTER_OBSERVER_LOG_FORMAT_FIX",
-    "trade_single_node": "PENDING",
-    "multi_maker_regression": "PENDING"
+    "fresh_real_business_passed": true,
+    "actual_runtime_256_roles_per_node_passed": true,
+    "runtime_proof": "/Users/kong/.opentradingcore/mac-demo-20261115-210937/physical-runtime-b83ba8v3/proof.json",
+    "new_same_jar_business_fault_under_robot_load_pending": true
   },
   "open_findings": [
     "Current cumulative strict protocol retains four real steady-state force barriers and one peer exchange per group. Generic group commit is implemented, but normal Order/Trade requests still use singleton commits; business batch integration remains a structural throughput limit.",
@@ -151,11 +79,10 @@
   ],
   "application_data_or_credentials_included": false,
   "current_maintenance": {
-    "status": "NORMAL_MANAGER_ROBOT_STOP_FOR_EXACT_COMMON_P0",
-    "business_containers_and_data_preserved": true,
-    "ten_original_robots_stopped": true,
-    "financial_cursor_passed": true,
-    "normal_restart_scheduled_in_qualification_finally": true
+    "status": "TEN_ROBOT_STEADY_BASELINE_RUNNING",
+    "active_generation": "/Users/kong/.opentradingcore/mac-demo-20261115-210937",
+    "prior_generation_normally_stopped_zero_pending_and_exact_finances": true,
+    "prior_generation_data_preserved": true
   },
   "ordinary_logging_layout": {
     "deploy_source_revision": "b9c800d",
@@ -287,224 +214,8 @@
     ]
   },
   "current_version_measurements": {
-    "generation": "mac-demo-20261115-180803",
-    "client_ack_policy": "LOCAL_DURABLE_ASYNC",
-    "jar_sha256": "a60aea73b59658ff6d5ec1cd63bf7671be21aee847f9daceb3ce969137e545cb",
-    "all_six_windows_passed": true,
-    "scope": "Same candidate JAR and source/quotas as strict; sequential fresh namespace, ten live Robots. Complete place/New and cancel/Cancelled cycle; not execution TPS.",
-    "report": "/Users/kong/.opentradingcore/mac-demo-20261115-180803/order-cancel-capacity-8aef4528.json",
-    "rows": [
-      {
-        "mode": "ORDER_ONLY",
-        "concurrency": 1,
-        "elapsed_seconds": 60.022,
-        "complete_cycles_per_second": 28.806,
-        "place_new_ms": {
-          "samples": 1729,
-          "p50": 11.024,
-          "p95": 26.63,
-          "p99": 37.306,
-          "p99_9": 116.952
-        },
-        "cancel_terminal_ms": {
-          "samples": 1729,
-          "p50": 16.695,
-          "p95": 40.235,
-          "p99": 55.487,
-          "p99_9": 91.83
-        },
-        "cycle_ms": {
-          "samples": 1729,
-          "p50": 28.185,
-          "p95": 65.684,
-          "p99": 89.333,
-          "p99_9": 399.791
-        },
-        "control_generation_before": {
-          "order": 2,
-          "trade": 2
-        },
-        "control_generation_after": {
-          "order": 2,
-          "trade": 2
-        }
-      },
-      {
-        "mode": "ORDER_ONLY",
-        "concurrency": 4,
-        "elapsed_seconds": 60.081,
-        "complete_cycles_per_second": 38.149,
-        "place_new_ms": {
-          "samples": 2292,
-          "p50": 55.99,
-          "p95": 105.117,
-          "p99": 141.452,
-          "p99_9": 235.01
-        },
-        "cancel_terminal_ms": {
-          "samples": 2292,
-          "p50": 38.638,
-          "p95": 73.697,
-          "p99": 98.272,
-          "p99_9": 265.018
-        },
-        "cycle_ms": {
-          "samples": 2292,
-          "p50": 94.027,
-          "p95": 174.746,
-          "p99": 222.245,
-          "p99_9": 647.895
-        },
-        "control_generation_before": {
-          "order": 2,
-          "trade": 2
-        },
-        "control_generation_after": {
-          "order": 2,
-          "trade": 2
-        }
-      },
-      {
-        "mode": "ORDER_ONLY",
-        "concurrency": 8,
-        "elapsed_seconds": 60.219,
-        "complete_cycles_per_second": 37.845,
-        "place_new_ms": {
-          "samples": 2279,
-          "p50": 117.659,
-          "p95": 197.861,
-          "p99": 287.671,
-          "p99_9": 900.49
-        },
-        "cancel_terminal_ms": {
-          "samples": 2279,
-          "p50": 78.061,
-          "p95": 132.716,
-          "p99": 207.534,
-          "p99_9": 683.214
-        },
-        "cycle_ms": {
-          "samples": 2279,
-          "p50": 191.97,
-          "p95": 319.48,
-          "p99": 578.928,
-          "p99_9": 1124.503
-        },
-        "control_generation_before": {
-          "order": 2,
-          "trade": 2
-        },
-        "control_generation_after": {
-          "order": 2,
-          "trade": 2
-        }
-      },
-      {
-        "mode": "TRADE",
-        "concurrency": 1,
-        "elapsed_seconds": 60.014,
-        "complete_cycles_per_second": 27.977,
-        "place_new_ms": {
-          "samples": 1679,
-          "p50": 12.819,
-          "p95": 24.312,
-          "p99": 39.739,
-          "p99_9": 86.327
-        },
-        "cancel_terminal_ms": {
-          "samples": 1679,
-          "p50": 18.71,
-          "p95": 33.328,
-          "p99": 46.34,
-          "p99_9": 123.085
-        },
-        "cycle_ms": {
-          "samples": 1679,
-          "p50": 32.067,
-          "p95": 56.258,
-          "p99": 81.996,
-          "p99_9": 136.237
-        },
-        "control_generation_before": {
-          "order": 2,
-          "trade": 2
-        },
-        "control_generation_after": {
-          "order": 2,
-          "trade": 2
-        }
-      },
-      {
-        "mode": "TRADE",
-        "concurrency": 4,
-        "elapsed_seconds": 60.396,
-        "complete_cycles_per_second": 29.936,
-        "place_new_ms": {
-          "samples": 1808,
-          "p50": 71.03,
-          "p95": 149.119,
-          "p99": 218.457,
-          "p99_9": 710.131
-        },
-        "cancel_terminal_ms": {
-          "samples": 1808,
-          "p50": 42.208,
-          "p95": 90.732,
-          "p99": 150.037,
-          "p99_9": 792.548
-        },
-        "cycle_ms": {
-          "samples": 1808,
-          "p50": 114.855,
-          "p95": 233.649,
-          "p99": 387.835,
-          "p99_9": 939.745
-        },
-        "control_generation_before": {
-          "order": 2,
-          "trade": 2
-        },
-        "control_generation_after": {
-          "order": 2,
-          "trade": 2
-        }
-      },
-      {
-        "mode": "TRADE",
-        "concurrency": 8,
-        "elapsed_seconds": 60.49,
-        "complete_cycles_per_second": 25.938,
-        "place_new_ms": {
-          "samples": 1569,
-          "p50": 147.976,
-          "p95": 478.068,
-          "p99": 1151.156,
-          "p99_9": 1821.404
-        },
-        "cancel_terminal_ms": {
-          "samples": 1569,
-          "p50": 84.994,
-          "p95": 242.738,
-          "p99": 432.047,
-          "p99_9": 1237.365
-        },
-        "cycle_ms": {
-          "samples": 1569,
-          "p50": 232.51,
-          "p95": 733.06,
-          "p99": 1525.675,
-          "p99_9": 2099.27
-        },
-        "control_generation_before": {
-          "order": 2,
-          "trade": 2
-        },
-        "control_generation_after": {
-          "order": 2,
-          "trade": 2
-        }
-      }
-    ]
+    "status": "PENDING_NEW_EXACT_JAR_NATIVE_BUSINESS_BASELINES",
+    "do_not_substitute_previous_release_values": true
   },
   "cumulative_commit_redesign": {
     "owner_approved": true,
@@ -1024,8 +735,8 @@
   "pipeline_candidate": {
     "revision": "a83e98ab8a17c5746c7840d4f1e5d0d014758b2e",
     "sha256": "4482c1d5af0d3c6b669aabea0f42d6cfe9fc8388b0c20765f731381516d390d1",
-    "deployed": false,
-    "status": "EXACT_JAR_FULL_P0_RUNNING_NO_QUALIFIED_PERFORMANCE_CLAIM",
+    "deployed": true,
+    "status": "FULL_COMMON_P0_PLUS_64_QUEUE_PRIMARY_CRASH_AND_FRESH_P1_PASS_NEW_PERFORMANCE_AND_LIVE_BUSINESS_FAULT_GATES_PENDING",
     "verification": "/Users/kong/.opentradingcore/t554-common-verifications/20261115-195035",
     "pre_freeze_worktree_safety_executed": 305,
     "pre_freeze_optional_external_skips": 3,
@@ -1033,18 +744,21 @@
     "per_partition_pending_max_bytes": 4194304,
     "process_pending_payload_budget_bytes": 33554432,
     "native_64_ack_catchup_passed_before_freeze": true,
-    "native_full_queue_primary_crash_special_case_pending": true,
+    "native_full_queue_primary_crash_special_case_pending": false,
     "exact_jar_safety_executed_passed": 305,
     "exact_jar_native_15_passed": true,
     "exact_jar_cold_4_passed": true,
     "exact_jar_both_directions_256_pairs_passed": true,
-    "exact_jar_complete_p0_still_running": true,
+    "exact_jar_complete_p0_still_running": false,
     "observed_unisolated_functional_timings_ms": {
       "a_failover": 166689,
       "a_home": 286479,
       "b_failover": 165256,
       "b_home": 238964
-    }
+    },
+    "full_queue_primary_crash_original_local_acked_head": 65,
+    "full_queue_primary_crash_actual_backup_committed_head": 29,
+    "full_queue_primary_crash_excluded_local_tail_records": 36
   },
   "async_business_fault_latest": {
     "rpo_case": "async-rpo-409daee5",
@@ -1096,5 +810,335 @@
     "strict_and_async_8_concurrency_business_container_cgroup_throttled_time_delta_seconds": 0,
     "scope": "Existing measured windows only; does not rule out all VM scheduling or I/O pressure",
     "cpu_limit_not_shown_as_direct_bottleneck": true
+  },
+  "previous_business_release_cumulative254": {
+    "generation": "mac-demo-20261115-180803",
+    "client_ack_policy": "LOCAL_DURABLE_ASYNC",
+    "common": {
+      "revision": "25466872e798376057f5021961efd85094bd9946",
+      "jar_sha256": "a60aea73b59658ff6d5ec1cd63bf7671be21aee847f9daceb3ce969137e545cb",
+      "verification_run": "20261115-170232",
+      "fixture_revision": "38242d87382a7c625b74b844921eb0119b0b2b4d",
+      "safety_tests_discovered": 305,
+      "safety_tests_executed_passed": 302,
+      "optional_historical_skipped": 3,
+      "native_physical_cases": 14,
+      "cold_restart_cases": 4,
+      "complete_256_home_both_directions_and_repeat": true,
+      "interrupted_signed_return": true,
+      "equal_wal_pairs_per_verification": 256,
+      "equal_snapshot_pairs_per_verification": 256,
+      "phase_timing_scope": "Disk cleanup overlapped native P0. Correctness qualified; timings retained for diagnostic purposes only."
+    },
+    "images": [
+      {
+        "name": "mac-demo-20261115-065831-order-a-hostready",
+        "image_id": "sha256:4db16a41427d399e233a47736fb05fe7aca4d1be427809a36625996587349738",
+        "container_id": "5caa7f7baca91d86f0cea7397db58d024c12ffcf77b09c2454bbecffd936b2bd",
+        "common_sha256": "71b4ce7dac4b2a51fe134a694f9f9f1c3654c1668f89f92f20bf731096ed264d",
+        "restart_count_at_observation": 0
+      },
+      {
+        "name": "mac-demo-20261115-065831-order-b-hostready",
+        "image_id": "sha256:4db16a41427d399e233a47736fb05fe7aca4d1be427809a36625996587349738",
+        "container_id": "646e7f056b9328061888208aba457895831e1c733e9373819db6692ac6a6b402",
+        "common_sha256": "71b4ce7dac4b2a51fe134a694f9f9f1c3654c1668f89f92f20bf731096ed264d",
+        "restart_count_at_observation": 0
+      },
+      {
+        "name": "mac-demo-20261115-065831-trade-a-hostready",
+        "image_id": "sha256:56b9b40e72a0dff67600c8ac16f466a07138955fa5f9f2360012a8e6ac6aeb09",
+        "container_id": "83ed53e72defd2b5c8a88cad98c70ebcaaba7e5b9f82e12b24b45baee1314807",
+        "common_sha256": "71b4ce7dac4b2a51fe134a694f9f9f1c3654c1668f89f92f20bf731096ed264d",
+        "restart_count_at_observation": 0
+      },
+      {
+        "name": "mac-demo-20261115-065831-trade-b-hostready",
+        "image_id": "sha256:56b9b40e72a0dff67600c8ac16f466a07138955fa5f9f2360012a8e6ac6aeb09",
+        "container_id": "71cad454e721d1577577234f99509c184c6151e395f1fe5e19ce3c9ad7d22798",
+        "common_sha256": "71b4ce7dac4b2a51fe134a694f9f9f1c3654c1668f89f92f20bf731096ed264d",
+        "restart_count_at_observation": 0
+      },
+      {
+        "name": "mac-demo-20261115-065831-order-witness",
+        "image_id": "sha256:4db16a41427d399e233a47736fb05fe7aca4d1be427809a36625996587349738",
+        "container_id": "948ad56b582a254cb21952ba6c5b6714928f74dd240bbf2153488624da05093e",
+        "common_sha256": "71b4ce7dac4b2a51fe134a694f9f9f1c3654c1668f89f92f20bf731096ed264d",
+        "restart_count_at_observation": 0
+      },
+      {
+        "name": "mac-demo-20261115-065831-trade-witness",
+        "image_id": "sha256:56b9b40e72a0dff67600c8ac16f466a07138955fa5f9f2360012a8e6ac6aeb09",
+        "container_id": "9b283392811b07ea7ab5e461f9bf02d80758342fcf733bb1c6a050aeb0b562f0",
+        "common_sha256": "71b4ce7dac4b2a51fe134a694f9f9f1c3654c1668f89f92f20bf731096ed264d",
+        "restart_count_at_observation": 0
+      },
+      {
+        "name": "dc-saas-gateway",
+        "image_id": "sha256:37ae902bcc4faaf649dd90d5ad8525881084fcdac40d5d92ac436ec0dd4e00a3",
+        "container_id": "36233cf0808b49a43758d4043adc301aa4eb38160cbefffa6cc3829d998b1a72",
+        "common_sha256": "71b4ce7dac4b2a51fe134a694f9f9f1c3654c1668f89f92f20bf731096ed264d",
+        "restart_count_at_observation": 0
+      },
+      {
+        "name": "dc-saas-mdsvr",
+        "image_id": "sha256:c1f653a5618ba11fa756ce6e4f9c123923167f18951ac523054cca90468fba59",
+        "container_id": "3bb65a94080c0fce9939f6ced5c84771a498c7ef8e34b0cd2dfbf7317e5f5fa5",
+        "common_sha256": "71b4ce7dac4b2a51fe134a694f9f9f1c3654c1668f89f92f20bf731096ed264d",
+        "restart_count_at_observation": 0
+      }
+    ],
+    "functional": {
+      "fresh_order_only_trade_and_no_trade_balance_mutation": "PASS",
+      "fresh_funded_signed_trade_and_balance_position_audit": "PASS",
+      "customer_execution_to_public_trade_match": "PASS",
+      "initial_trial_robot_quotes_and_real_tape_trade": "PASS",
+      "certified_trade_financial_cursor": "PASS",
+      "four_actual_physical_runtimes": "PASS_256_ROLES_128_HOME_PRIMARY_EACH",
+      "verification_directory": "/Users/kong/.opentradingcore/mac-demo-20261115-180803/verification.ZWuCFv",
+      "ten_robot_steady": "PASS_10_ROBOTS_5_MINUTES_BOTH_MODES",
+      "native_order_cancel": "PASS_SIX_TCP_WINDOWS_CONTROL_GENERATIONS_UNCHANGED",
+      "native_distributed_execution": "PASS_TWO_STREAMS_ONE_PER_SECOND",
+      "same_version_async_capacity": "PASS_SIX_TCP_WINDOWS_AND_TWO_STREAM_LOW_RATE_INTEGRITY",
+      "continuous_robot_business_failover": "RUNNING_AFTER_OBSERVER_LOG_FORMAT_FIX",
+      "trade_single_node": "PENDING",
+      "multi_maker_regression": "PENDING"
+    },
+    "current_version_measurements": {
+      "generation": "mac-demo-20261115-180803",
+      "client_ack_policy": "LOCAL_DURABLE_ASYNC",
+      "jar_sha256": "a60aea73b59658ff6d5ec1cd63bf7671be21aee847f9daceb3ce969137e545cb",
+      "all_six_windows_passed": true,
+      "scope": "Same candidate JAR and source/quotas as strict; sequential fresh namespace, ten live Robots. Complete place/New and cancel/Cancelled cycle; not execution TPS.",
+      "report": "/Users/kong/.opentradingcore/mac-demo-20261115-180803/order-cancel-capacity-8aef4528.json",
+      "rows": [
+        {
+          "mode": "ORDER_ONLY",
+          "concurrency": 1,
+          "elapsed_seconds": 60.022,
+          "complete_cycles_per_second": 28.806,
+          "place_new_ms": {
+            "samples": 1729,
+            "p50": 11.024,
+            "p95": 26.63,
+            "p99": 37.306,
+            "p99_9": 116.952
+          },
+          "cancel_terminal_ms": {
+            "samples": 1729,
+            "p50": 16.695,
+            "p95": 40.235,
+            "p99": 55.487,
+            "p99_9": 91.83
+          },
+          "cycle_ms": {
+            "samples": 1729,
+            "p50": 28.185,
+            "p95": 65.684,
+            "p99": 89.333,
+            "p99_9": 399.791
+          },
+          "control_generation_before": {
+            "order": 2,
+            "trade": 2
+          },
+          "control_generation_after": {
+            "order": 2,
+            "trade": 2
+          }
+        },
+        {
+          "mode": "ORDER_ONLY",
+          "concurrency": 4,
+          "elapsed_seconds": 60.081,
+          "complete_cycles_per_second": 38.149,
+          "place_new_ms": {
+            "samples": 2292,
+            "p50": 55.99,
+            "p95": 105.117,
+            "p99": 141.452,
+            "p99_9": 235.01
+          },
+          "cancel_terminal_ms": {
+            "samples": 2292,
+            "p50": 38.638,
+            "p95": 73.697,
+            "p99": 98.272,
+            "p99_9": 265.018
+          },
+          "cycle_ms": {
+            "samples": 2292,
+            "p50": 94.027,
+            "p95": 174.746,
+            "p99": 222.245,
+            "p99_9": 647.895
+          },
+          "control_generation_before": {
+            "order": 2,
+            "trade": 2
+          },
+          "control_generation_after": {
+            "order": 2,
+            "trade": 2
+          }
+        },
+        {
+          "mode": "ORDER_ONLY",
+          "concurrency": 8,
+          "elapsed_seconds": 60.219,
+          "complete_cycles_per_second": 37.845,
+          "place_new_ms": {
+            "samples": 2279,
+            "p50": 117.659,
+            "p95": 197.861,
+            "p99": 287.671,
+            "p99_9": 900.49
+          },
+          "cancel_terminal_ms": {
+            "samples": 2279,
+            "p50": 78.061,
+            "p95": 132.716,
+            "p99": 207.534,
+            "p99_9": 683.214
+          },
+          "cycle_ms": {
+            "samples": 2279,
+            "p50": 191.97,
+            "p95": 319.48,
+            "p99": 578.928,
+            "p99_9": 1124.503
+          },
+          "control_generation_before": {
+            "order": 2,
+            "trade": 2
+          },
+          "control_generation_after": {
+            "order": 2,
+            "trade": 2
+          }
+        },
+        {
+          "mode": "TRADE",
+          "concurrency": 1,
+          "elapsed_seconds": 60.014,
+          "complete_cycles_per_second": 27.977,
+          "place_new_ms": {
+            "samples": 1679,
+            "p50": 12.819,
+            "p95": 24.312,
+            "p99": 39.739,
+            "p99_9": 86.327
+          },
+          "cancel_terminal_ms": {
+            "samples": 1679,
+            "p50": 18.71,
+            "p95": 33.328,
+            "p99": 46.34,
+            "p99_9": 123.085
+          },
+          "cycle_ms": {
+            "samples": 1679,
+            "p50": 32.067,
+            "p95": 56.258,
+            "p99": 81.996,
+            "p99_9": 136.237
+          },
+          "control_generation_before": {
+            "order": 2,
+            "trade": 2
+          },
+          "control_generation_after": {
+            "order": 2,
+            "trade": 2
+          }
+        },
+        {
+          "mode": "TRADE",
+          "concurrency": 4,
+          "elapsed_seconds": 60.396,
+          "complete_cycles_per_second": 29.936,
+          "place_new_ms": {
+            "samples": 1808,
+            "p50": 71.03,
+            "p95": 149.119,
+            "p99": 218.457,
+            "p99_9": 710.131
+          },
+          "cancel_terminal_ms": {
+            "samples": 1808,
+            "p50": 42.208,
+            "p95": 90.732,
+            "p99": 150.037,
+            "p99_9": 792.548
+          },
+          "cycle_ms": {
+            "samples": 1808,
+            "p50": 114.855,
+            "p95": 233.649,
+            "p99": 387.835,
+            "p99_9": 939.745
+          },
+          "control_generation_before": {
+            "order": 2,
+            "trade": 2
+          },
+          "control_generation_after": {
+            "order": 2,
+            "trade": 2
+          }
+        },
+        {
+          "mode": "TRADE",
+          "concurrency": 8,
+          "elapsed_seconds": 60.49,
+          "complete_cycles_per_second": 25.938,
+          "place_new_ms": {
+            "samples": 1569,
+            "p50": 147.976,
+            "p95": 478.068,
+            "p99": 1151.156,
+            "p99_9": 1821.404
+          },
+          "cancel_terminal_ms": {
+            "samples": 1569,
+            "p50": 84.994,
+            "p95": 242.738,
+            "p99": 432.047,
+            "p99_9": 1237.365
+          },
+          "cycle_ms": {
+            "samples": 1569,
+            "p50": 232.51,
+            "p95": 733.06,
+            "p99": 1525.675,
+            "p99_9": 2099.27
+          },
+          "control_generation_before": {
+            "order": 2,
+            "trade": 2
+          },
+          "control_generation_after": {
+            "order": 2,
+            "trade": 2
+          }
+        }
+      ]
+    },
+    "current_maintenance": {
+      "status": "NORMAL_MANAGER_ROBOT_STOP_FOR_EXACT_COMMON_P0",
+      "business_containers_and_data_preserved": true,
+      "ten_original_robots_stopped": true,
+      "financial_cursor_passed": true,
+      "normal_restart_scheduled_in_qualification_finally": true
+    }
+  },
+  "next_reader_candidate": {
+    "revision": "495f1a8",
+    "deployed": false,
+    "focused_tests_executed_passed": 41,
+    "focused_skips": 0,
+    "full_safety": "DEFERRED_NOT_PASSED_TO_AVOID_MEASUREMENT_OVERLAP",
+    "exact_jar_full_p0": "NOT_STARTED",
+    "scope": "Current normal-async accepted reads use the existing signed local head; strict reads and snapshots retain real quorum barriers"
   }
 }
