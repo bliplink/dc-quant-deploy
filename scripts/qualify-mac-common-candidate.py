@@ -39,7 +39,7 @@ def checked_result(path, safety=False):
         raise ValueError('Exactly one complete qualification result is required: ' + str(path))
     discovered, executed, failures, ignored, skipped = map(int, matches[0][:5])
     if (matches[0][5] != 'true' or failures or ignored or discovered != executed + skipped
-            or executed < (306 if safety else 1) or (safety and skipped > 3)
+            or executed < (308 if safety else 1) or (safety and skipped > 3)
             or (not safety and skipped)):
         raise ValueError('Incomplete or unsuccessful qualification: ' + str(path))
     return dict(discovered=discovered, executed=executed, failures=failures,

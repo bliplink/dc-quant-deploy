@@ -36,6 +36,15 @@ class IncompleteWalObservation(RuntimeError):
     pass
 
 
+def delivery_fault_group(status, phase):
+    match = re.fullmatch(phase + r" delivery=(2|8) configured=\1 scheduler=1 "
+                         + (r"holdMillis=30000" if phase == "PAUSED" else r"reason=(?:requested|deadline|interrupted)"),
+                         status.strip())
+    if not match:
+        raise RuntimeError("Delivery fault must prove every worker of the exact configured group")
+    return int(match.group(1))
+
+
 @contextmanager
 def controlled_products_away_from_robots(run_id, record, password, robots, max_attempts=8):
     """Choose the fault tenant before funding or pausing any real service.
@@ -424,8 +433,7 @@ def main():
                     "/opt/java/openjdk/lib/tools.jar:" + tools_path, "T554RpoAttach", targets[0],
                     tools_path + "/fault-agent.jar", control + ",30000")
                 status = run("docker", "exec", order_node, "cat", control + "/status")
-                if not status.startswith("PAUSED delivery=2 scheduler=1"):
-                    raise RuntimeError("Bounded delivery hold was not established")
+                record["delivery_fault_workers"] = delivery_fault_group(status, "PAUSED")
                 record["delivery_fault"] = status
                 clients = {"T554RPO-" + run_id + "-M", "T554RPO-" + run_id + "-T"}
                 maker_client, taker_client = "T554RPO-" + run_id + "-M", "T554RPO-" + run_id + "-T"
@@ -568,7 +576,11 @@ def main():
                 if order_node and record.get("delivery_fault"):
                     def released_delivery():
                         status = run("docker", "exec", order_node, "cat", control + "/status")
-                        return status if status.startswith("RESUMED delivery=2 scheduler=1") else None
+                        if not status.startswith("RESUMED "):
+                            return None
+                        if delivery_fault_group(status, "RESUMED") != record["delivery_fault_workers"]:
+                            raise RuntimeError("Released worker group differs from the original paused group")
+                        return status
 
                     try:
                         record["delivery_fault_release"] = until(released_delivery, 5,

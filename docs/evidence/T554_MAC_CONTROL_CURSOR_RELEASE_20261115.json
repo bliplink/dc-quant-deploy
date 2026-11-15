@@ -1,6 +1,6 @@
 {
-  "observed_at": "2026-11-16T00:25:59.168792+08:00",
-  "status": "READER_ASYNC_BASELINES_INTEGRITY_PASS_PERFORMANCE_NO_GO_ORDER_POOL8_QUALIFIED_NOT_DEPLOYED_TRUE_RPO_RETRY_RUNNING",
+  "observed_at": "2026-11-16T01:06:17.638387+08:00",
+  "status": "TRUE_BUSINESS_RPO_NO_GO_BOUNDED_WAIT_FIX_52_TESTS_PASS_FULL_COMMON_P0_RUNNING",
   "production_acceptance": "NO_GO",
   "generation": "/Users/kong/.opentradingcore/mac-demo-20261115-232443",
   "client_ack_policy": "LOCAL_DURABLE_ASYNC",
@@ -101,7 +101,7 @@
     "trade_single_node_current_same_jar_pending": true
   },
   "current_maintenance": {
-    "status": "FORMAL_NATIVE_WINDOWS_DONE_TRUE_RPO_RUNNING_ORDER_POOL8_OVERLAY_NOT_DEPLOYED",
+    "status": "FAILED_RPO_EVIDENCE_RETAINED_NO_ORDER_REPLACEMENT_NEW_COMMON_P0_RUNNING",
     "active_generation": "/Users/kong/.opentradingcore/mac-demo-20261115-232443",
     "previous_generation_normally_stopped_zero_pending_and_exact_financial_cursor": true,
     "previous_generation_data_preserved": true
@@ -119,10 +119,11 @@
     "interpretation": "Pauses can violate20ms target; maxima alone do not explain12.62s final-receipt P99 or establish its root cause."
   },
   "open_findings": [
+    "Real business async-loss fault exposed Common unbounded async admission/drain waits retaining caller locks; automatic takeover/Home not completed. New bounded-wait candidate requires fresh exact-JAR fullP0 before integration.",
     "Both confirmation policies are far below sustained1000/s andP99<=20ms.",
-    "40/s actual offered executions:2400 eventually final,2027 inside60s,373 tail,33.7833/s in-window,finalP99=12623.652ms. No losses hidden.",
+    "Current reader async40/s:2396 in-window of2400,4 tail,finalP99=1838.847ms; older448 values retained under previous business release.",
     "Strict Common has generic group commit, business call sites still singleton; actual business batching remains required.",
-    "Normal projection and late-copy confirmation no longer drain subsequent LOCAL copies in the newly deployed reader release. Same-JAR business performance improvement remains unmeasured.",
+    "Reader release improved measured40/s tail but remains far off1000/s and20ms. Diagnostic delivery pool2 queued up to35; pool8 business-only candidate is tested but undeployed.",
     "Full-partition recovery remains minutes. Scheduling candidate is unqualified for RTO improvement.",
     "Current same-JAR complete Robot fault and true business RPO/reservation recovery gates remain unfinished.",
     "Retired original GG2803 unsettled matches remain unresolved independent retained evidence."
@@ -203,7 +204,7 @@
     "entry": "bash mac-colima-saas.sh verify-common COMMON_REVISION",
     "source": "scripts/qualify-mac-common-candidate.py",
     "runner": "tests/fixtures/common-release/QualifiedCommonChecks.java",
-    "minimum_actual_safety_tests": 306,
+    "minimum_actual_safety_tests": 308,
     "cold_restarts": 4,
     "snapshot_streaming_heap_mib": 96,
     "large_original_history_mib": 72,
@@ -1102,7 +1103,7 @@
   },
   "order_receipt_pool_candidate": {
     "revision": "c4fb1fd20c7430e84524bf3fa38870292e88c851",
-    "status": "SINGLE_CLASS_ORDER_OVERLAY_READY_NOT_DEPLOYED_WAITING_CURRENT_TRUE_RPO_GATES",
+    "status": "QUALIFIED_OLD_COMMON_OVERLAY_NOT_DEPLOYED_NEW_COMMON_REQUIRED",
     "image": "sha256:44447060b22601e608d537d546c167cc33195093285b05d82084b2ce0e68bc31",
     "full_tests_discovered": 214,
     "actual_executed_passed": 212,
@@ -1122,7 +1123,7 @@
   },
   "true_rpo_current": {
     "controller": "/Users/kong/.opentradingcore/t554-available-quorum-reader-async-recovery-after-diagnostic-v2-20261116.json",
-    "status": "RUNNING_AFTER_BOUNDED_CONTROLLED_PARTITION_SELECTION_FIX",
+    "status": "NO_GO_ASYNC_PREAPPEND_BUSINESS_LOCK_RECOVERY_HANG",
     "first_attempt": "/Users/kong/.opentradingcore/mac-demo-20261115-232443/async-rpo-b8046dbf/evidence.json",
     "first_attempt_injected_any_fault": false,
     "first_attempt_rejection": "Controlled tenant Trade partition collided with original Robot cohort. Original evidence retained.",
@@ -1130,5 +1131,30 @@
     "guard_preserved": true,
     "fault_body_errors_are_not_retried_as_new_tenants": true,
     "selection_and_existing_rpo_reservation_regressions_passed": 16
+  },
+  "true_business_rpo_failure": {
+    "status": "NO_GO",
+    "evidence": "/Users/kong/.opentradingcore/mac-demo-20261115-232443/async-rpo-ee583dc0/evidence.json",
+    "partition": "P045",
+    "observed_primary_local_head_before_crash": 96,
+    "observed_backup_head_before_crash": 95,
+    "final_takeover_boundary_proven": false,
+    "fault": "Actual Trade A SIGKILL after LOCAL risk-marked settlement receipts; survivor Trade B process retained",
+    "root_cause": "Full async pre-append queue can wait indefinitely while holding a business preparation lock, blocking another partition certified recovery install; strict drain has the same unbounded wait risk.",
+    "diagnostic": "/Users/kong/.opentradingcore/mac-demo-20261115-232443/recovery-progress-read-20261116",
+    "cleanup": "Only one proven old-JAR pre-encode waiter interrupted under its exact boundary monitor. Manual failed-exercise cleanup, not automatic recovery acceptance. Original primary restart policy restored; survivor never restarted.",
+    "after_cleanup": "/Users/kong/.opentradingcore/mac-demo-20261115-232443/recovery-progress-read-20261116/after-preappend-abort-summary.json",
+    "after_cleanup_observation": "5 retained-owner partitions READY at E3; next P220 RECOVERING. Trade A restart_count33; complete takeover/Home still not achieved.",
+    "reservation_loss_case_ran": false,
+    "next_order_pool8_deployed": false
+  },
+  "bounded_async_wait_candidate": {
+    "revision": "a02bd2b",
+    "sha256": "3c56fdda4cef4c345dd0ac369e44edbc21be234d84eaa88277b5245940421352",
+    "candidate": "/Users/kong/.opentradingcore/t554-common-candidates/20261116-bounded-async-recovery-waits",
+    "focused_actual_tests_passed": 52,
+    "focused_skipped": 0,
+    "status": "FULL_P0_RUNNING_NOT_DEPLOYED",
+    "scope": "Reuse existing two-second admission budget; recheck grant/fencing while waiting; reject before encoding/append or strict snapshot publication. Existing signed LOCAL64 and real physical catchup unchanged."
   }
 }

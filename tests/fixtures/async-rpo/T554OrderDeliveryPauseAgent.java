@@ -15,6 +15,7 @@ import java.util.List;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.FutureTask;
 import java.util.concurrent.ScheduledThreadPoolExecutor;
+import java.util.concurrent.ThreadPoolExecutor;
 
 /** Bounded test fault only. Pauses idle settlement delivery workers while
  * ordinary Common WAL replication continues. No class transformer, business
@@ -44,13 +45,32 @@ public final class T554OrderDeliveryPauseAgent {
         boolean handedOff = false;
         try {
             Files.createDirectory(root);
+            List<Thread> deliveryGroup = new ArrayList<>();
+            ThreadPoolExecutor deliveryPool = null;
+            for (Thread worker : liveThreads()) {
+                if (!WORKER.equals(worker.getName())) continue;
+                Object target = field(worker, "target");
+                if (target == null || !target.getClass().getName().equals("java.util.concurrent.ThreadPoolExecutor$Worker"))
+                    throw new IllegalStateException("Delivery thread has no verifiable executor");
+                Object owner = field(target, "this$0");
+                if (!(owner instanceof ThreadPoolExecutor) || (deliveryPool != null && deliveryPool != owner))
+                    throw new IllegalStateException("Delivery threads must belong to one exact executor");
+                deliveryPool = (ThreadPoolExecutor) owner;
+                deliveryGroup.add(worker);
+            }
+            if (deliveryPool == null || (deliveryPool.getCorePoolSize() != 2 && deliveryPool.getCorePoolSize() != 8)
+                    || deliveryPool.getMaximumPoolSize() != deliveryPool.getCorePoolSize()
+                    || deliveryGroup.size() != deliveryPool.getCorePoolSize())
+                throw new IllegalStateException("All configured 2 or 8 delivery workers must exist before the fault");
+            final int requiredDeliveries = deliveryGroup.size();
+            final String groupProof = "delivery=" + requiredDeliveries + " configured=" + requiredDeliveries + " scheduler=1";
             long searchDeadline = System.nanoTime() + java.util.concurrent.TimeUnit.SECONDS.toNanos(3);
-            while (suspended.size() < 3 && System.nanoTime() < searchDeadline) {
-                List<Thread> candidates = new ArrayList<>(Thread.getAllStackTraces().keySet());
+            while (suspended.size() < requiredDeliveries + 1 && System.nanoTime() < searchDeadline) {
+                List<Thread> candidates = liveThreads();
                 candidates.sort(Comparator.comparingLong(Thread::getId));
                 for (Thread candidate : candidates) {
                     if (suspended.contains(candidate)) continue;
-                    boolean delivery = deliveries < 2 && WORKER.equals(candidate.getName());
+                    boolean delivery = deliveryGroup.contains(candidate);
                     boolean scheduler = schedulers == 0 && ownsRetrySchedule(candidate, scheduledTarget);
                     if ((!delivery && !scheduler) || !idleWithoutLocks(candidate)) continue;
                     candidate.suspend();
@@ -59,14 +79,14 @@ public final class T554OrderDeliveryPauseAgent {
                         if (delivery) deliveries++;
                         else schedulers++;
                     } else candidate.resume();
-                    if (suspended.size() == 3) break;
+                    if (suspended.size() == requiredDeliveries + 1) break;
                 }
-                if (suspended.size() < 3) Thread.sleep(10);
+                if (suspended.size() < requiredDeliveries + 1) Thread.sleep(10);
             }
-            if (deliveries != 2 || schedulers != 1)
-                throw new IllegalStateException("Two idle delivery workers and their idle retry scheduler are required");
+            if (deliveries != requiredDeliveries || schedulers != 1)
+                throw new IllegalStateException("All configured idle delivery workers and their idle retry scheduler are required");
             long deadline = System.nanoTime() + java.util.concurrent.TimeUnit.MILLISECONDS.toNanos(holdMillis);
-            write(root, "PAUSED delivery=2 scheduler=1 holdMillis=" + holdMillis);
+            write(root, "PAUSED " + groupProof + " holdMillis=" + holdMillis);
             Thread release = new Thread(() -> {
                 String reason = "deadline";
                 try {
@@ -82,7 +102,7 @@ public final class T554OrderDeliveryPauseAgent {
                 } finally {
                     for (Thread worker : suspended) worker.resume();
                     ACTIVE.set(false);
-                    try { write(root, "RESUMED delivery=2 scheduler=1 reason=" + reason); }
+                    try { write(root, "RESUMED " + groupProof + " reason=" + reason); }
                     catch (Exception failure) { System.err.println("T554_RPO_DELIVERY_RELEASE_STATUS_WRITE_FAILED"); }
                 }
             }, "t554-rpo-delivery-deadline");
@@ -94,6 +114,23 @@ public final class T554OrderDeliveryPauseAgent {
                 for (Thread worker : suspended) worker.resume();
                 ACTIVE.set(false);
             }
+        }
+    }
+
+    private static List<Thread> liveThreads() {
+        ThreadGroup root = Thread.currentThread().getThreadGroup();
+        while (root.getParent() != null) root = root.getParent();
+        int size = Math.max(64, root.activeCount() * 2);
+        for (;;) {
+            Thread[] buffer = new Thread[size];
+            int count = root.enumerate(buffer, true);
+            if (count < size) {
+                List<Thread> result = new ArrayList<>();
+                for (int i = 0; i < count; i++) if (buffer[i] != null && buffer[i].isAlive()) result.add(buffer[i]);
+                return result;
+            }
+            if (size >= 65536) throw new IllegalStateException("Thread inventory exceeds bounded fault scope");
+            size *= 2;
         }
     }
 

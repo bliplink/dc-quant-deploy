@@ -11,8 +11,14 @@ import java.util.concurrent.atomic.AtomicInteger;
 /** Tool self-test, without business services or Common state. */
 public final class T554OrderDeliveryPauseAgentTest {
     public static void main(String[] arguments) throws Exception {
+        verifyGroup(2);
+        verifyGroup(8);
+        System.out.println("T554_DELIVERY_FAULT_EXPLICIT_RESUME_DEADLINE_AND_FAILED_SETUP_SELFTEST_PASS");
+    }
+
+    private static void verifyGroup(int count) throws Exception {
         Path parent = Files.createTempDirectory("t554-rpo-agent-selftest-");
-        ThreadPoolExecutor workers = pool(2);
+        ThreadPoolExecutor workers = pool(count);
         ScheduledThreadPoolExecutor scheduler = new ScheduledThreadPoolExecutor(1);
         ScheduledProbe probe = new ScheduledProbe();
         try {
@@ -27,14 +33,14 @@ public final class T554OrderDeliveryPauseAgentTest {
             if (probe.ticks.get() != ticks) throw new AssertionError("Retry scheduler remained active");
             Files.createFile(requested.resolve("resume.request"));
             if (!task.await(1, TimeUnit.SECONDS)) throw new AssertionError("Explicit resume did not release workers");
-            awaitStatus(requested, "RESUMED delivery=2 scheduler=1 reason=requested");
+            awaitStatus(requested, "RESUMED delivery=" + count + " configured=" + count + " scheduler=1 reason=requested");
             Path deadline = parent.resolve("deadline");
             T554OrderDeliveryPauseAgent.arm(deadline, 500, ScheduledProbe.class.getName());
             task = new CountDownLatch(1);
             CountDownLatch timeoutTask = task;
             workers.execute(timeoutTask::countDown);
             if (!task.await(2, TimeUnit.SECONDS)) throw new AssertionError("Automatic deadline did not release workers");
-            awaitStatus(deadline, "RESUMED delivery=2 scheduler=1 reason=deadline");
+            awaitStatus(deadline, "RESUMED delivery=" + count + " configured=" + count + " scheduler=1 reason=deadline");
         } finally {
             workers.shutdownNow();
             scheduler.shutdownNow();
@@ -54,7 +60,6 @@ public final class T554OrderDeliveryPauseAgentTest {
         } finally {
             workers.shutdownNow();
         }
-        System.out.println("T554_DELIVERY_FAULT_EXPLICIT_RESUME_DEADLINE_AND_FAILED_SETUP_SELFTEST_PASS");
     }
 
     public static final class ScheduledProbe implements Runnable {

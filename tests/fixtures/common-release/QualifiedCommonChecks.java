@@ -32,7 +32,7 @@ public final class QualifiedCommonChecks {
         boolean safety = "--safety".equals(args[0]);
         int executed = result.getRunCount() - skipped.size();
         boolean passed = result.wasSuccessful() && result.getIgnoreCount() == 0
-            && (safety ? executed >= 306 && OPTIONAL.containsAll(skipped)
+            && (safety ? executed >= 308 && OPTIONAL.containsAll(skipped)
                        : executed > 0 && skipped.isEmpty());
         System.out.println("COMMON_QUALIFICATION_RESULT discovered=" + result.getRunCount()
             + " executed=" + executed + " failures=" + result.getFailureCount()

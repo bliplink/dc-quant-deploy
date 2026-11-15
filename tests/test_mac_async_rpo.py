@@ -17,6 +17,19 @@ SPEC.loader.exec_module(RPO)
 
 
 class AsyncRpoEvidenceTest(unittest.TestCase):
+    def test_pause_and_release_require_all_configured_workers(self):
+        for count in (2, 8):
+            self.assertEqual(count, RPO.delivery_fault_group(
+                f'PAUSED delivery={count} configured={count} scheduler=1 holdMillis=30000', 'PAUSED'))
+            self.assertEqual(count, RPO.delivery_fault_group(
+                f'RESUMED delivery={count} configured={count} scheduler=1 reason=requested', 'RESUMED'))
+        for bad in ('PAUSED delivery=2 configured=8 scheduler=1 holdMillis=30000',
+                    'PAUSED delivery=2 scheduler=1 holdMillis=30000',
+                    'PAUSED delivery=8 configured=8 scheduler=0 holdMillis=30000',
+                    'PAUSED delivery=3 configured=3 scheduler=1 holdMillis=30000'):
+            with self.subTest(proof=bad), self.assertRaises(RuntimeError):
+                RPO.delivery_fault_group(bad, 'PAUSED')
+
     def test_pause_budget_reads_the_actual_dotted_java_property(self):
         with tempfile.TemporaryDirectory() as directory:
             properties = Path(directory) / 'application.properties'
