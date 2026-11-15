@@ -23,6 +23,7 @@ Usage:
   ./mac-colima-saas.sh fresh-verified CANDIDATE_DIRECTORY PHYSICAL_RESULT_DIRECTORY
   ./mac-colima-saas.sh verify-common COMMON_REVISION
   ./mac-colima-saas.sh verify-fresh RUN_DIRECTORY
+  ./mac-colima-saas.sh verify-runtime RUN_DIRECTORY
   ./mac-colima-saas.sh verify-order-cancel RUN_DIRECTORY [--transport tcp] [--seconds 60]
   ./mac-colima-saas.sh verify-settlements RUN_DIRECTORY --locations LOCATION...
   ./mac-colima-saas.sh verify-execution RUN_DIRECTORY --transport tcp --rate RATE --seconds SECONDS
@@ -233,6 +234,10 @@ main() {
     verify-order-cancel)
       [[ "$#" -ge 1 ]] || die "Usage: ./mac-colima-saas.sh verify-order-cancel RUN_DIRECTORY [--transport tcp] [--seconds 60]"
       python3 "${SCRIPT_DIR}/scripts/verify-mac-demo-order-cancel-capacity.py" --transport tcp "$@"
+      ;;
+    verify-runtime)
+      [[ "$#" == 1 ]] || die "Usage: ./mac-colima-saas.sh verify-runtime RUN_DIRECTORY"
+      python3 "${SCRIPT_DIR}/scripts/verify-mac-demo-runtime.py" "$@"
       ;;
     verify-settlements)
       [[ "$#" -ge 3 ]] || die "Usage: ./mac-colima-saas.sh verify-settlements RUN_DIRECTORY --locations LOCATION..."
