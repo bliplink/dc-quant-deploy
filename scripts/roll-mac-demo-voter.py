@@ -3,6 +3,7 @@
 import argparse
 from datetime import datetime, timedelta
 import fcntl
+import hashlib
 import json
 import os
 from pathlib import Path
@@ -12,6 +13,7 @@ import shlex
 import subprocess
 import sys
 import tempfile
+import threading
 import time
 import zlib
 
@@ -23,6 +25,65 @@ from t457_readonly_common_ha_preflight import common_sha, parse_manifest  # noqa
 FRESH = runpy.run_path(str(HERE / "mac-demo-fresh.py"))
 ROBOT_TRAFFIC = runpy.run_path(str(HERE / "mac-demo-robot-traffic.py"))
 read, run = FRESH["read"], FRESH["run"]
+
+
+class BoundedFaultLog:
+    """Private diagnostic head only. Never grants roles, ACK or recovery."""
+    LIMIT = 64 * 1024 * 1024
+
+    def __init__(self, directory, label, container):
+        if not re.fullmatch(r'[a-f0-9]{64}', container) or not re.fullmatch(r'[a-z-]+', label):
+            raise ValueError('Fault diagnostics require an exact container ID and fixed label')
+        self.path = directory / ('diagnostic-' + label + '-first.log')
+        since = (datetime.now() - timedelta(seconds=5)).astimezone().isoformat()
+        self.row = {'scope': 'BOUNDED_READ_ONLY_DIAGNOSTIC_NOT_ACCEPTANCE', 'container_id': container,
+                    'file': self.path.name, 'since': since, 'limit_bytes': self.LIMIT,
+                    'bytes': 0, 'limit_reached': False}
+        self.sink = self.path.open('xb')
+        try:
+            self.process = subprocess.Popen(['docker', 'logs', '--timestamps', '--follow', '--since',
+                since, container], stdout=subprocess.PIPE,
+                stderr=subprocess.STDOUT)
+        except BaseException:
+            self.sink.close()
+            raise
+        self.thread = threading.Thread(target=self._copy, daemon=True)
+        self.thread.start()
+
+    def _copy(self):
+        try:
+            with self.sink:
+                while self.row['bytes'] < self.LIMIT:
+                    chunk = self.process.stdout.read(min(65536, self.LIMIT - self.row['bytes']))
+                    if not chunk:
+                        return
+                    self.sink.write(chunk)
+                    self.row['bytes'] += len(chunk)
+                self.row['limit_reached'] = True
+                self.process.terminate()  # Only our read-only Docker log client.
+        except (OSError, ValueError) as error:
+            self.row['capture_error'] = type(error).__name__
+        finally:
+            self.process.stdout.close()
+
+    def close(self):
+        if self.process.poll() is None:
+            self.process.terminate()
+        try:
+            self.process.wait(timeout=5)
+        except subprocess.TimeoutExpired:
+            self.process.kill()
+            self.process.wait(timeout=5)
+        self.thread.join(timeout=5)
+        self.row['client_exit_code'] = self.process.returncode
+        self.row['capture_finished'] = not self.thread.is_alive()
+        if self.row['capture_finished']:
+            digest = hashlib.sha256()
+            with self.path.open('rb') as saved:
+                for chunk in iter(lambda: saved.read(65536), b''):
+                    digest.update(chunk)
+            self.row['sha256'] = digest.hexdigest()
+        return dict(self.row)
 
 
 def inspect(name):
@@ -305,6 +366,16 @@ def exercise(root, generation, kind, slot, args):
         staged.replace(output / "evidence.json")
         print(f"[mac-demo HA] {svc}{slot}: {stage}; {output}", flush=True)
 
+    log_readers = []
+
+    def start_fault_log(label, identifier):
+        if any(reader.row['container_id'] == identifier for reader in log_readers):
+            return
+        try:
+            log_readers.append(BoundedFaultLog(output, label, identifier))
+        except (OSError, ValueError) as error:
+            record.setdefault('diagnostic_capture_errors', []).append(label + ': ' + type(error).__name__)
+
     def wait(stage, predicate, active_id=None, observed_shard=None):
         start = time.monotonic()
         shown = -32
@@ -369,6 +440,9 @@ def exercise(root, generation, kind, slot, args):
         raise RuntimeError(f"Timed out waiting for signed business checkpoint {marker}")
 
     try:
+        start_fault_log('surviving-voter', survivor['Id'])
+        start_fault_log('original-voter', old['Id'])
+        start_fault_log('witness', inspect(witness_name)['Id'])
         if args.business_mode:
             with (output / "signed-business.log").open("w") as transcript:
                 business = subprocess.Popen(
@@ -496,6 +570,7 @@ def exercise(root, generation, kind, slot, args):
             new_id = read("docker", "run", "-d", *flags, replacement_image)
             record["replacement_id"] = new_id
             publish("replacement_started")
+        start_fault_log('returning-voter', new_id)
         wait("strict_home", lambda p, row: ready(row, home(p), "B" if home(p) == "A" else "A",
                                                   "STRICT_QUORUM", initial[p]["epoch"] + 2 + (home(p) == slot)), active_id=new_id)
         new_lease = lease(svc + slot)
@@ -571,6 +646,15 @@ def exercise(root, generation, kind, slot, args):
             renamed = False
         raise
     finally:
+        record['bounded_fault_logs_this_attempt'] = []
+        for reader in log_readers:
+            try:
+                record['bounded_fault_logs_this_attempt'].append(reader.close())
+            except (OSError, subprocess.SubprocessError) as error:
+                record.setdefault('diagnostic_capture_errors', []).append(type(error).__name__)
+        staged = output / 'evidence.tmp'
+        staged.write_text(json.dumps(record, indent=2, sort_keys=True) + '\n')
+        staged.replace(output / 'evidence.json')
         if business is not None and business.poll() is None:
             try:
                 business.wait(timeout=25)
