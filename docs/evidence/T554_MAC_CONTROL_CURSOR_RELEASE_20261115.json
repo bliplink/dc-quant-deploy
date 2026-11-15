@@ -1,5 +1,5 @@
 {
-  "observed_at": "2026-11-16T07:14:22.249803+08:00",
+  "observed_at": "2026-11-16T07:22:06.517163+08:00",
   "status": "NO_GO_NEW_COMMON_DEPLOYED_STRICT_BASELINES_INTEGRITY_PASS_PERFORMANCE_AND_BUSINESS_HA_PENDING",
   "production_acceptance": "NO_GO",
   "generation": "mac-demo-20261116-065052",
@@ -104,7 +104,7 @@
       }
     },
     "physical_seal_sha256": "b6a6fef76e07a1818efdc39aa000d48ce6a5f9ab3bf9db1e8c61614372eb1113",
-    "revision": "f7bb1e4",
+    "revision": "f7bb1e4f87ade75449a370738374c8bcaae3aab6",
     "sha256": "4a966ced261fe2105cda18782c140717dc1ab0c773ee788a7948243713e1747c",
     "deployed": true,
     "verification": "/Users/kong/.opentradingcore/t554-common-verifications/20261116-live-local-owner-replay-v3",
@@ -217,50 +217,28 @@
   "runtime_gc": {
     "actual_all_four_G1": true,
     "requested_max_pause_ms": 10,
-    "actual_flag_evidence": "/Users/kong/.opentradingcore/mac-demo-20261116-020105/actual-core-jar-and-gc-20261116.json",
+    "actual_flag_evidence": "/Users/kong/.opentradingcore/t554-live-strict-gc-identity-20261116.json",
     "actual_pause_sla_passed": false,
     "source": "G1 default for new core voters; explicit operator collector and pause budget preserved"
   },
   "functional": {
     "fresh_real_business_passed": true,
-    "fresh_verification": "/Users/kong/.opentradingcore/mac-demo-20261116-020105/verification.N1Q5k7",
+    "fresh_verification": "/Users/kong/.opentradingcore/t554-live-local-followthrough-v3-strict-verified-build-and-sequential-fresh-20261116.log",
     "order_only_and_trade_real_fills_passed": true,
     "each_customer_execution_unique_public_trade_passed": true,
     "initial_exact_financial_cursor_passed": true,
     "actual_all_four_256_partition_role_runtime_passed": true,
-    "runtime_proof": "/Users/kong/.opentradingcore/mac-demo-20261116-020105/physical-runtime-d2kh6u1e/proof.json",
-    "ten_robot_steady_status": "PASS_5_MINUTES_1346_PAIRED_FILLS",
+    "ten_robot_steady_status": "PASS_REAL_FIVE_MINUTE_WINDOW",
+    "ten_robot_steady_evidence": "/Users/kong/.opentradingcore/mac-demo-20261116-065052/robot-steady-10-230511.json",
     "current_same_jar_four_way_robot_sigkill_pending": true,
-    "current_true_async_settlement_loss_pending": false,
-    "current_lost_reservation_cancel_pending": false,
-    "current_lost_reservation_matched_readmission_pending": false,
+    "current_true_async_settlement_loss_pending": true,
+    "current_lost_reservation_cancel_pending": true,
+    "current_lost_reservation_matched_readmission_pending": true,
     "current_trade_single_node_pending": true,
-    "current_true_async_settlement_loss_evidence": "/Users/kong/.opentradingcore/mac-demo-20261116-020105/async-rpo-718d5943/evidence.json",
-    "lost_reservation_cancel_previous_no_go": "/Users/kong/.opentradingcore/mac-demo-20261116-020105/async-reservation-loss-53bae266/evidence.json",
-    "lost_reservation_cancel_composite_status": "LOCAL_TRUE_LOSS_CANCEL_PROVEN_IN_ORIGINAL_EXECUTION_AND_POST_HOME_READONLY_AUDIT_PASS_ORIGINAL_NO_GO_RETAINED",
-    "lost_reservation_cancel_original": "/Users/kong/.opentradingcore/mac-demo-20261116-020105/async-reservation-loss-c70fdcd6/evidence.json",
-    "lost_reservation_cancel_audit": "/Users/kong/.opentradingcore/mac-demo-20261116-020105/async-reservation-loss-c70fdcd6/independent-home-byte-audit-20261116.json",
-    "current_lost_reservation_matched_readmission_status": "BOTH_LIVE_LOCAL_ACCOUNTS_PROVEN_AND_INDEPENDENT_EXACT_HOME_AUDIT_PASS_ORIGINAL_NO_GO_RETAINED",
-    "lost_reservation_matched_readmission_first_no_go": "/Users/kong/.opentradingcore/mac-demo-20261116-020105/async-reservation-readmission-c5a30715/evidence.json",
-    "lost_reservation_matched_readmission_first_failure": "LOCAL fee predicate incorrectly depended on certified-only SQL financial enrichment; final LOCAL receipts and authenticated pair economics observed, complete live API gate not proved",
-    "lost_reservation_matched_readmission_retry": "/Users/kong/.opentradingcore/mac-demo-20261116-020105/async-reservation-readmission-99b035e3/evidence.json",
-    "lost_reservation_matched_readmission_composite_audit": "/Users/kong/.opentradingcore/mac-demo-20261116-020105/async-reservation-readmission-99b035e3/independent-home-single-execution-audit-20261116.json",
-    "single_trade_node_live_new_orders_fills_and_local_risk_receipts_observed": true,
-    "full_bidirectional_trade_single_node_suites_pending": true,
-    "current_four_way_failure": "/Users/kong/.opentradingcore/mac-demo-20261116-020105/ha-order-a-kill-21uje7yr/evidence.json",
-    "current_four_way_blocker_evidence": "/Users/kong/.opentradingcore/t554-order-p135-readonly-diagnostic-20261116/confirmed-blocker.json",
-    "current_four_way_next_faults_stopped": true,
-    "current_service_processes_stopped_by_inspection": false,
-    "new_strict_065052": {
-      "verified_build_and_sequential_fresh_log": "/Users/kong/.opentradingcore/t554-live-local-followthrough-v3-strict-verified-build-and-sequential-fresh-20261116.log",
-      "baseline_business_passed": true,
-      "ten_robot_five_minute_evidence": "/Users/kong/.opentradingcore/mac-demo-20261116-065052/robot-steady-10-230511.json",
-      "full_business_faults_on_this_jar_passed": false,
-      "original_failed_020105_recovered": false
-    }
+    "old_020105_auto_recovered": false
   },
   "current_performance": {
-    "status": "STRICT_TWO_AND_FORTY_INTEGRITY_PASS_SLO_FAIL_ORDER_CANCEL_RUNNING_MATRIX_QUEUED",
+    "status": "STRICT_BASELINE_INTEGRITY_PASS_SLO_FAIL_MATRIX_RUNNING_ASYNC_SEQUENTIAL_QUEUED",
     "strict_measured_on_this_release": true,
     "async_measured_on_this_release": false,
     "qualified_windows_cannot_overlap_faults_or_diagnostic_attach": true,
@@ -1004,7 +982,9 @@
     "matching_matrix_controller": "/Users/kong/.opentradingcore/t554-strict-queue-matrix-20261116.json",
     "matrix_implementation_commit": "3b3bf5c",
     "related_checks_executed": 33,
-    "matrix_actual_acceptance_pending": true
+    "matrix_actual_acceptance_pending": true,
+    "native_order_cancel_evidence": "/Users/kong/.opentradingcore/mac-demo-20261116-065052/order-cancel-capacity-ff8a1726.json",
+    "native_order_cancel_integrity": true
   },
   "last_completed_business_performance": {
     "generation": "mac-demo-20261115-232443",
@@ -1059,13 +1039,13 @@
     "async_match_readmission_driver_regressions_passed": 9
   },
   "open_findings": [
-    "Real Order A return stuck at closed/poisoned LOCAL P135 epoch3 published/forced296; no automatic live local replay currently connected. New Common candidate work is not deployed or fully qualified.",
-    "Sustained1000/s and end-to-endP99<=20ms remain unproved on both modes.",
-    "Complete256-partition takeover/Home remains minutes; functional evidence is not an isolatedRTO benchmark.",
-    "Common strict batching exists but business calls remain singleton.",
-    "Previous real RPO exposed infinite async waits holding business locks; new Common fullP0 passed, true settlement RPO retest now passed; reservation and four-way gates remain.",
-    "Genuine settlement RPO and reservation-loss cancellation/readmission have real evidence and post-Home exact audits; original harness NO-GO files retained. All-four process faults and sustained strict/async performance remain incomplete.",
-    "Retired originalGG2803 unsettled matches remain separate retained evidence."
+    "New strict native40/s completes all2400 inside60s with financial and ten-Robot integrity, but client finalP99=1320.248ms; both strict and async1000/s and20ms remain unaccepted.",
+    "Same-JAR business four-direction SIGKILL, Trade single-node, and async accepted-loss regressions remain pending; old020105 P135 failure was retained and replaced sequentially, not automatically recovered.",
+    "Common all256-partition takeover and Home remain minutes in the private fixture; no recovery-speed qualification claimed.",
+    "Common bounded strict batch exists; business requests still commit singleton transitions. Do not relax real physicalACK or fencing to reduce latency.",
+    "Tenant-symbol matching queues share Order Common partition and Trade tenant partition; explicit natural-hash matrix now running, scale result pending.",
+    "Host compression churn and guestIO pressure observed in strict40 window, without Order/Trade cgroupCPU throttling; causality requires diagnostic evidence.",
+    "Historical async settlement and reservation-loss composite audits retain original harnessNO_GO evidence and cannot replace thisJAR business acceptance."
   ],
   "historical_evidence": "archive/T554_MAC_CONTROL_CURSOR_RELEASE_PRE_20261116_0210.json",
   "raw_storage_diagnostic": {
@@ -1171,7 +1151,7 @@
     },
     "full_physical_qualification_passed": true,
     "production_go": false,
-    "common_revision": "f7bb1e4",
+    "common_revision": "f7bb1e4f87ade75449a370738374c8bcaae3aab6",
     "common_sha256": "4a966ced261fe2105cda18782c140717dc1ab0c773ee788a7948243713e1747c",
     "qualification_status": "PASS_COMMON_QUALIFICATION_BUSINESS_AND_PERFORMANCE_STILL_REQUIRED",
     "qualification": "/Users/kong/.opentradingcore/t554-common-candidates/20261116-live-local-owner-replay-v3/qualification/state.json",
@@ -1308,7 +1288,8 @@
     "source": "/Users/kong/.opentradingcore/t554-live-local-followthrough-v3-20261116.py",
     "scope": "Wait for complete exact-JAR qualification; recheck unchanged core source and original generation; sequential strict fresh with retained rollback; ten Robots and native TCP baselines. Stop on any failed integrity stage. Not owner acceptance.",
     "production_go": false,
-    "matrix_journal": "/Users/kong/.opentradingcore/t554-strict-queue-matrix-20261116.json"
+    "matrix_journal": "/Users/kong/.opentradingcore/t554-strict-queue-matrix-20261116.json",
+    "async_matrix_journal": "/Users/kong/.opentradingcore/t554-async-after-strict-matrix-20261116.json"
   },
   "future_fault_log_retention": {
     "source": "scripts/roll-mac-demo-voter.py",
@@ -1491,5 +1472,43 @@
     "status": "NORMAL_EXIT_CONFIRMED",
     "evidence": "/Users/kong/.opentradingcore/t554-authorized-qqvideo-normal-quit-20261116.json",
     "sole_performance_causality_claimed": false
+  },
+  "historical_functional_020105": {
+    "fresh_real_business_passed": true,
+    "fresh_verification": "/Users/kong/.opentradingcore/mac-demo-20261116-020105/verification.N1Q5k7",
+    "order_only_and_trade_real_fills_passed": true,
+    "each_customer_execution_unique_public_trade_passed": true,
+    "initial_exact_financial_cursor_passed": true,
+    "actual_all_four_256_partition_role_runtime_passed": true,
+    "runtime_proof": "/Users/kong/.opentradingcore/mac-demo-20261116-020105/physical-runtime-d2kh6u1e/proof.json",
+    "ten_robot_steady_status": "PASS_5_MINUTES_1346_PAIRED_FILLS",
+    "current_same_jar_four_way_robot_sigkill_pending": true,
+    "current_true_async_settlement_loss_pending": false,
+    "current_lost_reservation_cancel_pending": false,
+    "current_lost_reservation_matched_readmission_pending": false,
+    "current_trade_single_node_pending": true,
+    "current_true_async_settlement_loss_evidence": "/Users/kong/.opentradingcore/mac-demo-20261116-020105/async-rpo-718d5943/evidence.json",
+    "lost_reservation_cancel_previous_no_go": "/Users/kong/.opentradingcore/mac-demo-20261116-020105/async-reservation-loss-53bae266/evidence.json",
+    "lost_reservation_cancel_composite_status": "LOCAL_TRUE_LOSS_CANCEL_PROVEN_IN_ORIGINAL_EXECUTION_AND_POST_HOME_READONLY_AUDIT_PASS_ORIGINAL_NO_GO_RETAINED",
+    "lost_reservation_cancel_original": "/Users/kong/.opentradingcore/mac-demo-20261116-020105/async-reservation-loss-c70fdcd6/evidence.json",
+    "lost_reservation_cancel_audit": "/Users/kong/.opentradingcore/mac-demo-20261116-020105/async-reservation-loss-c70fdcd6/independent-home-byte-audit-20261116.json",
+    "current_lost_reservation_matched_readmission_status": "BOTH_LIVE_LOCAL_ACCOUNTS_PROVEN_AND_INDEPENDENT_EXACT_HOME_AUDIT_PASS_ORIGINAL_NO_GO_RETAINED",
+    "lost_reservation_matched_readmission_first_no_go": "/Users/kong/.opentradingcore/mac-demo-20261116-020105/async-reservation-readmission-c5a30715/evidence.json",
+    "lost_reservation_matched_readmission_first_failure": "LOCAL fee predicate incorrectly depended on certified-only SQL financial enrichment; final LOCAL receipts and authenticated pair economics observed, complete live API gate not proved",
+    "lost_reservation_matched_readmission_retry": "/Users/kong/.opentradingcore/mac-demo-20261116-020105/async-reservation-readmission-99b035e3/evidence.json",
+    "lost_reservation_matched_readmission_composite_audit": "/Users/kong/.opentradingcore/mac-demo-20261116-020105/async-reservation-readmission-99b035e3/independent-home-single-execution-audit-20261116.json",
+    "single_trade_node_live_new_orders_fills_and_local_risk_receipts_observed": true,
+    "full_bidirectional_trade_single_node_suites_pending": true,
+    "current_four_way_failure": "/Users/kong/.opentradingcore/mac-demo-20261116-020105/ha-order-a-kill-21uje7yr/evidence.json",
+    "current_four_way_blocker_evidence": "/Users/kong/.opentradingcore/t554-order-p135-readonly-diagnostic-20261116/confirmed-blocker.json",
+    "current_four_way_next_faults_stopped": true,
+    "current_service_processes_stopped_by_inspection": false,
+    "new_strict_065052": {
+      "verified_build_and_sequential_fresh_log": "/Users/kong/.opentradingcore/t554-live-local-followthrough-v3-strict-verified-build-and-sequential-fresh-20261116.log",
+      "baseline_business_passed": true,
+      "ten_robot_five_minute_evidence": "/Users/kong/.opentradingcore/mac-demo-20261116-065052/robot-steady-10-230511.json",
+      "full_business_faults_on_this_jar_passed": false,
+      "original_failed_020105_recovered": false
+    }
   }
 }
