@@ -172,6 +172,21 @@ def gc_observation_environment(entries):
     return updated
 
 
+def low_pause_gc_environment(entries):
+    """Use Java 8 G1 for new core voters unless an operator chose a collector."""
+    values = dict(entry.split('=', 1) for entry in entries)
+    options = ' '.join(values.get(key, '') for key in
+                       ('JAVA_OPTS', 'EXTRA_JAVA_OPTS', 'JAVA_TOOL_OPTIONS'))
+    if re.search(r'-XX:[+-]Use(?:G1|Parallel|ParallelOld|Serial|ConcMarkSweep|Z|Shenandoah|Epsilon)GC(?:\s|$)', options):
+        return list(entries)
+    flags = '-XX:+UseG1GC'
+    if not re.search(r'-XX:MaxGCPauseMillis=', options):
+        flags += ' -XX:MaxGCPauseMillis=10'
+    updated = [entry for entry in entries if not entry.startswith('EXTRA_JAVA_OPTS=')]
+    updated.append('EXTRA_JAVA_OPTS=' + (values.get('EXTRA_JAVA_OPTS', '') + ' ' + flags).strip())
+    return updated
+
+
 def update_properties(content, values):
     for key, value in values.items():
         content = re.sub(rf"^{re.escape(key)}=.*(?:\n|$)", "", content, flags=re.M)
@@ -705,7 +720,8 @@ def main():
             if value:
                 flags.extend([flag, str(value if key == "Memory" else value / 1e9)])
         phase_policy = client_ack_policy if phase == "hostready" and automatic_common else "STRICT_QUORUM"
-        for entry in gc_observation_environment(client_ack_environment(old_node["Config"]["Env"], phase_policy)):
+        for entry in low_pause_gc_environment(gc_observation_environment(
+                client_ack_environment(old_node["Config"]["Env"], phase_policy))):
             flags.extend(["-e", entry])
         flags.extend(["--label", f"otc.common.client_ack_policy={phase_policy}"])
         flags.extend(voter_runtime_mounts[kind, slot])

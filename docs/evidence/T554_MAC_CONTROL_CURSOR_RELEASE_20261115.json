@@ -1250,5 +1250,14 @@
       "Exact both-account balances and execution fees, zero frozen funds, correct paired positions and used margin",
       "Original primary return,512 raw WAL/snapshot pairs,exact financial cursor and continuous Robot"
     ]
+  },
+  "next_business_gc_candidate": {
+    "status": "JAVA8_IMAGE_SMOKE_AND28_RELEVANT_TOOL_TESTS_PASS_NOT_DEPLOYED_OR_PERFORMANCE_ACCEPTED",
+    "default_for_new_core_voters": "-XX:+UseG1GC -XX:MaxGCPauseMillis=10, only when original environment does not explicitly select or disable any collector",
+    "operator_collector_and_existing_pause_budget_preserved": true,
+    "heap_limits_changed": false,
+    "log_rotation_and_actual_pause_observation_preserved": true,
+    "why": "Original actual native40/s logs have allocation GC pauses exceeding20ms; total application pauses exceeded50ms on all four nodes. G1 target is best effort and must be measured.",
+    "comparison_caveat": "Next business release combines bounded Common waits,Order delivery pool8,and G1 default. Do not attribute any complete speedup to one isolated change."
   }
 }

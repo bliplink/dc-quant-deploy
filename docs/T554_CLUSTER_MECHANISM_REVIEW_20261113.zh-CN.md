@@ -190,3 +190,5 @@ Mac 为 arm64、10 CPU/24 GiB；运行的核心镜像均为 arm64。Colima 当�
 正式架构边界仍以 [Common 简洁职责约束](ARCHITECTURE_SIMPLE_COMMON_BOUNDARY_20261029.zh-CN.md) 和 [A/B Home 自动回主](COMMON_AB_HOME_PRIMARY_AUTO_FAILBACK_ARCHITECTURE_20261031.zh-CN.md) 为准。
 
 真正异步有损门禁现在顺序覆盖三项：已确认结算未复制、预占未复制后的正常撤单、预占未复制后的原订单正常撮合与自动重新预占。第三项新增工具已有九项回归检查通过，真实演练尚未执行；不会把撤单用例当成撮合恢复通过。
+
+下一代正常重部署的 Core JVM 默认选用 G1、10ms 目标暂停；原环境明确指定或禁用的 GC 算法及已有暂停预算保留。原生 Java 8 镜像启动检查、GC/存储/确认策略工具共 28 项检查通过，尚未部署或验证效果。当前 GC 停顿已超过20ms目标，参数只是尝试，不是性能保证；下一轮同时包含 Common 等待上限、Order 交付并发8与该 GC 调整，测得的整体差异不能全部归因于一个改动。
