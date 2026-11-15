@@ -24,6 +24,7 @@ Usage:
   ./mac-colima-saas.sh verify-common COMMON_REVISION
   ./mac-colima-saas.sh verify-fresh RUN_DIRECTORY
   ./mac-colima-saas.sh verify-runtime RUN_DIRECTORY
+  ./mac-colima-saas.sh observe-pauses RUN_DIRECTORY --since ISO_TIME --until ISO_TIME
   ./mac-colima-saas.sh verify-order-cancel RUN_DIRECTORY [--transport tcp] [--seconds 60]
   ./mac-colima-saas.sh verify-settlements RUN_DIRECTORY --locations LOCATION...
   ./mac-colima-saas.sh verify-execution RUN_DIRECTORY --transport tcp --rate RATE --seconds SECONDS
@@ -238,6 +239,10 @@ main() {
     verify-runtime)
       [[ "$#" == 1 ]] || die "Usage: ./mac-colima-saas.sh verify-runtime RUN_DIRECTORY"
       python3 "${SCRIPT_DIR}/scripts/verify-mac-demo-runtime.py" "$@"
+      ;;
+    observe-pauses)
+      [[ "$#" -ge 5 ]] || die "Usage: ./mac-colima-saas.sh observe-pauses RUN_DIRECTORY --since ISO_TIME --until ISO_TIME"
+      python3 "${SCRIPT_DIR}/scripts/observe-mac-demo-jvm-pauses.py" "$@"
       ;;
     verify-settlements)
       [[ "$#" -ge 3 ]] || die "Usage: ./mac-colima-saas.sh verify-settlements RUN_DIRECTORY --locations LOCATION..."
