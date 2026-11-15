@@ -467,6 +467,11 @@ def main():
                 expected_head = 65 if scenario.startswith("normal-dual-async-pipeline-64") else 2
                 if receipt != f"LOCAL_DURABLE_ASYNC P000 2 {expected_head} rpoRisk=true":
                     raise ValueError("Common normal async original LOCAL receipt is missing")
+                if '"a-local-history-read-before-peer"' in poison_source.read_text():
+                    accepted = (directory / 'a-local-history-read-before-peer').read_text().strip()
+                    if accepted != (f'LOCAL_ACCEPTED P000 2 {expected_head} frames={expected_head} '
+                                    'originalSignedHead=true'):
+                        raise ValueError('Common normal async accepted history was not authenticated before peer return')
                 if scenario == "normal-dual-async-pipeline-64":
                     verify_async_pipeline_prefixes(directory)
                 if (scenario.endswith("primary-kill")
