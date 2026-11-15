@@ -379,9 +379,26 @@
     "primitive_tests_passed": 47,
     "protocol_component_revision": "b0d48b2",
     "protocol_component_tests_passed": 34,
-    "formal_runtime_integrated": false,
+    "formal_runtime_integrated": true,
     "full_new_protocol_p0_passed": false,
     "production_deployed": false,
-    "new_protocol_performance_claimed": false
+    "new_protocol_performance_claimed": false,
+    "formal_runtime_focused_tests_passed": 72,
+    "formal_runtime_full_safety": "293 executed passed; 3 optional external historical fixture tests skipped",
+    "formal_runtime_independent_physical_p0": "RUNNING",
+    "bounded_source_pipeline_and_business_batch_integration": "PENDING",
+    "formal_runtime_revision": "8cf143a",
+    "formal_runtime_jar_sha256": "f0deb00ec069119392858c9785a61aaa7bf71af556dd3d3af2b0963322c602bf"
+  },
+  "read_only_current_control_recheck": {
+    "order": 34,
+    "trade": 70,
+    "all_256_each_ready_strict": true,
+    "home_distribution_not_rechecked_by_this_check": true,
+    "trade_control_changed_since_clean_capacity_windows": true,
+    "agent_business_restart": false,
+    "cause": "Real old V1 path timeouts at 13:37 and repeated custody failure at 13:39; physical processes unchanged; exact resource cause not established.",
+    "new_stability_pass_claimed": false,
+    "trade_control_change_observed_before_robot_stop": "2026-11-15T13:44:17+08:00"
   }
 }
