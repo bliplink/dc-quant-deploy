@@ -1,6 +1,6 @@
 {
   "observed_at": "2026-11-16T05:08:10.895585+08:00",
-  "status": "NO_GO_REAL_ORDER_A_RETURN_BLOCKED_BY_CLOSED_LOCAL_P135_COMMON_FIX_IN_DEVELOPMENT",
+  "status": "NO_GO_COMMON_P0_PASS_MAC_REPLACEMENT_WAITING_VERIFIED_DISK_ARCHIVE_BUSINESS_AND_PERFORMANCE_PENDING",
   "production_acceptance": "NO_GO",
   "generation": "/Users/kong/.opentradingcore/mac-demo-20261116-020105",
   "client_ack_policy": "LOCAL_DURABLE_ASYNC",
@@ -407,11 +407,11 @@
       "skipped": 0,
       "proof": "/Users/kong/.opentradingcore/t554-common-live-local-owner-unit-evidence-20261116/proof.json"
     },
-    "full_physical_qualification_passed": false,
+    "full_physical_qualification_passed": true,
     "production_go": false,
     "common_revision": "f7bb1e4",
     "common_sha256": "4a966ced261fe2105cda18782c140717dc1ab0c773ee788a7948243713e1747c",
-    "qualification_status": "V3_ALL_FOUR_LIVE_LOCAL_PASS_SAFETY_AND_FULL_PHYSICAL_RUNNING",
+    "qualification_status": "PASS_COMMON_QUALIFICATION_BUSINESS_AND_PERFORMANCE_STILL_REQUIRED",
     "qualification": "/Users/kong/.opentradingcore/t554-common-candidates/20261116-live-local-owner-replay-v3/qualification/state.json",
     "early_fixture_failure_preserved": "/Users/kong/.opentradingcore/t554-common-live-local-owner-published-v1-evidence-20261116/attempt-context.json",
     "failed_qualification_preserved": "/Users/kong/.opentradingcore/t554-common-candidates/20261116-live-local-owner-replay-v1/qualification/state.json",
@@ -475,7 +475,53 @@
         "optional_external_historical_skips": 0,
         "log_sha256": "556a0b1725c90d91eaff885ecbc86afad80a94eb315520f8bda3d3c605dd8f53"
       }
-    }
+    },
+    "safety": {
+      "discovered": 317,
+      "executed": 314,
+      "failures": 0,
+      "ignored": 0,
+      "optional_external_historical_skips": 3,
+      "log_sha256": "52e15f8beb8559c015bb0985343eaffc42e7adc0d9f250dc11a0ae60a673fa1e"
+    },
+    "v3_cold_results": {
+      "clean-local-owner": {
+        "discovered": 1,
+        "executed": 1,
+        "failures": 0,
+        "ignored": 0,
+        "optional_external_historical_skips": 0,
+        "log_sha256": "bfa772e17f0cfb19caccef8a88483144596b0c1cec24566ee5ded50d7a7a99b3"
+      },
+      "interrupted-retained-owner": {
+        "discovered": 1,
+        "executed": 1,
+        "failures": 0,
+        "ignored": 0,
+        "optional_external_historical_skips": 0,
+        "log_sha256": "169c373134248228141c0f969fdb7341e0e7876acb7282825c78d42584f71f62"
+      },
+      "unpublished-local-tail": {
+        "discovered": 1,
+        "executed": 1,
+        "failures": 0,
+        "ignored": 0,
+        "optional_external_historical_skips": 0,
+        "log_sha256": "2d0388a80eb8afa4793106aa917ba3ecdabcf1646d8959e2b67ec9e72cf0f305"
+      },
+      "mixed-cold-full-home": {
+        "discovered": 1,
+        "executed": 1,
+        "failures": 0,
+        "ignored": 0,
+        "optional_external_historical_skips": 0,
+        "log_sha256": "d1e42ca2c92ced99ead8c52f418ee10c739927d63a5580c76c47524ccb38d07d"
+      }
+    },
+    "full_qualification_finished_at": "2026-11-15T22:28:27.065622+00:00",
+    "physical_seal_sha256": "b6a6fef76e07a1818efdc39aa000d48ce6a5f9ab3bf9db1e8c61614372eb1113",
+    "business_deployed": false,
+    "downstream_complete_release_gate": "/Users/kong/.opentradingcore/t554-common-verifications/20261116-live-local-owner-replay-v3/downstream-complete-qualification-readcheck.json"
   },
   "github_recovery_branch_update_20261116": {
     "branch": "t554-mac-recovery-20261115",
@@ -510,5 +556,28 @@
     "captures": "original, survivor, witness and returning voter first logs from five seconds before each collector starts",
     "business_container_unchanged_readonly_proof": "/Users/kong/.opentradingcore/t554-bounded-readonly-fault-log-d6ah1mb9/proof.json",
     "actual_read_client_cap_and_stop_proof": "/Users/kong/.opentradingcore/t554-bounded-fault-log-cap-proof-15e7bfwh/proof.json"
+  },
+  "current_p0_recovery_timings_ms": {
+    "scope": "Private Common fixture; not live business or pressure acceptance",
+    "a_all_partition_takeover": 188767,
+    "a_home_return": 340465,
+    "b_all_partition_takeover": 170185,
+    "b_home_return": 257322,
+    "equal_wal_pairs_each_full_check": 256,
+    "equal_snapshot_pairs_each_full_check": 256,
+    "recovery_speed_go": false
+  },
+  "disk_cleanup_20261116": {
+    "host_free_gib_before_backup": 61,
+    "docker_free_gib_after_safe_old_shell_cleanup": 6.9,
+    "old_stopped_owned_shells_removed": 69,
+    "configs_archived_privately": true,
+    "all_volumes_and_active_containers_unchanged_at_shell_cleanup": true,
+    "old_image_cache_prune_proof": "/Users/kong/.opentradingcore/t554-old-image-cache-cleanup-7rtf3ib5/proof.json",
+    "stopped_shell_cleanup_proof": "/Users/kong/.opentradingcore/t554-retired-stopped-shell-cleanup-y2zyts2t/proof.json",
+    "retired_24_gib_full_backup_status": "IN_PROGRESS_ORIGINAL_NOT_REMOVED",
+    "full_backup_proof": "/Users/kong/.opentradingcore/t554-retired-ready-verified-backup-oodga6sq/proof.json",
+    "owned_wait_queue_held_until_backup_job_resumes_it": true,
+    "business_containers_held_or_restarted_for_archive": false
   }
 }
