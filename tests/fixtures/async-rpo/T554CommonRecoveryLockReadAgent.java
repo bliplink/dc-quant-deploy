@@ -29,6 +29,7 @@ public final class T554CommonRecoveryLockReadAgent {
             out.append("retained_physically_retired=").append(field(returns, "retainedPhysicallyRetired")).append('\n');
             out.append("retained_stage_present=").append(field(returns, "retainedStage") != null).append('\n');
             out.append("return_progress=").append(field(returns, "progress")).append('\n');
+            out.append("return_last_rejection=").append(field(returns, "lastRejection")).append('\n');
         }
         ThreadMXBean threads = ManagementFactory.getThreadMXBean();
         ThreadInfo[] info = threads.getThreadInfo(threads.getAllThreadIds(), 0);

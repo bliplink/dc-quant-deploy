@@ -1,6 +1,6 @@
 {
-  "observed_at": "2026-11-16T04:13:06.055033+08:00",
-  "status": "CURRENT_ASYNC_BASELINES_AND_TRUE_SETTLEMENT_RPO_PASS_RESERVATION_GATES_IN_PROGRESS_PERFORMANCE_NO_GO",
+  "observed_at": "2026-11-16T05:08:10.895585+08:00",
+  "status": "NO_GO_REAL_ORDER_A_RETURN_BLOCKED_BY_CLOSED_LOCAL_P135_COMMON_FIX_IN_DEVELOPMENT",
   "production_acceptance": "NO_GO",
   "generation": "/Users/kong/.opentradingcore/mac-demo-20261116-020105",
   "client_ack_policy": "LOCAL_DURABLE_ASYNC",
@@ -195,10 +195,14 @@
     "lost_reservation_matched_readmission_retry": "/Users/kong/.opentradingcore/mac-demo-20261116-020105/async-reservation-readmission-99b035e3/evidence.json",
     "lost_reservation_matched_readmission_composite_audit": "/Users/kong/.opentradingcore/mac-demo-20261116-020105/async-reservation-readmission-99b035e3/independent-home-single-execution-audit-20261116.json",
     "single_trade_node_live_new_orders_fills_and_local_risk_receipts_observed": true,
-    "full_bidirectional_trade_single_node_suites_pending": true
+    "full_bidirectional_trade_single_node_suites_pending": true,
+    "current_four_way_failure": "/Users/kong/.opentradingcore/mac-demo-20261116-020105/ha-order-a-kill-21uje7yr/evidence.json",
+    "current_four_way_blocker_evidence": "/Users/kong/.opentradingcore/t554-order-p135-readonly-diagnostic-20261116/confirmed-blocker.json",
+    "current_four_way_next_faults_stopped": true,
+    "current_service_processes_stopped_by_inspection": false
   },
   "current_performance": {
-    "status": "ASYNC_2_AND_40_NATIVE_TCP_AND_SIX_PLACE_CANCEL_BASELINES_COMPLETE_TARGET_NO_GO",
+    "status": "CURRENT_ASYNC_40_LOW_MEMORY_STILL_FAILS_WINDOW_AND_P99_NEW_JFR_HOTSPOTS_IDENTIFIED",
     "strict_measured_on_this_release": false,
     "async_measured_on_this_release": true,
     "pipeline_state": "/Users/kong/.opentradingcore/t554-bounded-waits-sequential-business-v2-20261116.json",
@@ -218,8 +222,26 @@
     },
     "place_cancel_evidence": "/Users/kong/.opentradingcore/mac-demo-20261116-020105/order-cancel-capacity-bc519ec8.json",
     "smaller_client_memory": "Native TCP 40/s actual comparison now running after true-loss audits; no result yet",
-    "jfr_diagnostic": "Bounded excluded-only entry validated against actual Java8 image; real business profile pending",
-    "followthrough_controller": "/Users/kong/.opentradingcore/t554-accepted-loss-followthrough-v5-20261116.json"
+    "jfr_diagnostic": {
+      "measurement": "/Users/kong/.opentradingcore/mac-demo-20261116-020105/distributed-execution-capacity-d9339f2a.json",
+      "qualified_for_performance": false,
+      "summary": "/Users/kong/.opentradingcore/mac-demo-20261116-020105/diagnostic-jfr-48c73ed32b58/window-detailed-summary.json",
+      "all_four_source_voters_unchanged_during_capture": true,
+      "recorded_data_loss_bytes": 0
+    },
+    "followthrough_controller": "/Users/kong/.opentradingcore/t554-accepted-loss-followthrough-v5-20261116.json",
+    "native_40_low_memory": {
+      "evidence": "/Users/kong/.opentradingcore/mac-demo-20261116-020105/distributed-execution-capacity-4c6aa50e.json",
+      "planned_sent_final": 2400,
+      "inside_window": 2341,
+      "tail_after_window": 59,
+      "actual_rate": 39.016666666666666,
+      "client_final_p99_ms": 4414.709,
+      "scheduled_final_p99_ms": 4415.474,
+      "integrity_passed": true,
+      "owner_performance_passed": false
+    },
+    "same_release_normal_window_pause_log": "/Users/kong/.opentradingcore/mac-demo-20261116-020105/jvm-pauses-epl5p3vg/proof.json"
   },
   "last_completed_business_performance": {
     "generation": "mac-demo-20261115-232443",
@@ -274,6 +296,7 @@
     "async_match_readmission_driver_regressions_passed": 9
   },
   "open_findings": [
+    "Real Order A return stuck at closed/poisoned LOCAL P135 epoch3 published/forced296; no automatic live local replay currently connected. New Common candidate work is not deployed or fully qualified.",
     "Sustained1000/s and end-to-endP99<=20ms remain unproved on both modes.",
     "Complete256-partition takeover/Home remains minutes; functional evidence is not an isolatedRTO benchmark.",
     "Common strict batching exists but business calls remain singleton.",
@@ -352,5 +375,19 @@
       "No inference that raw storage is the sole cause of1.84s business tail or that trading targets have passed."
     ]
   },
-  "application_data_or_credentials_included": false
+  "application_data_or_credentials_included": false,
+  "candidate_point_receipt_optimization": {
+    "revision": "d531dcb",
+    "deployed": false,
+    "specific_tests_passed": 6,
+    "before_point_and_sparse_file_reads": [
+      102,
+      106
+    ],
+    "after_asserted_read_upper_bounds": [
+      4,
+      6
+    ],
+    "evidence": "/Users/kong/.opentradingcore/t554-common-point-seek-20261116/scope.json"
+  }
 }
