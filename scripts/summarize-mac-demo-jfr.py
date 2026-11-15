@@ -15,7 +15,7 @@ import xml.etree.ElementTree as ET
 
 EVENTS = ('jdk.ExecutionSample', 'jdk.NativeMethodSample', 'jdk.JavaMonitorEnter',
           'jdk.ThreadPark', 'jdk.FileRead', 'jdk.FileWrite', 'jdk.SocketRead',
-          'jdk.SocketWrite', 'jdk.GarbageCollection', 'jdk.GCPhasePause')
+          'jdk.SocketWrite', 'jdk.GarbageCollection', 'jdk.GCPhasePause', 'jdk.DataLoss')
 
 
 def at(value):
@@ -63,7 +63,7 @@ class BoundedXml:
 def summarize(stream, since, until):
     counts, leaves, callers = Counter(), defaultdict(Counter), defaultdict(Counter)
     waits = defaultdict(lambda: {'count': 0, 'overlap_ms_sum': 0.0, 'max_event_ms': 0.0})
-    seen = 0
+    seen, lost_events, lost_bytes = 0, 0, 0
     for _, event in ET.iterparse(BoundedXml(stream), events=('end',)):
         if event.tag != 'event':
             continue
@@ -74,6 +74,9 @@ def summarize(stream, since, until):
         seen += 1
         if seen > 200000:
             raise RuntimeError('JFR event count exceeded the bounded read budget')
+        if kind == 'jdk.DataLoss':
+            lost_events += 1
+            lost_bytes += int(value(event, 'amount') or 0)
         start = at(value(event, 'startTime'))
         elapsed = duration(value(event, 'duration') or 'PT0S')
         overlap = max(0.0, (min(until, start + timedelta(seconds=elapsed)) - max(since, start)).total_seconds())
@@ -97,7 +100,9 @@ def summarize(stream, since, until):
             row['overlap_ms_sum'] += overlap * 1000
             row['max_event_ms'] = max(row['max_event_ms'], elapsed * 1000)
         event.clear()
-    return {'events_read': seen, 'events_overlapping_window': dict(counts),
+    return {'events_read': seen, 'data_loss_events_in_recording': lost_events,
+            'reported_data_loss_bytes_in_recording': lost_bytes,
+            'events_overlapping_window': dict(counts),
             'sampled_leaf_methods': {key: val.most_common(24) for key, val in leaves.items()},
             'first_recorded_application_callers': {key: val.most_common(24) for key, val in callers.items()},
             'long_events_by_application_caller': [dict(event_type=k[0], file_category=k[1], caller=k[2],
