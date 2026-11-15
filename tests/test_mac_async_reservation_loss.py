@@ -17,6 +17,41 @@ SPEC.loader.exec_module(LOSS)
 
 
 class ReservationLossPreflightTest(unittest.TestCase):
+    def accepted_fixture(self):
+        sha = 'a' * 64
+        command = self.reservation_frame()[28:]
+        fields = command.decode().split('\t')
+        fields[1:3] = ['5', '1']
+        batch = json.loads(base64.b64decode(fields[6]))
+        batch['mutations'][0]['payload'] = '{}'
+        fields[6] = base64.b64encode(json.dumps(batch).encode()).decode()
+        command = '\t'.join(fields).encode()
+        text = ('SCOPE COMMON_ACCEPTED_BYTES_NOT_QUORUM_OR_NEW_AUTHORITY\nCOMMON ' + sha
+                + '\nHEAD P079 5 1\nFRAME 5 1 ' + base64.b64encode(command).decode())
+        return sha, text
+
+    def test_accepted_source_rejects_wrong_sha_epoch_account_and_incomplete_window(self):
+        sha, text = self.accepted_fixture()
+        args = [sha, 'P079', 5, 'ABC123', 'fixture-user', '1234567890123456789', 'match']
+        self.assertEqual(1, len(LOSS.accepted_mutations(text, *args)))
+        for bad in [text.replace(sha, 'b' * 64), text.replace('HEAD P079 5 1', 'HEAD P079 4 1'),
+                    text.replace('HEAD P079 5 1', 'HEAD P079 5 2'), text.replace('FRAME 5 1', 'FRAME 5 2')]:
+            with self.assertRaises(RuntimeError):
+                LOSS.accepted_mutations(bad, *args)
+        args[4] = 'another-user'
+        with self.assertRaises(RuntimeError):
+            LOSS.accepted_mutations(text, *args)
+
+    def test_projection_comparison_preserves_payload_values_but_ignores_json_formatting(self):
+        a = [['P079', '5', '1', 'DEDUPE_RESULT', 'UPSERT', '{"a":1,"b":2}']]
+        b = [['P079', '5', '1', 'DEDUPE_RESULT', 'UPSERT', '{ "b": 2, "a": 1 }']]
+        self.assertEqual(LOSS.semantic_mutations(a), LOSS.semantic_mutations(b))
+        b[0][5] = '{"a":1,"b":3}'
+        self.assertNotEqual(LOSS.semantic_mutations(a), LOSS.semantic_mutations(b))
+        a = [['P079', '5', '1', 'OPEN_ORDER', 'REMOVE', None]]
+        b = [['P079', '5', '1', 'OPEN_ORDER', 'REMOVE', 'NULL']]
+        self.assertEqual(LOSS.semantic_mutations(a), LOSS.semantic_mutations(b))
+
     def readmission_rows(self):
         receipt = json.dumps({'result': {'info3': 'LOCAL_DURABLE_ASYNC', 'info4': 'P079/5/1'}})
         return [['P079', '5', '1', kind, 'UPSERT', receipt if kind == 'DEDUPE_RESULT' else '{}']

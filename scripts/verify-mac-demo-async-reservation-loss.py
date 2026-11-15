@@ -76,6 +76,57 @@ def terminal_cancel_mutations(location, order_id):
         "AND source_type='CANCEL_OPEN_PREPARED' ORDER BY source_epoch,journal_seq,mutation_index")
 
 
+def accepted_mutations(text, sha, partition, epoch, location, user, order_id, action):
+    """Decode only an authenticated accepted window, never raw uncommitted WAL."""
+    lines = text.splitlines()
+    if (len(lines) < 3 or lines[0] != 'SCOPE COMMON_ACCEPTED_BYTES_NOT_QUORUM_OR_NEW_AUTHORITY'
+            or lines[1] != 'COMMON ' + sha):
+        raise RuntimeError('Accepted observer source identity differs')
+    head = lines[2].split()
+    if len(head) != 4 or head[:3] != ['HEAD', partition, str(epoch)]:
+        raise RuntimeError('Accepted observer epoch or partition differs')
+    count = int(head[3])
+    if not 0 <= count <= 256 or len(lines) != 3 + count:
+        raise RuntimeError('Accepted observer did not return its complete bounded window')
+    request = str(order_id) + (':Trade_Cancel' if action == 'cancel' else ':Newing')
+    source = 'CANCEL_OPEN_PREPARED' if action == 'cancel' else 'NEWING_OPEN_PREPARED'
+    decode = lambda value: base64.b64decode(value, validate=True).decode('utf-8')
+    rows, total = [], 0
+    for sequence, line in enumerate(lines[3:], 1):
+        frame = line.split()
+        if len(frame) != 4 or frame[:3] != ['FRAME', str(epoch), str(sequence)]:
+            raise RuntimeError('Accepted observer frame coordinates differ')
+        command = base64.b64decode(frame[3], validate=True)
+        total += len(command)
+        if not command or total > 1024 * 1024:
+            raise RuntimeError('Accepted observer exceeded its payload budget')
+        fields = command.decode('utf-8').split('\t')
+        if (len(fields) != 7 or decode(fields[0]) != partition
+                or fields[1:3] != [str(epoch), str(sequence)]):
+            raise RuntimeError('Trade journal differs from its accepted Common coordinate')
+        if decode(fields[3]) != 'STATE_BATCH' or decode(fields[4]) != request:
+            continue
+        batch = json.loads(decode(fields[6]))
+        if (batch.get('location') != location or batch.get('requestId') != request
+                or batch.get('sourceType') != source):
+            raise RuntimeError('Accepted target batch identity differs')
+        mutations = batch['mutations']
+        key = location + '\x1f' + user + '\x1f' + str(order_id)
+        if sum(m['entityType'] == 'OPEN_ORDER' and m['entityKey'] == key for m in mutations) != 1:
+            raise RuntimeError('Accepted target is not the original account and order')
+        rows.extend([[partition, str(epoch), str(sequence), m['entityType'],
+                      m['operation'], m.get('payload')] for m in mutations])
+    return rows
+
+
+def semantic_mutations(rows):
+    def payload(row):
+        if row[5] is None or row[5] == 'NULL':
+            return 'null'
+        return json.dumps(json.loads(row[5]), sort_keys=True)
+    return sorted((tuple(row[:5]), payload(row)) for row in rows)
+
+
 def require_readmitted_reservation(rows, partition, epoch):
     if (len(rows) != 4 or len({tuple(row[:3]) for row in rows}) != 1
             or rows[0][0] != partition or int(rows[0][1]) != epoch
@@ -198,13 +249,29 @@ def main():
                 target_pids = {}
                 for node in (primary, backup):
                     run('docker', 'exec', node, 'mkdir', '-m', '700', tools_path)
-                    for name in ('head-observer.jar', 'T554RpoAttach.class'):
+                    for name in ('head-observer.jar', 'accepted-window-reader.jar', 'T554RpoAttach.class'):
                         run('docker', 'cp', str(args.tools / name), node + ':' + tools_path + '/' + name)
                     jvms = run('docker', 'exec', node, '/opt/java/openjdk/bin/jps', '-l').splitlines()
                     pids = [line.split()[0] for line in jvms if 'sun.tools.jps.Jps' not in line]
                     if len(pids) != 1:
                         raise RuntimeError('Expected one unique physical Trade JVM')
                     target_pids[node] = pids[0]
+
+                def accepted_business(action):
+                    remote = tools_path + '/accepted-' + secrets.token_hex(4) + '.txt'
+                    sha = release['common_sha256']
+                    run('docker', 'exec', backup, '/opt/java/openjdk/bin/java', '-Xmx64m', '-cp',
+                        '/opt/java/openjdk/lib/tools.jar:' + tools_path, 'T554RpoAttach',
+                        target_pids[backup], tools_path + '/accepted-window-reader.jar',
+                        f'{remote},{partition},{local[partition]["epoch"]},TradeSvr,{sha}')
+                    text = run('docker', 'exec', backup, 'cat', remote)
+                    proof = output / ('accepted-' + action + '.txt')
+                    proof.write_text(text + '\n')
+                    record['local_accepted_source'] = {'file': str(proof),
+                        'sha256': hashlib.sha256(proof.read_bytes()).hexdigest(),
+                        'scope': 'Existing authenticated accepted window; not a quorum claim'}
+                    return accepted_mutations(text, sha, partition, local[partition]['epoch'],
+                                              location, trader[1], order['OrderID'], action)
 
                 def certified_before():
                     try:
@@ -308,7 +375,7 @@ def main():
                     CANCEL['await_order'](trader, symbol, client, False)
 
                     def cancelled_batch():
-                        rows = terminal_cancel_mutations(location, order['OrderID'])
+                        rows = accepted_business('cancel')
                         if not rows:
                             return None
                         if len(rows) != 2 or {(row[3], row[4]) for row in rows} != {
@@ -322,7 +389,9 @@ def main():
                             raise RuntimeError('Persisted cancellation receipt lost its real local durability coordinate')
                         return rows
 
-                    record['local_cancel_mutations'] = until(cancelled_batch, 60, 'Terminal cancellation did not reach the certified projection')
+                    record['local_cancel_mutations'] = cancelled_batch()
+                    if not record['local_cancel_mutations']:
+                        raise RuntimeError('Terminal cancellation missing from actual accepted Common source')
                     record['account_after_cancel'] = account(trader)
                     if record['account_after_cancel'] != record['account_before']:
                         raise RuntimeError('Cancellation fabricated a second financial release')
@@ -347,16 +416,12 @@ def main():
                     CANCEL['await_order'](counterparty, symbol, taker_client, False)
 
                     def readmission():
-                        rows = PRODUCT['readonly_sql'](
-                            "SELECT partition_id,source_epoch,journal_seq,entity_type,operation,payload "
-                            "FROM dc_trade_projection_mutation "
-                            f"WHERE location='{location}' AND request_id='{order['OrderID']}:Newing' "
-                            f"AND source_type='NEWING_OPEN_PREPARED' AND source_epoch={local[partition]['epoch']} "
-                            "ORDER BY source_epoch,journal_seq,mutation_index")
+                        rows = accepted_business('match')
                         return require_readmitted_reservation(rows, partition, local[partition]['epoch']) if rows else None
 
-                    record['readmitted_original_reservation'] = until(readmission, 60,
-                        'The excluded original reservation was not recreated through normal Common persistence')
+                    record['readmitted_original_reservation'] = readmission()
+                    if not record['readmitted_original_reservation']:
+                        raise RuntimeError('Original reservation missing from actual accepted Common source')
                     record['matched_accounts_while_local'] = until(lambda: matched_accounts(
                         (trader, counterparty), symbol,
                         (record['account_before'], record['counterparty_account_before'])), 60,
@@ -406,6 +471,21 @@ def main():
                     save()
                     home = RPO['wait_roles'](root)
                     record['strict_home'] = home
+                    if record.get('local_business_consistent'):
+                        local_rows = record.get('local_cancel_mutations') or record['readmitted_original_reservation']
+                        def projected_original():
+                            if args.after_loss == 'cancel':
+                                rows = terminal_cancel_mutations(record['location'], record['order_id'])
+                            else:
+                                rows = PRODUCT['readonly_sql'](
+                                    "SELECT partition_id,source_epoch,journal_seq,entity_type,operation,payload "
+                                    "FROM dc_trade_projection_mutation "
+                                    f"WHERE location='{record['location']}' AND request_id='{record['order_id']}:Newing' "
+                                    f"AND source_type='NEWING_OPEN_PREPARED' AND source_epoch={local_rows[0][1]} "
+                                    "ORDER BY source_epoch,journal_seq,mutation_index")
+                            return rows if semantic_mutations(rows) == semantic_mutations(local_rows) else None
+                        record['identical_projection_after_home'] = until(projected_original, 60,
+                            'Authenticated LOCAL mutations differ from the certified SQL projection after Home')
                     hashes = [RPO['ROLL']['physical_hashes'](node, 'TradeSvr', slot, backup_slot, local, home)
                               for node, slot in ((primary, primary_slot), (backup, backup_slot))]
                     if hashes[0] != hashes[1] or len(hashes[0]) != 512:

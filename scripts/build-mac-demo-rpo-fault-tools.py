@@ -30,7 +30,7 @@ def main():
         ('T554CommonReplicationPauseAgent', 'replication-pause-agent.jar',
          'replication-self-test', 'replication-linux-self-test',
          'T554_REPLICATION_FAULT_REQUESTED_DEADLINE_AND_REJECTED_SETUP_SELFTEST_PASS'))
-    files = [source / 'T554RpoAttach.java']
+    files = [source / 'T554RpoAttach.java', source / 'T554AcceptedWindowReadAgent.java']
     for agent, _, _, _, _ in groups:
         files.extend((source / (agent + '.java'), source / (agent + 'Test.java')))
     evidence = {'status': 'NO_GO', 'linux_image_id': image,
@@ -45,6 +45,10 @@ def main():
 
     run('compile', [java / 'bin/javac', '-source', '8', '-target', '8', '-cp',
                     java / 'lib/tools.jar', '-d', root, *files])
+    observer_manifest = root / 'accepted-window.mf'
+    observer_manifest.write_text('Manifest-Version: 1.0\nAgent-Class: T554AcceptedWindowReadAgent\n\n')
+    run('accepted-window-jar', [java / 'bin/jar', 'cfm', root / 'accepted-window-reader.jar',
+                              observer_manifest, '-C', root, 'T554AcceptedWindowReadAgent.class'])
     for agent, jar, mac, linux, marker in groups:
         manifest = root / (agent + '.mf')
         manifest.write_text('Manifest-Version: 1.0\nAgent-Class: ' + agent +
@@ -65,6 +69,8 @@ def main():
     evidence.update(status='MAC_AND_LINUX_ALL_BOUNDED_FAULT_TOOLS_SELFTEST_PASS',
                     jars={jar: hashlib.sha256((root / jar).read_bytes()).hexdigest()
                           for _, jar, _, _, _ in groups})
+    evidence['jars']['accepted-window-reader.jar'] = hashlib.sha256(
+        (root / 'accepted-window-reader.jar').read_bytes()).hexdigest()
     (root / 'build.json').write_text(json.dumps(evidence, indent=2) + '\n')
     print(evidence['status'], root)
 
