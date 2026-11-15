@@ -133,7 +133,7 @@ class ReservationLossPreflightTest(unittest.TestCase):
             with patch.object(LOSS, 'account', return_value=current), \
                     patch.dict(LOSS.PRODUCT, ok=Mock(side_effect=positions),
                                readonly_sql=Mock(side_effect=AssertionError('LOCAL must not read certified SQL'))
-                               if accepted_fees is not None else Mock(return_value=[['-.02', '2', '2']])):
+                               if accepted_fees is not None else Mock(return_value=[['-.02', '1', '1']])):
                 return LOSS.matched_accounts(traders, 'BTC004USDT', before, accepted_fees)
         self.assertEqual(2, len(verify(balance)))
         self.assertEqual(2, len(verify(balance, {'buyer': '-.02', 'seller': '-.02'})))

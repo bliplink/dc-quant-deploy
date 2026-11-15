@@ -228,7 +228,9 @@ def matched_accounts(traders, symbol, before, accepted_fees=None, observed=None)
                 f"FROM dc_orders_execorders WHERE location='{location}' AND user_id='{user}'")
             if observed is not None:
                 observed[user]['certified_sql_fees'] = fees
-            if len(fees) != 1 or fees[0][1:] != ['2', '2']:
+            # This case has one original maker/taker match, hence exactly
+            # one final execution per account. Two would be a duplicate.
+            if len(fees) != 1 or fees[0][1:] != ['1', '1']:
                 return None
             fee = Decimal(fees[0][0])
         else:
