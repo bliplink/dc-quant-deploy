@@ -145,7 +145,7 @@ def place(trader, symbol, side, client, tif):
 
 def match_row(client):
     rows = PRODUCT["readonly_sql"](
-        "SELECT partition_id,source_epoch,journal_seq,payload FROM dc_order_projection_event "
+        "SELECT partition_id,source_epoch,journal_seq,HEX(payload) FROM dc_order_projection_event "
         "WHERE event_type='STATE_ATOMIC_MATCH_V1' "
         f"AND payload LIKE '%{client}%' ORDER BY source_epoch DESC,journal_seq DESC LIMIT 2")
     if not rows:
@@ -154,7 +154,7 @@ def match_row(client):
         raise RuntimeError("Controlled match has multiple physical projection origins")
     partition, epoch, sequence, payload = rows[0]
     return {"partition": partition, "epoch": int(epoch), "sequence": int(sequence),
-            "match_key": json.loads(payload)["matchKey"]}
+            "match_key": json.loads(bytes.fromhex(payload).decode('utf-8'))["matchKey"]}
 
 
 def final_reports(node, since, clients):

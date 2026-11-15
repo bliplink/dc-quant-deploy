@@ -67,6 +67,46 @@ class ReservationLossPreflightTest(unittest.TestCase):
         return [['P079', '5', '1', kind, 'UPSERT', receipt if kind == 'DEDUPE_RESULT' else '{}']
                 for kind in ('ACCOUNT_BALANCE', 'POSITION', 'OPEN_ORDER', 'DEDUPE_RESULT')]
 
+    def pair_fixture(self):
+        sha, _ = self.accepted_fixture()
+        b64 = lambda value: base64.b64encode(value.encode()).decode()
+        maker = '1234567890123456789'
+        held = [{'entityType': row[3], 'operation': row[4], 'payload': row[5],
+                 'entityKey': 'ABC123\x1ffixture-user\x1f' + maker if row[3] == 'OPEN_ORDER' else 'fixture'}
+                for row in self.readmission_rows()]
+        reservation = {'location': 'ABC123', 'requestId': maker + ':Newing',
+                       'sourceType': 'NEWING_OPEN_PREPARED', 'mutations': held}
+        mutations = []
+        for user, order, execution in [('fixture-user', maker, 'MX'), ('counter-user', '987', 'TX')]:
+            payloads = [json.dumps({'userID': user}), json.dumps({'userID': user}), None,
+                json.dumps({'userID': user, 'sourceID': execution, 'amount': '-.02', 'location': 'ABC123'}),
+                json.dumps({'report': {'UserID': user, 'OrderID': order, 'ExecID': execution},
+                    'result': {'info3': 'LOCAL_DURABLE_ASYNC', 'info4': 'P079/5/2'}})]
+            for kind, operation, payload in zip(('ACCOUNT_BALANCE', 'POSITION', 'OPEN_ORDER', 'POSTING', 'DEDUPE_RESULT'),
+                                               ('UPSERT', 'UPSERT', 'REMOVE', 'UPSERT', 'UPSERT'), payloads):
+                mutations.append({'entityType': kind, 'operation': operation, 'payload': payload,
+                                  'entityKey': '\x1f'.join(('ABC123', user, order))})
+        pair = {'location': 'ABC123', 'requestId': 'PAIR:fixture-match',
+                'sourceType': 'TRADE_ATOMIC_MATCH_PAIR_PREPARED', 'mutations': mutations}
+        text = 'SCOPE COMMON_ACCEPTED_BYTES_NOT_QUORUM_OR_NEW_AUTHORITY\nCOMMON ' + sha + '\nHEAD P079 5 2\n'
+        for sequence, batch in enumerate((reservation, pair), 1):
+            command = '\t'.join((b64('P079'), '5', str(sequence), b64('STATE_BATCH'),
+                                   b64(batch['requestId']), '123', b64(json.dumps(batch))))
+            text += 'FRAME 5 ' + str(sequence) + ' ' + b64(command) + '\n'
+        receipts = {execution: {'ExecID': execution, 'TradeSettlementCommit': 'P079/5/2'} for execution in ('MX', 'TX')}
+        return text, [sha, 'P079', 5, 'ABC123', 'fixture-user', maker,
+                      {'fixture-user', 'counter-user'}, receipts, 'fixture-match']
+
+    def test_local_pair_fees_bind_both_customers_to_their_original_real_receipt_coordinate(self):
+        text, args = self.pair_fixture()
+        self.assertEqual({'fixture-user': '-0.02', 'counter-user': '-0.02'}, LOSS.accepted_pair_fees(text, *args))
+        args[-2]['TX']['TradeSettlementCommit'] = 'P079/5/3'
+        with self.assertRaises(RuntimeError):
+            LOSS.accepted_pair_fees(text, *args)
+        args[-2]['TX'] = {'ExecID': 'MX', 'TradeSettlementCommit': 'P079/5/2'}
+        with self.assertRaises(RuntimeError):
+            LOSS.accepted_pair_fees(text, *args)
+
     def test_readmission_requires_all_four_mutations_at_one_actual_local_coordinate(self):
         rows = self.readmission_rows()
         self.assertEqual(rows, LOSS.require_readmitted_reservation(rows, 'P079', 5))
@@ -83,12 +123,14 @@ class ReservationLossPreflightTest(unittest.TestCase):
         balance = {'Balance': '9999.98', 'UsedMargin': '9', 'FreezedMargin': '0', 'FreezedCommission': '0'}
         positions = [dict(LongPosition='.001', ShortPosition='0', LongUsedMargin='9', ShortUsedMargin='0'),
                      dict(LongPosition='0', ShortPosition='.001', LongUsedMargin='0', ShortUsedMargin='9')]
-        def verify(current):
+        def verify(current, accepted_fees=None):
             with patch.object(LOSS, 'account', return_value=current), \
                     patch.dict(LOSS.PRODUCT, ok=Mock(side_effect=positions),
-                               readonly_sql=Mock(return_value=[['-.02', '2', '2']])):
-                return LOSS.matched_accounts(traders, 'BTC004USDT', before)
+                               readonly_sql=Mock(side_effect=AssertionError('LOCAL must not read certified SQL'))
+                               if accepted_fees is not None else Mock(return_value=[['-.02', '2', '2']])):
+                return LOSS.matched_accounts(traders, 'BTC004USDT', before, accepted_fees)
         self.assertEqual(2, len(verify(balance)))
+        self.assertEqual(2, len(verify(balance, {'buyer': '-.02', 'seller': '-.02'})))
         for key, value in [('Balance', '10000'), ('UsedMargin', '8'), ('FreezedMargin', '9')]:
             with self.subTest(field=key):
                 self.assertIsNone(verify(dict(balance, **{key: value})))

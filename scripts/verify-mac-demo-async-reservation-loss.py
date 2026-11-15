@@ -150,21 +150,85 @@ def require_readmitted_reservation(rows, partition, epoch):
     return rows
 
 
-def matched_accounts(traders, symbol, before):
+def accepted_pair_fees(text, sha, partition, epoch, location, maker_user, maker_order, users, receipts, match_key):
+    # Reuse the strict window/envelope checks and original re-reservation
+    # identity; then tie BOTH fee postings to the exact final LOCAL receipts.
+    require_readmitted_reservation(accepted_mutations(text, sha, partition, epoch,
+        location, maker_user, maker_order, 'match'), partition, epoch)
+    expected = {x['ExecID']: x['TradeSettlementCommit'] for x in receipts.values()}
+    if len(expected) != 2 or len(set(users)) != 2:
+        raise RuntimeError('Two distinct real customer executions and accounts required')
+    found = []
+    for line in text.splitlines()[3:]:
+        frame = line.split()
+        fields = base64.b64decode(frame[3], validate=True).decode().split('\t')
+        if base64.b64decode(fields[3], validate=True).decode() != 'STATE_BATCH':
+            continue
+        batch = json.loads(base64.b64decode(fields[6], validate=True))
+        if batch.get('sourceType') != 'TRADE_ATOMIC_MATCH_PAIR_PREPARED':
+            continue
+        request = 'PAIR:' + match_key
+        if (batch.get('location') != location or batch.get('requestId') != request
+                or base64.b64decode(fields[4], validate=True).decode() != request):
+            continue
+        coordinate = '/'.join((partition, frame[1], frame[2]))
+        mutations = batch['mutations']
+        if (len(mutations) != 10 or [x['entityType'] for x in mutations] !=
+                ['ACCOUNT_BALANCE', 'POSITION', 'OPEN_ORDER', 'POSTING', 'DEDUPE_RESULT'] * 2
+                or [x['operation'] for x in mutations] != ['UPSERT', 'UPSERT', 'REMOVE', 'UPSERT', 'UPSERT'] * 2):
+            raise RuntimeError('Original pair must retain its complete two-account transaction')
+        fees = {}
+        ids = set()
+        for offset in (0, 5):
+            posting = json.loads(mutations[offset + 3]['payload'])
+            dedupe = json.loads(mutations[offset + 4]['payload'])
+            user, execution = posting['userID'], posting['sourceID']
+            receipt = dedupe['result']
+            report = dedupe['report']
+            amount = Decimal(posting['amount'])
+            if (user not in users or user in fees or execution not in expected or execution in ids
+                    or expected[execution] != coordinate or posting['location'] != location
+                    or dedupe['report'].get('ExecID') != execution or dedupe['report'].get('UserID') != user
+                    or receipt.get('info3') != 'LOCAL_DURABLE_ASYNC' or receipt.get('info4') != coordinate
+                    or any(json.loads(mutations[offset + i]['payload']).get('userID') != user for i in (0, 1))
+                    or mutations[offset + 2]['entityKey'] != '\x1f'.join((location, user, report['OrderID']))
+                    or offset == 0 and (user != maker_user or report['OrderID'] != str(maker_order))
+                    or not amount.is_finite() or amount > 0):
+                raise RuntimeError('Pair fees differ from the actual two signed LOCAL customer receipts')
+            fees[user] = str(amount.normalize())
+            ids.add(execution)
+        found.append(fees)
+    if len(found) != 1:
+        raise RuntimeError('Expected one authenticated original pair settlement')
+    return found[0]
+
+
+def matched_accounts(traders, symbol, before, accepted_fees=None, observed=None):
     result = []
     for index, trader in enumerate(traders):
         location, user, token = trader
         balance = account(trader)
         position = PRODUCT['ok'](RPO['URL'], 'TradeSvr', 'queryTradePosition',
             {'securityid': symbol}, token, route_location=location)
-        fees = PRODUCT['readonly_sql']("SELECT COALESCE(SUM(fee),0),COUNT(*),COUNT(fee) "
-            f"FROM dc_orders_execorders WHERE location='{location}' AND user_id='{user}'")
+        if observed is not None:
+            observed[user] = {'balance': balance, 'position': position,
+                              'at': datetime.now(timezone.utc).isoformat()}
+        if accepted_fees is None:
+            fees = PRODUCT['readonly_sql']("SELECT COALESCE(SUM(fee),0),COUNT(*),COUNT(fee) "
+                f"FROM dc_orders_execorders WHERE location='{location}' AND user_id='{user}'")
+            if observed is not None:
+                observed[user]['certified_sql_fees'] = fees
+            if len(fees) != 1 or fees[0][1:] != ['2', '2']:
+                return None
+            fee = Decimal(fees[0][0])
+        else:
+            fee = Decimal(accepted_fees[user])
         side, other = ('Long', 'Short') if index == 0 else ('Short', 'Long')
         fields = ('LongPosition', 'ShortPosition', 'LongUsedMargin', 'ShortUsedMargin')
         if not isinstance(position, dict) or any(position.get(key) is None for key in fields):
             raise RuntimeError('Matched reservation recovery is missing exact live position fields')
-        if (len(fees) != 1 or fees[0][1:] != ['2', '2']
-                or Decimal(balance['Balance']) != Decimal(before[index]['Balance']) + Decimal(fees[0][0])
+        if (not fee.is_finite() or fee > 0
+                or Decimal(balance['Balance']) != Decimal(before[index]['Balance']) + fee
                 or Decimal(balance['FreezedMargin']) != 0 or Decimal(balance['FreezedCommission']) != 0
                 or Decimal(str(position[side + 'Position'])) != RPO['QUANTITY']
                 or Decimal(str(position[other + 'Position'])) != 0
@@ -175,7 +239,8 @@ def matched_accounts(traders, symbol, before):
         # Mark price, floating P&L and observation time are not persisted
         # position state and can move between LOCAL and Home observations.
         stable_position = {key: str(Decimal(str(position[key])).normalize()) for key in fields}
-        result.append({'user': user, 'balance': balance, 'position': stable_position, 'execution_fees': fees})
+        result.append({'user': user, 'balance': balance, 'position': stable_position,
+                       'execution_fee': str(fee.normalize())})
     return result
 
 
@@ -432,14 +497,22 @@ def main():
                     record['readmitted_original_reservation'] = readmission()
                     if not record['readmitted_original_reservation']:
                         raise RuntimeError('Original reservation missing from actual accepted Common source')
+                    record['local_pair_fees'] = accepted_pair_fees(
+                        Path(record['local_accepted_source']['file']).read_text(), release['common_sha256'],
+                        partition, local[partition]['epoch'], location, trader[1], order['OrderID'],
+                        {trader[1], counterparty[1]}, record['readmitted_match_receipts'],
+                        record['original_order_match']['match_key'])
+                    record['phase'] = 'CHECKING_BOTH_LIVE_LOCAL_ACCOUNTS_AGAINST_ACCEPTED_PAIR_FEES'
+                    save()
                     record['matched_accounts_while_local'] = until(lambda: matched_accounts(
                         (trader, counterparty), symbol,
-                        (record['account_before'], record['counterparty_account_before'])), 60,
+                        (record['account_before'], record['counterparty_account_before']),
+                        record['local_pair_fees'], record.setdefault('local_account_observations', {})), 60,
                         'Exact fees, positions, balance or frozen funds differ after matched readmission')
                     record['expected_account_after_business'] = record['matched_accounts_while_local'][0]['balance']
-                    record['readmitted_posting_events'] = ROBOT['require_posting_pairs']({
-                        'location': location, 'tape_execution_ids': [x['ExecID']
-                            for x in record['readmitted_match_receipts'].values()], 'local_trade_commits': []})
+                    # SQL financial enrichment is certified-only. Verify its
+                    # same postings after Home, keeping LOCAL fees tied to the
+                    # existing authenticated Common transaction above.
                 record['local_business_consistent'] = True
                 record['phase'] = 'LOCAL_BUSINESS_PROVEN_RETURN_REQUIRED'
                 save()
@@ -524,11 +597,16 @@ def main():
                         raise RuntimeError('Post-recovery normal cleanup changed the exact expected account')
                     if args.after_loss == 'match' and record.get('local_business_consistent'):
                         counterparty = RPO['refresh_trader'](counterparty, run_id, 1, password)
-                        checked = matched_accounts((trader, counterparty), record['symbol'],
-                            (record['account_before'], record['counterparty_account_before']))
+                        checked = until(lambda: matched_accounts((trader, counterparty), record['symbol'],
+                            (record['account_before'], record['counterparty_account_before']),
+                            observed=record.setdefault('home_account_observations', {})), 60,
+                            'Exact Home balances, positions and certified execution fees did not converge')
                         if checked != record['matched_accounts_while_local']:
                             raise RuntimeError('Original primary return changed readmitted match fees or positions')
                         record['matched_accounts_after_home'] = checked
+                        record['readmitted_posting_events'] = ROBOT['require_posting_pairs']({
+                            'location': record['location'], 'tape_execution_ids': [x['ExecID']
+                                for x in record['readmitted_match_receipts'].values()], 'local_trade_commits': []})
                     code, financial, checks = CAPACITY['reconcile_financial_cursor']()
                     record.update(financial_cursor=financial, financial_checks=checks)
                     if code:
