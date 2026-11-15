@@ -1,6 +1,6 @@
 {
-  "observed_at": "2026-11-15T22:41:29.438099+08:00",
-  "status": "PERFORMANCE_NO_GO_NEW_COMMON_INTERRUPTED_COLD_GATE_FAILED_UNDEPLOYED",
+  "observed_at": "2026-11-15T22:55:12.584656+08:00",
+  "status": "PERFORMANCE_NO_GO_NONDRAINING_CERTIFIED_PREFIX_EXACT_P0_RUNNING",
   "production_acceptance": "NO_GO",
   "generation": "/Users/kong/.opentradingcore/mac-demo-20261115-213528",
   "client_ack_policy": "LOCAL_DURABLE_ASYNC",
@@ -110,9 +110,9 @@
     "trade_single_node_current_same_jar_pending": true
   },
   "current_maintenance": {
-    "status": "TEN_ROBOTS_NORMAL_RESTORED_FINANCIAL_CURSOR_PASS",
+    "status": "TEN_ROBOTS_NORMAL_STOP_ZERO_PENDING_EXACT_FINANCE_FOR_NEW_COMMON_P0",
     "business_processes_restarted_for_this_common_test": false,
-    "normal_stop_controller": "/Users/kong/.opentradingcore/t554-local-reader-p0-controller-v3-20261115.json",
+    "normal_stop_controller": "/Users/kong/.opentradingcore/t554-local-reader-p0-controller-v4-20261115.json",
     "financial_cursor": "PASS_FINANCIAL_CURSOR",
     "settlement_backlog_zero_before_stop": true
   },
@@ -674,26 +674,14 @@
     "pacing_included_in_latency": true
   },
   "next_common_candidate": {
-    "revision": "c91e4436fe0c72260bbd722116037b6ce91cb074",
-    "sha256": "8ded633702ec41e3506d5ce820eb532e88c9be4bbc045593a33550bd742c3742",
+    "revision": "550717497462c76453216d7dd7161faec23d1f52",
+    "sha256": "2492f6933696a242d39d7dbaa295b046feb9c4ec653f18d9cce5becf6b86428e",
     "deployed": false,
-    "status": "NO_GO_INTERRUPTED_RETAINED_COLD_EXPECTED_STAGE_TIMEOUT",
-    "safety_executed_passed": 305,
-    "optional_external_historical_skips": 3,
-    "focused_reader_tests_executed_passed": 41,
-    "controller": "/Users/kong/.opentradingcore/t554-local-reader-p0-controller-v3-20261115.json",
-    "scope": "Existing signed local head for normal async current-Epoch accepted reads. Same coalesced recovery worker immediately continues after completed stages. Strict quorum/snapshots/old-Epoch authentication retained.",
-    "remaining_gates": [
-      "four cold restarts",
-      "16 native process cases",
-      "full256 bidirectional, third crash, repeated Home, interrupted signed return",
-      "P1 exact-JAR business integration",
-      "P2 business faults, exact financial consistency and 1000/s P99<=20ms"
-    ],
-    "failure": "RuntimeError: interrupted-retained-cold failed with exit 2",
-    "clean_local_owner_cold_passed": true,
-    "failure_evidence": "/Users/kong/.opentradingcore/t554-common-candidates/20261115-local-accepted-reader-work-conserving/serial-cold/interrupted-retained-cold.log",
-    "robot_restore_status": "TEN_ORIGINAL_ROBOTS_NORMALLY_RESTORED_AND_FINANCIAL_CURSOR_PASS"
+    "status": "EXACT_JAR_SAFETY_RUNNING_COLD_AND_NATIVE_HOME_REQUIRED",
+    "focused_tests_executed_passed": 50,
+    "focused_skips": 0,
+    "controller": "/Users/kong/.opentradingcore/t554-local-reader-p0-controller-v4-20261115.json",
+    "scope": "Pinned async clients read only the already physically certified prefix without draining newer LOCAL writes. Existing dual signatures, copied commit index, same-owner captured original force, current grant and WAL CRC remain required. Existing strict readers and snapshots retain their drain barriers. Original local accepted-reader fix retained. No scheduler acceleration."
   },
   "gc_readonly_diagnostic": {
     "evidence": "/Users/kong/.opentradingcore/mac-demo-20261115-213528/readonly-gc-log-diagnostic-after-load-20261115/capture.json",
@@ -711,7 +699,7 @@
     "Both confirmation policies are far below sustained1000/s andP99<=20ms.",
     "40/s actual offered executions:2400 eventually final,2027 inside60s,373 tail,33.7833/s in-window,finalP99=12623.652ms. No losses hidden.",
     "Strict Common has generic group commit, business call sites still singleton; actual business batching remains required.",
-    "Normal async read currently drains physical replication. Next candidate changes accepted current-Epoch reads only; not yet deployed or performance qualified.",
+    "Normal projection and late-copy confirmation reads currently drain physical replication. New candidate adds non-draining already-certified current-Epoch reads for pinned async clients; not deployed or performance qualified.",
     "Full-partition recovery remains minutes. Scheduling candidate is unqualified for RTO improvement.",
     "Current same-JAR complete Robot fault and true business RPO/reservation recovery gates remain unfinished.",
     "Retired original GG2803 unsettled matches remain unresolved independent retained evidence."
@@ -763,5 +751,29 @@
     "target_plan": "16x65=1040/s; not executed; current40/s accumulation must be fixed first",
     "gateway_profile_changed": false,
     "regression_tests_passed": 11
+  },
+  "failed_undeployed_scheduling_candidate": {
+    "revision": "c91e4436fe0c72260bbd722116037b6ce91cb074",
+    "sha256": "8ded633702ec41e3506d5ce820eb532e88c9be4bbc045593a33550bd742c3742",
+    "deployed": false,
+    "status": "NO_GO_INTERRUPTED_RETAINED_COLD_EXPECTED_STAGE_TIMEOUT",
+    "safety_executed_passed": 305,
+    "optional_external_historical_skips": 3,
+    "focused_reader_tests_executed_passed": 41,
+    "controller": "/Users/kong/.opentradingcore/t554-local-reader-p0-controller-v3-20261115.json",
+    "scope": "Existing signed local head for normal async current-Epoch accepted reads. Same coalesced recovery worker immediately continues after completed stages. Strict quorum/snapshots/old-Epoch authentication retained.",
+    "remaining_gates": [
+      "four cold restarts",
+      "16 native process cases",
+      "full256 bidirectional, third crash, repeated Home, interrupted signed return",
+      "P1 exact-JAR business integration",
+      "P2 business faults, exact financial consistency and 1000/s P99<=20ms"
+    ],
+    "failure": "RuntimeError: interrupted-retained-cold failed with exit 2",
+    "clean_local_owner_cold_passed": true,
+    "failure_evidence": "/Users/kong/.opentradingcore/t554-common-candidates/20261115-local-accepted-reader-work-conserving/serial-cold/interrupted-retained-cold.log",
+    "robot_restore_status": "TEN_ORIGINAL_ROBOTS_NORMALLY_RESTORED_AND_FINANCIAL_CURSOR_PASS",
+    "diagnostic": "Reproduced twice: all128 retained-owner partitions already LOCAL when the fixture armed its interrupt; no stage existed to interrupt. No cold pass claimed. Recovery wake optimization reverted in6c985aa.",
+    "diagnostic_state": "/Users/kong/.opentradingcore/t554-retained-cold-c91-diagnostic-20261115/state.json"
   }
 }
