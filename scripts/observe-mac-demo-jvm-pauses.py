@@ -56,6 +56,32 @@ def parse_pause(line):
     return result
 
 
+def parse_log_pauses(lines, file):
+    """Recover only a directly adjacent, identical-uptime interleaved prefix."""
+    previous = ''
+    events = []
+    for number, line in enumerate(lines, 1):
+        try:
+            event = parse_pause(line)
+        except ValueError:
+            missing = re.match(r'^(\d+(?:\.\d+)?): Total time for which application threads were stopped:',
+                               line.strip())
+            anchor = re.match(r'^(\d{4}-\d{2}-\d{2}T[\d:.]+(?:Z|[+-]\d{4})):\s+'
+                              r'(\d+(?:\.\d+)?):\s+\S', previous.strip())
+            if not missing or not anchor or missing[1] != anchor[2]:
+                raise
+            # Do not infer wall time from process start or interpolate uptime.
+            # The preceding complete prefix has this exact printed uptime;
+            # parse_pause still validates the entire original pause record.
+            event = parse_pause(anchor[1] + ': ' + line.strip())
+            event['interleaved_timestamp_prefix_line'] = number - 1
+            event['interleaved_timestamp_prefix'] = anchor[0]
+        if event:
+            events.append(dict(event, file=file, line=number))
+        previous = line
+    return events
+
+
 def summarize(events, since, until):
     selected = [e for e in events if since <= at(e['at']) < until]
     values = sorted(e['stopped_ms'] for e in selected)
@@ -148,10 +174,7 @@ def main():
                             process.terminate()
                             process.wait(timeout=10)
                 with gzip.open(target, 'rt', errors='strict') as captured:
-                    for number, line in enumerate(captured, 1):
-                        event = parse_pause(line)
-                        if event:
-                            events.append(dict(event, file=file, line=number))
+                    events.extend(parse_log_pauses(captured, file))
                 row['files'].append({'name': file, 'bytes_at_listing': int(size),
                                      'captured_bytes': received, 'raw_sha256': raw_hash.hexdigest()})
                 save()

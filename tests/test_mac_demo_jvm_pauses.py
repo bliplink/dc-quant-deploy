@@ -6,6 +6,24 @@ MOD = runpy.run_path(str(Path(__file__).resolve().parents[1] / 'scripts/observe-
 
 
 class JvmPauseObservationTest(unittest.TestCase):
+    def test_actual_split_prefix_requires_adjacent_identical_uptime_and_retains_provenance(self):
+        lines = [
+            '2026-11-16T06:59:32.473+0800: 145.167: '
+            '2026-11-16T06:59:32.473+0800: [GC concurrent-root-region-scan-start]\n',
+            '145.167: Total time for which application threads were stopped: '
+            '0.0042466 seconds, Stopping threads took: 0.0000555 seconds\n']
+        events = MOD['parse_log_pauses'](iter(lines), 'gc.log')
+        self.assertEqual(1, len(events))
+        self.assertEqual('2026-11-15T22:59:32.473000+00:00', events[0]['at'])
+        self.assertEqual(4.2466, events[0]['stopped_ms'])
+        self.assertEqual((1, 2, 'gc.log'), (events[0]['interleaved_timestamp_prefix_line'],
+                                         events[0]['line'], events[0]['file']))
+        for changed in [[lines[1]], [lines[0], 'unrelated\n', lines[1]],
+                        [lines[0].replace('145.167:', '145.166:'), lines[1]],
+                        [lines[0], lines[1].rstrip() + ' invalid trailing text']]:
+            with self.subTest(lines=changed), self.assertRaises(ValueError):
+                MOD['parse_log_pauses'](changed, 'gc.log')
+
     def test_actual_interleaved_timestamp_preserves_complete_inner_pause_and_outer_time(self):
         line = ('2026-11-16T02:46:16.112+0800: 2026-11-16T02:46:16.111+0800: 21.582: '
                 'Total time for which application threads were stopped: 0.0030066 seconds, '
