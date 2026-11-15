@@ -6,7 +6,9 @@ import json
 import os
 from pathlib import Path
 import re
+import struct
 import sys
+import zlib
 
 
 DIRECTIONS = re.compile(
@@ -21,6 +23,8 @@ BLOCKED_NOTICE_ACK = re.compile(
     r"blocked=(P[0-9]{3}) recovered=(P[0-9]{3})$", re.M)
 COLD_TAIL_ACK = re.compile(
     r"^[.]*T554_BOTH_COLD_STRICT_TAILS_SIGNED_PREFIX_HOME_AND_BUSINESS_ACK_PASS$", re.M)
+COLD_BATCH_TAIL_ACK = re.compile(
+    r"^[.]*T554_BOTH_COLD_UNCERTIFIED_64_COMMAND_GROUP_RETAINED_HOME_ACK_PASS$", re.M)
 NORMAL_ASYNC_ACK = re.compile(
     r"^[.]*T554_NORMAL_DUAL_ASYNC_BACKUP_OUTAGE_PRESERVES_LOCAL_ACK_PASS "
     r"sameEpoch=2 bothCommittedHeads=2 appliedOnce=true originalRisk=true$", re.M)
@@ -28,6 +32,10 @@ NORMAL_ASYNC_KILL = re.compile(
     r"^[.]*T554_NORMAL_DUAL_ASYNC_PRIMARY_SIGKILL_AFTER_LOCAL_ACK_REAL_WITNESS_HOME_PASS "
     r"backupCommittedHead=1 abandonedLocalHead=2 originalPrimaryWalUnchanged=true "
     r"backupCommittedPrefixUnchanged=true inflightTailExcluded=true home128Each=true$", re.M)
+NORMAL_ASYNC_KILL_CUMULATIVE = re.compile(
+    r"^[.]*T554_NORMAL_DUAL_ASYNC_PRIMARY_SIGKILL_AFTER_LOCAL_ACK_REAL_WITNESS_HOME_PASS "
+    r"backupCommittedHead=[12] originalLocalHead=2 originalPrimaryWalUnchanged=true "
+    r"backupCommittedPrefixUnchanged=true uncommittedTailExcluded=true home128Each=true$", re.M)
 NORMAL_ASYNC_BACKUP_EXPIRY = re.compile(
     r"^[.]*T554_NORMAL_DUAL_ASYNC_BACKUP_EXPIRY_PRESERVES_ACK_AND_CONTINUES_PASS$", re.M)
 NORMAL_ASYNC_MIXED_STRICT_TAIL = re.compile(
@@ -56,6 +64,42 @@ def verify_normal_async_primary_prefixes(directory):
             or primary != original or backup not in (prefix, original)
             or not (directory / "a-home-business-proof").is_file()):
         raise ValueError("Common async original committed prefix or excluded in-flight tail proof is invalid")
+    frontier = directory / "authenticated-fixture-frontier-P000-2.txt"
+    if frontier.exists():
+        parsed = re.fullmatch(r"head=([12]) sha256=([a-f0-9]{64})\n", frontier.read_text())
+        if not parsed:
+            raise ValueError("Missing exact authenticated async recovery frontier")
+        head = int(parsed[1])
+        committed = prefix if head == 1 else original
+        if (hashlib.sha256(committed).hexdigest() != parsed[2]
+                or head == 2 and backup != original):
+            raise ValueError("Async recovery frontier differs from its actual committed bytes")
+        stream = directory / "data-b/DemoSvr/DemoSvrB/P000/epoch-2/commit-index/commits.wal"
+        raw = stream.read_bytes()
+        if len(raw) < 8 or struct.unpack_from(">II", raw) != (0x4f544353, 2):
+            raise ValueError("Async recovery did not retain its cumulative commit stream")
+        cursor, prior, highest = 8, 0, None
+        while cursor < len(raw):
+            if len(raw) - cursor < 8:
+                raise ValueError("Async qualification requires a complete original commit stream")
+            size, crc = struct.unpack_from(">II", raw, cursor)
+            record = raw[cursor + 8:cursor + 8 + size]
+            if not 10 <= size <= 32768 or len(record) != size or zlib.crc32(record) != crc:
+                raise ValueError("Changed async cumulative commit record")
+            if struct.unpack_from(">II", record) != (0x4f544357, 2):
+                raise ValueError("Wrong async cumulative commit model")
+            offset = 10 + struct.unpack_from(">H", record, 8)[0]
+            if len(record) < offset + 26:
+                raise ValueError("Truncated async cumulative commit metadata")
+            epoch, sequence, previous = struct.unpack_from(">qqq", record, offset)
+            sha_length = struct.unpack_from(">H", record, offset + 24)[0]
+            prefix_sha = record[offset + 26:offset + 26 + sha_length]
+            if epoch != 2 or sequence != prior + 1 or previous != prior or sequence > 2:
+                raise ValueError("Async original cumulative commit chain changed")
+            prior, highest = sequence, prefix_sha
+            cursor += size + 8
+        if prior != head or highest != parsed[2].encode("ascii"):
+            raise ValueError("Reported async recovery frontier is not the original persisted head")
 
 
 def verify_live_role_census(directory):
@@ -70,6 +114,57 @@ def verify_live_role_census(directory):
             or (directory / "voter-states-before-cleanup.txt").read_text()
                != "survivor=alive returned=alive stableMillis=2000\n"):
         raise ValueError("Returned Common voters did not retain independent stable live processes")
+
+
+def verify_cold_batch_prefixes(directory):
+    """Consistency audit after the real Java RSA/fencing drill, not an
+    independent signature verifier or a substitute for that successful drill."""
+    originals = []
+    for side, node in (("a", "DemoSvrA"), ("b", "DemoSvrB")):
+        epoch = directory / ("data-" + side) / "DemoSvr" / node / "P000/epoch-4"
+        raw = (epoch / "business.wal").read_bytes()
+        position, first_end = 0, 0
+        for sequence in range(1, 66):
+            if len(raw) - position < 28:
+                raise ValueError("Missing original cold batch WAL frame")
+            magic, old_epoch, seq, size, crc = struct.unpack_from(">IqqII", raw, position)
+            payload = raw[position + 28:position + 28 + size]
+            if (magic != 0x43425731 or old_epoch != 4 or seq != sequence
+                    or not 0 < size <= 1024 * 1024 or len(payload) != size
+                    or zlib.crc32(struct.pack(">qq", old_epoch, seq) + payload) != crc
+                    or payload != (bytes((5, 3, 5)) if sequence == 1 else bytes((99, 98, 97)))):
+                raise ValueError("Changed or invalid original cold batch WAL bytes")
+            position += 28 + size
+            if sequence == 1:
+                first_end = position
+        if position != len(raw):
+            raise ValueError("Cold batch tail exceeds its exact 64-command bound")
+        prefix = hashlib.sha256(raw[:first_end]).hexdigest()
+        commit = (epoch / "commit-index/commits.wal").read_bytes()
+        if len(commit) < 16 or struct.unpack_from(">II", commit) != (0x4f544353, 2):
+            raise ValueError("Missing cumulative commit stream for cold batch")
+        size, crc = struct.unpack_from(">II", commit, 8)
+        record = commit[16:]
+        if not 0 < size <= 32768 or len(record) != size or zlib.crc32(record) != crc:
+            raise ValueError("Invalid cold batch original cumulative commit record")
+        if len(record) < 10 or struct.unpack_from(">II", record) != (0x4f544357, 2):
+            raise ValueError("Wrong cold batch cumulative proof model")
+        membership_length = struct.unpack_from(">H", record, 8)[0]
+        offset = 10 + membership_length
+        if len(record) < offset + 26 or struct.unpack_from(">qqq", record, offset) != (4, 1, 0):
+            raise ValueError("Uncertified cold batch tail became a cumulative commit")
+        sha_length = struct.unpack_from(">H", record, offset + 24)[0]
+        if record[offset + 26:offset + 26 + sha_length] != prefix.encode("ascii"):
+            raise ValueError("Cold batch committed prefix differs from original WAL")
+        originals.append((raw, commit, prefix))
+    if originals[0] != originals[1]:
+        raise ValueError("Cold batch physical originals differ between voters")
+    expected = "committed=1 originalA=65 originalB=65 sha256=" + originals[0][2] + "\n"
+    if (directory / "authenticated-fixture-prefix-P000-4.txt").read_text() != expected:
+        raise ValueError("Missing authenticated cold batch recovery frontier")
+    for name in ("a-cold-home-business-proof", "b-cold-home-business-proof"):
+        if not (directory / name).is_file():
+            raise ValueError("Cold batch did not prove both actual recovered business roles")
 
 
 def main():
@@ -128,13 +223,19 @@ def main():
             scenarios.append("cold-strict-tails")
             if len(COLD_TAIL_ACK.findall(log)) != 1:
                 raise ValueError("Common cold strict tail recovery lacks genuine Home business ACK evidence")
+        if "bothColdVotersKeepAnUncertifiedSixtyFourCommandGroupOutsideReplay" in poison_source.read_text():
+            scenarios.append("cold-strict-batch-tails")
+            if len(COLD_BATCH_TAIL_ACK.findall(log)) != 1:
+                raise ValueError("Common 64-command cold tail recovery lacks its complete physical proof")
         if "normalDualAsyncBackupOutageRetainsLocallyAcknowledgedWrites" in poison_source.read_text():
             scenarios.append("normal-dual-async")
             if len(NORMAL_ASYNC_ACK.findall(log)) != 1:
                 raise ValueError("Common normal async physical ACK and prefix recovery evidence is incomplete")
         if "normalDualAsyncPrimaryKilledAfterLocalAckReturnsThroughRealWitnessedRecovery" in poison_source.read_text():
             scenarios.append("normal-dual-async-primary-kill")
-            if len(NORMAL_ASYNC_KILL.findall(log)) != 1:
+            cumulative_marker = '" originalLocalHead=2 originalPrimaryWalUnchanged=true"' in poison_source.read_text()
+            expected_kill_marker = NORMAL_ASYNC_KILL_CUMULATIVE if cumulative_marker else NORMAL_ASYNC_KILL
+            if len(expected_kill_marker.findall(log)) != 1:
                 raise ValueError("Common normal async primary SIGKILL and witnessed Home proof is incomplete")
         if "normalDualAsyncBackupNodeExpiryPreservesLocalAckAndContinuesWriting" in poison_source.read_text():
             scenarios.append("normal-dual-async-backup-expiry")
@@ -155,6 +256,8 @@ def main():
                 if (not events or events[0] != "attempt=0 exit=78"
                         or "FATAL_COMMON_NODE_EPOCH_FENCED exiting JVM (78)" not in original):
                     raise ValueError("Common expired node did not exit through the physical process lifecycle")
+            if scenario == "cold-strict-batch-tails":
+                verify_cold_batch_prefixes(directory)
             if scenario == "graceful-shutdown":
                 events = (directory / "supervisor-events.txt").read_text().splitlines()
                 if not events or events[0] != "attempt=0 exit=143":
@@ -169,6 +272,8 @@ def main():
                         and not (directory / "DemoSvrA.attempt-0.log").is_file()):
                     raise ValueError("Common normal async killed primary log is missing")
                 if scenario.endswith("primary-kill"):
+                    if cumulative_marker and not (directory / "authenticated-fixture-frontier-P000-2.txt").is_file():
+                        raise ValueError("Common cumulative async recovery lacks its actual authenticated frontier")
                     verify_normal_async_primary_prefixes(directory)
                 if (directory / "client-ack-policy.txt").read_text().strip() != "LOCAL_DURABLE_ASYNC version=0":
                     raise ValueError("Common normal async immutable client ACK pin is missing")

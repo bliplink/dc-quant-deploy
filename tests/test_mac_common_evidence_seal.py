@@ -1,14 +1,63 @@
 import hashlib
 from pathlib import Path
 import runpy
+import struct
 import tempfile
 import unittest
+import zlib
 
 
 SEAL = runpy.run_path(str(Path(__file__).resolve().parents[1] / 'scripts/finalize-mac-common-failover.py'))
 
 
 class PhysicalEvidenceSealTest(unittest.TestCase):
+    def test_cold_batch_consistency_requires_exact_retained_tail_and_committed_frontier(self):
+        # Synthetic local files exercise only the post-drill consistency
+        # checker. They carry no RSA authority and cannot qualify a real P0.
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            frames = []
+            for seq in range(1, 66):
+                raw = bytes((5, 3, 5)) if seq == 1 else bytes((99, 98, 97))
+                crc = zlib.crc32(struct.pack('>qq', 4, seq) + raw)
+                frames.append(struct.pack('>IqqII', 0x43425731, 4, seq, len(raw), crc) + raw)
+            wal = b''.join(frames)
+            prefix = hashlib.sha256(frames[0]).hexdigest()
+            def utf(value):
+                raw = value.encode('ascii')
+                return struct.pack('>H', len(raw)) + raw
+            record = (struct.pack('>II', 0x4f544357, 2) + utf('a' * 64)
+                      + struct.pack('>qqq', 4, 1, 0) + utf(prefix) + utf('GENESIS') + struct.pack('>I', 0))
+            commit = (struct.pack('>II', 0x4f544353, 2)
+                      + struct.pack('>II', len(record), zlib.crc32(record)) + record)
+            originals = []
+            for side, node in (('a', 'DemoSvrA'), ('b', 'DemoSvrB')):
+                epoch = root / ('data-' + side) / 'DemoSvr' / node / 'P000/epoch-4'
+                (epoch / 'commit-index').mkdir(parents=True)
+                original = epoch / 'business.wal'
+                original.write_bytes(wal)
+                (epoch / 'commit-index/commits.wal').write_bytes(commit)
+                originals.append(original)
+            frontier = root / 'authenticated-fixture-prefix-P000-4.txt'
+            frontier.write_text('committed=1 originalA=65 originalB=65 sha256=' + prefix + '\n')
+            for name in ('a-cold-home-business-proof', 'b-cold-home-business-proof'):
+                (root / name).touch()
+            SEAL['verify_cold_batch_prefixes'](root)
+            for bad in (wal[:-1], b''.join(frames[:64]), wal + frames[-1], bytes((wal[0] ^ 1,)) + wal[1:]):
+                originals[1].write_bytes(bad)
+                with self.subTest(tail_bytes=len(bad)), self.assertRaises(ValueError):
+                    SEAL['verify_cold_batch_prefixes'](root)
+            originals[1].write_bytes(wal)
+            frontier.write_text('committed=65 originalA=65 originalB=65 sha256=' + prefix + '\n')
+            with self.assertRaises(ValueError):
+                SEAL['verify_cold_batch_prefixes'](root)
+
+    def test_cold_batch_proof_marker_cannot_be_replaced_by_single_tail_case(self):
+        marker = 'T554_BOTH_COLD_UNCERTIFIED_64_COMMAND_GROUP_RETAINED_HOME_ACK_PASS'
+        self.assertIsNotNone(SEAL['COLD_BATCH_TAIL_ACK'].search('..' + marker + '\n'))
+        self.assertIsNone(SEAL['COLD_BATCH_TAIL_ACK'].search(marker + ' incomplete\n'))
+        self.assertIsNone(SEAL['COLD_TAIL_ACK'].search(marker + '\n'))
+
     def test_returned_voters_need_distinct_live_actual_roles(self):
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary)
@@ -52,6 +101,16 @@ class PhysicalEvidenceSealTest(unittest.TestCase):
             with self.subTest(marker=name):
                 self.assertIsNotNone(SEAL[name].search('...' + marker + '\n'))
                 self.assertIsNone(SEAL[name].search(marker + ' incomplete\n'))
+
+    def test_cumulative_async_loss_marker_preserves_the_actual_backup_frontier(self):
+        for head in (1, 2):
+            marker = ('T554_NORMAL_DUAL_ASYNC_PRIMARY_SIGKILL_AFTER_LOCAL_ACK_REAL_WITNESS_HOME_PASS '
+                      'backupCommittedHead=' + str(head) + ' originalLocalHead=2 originalPrimaryWalUnchanged=true '
+                      'backupCommittedPrefixUnchanged=true uncommittedTailExcluded=true home128Each=true')
+            self.assertIsNotNone(SEAL['NORMAL_ASYNC_KILL_CUMULATIVE'].search('..' + marker + '\n'))
+            self.assertIsNone(SEAL['NORMAL_ASYNC_KILL'].search(marker + '\n'))
+            self.assertIsNone(SEAL['NORMAL_ASYNC_KILL_CUMULATIVE'].search(marker + ' incomplete\n'))
+        self.assertIsNone(SEAL['NORMAL_ASYNC_KILL_CUMULATIVE'].search(marker.replace('backupCommittedHead=2', 'backupCommittedHead=3') + '\n'))
 
     def test_async_primary_loss_allows_only_the_exact_original_inflight_tail(self):
         with tempfile.TemporaryDirectory() as temporary:

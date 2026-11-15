@@ -385,15 +385,28 @@
     "new_protocol_performance_claimed": false,
     "formal_runtime_focused_tests_passed": 72,
     "formal_runtime_full_safety": "Previous 8cf143a: 293 executed passed; 3 optional external historical fixture tests skipped. Latest exact candidate selection still pending.",
-    "formal_runtime_independent_physical_p0": "RUNNING; one real two-voter stalled-peer recovery/Home case passed separately; complete 13-case and 256 partitions not yet qualified",
-    "bounded_source_pipeline_and_business_batch_integration": "PENDING",
-    "formal_runtime_revision": "fe8a99a",
-    "formal_runtime_jar_sha256": "13f64c663f042ad576df21a30ab5209afbace2007c8472b816617582352998e2",
+    "formal_runtime_independent_physical_p0": "LATEST EXACT JAR FULL GATE PENDING; individual real cold64, async outage and async primary-kill cases passed in bounded working-source runs",
+    "bounded_source_pipeline_and_business_batch_integration": "STRICT COMMON BATCH CONNECTED; NORMAL ASYNC ONE OUTSTANDING AND BUSINESS BATCH CONNECTION REMAIN",
+    "formal_runtime_revision": "2546687",
+    "formal_runtime_jar_sha256": "a60aea73b59658ff6d5ec1cd63bf7671be21aee847f9daceb3ce969137e545cb",
     "latest_focused_tests_passed": 20,
     "latest_focused_tests_skipped": 0,
     "late_commit_semantics": "Replica can persist a valid cumulative commit after the caller times out. Recovery authenticates the actual stored signed prefix. Timeout alone is not proof of noncommit.",
     "first_physical_attempt": "NO_GO: live zero-head helper re-acquired existing OS lock; fixed in 670c9c1 with 20 regressions passed.",
-    "second_physical_attempt": "NO_GO: fixture inferred noncommit from timeout. Retained original A index=1 and B index=2; physical data prove the late committed command. Fixture now authenticates exact original prefix; independent naked/partial tail rejection retained."
+    "second_physical_attempt": "NO_GO: fixture inferred noncommit from timeout. Retained original A index=1 and B index=2; physical data prove the late committed command. Fixture now authenticates exact original prefix; independent naked/partial tail rejection retained.",
+    "formal_batch_registry_integrated": true,
+    "formal_batch_max_commands": 64,
+    "formal_batch_max_payload_bytes": 4194304,
+    "formal_batch_focused_tests_passed": 68,
+    "latest_boundary_suite_passed": 22,
+    "single_async_primary_kill_final": {
+      "all_ready_strict_partitions": 256,
+      "home_a": 128,
+      "home_b": 128,
+      "real_backup_committed_head": 2,
+      "original_local_head": 2,
+      "actual_loss_in_this_run": false
+    }
   },
   "read_only_current_control_recheck": {
     "order": 34,
