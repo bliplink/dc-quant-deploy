@@ -56,7 +56,20 @@ class DistributedReceiptTest(unittest.TestCase):
     def test_rpc_ack_without_final_trade_cannot_satisfy_capacity(self):
         streams = self.streams()
         del streams[1]['measurement']['orders'][0]['execution_id']
-        self.assertFalse(DRIVER['summarize_streams'](streams, 60)['all_accepted_final_receipts_pass'])
+        result = DRIVER['summarize_streams'](streams, 60)
+        self.assertFalse(result['all_accepted_final_receipts_pass'])
+        self.assertEqual(1, result['missing_final_receipts'])
+
+    def test_ioc_cancellation_is_visible_and_never_becomes_a_final_fill(self):
+        stream = {'run': 'fixture', 'location': 'TEST01', 'symbol': 'BTC005USDT',
+                  'measurement': {'orders': [{'client_order_id': 'cancelled-order'}]}}
+        with patch.dict(DRIVER['CANCEL']['PRODUCT'], readonly_sql=lambda sql:
+                        [['cancelled-order', 'Cancelled', '0', '0', 'BTC005USDT', '4']]):
+            result = DRIVER['projected_stream'](stream)
+        self.assertFalse(result['consistent'])
+        self.assertEqual({'Cancelled': 1}, result['order_status_counts'])
+        self.assertEqual({'0': 1}, result['execution_count_distribution'])
+        self.assertEqual(['cancelled-order'], result['nonfilled_client_order_ids'])
 
     def test_a_mode_label_cannot_replace_the_actual_receipt_durability(self):
         streams = self.streams()

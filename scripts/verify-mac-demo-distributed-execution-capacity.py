@@ -159,6 +159,8 @@ def _summarize_receipts(streams, seconds, expected_policy=None):
                      and responses == {'ACKNOWLEDGED': len(rows)} and len(fills) == len(rows) and not protocol)
     result = {'planned_orders': planned, 'sent_orders': len(rows), 'final_executions': len(fills),
               'fills_inside_offered_window': count_inside, 'scheduler_drops': drops,
+              'missing_final_receipts': len(rows) - len(fills),
+              'tail_final_receipts_after_window': len(fills) - count_inside,
               'responses': responses, 'stream_errors': protocol, 'start_spread_ms': round(spread, 3),
               'generator_accounting_pass': accounted,
               'observed_window_execution_rate': count_inside / seconds,
@@ -180,6 +182,9 @@ def projected_stream(stream):
         f"WHERE o.location='{stream['location']}' AND o.clord_id LIKE 'T554EXEC-{run}-%' "
         f"AND o.clord_id<>'T554EXEC-{run}-MAKER' GROUP BY o.clord_id,o.order_id,o.ord_status,o.security_id,o.market_indicator")
     return {'rows': len(rows), 'expected_rows': len(expected),
+            'order_status_counts': dict(Counter(row[1] for row in rows)),
+            'execution_count_distribution': dict(Counter(str(int(row[2])) for row in rows)),
+            'nonfilled_client_order_ids': sorted(row[0] for row in rows if row[1] != 'Filled'),
             'observed_symbols': sorted({row[4] for row in rows}), 'consistent':
             len(rows) == len(expected) and {row[0] for row in rows} == expected
             and all(row[1] == 'Filled' and int(row[2]) == 1
