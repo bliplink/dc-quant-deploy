@@ -19,6 +19,7 @@ CAPACITY = runpy.run_path(str(HERE / "verify-mac-demo-robot-capacity.py"))
 PRODUCT = CAPACITY["PRODUCT"]
 MEASURE = CAPACITY["MEASURE"]
 NATIVE = runpy.run_path(str(HERE / "mac-demo-native-tcp.py"))
+PERFORMANCE = runpy.run_path(str(HERE / "mac-demo-performance-target.py"))
 URL = "http://127.0.0.1:49502/httpapi/"
 
 
@@ -322,8 +323,9 @@ def main():
     parser.add_argument("generation", type=Path)
     parser.add_argument("--seconds", type=int, default=60)
     parser.add_argument("--mode", choices=("ORDER_ONLY", "TRADE"))
-    parser.add_argument("--concurrency", choices=(1, 4, 8), type=int)
+    parser.add_argument("--concurrency", choices=(1, 4, 8, 16, 32), type=int)
     parser.add_argument("--transport", choices=("http", "tcp"), default="http")
+    parser.add_argument("--require-performance-target", action="store_true")
     args = parser.parse_args()
     if not 30 <= args.seconds <= 300:
         parser.error("Use a 30 to 300 second window per concurrency level")
@@ -369,7 +371,8 @@ def main():
                         f"SELECT matching_mode FROM dc_tenant_symbol WHERE location='{location}' AND security_id='{symbol}'")
                     if actual != [[mode]]:
                         raise RuntimeError("Actual product mode differs from the controlled test")
-                    traders = [new_trader(location, symbol, mode, run, mode.lower() + str(i)) for i in range(8)]
+                    traders = [new_trader(location, symbol, mode, run, mode.lower() + str(i))
+                               for i in range(max(8, args.concurrency or 8))]
                     before = {user: balances(loc, user) for loc, user, _ in traders}
                     for concurrency in ((args.concurrency,) if args.concurrency is not None else (1, 4, 8)):
                         # TOKEN resume consumes the signed session. Keep the
@@ -508,6 +511,16 @@ def main():
             if getattr(exc, "native_process_evidence", None):
                 report["failure_native_process_evidence"] = exc.native_process_evidence
         finally:
+            for phase in report['phases']:
+                phase['phase_one_performance'] = PERFORMANCE['order_cancel_target'](phase, args.transport)
+            modes = (args.mode,) if args.mode else ('ORDER_ONLY', 'TRADE')
+            report['phase_one_performance_by_mode'] = {
+                mode: any(p.get('mode') == mode and p['phase_one_performance']['passed']
+                          for p in report['phases']) for mode in modes}
+            report['performance_target_required'] = args.require_performance_target
+            report['integrity_passed'] = report['passed']
+            if args.require_performance_target:
+                report['passed'] = report['passed'] and all(report['phase_one_performance_by_mode'].values())
             report["finished_at"] = datetime.now(timezone.utc).isoformat()
             output.write_text(json.dumps(report, indent=2) + "\n")
     print(("PASS " if report["passed"] else "NO_GO ") + str(output), flush=True)

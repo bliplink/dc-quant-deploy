@@ -1,5 +1,5 @@
 {
-  "observed_at": "2026-11-15T19:55:03.453150+08:00",
+  "observed_at": "2026-11-15T20:15:14.937940+08:00",
   "status": "STRICT_AND_ASYNC_NATIVE_BASELINES_PASS_PERFORMANCE_NO_GO_BUSINESS_FAULT_GATES_RUNNING",
   "production_acceptance": "NO_GO",
   "generation": "mac-demo-20261115-180803",
@@ -1050,5 +1050,23 @@
     "late_new_owned_normal_cancel_exact_finance_passed": true,
     "genuine_reservation_loss_pending": true,
     "continuous_four_way_business_fault_pending": true
+  },
+  "owner_confirmed_phase_one_performance_target": {
+    "owner_confirmed_at": "2026-11-15T20:15:14.936622+08:00",
+    "status": "OWNER_CONFIRMED_TARGET_CURRENT_RELEASE_NO_GO",
+    "minimum_sustained_rate_per_second": 1000,
+    "end_to_end_p99_max_ms": 20,
+    "minimum_window_seconds": 60,
+    "modes": [
+      "STRICT_QUORUM",
+      "LOCAL_DURABLE_ASYNC"
+    ],
+    "order_cancel_unit": "1000 successful business commands/s, with place and cancel each counted once; full cycle is two commands, not trade TPS",
+    "execution_unit": "1000 actual final trade receipts/s inside the offered window; not RPC ACKs or pair-leg double counting",
+    "latency": "Native TCP client request or scheduled slot to actual New/Cancelled/final execution receipt; include dispatch-delay distribution and all requests",
+    "stability": "Actual Robot-under-fault failover, catchup, automatic Home, financial and raw physical prefix consistency; no fake ACK or fencing bypass",
+    "errors_drops_missing_or_incomplete": "Must remain visible and prevent performance acceptance",
+    "current_production_acceptance": "NO_GO",
+    "required": true
   }
 }

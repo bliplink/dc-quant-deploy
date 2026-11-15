@@ -24,6 +24,7 @@ EXEC = runpy.run_path(str(HERE / 'verify-mac-demo-execution-capacity.py'))
 CANCEL, CAPACITY, MEASURE = (EXEC[key] for key in ('CANCEL', 'CAPACITY', 'MEASURE'))
 NATIVE = runpy.run_path(str(HERE / 'mac-demo-native-tcp.py'))
 RPO = runpy.run_path(str(HERE / 'verify-mac-demo-async-rpo.py'))
+PERFORMANCE = runpy.run_path(str(HERE / 'mac-demo-performance-target.py'))
 
 
 def reviewed_replication_lanes(root):
@@ -124,10 +125,11 @@ def main():
     parser.add_argument('--streams', type=int, choices=(2, 4, 8), default=4)
     parser.add_argument('--rate-per-stream', type=float, default=1)
     parser.add_argument('--seconds', type=int, default=60)
+    parser.add_argument('--require-performance-target', action='store_true')
     args = parser.parse_args()
-    if not (0 < args.rate_per_stream <= 50 and 60 <= args.seconds <= 120
-            and args.rate_per_stream * args.seconds * args.streams <= 6000):
-        parser.error('Use 0–50 orders/s per stream, 60–120 seconds and at most 6000 total planned orders')
+    if not (0 < args.rate_per_stream <= 250 and 60 <= args.seconds <= 120
+            and args.rate_per_stream * args.seconds <= 10000):
+        parser.error('Use 0–250 orders/s per stream, 60–120 seconds and at most 10000 orders per funded stream')
     os.umask(0o077)
     root = args.generation.resolve(strict=True)
     sdk = Path(os.environ.get('MAC_DEMO_SDK_ROOT', str(
@@ -285,6 +287,12 @@ def main():
         report['failure'] = EXEC['error_status'](error)
         report.setdefault('failure_stage', report['stage'])
     finally:
+        report['phase_one_performance'] = PERFORMANCE['execution_target'](
+            report.get('aggregate', {}), args.seconds, report['passed'])
+        report['performance_target_required'] = args.require_performance_target
+        report['integrity_passed'] = report['passed']
+        if args.require_performance_target:
+            report['passed'] = report['passed'] and report['phase_one_performance']['passed']
         report['finished_at'] = datetime.now(timezone.utc).isoformat()
         with output.open('x') as evidence:
             json.dump(report, evidence, indent=2)
