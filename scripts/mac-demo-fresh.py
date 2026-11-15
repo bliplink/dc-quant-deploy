@@ -148,6 +148,25 @@ def client_ack_environment(original, selected):
     return forwarded
 
 
+def gc_observation_environment(entries):
+    """Bounded Java 8 pause logs for the service launcher only."""
+    values = dict(entry.split("=", 1) for entry in entries)
+    options = " ".join(values.get(key, "") for key in
+                       ("JAVA_OPTS", "EXTRA_JAVA_OPTS", "JAVA_TOOL_OPTIONS"))
+    if re.search(r"(?:-Xloggc:|-XX:[+-](?:PrintGC|UseGCLogFileRotation)|-XX:(?:GCLogFileSize|NumberOfGCLogFiles)=)",
+                 options):
+        return list(entries)  # Preserve an explicitly configured GC observer.
+    flags = ("-Xloggc:/srv/dc/log/jvm-gc.log -XX:+PrintGCDetails "
+             "-XX:+PrintGCDateStamps -XX:+PrintGCApplicationStoppedTime "
+             "-XX:+UseGCLogFileRotation -XX:NumberOfGCLogFiles=5 -XX:GCLogFileSize=10M")
+    # JAVA_TOOL_OPTIONS also applies to jcmd/jstat. Use the existing service
+    # entrypoint's EXTRA_JAVA_OPTS so diagnostic children cannot overwrite
+    # the main JVM's evidence. Heap and GC algorithm are unchanged.
+    updated = [entry for entry in entries if not entry.startswith("EXTRA_JAVA_OPTS=")]
+    updated.append("EXTRA_JAVA_OPTS=" + (values.get("EXTRA_JAVA_OPTS", "") + " " + flags).strip())
+    return updated
+
+
 def update_properties(content, values):
     for key, value in values.items():
         content = re.sub(rf"^{re.escape(key)}=.*(?:\n|$)", "", content, flags=re.M)
@@ -677,7 +696,7 @@ def main():
             if value:
                 flags.extend([flag, str(value if key == "Memory" else value / 1e9)])
         phase_policy = client_ack_policy if phase == "hostready" and automatic_common else "STRICT_QUORUM"
-        for entry in client_ack_environment(old_node["Config"]["Env"], phase_policy):
+        for entry in gc_observation_environment(client_ack_environment(old_node["Config"]["Env"], phase_policy)):
             flags.extend(["-e", entry])
         flags.extend(["--label", f"otc.common.client_ack_policy={phase_policy}"])
         flags.extend(voter_runtime_mounts[kind, slot])
