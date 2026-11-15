@@ -80,7 +80,7 @@ def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('generation', type=Path)
     parser.add_argument('--tools', type=Path,
-                        default=Path.home() / '.opentradingcore/t554-rpo-delivery-fault-agent-20261112-v2')
+                        default=Path.home() / '.opentradingcore/t554-rpo-replication-fault-tools-20261115')
     args = parser.parse_args()
     root = args.generation.resolve(strict=True)
     os.umask(0o077)
@@ -88,6 +88,7 @@ def main():
         fcntl.flock(lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
         CAPACITY['require_strict_demo'](root)
         release = CAPACITY['common_release_identity'](root)
+        RPO['require_replication_fault_tools'](args.tools)
         if release['client_ack_policy'] != 'LOCAL_DURABLE_ASYNC':
             raise RuntimeError('Reservation loss requires normal dual-node asynchronous confirmation')
         for name in ('head-observer-self-test.status', 'head-observer-linux-self-test.status'):
@@ -181,10 +182,18 @@ def main():
                 record['robot_before_fault'] = ROBOT['wait_traffic'](
                     order_nodes, trade_nodes, datetime.now(timezone.utc), robot_location)
                 RPO['require_pause_lease_budget'](root / 'common/config-hostready/trade' / primary_slot / 'application.properties')
+                replication_control = '/tmp/t554-reservation-replication-control-' + run_id
+                record['replication_delivery_fault'] = RPO['arm_replication_delivery'](
+                    primary, target_pids[primary], tools_path, replication_control, args.tools)
+                save()
                 watchdog = RPO['arm_pause_watchdog'](backup_before['Id'], output)
                 policy_overridden = True
                 run('docker', 'update', '--restart', 'no', primary)
                 client = 'T554RESLOSS-' + run_id
+                # Keep the identity before submission: New may arrive after a
+                # failed bounded observation, and still needs normal cleanup.
+                record['client_order_id'] = client
+                save()
                 since = datetime.now(timezone.utc)
                 begun = time.monotonic()
                 try:
@@ -200,6 +209,7 @@ def main():
                         raise RuntimeError('Replica pause ended before the confirmed reservation fault')
                     record.update(client_order_id=client, order_id=order['OrderID'], order_new=order)
                     save()
+                    RPO['require_replication_delivery_held'](primary, replication_control)
                     run('docker', 'kill', '--signal', 'KILL', primary)
                     killed = True
                     stopped = inspect(primary)['State']
@@ -225,6 +235,11 @@ def main():
                 record['primary_local_acked_head'] = primary_head
                 local = RPO['wait_roles'](root, 'TradeSvr' + backup_slot)
                 record['survivor_local'] = local
+                post_raw, post_head = RPO['copy_wal'](backup, backup_slot, partition,
+                                                    output / 'actual-backup-after-takeover.wal', epoch)
+                record['actual_original_backup_head_after_takeover'] = post_head
+                if post_head != before_head or post_raw != before_raw:
+                    raise RuntimeError('A late delivered reservation invalidates this actual-loss case')
                 if inspect(backup)['State']['StartedAt'] != backup_before['State']['StartedAt']:
                     raise RuntimeError('The surviving backup unexpectedly restarted')
                 record['robot_while_local'] = ROBOT['wait_traffic'](
@@ -261,11 +276,29 @@ def main():
             failure = error
             record['failure'] = type(error).__name__ + ': ' + str(error)
         finally:
+            if primary and record.get('replication_delivery_fault'):
+                try:
+                    record['replication_delivery_release'] = RPO['release_replication_delivery'](
+                        primary, record['replication_delivery_fault']['control'])
+                except BaseException as release_error:
+                    record['replication_delivery_release_failure'] = type(release_error).__name__
+                    failure = failure or release_error
             try:
                 if backup and inspect(backup)['State']['Paused']:
                     run('docker', 'unpause', backup)
                 if primary and record.get('order_id') and not inspect(primary)['State']['Running']:
                     killed = True
+                if not killed and trader and record.get('client_order_id'):
+                    remaining = CANCEL['own_order'](CANCEL['open_orders'](
+                        trader, record['symbol']), record['client_order_id'])
+                    for owned in remaining:
+                        CANCEL['cancel'](trader, record['symbol'], {
+                            'order_id': owned['OrderID'], 'client_order_id': record['client_order_id']})
+                    if remaining:
+                        CANCEL['await_order'](trader, record['symbol'], record['client_order_id'], False)
+                        record['failed_case_owned_order_cleanup'] = 'NORMAL_API_CANCEL_WITHOUT_PRIMARY_KILL'
+                    if account(trader) != record['account_before']:
+                        raise RuntimeError('Aborted fault normal cleanup did not restore the original account')
                 if killed:
                     if local is None:
                         local = RPO['wait_roles'](root, 'TradeSvr' + backup_slot)
@@ -281,8 +314,6 @@ def main():
                     record['physical_pairs'] = 512
                     trader = RPO['refresh_trader'](trader, run_id, 0, password)
                     record['account_after_home'] = account(trader)
-                    if record['account_after_home'] != record['account_before']:
-                        raise RuntimeError('Original primary return resurrected or released the lost reservation')
                     remaining = CANCEL['own_order'](
                         CANCEL['open_orders'](trader, record['symbol']), record['client_order_id'])
                     if remaining:
@@ -297,6 +328,11 @@ def main():
                         record['failed_case_owned_order_cleanup'] = 'NORMAL_API_CANCEL_AFTER_HOME'
                         if account(trader) != record['account_before']:
                             raise RuntimeError('Failed-case cleanup altered funds')
+                    if (record.get('local_business_consistent')
+                            and record['account_after_home'] != record['account_before']):
+                        raise RuntimeError('Original primary return resurrected or released the lost reservation')
+                    if account(trader) != record['account_before']:
+                        raise RuntimeError('Post-recovery normal cleanup did not restore the original account')
                     code, financial, checks = CAPACITY['reconcile_financial_cursor']()
                     record.update(financial_cursor=financial, financial_checks=checks)
                     if code:

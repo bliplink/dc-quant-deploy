@@ -28,6 +28,9 @@ COLD_BATCH_TAIL_ACK = re.compile(
 NORMAL_ASYNC_ACK = re.compile(
     r"^[.]*T554_NORMAL_DUAL_ASYNC_BACKUP_OUTAGE_PRESERVES_LOCAL_ACK_PASS "
     r"sameEpoch=2 bothCommittedHeads=2 appliedOnce=true originalRisk=true$", re.M)
+NORMAL_ASYNC_PIPELINE = re.compile(
+    r"^[.]*T554_NORMAL_DUAL_ASYNC_64_LOCAL_ACKS_REAL_TCP_CUMULATIVE_CATCHUP_PASS "
+    r"sameEpoch=2 bothCommittedHeads=65 appliedOnce=true originalRisk=true$", re.M)
 NORMAL_ASYNC_KILL = re.compile(
     r"^[.]*T554_NORMAL_DUAL_ASYNC_PRIMARY_SIGKILL_AFTER_LOCAL_ACK_REAL_WITNESS_HOME_PASS "
     r"backupCommittedHead=1 abandonedLocalHead=2 originalPrimaryWalUnchanged=true "
@@ -281,6 +284,37 @@ def verify_cold_batch_prefixes(directory):
             raise ValueError("Cold batch did not prove both actual recovered business roles")
 
 
+def verify_async_pipeline_prefixes(directory):
+    """Post-drill byte/model audit only; original Java validates RSA and grants."""
+    originals = []
+    for side, node in (("a", "DemoSvrA"), ("b", "DemoSvrB")):
+        epoch = directory / ("data-" + side) / "DemoSvr" / node / "P000/epoch-2"
+        raw = (epoch / "business.wal").read_bytes()
+        position, ends = 0, {}
+        for sequence in range(1, 66):
+            if len(raw) - position < 28:
+                raise ValueError("Incomplete original async pipeline WAL")
+            magic, e, seq, size, crc = struct.unpack_from(">IqqII", raw, position)
+            payload = raw[position + 28:position + 28 + size]
+            if (magic != 0x43425731 or e != 2 or seq != sequence or not 0 < size <= 1024 * 1024
+                    or len(payload) != size or zlib.crc32(struct.pack(">qq", e, seq) + payload) != crc
+                    or payload != (bytes((5, 3, 5)) if sequence == 1 else bytes((99, 98, 97)))):
+                raise ValueError("Async pipeline original sequence or payload changed")
+            position += 28 + size
+            ends[sequence] = position
+        if position != len(raw):
+            raise ValueError("Async pipeline exceeded its original 64-command suffix")
+        commit = (epoch / "commit-index/commits.wal").read_bytes()
+        heads = cumulative_record_metadata(commit, 2, "P000", {"DemoSvrA", "DemoSvrB"})
+        if (not heads or heads[-1][0] != 65
+                or any(seq not in ends or hashlib.sha256(raw[:ends[seq]]).hexdigest() != prefix
+                       for seq, prefix in heads)):
+            raise ValueError("Async pipeline cumulative proof does not cover original bytes")
+        originals.append((raw, commit))
+    if originals[0] != originals[1]:
+        raise ValueError("Async pipeline actual physical copies differ")
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("candidate", type=Path)
@@ -345,6 +379,10 @@ def main():
             scenarios.append("normal-dual-async")
             if len(NORMAL_ASYNC_ACK.findall(log)) != 1:
                 raise ValueError("Common normal async physical ACK and prefix recovery evidence is incomplete")
+        if "normalDualAsyncSixtyFourLocalAcksCatchUpOnTheOriginalPhysicalVoters" in poison_source.read_text():
+            scenarios.append("normal-dual-async-pipeline-64")
+            if len(NORMAL_ASYNC_PIPELINE.findall(log)) != 1:
+                raise ValueError("Common bounded async pipeline lacks its real physical catchup proof")
         if "normalDualAsyncPrimaryKilledAfterLocalAckReturnsThroughRealWitnessedRecovery" in poison_source.read_text():
             scenarios.append("normal-dual-async-primary-kill")
             cumulative_marker = '" originalLocalHead=2 originalPrimaryWalUnchanged=true"' in poison_source.read_text()
@@ -380,8 +418,11 @@ def main():
                     raise ValueError("Common survivor did not continue durably before graceful voter return")
             if scenario.startswith("normal-dual-async"):
                 receipt = (directory / "a-local-acked-before-peer").read_text().strip()
-                if receipt != "LOCAL_DURABLE_ASYNC P000 2 2 rpoRisk=true":
+                expected_head = 65 if scenario == "normal-dual-async-pipeline-64" else 2
+                if receipt != f"LOCAL_DURABLE_ASYNC P000 2 {expected_head} rpoRisk=true":
                     raise ValueError("Common normal async original LOCAL receipt is missing")
+                if scenario == "normal-dual-async-pipeline-64":
+                    verify_async_pipeline_prefixes(directory)
                 if (scenario.endswith("primary-kill")
                         and not (directory / "DemoSvrA.attempt-0.log").is_file()):
                     raise ValueError("Common normal async killed primary log is missing")
@@ -430,7 +471,8 @@ def main():
             "both_directions_and_repeated_home": True, "interrupted_local_rearm": interrupted,
             "normal_dual_async": {"normal-dual-async", "normal-dual-async-primary-kill",
                                   "normal-dual-async-backup-expiry"}.issubset(poison_evidence),
-            "normal_dual_async_max_pending_per_partition": 1,
+            "normal_dual_async_max_pending_per_partition": 64 if "normal-dual-async-pipeline-64" in poison_evidence else 1,
+            "normal_dual_async_pipeline_physical_proof": "normal-dual-async-pipeline-64" in poison_evidence,
             "normal_dual_async_recovery_head": "backup_certified_committed",
             "live_poison_recovery_evidence": poison_evidence,
             "full_recovery_physical_evidence": recovery_evidence,

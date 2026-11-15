@@ -11,6 +11,50 @@ SEAL = runpy.run_path(str(Path(__file__).resolve().parents[1] / 'scripts/finaliz
 
 
 class PhysicalEvidenceSealTest(unittest.TestCase):
+    def test_async_pipeline_checks_original_65_frames_and_both_cumulative_copies(self):
+        # Synthetic format audit only. Dummy signatures do not authorize any
+        # commit, customer ACK or real P0 result.
+        def utf(value):
+            raw = value.encode('ascii')
+            return struct.pack('>H', len(raw)) + raw
+        frames = []
+        for seq in range(1, 66):
+            payload = bytes((5, 3, 5)) if seq == 1 else bytes((99, 98, 97))
+            frames.append(struct.pack('>IqqII', 0x43425731, 2, seq, len(payload),
+                                      zlib.crc32(struct.pack('>qq', 2, seq) + payload)) + payload)
+        wal = b''.join(frames)
+        previous, prior_hash = 0, 'GENESIS'
+        stream = struct.pack('>II', 0x4f544353, 2)
+        for seq in (1, 65):
+            prefix = hashlib.sha256(b''.join(frames[:seq])).hexdigest()
+            votes = []
+            for node in ('DemoSvrA', 'DemoSvrB'):
+                votes.append(struct.pack('>I', 2) + utf(node) + utf('P000') + struct.pack('>qq', 2, seq)
+                             + utf(prefix) + utf('a' * 64) + struct.pack('>I', 256) + bytes(256))
+            body = (struct.pack('>II', 0x4f544357, 2) + utf('a' * 64) + struct.pack('>qqq', 2, seq, previous)
+                    + utf(prefix) + utf(prior_hash) + struct.pack('>I', 2)
+                    + b''.join(struct.pack('>I', len(vote)) + vote for vote in votes))
+            stream += struct.pack('>II', len(body), zlib.crc32(body)) + body
+            previous, prior_hash = seq, hashlib.sha256(body).hexdigest()
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            paths = []
+            for side, node in (('a', 'DemoSvrA'), ('b', 'DemoSvrB')):
+                epoch = root / ('data-' + side) / 'DemoSvr' / node / 'P000/epoch-2'
+                (epoch / 'commit-index').mkdir(parents=True)
+                (epoch / 'business.wal').write_bytes(wal)
+                (epoch / 'commit-index/commits.wal').write_bytes(stream)
+                paths.append(epoch)
+            SEAL['verify_async_pipeline_prefixes'](root)
+            for bad in (wal[:-1], wal + frames[-1], bytes((wal[0] ^ 1,)) + wal[1:]):
+                (paths[1] / 'business.wal').write_bytes(bad)
+                with self.subTest(bytes=len(bad)), self.assertRaises(ValueError):
+                    SEAL['verify_async_pipeline_prefixes'](root)
+            (paths[1] / 'business.wal').write_bytes(wal)
+            (paths[1] / 'commit-index/commits.wal').write_bytes(struct.pack('>II', 0x4f544353, 2))
+            with self.assertRaises(ValueError):
+                SEAL['verify_async_pipeline_prefixes'](root)
+
     def test_actual_cumulative_model_rejects_legacy_or_mismatched_vote_metadata(self):
         # Format/chain checks only; dummy signatures never supply RSA authority.
         member, prefix, nodes = 'a' * 64, 'b' * 64, {'A', 'B'}

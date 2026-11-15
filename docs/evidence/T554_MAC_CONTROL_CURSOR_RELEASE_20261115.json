@@ -1,5 +1,5 @@
 {
-  "observed_at": "2026-11-15T18:42:39.304444",
+  "observed_at": "2026-11-15T19:55:03.453150+08:00",
   "status": "STRICT_AND_ASYNC_NATIVE_BASELINES_PASS_PERFORMANCE_NO_GO_BUSINESS_FAULT_GATES_RUNNING",
   "production_acceptance": "NO_GO",
   "generation": "mac-demo-20261115-180803",
@@ -150,7 +150,13 @@
     "Original retired GG2803 unsettled matches remain separately retained evidence."
   ],
   "application_data_or_credentials_included": false,
-  "current_maintenance": "Same-JAR async generation active; strict original cohort normally stopped and drained, data retained. Both mode baselines complete. Controlled RPO/four-way Robot business fault gates are running after a test-observer logger-layout fix.",
+  "current_maintenance": {
+    "status": "NORMAL_MANAGER_ROBOT_STOP_FOR_EXACT_COMMON_P0",
+    "business_containers_and_data_preserved": true,
+    "ten_original_robots_stopped": true,
+    "financial_cursor_passed": true,
+    "normal_restart_scheduled_in_qualification_finally": true
+  },
   "ordinary_logging_layout": {
     "deploy_source_revision": "b9c800d",
     "four_voter_files_installed": true,
@@ -1014,5 +1020,35 @@
     "actual_fills_observed": 25,
     "original_failed_evidence": "/Users/kong/.opentradingcore/mac-demo-20261115-180803/async-rpo-537f08c1/evidence.json",
     "new_controller": "/Users/kong/.opentradingcore/t554-formal-cumulative-async-fault-gates-v2-20261115.json"
+  },
+  "pipeline_candidate": {
+    "revision": "a83e98ab8a17c5746c7840d4f1e5d0d014758b2e",
+    "sha256": "4482c1d5af0d3c6b669aabea0f42d6cfe9fc8388b0c20765f731381516d390d1",
+    "deployed": false,
+    "status": "EXACT_JAR_FULL_P0_RUNNING_NO_QUALIFIED_PERFORMANCE_CLAIM",
+    "verification": "/Users/kong/.opentradingcore/t554-common-verifications/20261115-195035",
+    "pre_freeze_worktree_safety_executed": 305,
+    "pre_freeze_optional_external_skips": 3,
+    "per_partition_pending_max_commands": 64,
+    "per_partition_pending_max_bytes": 4194304,
+    "process_pending_payload_budget_bytes": 33554432,
+    "native_64_ack_catchup_passed_before_freeze": true,
+    "native_full_queue_primary_crash_special_case_pending": true
+  },
+  "async_business_fault_latest": {
+    "rpo_case": "async-rpo-409daee5",
+    "rpo_functional_home_pairs": 512,
+    "rpo_post_takeover_actual_loss_not_proven": true,
+    "reservation_late_commit_case": "async-reservation-loss-b644f9f3",
+    "reservation_late_commit_is_valid_freeze_not_financial_corruption": true,
+    "reservation_owned_normal_cancel_exact_finance_passed": true,
+    "bounded_replication_fault_mac_linux_selftests_passed": true,
+    "normalized_status_guard_regression_passed": true,
+    "latest_case": "async-reservation-loss-9b30e557",
+    "latest_case_result": "NO_GO_BOUNDED_NEW_NOT_OBSERVED_NO_PRIMARY_KILL",
+    "bounded_fault_explicitly_released": true,
+    "late_new_owned_normal_cancel_exact_finance_passed": true,
+    "genuine_reservation_loss_pending": true,
+    "continuous_four_way_business_fault_pending": true
   }
 }

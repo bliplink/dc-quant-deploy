@@ -114,8 +114,13 @@ def selected_client_ack_policy(images, selected):
             raise RuntimeError("Normal asynchronous confirmation requires exact Common physical verification")
         seal = json.loads((Path(images["common_fault_result"]) / "verification.seal.json").read_text())
         scenarios = {"normal-dual-async", "normal-dual-async-primary-kill", "normal-dual-async-backup-expiry"}
+        pending = seal.get("normal_dual_async_max_pending_per_partition")
+        if pending == 64:
+            scenarios.add("normal-dual-async-pipeline-64")
+        pipeline_proved = pending == 1 or (pending == 64
+                and seal.get("normal_dual_async_pipeline_physical_proof") is True)
         if (seal.get("normal_dual_async") is not True
-                or seal.get("normal_dual_async_max_pending_per_partition") != 1
+                or not pipeline_proved
                 or seal.get("normal_dual_async_recovery_head") != "backup_certified_committed"
                 or not scenarios <= seal.get("live_poison_recovery_evidence", {}).keys()):
             raise RuntimeError("Common verification is missing normal asynchronous recovery evidence")

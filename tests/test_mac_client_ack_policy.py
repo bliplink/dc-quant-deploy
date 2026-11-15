@@ -64,6 +64,27 @@ class ClientAckPolicyTest(unittest.TestCase):
                 self.assertEqual(1, '\n'.join(strict).count(PROPERTY))
                 self.assertIn(PROPERTY + '=STRICT_QUORUM', '\n'.join(strict))
 
+    def test_64_pending_requires_distinct_real_pipeline_case_and_supported_bound(self):
+        scenarios = dict.fromkeys(('normal-dual-async', 'normal-dual-async-primary-kill',
+                                  'normal-dual-async-backup-expiry', 'normal-dual-async-pipeline-64'), {})
+        seal = {'normal_dual_async': True, 'normal_dual_async_max_pending_per_partition': 64,
+                'normal_dual_async_pipeline_physical_proof': True,
+                'normal_dual_async_recovery_head': 'backup_certified_committed',
+                'live_poison_recovery_evidence': scenarios}
+        with tempfile.TemporaryDirectory() as directory:
+            evidence = Path(directory) / 'verification.seal.json'
+            with patch.dict(SELECT.__globals__, verified_common_release=lambda images: True):
+                evidence.write_text(json.dumps(seal))
+                self.assertEqual('LOCAL_DURABLE_ASYNC', SELECT({'common_fault_result': directory}, 'LOCAL_DURABLE_ASYNC'))
+                variants = [dict(seal, normal_dual_async_pipeline_physical_proof=False),
+                            dict(seal, normal_dual_async_max_pending_per_partition=128),
+                            dict(seal, live_poison_recovery_evidence={k:v for k,v in scenarios.items()
+                                                                   if k != 'normal-dual-async-pipeline-64'})]
+                for incomplete in variants:
+                    evidence.write_text(json.dumps(incomplete))
+                    with self.subTest(incomplete=list(incomplete)), self.assertRaises(RuntimeError):
+                        SELECT({'common_fault_result': directory}, 'LOCAL_DURABLE_ASYNC')
+
     def test_ambiguous_quoting_and_unknown_modes_fail_closed(self):
         with self.assertRaises(RuntimeError):
             ENVIRONMENT(['JAVA_OPTS="' + PROPERTY + '=STRICT_QUORUM'], 'STRICT_QUORUM')

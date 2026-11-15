@@ -173,6 +173,41 @@ def observe_physical_head(node, target_pid, tools_path, partition, sequence, pre
     return run("docker", "exec", node, "cat", output)
 
 
+def require_replication_fault_tools(tools):
+    for name in ("replication-self-test.status", "replication-linux-self-test.status"):
+        if (tools / name).read_text().strip() != "PASS":
+            raise RuntimeError("Bounded replication delivery fault requires Mac and Linux self-tests")
+
+
+def arm_replication_delivery(node, target_pid, tools_path, control, tools):
+    require_replication_fault_tools(tools)
+    run("docker", "cp", str(tools / "replication-pause-agent.jar"),
+        node + ":" + tools_path + "/replication-pause-agent.jar")
+    run("docker", "exec", node, "/opt/java/openjdk/bin/java", "-cp",
+        "/opt/java/openjdk/lib/tools.jar:" + tools_path, "T554RpoAttach", target_pid,
+        tools_path + "/replication-pause-agent.jar", control + ",10000")
+    status = run("docker", "exec", node, "cat", control + "/status")
+    if status != "PAUSED replication=8 holdMillis=10000":
+        raise RuntimeError("Eight idle replication workers were not held")
+    return {"status": status.strip(), "control": control,
+            "helper_sha256": hashlib.sha256((tools / "replication-pause-agent.jar").read_bytes()).hexdigest(),
+            "scope": "Bounded idle delivery pause only; no ACK, WAL, business field or control-plane writes"}
+
+
+def require_replication_delivery_held(node, control):
+    if not run("docker", "exec", node, "cat", control + "/status").startswith("PAUSED replication=8 "):
+        raise RuntimeError("Replication delivery hold expired before the primary fault")
+
+
+def release_replication_delivery(node, control):
+    if not inspect(node)["State"]["Running"]:
+        return "TERMINATED_WITH_ORIGINAL_PRIMARY_PROCESS"
+    run("docker", "exec", node, "touch", control + "/resume.request")
+    return until(lambda: (status if (status := run("docker", "exec", node, "cat", control + "/status"))
+                         .startswith("RESUMED replication=8 ") else None), 2,
+                 "Bounded replication fault did not release its workers")
+
+
 def copy_wal(node, slot, partition, target, epoch=2):
     base = FRESH["VOLUMES"]["ready"]
     source = f"{base}/TradeSvr/TradeSvr{slot}/TradeSvr/TradeSvr{slot}/{partition}/epoch-{epoch}/business.wal"
@@ -235,7 +270,7 @@ def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("generation", type=Path)
     parser.add_argument("--tools", type=Path,
-                        default=Path.home() / ".opentradingcore/t554-rpo-delivery-fault-agent-20261112-v2")
+                        default=Path.home() / ".opentradingcore/t554-rpo-replication-fault-tools-20261115")
     args = parser.parse_args()
     root = args.generation.resolve(strict=True)
     os.umask(0o077)
@@ -243,6 +278,7 @@ def main():
         fcntl.flock(lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
         CAPACITY["require_strict_demo"](root)
         release = CAPACITY["common_release_identity"](root)
+        require_replication_fault_tools(args.tools)
         if release["client_ack_policy"] != "LOCAL_DURABLE_ASYNC":
             raise RuntimeError("This case requires verified normal dual-node asynchronous confirmation")
         initial = {kind: manifest(root, kind) for kind in ("order", "trade")}
@@ -403,6 +439,10 @@ def main():
                 record.update(receipt_observation_seconds=RECEIPT_OBSERVATION_SECONDS,
                               replica_pause_watchdog_seconds=REPLICA_PAUSE_WATCHDOG_SECONDS,
                               configured_node_lease_ttl_ms=lease_ttl_ms)
+                replication_control = "/tmp/t554-rpo-replication-control-" + run_id
+                record["replication_delivery_fault"] = arm_replication_delivery(
+                    primary, head_observers[primary], tools_path, replication_control, args.tools)
+                save()
                 watchdog = arm_pause_watchdog(inspect(backup)["Id"], output)
                 begun = time.monotonic()
                 pause_attempted = True
@@ -422,6 +462,7 @@ def main():
                     record["final_local_published_before_peer"] = receipts
                     if not inspect(backup)["State"]["Paused"]:
                         raise RuntimeError("Bounded replica pause ended before the controlled primary fault")
+                    require_replication_delivery_held(primary, replication_control)
                     restart_override_attempted = True
                     record["restart_override_attempted"] = True
                     save()
@@ -451,6 +492,10 @@ def main():
                     raise RuntimeError("Original local ACK does not match its genuine fsynced WAL")
                 local = wait_roles(root, "TradeSvr" + backup_slot)
                 record["survivor_local"] = local
+                _, post_takeover_head = copy_wal(backup, backup_slot, partition, output / "actual-backup-after-takeover.wal")
+                record["actual_original_backup_head_after_takeover"] = post_takeover_head
+                if post_takeover_head != before_head:
+                    raise RuntimeError("A late delivered frame invalidates this actual-loss case")
                 if inspect(backup)["RestartCount"] != record["backup_restart_count"]:
                     raise RuntimeError("The controlled case unexpectedly expired the surviving backup process")
                 record["robot_while_local"] = ROBOT["wait_traffic"](
@@ -475,6 +520,13 @@ def main():
             save()
         finally:
             save()
+            if primary and record.get("replication_delivery_fault"):
+                try:
+                    record["replication_delivery_release"] = release_replication_delivery(
+                        primary, record["replication_delivery_fault"]["control"])
+                except BaseException as release_error:
+                    record["replication_delivery_release_failure"] = type(release_error).__name__
+                    failure = failure or release_error
             if order_node and control:
                 try:
                     subprocess.run(["docker", "exec", order_node, "touch", control + "/resume.request"],
