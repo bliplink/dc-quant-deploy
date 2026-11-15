@@ -167,7 +167,9 @@ Mac 为 arm64、10 CPU/24 GiB；运行的核心镜像均为 arm64。Colima 当�
 
 ## 新代码的一键验证入口
 
-仓库的 `bash mac-colima-saas.sh verify-common COMMON_REVISION` 已接入固定 JAR 的完整资格检查：45 个安全测试类（当前至少 306 项实际执行，最多三项明确可选历史材料跳过）、72 MiB 历史在 96 MiB 堆内重放、历史前缀、四项冷启动，以及原有独立进程故障和全 256 分区双向/重复/中断回主。结果分开记录，任一失败即 NO_GO；不会修改业务数据或替服务发布 READY。原生 TCP 压力窗口运行时入口拒绝启动，避免污染测量。
+新增 `bash mac-colima-saas.sh verify-and-fresh COMMON_REVISION`：依次冻结 Common、执行完整门禁、全量编译并测试业务源码，再顺序替换原 Mac Demo、运行真实业务启动验收。任何一关失败即停止后续部署；精确复用通过验证的同一 JAR，保留原容器和数据。确认模式沿用 `MAC_DEMO_CLIENT_ACK_POLICY=STRICT_QUORUM` 或 `LOCAL_DURABLE_ASYNC`。入口的成功/各阶段失败传递已测试；当前完整本机组合仍在执行，不能据此宣告生产或性能通过。
+
+仓库的 `bash mac-colima-saas.sh verify-common COMMON_REVISION` 已接入固定 JAR 的完整资格检查：45 个安全测试类（当前至少 308 项实际执行，最多三项明确可选历史材料跳过）、72 MiB 历史在 96 MiB 堆内重放、历史前缀、四项冷启动，以及原有独立进程故障和全 256 分区双向/重复/中断回主。结果分开记录，任一失败即 NO_GO；不会修改业务数据或替服务发布 READY。原生 TCP 压力窗口运行时入口拒绝启动，避免污染测量。
 
 代码为 `scripts/qualify-mac-common-candidate.py` 和 `tests/fixtures/common-release/QualifiedCommonChecks.java`。实际 JUnit 的失败/跳过/忽略门禁及入口失败传播共四项回归通过；当前这一轮完整 Common 验证使用原控制器并已通过，**尚未把新入口整体实跑宣称为 PASS**。同一候选已通过门禁后才使用现有 `fresh-verified CANDIDATE_DIRECTORY PHYSICAL_RESULT_DIRECTORY` 顺序部署，之后仍须实际业务、TCP 性能和 Robot 故障验收。
 
@@ -186,3 +188,5 @@ Mac 为 arm64、10 CPU/24 GiB；运行的核心镜像均为 arm64。Colima 当�
 - 详细历史：[此前原文记录](archive/T554_CLUSTER_MECHANISM_REVIEW_PRE_20261115_2122.zh-CN.md)。历史进行中结论以本文当前状态为准。
 
 正式架构边界仍以 [Common 简洁职责约束](ARCHITECTURE_SIMPLE_COMMON_BOUNDARY_20261029.zh-CN.md) 和 [A/B Home 自动回主](COMMON_AB_HOME_PRIMARY_AUTO_FAILBACK_ARCHITECTURE_20261031.zh-CN.md) 为准。
+
+真正异步有损门禁现在顺序覆盖三项：已确认结算未复制、预占未复制后的正常撤单、预占未复制后的原订单正常撮合与自动重新预占。第三项新增工具已有九项回归检查通过，真实演练尚未执行；不会把撤单用例当成撮合恢复通过。

@@ -22,6 +22,7 @@ Usage:
   ./mac-colima-saas.sh fresh [verified build directory]
   ./mac-colima-saas.sh fresh-verified CANDIDATE_DIRECTORY PHYSICAL_RESULT_DIRECTORY
   ./mac-colima-saas.sh verify-common COMMON_REVISION
+  ./mac-colima-saas.sh verify-and-fresh COMMON_REVISION
   ./mac-colima-saas.sh verify-fresh RUN_DIRECTORY
   ./mac-colima-saas.sh verify-runtime RUN_DIRECTORY
   ./mac-colima-saas.sh observe-pauses RUN_DIRECTORY --since ISO_TIME --until ISO_TIME
@@ -214,8 +215,8 @@ main() {
       python3 "${SCRIPT_DIR}/scripts/mac-demo-fresh.py" "${run_dir}" "${build_dir}" --apply --verify-business
       log "Fresh startup, physical and business checks: $((SECONDS - build_seconds))s."
       ;;
-    verify-common)
-      [[ "$#" == 1 ]] || die "Usage: ./mac-colima-saas.sh verify-common COMMON_REVISION"
+    verify-common|verify-and-fresh)
+      [[ "$#" == 1 ]] || die "Usage: ./mac-colima-saas.sh ${action} COMMON_REVISION"
       local common_stamp candidate_dir common_result_dir
       common_stamp="$(date +%Y%m%d-%H%M%S)"
       candidate_dir="${HOME}/.opentradingcore/t554-common-candidates/${common_stamp}"
@@ -223,6 +224,9 @@ main() {
       log "Common fault verification: ${common_result_dir}"
       bash "${SCRIPT_DIR}/scripts/build-mac-common-candidate.sh" "$1" "$candidate_dir"
       python3 "${SCRIPT_DIR}/scripts/qualify-mac-common-candidate.py" "$candidate_dir" "$common_result_dir"
+      if [[ "$action" == verify-and-fresh ]]; then
+        bash "${SCRIPT_DIR}/mac-colima-saas.sh" fresh-verified "$candidate_dir" "$common_result_dir"
+      fi
       ;;
     verify-fresh)
       [[ "$#" == 1 ]] || die "Usage: ./mac-colima-saas.sh verify-fresh RUN_DIRECTORY"

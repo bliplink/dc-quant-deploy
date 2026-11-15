@@ -86,6 +86,7 @@ class QualificationEntryTest(unittest.TestCase):
             (directory / 'bash').write_text('''#!/bin/sh
 case "$1" in
  */scripts/build-mac-common-candidate.sh) printf 'build %s %s\\n' "$2" "$3" >> "$COMMON_ENTRY_CALLS"; exit "${COMMON_BUILD_EXIT:-0}";;
+ */mac-colima-saas.sh) test "$2" = fresh-verified || exit 92; printf 'fresh %s %s\\n' "$3" "$4" >> "$COMMON_ENTRY_CALLS"; exit "${COMMON_FRESH_EXIT:-0}";;
  *) exit 90;;
 esac
 ''')
@@ -110,6 +111,24 @@ esac
                 self.assertEqual('reviewed-revision', rows[0].split()[1])
                 if count == 2:
                     self.assertEqual(rows[0].split()[2], rows[1].split()[1])
+
+            # A failing physical/safety gate must never reach deployment.
+            # A deployment failure must also remain a failed one-click run.
+            for build, qualify, fresh, expected, count in (
+                    (0, 0, 0, 0, 3), (7, 0, 0, 7, 1), (0, 8, 0, 8, 2), (0, 0, 9, 9, 3)):
+                calls.write_text('')
+                result = subprocess.run(['/bin/bash', str(ROOT / 'mac-colima-saas.sh'),
+                                         'verify-and-fresh', 'reviewed-revision'], capture_output=True, text=True,
+                    env=dict(os.environ, PATH=str(directory) + ':' + os.environ['PATH'],
+                             COLIMA_SSH_CONFIG='/dev/null', COMMON_ENTRY_CALLS=str(calls),
+                             COMMON_BUILD_EXIT=str(build), COMMON_QUALIFY_EXIT=str(qualify),
+                             COMMON_FRESH_EXIT=str(fresh)))
+                self.assertEqual(expected, result.returncode, result.stdout + result.stderr)
+                rows = calls.read_text().splitlines()
+                self.assertEqual(count, len(rows))
+                if count == 3:
+                    self.assertEqual(rows[0].split()[2], rows[2].split()[1])
+                    self.assertEqual(rows[1].split()[1:], rows[2].split()[1:])
 
 
 if __name__ == '__main__':
