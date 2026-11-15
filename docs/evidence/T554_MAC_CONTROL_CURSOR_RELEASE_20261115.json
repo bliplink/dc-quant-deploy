@@ -1,6 +1,6 @@
 {
-  "observed_at": "2026-11-16T01:49:07.243896+08:00",
-  "status": "COMMON_BOUNDED_WAIT_SAME_JAR_REQUALIFICATION_RUNNING_BUSINESS_NO_GO",
+  "observed_at": "2026-11-16T01:59:43.886297+08:00",
+  "status": "COMMON_BOUNDED_WAITS_FULL_P0_PASS_P1_BUILDING_BUSINESS_AND_PERFORMANCE_NO_GO",
   "production_acceptance": "NO_GO",
   "generation": "/Users/kong/.opentradingcore/mac-demo-20261115-232443",
   "client_ack_policy": "LOCAL_DURABLE_ASYNC",
@@ -101,7 +101,7 @@
     "trade_single_node_current_same_jar_pending": true
   },
   "current_maintenance": {
-    "status": "FAILED_RPO_EVIDENCE_RETAINED_NO_ORDER_REPLACEMENT_NEW_COMMON_P0_RUNNING",
+    "status": "FULL_EXACT_COMMON_QUALIFIED_BUSINESS_BUILD_RUNNING_OLD_FAILED_GENERATION_RETAINED",
     "active_generation": "/Users/kong/.opentradingcore/mac-demo-20261115-232443",
     "previous_generation_normally_stopped_zero_pending_and_exact_financial_cursor": true,
     "previous_generation_data_preserved": true
@@ -210,12 +210,13 @@
     "large_original_history_mib": 72,
     "uses_existing_independent_physical_failover_verifier": true,
     "business_services_or_data_mutated": false,
-    "end_to_end_new_wrapper_full_run_claimed": false,
+    "end_to_end_new_wrapper_full_run_claimed": true,
     "regression_tests_passed": 4,
     "test_scope": "Real JUnit pass/fail/ignore/assumption handling and actual entry failure propagation; no live business faults in tool tests",
     "combined_qualification_and_fresh_entry": "bash mac-colima-saas.sh verify-and-fresh COMMON_REVISION",
     "independent_private_native_home_jvms": true,
-    "combined_entry_failure_propagation_tested": true
+    "combined_entry_failure_propagation_tested": true,
+    "combined_entry_complete_actual_run_claimed": false
   },
   "old_40_per_second_service_log_diagnostic": {
     "evidence": "/Users/kong/.opentradingcore/mac-demo-20261115-213528/native-40-service-stage-diagnostic-20261115/summary-normalized-categories.json",
@@ -1157,7 +1158,7 @@
     "candidate": "/Users/kong/.opentradingcore/t554-common-candidates/20261116-bounded-async-recovery-waits-native-retry",
     "focused_actual_tests_passed": 52,
     "focused_skipped": 0,
-    "status": "RETRY_308_SAFETY_AND4_COLD_PASS_FULL_NATIVE_AND_HOME_RUNNING_NOT_DEPLOYED",
+    "status": "FULL_EXACT_COMMON_P0_PASS_FULL_BUSINESS_BUILD_RUNNING_NOT_DEPLOYED",
     "scope": "Reuse existing two-second admission budget; recheck grant/fencing while waiting; reject before encoding/append or strict snapshot publication. Existing signed LOCAL64 and real physical catchup unchanged.",
     "first_full_attempt_status": "NO_GO_NATIVE_BACKUP_OUTAGE_FIXTURE_EXITED_ON_NEW_BOUNDED_STRICT_READ_ERROR",
     "first_full_attempt_safety_executed": 308,
@@ -1167,7 +1168,20 @@
     "native_backup_outage_retry_focused_passed": true,
     "actual_safety_executed_passed": 308,
     "cold_restart_cases_passed": 4,
-    "full_qualification_state": "/Users/kong/.opentradingcore/t554-common-candidates/20261116-bounded-async-recovery-waits-native-retry/qualification/state.json"
+    "full_qualification_state": "/Users/kong/.opentradingcore/t554-common-candidates/20261116-bounded-async-recovery-waits-native-retry/qualification/state.json",
+    "native_fault_cases_passed": 16,
+    "complete_256_bidirectional_third_repeated_interrupted_home_passed": true,
+    "equal_wal_pairs": 256,
+    "equal_snapshot_pairs": 256,
+    "full_queue_primary_original_local_head": 65,
+    "full_queue_primary_actual_backup_head": 29,
+    "unreplicated_local_tail_excluded": 36,
+    "unisolated_complete_partition_timing_ms": {
+      "a_takeover": 179258,
+      "a_home": 386103,
+      "b_takeover": 175814,
+      "b_home": 250356
+    }
   },
   "synthetic_storage_diagnostic": {
     "observed_at": "2026-11-16T01:36:21.884747+08:00",
