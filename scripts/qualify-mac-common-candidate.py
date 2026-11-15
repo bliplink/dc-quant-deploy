@@ -160,10 +160,11 @@ def main():
         # Private fixture directories and independent ZK sessions; the same
         # immutable JAR remains first in every parent and child classpath.
         full_output = (work / 'full-physical.log').open('x')
+        state['physical_fixture_revision'] = env.get('MAC_DEMO_COMMON_P0_FIXTURE_REVISION', revision)
         full = subprocess.Popen(['bash', str(REPO / 'scripts/verify-mac-common-failover.sh'),
                                  str(candidate), expected, str(results)], cwd=REPO,
             env=dict(env, MAC_DEMO_REQUIRE_INTERRUPTED_RETURN='true',
-                     MAC_DEMO_COMMON_P0_FIXTURE_REVISION=revision),
+                     MAC_DEMO_COMMON_P0_FIXTURE_REVISION=env.get('MAC_DEMO_COMMON_P0_FIXTURE_REVISION', revision)),
             stdout=full_output, stderr=subprocess.STDOUT, start_new_session=True)
         state['physical_pid'] = full.pid
         state['cold'] = {}
