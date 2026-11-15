@@ -527,6 +527,8 @@ def main():
             "normal_dual_async_max_pending_per_partition": 64 if "normal-dual-async-pipeline-64" in poison_evidence else 1,
             "normal_dual_async_pipeline_physical_proof": "normal-dual-async-pipeline-64" in poison_evidence,
             "normal_dual_async_full_queue_primary_crash": "normal-dual-async-pipeline-64-primary-kill" in poison_evidence,
+            "normal_dual_async_current_local_history": bool(poison_evidence)
+                and '"a-local-history-read-before-peer"' in poison_source.read_text(),
             "normal_dual_async_recovery_head": "backup_certified_committed",
             "live_poison_recovery_evidence": poison_evidence,
             "full_recovery_physical_evidence": recovery_evidence,
