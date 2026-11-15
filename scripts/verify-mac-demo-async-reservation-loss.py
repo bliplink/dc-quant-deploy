@@ -282,17 +282,23 @@ def main():
                     primary_raw[len(before_raw):], partition, epoch, primary_head,
                     location, trader[1], order['OrderID'])
                 record['primary_local_acked_head'] = primary_head
+                record['phase'] = 'WAITING_SURVIVING_NODE_ALL_LOCAL'
+                save()
                 local = RPO['wait_roles'](root, 'TradeSvr' + backup_slot)
                 record['survivor_local'] = local
                 post_raw, post_head = RPO['copy_wal'](backup, backup_slot, partition,
                                                     output / 'actual-backup-after-takeover.wal', epoch)
                 record['actual_original_backup_head_after_takeover'] = post_head
+                record['phase'] = 'CHECKING_REAL_EXCLUSION_AND_ROBOT_LOCAL_BUSINESS'
+                save()
                 if post_head != before_head or post_raw != before_raw:
                     raise RuntimeError('A late delivered reservation invalidates this actual-loss case')
                 if inspect(backup)['State']['StartedAt'] != backup_before['State']['StartedAt']:
                     raise RuntimeError('The surviving backup unexpectedly restarted')
                 record['robot_while_local'] = ROBOT['wait_traffic'](
                     order_nodes, [backup], datetime.now(timezone.utc), robot_location, local)
+                record['phase'] = 'CHECKING_FUNDS_BEFORE_NORMAL_BUSINESS'
+                save()
                 trader = RPO['refresh_trader'](trader, run_id, 0, password)
                 record['account_after_certified_takeover_before_cancel'] = account(trader)
                 if record['account_after_certified_takeover_before_cancel'] != record['account_before']:
@@ -360,10 +366,12 @@ def main():
                         'location': location, 'tape_execution_ids': [x['ExecID']
                             for x in record['readmitted_match_receipts'].values()], 'local_trade_commits': []})
                 record['local_business_consistent'] = True
+                record['phase'] = 'LOCAL_BUSINESS_PROVEN_RETURN_REQUIRED'
                 save()
         except BaseException as error:
             failure = error
             record['failure'] = type(error).__name__ + ': ' + str(error)
+            save()  # Preserve the actual cause before potentially lengthy safe return.
         finally:
             if primary and record.get('replication_delivery_fault'):
                 try:
@@ -394,6 +402,8 @@ def main():
                         record['survivor_local'] = local
                     run('docker', 'update', '--restart', 'on-failure', primary)
                     run('docker', 'start', primary)
+                    record['phase'] = 'RETURNING_ORIGINAL_NODE_WAITING_STRICT_HOME'
+                    save()
                     home = RPO['wait_roles'](root)
                     record['strict_home'] = home
                     hashes = [RPO['ROLL']['physical_hashes'](node, 'TradeSvr', slot, backup_slot, local, home)
