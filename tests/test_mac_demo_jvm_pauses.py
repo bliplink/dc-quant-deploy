@@ -6,6 +6,17 @@ MOD = runpy.run_path(str(Path(__file__).resolve().parents[1] / 'scripts/observe-
 
 
 class JvmPauseObservationTest(unittest.TestCase):
+    def test_actual_interleaved_timestamp_preserves_complete_inner_pause_and_outer_time(self):
+        line = ('2026-11-16T02:46:16.112+0800: 2026-11-16T02:46:16.111+0800: 21.582: '
+                'Total time for which application threads were stopped: 0.0030066 seconds, '
+                'Stopping threads took: 0.0000825 seconds')
+        event = MOD['parse_pause'](line)
+        self.assertEqual('2026-11-15T18:46:16.111000+00:00', event['at'])
+        self.assertEqual('2026-11-15T18:46:16.112000+00:00', event['interleaved_outer_timestamp'])
+        self.assertEqual(3.0066, event['stopped_ms'])
+        with self.assertRaises(ValueError):
+            MOD['parse_pause']('unrecognized prefix: ' + line)
+
     def test_actual_java8_record_preserves_timezone_and_millisecond_scale(self):
         event = MOD['parse_pause']('2026-11-15T10:36:55.184+0800: 0.283: '
                                   'Total time for which application threads were stopped: '

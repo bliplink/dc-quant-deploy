@@ -33,13 +33,27 @@ def at(value):
 def parse_pause(line):
     if 'Total time for which application threads were stopped:' not in line:
         return None
-    match = PAUSE.fullmatch(line.strip())
+    stripped = line.strip()
+    match = PAUSE.fullmatch(stripped)
+    outer_at = None
+    if not match:
+        # Concurrent HotSpot GC writers can interleave a timestamp prefix
+        # immediately before a complete pause line. Accept only that exact
+        # form and retain the extra timestamp; arbitrary suffixes still fail.
+        prefix, separator, remainder = stripped.partition(': ')
+        if separator and re.fullmatch(r'\d{4}-\d{2}-\d{2}T[\d:.]+(?:Z|[+-]\d{4})', prefix):
+            match = PAUSE.fullmatch(remainder)
+            if match:
+                outer_at = at(prefix).isoformat()
     if not match:
         raise ValueError('Unrecognized application-pause record; cannot infer zero pauses')
     fields = match.groupdict()
-    return {'at': at(fields['at']).isoformat(), 'uptime_seconds': float(fields['uptime']),
+    result = {'at': at(fields['at']).isoformat(), 'uptime_seconds': float(fields['uptime']),
             'stopped_ms': round(float(fields['seconds']) * 1000, 7),
             'stopping_threads_ms': round(float(fields['stopping']) * 1000, 7)}
+    if outer_at is not None:
+        result['interleaved_outer_timestamp'] = outer_at
+    return result
 
 
 def summarize(events, since, until):
