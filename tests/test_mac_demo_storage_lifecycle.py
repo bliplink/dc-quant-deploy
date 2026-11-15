@@ -25,6 +25,8 @@ class StorageLifecycleTest(unittest.TestCase):
                     'log4j.appender.file=org.apache.log4j.DailyRollingFileAppender\n'
                     'log4j.appender.file.File=../../log/OrderSvr.log\n'
                     'log4j.appender.file.DatePattern=yyyy-MM-dd\n'
+                    'log4j.appender.file.layout.ConversionPattern=%d %p %m (%C{1}:%L)%n\n'
+                    'log4j.appender.stdout.layout.ConversionPattern=%d %p %m (%C{1}:%L)%n\n'
                     'log4j.logger.Common=DEBUG\n')
         bounded = BOUNDED_LOGGING(original)
         self.assertIn('log4j.rootLogger=INFO,file,stdout\n', bounded)
@@ -34,6 +36,7 @@ class StorageLifecycleTest(unittest.TestCase):
         self.assertIn('log4j.appender.file.MaxFileSize=50MB\n', bounded)
         self.assertIn('log4j.appender.file.MaxBackupIndex=5\n', bounded)
         self.assertNotIn('DatePattern', bounded)
+        self.assertEqual(2, bounded.count('ConversionPattern=%d %p %m (%c{1})%n'))
         self.assertEqual(bounded, BOUNDED_LOGGING(bounded))
 
     def test_unknown_or_duplicate_file_appenders_fail_before_deployment(self):

@@ -241,6 +241,12 @@ def prepare_voter_runtime_storage(generation, kind, slot, image):
 
 
 def bounded_application_logging(content):
+    # Caller class/line lookup builds a stack trace for every ordinary log
+    # message while Log4j holds its appender lock. Logger names retain the
+    # source category without that work; message text and levels stay intact.
+    content = re.sub(r"^(log4j\.appender\.[^.]+\.layout\.ConversionPattern\s*=.*)$",
+                     lambda line: line.group(1).replace("%C{1}:%L", "%c{1}"),
+                     content, flags=re.M)
     appender = re.compile(r"^log4j\.appender\.file\s*=\s*(\S+)\s*$", re.M)
     matches = list(appender.finditer(content))
     supported = {"org.apache.log4j." + name for name in
