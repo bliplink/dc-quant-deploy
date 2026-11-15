@@ -1064,3 +1064,22 @@ Common8bf879d360d1844d3e9a3423f4405119440381e0 在不可变回执验签复用之
 
 
 05:52: The new exact candidate passed mixed cold-owner restart and automatic 256 Home WAL/snapshot agreement with no pending installation reservation on either voter. Full remaining P0 is still running. Capacity admission regression: 21 tests PASS; original stopped-Robot backlog policy: 4 tests PASS. One-click `verify-settlements RUN_DIRECTORY --locations LOCATION...` exposes the complete pending-index check. `verify-order-cancel` now forwards measurement arguments and defaults to native TCP; an explicit transport argument remains available for diagnostics.
+
+## 2026-11-15 08:29：优化门禁与仍须解决的集群问题
+
+当前唯一业务环境仍为 `mac-demo-20261115-065831`，实际 Common3d/Ordera703/Trade8b 未变。十个原 Robot 正常停止，全部数据、核心进程与失败压力记录保留。性能和负载稳定性继续 NO_GO；后续新版本必须完成同条件 TCP 重测。
+
+候选 Common99a91b9（JAR `60ede5a9bf142b3fcdd8b2420d3cdcd37ead0912b40bc2dbeeb581fb05e55d98`）包含控制 Watch 待执行刷新合并，以及最多 16 个已核验 WAL 读取位置，避免投影与快照两个读者交错推进时互相清掉唯一游标、反复扫描旧帧头。252 项安全、72 MiB 原始认证历史在 96 MiB 堆内回放及历史前缀检查通过。这些是局部工作量和正确性证据，尚无新版 TPS/P99 改善结论。
+
+第一次独立冷启动进程在恢复之前因 `BindException: Address already in use` 退出，完整门禁控制器立即终止其它夹具并保持 NO_GO，未安装新版本。保留原 `20261115-080634` 与失败日志；同一生产 JAR 的串行冷启动复测已通过本机确认边界恢复、中断恢复再启动及未提交私有尾部隔离。混合冷 owner 完整 Home 回归、原 13 个物理故障和完整 256 分区双向/重复故障仍待完成；新结果为 `20261115-081811`，不能复用 Common3d 的完整通过结果。
+
+Ordere497510 在 d3740ee 长历史回放修复上补充终结任务处理：New 回调排队后，订单若已被正常持久撤销、成交或过期，撮合 worker 不再为这项过期任务抛错、追加提交或发布。空订单、尚不支持的状态/类型、真正的 Common 提交拒绝仍明确报错，并附状态和类型。旧实现针对终结队列测试复现错误，新版 15 项针对性、213 项完整回归通过（保留 2 项原有跳过），尚未部署。真实旧日志缺少该异常的订单状态，故不能将整个异常洪泛或副本超时根因直接归给此项修复。
+
+待关闭的四项边界：
+
+1. **负载下物理提交超时**：P190/P233 同时在副本双签托管回执账本 ACK 阶段超时。原 3 秒限制保持；544 和 2406 个带 JFR 诊断循环未复现，不代表正式失败已关闭。需要精确新版、完整正式下撤单矩阵和无意外控制代次变化的持续窗口。
+2. **串行持久化成本**：一笔业务包含多次 Common 命令及多轮真实 WAL/提交索引/证书/回执文件与目录 force；异步下一笔同分区命令仍受单条待复制限制。现有两项优化不改变这条合同，也不保证热点吞吐跨数量级提升。
+3. **分钟级全分区恢复**：单个共享 Stage、逐分区回归及证明/落盘累计耗时仍高。控制唤醒合并可以减少重复工作，但必须实测接管与回归两个阶段，不能用缩短轮询或测试总时长替代 RTO。
+4. **历史规模下的业务恢复**：Order 长历史回放修复已通过 70,001 帧领域回归，原数据启动与实际故障回放尚未验收；旧 GG 的 2803 条未结算撮合仍是保留的独立问题，不能由新环境零积压结论覆盖。
+
+现有 CPU 配额下，正式失败窗口四核心容器新增 CPU 限流为 0，VM 仍有约 4 GiB 可用内存。现有日志和数据已经使用持久卷；当前证据不支持仅靠增加 CPU/内存或再次映射目录即可解决。后续按真实锁等待、物理复制、有效 fsync 计时和 CPU 样本决定下一项修改，保持故障诊断与正式容量测量分开。
