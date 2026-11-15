@@ -1,9 +1,9 @@
 {
-  "observed_at": "2026-11-16T05:08:10.895585+08:00",
-  "status": "NO_GO_COMMON_P0_PASS_MAC_REPLACEMENT_WAITING_VERIFIED_DISK_ARCHIVE_BUSINESS_AND_PERFORMANCE_PENDING",
+  "observed_at": "2026-11-16T07:14:22.249803+08:00",
+  "status": "NO_GO_NEW_COMMON_DEPLOYED_STRICT_BASELINES_INTEGRITY_PASS_PERFORMANCE_AND_BUSINESS_HA_PENDING",
   "production_acceptance": "NO_GO",
-  "generation": "/Users/kong/.opentradingcore/mac-demo-20261116-020105",
-  "client_ack_policy": "LOCAL_DURABLE_ASYNC",
+  "generation": "mac-demo-20261116-065052",
+  "client_ack_policy": "STRICT_QUORUM",
   "owner_confirmed_phase_one_performance_target": {
     "owner_confirmed_at": "2026-11-15T20:15:14.936622+08:00",
     "status": "OWNER_CONFIRMED_TARGET_CURRENT_RELEASE_NO_GO",
@@ -23,29 +23,96 @@
     "required": true
   },
   "common": {
-    "revision": "a02bd2b13c231c8dde228945e6fd716185d71394",
-    "sha256": "3c56fdda4cef4c345dd0ac369e44edbc21be234d84eaa88277b5245940421352",
+    "common_revision": "f7bb1e4",
+    "common_sha256": "4a966ced261fe2105cda18782c140717dc1ab0c773ee788a7948243713e1747c",
+    "qualification_status": "PASS_COMMON_QUALIFICATION_BUSINESS_AND_PERFORMANCE_STILL_REQUIRED",
+    "qualification": "/Users/kong/.opentradingcore/t554-common-candidates/20261116-live-local-owner-replay-v3/qualification/state.json",
+    "safety": {
+      "discovered": 317,
+      "executed": 314,
+      "failures": 0,
+      "ignored": 0,
+      "optional_external_historical_skips": 3,
+      "log_sha256": "52e15f8beb8559c015bb0985343eaffc42e7adc0d9f250dc11a0ae60a673fa1e"
+    },
+    "v3_live_local_results": {
+      "live-local-permanent-fence": {
+        "discovered": 1,
+        "executed": 1,
+        "failures": 0,
+        "ignored": 0,
+        "optional_external_historical_skips": 0,
+        "log_sha256": "508bfbf8f21185655213677757011256cef67dbda36203dd8bb4d6a1ec984cc5"
+      },
+      "live-local-repeated-heads": {
+        "discovered": 1,
+        "executed": 1,
+        "failures": 0,
+        "ignored": 0,
+        "optional_external_historical_skips": 0,
+        "log_sha256": "8d68e5ba0f19f67a5295c6c80adae81e710708871a5910a405bf76d533959508"
+      },
+      "live-local-published-head": {
+        "discovered": 1,
+        "executed": 1,
+        "failures": 0,
+        "ignored": 0,
+        "optional_external_historical_skips": 0,
+        "log_sha256": "247de72dac5083575b6c1e9b1681d37cc5113b9ebc98a973fc7d07b2af7e4c0b"
+      },
+      "live-local-private-tail": {
+        "discovered": 1,
+        "executed": 1,
+        "failures": 0,
+        "ignored": 0,
+        "optional_external_historical_skips": 0,
+        "log_sha256": "556a0b1725c90d91eaff885ecbc86afad80a94eb315520f8bda3d3c605dd8f53"
+      }
+    },
+    "v3_cold_results": {
+      "clean-local-owner": {
+        "discovered": 1,
+        "executed": 1,
+        "failures": 0,
+        "ignored": 0,
+        "optional_external_historical_skips": 0,
+        "log_sha256": "bfa772e17f0cfb19caccef8a88483144596b0c1cec24566ee5ded50d7a7a99b3"
+      },
+      "interrupted-retained-owner": {
+        "discovered": 1,
+        "executed": 1,
+        "failures": 0,
+        "ignored": 0,
+        "optional_external_historical_skips": 0,
+        "log_sha256": "169c373134248228141c0f969fdb7341e0e7876acb7282825c78d42584f71f62"
+      },
+      "unpublished-local-tail": {
+        "discovered": 1,
+        "executed": 1,
+        "failures": 0,
+        "ignored": 0,
+        "optional_external_historical_skips": 0,
+        "log_sha256": "2d0388a80eb8afa4793106aa917ba3ecdabcf1646d8959e2b67ec9e72cf0f305"
+      },
+      "mixed-cold-full-home": {
+        "discovered": 1,
+        "executed": 1,
+        "failures": 0,
+        "ignored": 0,
+        "optional_external_historical_skips": 0,
+        "log_sha256": "d1e42ca2c92ced99ead8c52f418ee10c739927d63a5580c76c47524ccb38d07d"
+      }
+    },
+    "physical_seal_sha256": "b6a6fef76e07a1818efdc39aa000d48ce6a5f9ab3bf9db1e8c61614372eb1113",
+    "revision": "f7bb1e4",
+    "sha256": "4a966ced261fe2105cda18782c140717dc1ab0c773ee788a7948243713e1747c",
     "deployed": true,
-    "verification": "/Users/kong/.opentradingcore/t554-common-verifications/20261116-bounded-async-recovery-waits-native-retry",
-    "qualification_state": "/Users/kong/.opentradingcore/t554-common-candidates/20261116-bounded-async-recovery-waits-native-retry/qualification/state.json",
-    "native_fixture_revision": "c308774f253b8efc02d51756a5c35de6ea69b3ed",
-    "actual_safety_executed_passed": 308,
-    "optional_external_historical_skips": 3,
-    "cold_restart_cases_passed": 4,
+    "verification": "/Users/kong/.opentradingcore/t554-common-verifications/20261116-live-local-owner-replay-v3",
+    "business_recovery_and_performance_accepted": false,
     "native_fault_cases_passed": 16,
     "complete_256_bidirectional_third_repeated_interrupted_home_passed": true,
     "equal_wal_pairs": 256,
-    "equal_snapshot_pairs": 256,
-    "full_queue_original_local_head": 65,
-    "full_queue_actual_backup_head": 29,
-    "excluded_unreplicated_local_tail": 36,
-    "unisolated_full_partition_timing_ms": {
-      "a_takeover": 179258,
-      "a_home": 386103,
-      "b_takeover": 175814,
-      "b_home": 250356
-    },
-    "business_recovery_and_performance_accepted": false
+    "equal_snapshot_pairs": 256
   },
   "sources": {
     "shared": {
@@ -98,67 +165,51 @@
   },
   "actual_core_nodes": [
     {
-      "node": "mac-demo-20261116-020105-order-a-hostready",
-      "id": "649cd0675e7d22a88e44098e12ff008fb8275fd6b2baf80a16f4846e67a5db91",
-      "image": "sha256:7077d235f4ddc118a7c9f789a99a78930e8add63439c58ade9b6f8e04ab8d96e",
-      "started_at": "2026-11-15T18:04:36.714219428Z",
-      "actual_common_jar_sha256": "3c56fdda4cef4c345dd0ac369e44edbc21be234d84eaa88277b5245940421352",
-      "runtime_gc_header_g1": true,
-      "runtime_gc_header_target_pause_ms": 10,
-      "options": [
-        "-Dcommon.certified.clientAckPolicy=LOCAL_DURABLE_ASYNC",
-        "-XX:+UseG1GC",
-        "-XX:MaxGCPauseMillis=10",
-        "-Xms128m",
-        "-Xmx1g"
+      "node": "mac-demo-20261116-065052-order-a-hostready",
+      "id": "2a12a523c76388f536a020d397d31c94613416165504385f8b842198d27691d5",
+      "image": "sha256:d037e502691c6d150371c4b8d5a0c8a182335f5a56c3d5947cdfb46543d22ba2",
+      "started_at": "2026-11-15T22:57:07.187683439Z",
+      "actual_common_jar_sha256": "4a966ced261fe2105cda18782c140717dc1ab0c773ee788a7948243713e1747c",
+      "restart_count": 0,
+      "java_options": [
+        "JAVA_OPTS=-Xms128m -Xmx1g -Dzookeeper.sasl.client=false",
+        "JAVA_TOOL_OPTIONS=-Dcommon.certified.clientAckPolicy=STRICT_QUORUM"
       ]
     },
     {
-      "node": "mac-demo-20261116-020105-order-b-hostready",
-      "id": "4fa48c0f381a0b399b9f6c0213a8d426de4b76141331640dfa0aa60aa608be50",
-      "image": "sha256:7077d235f4ddc118a7c9f789a99a78930e8add63439c58ade9b6f8e04ab8d96e",
-      "started_at": "2026-11-15T18:04:36.716196803Z",
-      "actual_common_jar_sha256": "3c56fdda4cef4c345dd0ac369e44edbc21be234d84eaa88277b5245940421352",
-      "runtime_gc_header_g1": true,
-      "runtime_gc_header_target_pause_ms": 10,
-      "options": [
-        "-Xms128m",
-        "-Xmx1g",
-        "-Dcommon.certified.clientAckPolicy=LOCAL_DURABLE_ASYNC",
-        "-XX:+UseG1GC",
-        "-XX:MaxGCPauseMillis=10"
+      "node": "mac-demo-20261116-065052-order-b-hostready",
+      "id": "dac47ead74749586e4470e907f516a9c6492fd336837e2d433b7c14ad34354e9",
+      "image": "sha256:d037e502691c6d150371c4b8d5a0c8a182335f5a56c3d5947cdfb46543d22ba2",
+      "started_at": "2026-11-15T22:57:07.19292898Z",
+      "actual_common_jar_sha256": "4a966ced261fe2105cda18782c140717dc1ab0c773ee788a7948243713e1747c",
+      "restart_count": 0,
+      "java_options": [
+        "JAVA_TOOL_OPTIONS=-Dcommon.certified.clientAckPolicy=STRICT_QUORUM",
+        "JAVA_OPTS=-Xms128m -Xmx1g -Dzookeeper.sasl.client=false"
       ]
     },
     {
-      "node": "mac-demo-20261116-020105-trade-a-hostready",
-      "id": "02b174dd2a30d6c02df54249a2e14500532ce4decff42ae679dbb036453d757b",
-      "image": "sha256:48cd45f73010f3628bc7b2a9d92d964de3eb387cb01798d3df39eadf0364a9d3",
-      "started_at": "2026-11-15T18:04:36.712521219Z",
-      "actual_common_jar_sha256": "3c56fdda4cef4c345dd0ac369e44edbc21be234d84eaa88277b5245940421352",
-      "runtime_gc_header_g1": true,
-      "runtime_gc_header_target_pause_ms": 10,
-      "options": [
-        "-Dcommon.certified.clientAckPolicy=LOCAL_DURABLE_ASYNC",
-        "-XX:+UseG1GC",
-        "-XX:MaxGCPauseMillis=10",
-        "-Xms128m",
-        "-Xmx2g"
+      "node": "mac-demo-20261116-065052-trade-a-hostready",
+      "id": "d944a19925fff15edc514985782a20cfaf58fbed99085eb22b8acaa6eef25415",
+      "image": "sha256:badc197bab2028cdb3dff15a7ad9cb76ce3d3cd4612b15c25380fc94b8231c4f",
+      "started_at": "2026-11-15T22:57:07.191258855Z",
+      "actual_common_jar_sha256": "4a966ced261fe2105cda18782c140717dc1ab0c773ee788a7948243713e1747c",
+      "restart_count": 0,
+      "java_options": [
+        "JAVA_TOOL_OPTIONS=-Dcommon.certified.clientAckPolicy=STRICT_QUORUM",
+        "JAVA_OPTS=-Xms128m -Xmx2g -Dzookeeper.sasl.client=false -XX:MaxDirectMemorySize=512m -XX:+HeapDumpOnOutOfMemoryError -XX:HeapDumpPath=/srv/dc/data/t554-oom-TradeSvr-common3d.hprof -XX:+ExitOnOutOfMemoryError"
       ]
     },
     {
-      "node": "mac-demo-20261116-020105-trade-b-hostready",
-      "id": "5925d045ffc6aa4d9b9fd22a7ecb62e4d9c610f6447b1699c88531f8535bf8c4",
-      "image": "sha256:48cd45f73010f3628bc7b2a9d92d964de3eb387cb01798d3df39eadf0364a9d3",
-      "started_at": "2026-11-15T18:04:36.711333594Z",
-      "actual_common_jar_sha256": "3c56fdda4cef4c345dd0ac369e44edbc21be234d84eaa88277b5245940421352",
-      "runtime_gc_header_g1": true,
-      "runtime_gc_header_target_pause_ms": 10,
-      "options": [
-        "-Dcommon.certified.clientAckPolicy=LOCAL_DURABLE_ASYNC",
-        "-XX:+UseG1GC",
-        "-XX:MaxGCPauseMillis=10",
-        "-Xms128m",
-        "-Xmx2g"
+      "node": "mac-demo-20261116-065052-trade-b-hostready",
+      "id": "4930bc7536432185b750e35425709af73ac301b57a8822ccd29f3e119e3cfd9c",
+      "image": "sha256:badc197bab2028cdb3dff15a7ad9cb76ce3d3cd4612b15c25380fc94b8231c4f",
+      "started_at": "2026-11-15T22:57:07.18914673Z",
+      "actual_common_jar_sha256": "4a966ced261fe2105cda18782c140717dc1ab0c773ee788a7948243713e1747c",
+      "restart_count": 0,
+      "java_options": [
+        "JAVA_OPTS=-Xms128m -Xmx2g -Dzookeeper.sasl.client=false -XX:MaxDirectMemorySize=512m -XX:+HeapDumpOnOutOfMemoryError -XX:HeapDumpPath=/srv/dc/data/t554-oom-TradeSvr-common3d.hprof -XX:+ExitOnOutOfMemoryError",
+        "JAVA_TOOL_OPTIONS=-Dcommon.certified.clientAckPolicy=STRICT_QUORUM"
       ]
     }
   ],
@@ -199,49 +250,761 @@
     "current_four_way_failure": "/Users/kong/.opentradingcore/mac-demo-20261116-020105/ha-order-a-kill-21uje7yr/evidence.json",
     "current_four_way_blocker_evidence": "/Users/kong/.opentradingcore/t554-order-p135-readonly-diagnostic-20261116/confirmed-blocker.json",
     "current_four_way_next_faults_stopped": true,
-    "current_service_processes_stopped_by_inspection": false
+    "current_service_processes_stopped_by_inspection": false,
+    "new_strict_065052": {
+      "verified_build_and_sequential_fresh_log": "/Users/kong/.opentradingcore/t554-live-local-followthrough-v3-strict-verified-build-and-sequential-fresh-20261116.log",
+      "baseline_business_passed": true,
+      "ten_robot_five_minute_evidence": "/Users/kong/.opentradingcore/mac-demo-20261116-065052/robot-steady-10-230511.json",
+      "full_business_faults_on_this_jar_passed": false,
+      "original_failed_020105_recovered": false
+    }
   },
   "current_performance": {
-    "status": "CURRENT_ASYNC_40_LOW_MEMORY_STILL_FAILS_WINDOW_AND_P99_NEW_JFR_HOTSPOTS_IDENTIFIED",
-    "strict_measured_on_this_release": false,
-    "async_measured_on_this_release": true,
-    "pipeline_state": "/Users/kong/.opentradingcore/t554-bounded-waits-sequential-business-v2-20261116.json",
+    "status": "STRICT_TWO_AND_FORTY_INTEGRITY_PASS_SLO_FAIL_ORDER_CANCEL_RUNNING_MATRIX_QUEUED",
+    "strict_measured_on_this_release": true,
+    "async_measured_on_this_release": false,
     "qualified_windows_cannot_overlap_faults_or_diagnostic_attach": true,
     "native_2": {
-      "evidence": "/Users/kong/.opentradingcore/mac-demo-20261116-020105/distributed-execution-capacity-4973f405.json",
-      "sent_final_in_window": 120,
-      "final_p99_ms": 323.075
+      "evidence": "/Users/kong/.opentradingcore/mac-demo-20261116-065052/distributed-execution-capacity-8b70fd57.json",
+      "aggregate": {
+        "planned_orders": 120,
+        "sent_orders": 120,
+        "final_executions": 120,
+        "fills_inside_offered_window": 120,
+        "scheduler_drops": 0,
+        "responses": {
+          "ACKNOWLEDGED": 120
+        },
+        "stream_errors": [],
+        "start_spread_ms": 1.0,
+        "generator_accounting_pass": true,
+        "observed_window_execution_rate": 2.0,
+        "window_delivery_fraction": 1.0,
+        "all_accepted_final_receipts_pass": true,
+        "window_capacity_pass": true,
+        "ack_ms": {
+          "samples": 120,
+          "p50": 7.459,
+          "p95": 11.298,
+          "p99": 175.087,
+          "p99_9": 217.697
+        },
+        "client_fill_ms": {
+          "samples": 120,
+          "p50": 38.516,
+          "p95": 51.541,
+          "p99": 398.133,
+          "p99_9": 412.606
+        },
+        "scheduled_fill_ms": {
+          "samples": 120,
+          "p50": 41.344,
+          "p95": 55.019,
+          "p99": 413.485,
+          "p99_9": 432.621
+        },
+        "dispatch_delay_ms": {
+          "samples": 120,
+          "p50": 2.568,
+          "p95": 5.069,
+          "p99": 15.352,
+          "p99_9": 20.015
+        },
+        "matching_queue_count": 2,
+        "tenant_count": 2,
+        "queue_layout": {
+          "explicit_matrix": false,
+          "tenants": 2,
+          "symbols_per_tenant": 1,
+          "sessions_per_queue": 1,
+          "matching_queues": 2,
+          "native_sessions": 2,
+          "placement": "DISTINCT_PARTITIONS_BALANCED"
+        },
+        "queues": [
+          {
+            "location": "H7J4HT",
+            "symbol": "BTC004USDT",
+            "market_indicator": "4",
+            "native_sessions": 1,
+            "order_partition": "P103",
+            "trade_partition": "P193",
+            "order_primary": "OrderSvrA",
+            "trade_primary": "TradeSvrB",
+            "measurement": {
+              "planned_orders": 60,
+              "sent_orders": 60,
+              "final_executions": 60,
+              "fills_inside_offered_window": 60,
+              "scheduler_drops": 0,
+              "responses": {
+                "ACKNOWLEDGED": 60
+              },
+              "stream_errors": [],
+              "start_spread_ms": 0.0,
+              "generator_accounting_pass": true,
+              "observed_window_execution_rate": 1.0,
+              "window_delivery_fraction": 1.0,
+              "all_accepted_final_receipts_pass": true,
+              "window_capacity_pass": true,
+              "ack_ms": {
+                "samples": 60,
+                "p50": 7.237,
+                "p95": 9.933,
+                "p99": 217.697,
+                "p99_9": 217.697
+              },
+              "client_fill_ms": {
+                "samples": 60,
+                "p50": 38.097,
+                "p95": 48.279,
+                "p99": 412.606,
+                "p99_9": 412.606
+              },
+              "scheduled_fill_ms": {
+                "samples": 60,
+                "p50": 41.454,
+                "p95": 51.309,
+                "p99": 432.621,
+                "p99_9": 432.621
+              },
+              "dispatch_delay_ms": {
+                "samples": 60,
+                "p50": 2.568,
+                "p95": 5.138,
+                "p99": 20.015,
+                "p99_9": 20.015
+              }
+            }
+          },
+          {
+            "location": "U1UO83",
+            "symbol": "BTC004USDT",
+            "market_indicator": "4",
+            "native_sessions": 1,
+            "order_partition": "P158",
+            "trade_partition": "P081",
+            "order_primary": "OrderSvrB",
+            "trade_primary": "TradeSvrA",
+            "measurement": {
+              "planned_orders": 60,
+              "sent_orders": 60,
+              "final_executions": 60,
+              "fills_inside_offered_window": 60,
+              "scheduler_drops": 0,
+              "responses": {
+                "ACKNOWLEDGED": 60
+              },
+              "stream_errors": [],
+              "start_spread_ms": 0.0,
+              "generator_accounting_pass": true,
+              "observed_window_execution_rate": 1.0,
+              "window_delivery_fraction": 1.0,
+              "all_accepted_final_receipts_pass": true,
+              "window_capacity_pass": true,
+              "ack_ms": {
+                "samples": 60,
+                "p50": 7.532,
+                "p95": 11.3,
+                "p99": 175.087,
+                "p99_9": 175.087
+              },
+              "client_fill_ms": {
+                "samples": 60,
+                "p50": 38.593,
+                "p95": 56.062,
+                "p99": 398.133,
+                "p99_9": 398.133
+              },
+              "scheduled_fill_ms": {
+                "samples": 60,
+                "p50": 40.913,
+                "p95": 58.926,
+                "p99": 413.485,
+                "p99_9": 413.485
+              },
+              "dispatch_delay_ms": {
+                "samples": 60,
+                "p50": 2.509,
+                "p95": 4.951,
+                "p99": 15.352,
+                "p99_9": 15.352
+              }
+            }
+          }
+        ],
+        "queues_by_order_partition": {
+          "P103": 1,
+          "P158": 1
+        },
+        "queues_by_trade_partition": {
+          "P193": 1,
+          "P081": 1
+        }
+      },
+      "integrity_passed": true,
+      "phase_one_performance": {
+        "passed": false,
+        "target_per_second": 1000,
+        "target_p99_ms": 20,
+        "unit": "Actual final trade receipts per second",
+        "checks": {
+          "qualified_window": true,
+          "integrity": true,
+          "sustained_window": true,
+          "all_requests_and_fills_accounted": true,
+          "actual_in_window_final_trade_rate": false,
+          "client_final_receipt_p99": false,
+          "scheduled_final_receipt_p99": false
+        },
+        "observed_per_second": 2.0,
+        "tail_final_receipts_after_window": 0
+      }
     },
     "native_40": {
-      "evidence": "/Users/kong/.opentradingcore/mac-demo-20261116-020105/distributed-execution-capacity-36eae3d1.json",
-      "sent_final_in_window": 2400,
-      "final_p99_ms": 1404.298,
-      "scheduled_final_p99_ms": 1425.073,
-      "actual_rate": 40,
-      "maximum_capacity_claimed": false
-    },
-    "place_cancel_evidence": "/Users/kong/.opentradingcore/mac-demo-20261116-020105/order-cancel-capacity-bc519ec8.json",
-    "smaller_client_memory": "Native TCP 40/s actual comparison now running after true-loss audits; no result yet",
-    "jfr_diagnostic": {
-      "measurement": "/Users/kong/.opentradingcore/mac-demo-20261116-020105/distributed-execution-capacity-d9339f2a.json",
-      "qualified_for_performance": false,
-      "summary": "/Users/kong/.opentradingcore/mac-demo-20261116-020105/diagnostic-jfr-48c73ed32b58/window-detailed-summary.json",
-      "all_four_source_voters_unchanged_during_capture": true,
-      "recorded_data_loss_bytes": 0
-    },
-    "followthrough_controller": "/Users/kong/.opentradingcore/t554-accepted-loss-followthrough-v5-20261116.json",
-    "native_40_low_memory": {
-      "evidence": "/Users/kong/.opentradingcore/mac-demo-20261116-020105/distributed-execution-capacity-4c6aa50e.json",
-      "planned_sent_final": 2400,
-      "inside_window": 2341,
-      "tail_after_window": 59,
-      "actual_rate": 39.016666666666666,
-      "client_final_p99_ms": 4414.709,
-      "scheduled_final_p99_ms": 4415.474,
+      "evidence": "/Users/kong/.opentradingcore/mac-demo-20261116-065052/distributed-execution-capacity-edb117c1.json",
+      "aggregate": {
+        "planned_orders": 2400,
+        "sent_orders": 2400,
+        "final_executions": 2400,
+        "fills_inside_offered_window": 2400,
+        "scheduler_drops": 0,
+        "responses": {
+          "ACKNOWLEDGED": 2400
+        },
+        "stream_errors": [],
+        "start_spread_ms": 6.0,
+        "generator_accounting_pass": true,
+        "observed_window_execution_rate": 40.0,
+        "window_delivery_fraction": 1.0,
+        "all_accepted_final_receipts_pass": true,
+        "window_capacity_pass": true,
+        "ack_ms": {
+          "samples": 2400,
+          "p50": 13.62,
+          "p95": 120.005,
+          "p99": 392.829,
+          "p99_9": 607.808
+        },
+        "client_fill_ms": {
+          "samples": 2400,
+          "p50": 82.497,
+          "p95": 792.609,
+          "p99": 1320.248,
+          "p99_9": 1493.68
+        },
+        "scheduled_fill_ms": {
+          "samples": 2400,
+          "p50": 86.89,
+          "p95": 798.679,
+          "p99": 1327.441,
+          "p99_9": 1498.165
+        },
+        "dispatch_delay_ms": {
+          "samples": 2400,
+          "p50": 3.133,
+          "p95": 9.572,
+          "p99": 22.524,
+          "p99_9": 86.897
+        },
+        "matching_queue_count": 8,
+        "tenant_count": 8,
+        "queue_layout": {
+          "explicit_matrix": false,
+          "tenants": 8,
+          "symbols_per_tenant": 1,
+          "sessions_per_queue": 1,
+          "matching_queues": 8,
+          "native_sessions": 8,
+          "placement": "DISTINCT_PARTITIONS_BALANCED"
+        },
+        "queues": [
+          {
+            "location": "BTURGR",
+            "symbol": "BTC004USDT",
+            "market_indicator": "4",
+            "native_sessions": 1,
+            "order_partition": "P193",
+            "trade_partition": "P155",
+            "order_primary": "OrderSvrB",
+            "trade_primary": "TradeSvrB",
+            "measurement": {
+              "planned_orders": 300,
+              "sent_orders": 300,
+              "final_executions": 300,
+              "fills_inside_offered_window": 300,
+              "scheduler_drops": 0,
+              "responses": {
+                "ACKNOWLEDGED": 300
+              },
+              "stream_errors": [],
+              "start_spread_ms": 0.0,
+              "generator_accounting_pass": true,
+              "observed_window_execution_rate": 5.0,
+              "window_delivery_fraction": 1.0,
+              "all_accepted_final_receipts_pass": true,
+              "window_capacity_pass": true,
+              "ack_ms": {
+                "samples": 300,
+                "p50": 11.819,
+                "p95": 139.444,
+                "p99": 421.136,
+                "p99_9": 535.489
+              },
+              "client_fill_ms": {
+                "samples": 300,
+                "p50": 74.971,
+                "p95": 643.961,
+                "p99": 1187.295,
+                "p99_9": 1291.871
+              },
+              "scheduled_fill_ms": {
+                "samples": 300,
+                "p50": 78.341,
+                "p95": 653.646,
+                "p99": 1192.029,
+                "p99_9": 1318.906
+              },
+              "dispatch_delay_ms": {
+                "samples": 300,
+                "p50": 3.223,
+                "p95": 9.686,
+                "p99": 22.524,
+                "p99_9": 55.768
+              }
+            }
+          },
+          {
+            "location": "DQNF53",
+            "symbol": "BTC004USDT",
+            "market_indicator": "4",
+            "native_sessions": 1,
+            "order_partition": "P041",
+            "trade_partition": "P126",
+            "order_primary": "OrderSvrA",
+            "trade_primary": "TradeSvrA",
+            "measurement": {
+              "planned_orders": 300,
+              "sent_orders": 300,
+              "final_executions": 300,
+              "fills_inside_offered_window": 300,
+              "scheduler_drops": 0,
+              "responses": {
+                "ACKNOWLEDGED": 300
+              },
+              "stream_errors": [],
+              "start_spread_ms": 0.0,
+              "generator_accounting_pass": true,
+              "observed_window_execution_rate": 5.0,
+              "window_delivery_fraction": 1.0,
+              "all_accepted_final_receipts_pass": true,
+              "window_capacity_pass": true,
+              "ack_ms": {
+                "samples": 300,
+                "p50": 15.926,
+                "p95": 136.522,
+                "p99": 372.251,
+                "p99_9": 425.94
+              },
+              "client_fill_ms": {
+                "samples": 300,
+                "p50": 86.292,
+                "p95": 846.094,
+                "p99": 1329.696,
+                "p99_9": 1493.68
+              },
+              "scheduled_fill_ms": {
+                "samples": 300,
+                "p50": 90.745,
+                "p95": 867.356,
+                "p99": 1334.662,
+                "p99_9": 1498.165
+              },
+              "dispatch_delay_ms": {
+                "samples": 300,
+                "p50": 2.914,
+                "p95": 9.297,
+                "p99": 21.221,
+                "p99_9": 86.897
+              }
+            }
+          },
+          {
+            "location": "DVDUHP",
+            "symbol": "BTC004USDT",
+            "market_indicator": "4",
+            "native_sessions": 1,
+            "order_partition": "P042",
+            "trade_partition": "P122",
+            "order_primary": "OrderSvrA",
+            "trade_primary": "TradeSvrA",
+            "measurement": {
+              "planned_orders": 300,
+              "sent_orders": 300,
+              "final_executions": 300,
+              "fills_inside_offered_window": 300,
+              "scheduler_drops": 0,
+              "responses": {
+                "ACKNOWLEDGED": 300
+              },
+              "stream_errors": [],
+              "start_spread_ms": 0.0,
+              "generator_accounting_pass": true,
+              "observed_window_execution_rate": 5.0,
+              "window_delivery_fraction": 1.0,
+              "all_accepted_final_receipts_pass": true,
+              "window_capacity_pass": true,
+              "ack_ms": {
+                "samples": 300,
+                "p50": 13.587,
+                "p95": 89.838,
+                "p99": 350.977,
+                "p99_9": 420.801
+              },
+              "client_fill_ms": {
+                "samples": 300,
+                "p50": 83.087,
+                "p95": 769.863,
+                "p99": 1253.281,
+                "p99_9": 1353.518
+              },
+              "scheduled_fill_ms": {
+                "samples": 300,
+                "p50": 86.974,
+                "p95": 778.308,
+                "p99": 1255.135,
+                "p99_9": 1362.241
+              },
+              "dispatch_delay_ms": {
+                "samples": 300,
+                "p50": 3.213,
+                "p95": 9.598,
+                "p99": 16.135,
+                "p99_9": 93.103
+              }
+            }
+          },
+          {
+            "location": "I7FJ6C",
+            "symbol": "BTC004USDT",
+            "market_indicator": "4",
+            "native_sessions": 1,
+            "order_partition": "P169",
+            "trade_partition": "P057",
+            "order_primary": "OrderSvrB",
+            "trade_primary": "TradeSvrA",
+            "measurement": {
+              "planned_orders": 300,
+              "sent_orders": 300,
+              "final_executions": 300,
+              "fills_inside_offered_window": 300,
+              "scheduler_drops": 0,
+              "responses": {
+                "ACKNOWLEDGED": 300
+              },
+              "stream_errors": [],
+              "start_spread_ms": 0.0,
+              "generator_accounting_pass": true,
+              "observed_window_execution_rate": 5.0,
+              "window_delivery_fraction": 1.0,
+              "all_accepted_final_receipts_pass": true,
+              "window_capacity_pass": true,
+              "ack_ms": {
+                "samples": 300,
+                "p50": 12.108,
+                "p95": 111.222,
+                "p99": 484.243,
+                "p99_9": 776.735
+              },
+              "client_fill_ms": {
+                "samples": 300,
+                "p50": 79.403,
+                "p95": 642.321,
+                "p99": 1339.27,
+                "p99_9": 1539.749
+              },
+              "scheduled_fill_ms": {
+                "samples": 300,
+                "p50": 82.721,
+                "p95": 651.185,
+                "p99": 1339.869,
+                "p99_9": 1565.197
+              },
+              "dispatch_delay_ms": {
+                "samples": 300,
+                "p50": 3.103,
+                "p95": 9.328,
+                "p99": 25.448,
+                "p99_9": 47.862
+              }
+            }
+          },
+          {
+            "location": "IMQL5E",
+            "symbol": "BTC004USDT",
+            "market_indicator": "4",
+            "native_sessions": 1,
+            "order_partition": "P115",
+            "trade_partition": "P053",
+            "order_primary": "OrderSvrA",
+            "trade_primary": "TradeSvrA",
+            "measurement": {
+              "planned_orders": 300,
+              "sent_orders": 300,
+              "final_executions": 300,
+              "fills_inside_offered_window": 300,
+              "scheduler_drops": 0,
+              "responses": {
+                "ACKNOWLEDGED": 300
+              },
+              "stream_errors": [],
+              "start_spread_ms": 0.0,
+              "generator_accounting_pass": true,
+              "observed_window_execution_rate": 5.0,
+              "window_delivery_fraction": 1.0,
+              "all_accepted_final_receipts_pass": true,
+              "window_capacity_pass": true,
+              "ack_ms": {
+                "samples": 300,
+                "p50": 15.135,
+                "p95": 119.905,
+                "p99": 450.775,
+                "p99_9": 575.623
+              },
+              "client_fill_ms": {
+                "samples": 300,
+                "p50": 82.938,
+                "p95": 820.034,
+                "p99": 1444.491,
+                "p99_9": 1546.459
+              },
+              "scheduled_fill_ms": {
+                "samples": 300,
+                "p50": 88.082,
+                "p95": 841.85,
+                "p99": 1469.896,
+                "p99_9": 1548.638
+              },
+              "dispatch_delay_ms": {
+                "samples": 300,
+                "p50": 3.506,
+                "p95": 9.88,
+                "p99": 21.816,
+                "p99_9": 35.373
+              }
+            }
+          },
+          {
+            "location": "JFRR7M",
+            "symbol": "BTC004USDT",
+            "market_indicator": "4",
+            "native_sessions": 1,
+            "order_partition": "P162",
+            "trade_partition": "P174",
+            "order_primary": "OrderSvrB",
+            "trade_primary": "TradeSvrB",
+            "measurement": {
+              "planned_orders": 300,
+              "sent_orders": 300,
+              "final_executions": 300,
+              "fills_inside_offered_window": 300,
+              "scheduler_drops": 0,
+              "responses": {
+                "ACKNOWLEDGED": 300
+              },
+              "stream_errors": [],
+              "start_spread_ms": 0.0,
+              "generator_accounting_pass": true,
+              "observed_window_execution_rate": 5.0,
+              "window_delivery_fraction": 1.0,
+              "all_accepted_final_receipts_pass": true,
+              "window_capacity_pass": true,
+              "ack_ms": {
+                "samples": 300,
+                "p50": 12.052,
+                "p95": 144.91,
+                "p99": 525.258,
+                "p99_9": 611.708
+              },
+              "client_fill_ms": {
+                "samples": 300,
+                "p50": 77.985,
+                "p95": 729.834,
+                "p99": 1344.666,
+                "p99_9": 1481.209
+              },
+              "scheduled_fill_ms": {
+                "samples": 300,
+                "p50": 81.808,
+                "p95": 731.472,
+                "p99": 1345.891,
+                "p99_9": 1489.12
+              },
+              "dispatch_delay_ms": {
+                "samples": 300,
+                "p50": 3.529,
+                "p95": 9.914,
+                "p99": 19.925,
+                "p99_9": 50.946
+              }
+            }
+          },
+          {
+            "location": "M50UNR",
+            "symbol": "BTC004USDT",
+            "market_indicator": "4",
+            "native_sessions": 1,
+            "order_partition": "P038",
+            "trade_partition": "P078",
+            "order_primary": "OrderSvrA",
+            "trade_primary": "TradeSvrA",
+            "measurement": {
+              "planned_orders": 300,
+              "sent_orders": 300,
+              "final_executions": 300,
+              "fills_inside_offered_window": 300,
+              "scheduler_drops": 0,
+              "responses": {
+                "ACKNOWLEDGED": 300
+              },
+              "stream_errors": [],
+              "start_spread_ms": 0.0,
+              "generator_accounting_pass": true,
+              "observed_window_execution_rate": 5.0,
+              "window_delivery_fraction": 1.0,
+              "all_accepted_final_receipts_pass": true,
+              "window_capacity_pass": true,
+              "ack_ms": {
+                "samples": 300,
+                "p50": 15.47,
+                "p95": 93.749,
+                "p99": 332.695,
+                "p99_9": 487.527
+              },
+              "client_fill_ms": {
+                "samples": 300,
+                "p50": 87.301,
+                "p95": 868.012,
+                "p99": 1323.465,
+                "p99_9": 1351.949
+              },
+              "scheduled_fill_ms": {
+                "samples": 300,
+                "p50": 91.558,
+                "p95": 883.84,
+                "p99": 1327.441,
+                "p99_9": 1366.5
+              },
+              "dispatch_delay_ms": {
+                "samples": 300,
+                "p50": 2.939,
+                "p95": 9.517,
+                "p99": 28.061,
+                "p99_9": 42.444
+              }
+            }
+          },
+          {
+            "location": "S5QLBV",
+            "symbol": "BTC004USDT",
+            "market_indicator": "4",
+            "native_sessions": 1,
+            "order_partition": "P072",
+            "trade_partition": "P041",
+            "order_primary": "OrderSvrA",
+            "trade_primary": "TradeSvrA",
+            "measurement": {
+              "planned_orders": 300,
+              "sent_orders": 300,
+              "final_executions": 300,
+              "fills_inside_offered_window": 300,
+              "scheduler_drops": 0,
+              "responses": {
+                "ACKNOWLEDGED": 300
+              },
+              "stream_errors": [],
+              "start_spread_ms": 0.0,
+              "generator_accounting_pass": true,
+              "observed_window_execution_rate": 5.0,
+              "window_delivery_fraction": 1.0,
+              "all_accepted_final_receipts_pass": true,
+              "window_capacity_pass": true,
+              "ack_ms": {
+                "samples": 300,
+                "p50": 13.612,
+                "p95": 77.434,
+                "p99": 332.455,
+                "p99_9": 446.531
+              },
+              "client_fill_ms": {
+                "samples": 300,
+                "p50": 85.972,
+                "p95": 792.609,
+                "p99": 1245.327,
+                "p99_9": 1300.081
+              },
+              "scheduled_fill_ms": {
+                "samples": 300,
+                "p50": 90.445,
+                "p95": 801.107,
+                "p99": 1252.288,
+                "p99_9": 1312.132
+              },
+              "dispatch_delay_ms": {
+                "samples": 300,
+                "p50": 2.803,
+                "p95": 8.854,
+                "p99": 18.312,
+                "p99_9": 87.891
+              }
+            }
+          }
+        ],
+        "queues_by_order_partition": {
+          "P193": 1,
+          "P041": 1,
+          "P042": 1,
+          "P169": 1,
+          "P115": 1,
+          "P162": 1,
+          "P038": 1,
+          "P072": 1
+        },
+        "queues_by_trade_partition": {
+          "P155": 1,
+          "P126": 1,
+          "P122": 1,
+          "P057": 1,
+          "P053": 1,
+          "P174": 1,
+          "P078": 1,
+          "P041": 1
+        }
+      },
       "integrity_passed": true,
-      "owner_performance_passed": false
+      "phase_one_performance": {
+        "passed": false,
+        "target_per_second": 1000,
+        "target_p99_ms": 20,
+        "unit": "Actual final trade receipts per second",
+        "checks": {
+          "qualified_window": true,
+          "integrity": true,
+          "sustained_window": true,
+          "all_requests_and_fills_accounted": true,
+          "actual_in_window_final_trade_rate": false,
+          "client_final_receipt_p99": false,
+          "scheduled_final_receipt_p99": false
+        },
+        "observed_per_second": 40.0,
+        "tail_final_receipts_after_window": 0
+      }
     },
-    "same_release_normal_window_pause_log": "/Users/kong/.opentradingcore/mac-demo-20261116-020105/jvm-pauses-epl5p3vg/proof.json"
+    "followthrough_controller": "/Users/kong/.opentradingcore/t554-live-local-followthrough-v3-20261116.json",
+    "matching_matrix_controller": "/Users/kong/.opentradingcore/t554-strict-queue-matrix-20261116.json",
+    "matrix_implementation_commit": "3b3bf5c",
+    "related_checks_executed": 33,
+    "matrix_actual_acceptance_pending": true
   },
   "last_completed_business_performance": {
     "generation": "mac-demo-20261115-232443",
@@ -391,8 +1154,7 @@
     "evidence": "/Users/kong/.opentradingcore/t554-common-point-seek-20261116/scope.json"
   },
   "closed_local_owner_candidate": {
-    "status": "PRIVATE_COMMON_TESTING_NOT_QUALIFIED_NOT_DEPLOYED",
-    "business_jar_unchanged": "3c56fdda4cef4c345dd0ac369e44edbc21be234d84eaa88277b5245940421352",
+    "status": "COMPLETE_COMMON_QUALIFICATION_PASS_DEPLOYED_STRICT_BUSINESS_BASELINE_PASS_OWNER_ACCEPTANCE_PENDING",
     "deployed_jar_regression": {
       "executed": 1,
       "failed": 1,
@@ -414,8 +1176,6 @@
     "qualification_status": "PASS_COMMON_QUALIFICATION_BUSINESS_AND_PERFORMANCE_STILL_REQUIRED",
     "qualification": "/Users/kong/.opentradingcore/t554-common-candidates/20261116-live-local-owner-replay-v3/qualification/state.json",
     "early_fixture_failure_preserved": "/Users/kong/.opentradingcore/t554-common-live-local-owner-published-v1-evidence-20261116/attempt-context.json",
-    "failed_qualification_preserved": "/Users/kong/.opentradingcore/t554-common-candidates/20261116-live-local-owner-replay-v1/qualification/state.json",
-    "failure": "Live recovery triggered, but reopening the already retained authenticated predecessor raised OverlappingFileLockException. No writer admitted; no business deployment.",
     "successor_revision": "4fd04b1",
     "successor_change": "Reuse existing binding.retainedOriginalPhysicalSource during the same original signed predecessor verification/replay; retain OS WAL locks and all grants/fences.",
     "previous_v1_failure": {
@@ -520,7 +1280,7 @@
     },
     "full_qualification_finished_at": "2026-11-15T22:28:27.065622+00:00",
     "physical_seal_sha256": "b6a6fef76e07a1818efdc39aa000d48ce6a5f9ab3bf9db1e8c61614372eb1113",
-    "business_deployed": false,
+    "business_deployed": true,
     "downstream_complete_release_gate": "/Users/kong/.opentradingcore/t554-common-verifications/20261116-live-local-owner-replay-v3/downstream-complete-qualification-readcheck.json"
   },
   "github_recovery_branch_update_20261116": {
@@ -547,7 +1307,8 @@
     "journal": "/Users/kong/.opentradingcore/t554-live-local-followthrough-v3-20261116.json",
     "source": "/Users/kong/.opentradingcore/t554-live-local-followthrough-v3-20261116.py",
     "scope": "Wait for complete exact-JAR qualification; recheck unchanged core source and original generation; sequential strict fresh with retained rollback; ten Robots and native TCP baselines. Stop on any failed integrity stage. Not owner acceptance.",
-    "production_go": false
+    "production_go": false,
+    "matrix_journal": "/Users/kong/.opentradingcore/t554-strict-queue-matrix-20261116.json"
   },
   "future_fault_log_retention": {
     "source": "scripts/roll-mac-demo-voter.py",
@@ -575,9 +1336,160 @@
     "all_volumes_and_active_containers_unchanged_at_shell_cleanup": true,
     "old_image_cache_prune_proof": "/Users/kong/.opentradingcore/t554-old-image-cache-cleanup-7rtf3ib5/proof.json",
     "stopped_shell_cleanup_proof": "/Users/kong/.opentradingcore/t554-retired-stopped-shell-cleanup-y2zyts2t/proof.json",
-    "retired_24_gib_full_backup_status": "IN_PROGRESS_ORIGINAL_NOT_REMOVED",
+    "retired_24_gib_full_backup_status": "PASS_FULL_VERIFIED_BACKUP_RETAINED_OLD_DOCKER_COPY_REMOVED",
     "full_backup_proof": "/Users/kong/.opentradingcore/t554-retired-ready-verified-backup-oodga6sq/proof.json",
-    "owned_wait_queue_held_until_backup_job_resumes_it": true,
-    "business_containers_held_or_restarted_for_archive": false
+    "owned_wait_queue_held_until_backup_job_resumes_it": false,
+    "business_containers_held_or_restarted_for_archive": false,
+    "archive_bytes": 3873558848,
+    "archive_sha256": "03e4ac6259398156bbe8f8350a0987c5200552b42b865965e5047ad999a9c3e2",
+    "archive_full_compare_exit_code": 0,
+    "docker_free_gib_after_verified_archive": 30,
+    "host_free_gib_after_verified_archive": 62,
+    "owned_wait_queue_resumed": true
+  },
+  "historical_runtime_cursors": [
+    {
+      "observed_at": "2026-11-16T05:08:10.895585+08:00",
+      "generation": "/Users/kong/.opentradingcore/mac-demo-20261116-020105",
+      "client_ack_policy": "LOCAL_DURABLE_ASYNC",
+      "common": {
+        "revision": "a02bd2b13c231c8dde228945e6fd716185d71394",
+        "sha256": "3c56fdda4cef4c345dd0ac369e44edbc21be234d84eaa88277b5245940421352",
+        "deployed": true,
+        "verification": "/Users/kong/.opentradingcore/t554-common-verifications/20261116-bounded-async-recovery-waits-native-retry",
+        "qualification_state": "/Users/kong/.opentradingcore/t554-common-candidates/20261116-bounded-async-recovery-waits-native-retry/qualification/state.json",
+        "native_fixture_revision": "c308774f253b8efc02d51756a5c35de6ea69b3ed",
+        "actual_safety_executed_passed": 308,
+        "optional_external_historical_skips": 3,
+        "cold_restart_cases_passed": 4,
+        "native_fault_cases_passed": 16,
+        "complete_256_bidirectional_third_repeated_interrupted_home_passed": true,
+        "equal_wal_pairs": 256,
+        "equal_snapshot_pairs": 256,
+        "full_queue_original_local_head": 65,
+        "full_queue_actual_backup_head": 29,
+        "excluded_unreplicated_local_tail": 36,
+        "unisolated_full_partition_timing_ms": {
+          "a_takeover": 179258,
+          "a_home": 386103,
+          "b_takeover": 175814,
+          "b_home": 250356
+        },
+        "business_recovery_and_performance_accepted": false
+      },
+      "actual_core_nodes": [
+        {
+          "node": "mac-demo-20261116-020105-order-a-hostready",
+          "id": "649cd0675e7d22a88e44098e12ff008fb8275fd6b2baf80a16f4846e67a5db91",
+          "image": "sha256:7077d235f4ddc118a7c9f789a99a78930e8add63439c58ade9b6f8e04ab8d96e",
+          "started_at": "2026-11-15T18:04:36.714219428Z",
+          "actual_common_jar_sha256": "3c56fdda4cef4c345dd0ac369e44edbc21be234d84eaa88277b5245940421352",
+          "runtime_gc_header_g1": true,
+          "runtime_gc_header_target_pause_ms": 10,
+          "options": [
+            "-Dcommon.certified.clientAckPolicy=LOCAL_DURABLE_ASYNC",
+            "-XX:+UseG1GC",
+            "-XX:MaxGCPauseMillis=10",
+            "-Xms128m",
+            "-Xmx1g"
+          ]
+        },
+        {
+          "node": "mac-demo-20261116-020105-order-b-hostready",
+          "id": "4fa48c0f381a0b399b9f6c0213a8d426de4b76141331640dfa0aa60aa608be50",
+          "image": "sha256:7077d235f4ddc118a7c9f789a99a78930e8add63439c58ade9b6f8e04ab8d96e",
+          "started_at": "2026-11-15T18:04:36.716196803Z",
+          "actual_common_jar_sha256": "3c56fdda4cef4c345dd0ac369e44edbc21be234d84eaa88277b5245940421352",
+          "runtime_gc_header_g1": true,
+          "runtime_gc_header_target_pause_ms": 10,
+          "options": [
+            "-Xms128m",
+            "-Xmx1g",
+            "-Dcommon.certified.clientAckPolicy=LOCAL_DURABLE_ASYNC",
+            "-XX:+UseG1GC",
+            "-XX:MaxGCPauseMillis=10"
+          ]
+        },
+        {
+          "node": "mac-demo-20261116-020105-trade-a-hostready",
+          "id": "02b174dd2a30d6c02df54249a2e14500532ce4decff42ae679dbb036453d757b",
+          "image": "sha256:48cd45f73010f3628bc7b2a9d92d964de3eb387cb01798d3df39eadf0364a9d3",
+          "started_at": "2026-11-15T18:04:36.712521219Z",
+          "actual_common_jar_sha256": "3c56fdda4cef4c345dd0ac369e44edbc21be234d84eaa88277b5245940421352",
+          "runtime_gc_header_g1": true,
+          "runtime_gc_header_target_pause_ms": 10,
+          "options": [
+            "-Dcommon.certified.clientAckPolicy=LOCAL_DURABLE_ASYNC",
+            "-XX:+UseG1GC",
+            "-XX:MaxGCPauseMillis=10",
+            "-Xms128m",
+            "-Xmx2g"
+          ]
+        },
+        {
+          "node": "mac-demo-20261116-020105-trade-b-hostready",
+          "id": "5925d045ffc6aa4d9b9fd22a7ecb62e4d9c610f6447b1699c88531f8535bf8c4",
+          "image": "sha256:48cd45f73010f3628bc7b2a9d92d964de3eb387cb01798d3df39eadf0364a9d3",
+          "started_at": "2026-11-15T18:04:36.711333594Z",
+          "actual_common_jar_sha256": "3c56fdda4cef4c345dd0ac369e44edbc21be234d84eaa88277b5245940421352",
+          "runtime_gc_header_g1": true,
+          "runtime_gc_header_target_pause_ms": 10,
+          "options": [
+            "-Dcommon.certified.clientAckPolicy=LOCAL_DURABLE_ASYNC",
+            "-XX:+UseG1GC",
+            "-XX:MaxGCPauseMillis=10",
+            "-Xms128m",
+            "-Xmx2g"
+          ]
+        }
+      ],
+      "current_performance": {
+        "status": "CURRENT_ASYNC_40_LOW_MEMORY_STILL_FAILS_WINDOW_AND_P99_NEW_JFR_HOTSPOTS_IDENTIFIED",
+        "strict_measured_on_this_release": false,
+        "async_measured_on_this_release": true,
+        "pipeline_state": "/Users/kong/.opentradingcore/t554-bounded-waits-sequential-business-v2-20261116.json",
+        "qualified_windows_cannot_overlap_faults_or_diagnostic_attach": true,
+        "native_2": {
+          "evidence": "/Users/kong/.opentradingcore/mac-demo-20261116-020105/distributed-execution-capacity-4973f405.json",
+          "sent_final_in_window": 120,
+          "final_p99_ms": 323.075
+        },
+        "native_40": {
+          "evidence": "/Users/kong/.opentradingcore/mac-demo-20261116-020105/distributed-execution-capacity-36eae3d1.json",
+          "sent_final_in_window": 2400,
+          "final_p99_ms": 1404.298,
+          "scheduled_final_p99_ms": 1425.073,
+          "actual_rate": 40,
+          "maximum_capacity_claimed": false
+        },
+        "place_cancel_evidence": "/Users/kong/.opentradingcore/mac-demo-20261116-020105/order-cancel-capacity-bc519ec8.json",
+        "smaller_client_memory": "Native TCP 40/s actual comparison now running after true-loss audits; no result yet",
+        "jfr_diagnostic": {
+          "measurement": "/Users/kong/.opentradingcore/mac-demo-20261116-020105/distributed-execution-capacity-d9339f2a.json",
+          "qualified_for_performance": false,
+          "summary": "/Users/kong/.opentradingcore/mac-demo-20261116-020105/diagnostic-jfr-48c73ed32b58/window-detailed-summary.json",
+          "all_four_source_voters_unchanged_during_capture": true,
+          "recorded_data_loss_bytes": 0
+        },
+        "followthrough_controller": "/Users/kong/.opentradingcore/t554-accepted-loss-followthrough-v5-20261116.json",
+        "native_40_low_memory": {
+          "evidence": "/Users/kong/.opentradingcore/mac-demo-20261116-020105/distributed-execution-capacity-4c6aa50e.json",
+          "planned_sent_final": 2400,
+          "inside_window": 2341,
+          "tail_after_window": 59,
+          "actual_rate": 39.016666666666666,
+          "client_final_p99_ms": 4414.709,
+          "scheduled_final_p99_ms": 4415.474,
+          "integrity_passed": true,
+          "owner_performance_passed": false
+        },
+        "same_release_normal_window_pause_log": "/Users/kong/.opentradingcore/mac-demo-20261116-020105/jvm-pauses-epl5p3vg/proof.json"
+      }
+    }
+  ],
+  "authorized_qqvideo_exit_20261116": {
+    "status": "NORMAL_EXIT_CONFIRMED",
+    "evidence": "/Users/kong/.opentradingcore/t554-authorized-qqvideo-normal-quit-20261116.json",
+    "sole_performance_causality_claimed": false
   }
 }
