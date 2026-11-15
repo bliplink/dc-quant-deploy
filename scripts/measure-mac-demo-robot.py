@@ -85,10 +85,15 @@ def resources(containers):
         sample = {key: item[key] for key in keys}
         try:
             raw = subprocess.check_output(
-                ["docker", "exec", item["Name"], "cat", "/sys/fs/cgroup/cpu.stat"],
+                ["docker", "exec", item["Name"], "cat", "/sys/fs/cgroup/cpu.stat", "/proc/1/io"],
                 text=True, stderr=subprocess.DEVNULL, timeout=3)
-            sample["cpu_cgroup_stat"] = {key: int(value) for key, value in map(str.split, raw.splitlines())}
+            fields = [line.split() for line in raw.splitlines()]
+            sample["cpu_cgroup_stat"] = {key: int(value) for key, value in fields if not key.endswith(':')}
+            # The four core JVMs are PID 1. Other containers can use an init
+            # wrapper: retain this as PID-1 scope, not whole-container I/O.
+            sample["pid1_io_stat"] = {key[:-1]: int(value) for key, value in fields if key.endswith(':')}
             sample["cpu_cgroup_sampled_at"] = datetime.now(timezone.utc).isoformat()
+            sample["pid1_io_sampled_at"] = sample["cpu_cgroup_sampled_at"]
         except (OSError, ValueError, subprocess.SubprocessError) as failure:
             sample["cpu_cgroup_error"] = type(failure).__name__
         samples.append(sample)
