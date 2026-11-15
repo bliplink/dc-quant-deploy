@@ -1,6 +1,6 @@
 {
-  "observed_at": "2026-11-15T23:13:40.082711+08:00",
-  "status": "PERFORMANCE_NO_GO_NONDRAINING_CERTIFIED_PREFIX_EXACT_P0_RUNNING",
+  "observed_at": "2026-11-15T23:23:14.562689+08:00",
+  "status": "NEW_EXACT_COMMON_COMPLETE_P0_PASS_SOURCE_BUSINESS_BUILD_RUNNING_PERFORMANCE_NO_GO",
   "production_acceptance": "NO_GO",
   "generation": "/Users/kong/.opentradingcore/mac-demo-20261115-213528",
   "client_ack_policy": "LOCAL_DURABLE_ASYNC",
@@ -110,11 +110,12 @@
     "trade_single_node_current_same_jar_pending": true
   },
   "current_maintenance": {
-    "status": "TEN_ROBOTS_NORMAL_STOP_ZERO_PENDING_EXACT_FINANCE_FOR_NEW_COMMON_P0",
+    "status": "TEN_ORIGINAL_ROBOTS_NORMALLY_RESTORED_FINANCIAL_CURSOR_PASS_BUSINESS_BUILD_RUNNING",
     "business_processes_restarted_for_this_common_test": false,
     "normal_stop_controller": "/Users/kong/.opentradingcore/t554-local-reader-p0-controller-v4-20261115.json",
     "financial_cursor": "PASS_FINANCIAL_CURSOR",
-    "settlement_backlog_zero_before_stop": true
+    "settlement_backlog_zero_before_stop": true,
+    "new_build": "/Users/kong/.opentradingcore/mac-demo-build-20261115-available-quorum-reader-qualified"
   },
   "strict_measurements": {
     "order_cancel": {
@@ -677,7 +678,7 @@
     "revision": "550717497462c76453216d7dd7161faec23d1f52",
     "sha256": "2492f6933696a242d39d7dbaa295b046feb9c4ec653f18d9cce5becf6b86428e",
     "deployed": false,
-    "status": "EXACT_JAR_306_SAFETY_FOUR_COLD_NATIVE_COPIED_PREFIX_SUPPLEMENT_PASS_COMPLETE_PHYSICAL_P0_STILL_RUNNING",
+    "status": "COMPLETE_EXACT_COMMON_P0_AND_NATIVE_COPIED_PREFIX_SUPPLEMENT_PASS_P1_BUILD_RUNNING",
     "focused_tests_executed_passed": 50,
     "focused_skips": 0,
     "controller": "/Users/kong/.opentradingcore/t554-local-reader-p0-controller-v4-20261115.json",
@@ -689,7 +690,14 @@
     "native_copied_prefix_supplement": "/Users/kong/.opentradingcore/t554-common-nondraining-quorum-read-native-supplement-20261115/state.json",
     "supplement_fixture_revision": "bbefaa1",
     "supplement_production_source_unchanged": true,
-    "full_physical_p0_passed": false
+    "full_physical_p0_passed": true,
+    "qualification_summary": "/Users/kong/.opentradingcore/t554-common-verifications/20261115-225159/complete-qualification-summary.json",
+    "observed_unisolated_functional_timings_ms": {
+      "a_failover": 171797,
+      "a_home": 296233,
+      "b_failover": 163457,
+      "b_home": 241419
+    }
   },
   "gc_readonly_diagnostic": {
     "evidence": "/Users/kong/.opentradingcore/mac-demo-20261115-213528/readonly-gc-log-diagnostic-after-load-20261115/capture.json",
@@ -797,5 +805,17 @@
     "end_to_end_new_wrapper_full_run_claimed": false,
     "regression_tests_passed": 4,
     "test_scope": "Real JUnit pass/fail/ignore/assumption handling and actual entry failure propagation; no live business faults in tool tests"
+  },
+  "old_40_per_second_service_log_diagnostic": {
+    "evidence": "/Users/kong/.opentradingcore/mac-demo-20261115-213528/native-40-service-stage-diagnostic-20261115/summary-normalized-categories.json",
+    "paired_clients": 2400,
+    "from": "Trade UpdateOrderHandler Newing log",
+    "to": "Order GwServerResource Trade log",
+    "service_log_interval_p50_ms": 2204.213,
+    "service_log_interval_p99_ms": 12455.623,
+    "client_final_receipt_p99_ms": 12623.652,
+    "scope": "Read-only original window; first logger/category occurrence per client. Log timestamps are diagnostic, not complete tracing or a new pressure window. CGLIB suffix normalized across the two physical Order JVMs.",
+    "business_mutations": false,
+    "jvm_attach": false
   }
 }
