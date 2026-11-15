@@ -9,6 +9,7 @@ from decimal import Decimal
 import fcntl
 import hashlib
 import json
+import math
 import os
 from pathlib import Path
 import re
@@ -25,6 +26,24 @@ CANCEL, CAPACITY, MEASURE = (EXEC[key] for key in ('CANCEL', 'CAPACITY', 'MEASUR
 NATIVE = runpy.run_path(str(HERE / 'mac-demo-native-tcp.py'))
 RPO = runpy.run_path(str(HERE / 'verify-mac-demo-async-rpo.py'))
 PERFORMANCE = runpy.run_path(str(HERE / 'mac-demo-performance-target.py'))
+
+
+def validate_offered_load(streams, rate, seconds):
+    """Keep every ordinary authenticated session below the existing gateway quota.
+
+    Sixteen independent sessions can offer 1,040/s at 65/s each; using
+    eight sessions at 130/s would test admission rejection instead of capacity.
+    The session cap includes headroom below the current 100 RPC/s profile.
+    """
+    if (streams not in (2, 4, 8, 16) or not math.isfinite(rate)
+            or not 0 < rate <= 80 or not 60 <= seconds <= 120
+            or rate * seconds > 10000):
+        raise ValueError('Use 2/4/8/16 independent streams, at most 80 orders/s per session, '
+                         '60–120 seconds and at most 10000 orders per funded stream')
+    return {'sessions': streams, 'per_session_offered_requests_per_second': rate,
+            'per_session_request_budget_per_second': 80,
+            'gateway_profile_changed': False,
+            'total_offered_executions_per_second': streams * rate}
 
 
 def reviewed_replication_lanes(root):
@@ -122,14 +141,15 @@ def projected_stream(stream):
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('generation', type=Path)
-    parser.add_argument('--streams', type=int, choices=(2, 4, 8), default=4)
+    parser.add_argument('--streams', type=int, choices=(2, 4, 8, 16), default=4)
     parser.add_argument('--rate-per-stream', type=float, default=1)
     parser.add_argument('--seconds', type=int, default=60)
     parser.add_argument('--require-performance-target', action='store_true')
     args = parser.parse_args()
-    if not (0 < args.rate_per_stream <= 250 and 60 <= args.seconds <= 120
-            and args.rate_per_stream * args.seconds <= 10000):
-        parser.error('Use 0–250 orders/s per stream, 60–120 seconds and at most 10000 orders per funded stream')
+    try:
+        admission_budget = validate_offered_load(args.streams, args.rate_per_stream, args.seconds)
+    except ValueError as error:
+        parser.error(str(error))
     os.umask(0o077)
     root = args.generation.resolve(strict=True)
     sdk = Path(os.environ.get('MAC_DEMO_SDK_ROOT', str(
@@ -142,6 +162,7 @@ def main():
               'scope': 'Independent funded tenants, distinct Order and Trade partitions, both A/B primaries; original live Robot background',
               'target_streams': args.streams, 'target_orders_per_second': args.streams * args.rate_per_stream,
               'target_seconds': args.seconds, 'streams': [], 'excluded_setup': [],
+              'native_session_admission_budget': admission_budget,
               'measurement_source_sha256': hashlib.sha256(Path(__file__).read_bytes()).hexdigest(),
               'native_wrapper_sha256': hashlib.sha256((HERE / 'mac-demo-native-tcp.py').read_bytes()).hexdigest(),
               'started_at': datetime.now(timezone.utc).isoformat()}

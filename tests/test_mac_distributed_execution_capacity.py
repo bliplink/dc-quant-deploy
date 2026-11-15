@@ -10,6 +10,16 @@ DRIVER = runpy.run_path(str(Path(__file__).resolve().parents[1] /
 
 
 class DistributedReceiptTest(unittest.TestCase):
+    def test_owner_thousand_target_uses_sufficient_normal_sessions(self):
+        budget = DRIVER['validate_offered_load'](16, 65, 60)
+        self.assertEqual(1040, budget['total_offered_executions_per_second'])
+        self.assertFalse(budget['gateway_profile_changed'])
+        # This previously permitted plan exceeds the real per-session quota.
+        # Reject it before tenant creation, funding, or any pressure is sent.
+        for rate in (130, float('inf'), float('nan'), 0):
+            with self.subTest(rate=rate), self.assertRaises(ValueError):
+                DRIVER['validate_offered_load'](8, rate, 60)
+
     def streams(self):
         streams = []
         for i, side in enumerate('AB'):
