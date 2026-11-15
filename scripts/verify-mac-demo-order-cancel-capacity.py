@@ -393,8 +393,13 @@ def main():
                             price = str((reference / 2).quantize(Decimal("1"), rounding=ROUND_DOWN))
                             phase = {"mode": mode, "symbol": symbol, "location": location,
                                      "concurrency": concurrency, "price": price,
-                                     "started_at": datetime.now(timezone.utc).isoformat()}
+                                     "started_at": datetime.now(timezone.utc).isoformat(),
+                                     "control_generation_before": control_before,
+                                     "balances_before": before}
                             report["phases"].append(phase)
+                            # Keep the financial baseline even if the later
+                            # physical-control check interrupts reconciliation.
+                            output.write_text(json.dumps(report, indent=2) + "\n")
                             prefix = f"T554CC-{run}-{mode}-{concurrency}"
                             begun = time.monotonic()
                             deadline = begun + args.seconds
