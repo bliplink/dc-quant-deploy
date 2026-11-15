@@ -1,6 +1,6 @@
 {
-  "observed_at": "2026-11-15T11:42:43.499787",
-  "status": "EXACT_COMBINED_COMMON_P0_AND_RETAINED_DATA_FUNCTIONAL_PASS_REAL_NATIVE_LOAD_IN_PROGRESS",
+  "observed_at": "2026-11-15T04:02:49.144259+00:00",
+  "status": "EXACT_COMMON_FUNCTIONAL_PASS_PERFORMANCE_NO_GO_NATIVE_RETEST_STARTED",
   "production_acceptance": "NO_GO",
   "generation": "mac-demo-20261115-065831",
   "original_volumes_preserved": true,
@@ -157,7 +157,7 @@
     "Normal strict Common path is serial: three peer request/response exchanges; source has seven file/directory force calls and replica five, per singleton Common commit. Physical writer does not yet implement real multi-command group commit. This is a structural performance limit, not a measured production throughput formula."
   ],
   "application_data_or_credentials_included": false,
-  "current_maintenance": "Complete. Original ten Robots normally RUNNING, no COW/du/storage maintenance overlaps qualified pressure.",
+  "current_maintenance": "Verified closed/inactive MySQL binlog archiving complete; ten original Robots resuming by authenticated Manager. No archive or directory scan overlaps new native windows.",
   "ordinary_logging_layout": {
     "deploy_source_revision": "b9c800d",
     "four_voter_files_installed": true,
@@ -222,7 +222,10 @@
     "unused_old_zookeeper_fixture_log_volumes_archived_and_reclaimed": 6,
     "compressed_zk_archive_bytes": 402139031,
     "all_archive_contents_compared_to_unchanged_originals_before_reclaim": true,
-    "all_current_and_rollback_business_volumes_retained": true
+    "all_current_and_rollback_business_volumes_retained": true,
+    "closed_active_mysql_binary_logs_full_gzip_readback_then_normal_purge": 4,
+    "retired_mysql_binary_logs_losslessly_archived": 3,
+    "host_free_after_maintenance_approx_gib": 6.0
   },
   "previous_version_measurements_99a91b9": {
     "background": "Original ten Robots; same volumes and images. Observations are not isolated causal before/after comparisons.",
@@ -282,8 +285,31 @@
     }
   },
   "current_version_measurements": {
-    "status": "FIVE_MINUTE_ORIGINAL_TEN_ROBOT_STEADY_IN_PROGRESS_NATIVE_WINDOWS_PENDING",
+    "status": "STRICT_NATIVE_BASELINE_AND_CANCEL_RETEST_IN_PROGRESS",
     "common_revision": "4f28c95245387a2e18f0afe6d2b1bc816f6484ba",
-    "native_capacity_or_latency_improvement_claimed": false
+    "native_capacity_or_latency_improvement_claimed": false,
+    "original_steady_report_latency_invalidated": true,
+    "reason": "Logger marker expected caller line numbers; original report falsely passed with zero ingress/paired samples. Fixed marker and require finite paired samples for every requested tenant. Original report retained with invalidation marker.",
+    "independent_original_window_remeasurement": {
+      "quotes": 5743,
+      "tape_requests": 774,
+      "filled_executions": 772,
+      "paired_samples": 772,
+      "paired_tenants": 10,
+      "service_ingress_to_filled_publish_ms": {
+        "p50": 93.92,
+        "p95": 279.054,
+        "p99": 1075.246,
+        "p99_9": 3375.086
+      },
+      "scope": "Retained logs from original five-minute window; service-to-service latency, not full client round trip or a controlled before/after comparison. Window-edge requests are not a data-loss finding.",
+      "control_generation": {
+        "order": 26,
+        "trade": 58
+      },
+      "max_completed_jvm_stop_ms": 149.3985
+    },
+    "first_native_attempt": "ADMISSION_NO_GO_BEFORE_ANY_SETUP_OR_PRESSURE_LOW_HOST_DISK",
+    "measurement_regression_tests_passed": 10
   }
 }
