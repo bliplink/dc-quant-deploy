@@ -1,5 +1,5 @@
 {
-  "observed_at": "2026-11-15T10:22:54.553478",
+  "observed_at": "2026-11-15T10:52:03.597626",
   "status": "EXACT_COMMON_FUNCTIONAL_PASS_REAL_LOAD_PHYSICAL_ACK_TIMEOUT_PERFORMANCE_AND_STABILITY_NO_GO",
   "production_acceptance": "NO_GO",
   "generation": "mac-demo-20261115-065831",
@@ -197,20 +197,28 @@
   },
   "current_maintenance": "Original ten Robots normally STOPPED after storage gate. Original business and rollback data retained. No unprofiled pressure started below the 4 GiB storage guard.",
   "candidate_not_deployed": {
-    "common_revision": "b1214be",
-    "common_jar_sha256": "a5f40512f9e1a17a9f96d473c6737d9fbed7ea716f4c7419584c2a67171cd0b0",
-    "change": "Reuse one exact canonical immutable manifest parse; no cached authorization, grant or signature result.",
-    "targeted_tests": 36,
-    "full_safety_tests": 256,
-    "large_genesis_72_mib_under_96_mib_heap": "PASS",
+    "common_revision": "4f28c95245387a2e18f0afe6d2b1bc816f6484ba",
+    "common_jar_sha256": "71b4ce7dac4b2a51fe134a694f9f9f1c3654c1668f89f92f20bf731096ed264d",
+    "changes": [
+      "Reuse exact immutable canonical manifest parses.",
+      "Use separate bounded server executors for the existing cold recovery connection and physical durability connections, preserving per-channel wire order."
+    ],
+    "transport_and_framing_tests": 11,
+    "full_safety_tests": "RUNNING_EXPECTED_261",
     "full_physical_and_cold_home": "RUNNING_NOT_YET_QUALIFIED",
-    "deployed": false
+    "deployed": false,
+    "previous_parse_only_candidate": {
+      "revision": "b1214be",
+      "safety_tests_passed": 256,
+      "all_four_cold_cases_passed": true,
+      "full_p0": "CANCELLED_SUPERSEDED_BEFORE_COMPLETION_NOT_QUALIFIED"
+    }
   },
   "ordinary_logging_layout": {
     "deploy_source_revision": "b9c800d",
     "four_voter_files_installed": true,
     "same_processes_and_restart_counts": true,
-    "runtime_reload": "TO_BE_OBSERVED_UNDER_NORMAL_TRAFFIC",
+    "runtime_reload": "OBSERVED_ALL_FOUR_NORMAL_LOG_STREAMS_NEW_CATEGORY_LAYOUT_NO_OLD_CALLER_LINE_SUFFIX",
     "change": "Ordinary layout caller class+line replaced with logger category. Same log levels, messages, appenders and volume/rotation configuration.",
     "tests": 19
   },
@@ -241,5 +249,33 @@
       "trade_control_after_recovery": 58
     },
     "unprofiled_followup": "BLOCKED_BEFORE_SENDING_BY_STORAGE_GUARD"
+  },
+  "bounded_jvm_pause_observation": {
+    "source_revision": "b73ac85",
+    "runtime_deployed": false,
+    "java8_flags_accepted_in_same_image": true,
+    "dated_pause_records_observed_in_offline_process": true,
+    "rotation_files": 5,
+    "max_file_mib": 10,
+    "diagnostic_children_options_unchanged": true,
+    "heap_gc_algorithm_ack_unchanged": true
+  },
+  "confirmed_common_executor_finding": {
+    "old_reproduction": "One blocked cold recovery TCP request caused only 7 of 8 healthy WAL stripes to finish, despite idle durability executors.",
+    "new_regressions_passed": 11,
+    "coverage": [
+      "All 8 WAL stripes and 8 custody control stripes complete while cold read remains blocked.",
+      "Legacy mixed TCP connection retains response/frame order.",
+      "Header peeking is bounded, non-consuming and does not replace full validation."
+    ],
+    "qualification": "Exact combined Common complete P0 is pending; no production stability or performance closure claimed."
+  },
+  "storage_maintenance": {
+    "unused_generated_fixture_runs_archived": 39,
+    "retired_generated_fixture_runs_archived": 31,
+    "unused_old_zookeeper_fixture_log_volumes_archived_and_reclaimed": 6,
+    "compressed_zk_archive_bytes": 402139031,
+    "all_archive_contents_compared_to_unchanged_originals_before_reclaim": true,
+    "all_current_and_rollback_business_volumes_retained": true
   }
 }
