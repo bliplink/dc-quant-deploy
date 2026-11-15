@@ -1,5 +1,5 @@
 {
-  "observed_at": "2026-11-15T20:15:14.937940+08:00",
+  "observed_at": "2026-11-15T20:42:42.820557+08:00",
   "status": "STRICT_AND_ASYNC_NATIVE_BASELINES_PASS_PERFORMANCE_NO_GO_BUSINESS_FAULT_GATES_RUNNING",
   "production_acceptance": "NO_GO",
   "generation": "mac-demo-20261115-180803",
@@ -1033,7 +1033,18 @@
     "per_partition_pending_max_bytes": 4194304,
     "process_pending_payload_budget_bytes": 33554432,
     "native_64_ack_catchup_passed_before_freeze": true,
-    "native_full_queue_primary_crash_special_case_pending": true
+    "native_full_queue_primary_crash_special_case_pending": true,
+    "exact_jar_safety_executed_passed": 305,
+    "exact_jar_native_15_passed": true,
+    "exact_jar_cold_4_passed": true,
+    "exact_jar_both_directions_256_pairs_passed": true,
+    "exact_jar_complete_p0_still_running": true,
+    "observed_unisolated_functional_timings_ms": {
+      "a_failover": 166689,
+      "a_home": 286479,
+      "b_failover": 165256,
+      "b_home": 238964
+    }
   },
   "async_business_fault_latest": {
     "rpo_case": "async-rpo-409daee5",
@@ -1068,5 +1079,22 @@
     "errors_drops_missing_or_incomplete": "Must remain visible and prevent performance acceptance",
     "current_production_acceptance": "NO_GO",
     "required": true
+  },
+  "additional_retired_generation_cleanup": {
+    "generation": "mac-demo-20261115-065831",
+    "stopped_containers_removed": 32,
+    "volumes_removed": 9,
+    "host_data_directories_removed": 2,
+    "running_ids_unchanged": true,
+    "docker_data_disk_available_gib_approx": 46,
+    "docker_data_disk_used_percent": 69,
+    "host_available_gib_approx": 106,
+    "current_two_test_generations_and_unresolved_reference_preserved": true
+  },
+  "cpu_quota_diagnostic": {
+    "source": "/Users/kong/.opentradingcore/t554-existing-native8-cpu-quota-delta-diagnostic-20261115.json",
+    "strict_and_async_8_concurrency_business_container_cgroup_throttled_time_delta_seconds": 0,
+    "scope": "Existing measured windows only; does not rule out all VM scheduling or I/O pressure",
+    "cpu_limit_not_shown_as_direct_bottleneck": true
   }
 }
