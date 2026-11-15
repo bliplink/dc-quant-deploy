@@ -267,6 +267,7 @@ main() {
       python3 "${SCRIPT_DIR}/scripts/build-mac-demo-rpo-fault-tools.py" "$rpo_tools" --linux-image "$rpo_image"
       python3 "${SCRIPT_DIR}/scripts/verify-mac-demo-async-rpo.py" "$1" --tools "$rpo_tools"
       python3 "${SCRIPT_DIR}/scripts/verify-mac-demo-async-reservation-loss.py" "$1" --tools "$rpo_tools"
+      python3 "${SCRIPT_DIR}/scripts/verify-mac-demo-async-reservation-loss.py" "$1" --tools "$rpo_tools" --after-loss match
       ;;
     verify-ha)
       [[ "$#" -ge 2 && "$#" -le 4 && "$2" =~ ^(term|kill)$ && "${3:-A}" =~ ^[AB]$ ]] ||

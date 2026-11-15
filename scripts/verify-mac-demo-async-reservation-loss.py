@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Verify normal cancellation after a genuinely unreplicated Trade reservation is lost."""
+"""Verify cancellation or signed match readmission after an actual lost reservation."""
 import argparse
 import base64
 from datetime import datetime, timezone
@@ -76,11 +76,54 @@ def terminal_cancel_mutations(location, order_id):
         "AND source_type='CANCEL_OPEN_PREPARED' ORDER BY source_epoch,journal_seq,mutation_index")
 
 
+def require_readmitted_reservation(rows, partition, epoch):
+    if (len(rows) != 4 or len({tuple(row[:3]) for row in rows}) != 1
+            or rows[0][0] != partition or int(rows[0][1]) != epoch
+            or {(row[3], row[4]) for row in rows} != {
+                ('ACCOUNT_BALANCE', 'UPSERT'), ('POSITION', 'UPSERT'),
+                ('OPEN_ORDER', 'UPSERT'), ('DEDUPE_RESULT', 'UPSERT')}):
+        raise RuntimeError('Readmission must use one real new-epoch four-domain reservation commit')
+    receipt = json.loads(next(row[5] for row in rows if row[3] == 'DEDUPE_RESULT'))['result']
+    if receipt.get('info3') != 'LOCAL_DURABLE_ASYNC' or receipt.get('info4') != '/'.join(rows[0][:3]):
+        raise RuntimeError('Readmission receipt differs from its actual LOCAL reservation coordinate')
+    return rows
+
+
+def matched_accounts(traders, symbol, before):
+    result = []
+    for index, trader in enumerate(traders):
+        location, user, token = trader
+        balance = account(trader)
+        position = PRODUCT['ok'](RPO['URL'], 'TradeSvr', 'queryTradePosition',
+            {'securityid': symbol}, token, route_location=location)
+        fees = PRODUCT['readonly_sql']("SELECT COALESCE(SUM(fee),0),COUNT(*),COUNT(fee) "
+            f"FROM dc_orders_execorders WHERE location='{location}' AND user_id='{user}'")
+        side, other = ('Long', 'Short') if index == 0 else ('Short', 'Long')
+        fields = ('LongPosition', 'ShortPosition', 'LongUsedMargin', 'ShortUsedMargin')
+        if not isinstance(position, dict) or any(position.get(key) is None for key in fields):
+            raise RuntimeError('Matched reservation recovery is missing exact live position fields')
+        if (len(fees) != 1 or fees[0][1:] != ['2', '2']
+                or Decimal(balance['Balance']) != Decimal(before[index]['Balance']) + Decimal(fees[0][0])
+                or Decimal(balance['FreezedMargin']) != 0 or Decimal(balance['FreezedCommission']) != 0
+                or Decimal(str(position[side + 'Position'])) != RPO['QUANTITY']
+                or Decimal(str(position[other + 'Position'])) != 0
+                or Decimal(balance['UsedMargin']) <= 0
+                or Decimal(balance['UsedMargin']) != Decimal(str(position['LongUsedMargin']))
+                    + Decimal(str(position['ShortUsedMargin']))):
+            return None
+        # Mark price, floating P&L and observation time are not persisted
+        # position state and can move between LOCAL and Home observations.
+        stable_position = {key: str(Decimal(str(position[key])).normalize()) for key in fields}
+        result.append({'user': user, 'balance': balance, 'position': stable_position, 'execution_fees': fees})
+    return result
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('generation', type=Path)
     parser.add_argument('--tools', type=Path,
                         default=Path.home() / '.opentradingcore/t554-rpo-replication-fault-tools-20261115')
+    parser.add_argument('--after-loss', choices=('cancel', 'match'), default='cancel')
     args = parser.parse_args()
     root = args.generation.resolve(strict=True)
     os.umask(0o077)
@@ -100,10 +143,12 @@ def main():
             raise RuntimeError('The original Robot cohort must be running before this case')
         robot_before = inspect('dc-saas-robotsvr')
         run_id = secrets.token_hex(4)
-        output = root / ('async-reservation-loss-' + run_id)
+        output = root / (('async-reservation-loss-' if args.after_loss == 'cancel'
+                          else 'async-reservation-readmission-') + run_id)
         output.mkdir(mode=0o700)
         record = {'status': 'NO_GO', 'generation': root.name, 'common_release': release,
                   'initial': initial, 'started_at': datetime.now(timezone.utc).isoformat(),
+                  'after_loss': args.after_loss,
                   'driver_sha256': hashlib.sha256(Path(__file__).read_bytes()).hexdigest(),
                   'rpo_helper_sha256': hashlib.sha256((HERE / 'verify-mac-demo-async-rpo.py').read_bytes()).hexdigest()}
 
@@ -119,6 +164,7 @@ def main():
         local = None
         failure = None
         trader = None
+        counterparty = None
         password = secrets.token_urlsafe(24)
         admin_password = secrets.token_urlsafe(24)
         since = None
@@ -129,6 +175,9 @@ def main():
                 if any(zlib.crc32(other.encode()) % 256 == int(partition[1:]) for other in baseline):
                     raise RuntimeError('Controlled reservation partition collides with the active Robot cohort')
                 trader = CANCEL['new_trader'](location, symbol, 'TRADE', run_id, 0, password)
+                if args.after_loss == 'match':
+                    counterparty = CANCEL['new_trader'](location, symbol, 'TRADE', run_id, 1, password)
+                    record['counterparty_account_before'] = account(counterparty)
                 primary_slot = initial['trade'][partition]['primary'][-1]
                 backup_slot = 'B' if primary_slot == 'A' else 'A'
                 epoch = initial['trade'][partition]['epoch']
@@ -248,28 +297,68 @@ def main():
                 record['account_after_certified_takeover_before_cancel'] = account(trader)
                 if record['account_after_certified_takeover_before_cancel'] != record['account_before']:
                     raise RuntimeError('The lost reservation altered recovered funds before cancellation')
-                CANCEL['cancel'](trader, symbol, {'order_id': order['OrderID'], 'client_order_id': client})
-                CANCEL['await_order'](trader, symbol, client, False)
+                if args.after_loss == 'cancel':
+                    CANCEL['cancel'](trader, symbol, {'order_id': order['OrderID'], 'client_order_id': client})
+                    CANCEL['await_order'](trader, symbol, client, False)
 
-                def cancelled_batch():
-                    rows = terminal_cancel_mutations(location, order['OrderID'])
-                    if not rows:
-                        return None
-                    if len(rows) != 2 or {(row[3], row[4]) for row in rows} != {
-                            ('OPEN_ORDER', 'REMOVE'), ('DEDUPE_RESULT', 'UPSERT')}:
-                        raise RuntimeError('Lost reservation cancel did not persist exactly the two terminal mutations')
-                    if len({tuple(row[:3]) for row in rows}) != 1 or int(rows[0][1]) != local[partition]['epoch']:
-                        raise RuntimeError('Cancel mutations do not share the genuine LOCAL commit coordinate')
-                    receipt = json.loads(next(row[5] for row in rows if row[3] == 'DEDUPE_RESULT'))
-                    result = receipt['result']
-                    if result.get('info3') != 'LOCAL_DURABLE_ASYNC' or result.get('info4') != '/'.join(rows[0][:3]):
-                        raise RuntimeError('Persisted cancellation receipt lost its real local durability coordinate')
-                    return rows
+                    def cancelled_batch():
+                        rows = terminal_cancel_mutations(location, order['OrderID'])
+                        if not rows:
+                            return None
+                        if len(rows) != 2 or {(row[3], row[4]) for row in rows} != {
+                                ('OPEN_ORDER', 'REMOVE'), ('DEDUPE_RESULT', 'UPSERT')}:
+                            raise RuntimeError('Lost reservation cancel did not persist exactly the two terminal mutations')
+                        if len({tuple(row[:3]) for row in rows}) != 1 or int(rows[0][1]) != local[partition]['epoch']:
+                            raise RuntimeError('Cancel mutations do not share the genuine LOCAL commit coordinate')
+                        receipt = json.loads(next(row[5] for row in rows if row[3] == 'DEDUPE_RESULT'))
+                        result = receipt['result']
+                        if result.get('info3') != 'LOCAL_DURABLE_ASYNC' or result.get('info4') != '/'.join(rows[0][:3]):
+                            raise RuntimeError('Persisted cancellation receipt lost its real local durability coordinate')
+                        return rows
 
-                record['local_cancel_mutations'] = until(cancelled_batch, 60, 'Terminal cancellation did not reach the certified projection')
-                record['account_after_cancel'] = account(trader)
-                if record['account_after_cancel'] != record['account_before']:
-                    raise RuntimeError('Cancellation fabricated a second financial release')
+                    record['local_cancel_mutations'] = until(cancelled_batch, 60, 'Terminal cancellation did not reach the certified projection')
+                    record['account_after_cancel'] = account(trader)
+                    if record['account_after_cancel'] != record['account_before']:
+                        raise RuntimeError('Cancellation fabricated a second financial release')
+                else:
+                    counterparty = RPO['refresh_trader'](counterparty, run_id, 1, password)
+                    record['matched_after_loss_since'] = datetime.now(timezone.utc).isoformat()
+                    matched_since = datetime.now(timezone.utc)
+                    taker_client = 'T554RESMATCH-' + run_id
+                    record['taker_client_order_id'] = taker_client
+                    save()
+                    # The original resting Order remains authoritative. Only a
+                    # normal new counter-order triggers its original signed match.
+                    RPO['place'](counterparty, symbol, 'Sell', taker_client, 'IOC')
+                    record['readmitted_match_receipts'] = until(lambda: RPO['final_reports'](
+                        order_node, matched_since, {client, taker_client}), 90,
+                        'Lost reservation did not automatically re-enter and settle the real original Order')
+                    record['original_order_match'] = until(lambda: RPO['match_row'](taker_client), 60,
+                        'The settlement has no original durable Order match')
+                    if record['original_order_match']['partition'] != order_partition:
+                        raise RuntimeError('Restored reservation settled a different Order partition')
+                    CANCEL['await_order'](trader, symbol, client, False)
+                    CANCEL['await_order'](counterparty, symbol, taker_client, False)
+
+                    def readmission():
+                        rows = PRODUCT['readonly_sql'](
+                            "SELECT partition_id,source_epoch,journal_seq,entity_type,operation,payload "
+                            "FROM dc_trade_projection_mutation "
+                            f"WHERE location='{location}' AND request_id='{order['OrderID']}:Newing' "
+                            f"AND source_type='NEWING_OPEN_PREPARED' AND source_epoch={local[partition]['epoch']} "
+                            "ORDER BY source_epoch,journal_seq,mutation_index")
+                        return require_readmitted_reservation(rows, partition, local[partition]['epoch']) if rows else None
+
+                    record['readmitted_original_reservation'] = until(readmission, 60,
+                        'The excluded original reservation was not recreated through normal Common persistence')
+                    record['matched_accounts_while_local'] = until(lambda: matched_accounts(
+                        (trader, counterparty), symbol,
+                        (record['account_before'], record['counterparty_account_before'])), 60,
+                        'Exact fees, positions, balance or frozen funds differ after matched readmission')
+                    record['expected_account_after_business'] = record['matched_accounts_while_local'][0]['balance']
+                    record['readmitted_posting_events'] = ROBOT['require_posting_pairs']({
+                        'location': location, 'tape_execution_ids': [x['ExecID']
+                            for x in record['readmitted_match_receipts'].values()], 'local_trade_commits': []})
                 record['local_business_consistent'] = True
                 save()
         except BaseException as error:
@@ -329,10 +418,17 @@ def main():
                         if account(trader) != record['account_before']:
                             raise RuntimeError('Failed-case cleanup altered funds')
                     if (record.get('local_business_consistent')
-                            and record['account_after_home'] != record['account_before']):
+                            and record['account_after_home'] != record.get('expected_account_after_business', record['account_before'])):
                         raise RuntimeError('Original primary return resurrected or released the lost reservation')
-                    if account(trader) != record['account_before']:
-                        raise RuntimeError('Post-recovery normal cleanup did not restore the original account')
+                    if account(trader) != record.get('expected_account_after_business', record['account_before']):
+                        raise RuntimeError('Post-recovery normal cleanup changed the exact expected account')
+                    if args.after_loss == 'match' and record.get('local_business_consistent'):
+                        counterparty = RPO['refresh_trader'](counterparty, run_id, 1, password)
+                        checked = matched_accounts((trader, counterparty), record['symbol'],
+                            (record['account_before'], record['counterparty_account_before']))
+                        if checked != record['matched_accounts_while_local']:
+                            raise RuntimeError('Original primary return changed readmitted match fees or positions')
+                        record['matched_accounts_after_home'] = checked
                     code, financial, checks = CAPACITY['reconcile_financial_cursor']()
                     record.update(financial_cursor=financial, financial_checks=checks)
                     if code:
@@ -359,7 +455,9 @@ def main():
                         record['restart_policy_failure'] = type(error).__name__ + ': ' + str(error)
                         failure = failure or error
             if failure is None and record.get('local_business_consistent') and record.get('physical_pairs') == 512:
-                record['status'] = 'UNREPLICATED_RESERVATION_LOSS_NORMAL_CANCEL_FUNDS_AND_HOME_PASS'
+                record['status'] = ('UNREPLICATED_RESERVATION_LOSS_NORMAL_CANCEL_FUNDS_AND_HOME_PASS'
+                    if args.after_loss == 'cancel' else
+                    'UNREPLICATED_RESERVATION_LOSS_NORMAL_MATCH_READMISSION_FUNDS_AND_HOME_PASS')
             record['finished_at'] = datetime.now(timezone.utc).isoformat()
             save()
         print('[mac-demo reservation loss]', record['status'], output, flush=True)

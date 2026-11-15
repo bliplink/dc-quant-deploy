@@ -17,6 +17,37 @@ SPEC.loader.exec_module(LOSS)
 
 
 class ReservationLossPreflightTest(unittest.TestCase):
+    def readmission_rows(self):
+        receipt = json.dumps({'result': {'info3': 'LOCAL_DURABLE_ASYNC', 'info4': 'P079/5/1'}})
+        return [['P079', '5', '1', kind, 'UPSERT', receipt if kind == 'DEDUPE_RESULT' else '{}']
+                for kind in ('ACCOUNT_BALANCE', 'POSITION', 'OPEN_ORDER', 'DEDUPE_RESULT')]
+
+    def test_readmission_requires_all_four_mutations_at_one_actual_local_coordinate(self):
+        rows = self.readmission_rows()
+        self.assertEqual(rows, LOSS.require_readmitted_reservation(rows, 'P079', 5))
+        candidates = [rows[:-1], rows + rows, [row[:] for row in rows], [row[:] for row in rows]]
+        candidates[2][0][1] = '4'
+        candidates[3][-1][5] = json.dumps({'result': {'info3': 'STRICT_QUORUM', 'info4': 'P079/5/1'}})
+        for bad in candidates:
+            with self.subTest(rows=bad), self.assertRaises(RuntimeError):
+                LOSS.require_readmitted_reservation(bad, 'P079', 5)
+
+    def test_matched_recovery_checks_both_accounts_exact_fees_no_freeze_and_position_margin(self):
+        traders = [('ABC123', 'buyer', 'fixture'), ('ABC123', 'seller', 'fixture')]
+        before = [{'Balance': '10000'}, {'Balance': '10000'}]
+        balance = {'Balance': '9999.98', 'UsedMargin': '9', 'FreezedMargin': '0', 'FreezedCommission': '0'}
+        positions = [dict(LongPosition='.001', ShortPosition='0', LongUsedMargin='9', ShortUsedMargin='0'),
+                     dict(LongPosition='0', ShortPosition='.001', LongUsedMargin='0', ShortUsedMargin='9')]
+        def verify(current):
+            with patch.object(LOSS, 'account', return_value=current), \
+                    patch.dict(LOSS.PRODUCT, ok=Mock(side_effect=positions),
+                               readonly_sql=Mock(return_value=[['-.02', '2', '2']])):
+                return LOSS.matched_accounts(traders, 'BTC004USDT', before)
+        self.assertEqual(2, len(verify(balance)))
+        for key, value in [('Balance', '10000'), ('UsedMargin', '8'), ('FreezedMargin', '9')]:
+            with self.subTest(field=key):
+                self.assertIsNone(verify(dict(balance, **{key: value})))
+
     def reservation_frame(self, request='1234567890123456789:Newing', user='fixture-user'):
         batch = {'location': 'ABC123', 'requestId': request, 'sourceType': 'NEWING_OPEN_PREPARED',
                  'mutations': [{'entityType': 'OPEN_ORDER', 'operation': 'UPSERT',
@@ -83,6 +114,21 @@ class ReservationLossPreflightTest(unittest.TestCase):
         with patch.dict(LOSS.PRODUCT, ok=Mock(return_value={'Balance': '10000'})):
             with self.assertRaisesRegex(RuntimeError, 'missing an exact financial field'):
                 LOSS.account(('TENANT', 'USER', 'in-memory-fixture-session'))
+
+    def test_matched_readmission_also_refuses_strict_mode_before_any_mutation(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary) / 'mac-demo-20261116-000000'
+            root.mkdir()
+            customer = Mock(side_effect=AssertionError('A business mutation was reached'))
+            with patch.dict(LOSS.RPO['FRESH'], LOCAL=Path(temporary)), \
+                    patch.dict(LOSS.CAPACITY, require_strict_demo=Mock(), common_release_identity=lambda root: {
+                        'client_ack_policy': 'STRICT_QUORUM'}), \
+                    patch.dict(LOSS.PRODUCT, ok=customer), \
+                    patch.object(sys, 'argv', [str(SCRIPT), str(root), '--after-loss', 'match']):
+                with self.assertRaisesRegex(RuntimeError, 'normal dual-node asynchronous'):
+                    LOSS.main()
+            customer.assert_not_called()
+            self.assertEqual([], list(root.iterdir()))
 
 
 if __name__ == '__main__':
