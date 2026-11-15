@@ -46,6 +46,12 @@ class ReservationLossPreflightTest(unittest.TestCase):
         a = [['P079', '5', '1', 'DEDUPE_RESULT', 'UPSERT', '{"a":1,"b":2}']]
         b = [['P079', '5', '1', 'DEDUPE_RESULT', 'UPSERT', '{ "b": 2, "a": 1 }']]
         self.assertEqual(LOSS.semantic_mutations(a), LOSS.semantic_mutations(b))
+        a[0][5], b[0][5] = '{"balance":9007199254740992.1}', '{"balance":9007199254740992.2}'
+        self.assertNotEqual(LOSS.semantic_mutations(a), LOSS.semantic_mutations(b))
+        a[0][5], b[0][5] = '{"balance":9.0}', '{"balance":9}'
+        self.assertEqual(LOSS.semantic_mutations(a), LOSS.semantic_mutations(b))
+        a[0][5], b[0][5] = '{"balance":1}', '{"balance":true}'
+        self.assertNotEqual(LOSS.semantic_mutations(a), LOSS.semantic_mutations(b))
         b[0][5] = '{"a":1,"b":3}'
         self.assertNotEqual(LOSS.semantic_mutations(a), LOSS.semantic_mutations(b))
         a = [['P079', '5', '1', 'OPEN_ORDER', 'REMOVE', None]]

@@ -130,10 +130,20 @@ def accepted_mutations(text, sha, partition, epoch, location, user, order_id, ac
 
 
 def semantic_mutations(rows):
+    def canonical(value):
+        if isinstance(value, dict):
+            return ('OBJECT', tuple(sorted((key, canonical(item)) for key, item in value.items())))
+        if isinstance(value, list):
+            return ('ARRAY', tuple(canonical(item) for item in value))
+        if isinstance(value, Decimal):
+            return ('NUMBER', value)
+        return (type(value).__name__, value)
+
     def payload(row):
         if row[5] is None or row[5] == 'NULL':
-            return 'null'
-        return json.dumps(json.loads(row[5]), sort_keys=True)
+            return canonical(None)
+        parsed = json.loads(row[5], parse_float=Decimal, parse_int=Decimal)
+        return canonical(parsed)
     return sorted((tuple(row[:5]), payload(row)) for row in rows)
 
 
