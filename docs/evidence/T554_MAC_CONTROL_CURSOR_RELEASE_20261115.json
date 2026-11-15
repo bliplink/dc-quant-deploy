@@ -1,78 +1,9 @@
 {
-  "observed_at": "2026-11-16T01:59:43.886297+08:00",
-  "status": "COMMON_BOUNDED_WAITS_FULL_P0_PASS_P1_BUILDING_BUSINESS_AND_PERFORMANCE_NO_GO",
+  "observed_at": "2026-11-16T02:12:46.959423+08:00",
+  "status": "BOUNDED_WAIT_COMMON_FULL_P0_AND_NEW_BUSINESS_BASELINE_PASS_TEN_ROBOT_STEADY_RUNNING",
   "production_acceptance": "NO_GO",
-  "generation": "/Users/kong/.opentradingcore/mac-demo-20261115-232443",
+  "generation": "/Users/kong/.opentradingcore/mac-demo-20261116-020105",
   "client_ack_policy": "LOCAL_DURABLE_ASYNC",
-  "original_volumes_preserved": true,
-  "common": {
-    "revision": "550717497462c76453216d7dd7161faec23d1f52",
-    "sha256": "2492f6933696a242d39d7dbaa295b046feb9c4ec653f18d9cce5becf6b86428e",
-    "deployed": true,
-    "status": "FULL_P0_AND_NATIVE_COPIED_PREFIX_SUPPLEMENT_PASS_P1_FRESH_AND_ACTUAL_RUNTIME_PASS",
-    "verification": "/Users/kong/.opentradingcore/t554-common-verifications/20261115-225159",
-    "actual_safety_executed_passed": 306,
-    "optional_external_historical_skips": 3,
-    "cold_restart_cases_passed": 4,
-    "native_fault_cases_passed": 16,
-    "complete_256_bidirectional_third_repeated_interrupted_home_passed": true,
-    "full_queue_primary_crash_original_local_head": 65,
-    "full_queue_primary_crash_actual_backup_certified_head": 4,
-    "excluded_unreplicated_local_tail_records": 61,
-    "performance_accepted": false
-  },
-  "sources": {
-    "shared": {
-      "revision": "010038a35967acbd8c9af45c0e5930564e1ebfc6",
-      "tests": {
-        "tests": 52,
-        "failures": 0,
-        "errors": 0,
-        "skipped": 0
-      }
-    },
-    "order": {
-      "revision": "e497510f28853cbcd0e287cc6988f0a525b64297",
-      "tests": {
-        "tests": 213,
-        "failures": 0,
-        "errors": 0,
-        "skipped": 2
-      }
-    },
-    "trade": {
-      "revision": "8b9c31d485649602d2e49e2c8db52dc6cdd1f708",
-      "tests": {
-        "tests": 261,
-        "failures": 0,
-        "errors": 0,
-        "skipped": 0
-      }
-    },
-    "md": {
-      "revision": "578ed2f22882b1a20b9d9c63c9333a3417956201",
-      "tests": {
-        "tests": 207,
-        "failures": 0,
-        "errors": 0,
-        "skipped": 0
-      }
-    },
-    "notification_fanout": {
-      "revision": "1a95b80c4570ab6d829da94daa7d53fe53d132a1",
-      "class_sha256": "fc2944a86c2e6cf7054e474f456a2a0dbfb9ce209ae18786f93bc07c5ff5d725"
-    },
-    "projection": {
-      "revision": "17eaa313759d5607ae767d81c8b1d8df2556a9b0",
-      "tests": 29
-    }
-  },
-  "images": {
-    "mac-demo-20261115-232443-order-a-hostready": "sha256:96ce9488275cfdc5a5458df32f557b1ceefdd9240e2ff2e0f2d9da9ca505b72d",
-    "mac-demo-20261115-232443-order-b-hostready": "sha256:96ce9488275cfdc5a5458df32f557b1ceefdd9240e2ff2e0f2d9da9ca505b72d",
-    "mac-demo-20261115-232443-trade-a-hostready": "sha256:cf78f2d3f6c56028cac051e0d3cbda5f2ec7a37aad37a6c0e7a22aa47da87926",
-    "mac-demo-20261115-232443-trade-b-hostready": "sha256:cf78f2d3f6c56028cac051e0d3cbda5f2ec7a37aad37a6c0e7a22aa47da87926"
-  },
   "owner_confirmed_phase_one_performance_target": {
     "owner_confirmed_at": "2026-11-15T20:15:14.936622+08:00",
     "status": "OWNER_CONFIRMED_TARGET_CURRENT_RELEASE_NO_GO",
@@ -91,1099 +22,238 @@
     "current_production_acceptance": "NO_GO",
     "required": true
   },
-  "functional": {
-    "fresh_real_business_passed": true,
-    "actual_runtime_256_roles_per_node_passed": true,
-    "runtime_proof": "/Users/kong/.opentradingcore/mac-demo-20261115-232443/physical-runtime-ocjgdhec/proof.json",
-    "initial_financial_cursor": "PASS_FINANCIAL_CURSOR",
-    "current_same_jar_four_way_robot_faults_pending": true,
-    "true_business_reservation_rpo_loss_pending": true,
-    "trade_single_node_current_same_jar_pending": true
-  },
-  "current_maintenance": {
-    "status": "FULL_EXACT_COMMON_QUALIFIED_BUSINESS_BUILD_RUNNING_OLD_FAILED_GENERATION_RETAINED",
-    "active_generation": "/Users/kong/.opentradingcore/mac-demo-20261115-232443",
-    "previous_generation_normally_stopped_zero_pending_and_exact_financial_cursor": true,
-    "previous_generation_data_preserved": true
-  },
-  "gc_readonly_diagnostic": {
-    "evidence": "/Users/kong/.opentradingcore/mac-demo-20261115-213528/readonly-gc-log-diagnostic-after-load-20261115/capture.json",
-    "copied_only_after_pressure_clients_exited": true,
-    "method": "Existing GC log copy; no VM attach or safepoint",
-    "max_observed_pause_ms": {
-      "order_a": 186.9902,
-      "order_b": 580.9035,
-      "trade_a": 370.2945,
-      "trade_b": 517.7655
-    },
-    "interpretation": "Pauses can violate20ms target; maxima alone do not explain12.62s final-receipt P99 or establish its root cause."
-  },
-  "open_findings": [
-    "Real business async-loss fault exposed Common unbounded async admission/drain waits retaining caller locks; automatic takeover/Home not completed. New bounded-wait candidate requires fresh exact-JAR fullP0 before integration.",
-    "Both confirmation policies are far below sustained1000/s andP99<=20ms.",
-    "Current reader async40/s:2396 in-window of2400,4 tail,finalP99=1838.847ms; older448 values retained under previous business release.",
-    "Strict Common has generic group commit, business call sites still singleton; actual business batching remains required.",
-    "Reader release improved measured40/s tail but remains far off1000/s and20ms. Diagnostic delivery pool2 queued up to35; pool8 business-only candidate is tested but undeployed.",
-    "Full-partition recovery remains minutes. Scheduling candidate is unqualified for RTO improvement.",
-    "Current same-JAR complete Robot fault and true business RPO/reservation recovery gates remain unfinished.",
-    "Retired original GG2803 unsettled matches remain unresolved independent retained evidence."
-  ],
-  "storage_maintenance": {
-    "status": "PASS_CURRENT_RUNNING_CONTAINER_IDS_UNCHANGED",
-    "authorization": "Owner explicitly allowed obsolete data deletion on 2026-11-15.",
-    "removed_unused_colima_profiles": [
-      "ha-test",
-      "ha-test-sshfs"
-    ],
-    "retired_demo_data_directories_deleted": 62,
-    "other_retired_data_log_archive_targets_deleted": 18,
-    "host_free_before_bytes": 7418650624,
-    "host_free_after_bytes": 110085627904,
-    "audit_directory": "/Users/kong/.opentradingcore/t554-delete-unused-colima-data-20261115",
-    "active_business_data_retained": true,
-    "unresolved_gg_history_retained": true,
-    "source_repositories_retained": true,
-    "retired_paths_marked_against_accidental_empty_restart": true,
-    "note": "Free-space delta includes concurrent writes and APFS reclamation. Earlier retained-volume statements are historical; obsolete volumes were deleted under the new authorization.",
-    "retired_stopped_demo_containers_deleted": 633,
-    "unreferenced_local_docker_volumes_deleted": 383,
-    "unreferenced_images_reclaimed_reported": "1.099GB",
-    "host_free_after_final_bytes": 140071718912,
-    "docker_guest_available_kib": 34472816,
-    "docker_guest_used_percent": 78,
-    "online_trim_observation": "Remote fstrim completed after local 60s wrapper timeout; remote exit status unavailable. Independent host free-space gain measured. No service restart.",
-    "pre_release_readonly_runtime": "PASS all four current Order/Trade physical runtimes",
-    "pre_release_original_robot_settlement_backlog": "PASS 10 original locations",
-    "pre_release_financial_cursor": "PASS_FINANCIAL_CURSOR with exact predecessor checks; no reasons"
-  },
-  "additional_retired_generation_cleanup": {
-    "generation": "mac-demo-20261115-065831",
-    "stopped_containers_removed": 32,
-    "volumes_removed": 9,
-    "host_data_directories_removed": 2,
-    "running_ids_unchanged": true,
-    "docker_data_disk_available_gib_approx": 46,
-    "docker_data_disk_used_percent": 69,
-    "host_available_gib_approx": 106,
-    "current_two_test_generations_and_unresolved_reference_preserved": true
-  },
-  "historical_evidence": "archive/T554_MAC_CONTROL_CURSOR_RELEASE_PRE_20261115_2235.json",
-  "application_data_or_credentials_included": false,
-  "native_capacity_driver": {
-    "max_independent_sessions": 16,
-    "per_session_max_offered_rpc_per_second": 80,
-    "target_plan": "16x65=1040/s; not executed; current40/s accumulation must be fixed first",
-    "gateway_profile_changed": false,
-    "regression_tests_passed": 11
-  },
-  "failed_undeployed_scheduling_candidate": {
-    "revision": "c91e4436fe0c72260bbd722116037b6ce91cb074",
-    "sha256": "8ded633702ec41e3506d5ce820eb532e88c9be4bbc045593a33550bd742c3742",
-    "deployed": false,
-    "status": "NO_GO_INTERRUPTED_RETAINED_COLD_EXPECTED_STAGE_TIMEOUT",
-    "safety_executed_passed": 305,
-    "optional_external_historical_skips": 3,
-    "focused_reader_tests_executed_passed": 41,
-    "controller": "/Users/kong/.opentradingcore/t554-local-reader-p0-controller-v3-20261115.json",
-    "scope": "Existing signed local head for normal async current-Epoch accepted reads. Same coalesced recovery worker immediately continues after completed stages. Strict quorum/snapshots/old-Epoch authentication retained.",
-    "remaining_gates": [
-      "four cold restarts",
-      "16 native process cases",
-      "full256 bidirectional, third crash, repeated Home, interrupted signed return",
-      "P1 exact-JAR business integration",
-      "P2 business faults, exact financial consistency and 1000/s P99<=20ms"
-    ],
-    "failure": "RuntimeError: interrupted-retained-cold failed with exit 2",
-    "clean_local_owner_cold_passed": true,
-    "failure_evidence": "/Users/kong/.opentradingcore/t554-common-candidates/20261115-local-accepted-reader-work-conserving/serial-cold/interrupted-retained-cold.log",
-    "robot_restore_status": "TEN_ORIGINAL_ROBOTS_NORMALLY_RESTORED_AND_FINANCIAL_CURSOR_PASS",
-    "diagnostic": "Reproduced twice: all128 retained-owner partitions already LOCAL when the fixture armed its interrupt; no stage existed to interrupt. No cold pass claimed. Recovery wake optimization reverted in6c985aa.",
-    "diagnostic_state": "/Users/kong/.opentradingcore/t554-retained-cold-c91-diagnostic-20261115/state.json"
-  },
-  "one_click_common_qualification": {
-    "entry": "bash mac-colima-saas.sh verify-common COMMON_REVISION",
-    "source": "scripts/qualify-mac-common-candidate.py",
-    "runner": "tests/fixtures/common-release/QualifiedCommonChecks.java",
-    "minimum_actual_safety_tests": 308,
-    "cold_restarts": 4,
-    "snapshot_streaming_heap_mib": 96,
-    "large_original_history_mib": 72,
-    "uses_existing_independent_physical_failover_verifier": true,
-    "business_services_or_data_mutated": false,
-    "end_to_end_new_wrapper_full_run_claimed": true,
-    "regression_tests_passed": 4,
-    "test_scope": "Real JUnit pass/fail/ignore/assumption handling and actual entry failure propagation; no live business faults in tool tests",
-    "combined_qualification_and_fresh_entry": "bash mac-colima-saas.sh verify-and-fresh COMMON_REVISION",
-    "independent_private_native_home_jvms": true,
-    "combined_entry_failure_propagation_tested": true,
-    "combined_entry_complete_actual_run_claimed": false
-  },
-  "old_40_per_second_service_log_diagnostic": {
-    "evidence": "/Users/kong/.opentradingcore/mac-demo-20261115-213528/native-40-service-stage-diagnostic-20261115/summary-normalized-categories.json",
-    "paired_clients": 2400,
-    "from": "Trade UpdateOrderHandler Newing log",
-    "to": "Order GwServerResource Trade log",
-    "service_log_interval_p50_ms": 2204.213,
-    "service_log_interval_p99_ms": 12455.623,
-    "client_final_receipt_p99_ms": 12623.652,
-    "scope": "Read-only original window; first logger/category occurrence per client. Log timestamps are diagnostic, not complete tracing or a new pressure window. CGLIB suffix normalized across the two physical Order JVMs.",
-    "business_mutations": false,
-    "jvm_attach": false
-  },
-  "previous_business_release_a83_pipeline": {
-    "generation": "/Users/kong/.opentradingcore/mac-demo-20261115-213528",
-    "common": {
-      "revision": "a83e98ab8a17c5746c7840d4f1e5d0d014758b2e",
-      "sha256": "4482c1d5af0d3c6b669aabea0f42d6cfe9fc8388b0c20765f731381516d390d1",
-      "deployed": true,
-      "status": "DEPLOYED_COMMON_P0_AND_FULL_QUEUE_CRASH_PASS_BUSINESS_BASELINES_PASS_PERFORMANCE_NO_GO",
-      "verification": "/Users/kong/.opentradingcore/t554-common-verifications/20261115-195035",
-      "pre_freeze_worktree_safety_executed": 305,
-      "pre_freeze_optional_external_skips": 3,
-      "per_partition_pending_max_commands": 64,
-      "per_partition_pending_max_bytes": 4194304,
-      "process_pending_payload_budget_bytes": 33554432,
-      "native_64_ack_catchup_passed_before_freeze": true,
-      "native_full_queue_primary_crash_special_case_pending": false,
-      "exact_jar_safety_executed_passed": 305,
-      "exact_jar_native_15_passed": true,
-      "exact_jar_cold_4_passed": true,
-      "exact_jar_both_directions_256_pairs_passed": true,
-      "exact_jar_complete_p0_still_running": false,
-      "observed_unisolated_functional_timings_ms": {
-        "a_failover": 166689,
-        "a_home": 286479,
-        "b_failover": 165256,
-        "b_home": 238964
-      },
-      "full_queue_primary_crash_original_local_acked_head": 65,
-      "full_queue_primary_crash_actual_backup_committed_head": 29,
-      "full_queue_primary_crash_excluded_local_tail_records": 36
-    },
-    "images": {
-      "mac-demo-20261115-213528-order-a-hostready": "sha256:34c54fd5a74eda11003cc01011dca4571592b0f1debbbe4beda305737aef1ca2",
-      "mac-demo-20261115-213528-order-b-hostready": "sha256:34c54fd5a74eda11003cc01011dca4571592b0f1debbbe4beda305737aef1ca2",
-      "mac-demo-20261115-213528-trade-a-hostready": "sha256:e4a54c9747edceda9203cdec745fc10a44766e463fdcf5cda902c365fa5f3cd5",
-      "mac-demo-20261115-213528-trade-b-hostready": "sha256:e4a54c9747edceda9203cdec745fc10a44766e463fdcf5cda902c365fa5f3cd5"
-    },
-    "strict_measurements": {
-      "order_cancel": {
-        "evidence": "/Users/kong/.opentradingcore/mac-demo-20261115-210937/order-cancel-capacity-42cc86c3.json",
-        "integrity_passed": true,
-        "pacing_included_in_latency": false,
-        "per_session_rpc_budget": null,
-        "windows": [
-          {
-            "mode": "ORDER_ONLY",
-            "concurrency": 1,
-            "elapsed_seconds": 60.013,
-            "cycles_per_second": 39.058,
-            "commands_per_second": 78.116,
-            "new_p99_ms": 22.136,
-            "cancel_p99_ms": 28.948,
-            "integrity_passed": true,
-            "performance": {
-              "passed": false,
-              "target_per_second": 1000,
-              "target_p99_ms": 20,
-              "unit": "Place plus cancel commands per second",
-              "observed_per_second": 78.11640811157582,
-              "checks": {
-                "native_tcp": true,
-                "integrity": true,
-                "sustained_window": true,
-                "all_operations_completed": true,
-                "successful_command_rate": false,
-                "new_status_p99": false,
-                "cancel_terminal_p99": false
-              },
-              "note": "A complete place/cancel cycle is two commands, not an actual trade."
-            }
-          },
-          {
-            "mode": "ORDER_ONLY",
-            "concurrency": 4,
-            "elapsed_seconds": 60.751,
-            "cycles_per_second": 45.053,
-            "commands_per_second": 90.106,
-            "new_p99_ms": 168.916,
-            "cancel_p99_ms": 106.344,
-            "integrity_passed": true,
-            "performance": {
-              "passed": false,
-              "target_per_second": 1000,
-              "target_p99_ms": 20,
-              "unit": "Place plus cancel commands per second",
-              "observed_per_second": 90.10551266645817,
-              "checks": {
-                "native_tcp": true,
-                "integrity": true,
-                "sustained_window": true,
-                "all_operations_completed": true,
-                "successful_command_rate": false,
-                "new_status_p99": false,
-                "cancel_terminal_p99": false
-              },
-              "note": "A complete place/cancel cycle is two commands, not an actual trade."
-            }
-          },
-          {
-            "mode": "ORDER_ONLY",
-            "concurrency": 8,
-            "elapsed_seconds": 60.243,
-            "cycles_per_second": 49.533,
-            "commands_per_second": 99.066,
-            "new_p99_ms": 299.208,
-            "cancel_p99_ms": 176.565,
-            "integrity_passed": true,
-            "performance": {
-              "passed": false,
-              "target_per_second": 1000,
-              "target_p99_ms": 20,
-              "unit": "Place plus cancel commands per second",
-              "observed_per_second": 99.06545158773633,
-              "checks": {
-                "native_tcp": true,
-                "integrity": true,
-                "sustained_window": true,
-                "all_operations_completed": true,
-                "successful_command_rate": false,
-                "new_status_p99": false,
-                "cancel_terminal_p99": false
-              },
-              "note": "A complete place/cancel cycle is two commands, not an actual trade."
-            }
-          },
-          {
-            "mode": "TRADE",
-            "concurrency": 1,
-            "elapsed_seconds": 60.036,
-            "cycles_per_second": 28.499,
-            "commands_per_second": 56.998,
-            "new_p99_ms": 37.908,
-            "cancel_p99_ms": 37.339,
-            "integrity_passed": true,
-            "performance": {
-              "passed": false,
-              "target_per_second": 1000,
-              "target_p99_ms": 20,
-              "unit": "Place plus cancel commands per second",
-              "observed_per_second": 56.99913385302152,
-              "checks": {
-                "native_tcp": true,
-                "integrity": true,
-                "sustained_window": true,
-                "all_operations_completed": true,
-                "successful_command_rate": false,
-                "new_status_p99": false,
-                "cancel_terminal_p99": false
-              },
-              "note": "A complete place/cancel cycle is two commands, not an actual trade."
-            }
-          },
-          {
-            "mode": "TRADE",
-            "concurrency": 4,
-            "elapsed_seconds": 60.212,
-            "cycles_per_second": 36.139,
-            "commands_per_second": 72.278,
-            "new_p99_ms": 162.751,
-            "cancel_p99_ms": 102.436,
-            "integrity_passed": true,
-            "performance": {
-              "passed": false,
-              "target_per_second": 1000,
-              "target_p99_ms": 20,
-              "unit": "Place plus cancel commands per second",
-              "observed_per_second": 72.27795123895568,
-              "checks": {
-                "native_tcp": true,
-                "integrity": true,
-                "sustained_window": true,
-                "all_operations_completed": true,
-                "successful_command_rate": false,
-                "new_status_p99": false,
-                "cancel_terminal_p99": false
-              },
-              "note": "A complete place/cancel cycle is two commands, not an actual trade."
-            }
-          },
-          {
-            "mode": "TRADE",
-            "concurrency": 8,
-            "elapsed_seconds": 60.151,
-            "cycles_per_second": 33.183,
-            "commands_per_second": 66.366,
-            "new_p99_ms": 305.763,
-            "cancel_p99_ms": 183.914,
-            "integrity_passed": true,
-            "performance": {
-              "passed": false,
-              "target_per_second": 1000,
-              "target_p99_ms": 20,
-              "unit": "Place plus cancel commands per second",
-              "observed_per_second": 66.3663114495187,
-              "checks": {
-                "native_tcp": true,
-                "integrity": true,
-                "sustained_window": true,
-                "all_operations_completed": true,
-                "successful_command_rate": false,
-                "new_status_p99": false,
-                "cancel_terminal_p99": false
-              },
-              "note": "A complete place/cancel cycle is two commands, not an actual trade."
-            }
-          }
-        ]
-      },
-      "execution_low": {
-        "evidence": "/Users/kong/.opentradingcore/mac-demo-20261115-210937/distributed-execution-capacity-cf3a8470.json",
-        "integrity_passed": true,
-        "offered_rate": 2.0,
-        "seconds": 60,
-        "aggregate": {
-          "planned_orders": 120,
-          "sent_orders": 120,
-          "final_executions": 120,
-          "fills_inside_offered_window": 120,
-          "scheduler_drops": 0,
-          "responses": {
-            "ACKNOWLEDGED": 120
-          },
-          "stream_errors": [],
-          "start_spread_ms": 0.0,
-          "generator_accounting_pass": true,
-          "observed_window_execution_rate": 2.0,
-          "window_delivery_fraction": 1.0,
-          "all_accepted_final_receipts_pass": true,
-          "window_capacity_pass": true,
-          "ack_ms": {
-            "samples": 120,
-            "p50": 9.195,
-            "p95": 15.498,
-            "p99": 20.492,
-            "p99_9": 22.809
-          },
-          "client_fill_ms": {
-            "samples": 120,
-            "p50": 52.591,
-            "p95": 93.4,
-            "p99": 120.588,
-            "p99_9": 135.865
-          },
-          "scheduled_fill_ms": {
-            "samples": 120,
-            "p50": 56.012,
-            "p95": 99.2,
-            "p99": 128.092,
-            "p99_9": 137.577
-          },
-          "dispatch_delay_ms": {
-            "samples": 120,
-            "p50": 2.998,
-            "p95": 8.556,
-            "p99": 10.207,
-            "p99_9": 10.249
-          }
-        },
-        "performance": {
-          "passed": false,
-          "target_per_second": 1000,
-          "target_p99_ms": 20,
-          "unit": "Actual final trade receipts per second",
-          "checks": {
-            "integrity": true,
-            "sustained_window": true,
-            "all_requests_and_fills_accounted": true,
-            "actual_in_window_final_trade_rate": false,
-            "client_final_receipt_p99": false,
-            "scheduled_final_receipt_p99": false
-          },
-          "observed_per_second": 2.0,
-          "tail_final_receipts_after_window": 0
-        },
-        "control_stable": true
-      }
-    },
-    "async_measurements": {
-      "order_cancel": {
-        "evidence": "/Users/kong/.opentradingcore/mac-demo-20261115-213528/order-cancel-capacity-7a9953f5.json",
-        "integrity_passed": true,
-        "pacing_included_in_latency": true,
-        "per_session_rpc_budget": 80,
-        "windows": [
-          {
-            "mode": "ORDER_ONLY",
-            "concurrency": 1,
-            "elapsed_seconds": 60.023,
-            "cycles_per_second": 32.421,
-            "commands_per_second": 64.842,
-            "new_p99_ms": 30.508,
-            "cancel_p99_ms": 38.876,
-            "integrity_passed": true,
-            "performance": {
-              "passed": false,
-              "target_per_second": 1000,
-              "target_p99_ms": 20,
-              "unit": "Place plus cancel commands per second",
-              "observed_per_second": 64.84181063925494,
-              "checks": {
-                "native_tcp": true,
-                "integrity": true,
-                "sustained_window": true,
-                "all_operations_completed": true,
-                "successful_command_rate": false,
-                "new_status_p99": false,
-                "cancel_terminal_p99": false
-              },
-              "note": "A complete place/cancel cycle is two commands, not an actual trade."
-            }
-          },
-          {
-            "mode": "ORDER_ONLY",
-            "concurrency": 4,
-            "elapsed_seconds": 61.42,
-            "cycles_per_second": 39.857,
-            "commands_per_second": 79.714,
-            "new_p99_ms": 280.729,
-            "cancel_p99_ms": 148.509,
-            "integrity_passed": true,
-            "performance": {
-              "passed": false,
-              "target_per_second": 1000,
-              "target_p99_ms": 20,
-              "unit": "Place plus cancel commands per second",
-              "observed_per_second": 79.71344838814719,
-              "checks": {
-                "native_tcp": true,
-                "integrity": true,
-                "sustained_window": true,
-                "all_operations_completed": true,
-                "successful_command_rate": false,
-                "new_status_p99": false,
-                "cancel_terminal_p99": false
-              },
-              "note": "A complete place/cancel cycle is two commands, not an actual trade."
-            }
-          },
-          {
-            "mode": "ORDER_ONLY",
-            "concurrency": 8,
-            "elapsed_seconds": 60.233,
-            "cycles_per_second": 60.565,
-            "commands_per_second": 121.13,
-            "new_p99_ms": 226.247,
-            "cancel_p99_ms": 162.146,
-            "integrity_passed": true,
-            "performance": {
-              "passed": false,
-              "target_per_second": 1000,
-              "target_p99_ms": 20,
-              "unit": "Place plus cancel commands per second",
-              "observed_per_second": 121.12961333488288,
-              "checks": {
-                "native_tcp": true,
-                "integrity": true,
-                "sustained_window": true,
-                "all_operations_completed": true,
-                "successful_command_rate": false,
-                "new_status_p99": false,
-                "cancel_terminal_p99": false
-              },
-              "note": "A complete place/cancel cycle is two commands, not an actual trade."
-            }
-          },
-          {
-            "mode": "TRADE",
-            "concurrency": 1,
-            "elapsed_seconds": 60.238,
-            "cycles_per_second": 25.997,
-            "commands_per_second": 51.994,
-            "new_p99_ms": 58.206,
-            "cancel_p99_ms": 62.812,
-            "integrity_passed": true,
-            "performance": {
-              "passed": false,
-              "target_per_second": 1000,
-              "target_p99_ms": 20,
-              "unit": "Place plus cancel commands per second",
-              "observed_per_second": 51.99375809289817,
-              "checks": {
-                "native_tcp": true,
-                "integrity": true,
-                "sustained_window": true,
-                "all_operations_completed": true,
-                "successful_command_rate": false,
-                "new_status_p99": false,
-                "cancel_terminal_p99": false
-              },
-              "note": "A complete place/cancel cycle is two commands, not an actual trade."
-            }
-          },
-          {
-            "mode": "TRADE",
-            "concurrency": 4,
-            "elapsed_seconds": 60.132,
-            "cycles_per_second": 11.375,
-            "commands_per_second": 22.75,
-            "new_p99_ms": 1633.229,
-            "cancel_p99_ms": 1215.676,
-            "integrity_passed": true,
-            "performance": {
-              "passed": false,
-              "target_per_second": 1000,
-              "target_p99_ms": 20,
-              "unit": "Place plus cancel commands per second",
-              "observed_per_second": 22.749950109758533,
-              "checks": {
-                "native_tcp": true,
-                "integrity": true,
-                "sustained_window": true,
-                "all_operations_completed": true,
-                "successful_command_rate": false,
-                "new_status_p99": false,
-                "cancel_terminal_p99": false
-              },
-              "note": "A complete place/cancel cycle is two commands, not an actual trade."
-            }
-          },
-          {
-            "mode": "TRADE",
-            "concurrency": 8,
-            "elapsed_seconds": 62.139,
-            "cycles_per_second": 27.776,
-            "commands_per_second": 55.552,
-            "new_p99_ms": 749.365,
-            "cancel_p99_ms": 420.438,
-            "integrity_passed": true,
-            "performance": {
-              "passed": false,
-              "target_per_second": 1000,
-              "target_p99_ms": 20,
-              "unit": "Place plus cancel commands per second",
-              "observed_per_second": 55.552873396739564,
-              "checks": {
-                "native_tcp": true,
-                "integrity": true,
-                "sustained_window": true,
-                "all_operations_completed": true,
-                "successful_command_rate": false,
-                "new_status_p99": false,
-                "cancel_terminal_p99": false
-              },
-              "note": "A complete place/cancel cycle is two commands, not an actual trade."
-            }
-          }
-        ]
-      },
-      "execution_low": {
-        "evidence": "/Users/kong/.opentradingcore/mac-demo-20261115-213528/distributed-execution-capacity-aa68842b.json",
-        "integrity_passed": true,
-        "offered_rate": 2.0,
-        "seconds": 60,
-        "aggregate": {
-          "planned_orders": 120,
-          "sent_orders": 120,
-          "final_executions": 120,
-          "fills_inside_offered_window": 120,
-          "scheduler_drops": 0,
-          "responses": {
-            "ACKNOWLEDGED": 120
-          },
-          "stream_errors": [],
-          "start_spread_ms": 2.0,
-          "generator_accounting_pass": true,
-          "observed_window_execution_rate": 2.0,
-          "window_delivery_fraction": 1.0,
-          "all_accepted_final_receipts_pass": true,
-          "window_capacity_pass": true,
-          "ack_ms": {
-            "samples": 120,
-            "p50": 6.26,
-            "p95": 10.796,
-            "p99": 15.623,
-            "p99_9": 18.588
-          },
-          "client_fill_ms": {
-            "samples": 120,
-            "p50": 39.258,
-            "p95": 71.692,
-            "p99": 120.928,
-            "p99_9": 129.308
-          },
-          "scheduled_fill_ms": {
-            "samples": 120,
-            "p50": 42.499,
-            "p95": 74.612,
-            "p99": 130.767,
-            "p99_9": 140.753
-          },
-          "dispatch_delay_ms": {
-            "samples": 120,
-            "p50": 4.012,
-            "p95": 10.2,
-            "p99": 10.528,
-            "p99_9": 11.446
-          }
-        },
-        "performance": {
-          "passed": false,
-          "target_per_second": 1000,
-          "target_p99_ms": 20,
-          "unit": "Actual final trade receipts per second",
-          "checks": {
-            "integrity": true,
-            "sustained_window": true,
-            "all_requests_and_fills_accounted": true,
-            "actual_in_window_final_trade_rate": false,
-            "client_final_receipt_p99": false,
-            "scheduled_final_receipt_p99": false
-          },
-          "observed_per_second": 2.0,
-          "tail_final_receipts_after_window": 0
-        },
-        "control_stable": true
-      },
-      "execution_40_offered": {
-        "evidence": "/Users/kong/.opentradingcore/mac-demo-20261115-213528/distributed-execution-capacity-4cac527b.json",
-        "integrity_passed": true,
-        "offered_rate": 40.0,
-        "seconds": 60,
-        "aggregate": {
-          "planned_orders": 2400,
-          "sent_orders": 2400,
-          "final_executions": 2400,
-          "fills_inside_offered_window": 2027,
-          "scheduler_drops": 0,
-          "responses": {
-            "ACKNOWLEDGED": 2400
-          },
-          "stream_errors": [],
-          "start_spread_ms": 12.0,
-          "generator_accounting_pass": true,
-          "observed_window_execution_rate": 33.78333333333333,
-          "window_delivery_fraction": 0.8445833333333334,
-          "all_accepted_final_receipts_pass": true,
-          "window_capacity_pass": false,
-          "ack_ms": {
-            "samples": 2400,
-            "p50": 49.883,
-            "p95": 763.569,
-            "p99": 1319.709,
-            "p99_9": 2462.627
-          },
-          "client_fill_ms": {
-            "samples": 2400,
-            "p50": 2329.871,
-            "p95": 10568.973,
-            "p99": 12623.652,
-            "p99_9": 13515.527
-          },
-          "scheduled_fill_ms": {
-            "samples": 2400,
-            "p50": 2331.803,
-            "p95": 10570.64,
-            "p99": 12624.256,
-            "p99_9": 13519.456
-          },
-          "dispatch_delay_ms": {
-            "samples": 2400,
-            "p50": 3.804,
-            "p95": 10.466,
-            "p99": 13.726,
-            "p99_9": 29.677
-          }
-        },
-        "performance": {
-          "passed": false,
-          "target_per_second": 1000,
-          "target_p99_ms": 20,
-          "unit": "Actual final trade receipts per second",
-          "checks": {
-            "integrity": true,
-            "sustained_window": true,
-            "all_requests_and_fills_accounted": true,
-            "actual_in_window_final_trade_rate": false,
-            "client_final_receipt_p99": false,
-            "scheduled_final_receipt_p99": false
-          },
-          "observed_per_second": 33.78333333333333,
-          "tail_final_receipts_after_window": 373
-        },
-        "control_stable": true
-      }
-    },
-    "comparison_limit": "Strict native cancel client was unpaced; async client includes 80 RPC/s per-session pacing in request latency. Same Common JAR but not a controlled causal comparison. No performance acceptance passed.",
-    "native_rate_limit_postmortem": {
-      "first_async_run_no_go_retained": "/Users/kong/.opentradingcore/mac-demo-20261115-213528/order-cancel-capacity-b8935cc2.json",
-      "reason": "Real gateway per-SID 100 requests/s burst30 admission rejection, numeric code10003. Not a Common ACK failure.",
-      "normal_owned_order_cleanup_passed": true,
-      "gateway_policy_changed": false,
-      "new_client_budget_per_second": 80,
-      "pacing_included_in_latency": true
-    }
-  },
-  "qualified_reader_release": {
-    "revision": "550717497462c76453216d7dd7161faec23d1f52",
-    "sha256": "2492f6933696a242d39d7dbaa295b046feb9c4ec653f18d9cce5becf6b86428e",
-    "deployed": true,
-    "status": "SAME_EXACT_COMMON_READER_DEPLOYED_FRESH_BUSINESS_AND_RUNTIME_PASS_MEASUREMENT_RUNNING",
-    "focused_tests_executed_passed": 50,
-    "focused_skips": 0,
-    "controller": "/Users/kong/.opentradingcore/t554-local-reader-p0-controller-v4-20261115.json",
-    "scope": "Pinned async clients read only the already physically certified prefix without draining newer LOCAL writes. Existing dual signatures, copied commit index, same-owner captured original force, current grant and WAL CRC remain required. Existing strict readers and snapshots retain their drain barriers. Original local accepted-reader fix retained. No scheduler acceleration.",
-    "safety_executed_passed": 306,
-    "safety_discovered": 309,
-    "optional_external_historical_skips": 3,
-    "cold_restart_gates_passed": 4,
-    "native_copied_prefix_supplement": "/Users/kong/.opentradingcore/t554-common-nondraining-quorum-read-native-supplement-20261115/state.json",
-    "supplement_fixture_revision": "bbefaa1",
-    "supplement_production_source_unchanged": true,
-    "full_physical_p0_passed": true,
-    "qualification_summary": "/Users/kong/.opentradingcore/t554-common-verifications/20261115-225159/complete-qualification-summary.json",
-    "observed_unisolated_functional_timings_ms": {
-      "a_failover": 171797,
-      "a_home": 296233,
-      "b_failover": 163457,
-      "b_home": 241419
-    }
-  },
-  "current_version_measurements": {
-    "status": "ALL_CURRENT_ASYNC_BASELINE_INTEGRITY_PASS_PERFORMANCE_NO_GO",
-    "controller": "/Users/kong/.opentradingcore/t554-available-quorum-reader-async-business-baseline-20261115.json",
-    "robot_steady": {
-      "evidence": "/Users/kong/.opentradingcore/mac-demo-20261115-232443/robot-steady-10-153634.json",
-      "integrity_passed": true,
-      "paired_fills": 489,
-      "service_interval_not_client_round_trip": {
-        "paired_samples": 489,
-        "p50": 26.757,
-        "p95": 51.01,
-        "p99": 96.246,
-        "p99_9": 219.943
-      }
-    },
-    "execution_low": {
-      "evidence": "/Users/kong/.opentradingcore/mac-demo-20261115-232443/distributed-execution-capacity-342d6b6e.json",
-      "integrity_passed": true,
-      "common_sha256": "2492f6933696a242d39d7dbaa295b046feb9c4ec653f18d9cce5becf6b86428e",
-      "aggregate": {
-        "planned_orders": 120,
-        "sent_orders": 120,
-        "final_executions": 120,
-        "fills_inside_offered_window": 120,
-        "scheduler_drops": 0,
-        "responses": {
-          "ACKNOWLEDGED": 120
-        },
-        "stream_errors": [],
-        "start_spread_ms": 3.0,
-        "generator_accounting_pass": true,
-        "observed_window_execution_rate": 2.0,
-        "window_delivery_fraction": 1.0,
-        "all_accepted_final_receipts_pass": true,
-        "window_capacity_pass": true,
-        "ack_ms": {
-          "samples": 120,
-          "p50": 6.15,
-          "p95": 11.428,
-          "p99": 40.968,
-          "p99_9": 64.449
-        },
-        "client_fill_ms": {
-          "samples": 120,
-          "p50": 37.521,
-          "p95": 70.732,
-          "p99": 125.802,
-          "p99_9": 194.243
-        },
-        "scheduled_fill_ms": {
-          "samples": 120,
-          "p50": 42.233,
-          "p95": 73.605,
-          "p99": 134.494,
-          "p99_9": 202.994
-        },
-        "dispatch_delay_ms": {
-          "samples": 120,
-          "p50": 4.299,
-          "p95": 9.21,
-          "p99": 10.258,
-          "p99_9": 10.324
-        }
-      },
-      "performance": {
-        "passed": false,
-        "target_per_second": 1000,
-        "target_p99_ms": 20,
-        "unit": "Actual final trade receipts per second",
-        "checks": {
-          "integrity": true,
-          "sustained_window": true,
-          "all_requests_and_fills_accounted": true,
-          "actual_in_window_final_trade_rate": false,
-          "client_final_receipt_p99": false,
-          "scheduled_final_receipt_p99": false
-        },
-        "observed_per_second": 2.0,
-        "tail_final_receipts_after_window": 0
-      }
-    },
-    "execution_40_offered": {
-      "evidence": "/Users/kong/.opentradingcore/mac-demo-20261115-232443/distributed-execution-capacity-07322ab7.json",
-      "integrity_passed": true,
-      "common_sha256": "2492f6933696a242d39d7dbaa295b046feb9c4ec653f18d9cce5becf6b86428e",
-      "aggregate": {
-        "planned_orders": 2400,
-        "sent_orders": 2400,
-        "final_executions": 2400,
-        "fills_inside_offered_window": 2396,
-        "scheduler_drops": 0,
-        "responses": {
-          "ACKNOWLEDGED": 2400
-        },
-        "stream_errors": [],
-        "start_spread_ms": 9.0,
-        "generator_accounting_pass": true,
-        "observed_window_execution_rate": 39.93333333333333,
-        "window_delivery_fraction": 0.9983333333333333,
-        "all_accepted_final_receipts_pass": true,
-        "window_capacity_pass": false,
-        "ack_ms": {
-          "samples": 2400,
-          "p50": 12.029,
-          "p95": 58.349,
-          "p99": 254.153,
-          "p99_9": 584.681
-        },
-        "client_fill_ms": {
-          "samples": 2400,
-          "p50": 92.483,
-          "p95": 701.055,
-          "p99": 1838.847,
-          "p99_9": 2228.15
-        },
-        "scheduled_fill_ms": {
-          "samples": 2400,
-          "p50": 96.78,
-          "p95": 702.322,
-          "p99": 1848.838,
-          "p99_9": 2241.885
-        },
-        "dispatch_delay_ms": {
-          "samples": 2400,
-          "p50": 2.957,
-          "p95": 9.435,
-          "p99": 11.597,
-          "p99_9": 49.514
-        }
-      },
-      "performance": {
-        "passed": false,
-        "target_per_second": 1000,
-        "target_p99_ms": 20,
-        "unit": "Actual final trade receipts per second",
-        "checks": {
-          "integrity": true,
-          "sustained_window": true,
-          "all_requests_and_fills_accounted": true,
-          "actual_in_window_final_trade_rate": false,
-          "client_final_receipt_p99": false,
-          "scheduled_final_receipt_p99": false
-        },
-        "observed_per_second": 39.93333333333333,
-        "tail_final_receipts_after_window": 4
-      }
-    },
-    "order_cancel": {
-      "evidence": "/Users/kong/.opentradingcore/mac-demo-20261115-232443/order-cancel-capacity-a076ba65.json",
-      "integrity_passed": true,
-      "windows": [
-        {
-          "mode": "ORDER_ONLY",
-          "concurrency": 1,
-          "cycles_per_second": 32.174,
-          "commands_per_second": 64.348,
-          "new_p99_ms": 35.313,
-          "cancel_p99_ms": 50.662,
-          "integrity_passed": true
-        },
-        {
-          "mode": "ORDER_ONLY",
-          "concurrency": 4,
-          "cycles_per_second": 60.116,
-          "commands_per_second": 120.232,
-          "new_p99_ms": 111.523,
-          "cancel_p99_ms": 79.872,
-          "integrity_passed": true
-        },
-        {
-          "mode": "ORDER_ONLY",
-          "concurrency": 8,
-          "cycles_per_second": 36.71,
-          "commands_per_second": 73.42,
-          "new_p99_ms": 1589.42,
-          "cancel_p99_ms": 627.587,
-          "integrity_passed": true
-        },
-        {
-          "mode": "TRADE",
-          "concurrency": 1,
-          "cycles_per_second": 22.808,
-          "commands_per_second": 45.616,
-          "new_p99_ms": 100.934,
-          "cancel_p99_ms": 102.006,
-          "integrity_passed": true
-        },
-        {
-          "mode": "TRADE",
-          "concurrency": 4,
-          "cycles_per_second": 29.133,
-          "commands_per_second": 58.266,
-          "new_p99_ms": 782.964,
-          "cancel_p99_ms": 646.589,
-          "integrity_passed": true
-        },
-        {
-          "mode": "TRADE",
-          "concurrency": 8,
-          "cycles_per_second": 32.511,
-          "commands_per_second": 65.022,
-          "new_p99_ms": 1532.957,
-          "cancel_p99_ms": 625.626,
-          "integrity_passed": true
-        }
-      ],
-      "pacing_included_in_latency": true,
-      "per_session_rpc_budget": 80
-    },
-    "strict_current_jar_measured": false,
-    "owner_performance_accepted": false
-  },
-  "queue_diagnostic": {
-    "evidence": "/Users/kong/.opentradingcore/mac-demo-20261115-232443/pipeline-queue-diagnostic-20261116/state.json",
-    "status": "DIAGNOSTIC_INTEGRITY_PASS_QUEUES_CAPTURED_NOT_PERFORMANCE_ACCEPTANCE",
-    "performance_qualified": false,
-    "sampling_may_perturb_timing": true,
-    "capacity_numbers_not_used_as_acceptance": true,
-    "sample_sets": 11,
-    "observed_maxima": {
-      "order-a:common_async.active": 5,
-      "order-a:common_async.queued": 0,
-      "order-a:order_delivery.active": 2,
-      "order-a:order_delivery.queued": 26,
-      "order-a:order_inflight.oldest_ms": 915,
-      "order-a:order_retry.waiting": 66,
-      "order-a:order_outbox.pending_count": 106,
-      "order-a:order_outbox.observed_local_copy_pending": 87,
-      "order-b:common_async.active": 7,
-      "order-b:common_async.queued": 0,
-      "order-b:order_delivery.active": 2,
-      "order-b:order_delivery.queued": 35,
-      "order-b:order_inflight.oldest_ms": 736,
-      "order-b:order_retry.waiting": 109,
-      "order-b:order_outbox.pending_count": 288,
-      "order-b:order_outbox.observed_local_copy_pending": 241,
-      "trade-a:common_async.active": 5,
-      "trade-a:common_async.queued": 0,
-      "trade-b:common_async.active": 5,
-      "trade-b:common_async.queued": 0
-    },
-    "observer_business_mutations": false,
-    "bytecode_transformers": false,
-    "source": "tests/fixtures/async-rpo/T554PipelineQueueReadAgent.java"
-  },
-  "gc_current_formal_40_window": {
-    "evidence": "/Users/kong/.opentradingcore/mac-demo-20261115-232443/readonly-gc-after-native-20261116/summary.json",
-    "scope": "Copied original GC logs after qualified clients exited; timestamp parse failures0; initial invalid compact-timezone parse preserved and invalidated.",
-    "max_pause_ms": {
-      "order_a": 35.3806,
-      "order_b": 53.2297,
-      "trade_a": 209.6457,
-      "trade_b": 97.3605
-    },
-    "explains_full_1838ms_final_tail": false
-  },
-  "order_receipt_pool_candidate": {
-    "revision": "c4fb1fd20c7430e84524bf3fa38870292e88c851",
-    "status": "QUALIFIED_OLD_COMMON_OVERLAY_NOT_DEPLOYED_NEW_COMMON_REQUIRED",
-    "image": "sha256:44447060b22601e608d537d546c167cc33195093285b05d82084b2ce0e68bc31",
-    "full_tests_discovered": 214,
-    "actual_executed_passed": 212,
-    "existing_skips": [
-      "com.app.dc.service.state.OrderT343RealP193ReplayReadonlyTest.originalP193FiveDomainEventKindsReplayToCertified22667",
-      "com.app.dc.service.state.OrderT344RealP193InMemoryBookTest.realOrderManagerReplaysOriginalCertified22667AndFinds48Live"
-    ],
-    "focused_passed": 19,
-    "old_pool_negative_control_reproduced": true,
-    "changed_production_classes": [
-      "com/app/dc/service/state/OrderSignedMatchDeliveryWorker.class"
-    ],
-    "new_class_sha256": "5ebb2e32d828ba6c023583aa35ffa28bffe2859843b61661be9812204f4eb12b",
-    "common_and_shared_actual_image_bytes_unchanged": true,
-    "deployed": false,
-    "evidence": "/Users/kong/.opentradingcore/t554-order-delivery8-candidate-20261116/state.json"
-  },
-  "true_rpo_current": {
-    "controller": "/Users/kong/.opentradingcore/t554-available-quorum-reader-async-recovery-after-diagnostic-v2-20261116.json",
-    "status": "NO_GO_ASYNC_PREAPPEND_BUSINESS_LOCK_RECOVERY_HANG",
-    "first_attempt": "/Users/kong/.opentradingcore/mac-demo-20261115-232443/async-rpo-b8046dbf/evidence.json",
-    "first_attempt_injected_any_fault": false,
-    "first_attempt_rejection": "Controlled tenant Trade partition collided with original Robot cohort. Original evidence retained.",
-    "driver_max_pre_fault_selection_attempts": 8,
-    "guard_preserved": true,
-    "fault_body_errors_are_not_retried_as_new_tenants": true,
-    "selection_and_existing_rpo_reservation_regressions_passed": 16
-  },
-  "true_business_rpo_failure": {
-    "status": "NO_GO",
-    "evidence": "/Users/kong/.opentradingcore/mac-demo-20261115-232443/async-rpo-ee583dc0/evidence.json",
-    "partition": "P045",
-    "observed_primary_local_head_before_crash": 96,
-    "observed_backup_head_before_crash": 95,
-    "final_takeover_boundary_proven": false,
-    "fault": "Actual Trade A SIGKILL after LOCAL risk-marked settlement receipts; survivor Trade B process retained",
-    "root_cause": "Full async pre-append queue can wait indefinitely while holding a business preparation lock, blocking another partition certified recovery install; strict drain has the same unbounded wait risk.",
-    "diagnostic": "/Users/kong/.opentradingcore/mac-demo-20261115-232443/recovery-progress-read-20261116",
-    "cleanup": "Only one proven old-JAR pre-encode waiter interrupted under its exact boundary monitor. Manual failed-exercise cleanup, not automatic recovery acceptance. Original primary restart policy restored; survivor never restarted.",
-    "after_cleanup": "/Users/kong/.opentradingcore/mac-demo-20261115-232443/recovery-progress-read-20261116/after-preappend-abort-summary.json",
-    "after_cleanup_observation": "5 retained-owner partitions READY at E3; next P220 RECOVERING. Trade A restart_count33; complete takeover/Home still not achieved.",
-    "reservation_loss_case_ran": false,
-    "next_order_pool8_deployed": false
-  },
-  "bounded_async_wait_candidate": {
-    "revision": "a02bd2b",
+  "common": {
+    "revision": "a02bd2b13c231c8dde228945e6fd716185d71394",
     "sha256": "3c56fdda4cef4c345dd0ac369e44edbc21be234d84eaa88277b5245940421352",
-    "candidate": "/Users/kong/.opentradingcore/t554-common-candidates/20261116-bounded-async-recovery-waits-native-retry",
-    "focused_actual_tests_passed": 52,
-    "focused_skipped": 0,
-    "status": "FULL_EXACT_COMMON_P0_PASS_FULL_BUSINESS_BUILD_RUNNING_NOT_DEPLOYED",
-    "scope": "Reuse existing two-second admission budget; recheck grant/fencing while waiting; reject before encoding/append or strict snapshot publication. Existing signed LOCAL64 and real physical catchup unchanged.",
-    "first_full_attempt_status": "NO_GO_NATIVE_BACKUP_OUTAGE_FIXTURE_EXITED_ON_NEW_BOUNDED_STRICT_READ_ERROR",
-    "first_full_attempt_safety_executed": 308,
-    "first_full_attempt_cold_cases_passed": 4,
-    "first_full_attempt_evidence": "/Users/kong/.opentradingcore/t554-common-candidates/20261116-bounded-async-recovery-waits/qualification/state.json",
+    "deployed": true,
+    "verification": "/Users/kong/.opentradingcore/t554-common-verifications/20261116-bounded-async-recovery-waits-native-retry",
+    "qualification_state": "/Users/kong/.opentradingcore/t554-common-candidates/20261116-bounded-async-recovery-waits-native-retry/qualification/state.json",
     "native_fixture_revision": "c308774f253b8efc02d51756a5c35de6ea69b3ed",
-    "native_backup_outage_retry_focused_passed": true,
     "actual_safety_executed_passed": 308,
+    "optional_external_historical_skips": 3,
     "cold_restart_cases_passed": 4,
-    "full_qualification_state": "/Users/kong/.opentradingcore/t554-common-candidates/20261116-bounded-async-recovery-waits-native-retry/qualification/state.json",
     "native_fault_cases_passed": 16,
     "complete_256_bidirectional_third_repeated_interrupted_home_passed": true,
     "equal_wal_pairs": 256,
     "equal_snapshot_pairs": 256,
-    "full_queue_primary_original_local_head": 65,
-    "full_queue_primary_actual_backup_head": 29,
-    "unreplicated_local_tail_excluded": 36,
-    "unisolated_complete_partition_timing_ms": {
+    "full_queue_original_local_head": 65,
+    "full_queue_actual_backup_head": 29,
+    "excluded_unreplicated_local_tail": 36,
+    "unisolated_full_partition_timing_ms": {
       "a_takeover": 179258,
       "a_home": 386103,
       "b_takeover": 175814,
       "b_home": 250356
+    },
+    "business_recovery_and_performance_accepted": false
+  },
+  "sources": {
+    "shared": {
+      "revision": "010038a35967acbd8c9af45c0e5930564e1ebfc6",
+      "tests": {
+        "discovered": 52,
+        "failures": 0,
+        "errors": 0,
+        "skipped": 0,
+        "skipped_names": [],
+        "actual_executed_passed": 52
+      }
+    },
+    "order": {
+      "revision": "c4fb1fd20c7430e84524bf3fa38870292e88c851",
+      "tests": {
+        "discovered": 214,
+        "failures": 0,
+        "errors": 0,
+        "skipped": 2,
+        "skipped_names": [
+          "com.app.dc.service.state.OrderT343RealP193ReplayReadonlyTest.originalP193FiveDomainEventKindsReplayToCertified22667",
+          "com.app.dc.service.state.OrderT344RealP193InMemoryBookTest.realOrderManagerReplaysOriginalCertified22667AndFinds48Live"
+        ],
+        "actual_executed_passed": 212
+      }
+    },
+    "trade": {
+      "revision": "8b9c31d485649602d2e49e2c8db52dc6cdd1f708",
+      "tests": {
+        "discovered": 261,
+        "failures": 0,
+        "errors": 0,
+        "skipped": 0,
+        "skipped_names": [],
+        "actual_executed_passed": 261
+      }
+    },
+    "md": {
+      "revision": "578ed2f22882b1a20b9d9c63c9333a3417956201",
+      "tests": {
+        "discovered": 207,
+        "failures": 0,
+        "errors": 0,
+        "skipped": 0,
+        "skipped_names": [],
+        "actual_executed_passed": 207
+      }
     }
   },
-  "synthetic_storage_diagnostic": {
+  "actual_core_nodes": [
+    {
+      "node": "mac-demo-20261116-020105-order-a-hostready",
+      "id": "649cd0675e7d22a88e44098e12ff008fb8275fd6b2baf80a16f4846e67a5db91",
+      "image": "sha256:7077d235f4ddc118a7c9f789a99a78930e8add63439c58ade9b6f8e04ab8d96e",
+      "started_at": "2026-11-15T18:04:36.714219428Z",
+      "actual_common_jar_sha256": "3c56fdda4cef4c345dd0ac369e44edbc21be234d84eaa88277b5245940421352",
+      "runtime_gc_header_g1": true,
+      "runtime_gc_header_target_pause_ms": 10,
+      "options": [
+        "-Dcommon.certified.clientAckPolicy=LOCAL_DURABLE_ASYNC",
+        "-XX:+UseG1GC",
+        "-XX:MaxGCPauseMillis=10",
+        "-Xms128m",
+        "-Xmx1g"
+      ]
+    },
+    {
+      "node": "mac-demo-20261116-020105-order-b-hostready",
+      "id": "4fa48c0f381a0b399b9f6c0213a8d426de4b76141331640dfa0aa60aa608be50",
+      "image": "sha256:7077d235f4ddc118a7c9f789a99a78930e8add63439c58ade9b6f8e04ab8d96e",
+      "started_at": "2026-11-15T18:04:36.716196803Z",
+      "actual_common_jar_sha256": "3c56fdda4cef4c345dd0ac369e44edbc21be234d84eaa88277b5245940421352",
+      "runtime_gc_header_g1": true,
+      "runtime_gc_header_target_pause_ms": 10,
+      "options": [
+        "-Xms128m",
+        "-Xmx1g",
+        "-Dcommon.certified.clientAckPolicy=LOCAL_DURABLE_ASYNC",
+        "-XX:+UseG1GC",
+        "-XX:MaxGCPauseMillis=10"
+      ]
+    },
+    {
+      "node": "mac-demo-20261116-020105-trade-a-hostready",
+      "id": "02b174dd2a30d6c02df54249a2e14500532ce4decff42ae679dbb036453d757b",
+      "image": "sha256:48cd45f73010f3628bc7b2a9d92d964de3eb387cb01798d3df39eadf0364a9d3",
+      "started_at": "2026-11-15T18:04:36.712521219Z",
+      "actual_common_jar_sha256": "3c56fdda4cef4c345dd0ac369e44edbc21be234d84eaa88277b5245940421352",
+      "runtime_gc_header_g1": true,
+      "runtime_gc_header_target_pause_ms": 10,
+      "options": [
+        "-Dcommon.certified.clientAckPolicy=LOCAL_DURABLE_ASYNC",
+        "-XX:+UseG1GC",
+        "-XX:MaxGCPauseMillis=10",
+        "-Xms128m",
+        "-Xmx2g"
+      ]
+    },
+    {
+      "node": "mac-demo-20261116-020105-trade-b-hostready",
+      "id": "5925d045ffc6aa4d9b9fd22a7ecb62e4d9c610f6447b1699c88531f8535bf8c4",
+      "image": "sha256:48cd45f73010f3628bc7b2a9d92d964de3eb387cb01798d3df39eadf0364a9d3",
+      "started_at": "2026-11-15T18:04:36.711333594Z",
+      "actual_common_jar_sha256": "3c56fdda4cef4c345dd0ac369e44edbc21be234d84eaa88277b5245940421352",
+      "runtime_gc_header_g1": true,
+      "runtime_gc_header_target_pause_ms": 10,
+      "options": [
+        "-Dcommon.certified.clientAckPolicy=LOCAL_DURABLE_ASYNC",
+        "-XX:+UseG1GC",
+        "-XX:MaxGCPauseMillis=10",
+        "-Xms128m",
+        "-Xmx2g"
+      ]
+    }
+  ],
+  "order_delivery8_actual_class_evidence": "/Users/kong/.opentradingcore/mac-demo-20261116-020105/actual-order-delivery8-classes-20261116.json",
+  "runtime_gc": {
+    "actual_all_four_G1": true,
+    "requested_max_pause_ms": 10,
+    "actual_flag_evidence": "/Users/kong/.opentradingcore/mac-demo-20261116-020105/actual-core-jar-and-gc-20261116.json",
+    "actual_pause_sla_passed": false,
+    "source": "G1 default for new core voters; explicit operator collector and pause budget preserved"
+  },
+  "functional": {
+    "fresh_real_business_passed": true,
+    "fresh_verification": "/Users/kong/.opentradingcore/mac-demo-20261116-020105/verification.N1Q5k7",
+    "order_only_and_trade_real_fills_passed": true,
+    "each_customer_execution_unique_public_trade_passed": true,
+    "initial_exact_financial_cursor_passed": true,
+    "actual_all_four_256_partition_role_runtime_passed": true,
+    "runtime_proof": "/Users/kong/.opentradingcore/mac-demo-20261116-020105/physical-runtime-d2kh6u1e/proof.json",
+    "ten_robot_steady_status": "RUNNING",
+    "current_same_jar_four_way_robot_sigkill_pending": true,
+    "current_true_async_settlement_loss_pending": true,
+    "current_lost_reservation_cancel_pending": true,
+    "current_lost_reservation_matched_readmission_pending": true,
+    "current_trade_single_node_pending": true
+  },
+  "current_performance": {
+    "status": "NATIVE_BASELINES_QUEUED_AFTER_TEN_ROBOT_STEADY_NOT_ACCEPTED",
+    "strict_measured_on_this_release": false,
+    "async_measured_on_this_release": false,
+    "pipeline_state": "/Users/kong/.opentradingcore/t554-bounded-waits-sequential-business-v2-20261116.json",
+    "qualified_windows_cannot_overlap_faults_or_diagnostic_attach": true
+  },
+  "last_completed_business_performance": {
+    "generation": "mac-demo-20261115-232443",
+    "common_sha256": "2492f6933696a242d39d7dbaa295b046feb9c4ec653f18d9cce5becf6b86428e",
+    "client_ack_policy": "LOCAL_DURABLE_ASYNC",
+    "is_current_release": false,
+    "native_actual_execution_2_per_second": {
+      "sent": 120,
+      "inside_window": 120,
+      "final_p99_ms": 125.802
+    },
+    "native_actual_execution_40_per_second": {
+      "planned": 2400,
+      "sent": 2400,
+      "final": 2400,
+      "inside_window": 2396,
+      "after_window": 4,
+      "actual_in_window_per_second": 39.933333,
+      "ack_p99_ms": 254.153,
+      "final_p50_ms": 92.483,
+      "final_p99_ms": 1838.847,
+      "scheduled_final_p99_ms": 1848.838,
+      "scheduler_drops": 0,
+      "financial_passed": true
+    },
+    "original_evidence": "/Users/kong/dc-quant-deploy/docs/evidence/archive/T554_MAC_CONTROL_CURSOR_RELEASE_PRE_20261116_0210.json",
+    "performance_accepted": false
+  },
+  "original_failed_generation": {
+    "generation": "/Users/kong/.opentradingcore/mac-demo-20261115-232443",
+    "status": "TRUE_BUSINESS_RPO_NO_GO_RETAINED_AFTER_SEQUENTIAL_REPLACEMENT",
+    "failure_evidence": "/Users/kong/.opentradingcore/mac-demo-20261115-232443/async-rpo-ee583dc0/evidence.json",
+    "old_data_and_containers_retained": true,
+    "all_ten_original_robot_stop_requests_accepted": true,
+    "all_robot_owners_released_before_retirement": false,
+    "zero_pending_or_financial_drain_claimed": false,
+    "manual_preappend_waiter_abort_is_not_automatic_recovery_acceptance": true
+  },
+  "implementation_changes": [
+    "Common pre-append/drain waits reuse existing two-second budget and check exact grant/fencing; fail before encoding/append or strict snapshot publication. Existing64LOCAL proofs and actual physical catchup retained.",
+    "Order committed match delivery bounded pool2 to8, original1024 queue and per-partition ordering retained.",
+    "New-core G1 target10ms; this is best effort and requires real native measurement."
+  ],
+  "one_click": {
+    "common_qualification": "bash mac-colima-saas.sh verify-common COMMON_REVISION",
+    "qualify_build_and_sequential_fresh": "bash mac-colima-saas.sh verify-and-fresh COMMON_REVISION",
+    "reuse_exact_previously_qualified_common": "bash mac-colima-saas.sh fresh-verified CANDIDATE PHYSICAL_RESULT",
+    "same_jar_qualification_full_actual_passed": true,
+    "combined_entry_stage_failure_propagation_tested": true,
+    "combined_entry_itself_complete_actual_run_claimed": false,
+    "async_recovery_three_cases": "bash mac-colima-saas.sh verify-async-recovery RUN_DIRECTORY",
+    "async_match_readmission_driver_regressions_passed": 9
+  },
+  "open_findings": [
+    "Sustained1000/s and end-to-endP99<=20ms remain unproved on both modes.",
+    "Complete256-partition takeover/Home remains minutes; functional evidence is not an isolatedRTO benchmark.",
+    "Common strict batching exists but business calls remain singleton.",
+    "Previous real RPO exposed infinite async waits holding business locks; new Common fullP0 passed, exact failure still requires live business retest.",
+    "Robot under all four process faults, single Trade node, genuine async loss/readmission and exact finance gates remain incomplete on new release.",
+    "Retired originalGG2803 unsettled matches remain separate retained evidence."
+  ],
+  "historical_evidence": "archive/T554_MAC_CONTROL_CURSOR_RELEASE_PRE_20261116_0210.json",
+  "raw_storage_diagnostic": {
     "observed_at": "2026-11-16T01:36:21.884747+08:00",
     "status": "SYNTHETIC_IO_DIAGNOSTIC_ONLY_NOT_TRADING_PERFORMANCE_ACCEPTANCE",
     "production_go": false,
@@ -1253,25 +323,5 @@
       "No inference that raw storage is the sole cause of1.84s business tail or that trading targets have passed."
     ]
   },
-  "matched_lost_reservation_test": {
-    "status": "TEST_DRIVER_AND9_REGRESSIONS_READY_LIVE_CASE_NOT_RUN",
-    "entry": "verify-async-recovery now runs true settlement loss, lost-reservation cancel, then lost-reservation matched readmission sequentially",
-    "driver": "scripts/verify-mac-demo-async-reservation-loss.py --after-loss match",
-    "requirements": [
-      "Original reservation genuinely absent from surviving certified old prefix after SIGKILL",
-      "Normal counter-order matches the original resting Order",
-      "One actual new-epoch four-domain reservation commit with original order identity and risk-marked LOCAL coordinate",
-      "Exact both-account balances and execution fees, zero frozen funds, correct paired positions and used margin",
-      "Original primary return,512 raw WAL/snapshot pairs,exact financial cursor and continuous Robot"
-    ]
-  },
-  "next_business_gc_candidate": {
-    "status": "JAVA8_IMAGE_SMOKE_AND28_RELEVANT_TOOL_TESTS_PASS_NOT_DEPLOYED_OR_PERFORMANCE_ACCEPTED",
-    "default_for_new_core_voters": "-XX:+UseG1GC -XX:MaxGCPauseMillis=10, only when original environment does not explicitly select or disable any collector",
-    "operator_collector_and_existing_pause_budget_preserved": true,
-    "heap_limits_changed": false,
-    "log_rotation_and_actual_pause_observation_preserved": true,
-    "why": "Original actual native40/s logs have allocation GC pauses exceeding20ms; total application pauses exceeded50ms on all four nodes. G1 target is best effort and must be measured.",
-    "comparison_caveat": "Next business release combines bounded Common waits,Order delivery pool8,and G1 default. Do not attribute any complete speedup to one isolated change."
-  }
+  "application_data_or_credentials_included": false
 }
