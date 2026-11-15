@@ -52,6 +52,16 @@ class ReservationLossPreflightTest(unittest.TestCase):
         b = [['P079', '5', '1', 'OPEN_ORDER', 'REMOVE', 'NULL']]
         self.assertEqual(LOSS.semantic_mutations(a), LOSS.semantic_mutations(b))
 
+    def test_mysql_transport_preserves_original_backslashes_and_control_characters(self):
+        payload = json.dumps({'executionKey': 'ABC123\\u001f123\x1fTrade_Cancel'})
+        rows = [['P079', '5', '1', 'DEDUPE_RESULT', 'UPSERT', payload.encode().hex()],
+                ['P079', '5', '1', 'OPEN_ORDER', 'REMOVE', 'NULL']]
+        with patch.dict(LOSS.PRODUCT, readonly_sql=Mock(return_value=rows)):
+            actual = LOSS.terminal_cancel_mutations('ABC123', '123')
+        self.assertEqual(payload, actual[0][5])
+        self.assertIsNone(actual[1][5])
+        self.assertEqual('ABC123\\u001f123\x1fTrade_Cancel', json.loads(actual[0][5])['executionKey'])
+
     def readmission_rows(self):
         receipt = json.dumps({'result': {'info3': 'LOCAL_DURABLE_ASYNC', 'info4': 'P079/5/1'}})
         return [['P079', '5', '1', kind, 'UPSERT', receipt if kind == 'DEDUPE_RESULT' else '{}']

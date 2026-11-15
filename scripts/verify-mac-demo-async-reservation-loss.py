@@ -69,11 +69,21 @@ def account(trader):
 
 
 def terminal_cancel_mutations(location, order_id):
-    return PRODUCT['readonly_sql'](
-        "SELECT partition_id,source_epoch,journal_seq,entity_type,operation,payload "
+    return projection_mutations(
+        "SELECT partition_id,source_epoch,journal_seq,entity_type,operation,HEX(payload) "
         "FROM dc_trade_projection_mutation "
         f"WHERE location='{location}' AND request_id='{order_id}:Trade_Cancel' "
         "AND source_type='CANCEL_OPEN_PREPARED' ORDER BY source_epoch,journal_seq,mutation_index")
+
+
+def projection_mutations(query):
+    # mysql batch output escapes backslashes and control characters. HEX
+    # transports the actual stored UTF-8 bytes, rather than normalizing keys
+    # or weakening the Common-to-projection comparison.
+    rows = PRODUCT['readonly_sql'](query)
+    for row in rows:
+        row[5] = None if row[5] == 'NULL' else bytes.fromhex(row[5]).decode('utf-8')
+    return rows
 
 
 def accepted_mutations(text, sha, partition, epoch, location, user, order_id, action):
@@ -477,8 +487,8 @@ def main():
                             if args.after_loss == 'cancel':
                                 rows = terminal_cancel_mutations(record['location'], record['order_id'])
                             else:
-                                rows = PRODUCT['readonly_sql'](
-                                    "SELECT partition_id,source_epoch,journal_seq,entity_type,operation,payload "
+                                rows = projection_mutations(
+                                    "SELECT partition_id,source_epoch,journal_seq,entity_type,operation,HEX(payload) "
                                     "FROM dc_trade_projection_mutation "
                                     f"WHERE location='{record['location']}' AND request_id='{record['order_id']}:Newing' "
                                     f"AND source_type='NEWING_OPEN_PREPARED' AND source_epoch={local_rows[0][1]} "
