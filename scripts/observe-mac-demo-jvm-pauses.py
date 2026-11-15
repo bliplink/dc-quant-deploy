@@ -36,6 +36,7 @@ def parse_pause(line):
     stripped = line.strip()
     match = PAUSE.fullmatch(stripped)
     outer_at = None
+    extra_at = None
     if not match:
         # Concurrent HotSpot GC writers can interleave a timestamp prefix
         # immediately before a complete pause line. Accept only that exact
@@ -46,6 +47,32 @@ def parse_pause(line):
             if match:
                 outer_at = at(prefix).isoformat()
     if not match:
+        # The other actual Java8 interleaving puts the concurrent GC
+        # timestamp between a complete date+uptime prefix and the pause body.
+        stamp = r'\d{4}-\d{2}-\d{2}T[\d:.]+(?:Z|[+-]\d{4})'
+        inserted = re.fullmatch(r'(' + stamp + r'):\s+(\d+(?:\.\d+)?):\s+('
+                                + stamp + r'):\s+(Total time for which application threads were stopped: .+)',
+                                stripped)
+        if inserted:
+            match = PAUSE.fullmatch(inserted[1] + ': ' + inserted[2] + ': ' + inserted[4])
+            if match:
+                extra_at = at(inserted[3]).isoformat()
+    if not match:
+        # Both concurrent writers can print a complete date+uptime header.
+        # Accept only identical printed uptimes; never interpolate time.
+        stamp = r'\d{4}-\d{2}-\d{2}T[\d:.]+(?:Z|[+-]\d{4})'
+        doubled = re.fullmatch(r'(?P<first>' + stamp + r'):\s+(?:(?P<before>' + stamp
+            + r'):\s+)?(?P<uptime>\d+(?:\.\d+)?):\s+(?:(?P<after>' + stamp
+            + r'):\s+)?(?P<duplicate>\d+(?:\.\d+)?):\s+'
+            r'(?P<body>Total time for which application threads were stopped: .+)', stripped)
+        if (doubled and bool(doubled['before']) != bool(doubled['after'])
+                and doubled['uptime'] == doubled['duplicate']):
+            match = PAUSE.fullmatch((doubled['before'] or doubled['first']) + ': '
+                                   + doubled['uptime'] + ': ' + doubled['body'])
+            if match:
+                outer_at = at(doubled['first']).isoformat() if doubled['before'] else None
+                extra_at = at(doubled['after']).isoformat() if doubled['after'] else None
+    if not match:
         raise ValueError('Unrecognized application-pause record; cannot infer zero pauses')
     fields = match.groupdict()
     result = {'at': at(fields['at']).isoformat(), 'uptime_seconds': float(fields['uptime']),
@@ -53,6 +80,8 @@ def parse_pause(line):
             'stopping_threads_ms': round(float(fields['stopping']) * 1000, 7)}
     if outer_at is not None:
         result['interleaved_outer_timestamp'] = outer_at
+    if extra_at is not None:
+        result['interleaved_extra_timestamp'] = extra_at
     return result
 
 
@@ -66,16 +95,19 @@ def parse_log_pauses(lines, file):
         except ValueError:
             missing = re.match(r'^(\d+(?:\.\d+)?): Total time for which application threads were stopped:',
                                line.strip())
-            anchor = re.match(r'^(\d{4}-\d{2}-\d{2}T[\d:.]+(?:Z|[+-]\d{4})):\s+'
-                              r'(\d+(?:\.\d+)?):\s+\S', previous.strip())
-            if not missing or not anchor or missing[1] != anchor[2]:
+            stamp = r'\d{4}-\d{2}-\d{2}T[\d:.]+(?:Z|[+-]\d{4})'
+            anchor = re.match(r'^(?:(?P<outer>' + stamp + r'):\s+)?(?P<at>' + stamp + r'):\s+'
+                              r'(?P<uptime>\d+(?:\.\d+)?):\s+\S', previous.strip())
+            if not missing or not anchor or missing[1] != anchor['uptime']:
                 raise
             # Do not infer wall time from process start or interpolate uptime.
             # The preceding complete prefix has this exact printed uptime;
             # parse_pause still validates the entire original pause record.
-            event = parse_pause(anchor[1] + ': ' + line.strip())
+            event = parse_pause(anchor['at'] + ': ' + line.strip())
             event['interleaved_timestamp_prefix_line'] = number - 1
             event['interleaved_timestamp_prefix'] = anchor[0]
+            if anchor['outer']:
+                event['interleaved_outer_timestamp'] = at(anchor['outer']).isoformat()
         if event:
             events.append(dict(event, file=file, line=number))
         previous = line

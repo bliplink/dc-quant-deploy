@@ -6,6 +6,40 @@ MOD = runpy.run_path(str(Path(__file__).resolve().parents[1] / 'scripts/observe-
 
 
 class JvmPauseObservationTest(unittest.TestCase):
+    def test_concurrent_complete_headers_require_identical_printed_uptime(self):
+        stamp = '2026-11-16T07:56:20.917+0800: '
+        body = ('Total time for which application threads were stopped: 0.0022636 seconds, '
+                'Stopping threads took: 0.0000700 seconds')
+        for prefix in [stamp + stamp + '971.774: 971.774: ',
+                       stamp + '971.774: ' + stamp + '971.774: ']:
+            event = MOD['parse_pause'](prefix + body)
+            self.assertEqual('2026-11-15T23:56:20.917000+00:00', event['at'])
+            self.assertEqual(2.2636, event['stopped_ms'])
+            with self.assertRaises(ValueError):
+                MOD['parse_pause'](prefix.replace('971.774:', '971.775:', 1) + body)
+
+    def test_actual_date_inserted_after_complete_uptime_preserves_both_times(self):
+        line = ('2026-11-16T07:54:54.687+0800: 885.544: 2026-11-16T07:54:54.687+0800: '
+                'Total time for which application threads were stopped: 0.0027115 seconds, '
+                'Stopping threads took: 0.0000528 seconds')
+        event = MOD['parse_pause'](line)
+        self.assertEqual('2026-11-15T23:54:54.687000+00:00', event['at'])
+        self.assertEqual(event['at'], event['interleaved_extra_timestamp'])
+        self.assertEqual(2.7115, event['stopped_ms'])
+        with self.assertRaises(ValueError):
+            MOD['parse_pause'](line + ' invalid trailing text')
+
+    def test_actual_double_date_prefix_keeps_the_inner_uptime_anchor(self):
+        lines = [
+            '2026-11-16T07:52:43.390+0800: 2026-11-16T07:52:43.390+0800: '
+            '754.247: [GC concurrent-root-region-scan-start]\n',
+            '754.247: Total time for which application threads were stopped: '
+            '0.0040025 seconds, Stopping threads took: 0.0001720 seconds\n']
+        event, = MOD['parse_log_pauses'](lines, 'gc.log')
+        self.assertEqual('2026-11-15T23:52:43.390000+00:00', event['at'])
+        self.assertEqual(event['at'], event['interleaved_outer_timestamp'])
+        self.assertEqual(4.0025, event['stopped_ms'])
+
     def test_actual_split_prefix_requires_adjacent_identical_uptime_and_retains_provenance(self):
         lines = [
             '2026-11-16T06:59:32.473+0800: 145.167: '
