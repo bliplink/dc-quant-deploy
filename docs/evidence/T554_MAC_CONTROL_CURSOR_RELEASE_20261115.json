@@ -1,6 +1,6 @@
 {
-  "observed_at": "2026-11-15T09:06:25.230551",
-  "status": "EXACT_COMMON_AND_RETAINED_DATA_FUNCTIONAL_PASS_NATIVE_PERFORMANCE_AND_BUSINESS_HA_PENDING",
+  "observed_at": "2026-11-15T09:46:59.485600",
+  "status": "EXACT_COMMON_FUNCTIONAL_PASS_REAL_LOAD_PHYSICAL_ACK_TIMEOUT_PERFORMANCE_AND_STABILITY_NO_GO",
   "production_acceptance": "NO_GO",
   "generation": "mac-demo-20261115-065831",
   "original_volumes_preserved": true,
@@ -137,13 +137,61 @@
     "original_cohort_financial_unsettled_before_resume": 0,
     "original_cohort_local_final_pending_before_resume": 0,
     "financial_cursor_before_resume": "PASS",
-    "original_robots_normally_restarted": true
+    "original_robots_normally_restarted": true,
+    "original_robots_current_state": "STOPPED_BY_NORMAL_MANAGER_FOR_STORAGE_MAINTENANCE_AND_DIAGNOSIS",
+    "post_recovery_financial_cursor": "PASS",
+    "post_recovery_original_cohort_financial_unsettled": 0,
+    "post_recovery_original_cohort_local_final_pending": 0,
+    "post_recovery_control_generation": {
+      "order": 26,
+      "trade": 22
+    }
   },
   "open_findings": [
-    "Earlier formal native cancel window triggered strict replica receipt-ledger timeouts on P190/P233; a new formal load result is still required.",
+    "Current exact Common under normal four-client cancel load again suffered WAL receipt/custody receipt-ledger physical ACK timeouts across multiple Order and Trade partitions. Automatic isolation/recovery advanced Order 10 to 26, Trade 2 to 22; financial reconciliation passed, but load stability remains NO_GO.",
+    "Native client final P99 1755.737 ms at two partitions each 1/s is unacceptable; no current-version performance improvement proven.",
+    "Independent 69-second storage bracket saw about 4.47 GiB written; includes setup, tail and background traffic, not a per-trade cost or established WAL/log attribution.",
     "Serialized persistence and one outstanding asynchronous copy per partition still bound hotspot throughput.",
     "Full-partition takeover and return remain minutes.",
     "Original retired generation GG2803 unsettled matches remain separate retained evidence."
   ],
-  "application_data_or_credentials_included": false
+  "application_data_or_credentials_included": false,
+  "current_version_measurements": {
+    "background": "Original ten Robots; same volumes and images. Observations are not isolated causal before/after comparisons.",
+    "robot_steady": {
+      "report": "robot-steady-10-011005.json",
+      "seconds": 300,
+      "quotes": 7593,
+      "tape_requests": 465,
+      "fills": 465,
+      "service_final_publish_p99_ms": 705.523,
+      "service_final_publish_p999_ms": 1162.85
+    },
+    "native_two_partitions": {
+      "report": "distributed-execution-capacity-f16bed43.json",
+      "offered_per_partition_per_second": 1,
+      "planned": 120,
+      "sent": 120,
+      "final": 120,
+      "final_in_window": 120,
+      "send_drops": 0,
+      "stream_errors": 0,
+      "ack_p99_ms": 398.707,
+      "client_final_p50_ms": 218.972,
+      "client_final_p99_ms": 1755.737,
+      "client_final_p999_ms": 1881.616
+    },
+    "native_place_cancel": {
+      "report": "order-cancel-capacity-6f5d737f.json",
+      "status": "NO_GO",
+      "order_only_concurrency_1": {
+        "cycles_per_second": 8.788,
+        "new_p99_ms": 120.735,
+        "cancel_terminal_p99_ms": 179.664,
+        "cycle_p99_ms": 273.053
+      },
+      "order_only_concurrency_4": "Physical ACK failure and changing control generation; no valid capacity conclusion. Client results were lost by a post-window reporting bug, now fixed; counts must not be inferred.",
+      "later_windows": "NOT_RUN_BLOCKED_BY_FAILURE"
+    }
+  }
 }

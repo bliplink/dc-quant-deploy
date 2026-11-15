@@ -4,6 +4,8 @@ import json
 import os
 from pathlib import Path
 import subprocess
+import tempfile
+from datetime import datetime, timezone
 
 
 HERE = Path(__file__).resolve().parent
@@ -46,11 +48,46 @@ def run(work, config):
     identity = json.loads((work / 'identity.json').read_text())
     command = [identity['java_home'] + '/bin/java', '-Xms32m', '-Xmx256m', '-cp',
                str(work) + os.pathsep + str(work / 'lib' / '*'), identity.get('class_name', 'MacDemoNativeTcpLoad')]
-    completed = subprocess.run(command, input=json.dumps(config) + '\n', capture_output=True, text=True,
-                               timeout=config['seconds'] + 150)
+    # Preserve each real client outcome before a later role/finance check can
+    # throw. Raw SDK output may contain sessions: private directory/files only,
+    # and never persist the input credentials or print the raw output.
+    evidence = Path(tempfile.mkdtemp(prefix='native-result-', dir=work))
+    meta = {'started_at': datetime.now(timezone.utc).isoformat(),
+            'request': {key: config[key] for key in ('prefix', 'seconds', 'location', 'user_id', 'symbol')
+                        if key in config}, 'class_name': identity.get('class_name', 'MacDemoNativeTcpLoad')}
+
+    def retain(stdout, stderr, returncode, timed_out=False):
+        meta.update(returncode=returncode, timed_out=timed_out,
+                    finished_at=datetime.now(timezone.utc).isoformat(), files={})
+        for name, raw in [('stdout.txt', stdout), ('stderr.txt', stderr)]:
+            data = raw if isinstance(raw, bytes) else (raw or '').encode('utf-8')
+            with (evidence / name).open('xb') as stream:
+                os.fchmod(stream.fileno(), 0o600)
+                stream.write(data)
+            meta['files'][name] = {'sha256': hashlib.sha256(data).hexdigest(), 'bytes': len(data)}
+        proof = evidence / 'proof.json'
+        with proof.open('x') as stream:
+            os.fchmod(stream.fileno(), 0o600)
+            json.dump(meta, stream, indent=2)
+            stream.write('\n')
+        return proof
+
+    try:
+        completed = subprocess.run(command, input=json.dumps(config) + '\n', capture_output=True, text=True,
+                                   timeout=config['seconds'] + 150)
+    except subprocess.TimeoutExpired as timeout:
+        proof = retain(timeout.stdout, timeout.stderr, None, timed_out=True)
+        failure = RuntimeError('Native TCP client timed out; private evidence retained')
+        failure.native_process_evidence = str(proof)
+        raise failure from timeout
+    proof = retain(completed.stdout, completed.stderr, completed.returncode)
     records = [line.removeprefix('T554_NATIVE_TCP_REPORT ') for line in completed.stdout.splitlines()
                if line.startswith('T554_NATIVE_TCP_REPORT ')]
     if completed.returncode or len(records) != 1:
         failures = [line for line in completed.stdout.splitlines() if line.startswith('T554_NATIVE_TCP_FAILURE ')]
-        raise RuntimeError('Native TCP client failed, exit=' + str(completed.returncode) + ' ' + ','.join(failures))
-    return json.loads(records[0])
+        failure = RuntimeError('Native TCP client failed, exit=' + str(completed.returncode) + ' ' + ','.join(failures))
+        failure.native_process_evidence = str(proof)
+        raise failure
+    result = json.loads(records[0])
+    result['native_process_evidence'] = str(proof)
+    return result

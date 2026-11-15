@@ -427,6 +427,17 @@ def main():
                             if args.transport == "tcp":
                                 phase["host_elapsed_including_native_login_and_barrier_seconds"] = round(elapsed, 3)
                                 elapsed = max(row["elapsed_seconds"] for row in measurements)
+                            # A real recovery can make require_strict_demo fail.
+                            # Keep the drained client results and resource
+                            # samples before that gate; never lose uncertainty
+                            # evidence or relabel this phase as a pass.
+                            phase.update(elapsed_seconds=round(elapsed, 3), records=records,
+                                         resources=resources, passed=False,
+                                         client_results_saved_before_control_check=True)
+                            if args.transport == "tcp":
+                                phase["native_process_evidence"] = [row["native_process_evidence"]
+                                                                    for row in measurements]
+                            output.write_text(json.dumps(report, indent=2) + "\n")
                             control_after = CAPACITY["require_strict_demo"](root)
                             phase.update(elapsed_seconds=round(elapsed, 3), records=records, resources=resources,
                                          control_generation_before=control_before, control_generation_after=control_after,
@@ -489,6 +500,8 @@ def main():
             report["passed"] = True
         except Exception as exc:
             report["failure"] = type(exc).__name__ + ": " + str(exc)[:180]
+            if getattr(exc, "native_process_evidence", None):
+                report["failure_native_process_evidence"] = exc.native_process_evidence
         finally:
             report["finished_at"] = datetime.now(timezone.utc).isoformat()
             output.write_text(json.dumps(report, indent=2) + "\n")

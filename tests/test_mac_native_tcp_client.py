@@ -1,6 +1,7 @@
 import json
 from pathlib import Path
 import runpy
+import tempfile
 from types import SimpleNamespace
 import unittest
 from unittest.mock import patch
@@ -10,11 +11,18 @@ NATIVE = runpy.run_path(str(Path(__file__).resolve().parents[1] / 'scripts/mac-d
 
 
 class NativeTcpClientTest(unittest.TestCase):
+    def work(self, identity):
+        temporary = tempfile.TemporaryDirectory()
+        self.addCleanup(temporary.cleanup)
+        work = Path(temporary.name)
+        (work / 'identity.json').write_text(json.dumps(identity))
+        return work
+
     def run_client(self, completed):
         identity = {'java_home': '/test-java'}
-        work = Path('/test-native-client')
-        with patch.object(Path, 'read_text', return_value=json.dumps(identity)), \
-                patch.object(NATIVE['subprocess'], 'run', return_value=completed) as process:
+        work = self.work(identity)
+        completed.stderr = ''
+        with patch.object(NATIVE['subprocess'], 'run', return_value=completed) as process:
             result = NATIVE['run'](work, {'seconds': 60, 'token': 'private-session'})
         arguments, options = process.call_args
         self.assertNotIn('private-session', ' '.join(arguments[0]))
@@ -24,7 +32,8 @@ class NativeTcpClientTest(unittest.TestCase):
 
     def test_only_the_complete_native_report_is_accepted(self):
         result = self.run_client(SimpleNamespace(returncode=0, stdout='library output\nT554_NATIVE_TCP_REPORT {"orders": []}\n'))
-        self.assertEqual({'orders': []}, result)
+        self.assertEqual([], result['orders'])
+        self.assertTrue(Path(result['native_process_evidence']).is_file())
 
     def test_missing_or_ambiguous_reports_fail(self):
         for text in ['', 'T554_NATIVE_TCP_REPORT {}\nT554_NATIVE_TCP_REPORT {}\n']:
@@ -38,11 +47,9 @@ class NativeTcpClientTest(unittest.TestCase):
         self.assertIn('IOException', str(caught.exception))
 
     def test_recorded_cancel_client_is_selected_without_exposing_credentials(self):
-        work = Path('/test-native-client')
-        with patch.object(Path, 'read_text', return_value=json.dumps({
-                'java_home': '/test-java', 'class_name': 'MacDemoNativeTcpOrderCancel'})), \
-                patch.object(NATIVE['subprocess'], 'run', return_value=SimpleNamespace(
-                    returncode=0, stdout='T554_NATIVE_TCP_REPORT {"orders": []}\n')) as process:
+        work = self.work({'java_home': '/test-java', 'class_name': 'MacDemoNativeTcpOrderCancel'})
+        with patch.object(NATIVE['subprocess'], 'run', return_value=SimpleNamespace(
+                    returncode=0, stdout='T554_NATIVE_TCP_REPORT {"orders": []}\n', stderr='')) as process:
             NATIVE['run'](work, {'seconds': 60, 'token': 'private-session'})
         self.assertEqual('MacDemoNativeTcpOrderCancel', process.call_args.args[0][-1])
         self.assertNotIn('private-session', repr(process.call_args.args))
