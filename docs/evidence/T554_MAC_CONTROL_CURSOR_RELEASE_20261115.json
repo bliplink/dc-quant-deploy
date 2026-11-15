@@ -1,28 +1,25 @@
 {
-  "observed_at": "2026-11-15T13:54:51.316730",
-  "status": "CURRENT_STRICT_CANCEL_BASELINE_PASS_PERFORMANCE_NO_GO_APPROVED_CUMULATIVE_REDESIGN_COMPONENTS_ONLY",
+  "observed_at": "2026-11-15T17:53:18.728930",
+  "status": "CUMULATIVE_V2_P0_AND_FRESH_BUSINESS_PASS_NATIVE_PERFORMANCE_PENDING",
   "production_acceptance": "NO_GO",
-  "generation": "mac-demo-20261115-065831",
+  "generation": "mac-demo-20261115-174410",
   "original_volumes_preserved": true,
   "client_ack_policy": "STRICT_QUORUM",
   "common": {
-    "revision": "4f28c95245387a2e18f0afe6d2b1bc816f6484ba",
-    "jar_sha256": "71b4ce7dac4b2a51fe134a694f9f9f1c3654c1668f89f92f20bf731096ed264d",
-    "verification_run": "20261115-104903",
-    "safety_tests": 261,
-    "native_physical_cases": 13,
+    "revision": "25466872e798376057f5021961efd85094bd9946",
+    "jar_sha256": "a60aea73b59658ff6d5ec1cd63bf7671be21aee847f9daceb3ce969137e545cb",
+    "verification_run": "20261115-170232",
+    "fixture_revision": "38242d87382a7c625b74b844921eb0119b0b2b4d",
+    "safety_tests_discovered": 305,
+    "safety_tests_executed_passed": 302,
+    "optional_historical_skipped": 3,
+    "native_physical_cases": 14,
     "cold_restart_cases": 4,
     "complete_256_home_both_directions_and_repeat": true,
     "interrupted_signed_return": true,
     "equal_wal_pairs_per_verification": 256,
     "equal_snapshot_pairs_per_verification": 256,
-    "controlled_fixture_phase_observations_ms": {
-      "a_takeover": 163347,
-      "a_home": 324483,
-      "b_takeover": 164196,
-      "b_home": 227675
-    },
-    "phase_timing_scope": "Functional independent fixtures, distinct phases; not production RTO or a causal performance comparison. All original physical proofs retained."
+    "phase_timing_scope": "Disk cleanup overlapped native P0. Correctness qualified; timings retained for diagnostic purposes only."
   },
   "sources": {
     "shared": {
@@ -129,23 +126,20 @@
     }
   ],
   "functional": {
-    "multi_maker_report": "multi-maker-f952aa4c.json",
-    "cases": 12,
-    "actual_physical_roles": 256,
-    "actual_primary_writers_per_node": 128,
-    "original_cohort_count": 10,
-    "original_cohort_financial_unsettled_before_resume": 0,
-    "original_cohort_local_final_pending_before_resume": 0,
-    "financial_cursor_before_resume": "PASS_FINANCIAL_CURSOR",
-    "original_robots_normally_restarted": true,
-    "original_robots_current_state": "NORMALLY_STOPPED_FOR_COMMON_DEVELOPMENT",
-    "post_recovery_financial_cursor": "PASS",
-    "post_recovery_original_cohort_financial_unsettled": 0,
-    "post_recovery_original_cohort_local_final_pending": 0,
-    "post_recovery_control_generation": {
-      "order": 26,
-      "trade": 58
-    }
+    "fresh_order_only_trade_and_no_trade_balance_mutation": "PASS",
+    "fresh_funded_signed_trade_and_balance_position_audit": "PASS",
+    "customer_execution_to_public_trade_match": "PASS",
+    "initial_trial_robot_quotes_and_real_tape_trade": "PASS",
+    "certified_trade_financial_cursor": "PASS",
+    "four_actual_physical_runtimes": "PASS_256_ROLES_128_HOME_PRIMARY_EACH",
+    "verification_directory": "/Users/kong/.opentradingcore/mac-demo-20261115-174410/verification.SwQqmE",
+    "ten_robot_steady": "RUNNING",
+    "native_order_cancel": "PENDING",
+    "native_distributed_execution": "PENDING",
+    "same_version_async_capacity": "PENDING",
+    "continuous_robot_business_failover": "PENDING",
+    "trade_single_node": "PENDING",
+    "multi_maker_regression": "PENDING"
   },
   "open_findings": [
     "Previous unprofiled 99a91b9 four-client load caused physical ACK timeouts. The confirmed cold-server executor defect is fixed and exactly qualified; same-version real load must close the previous failure.",
@@ -157,7 +151,7 @@
     "Normal strict Common path is serial: three peer request/response exchanges; source has seven file/directory force calls and replica five, per singleton Common commit. Physical writer does not yet implement real multi-command group commit. This is a structural performance limit, not a measured production throughput formula."
   ],
   "application_data_or_credentials_included": false,
-  "current_maintenance": "Verified lossless SQL/stdout rotation archiving and discard complete. Original ten Robots normally stopped with financial reconciliation after clean strict cancel baseline; current business containers/data retained.",
+  "current_maintenance": "Disk cleanup complete; previous business generation normally retired and data retained. New strict cumulative Common generation active with ten normally running Robots; native qualification in progress.",
   "ordinary_logging_layout": {
     "deploy_source_revision": "b9c800d",
     "four_voter_files_installed": true,
@@ -275,102 +269,21 @@
     "common_revision": "99a91b9bd9039bdc40f11bc87192a5e4f25f28b9"
   },
   "qualified_optimization_release": {
-    "common_revision": "4f28c95245387a2e18f0afe6d2b1bc816f6484ba",
-    "common_jar_sha256": "71b4ce7dac4b2a51fe134a694f9f9f1c3654c1668f89f92f20bf731096ed264d",
-    "changes": [
-      "Reuse exact immutable canonical manifest parses.",
-      "Use separate bounded server executors for the existing cold recovery connection and physical durability connections, preserving per-channel wire order."
-    ],
-    "transport_and_framing_tests": 11,
-    "full_safety_tests": 261,
+    "common_revision": "25466872e798376057f5021961efd85094bd9946",
+    "common_jar_sha256": "a60aea73b59658ff6d5ec1cd63bf7671be21aee847f9daceb3ce969137e545cb",
     "full_physical_and_cold_home": "PASS",
     "deployed": true,
-    "previous_parse_only_candidate": {
-      "revision": "b1214be",
-      "safety_tests_passed": 256,
-      "all_four_cold_cases_passed": true,
-      "full_p0": "CANCELLED_SUPERSEDED_BEFORE_COMPLETION_NOT_QUALIFIED"
-    }
+    "business_functional_startup": "PASS",
+    "performance": "PENDING",
+    "production_go": false,
+    "changes": [
+      "One cumulative commit stream replaces repeated normal custody/receipt writes. Real primary/replica WAL force and cumulative index force retained.",
+      "One normal strict physical peer exchange instead of three; bounded generic strict group API connected, business batching still pending."
+    ]
   },
   "current_version_measurements": {
-    "status": "FIVE_CLEAN_STRICT_CANCEL_WINDOWS_PASS_NO_HIGH_PERFORMANCE_ACCEPTANCE",
-    "common_revision": "4f28c95245387a2e18f0afe6d2b1bc816f6484ba",
-    "native_capacity_or_latency_improvement_claimed": false,
-    "original_steady_report_latency_invalidated": true,
-    "reason": "Logger marker expected caller line numbers; original report falsely passed with zero ingress/paired samples. Fixed marker and require finite paired samples for every requested tenant. Original report retained with invalidation marker.",
-    "independent_original_window_remeasurement": {
-      "quotes": 5743,
-      "tape_requests": 774,
-      "filled_executions": 772,
-      "paired_samples": 772,
-      "paired_tenants": 10,
-      "service_ingress_to_filled_publish_ms": {
-        "p50": 93.92,
-        "p95": 279.054,
-        "p99": 1075.246,
-        "p99_9": 3375.086
-      },
-      "scope": "Retained logs from original five-minute window; service-to-service latency, not full client round trip or a controlled before/after comparison. Window-edge requests are not a data-loss finding.",
-      "control_generation": {
-        "order": 26,
-        "trade": 58
-      },
-      "max_completed_jvm_stop_ms": 149.3985
-    },
-    "first_native_attempt": "ADMISSION_NO_GO_BEFORE_ANY_SETUP_OR_PRESSURE_LOW_HOST_DISK",
-    "measurement_regression_tests_passed": 10,
-    "strict_cancel_clean_windows": [
-      {
-        "mode": "ORDER_ONLY",
-        "concurrency": 4,
-        "cycles": 805,
-        "cycles_per_second": 13.265,
-        "new_p99_ms": 742.949,
-        "cancelled_p99_ms": 475.327,
-        "cycle_p99_ms": 1036.718
-      },
-      {
-        "mode": "ORDER_ONLY",
-        "concurrency": 8,
-        "cycles": 760,
-        "cycles_per_second": 12.537,
-        "new_p99_ms": 2008.509,
-        "cancelled_p99_ms": 714.958,
-        "cycle_p99_ms": 2486.617
-      },
-      {
-        "mode": "TRADE",
-        "concurrency": 1,
-        "cycles": 544,
-        "cycles_per_second": 9.052,
-        "new_p99_ms": 136.875,
-        "cancelled_p99_ms": 184.965,
-        "cycle_p99_ms": 294.391
-      },
-      {
-        "mode": "TRADE",
-        "concurrency": 4,
-        "cycles": 640,
-        "cycles_per_second": 10.609,
-        "new_p99_ms": 938.717,
-        "cancelled_p99_ms": 465.287,
-        "cycle_p99_ms": 1496.571
-      },
-      {
-        "mode": "TRADE",
-        "concurrency": 8,
-        "cycles": 760,
-        "cycles_per_second": 12.511,
-        "new_p99_ms": 980.151,
-        "cancelled_p99_ms": 636.933,
-        "cycle_p99_ms": 1833.559
-      }
-    ],
-    "strict_cancel_control_generation": {
-      "order": 34,
-      "trade": 58
-    },
-    "async_same_version": "PENDING"
+    "status": "NOT_YET_MEASURED_CURRENT_CUMULATIVE_JAR",
+    "scope": "Previous 4f data retained separately; no new throughput or P99 claim yet."
   },
   "cumulative_commit_redesign": {
     "owner_approved": true,
@@ -460,7 +373,9 @@
       "scope": "Actual process artifacts; RSA/role/fencing proof remains the preceding real Java drill.",
       "verified_metadata_records": 8210
     },
-    "business_integration_status": "BUILDING_SAME_TESTED_COMMON_JAR_NOT_YET_DEPLOYED"
+    "business_integration_status": "SAME_TESTED_JAR_ACTIVE_ON_ORIGINAL_MAC_DEMO_FRESH_BUSINESS_AND_PHYSICAL_RUNTIME_PASS_NATIVE_TESTS_PENDING",
+    "business_generation": "mac-demo-20261115-174410",
+    "production_runtime_deployed_to_mac_demo": true
   },
   "read_only_current_control_recheck": {
     "order": 34,
@@ -505,5 +420,146 @@
     "pre_release_readonly_runtime": "PASS all four current Order/Trade physical runtimes",
     "pre_release_original_robot_settlement_backlog": "PASS 10 original locations",
     "pre_release_financial_cursor": "PASS_FINANCIAL_CURSOR with exact predecessor checks; no reasons"
+  },
+  "previous_business_release_4f28c95": {
+    "status": "CURRENT_STRICT_CANCEL_BASELINE_PASS_PERFORMANCE_NO_GO_APPROVED_CUMULATIVE_REDESIGN_COMPONENTS_ONLY",
+    "generation": "mac-demo-20261115-065831",
+    "common": {
+      "revision": "4f28c95245387a2e18f0afe6d2b1bc816f6484ba",
+      "jar_sha256": "71b4ce7dac4b2a51fe134a694f9f9f1c3654c1668f89f92f20bf731096ed264d",
+      "verification_run": "20261115-104903",
+      "safety_tests": 261,
+      "native_physical_cases": 13,
+      "cold_restart_cases": 4,
+      "complete_256_home_both_directions_and_repeat": true,
+      "interrupted_signed_return": true,
+      "equal_wal_pairs_per_verification": 256,
+      "equal_snapshot_pairs_per_verification": 256,
+      "controlled_fixture_phase_observations_ms": {
+        "a_takeover": 163347,
+        "a_home": 324483,
+        "b_takeover": 164196,
+        "b_home": 227675
+      },
+      "phase_timing_scope": "Functional independent fixtures, distinct phases; not production RTO or a causal performance comparison. All original physical proofs retained."
+    },
+    "functional": {
+      "multi_maker_report": "multi-maker-f952aa4c.json",
+      "cases": 12,
+      "actual_physical_roles": 256,
+      "actual_primary_writers_per_node": 128,
+      "original_cohort_count": 10,
+      "original_cohort_financial_unsettled_before_resume": 0,
+      "original_cohort_local_final_pending_before_resume": 0,
+      "financial_cursor_before_resume": "PASS_FINANCIAL_CURSOR",
+      "original_robots_normally_restarted": true,
+      "original_robots_current_state": "NORMALLY_STOPPED_FOR_COMMON_DEVELOPMENT",
+      "post_recovery_financial_cursor": "PASS",
+      "post_recovery_original_cohort_financial_unsettled": 0,
+      "post_recovery_original_cohort_local_final_pending": 0,
+      "post_recovery_control_generation": {
+        "order": 26,
+        "trade": 58
+      }
+    },
+    "current_maintenance": "Verified lossless SQL/stdout rotation archiving and discard complete. Original ten Robots normally stopped with financial reconciliation after clean strict cancel baseline; current business containers/data retained.",
+    "qualified_optimization_release": {
+      "common_revision": "4f28c95245387a2e18f0afe6d2b1bc816f6484ba",
+      "common_jar_sha256": "71b4ce7dac4b2a51fe134a694f9f9f1c3654c1668f89f92f20bf731096ed264d",
+      "changes": [
+        "Reuse exact immutable canonical manifest parses.",
+        "Use separate bounded server executors for the existing cold recovery connection and physical durability connections, preserving per-channel wire order."
+      ],
+      "transport_and_framing_tests": 11,
+      "full_safety_tests": 261,
+      "full_physical_and_cold_home": "PASS",
+      "deployed": true,
+      "previous_parse_only_candidate": {
+        "revision": "b1214be",
+        "safety_tests_passed": 256,
+        "all_four_cold_cases_passed": true,
+        "full_p0": "CANCELLED_SUPERSEDED_BEFORE_COMPLETION_NOT_QUALIFIED"
+      }
+    },
+    "current_version_measurements": {
+      "status": "FIVE_CLEAN_STRICT_CANCEL_WINDOWS_PASS_NO_HIGH_PERFORMANCE_ACCEPTANCE",
+      "common_revision": "4f28c95245387a2e18f0afe6d2b1bc816f6484ba",
+      "native_capacity_or_latency_improvement_claimed": false,
+      "original_steady_report_latency_invalidated": true,
+      "reason": "Logger marker expected caller line numbers; original report falsely passed with zero ingress/paired samples. Fixed marker and require finite paired samples for every requested tenant. Original report retained with invalidation marker.",
+      "independent_original_window_remeasurement": {
+        "quotes": 5743,
+        "tape_requests": 774,
+        "filled_executions": 772,
+        "paired_samples": 772,
+        "paired_tenants": 10,
+        "service_ingress_to_filled_publish_ms": {
+          "p50": 93.92,
+          "p95": 279.054,
+          "p99": 1075.246,
+          "p99_9": 3375.086
+        },
+        "scope": "Retained logs from original five-minute window; service-to-service latency, not full client round trip or a controlled before/after comparison. Window-edge requests are not a data-loss finding.",
+        "control_generation": {
+          "order": 26,
+          "trade": 58
+        },
+        "max_completed_jvm_stop_ms": 149.3985
+      },
+      "first_native_attempt": "ADMISSION_NO_GO_BEFORE_ANY_SETUP_OR_PRESSURE_LOW_HOST_DISK",
+      "measurement_regression_tests_passed": 10,
+      "strict_cancel_clean_windows": [
+        {
+          "mode": "ORDER_ONLY",
+          "concurrency": 4,
+          "cycles": 805,
+          "cycles_per_second": 13.265,
+          "new_p99_ms": 742.949,
+          "cancelled_p99_ms": 475.327,
+          "cycle_p99_ms": 1036.718
+        },
+        {
+          "mode": "ORDER_ONLY",
+          "concurrency": 8,
+          "cycles": 760,
+          "cycles_per_second": 12.537,
+          "new_p99_ms": 2008.509,
+          "cancelled_p99_ms": 714.958,
+          "cycle_p99_ms": 2486.617
+        },
+        {
+          "mode": "TRADE",
+          "concurrency": 1,
+          "cycles": 544,
+          "cycles_per_second": 9.052,
+          "new_p99_ms": 136.875,
+          "cancelled_p99_ms": 184.965,
+          "cycle_p99_ms": 294.391
+        },
+        {
+          "mode": "TRADE",
+          "concurrency": 4,
+          "cycles": 640,
+          "cycles_per_second": 10.609,
+          "new_p99_ms": 938.717,
+          "cancelled_p99_ms": 465.287,
+          "cycle_p99_ms": 1496.571
+        },
+        {
+          "mode": "TRADE",
+          "concurrency": 8,
+          "cycles": 760,
+          "cycles_per_second": 12.511,
+          "new_p99_ms": 980.151,
+          "cancelled_p99_ms": 636.933,
+          "cycle_p99_ms": 1833.559
+        }
+      ],
+      "strict_cancel_control_generation": {
+        "order": 34,
+        "trade": 58
+      },
+      "async_same_version": "PENDING"
+    }
   }
 }
