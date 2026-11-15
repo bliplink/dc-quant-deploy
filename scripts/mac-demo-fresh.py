@@ -486,8 +486,12 @@ def main():
         raise RuntimeError("Expected the reviewed active Mac Demo containers")
     running_old_core = [name for name in old_core_names if old[name]["State"]["Running"]]
     if active_generation:
+        # A failed development voter can be between supervisor attempts.
+        # Only an exact physically verified replacement may retire that
+        # restarting state; its original ID, policy and volumes remain saved.
+        retained_states = ("running", "exited", "restarting") if automatic_common else ("running", "exited")
         if any(old[name]["Config"]["Labels"].get("otc.mac.demo.generation") != active_generation
-               or old[name]["State"]["Status"] not in ("running", "exited") for name in old_core_names):
+               or old[name]["State"]["Status"] not in retained_states for name in old_core_names):
             raise RuntimeError("Expected the exact active generation's two retained voters per service")
         # An exact physically verified replacement can start from a failed Demo.
         # Retain the failed voters and their volumes as the original rollback state.
