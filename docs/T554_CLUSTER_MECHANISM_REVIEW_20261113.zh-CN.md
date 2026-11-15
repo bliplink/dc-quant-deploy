@@ -1205,6 +1205,14 @@ Common8bf879d360d1844d3e9a3423f4405119440381e0 在不可变回执验签复用之
 
 05:52: The new exact candidate passed mixed cold-owner restart and automatic 256 Home WAL/snapshot agreement with no pending installation reservation on either voter. Full remaining P0 is still running. Capacity admission regression: 21 tests PASS; original stopped-Robot backlog policy: 4 tests PASS. One-click `verify-settlements RUN_DIRECTORY --locations LOCATION...` exposes the complete pending-index check. `verify-order-cancel` now forwards measurement arguments and defaults to native TCP; an explicit transport argument remains available for diagnostics.
 
+## 2026-11-15：旧数据删除授权和当前验证状态
+
+500 GB 标称容量约为 466 GiB，扣除系统分区后数据卷约 460 GiB。清理前开发运行目录约 202 GiB、当前 Docker 数据磁盘约 144 GiB、Codex 历史工作目录约 30 GiB。Docker 内部逻辑容量不能再次相加；历次部署持续保留的数据、日志和整卷备份是主要占用。
+
+按用户最新授权，已删除两个停用 Colima 环境及其数据盘、62 套未被运行容器挂载的旧 Demo 数据、18 项退役测试数据/日志/整卷备份。可用空间由约 6.91 GiB 增至 102.52 GiB，释放约 95.61 GiB。当前业务容器 ID 不变，当前数据、源码及未关闭的 GG 原始问题数据保留。删除路径留下停用标记，引用旧数据的停止容器禁用自动重启。逐项审计保存在本机 `t554-delete-unused-colima-data-20261115`；此前旧卷保留的记录为历史状态，现按新授权更新。
+
+Common2546687 / JAR `a60aea73b59658ff6d5ec1cd63bf7671be21aee847f9daceb3ce969137e545cb` 的上一轮原生故障 13/14 通过。正常关闭夹具固定损坏 B 文件，却可能实际缓存认证的 A 原始文件；测试提交38242d8改为损坏实际认证定位，同时检查原 Epoch、序号及非空水位。单场景回归 1 项通过，生产源码未变。新完整门禁 `20261115-170232` 运行中，尚未封存；相同生产 JAR 的302项安全执行及四项冷恢复通过记录保留。新版本尚未部署，性能及整体发布仍 NO_GO。
+
 ## 2026-11-15 08:29：优化门禁与仍须解决的集群问题
 
 当前唯一业务环境仍为 `mac-demo-20261115-065831`，实际 Common3d/Ordera703/Trade8b 未变。十个原 Robot 正常停止，全部数据、核心进程与失败压力记录保留。性能和负载稳定性继续 NO_GO；后续新版本必须完成同条件 TCP 重测。

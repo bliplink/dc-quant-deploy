@@ -391,7 +391,7 @@
       "optional_external_historical_skipped": 3,
       "jar_sha256": "a60aea73b59658ff6d5ec1cd63bf7671be21aee847f9daceb3ce969137e545cb"
     },
-    "formal_runtime_independent_physical_p0": "RUNNING full 14 independent voter cases and 256-partition bidirectional/third-crash/repeated/interrupted return. Production remains NO_GO until sealed.",
+    "formal_runtime_independent_physical_p0": "RUNNING fresh 14 native cases and 256 Home bidirectional/third/repeated/interrupted return; same a60aea73 production JAR. Previous failed run retained.",
     "bounded_source_pipeline_and_business_batch_integration": "STRICT COMMON BATCH CONNECTED; NORMAL ASYNC ONE OUTSTANDING AND BUSINESS BATCH CONNECTION REMAIN",
     "formal_runtime_revision": "2546687",
     "formal_runtime_jar_sha256": "a60aea73b59658ff6d5ec1cd63bf7671be21aee847f9daceb3ce969137e545cb",
@@ -432,6 +432,14 @@
       "metadata_records": 3,
       "raw_prefixes_match": true,
       "scope": "Actual process artifacts from the completed individual drill; full current P0 still pending."
+    },
+    "previous_full_physical_attempt": "NO_GO: 13/14 native cases passed; graceful-shutdown fixture tampered an unused B WAL while cache could legitimately select original A WAL. Full Home phase did not execute.",
+    "archive_locator_fixture_correction": {
+      "fixture_revision": "38242d87382a7c625b74b844921eb0119b0b2b4d",
+      "production_source_unchanged_from": "25466872e798376057f5021961efd85094bd9946",
+      "selected_regression": "PASS 1 test, zero failures/errors/skips",
+      "current_full_verification": "/Users/kong/.opentradingcore/t554-common-verifications/20261115-170232",
+      "current_full_status": "RUNNING_NOT_SEALED"
     }
   },
   "read_only_current_control_recheck": {
@@ -449,5 +457,23 @@
     "order_primary_b": 128,
     "trade_primary_a": 128,
     "trade_primary_b": 128
+  },
+  "owner_authorized_retired_storage_cleanup_20261115": {
+    "status": "PASS_CURRENT_RUNNING_CONTAINER_IDS_UNCHANGED",
+    "authorization": "Owner explicitly allowed obsolete data deletion on 2026-11-15.",
+    "removed_unused_colima_profiles": [
+      "ha-test",
+      "ha-test-sshfs"
+    ],
+    "retired_demo_data_directories_deleted": 62,
+    "other_retired_data_log_archive_targets_deleted": 18,
+    "host_free_before_bytes": 7418650624,
+    "host_free_after_bytes": 110085627904,
+    "audit_directory": "/Users/kong/.opentradingcore/t554-delete-unused-colima-data-20261115",
+    "active_business_data_retained": true,
+    "unresolved_gg_history_retained": true,
+    "source_repositories_retained": true,
+    "retired_paths_marked_against_accidental_empty_restart": true,
+    "note": "Free-space delta includes concurrent writes and APFS reclamation. Earlier retained-volume statements are historical; obsolete volumes were deleted under the new authorization."
   }
 }
