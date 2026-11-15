@@ -10,6 +10,7 @@ import re
 import runpy
 import subprocess
 import tempfile
+import traceback
 
 REPO = Path(__file__).resolve().parent.parent
 KEYS = {"node", "role_ok", "writer_ok", "expected_writers", "opened_partitions", "reservations"}
@@ -126,6 +127,12 @@ def main():
         # Tool stderr can contain private runtime details. Keep it out of the
         # console; callers receive only the failure class and private proof.
         report["failure_type"] = type(failure).__name__
+        detail = traceback.format_exc()
+        if isinstance(failure, subprocess.CalledProcessError) and failure.stderr:
+            detail += "\n" + failure.stderr
+        private_log = work / "failure-private.txt"
+        private_log.write_text(detail)
+        report["failure_evidence"] = str(private_log)
     finally:
         report["finished_at"] = datetime.now(timezone.utc).isoformat()
         save()
