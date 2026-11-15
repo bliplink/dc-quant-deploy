@@ -1,4 +1,5 @@
 import runpy
+import json
 from datetime import datetime, timezone
 from pathlib import Path
 import sys
@@ -13,6 +14,32 @@ NOW = datetime(2026, 11, 14, 1, 48, tzinfo=timezone.utc)
 
 
 class RobotTrafficSelectionTest(unittest.TestCase):
+    def test_fault_traffic_accepts_current_and_historical_logger_layouts(self):
+        for logger in ('UpdateOrderHandler', 'UpdateOrderHandler:123'):
+            with self.subTest(logger=logger):
+                messages = [
+                    dict(ExecType='Newing', Location='ABC123', ClOrdID='quote-1',
+                         Terminal='RobotSvr', Side='Buy'),
+                    dict(ExecType='Newing', Location='ABC123', ClOrdID='tape-1',
+                         Terminal='RobotSvr-Tape', TimeInForce='IOC')]
+                lines = ['INFO sid:null,' + json.dumps(row, separators=(',', ':'))
+                         + ' (' + logger + ')' for row in messages]
+                snapshot = TRAFFIC['snapshot']
+                with patch.dict(snapshot.__globals__, logs=Mock(return_value=lines)):
+                    quotes, requests, _, _ = snapshot([], ['trade'], NOW, NOW)
+                self.assertEqual({('ABC123', 'Buy', 'quote-1')}, quotes)
+                self.assertEqual({('ABC123', 'tape-1')}, requests)
+
+    def test_other_logger_cannot_supply_trade_ingress_evidence(self):
+        row = dict(ExecType='Newing', Location='ABC123', ClOrdID='quote-1',
+                   Terminal='RobotSvr', Side='Buy')
+        line = 'INFO sid:null,' + json.dumps(row, separators=(',', ':')) + ' (OtherHandler:123)'
+        snapshot = TRAFFIC['snapshot']
+        with patch.dict(snapshot.__globals__, logs=Mock(return_value=[line])):
+            quotes, requests, _, _ = snapshot([], ['trade'], NOW, NOW)
+        self.assertFalse(quotes)
+        self.assertFalse(requests)
+
     @staticmethod
     def traffic():
         return ({('STOPPED', 'Buy', 'old-quote'), ('LIVE', 'Buy', 'live-quote')},

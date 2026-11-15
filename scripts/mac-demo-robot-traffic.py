@@ -13,6 +13,7 @@ SAFE = re.compile(r"[A-Za-z0-9_-]{1,64}\Z")
 LOCAL = re.compile(r"TRADE_LOCAL_MATCH_RECEIPT location=([A-Za-z0-9_-]+) symbol=\S+ "
                    r"coordinate=(P\d{3})/(\d+)/(\d+) quorumDurable=false rpoRisk=true")
 DECODER = json.JSONDecoder()
+TRADE_INGRESS_LOGGER = re.compile(r"\(UpdateOrderHandler(?::\d+)?\)")
 
 
 def utc_now():
@@ -33,7 +34,8 @@ def snapshot(order, trade, since, until):
             if match:
                 location, partition, epoch, sequence = match.groups()
                 local.add((location, partition, int(epoch), int(sequence)))
-            if '"ExecType":"Newing"' not in line or "INFO sid:" not in line or "UpdateOrderHandler:" not in line:
+            if ('"ExecType":"Newing"' not in line or "INFO sid:" not in line
+                    or not TRADE_INGRESS_LOGGER.search(line)):
                 continue
             try:
                 report, _ = DECODER.raw_decode(line[line.index("{", line.index("INFO sid:")):])

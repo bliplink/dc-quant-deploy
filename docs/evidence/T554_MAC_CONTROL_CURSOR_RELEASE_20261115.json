@@ -1,10 +1,10 @@
 {
-  "observed_at": "2026-11-15T17:53:18.728930",
-  "status": "CUMULATIVE_V2_P0_AND_FRESH_BUSINESS_PASS_NATIVE_PERFORMANCE_PENDING",
+  "observed_at": "2026-11-15T18:42:39.304444",
+  "status": "STRICT_AND_ASYNC_NATIVE_BASELINES_PASS_PERFORMANCE_NO_GO_BUSINESS_FAULT_GATES_RUNNING",
   "production_acceptance": "NO_GO",
-  "generation": "mac-demo-20261115-174410",
+  "generation": "mac-demo-20261115-180803",
   "original_volumes_preserved": true,
-  "client_ack_policy": "STRICT_QUORUM",
+  "client_ack_policy": "LOCAL_DURABLE_ASYNC",
   "common": {
     "revision": "25466872e798376057f5021961efd85094bd9946",
     "jar_sha256": "a60aea73b59658ff6d5ec1cd63bf7671be21aee847f9daceb3ce969137e545cb",
@@ -132,26 +132,25 @@
     "initial_trial_robot_quotes_and_real_tape_trade": "PASS",
     "certified_trade_financial_cursor": "PASS",
     "four_actual_physical_runtimes": "PASS_256_ROLES_128_HOME_PRIMARY_EACH",
-    "verification_directory": "/Users/kong/.opentradingcore/mac-demo-20261115-174410/verification.SwQqmE",
-    "ten_robot_steady": "RUNNING",
-    "native_order_cancel": "PENDING",
-    "native_distributed_execution": "PENDING",
-    "same_version_async_capacity": "PENDING",
-    "continuous_robot_business_failover": "PENDING",
+    "verification_directory": "/Users/kong/.opentradingcore/mac-demo-20261115-180803/verification.ZWuCFv",
+    "ten_robot_steady": "PASS_10_ROBOTS_5_MINUTES_BOTH_MODES",
+    "native_order_cancel": "PASS_SIX_TCP_WINDOWS_CONTROL_GENERATIONS_UNCHANGED",
+    "native_distributed_execution": "PASS_TWO_STREAMS_ONE_PER_SECOND",
+    "same_version_async_capacity": "PASS_SIX_TCP_WINDOWS_AND_TWO_STREAM_LOW_RATE_INTEGRITY",
+    "continuous_robot_business_failover": "RUNNING_AFTER_OBSERVER_LOG_FORMAT_FIX",
     "trade_single_node": "PENDING",
     "multi_maker_regression": "PENDING"
   },
   "open_findings": [
-    "Previous unprofiled 99a91b9 four-client load caused physical ACK timeouts. The confirmed cold-server executor defect is fixed and exactly qualified; same-version real load must close the previous failure.",
-    "Native client final P99 1755.737 ms at two partitions each 1/s is unacceptable; no current-version performance improvement proven.",
-    "Independent 69-second storage bracket saw about 4.47 GiB written; includes setup, tail and background traffic, not a per-trade cost or established WAL/log attribution.",
-    "Serialized persistence and one outstanding asynchronous copy per partition still bound hotspot throughput.",
-    "Full-partition takeover and return remain minutes.",
-    "Original retired generation GG2803 unsettled matches remain separate retained evidence.",
-    "Normal strict Common path is serial: three peer request/response exchanges; source has seven file/directory force calls and replica five, per singleton Common commit. Physical writer does not yet implement real multi-command group commit. This is a structural performance limit, not a measured production throughput formula."
+    "Current cumulative strict protocol retains four real steady-state force barriers and one peer exchange per group. Generic group commit is implemented, but normal Order/Trade requests still use singleton commits; business batch integration remains a structural throughput limit.",
+    "Normal async retains one pending command, monitor held over network copy and one additional signed atomic local-head publication. Eight-client Trade: 25.938 complete cycles/s, New P99=1151.156ms. Bounded real pipeline and business batching remain pending.",
+    "Current strict eight-client Trade test: 36.817 complete place/cancel cycles per second, New P99 270.561ms, cycle P99 386.933ms. Current high-concurrency performance remains below the intended high-performance goal.",
+    "Six clean strict native windows and ten-Robot five-minute steady passed with stable control generations; longer load and business failover under Robot traffic remain required.",
+    "Full partition recovery remains minutes; native timing was not an isolated RTO measurement.",
+    "Original retired GG2803 unsettled matches remain separately retained evidence."
   ],
   "application_data_or_credentials_included": false,
-  "current_maintenance": "Disk cleanup complete; previous business generation normally retired and data retained. New strict cumulative Common generation active with ten normally running Robots; native qualification in progress.",
+  "current_maintenance": "Same-JAR async generation active; strict original cohort normally stopped and drained, data retained. Both mode baselines complete. Controlled RPO/four-way Robot business fault gates are running after a test-observer logger-layout fix.",
   "ordinary_logging_layout": {
     "deploy_source_revision": "b9c800d",
     "four_voter_files_installed": true,
@@ -282,8 +281,224 @@
     ]
   },
   "current_version_measurements": {
-    "status": "NOT_YET_MEASURED_CURRENT_CUMULATIVE_JAR",
-    "scope": "Previous 4f data retained separately; no new throughput or P99 claim yet."
+    "generation": "mac-demo-20261115-180803",
+    "client_ack_policy": "LOCAL_DURABLE_ASYNC",
+    "jar_sha256": "a60aea73b59658ff6d5ec1cd63bf7671be21aee847f9daceb3ce969137e545cb",
+    "all_six_windows_passed": true,
+    "scope": "Same candidate JAR and source/quotas as strict; sequential fresh namespace, ten live Robots. Complete place/New and cancel/Cancelled cycle; not execution TPS.",
+    "report": "/Users/kong/.opentradingcore/mac-demo-20261115-180803/order-cancel-capacity-8aef4528.json",
+    "rows": [
+      {
+        "mode": "ORDER_ONLY",
+        "concurrency": 1,
+        "elapsed_seconds": 60.022,
+        "complete_cycles_per_second": 28.806,
+        "place_new_ms": {
+          "samples": 1729,
+          "p50": 11.024,
+          "p95": 26.63,
+          "p99": 37.306,
+          "p99_9": 116.952
+        },
+        "cancel_terminal_ms": {
+          "samples": 1729,
+          "p50": 16.695,
+          "p95": 40.235,
+          "p99": 55.487,
+          "p99_9": 91.83
+        },
+        "cycle_ms": {
+          "samples": 1729,
+          "p50": 28.185,
+          "p95": 65.684,
+          "p99": 89.333,
+          "p99_9": 399.791
+        },
+        "control_generation_before": {
+          "order": 2,
+          "trade": 2
+        },
+        "control_generation_after": {
+          "order": 2,
+          "trade": 2
+        }
+      },
+      {
+        "mode": "ORDER_ONLY",
+        "concurrency": 4,
+        "elapsed_seconds": 60.081,
+        "complete_cycles_per_second": 38.149,
+        "place_new_ms": {
+          "samples": 2292,
+          "p50": 55.99,
+          "p95": 105.117,
+          "p99": 141.452,
+          "p99_9": 235.01
+        },
+        "cancel_terminal_ms": {
+          "samples": 2292,
+          "p50": 38.638,
+          "p95": 73.697,
+          "p99": 98.272,
+          "p99_9": 265.018
+        },
+        "cycle_ms": {
+          "samples": 2292,
+          "p50": 94.027,
+          "p95": 174.746,
+          "p99": 222.245,
+          "p99_9": 647.895
+        },
+        "control_generation_before": {
+          "order": 2,
+          "trade": 2
+        },
+        "control_generation_after": {
+          "order": 2,
+          "trade": 2
+        }
+      },
+      {
+        "mode": "ORDER_ONLY",
+        "concurrency": 8,
+        "elapsed_seconds": 60.219,
+        "complete_cycles_per_second": 37.845,
+        "place_new_ms": {
+          "samples": 2279,
+          "p50": 117.659,
+          "p95": 197.861,
+          "p99": 287.671,
+          "p99_9": 900.49
+        },
+        "cancel_terminal_ms": {
+          "samples": 2279,
+          "p50": 78.061,
+          "p95": 132.716,
+          "p99": 207.534,
+          "p99_9": 683.214
+        },
+        "cycle_ms": {
+          "samples": 2279,
+          "p50": 191.97,
+          "p95": 319.48,
+          "p99": 578.928,
+          "p99_9": 1124.503
+        },
+        "control_generation_before": {
+          "order": 2,
+          "trade": 2
+        },
+        "control_generation_after": {
+          "order": 2,
+          "trade": 2
+        }
+      },
+      {
+        "mode": "TRADE",
+        "concurrency": 1,
+        "elapsed_seconds": 60.014,
+        "complete_cycles_per_second": 27.977,
+        "place_new_ms": {
+          "samples": 1679,
+          "p50": 12.819,
+          "p95": 24.312,
+          "p99": 39.739,
+          "p99_9": 86.327
+        },
+        "cancel_terminal_ms": {
+          "samples": 1679,
+          "p50": 18.71,
+          "p95": 33.328,
+          "p99": 46.34,
+          "p99_9": 123.085
+        },
+        "cycle_ms": {
+          "samples": 1679,
+          "p50": 32.067,
+          "p95": 56.258,
+          "p99": 81.996,
+          "p99_9": 136.237
+        },
+        "control_generation_before": {
+          "order": 2,
+          "trade": 2
+        },
+        "control_generation_after": {
+          "order": 2,
+          "trade": 2
+        }
+      },
+      {
+        "mode": "TRADE",
+        "concurrency": 4,
+        "elapsed_seconds": 60.396,
+        "complete_cycles_per_second": 29.936,
+        "place_new_ms": {
+          "samples": 1808,
+          "p50": 71.03,
+          "p95": 149.119,
+          "p99": 218.457,
+          "p99_9": 710.131
+        },
+        "cancel_terminal_ms": {
+          "samples": 1808,
+          "p50": 42.208,
+          "p95": 90.732,
+          "p99": 150.037,
+          "p99_9": 792.548
+        },
+        "cycle_ms": {
+          "samples": 1808,
+          "p50": 114.855,
+          "p95": 233.649,
+          "p99": 387.835,
+          "p99_9": 939.745
+        },
+        "control_generation_before": {
+          "order": 2,
+          "trade": 2
+        },
+        "control_generation_after": {
+          "order": 2,
+          "trade": 2
+        }
+      },
+      {
+        "mode": "TRADE",
+        "concurrency": 8,
+        "elapsed_seconds": 60.49,
+        "complete_cycles_per_second": 25.938,
+        "place_new_ms": {
+          "samples": 1569,
+          "p50": 147.976,
+          "p95": 478.068,
+          "p99": 1151.156,
+          "p99_9": 1821.404
+        },
+        "cancel_terminal_ms": {
+          "samples": 1569,
+          "p50": 84.994,
+          "p95": 242.738,
+          "p99": 432.047,
+          "p99_9": 1237.365
+        },
+        "cycle_ms": {
+          "samples": 1569,
+          "p50": 232.51,
+          "p95": 733.06,
+          "p99": 1525.675,
+          "p99_9": 2099.27
+        },
+        "control_generation_before": {
+          "order": 2,
+          "trade": 2
+        },
+        "control_generation_after": {
+          "order": 2,
+          "trade": 2
+        }
+      }
+    ]
   },
   "cumulative_commit_redesign": {
     "owner_approved": true,
@@ -374,7 +589,7 @@
       "verified_metadata_records": 8210
     },
     "business_integration_status": "SAME_TESTED_JAR_ACTIVE_ON_ORIGINAL_MAC_DEMO_FRESH_BUSINESS_AND_PHYSICAL_RUNTIME_PASS_NATIVE_TESTS_PENDING",
-    "business_generation": "mac-demo-20261115-174410",
+    "business_generation": "mac-demo-20261115-180803",
     "production_runtime_deployed_to_mac_demo": true
   },
   "read_only_current_control_recheck": {
@@ -560,6 +775,244 @@
         "trade": 58
       },
       "async_same_version": "PENDING"
-    }
+    },
+    "open_findings_at_retirement": [
+      "Previous unprofiled 99a91b9 four-client load caused physical ACK timeouts. The confirmed cold-server executor defect is fixed and exactly qualified; same-version real load must close the previous failure.",
+      "Native client final P99 1755.737 ms at two partitions each 1/s is unacceptable; no current-version performance improvement proven.",
+      "Independent 69-second storage bracket saw about 4.47 GiB written; includes setup, tail and background traffic, not a per-trade cost or established WAL/log attribution.",
+      "Serialized persistence and one outstanding asynchronous copy per partition still bound hotspot throughput.",
+      "Full-partition takeover and return remain minutes.",
+      "Original retired generation GG2803 unsettled matches remain separate retained evidence.",
+      "Normal strict Common path is serial: three peer request/response exchanges; source has seven file/directory force calls and replica five, per singleton Common commit. Physical writer does not yet implement real multi-command group commit. This is a structural performance limit, not a measured production throughput formula."
+    ]
+  },
+  "strict_cumulative_version_measurements": {
+    "generation": "mac-demo-20261115-174410",
+    "client_ack_policy": "STRICT_QUORUM",
+    "jar_sha256": "a60aea73b59658ff6d5ec1cd63bf7671be21aee847f9daceb3ce969137e545cb",
+    "scope": "Fresh generation after storage cleanup; actual measured capacity, not a controlled causal comparison to older larger datasets. Complete cycle is place/New and cancel/Cancelled. Ten live Robots in background.",
+    "order_cancel_report": "/Users/kong/.opentradingcore/mac-demo-20261115-174410/order-cancel-capacity-dcfb0184.json",
+    "all_six_windows_passed": true,
+    "rows": [
+      {
+        "mode": "ORDER_ONLY",
+        "concurrency": 1,
+        "elapsed_seconds": 60.018,
+        "complete_cycles_per_second": 40.588,
+        "place_new_ms": {
+          "samples": 2436,
+          "p50": 9.17,
+          "p95": 16.336,
+          "p99": 24.503,
+          "p99_9": 39.593
+        },
+        "cancel_terminal_ms": {
+          "samples": 2436,
+          "p50": 12.59,
+          "p95": 22.535,
+          "p99": 31.163,
+          "p99_9": 91.227
+        },
+        "cycle_ms": {
+          "samples": 2436,
+          "p50": 22.028,
+          "p95": 38.733,
+          "p99": 52.678,
+          "p99_9": 136.798
+        },
+        "control_generation_before": {
+          "order": 2,
+          "trade": 2
+        },
+        "control_generation_after": {
+          "order": 2,
+          "trade": 2
+        }
+      },
+      {
+        "mode": "ORDER_ONLY",
+        "concurrency": 4,
+        "elapsed_seconds": 60.077,
+        "complete_cycles_per_second": 52.865,
+        "place_new_ms": {
+          "samples": 3176,
+          "p50": 41.618,
+          "p95": 67.495,
+          "p99": 86.1,
+          "p99_9": 173.716
+        },
+        "cancel_terminal_ms": {
+          "samples": 3176,
+          "p50": 28.934,
+          "p95": 48.692,
+          "p99": 64.696,
+          "p99_9": 149.207
+        },
+        "cycle_ms": {
+          "samples": 3176,
+          "p50": 69.771,
+          "p95": 107.269,
+          "p99": 133.943,
+          "p99_9": 575.062
+        },
+        "control_generation_before": {
+          "order": 2,
+          "trade": 2
+        },
+        "control_generation_after": {
+          "order": 2,
+          "trade": 2
+        }
+      },
+      {
+        "mode": "ORDER_ONLY",
+        "concurrency": 8,
+        "elapsed_seconds": 60.196,
+        "complete_cycles_per_second": 55.369,
+        "place_new_ms": {
+          "samples": 3333,
+          "p50": 82.927,
+          "p95": 121.167,
+          "p99": 156.952,
+          "p99_9": 518.011
+        },
+        "cancel_terminal_ms": {
+          "samples": 3333,
+          "p50": 54.839,
+          "p95": 88.256,
+          "p99": 120.07,
+          "p99_9": 310.363
+        },
+        "cycle_ms": {
+          "samples": 3333,
+          "p50": 136.35,
+          "p95": 190.433,
+          "p99": 253.721,
+          "p99_9": 635.67
+        },
+        "control_generation_before": {
+          "order": 2,
+          "trade": 2
+        },
+        "control_generation_after": {
+          "order": 2,
+          "trade": 2
+        }
+      },
+      {
+        "mode": "TRADE",
+        "concurrency": 1,
+        "elapsed_seconds": 60.003,
+        "complete_cycles_per_second": 26.665,
+        "place_new_ms": {
+          "samples": 1600,
+          "p50": 14.523,
+          "p95": 29.991,
+          "p99": 47.239,
+          "p99_9": 135.192
+        },
+        "cancel_terminal_ms": {
+          "samples": 1600,
+          "p50": 17.544,
+          "p95": 33.449,
+          "p99": 49.403,
+          "p99_9": 85.686
+        },
+        "cycle_ms": {
+          "samples": 1600,
+          "p50": 32.565,
+          "p95": 62.053,
+          "p99": 95.793,
+          "p99_9": 260.949
+        },
+        "control_generation_before": {
+          "order": 2,
+          "trade": 2
+        },
+        "control_generation_after": {
+          "order": 2,
+          "trade": 2
+        }
+      },
+      {
+        "mode": "TRADE",
+        "concurrency": 4,
+        "elapsed_seconds": 60.117,
+        "complete_cycles_per_second": 34.133,
+        "place_new_ms": {
+          "samples": 2052,
+          "p50": 64.507,
+          "p95": 129.909,
+          "p99": 188.279,
+          "p99_9": 796.505
+        },
+        "cancel_terminal_ms": {
+          "samples": 2052,
+          "p50": 36.937,
+          "p95": 77.505,
+          "p99": 113.83,
+          "p99_9": 195.925
+        },
+        "cycle_ms": {
+          "samples": 2052,
+          "p50": 101.676,
+          "p95": 200.224,
+          "p99": 272.105,
+          "p99_9": 1068.564
+        },
+        "control_generation_before": {
+          "order": 2,
+          "trade": 2
+        },
+        "control_generation_after": {
+          "order": 2,
+          "trade": 2
+        }
+      },
+      {
+        "mode": "TRADE",
+        "concurrency": 8,
+        "elapsed_seconds": 60.189,
+        "complete_cycles_per_second": 36.817,
+        "place_new_ms": {
+          "samples": 2216,
+          "p50": 133.497,
+          "p95": 205.567,
+          "p99": 270.561,
+          "p99_9": 1363.358
+        },
+        "cancel_terminal_ms": {
+          "samples": 2216,
+          "p50": 68.172,
+          "p95": 110.617,
+          "p99": 144.141,
+          "p99_9": 527.029
+        },
+        "cycle_ms": {
+          "samples": 2216,
+          "p50": 198.799,
+          "p95": 301.955,
+          "p99": 386.933,
+          "p99_9": 1523.553
+        },
+        "control_generation_before": {
+          "order": 2,
+          "trade": 2
+        },
+        "control_generation_after": {
+          "order": 2,
+          "trade": 2
+        }
+      }
+    ]
+  },
+  "robot_fault_log_layout_regression": {
+    "first_result": "NO_GO before fault injection; no business process killed",
+    "root_cause": "Traffic observer required old UpdateOrderHandler:line logger; current pattern has UpdateOrderHandler without line number. Actual Robot traffic was running.",
+    "test_count_passed": 5,
+    "actual_quotes_observed": 333,
+    "actual_fills_observed": 25,
+    "original_failed_evidence": "/Users/kong/.opentradingcore/mac-demo-20261115-180803/async-rpo-537f08c1/evidence.json",
+    "new_controller": "/Users/kong/.opentradingcore/t554-formal-cumulative-async-fault-gates-v2-20261115.json"
   }
 }
