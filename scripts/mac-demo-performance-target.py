@@ -13,10 +13,11 @@ def complete_latency(distribution, samples):
             and 0 <= p99 <= P99_MILLISECONDS)
 
 
-def execution_target(aggregate, seconds, integrity_passed):
+def execution_target(aggregate, seconds, integrity_passed, qualified_window=True):
     samples = aggregate.get('sent_orders', 0)
     throughput = aggregate.get('observed_window_execution_rate', 0)
     checks = {
+        'qualified_window': qualified_window is True,
         'integrity': integrity_passed is True,
         'sustained_window': seconds >= 60,
         'all_requests_and_fills_accounted': (

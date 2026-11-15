@@ -123,7 +123,7 @@ def main():
         admin_password = secrets.token_urlsafe(24)
         since = None
         try:
-            with CANCEL['controlled_products'](run_id, record, admin_password) as (location, products):
+            with RPO['controlled_products_away_from_robots'](run_id, record, admin_password, baseline) as (location, products):
                 symbol = next(symbol for mode, symbol in products if mode == 'TRADE')
                 partition = 'P%03d' % (zlib.crc32(location.encode()) % 256)
                 if any(zlib.crc32(other.encode()) % 256 == int(partition[1:]) for other in baseline):

@@ -1,6 +1,6 @@
 {
-  "observed_at": "2026-11-15T23:34:05.135512+08:00",
-  "status": "READER_JAR_FRESH_BUSINESS_AND_RUNTIME_PASS_TEN_ROBOT_STEADY_RUNNING_PERFORMANCE_NOT_ACCEPTED",
+  "observed_at": "2026-11-16T00:25:59.168792+08:00",
+  "status": "READER_ASYNC_BASELINES_INTEGRITY_PASS_PERFORMANCE_NO_GO_ORDER_POOL8_QUALIFIED_NOT_DEPLOYED_TRUE_RPO_RETRY_RUNNING",
   "production_acceptance": "NO_GO",
   "generation": "/Users/kong/.opentradingcore/mac-demo-20261115-232443",
   "client_ack_policy": "LOCAL_DURABLE_ASYNC",
@@ -101,7 +101,7 @@
     "trade_single_node_current_same_jar_pending": true
   },
   "current_maintenance": {
-    "status": "NEW_READER_RELEASE_TEN_ROBOT_STEADY_RUNNING",
+    "status": "FORMAL_NATIVE_WINDOWS_DONE_TRUE_RPO_RUNNING_ORDER_POOL8_OVERLAY_NOT_DEPLOYED",
     "active_generation": "/Users/kong/.opentradingcore/mac-demo-20261115-232443",
     "previous_generation_normally_stopped_zero_pending_and_exact_financial_cursor": true,
     "previous_generation_data_preserved": true
@@ -845,13 +845,290 @@
     }
   },
   "current_version_measurements": {
-    "status": "TEN_ROBOT_STEADY_RUNNING_NO_NEW_NATIVE_CAPACITY_RESULTS_YET",
+    "status": "ALL_CURRENT_ASYNC_BASELINE_INTEGRITY_PASS_PERFORMANCE_NO_GO",
     "controller": "/Users/kong/.opentradingcore/t554-available-quorum-reader-async-business-baseline-20261115.json",
-    "next_order": [
-      "low_actual_execution_rate2_per_second",
-      "actual_execution_rate40_per_second",
-      "native_tcp_place_cancel_six_windows"
+    "robot_steady": {
+      "evidence": "/Users/kong/.opentradingcore/mac-demo-20261115-232443/robot-steady-10-153634.json",
+      "integrity_passed": true,
+      "paired_fills": 489,
+      "service_interval_not_client_round_trip": {
+        "paired_samples": 489,
+        "p50": 26.757,
+        "p95": 51.01,
+        "p99": 96.246,
+        "p99_9": 219.943
+      }
+    },
+    "execution_low": {
+      "evidence": "/Users/kong/.opentradingcore/mac-demo-20261115-232443/distributed-execution-capacity-342d6b6e.json",
+      "integrity_passed": true,
+      "common_sha256": "2492f6933696a242d39d7dbaa295b046feb9c4ec653f18d9cce5becf6b86428e",
+      "aggregate": {
+        "planned_orders": 120,
+        "sent_orders": 120,
+        "final_executions": 120,
+        "fills_inside_offered_window": 120,
+        "scheduler_drops": 0,
+        "responses": {
+          "ACKNOWLEDGED": 120
+        },
+        "stream_errors": [],
+        "start_spread_ms": 3.0,
+        "generator_accounting_pass": true,
+        "observed_window_execution_rate": 2.0,
+        "window_delivery_fraction": 1.0,
+        "all_accepted_final_receipts_pass": true,
+        "window_capacity_pass": true,
+        "ack_ms": {
+          "samples": 120,
+          "p50": 6.15,
+          "p95": 11.428,
+          "p99": 40.968,
+          "p99_9": 64.449
+        },
+        "client_fill_ms": {
+          "samples": 120,
+          "p50": 37.521,
+          "p95": 70.732,
+          "p99": 125.802,
+          "p99_9": 194.243
+        },
+        "scheduled_fill_ms": {
+          "samples": 120,
+          "p50": 42.233,
+          "p95": 73.605,
+          "p99": 134.494,
+          "p99_9": 202.994
+        },
+        "dispatch_delay_ms": {
+          "samples": 120,
+          "p50": 4.299,
+          "p95": 9.21,
+          "p99": 10.258,
+          "p99_9": 10.324
+        }
+      },
+      "performance": {
+        "passed": false,
+        "target_per_second": 1000,
+        "target_p99_ms": 20,
+        "unit": "Actual final trade receipts per second",
+        "checks": {
+          "integrity": true,
+          "sustained_window": true,
+          "all_requests_and_fills_accounted": true,
+          "actual_in_window_final_trade_rate": false,
+          "client_final_receipt_p99": false,
+          "scheduled_final_receipt_p99": false
+        },
+        "observed_per_second": 2.0,
+        "tail_final_receipts_after_window": 0
+      }
+    },
+    "execution_40_offered": {
+      "evidence": "/Users/kong/.opentradingcore/mac-demo-20261115-232443/distributed-execution-capacity-07322ab7.json",
+      "integrity_passed": true,
+      "common_sha256": "2492f6933696a242d39d7dbaa295b046feb9c4ec653f18d9cce5becf6b86428e",
+      "aggregate": {
+        "planned_orders": 2400,
+        "sent_orders": 2400,
+        "final_executions": 2400,
+        "fills_inside_offered_window": 2396,
+        "scheduler_drops": 0,
+        "responses": {
+          "ACKNOWLEDGED": 2400
+        },
+        "stream_errors": [],
+        "start_spread_ms": 9.0,
+        "generator_accounting_pass": true,
+        "observed_window_execution_rate": 39.93333333333333,
+        "window_delivery_fraction": 0.9983333333333333,
+        "all_accepted_final_receipts_pass": true,
+        "window_capacity_pass": false,
+        "ack_ms": {
+          "samples": 2400,
+          "p50": 12.029,
+          "p95": 58.349,
+          "p99": 254.153,
+          "p99_9": 584.681
+        },
+        "client_fill_ms": {
+          "samples": 2400,
+          "p50": 92.483,
+          "p95": 701.055,
+          "p99": 1838.847,
+          "p99_9": 2228.15
+        },
+        "scheduled_fill_ms": {
+          "samples": 2400,
+          "p50": 96.78,
+          "p95": 702.322,
+          "p99": 1848.838,
+          "p99_9": 2241.885
+        },
+        "dispatch_delay_ms": {
+          "samples": 2400,
+          "p50": 2.957,
+          "p95": 9.435,
+          "p99": 11.597,
+          "p99_9": 49.514
+        }
+      },
+      "performance": {
+        "passed": false,
+        "target_per_second": 1000,
+        "target_p99_ms": 20,
+        "unit": "Actual final trade receipts per second",
+        "checks": {
+          "integrity": true,
+          "sustained_window": true,
+          "all_requests_and_fills_accounted": true,
+          "actual_in_window_final_trade_rate": false,
+          "client_final_receipt_p99": false,
+          "scheduled_final_receipt_p99": false
+        },
+        "observed_per_second": 39.93333333333333,
+        "tail_final_receipts_after_window": 4
+      }
+    },
+    "order_cancel": {
+      "evidence": "/Users/kong/.opentradingcore/mac-demo-20261115-232443/order-cancel-capacity-a076ba65.json",
+      "integrity_passed": true,
+      "windows": [
+        {
+          "mode": "ORDER_ONLY",
+          "concurrency": 1,
+          "cycles_per_second": 32.174,
+          "commands_per_second": 64.348,
+          "new_p99_ms": 35.313,
+          "cancel_p99_ms": 50.662,
+          "integrity_passed": true
+        },
+        {
+          "mode": "ORDER_ONLY",
+          "concurrency": 4,
+          "cycles_per_second": 60.116,
+          "commands_per_second": 120.232,
+          "new_p99_ms": 111.523,
+          "cancel_p99_ms": 79.872,
+          "integrity_passed": true
+        },
+        {
+          "mode": "ORDER_ONLY",
+          "concurrency": 8,
+          "cycles_per_second": 36.71,
+          "commands_per_second": 73.42,
+          "new_p99_ms": 1589.42,
+          "cancel_p99_ms": 627.587,
+          "integrity_passed": true
+        },
+        {
+          "mode": "TRADE",
+          "concurrency": 1,
+          "cycles_per_second": 22.808,
+          "commands_per_second": 45.616,
+          "new_p99_ms": 100.934,
+          "cancel_p99_ms": 102.006,
+          "integrity_passed": true
+        },
+        {
+          "mode": "TRADE",
+          "concurrency": 4,
+          "cycles_per_second": 29.133,
+          "commands_per_second": 58.266,
+          "new_p99_ms": 782.964,
+          "cancel_p99_ms": 646.589,
+          "integrity_passed": true
+        },
+        {
+          "mode": "TRADE",
+          "concurrency": 8,
+          "cycles_per_second": 32.511,
+          "commands_per_second": 65.022,
+          "new_p99_ms": 1532.957,
+          "cancel_p99_ms": 625.626,
+          "integrity_passed": true
+        }
+      ],
+      "pacing_included_in_latency": true,
+      "per_session_rpc_budget": 80
+    },
+    "strict_current_jar_measured": false,
+    "owner_performance_accepted": false
+  },
+  "queue_diagnostic": {
+    "evidence": "/Users/kong/.opentradingcore/mac-demo-20261115-232443/pipeline-queue-diagnostic-20261116/state.json",
+    "status": "DIAGNOSTIC_INTEGRITY_PASS_QUEUES_CAPTURED_NOT_PERFORMANCE_ACCEPTANCE",
+    "performance_qualified": false,
+    "sampling_may_perturb_timing": true,
+    "capacity_numbers_not_used_as_acceptance": true,
+    "sample_sets": 11,
+    "observed_maxima": {
+      "order-a:common_async.active": 5,
+      "order-a:common_async.queued": 0,
+      "order-a:order_delivery.active": 2,
+      "order-a:order_delivery.queued": 26,
+      "order-a:order_inflight.oldest_ms": 915,
+      "order-a:order_retry.waiting": 66,
+      "order-a:order_outbox.pending_count": 106,
+      "order-a:order_outbox.observed_local_copy_pending": 87,
+      "order-b:common_async.active": 7,
+      "order-b:common_async.queued": 0,
+      "order-b:order_delivery.active": 2,
+      "order-b:order_delivery.queued": 35,
+      "order-b:order_inflight.oldest_ms": 736,
+      "order-b:order_retry.waiting": 109,
+      "order-b:order_outbox.pending_count": 288,
+      "order-b:order_outbox.observed_local_copy_pending": 241,
+      "trade-a:common_async.active": 5,
+      "trade-a:common_async.queued": 0,
+      "trade-b:common_async.active": 5,
+      "trade-b:common_async.queued": 0
+    },
+    "observer_business_mutations": false,
+    "bytecode_transformers": false,
+    "source": "tests/fixtures/async-rpo/T554PipelineQueueReadAgent.java"
+  },
+  "gc_current_formal_40_window": {
+    "evidence": "/Users/kong/.opentradingcore/mac-demo-20261115-232443/readonly-gc-after-native-20261116/summary.json",
+    "scope": "Copied original GC logs after qualified clients exited; timestamp parse failures0; initial invalid compact-timezone parse preserved and invalidated.",
+    "max_pause_ms": {
+      "order_a": 35.3806,
+      "order_b": 53.2297,
+      "trade_a": 209.6457,
+      "trade_b": 97.3605
+    },
+    "explains_full_1838ms_final_tail": false
+  },
+  "order_receipt_pool_candidate": {
+    "revision": "c4fb1fd20c7430e84524bf3fa38870292e88c851",
+    "status": "SINGLE_CLASS_ORDER_OVERLAY_READY_NOT_DEPLOYED_WAITING_CURRENT_TRUE_RPO_GATES",
+    "image": "sha256:44447060b22601e608d537d546c167cc33195093285b05d82084b2ce0e68bc31",
+    "full_tests_discovered": 214,
+    "actual_executed_passed": 212,
+    "existing_skips": [
+      "com.app.dc.service.state.OrderT343RealP193ReplayReadonlyTest.originalP193FiveDomainEventKindsReplayToCertified22667",
+      "com.app.dc.service.state.OrderT344RealP193InMemoryBookTest.realOrderManagerReplaysOriginalCertified22667AndFinds48Live"
     ],
-    "true_business_loss_drills_queued_after_integrity_pass": "/Users/kong/.opentradingcore/t554-available-quorum-reader-async-recovery-after-baseline-20261115.json"
+    "focused_passed": 19,
+    "old_pool_negative_control_reproduced": true,
+    "changed_production_classes": [
+      "com/app/dc/service/state/OrderSignedMatchDeliveryWorker.class"
+    ],
+    "new_class_sha256": "5ebb2e32d828ba6c023583aa35ffa28bffe2859843b61661be9812204f4eb12b",
+    "common_and_shared_actual_image_bytes_unchanged": true,
+    "deployed": false,
+    "evidence": "/Users/kong/.opentradingcore/t554-order-delivery8-candidate-20261116/state.json"
+  },
+  "true_rpo_current": {
+    "controller": "/Users/kong/.opentradingcore/t554-available-quorum-reader-async-recovery-after-diagnostic-v2-20261116.json",
+    "status": "RUNNING_AFTER_BOUNDED_CONTROLLED_PARTITION_SELECTION_FIX",
+    "first_attempt": "/Users/kong/.opentradingcore/mac-demo-20261115-232443/async-rpo-b8046dbf/evidence.json",
+    "first_attempt_injected_any_fault": false,
+    "first_attempt_rejection": "Controlled tenant Trade partition collided with original Robot cohort. Original evidence retained.",
+    "driver_max_pre_fault_selection_attempts": 8,
+    "guard_preserved": true,
+    "fault_body_errors_are_not_retried_as_new_tenants": true,
+    "selection_and_existing_rpo_reservation_regressions_passed": 16
   }
 }

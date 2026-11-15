@@ -23,6 +23,13 @@ class PerformanceAcceptanceTest(unittest.TestCase):
         slower['observed_window_execution_rate'] = 999
         self.assertFalse(TARGET['execution_target'](slower, 60, True)['passed'])
 
+    def test_profiled_window_keeps_accounting_but_cannot_satisfy_performance(self):
+        result = TARGET['execution_target'](self.aggregate(), 60, True, qualified_window=False)
+        self.assertFalse(result['passed'])
+        self.assertFalse(result['checks']['qualified_window'])
+        self.assertTrue(result['checks']['all_requests_and_fills_accounted'])
+        self.assertEqual(1000, result['observed_per_second'])
+
     def test_missing_failed_dropped_or_unsampled_requests_cannot_pass(self):
         for key, value in (('all_accepted_final_receipts_pass', False),
                            ('generator_accounting_pass', False), ('scheduler_drops', 1),

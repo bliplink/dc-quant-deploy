@@ -1,4 +1,5 @@
 import ast
+from contextlib import contextmanager
 import importlib.util
 from pathlib import Path
 import struct
@@ -97,6 +98,54 @@ class AsyncRpoEvidenceTest(unittest.TestCase):
 
             with patch.object(RPO.subprocess, 'Popen', side_effect=launch):
                 RPO.arm_pause_watchdog('a' * 64, output)
+
+
+class ControlledFaultPlacementTest(unittest.TestCase):
+    def fake(self, locations, events):
+        iterator = iter(locations)
+        @contextmanager
+        def products(run, report, password):
+            location = next(iterator)
+            events.append(('enter', location))
+            report['selected_setup'] = location
+            try:
+                yield location, (('TRADE', 'BTC004USDT'),)
+            finally:
+                events.append(('close', location))
+        return products
+
+    def test_collision_closes_normally_before_selecting_and_holding_safe_products(self):
+        robot = 'AAA001'
+        collision = next('C%05d' % i for i in range(10000)
+                         if zlib.crc32(('C%05d' % i).encode()) % 256 == zlib.crc32(robot.encode()) % 256)
+        safe = next('S%05d' % i for i in range(10000)
+                    if zlib.crc32(('S%05d' % i).encode()) % 256 != zlib.crc32(robot.encode()) % 256)
+        events, report = [], {}
+        with patch.dict(RPO.CANCEL, controlled_products=self.fake([collision, safe], events)):
+            with RPO.controlled_products_away_from_robots('run', report, 'fixture', [robot]) as (location, products):
+                self.assertEqual(safe, location)
+                self.assertEqual([('enter', collision), ('close', collision), ('enter', safe)], events)
+                self.assertEqual(safe, report['selected_setup'])
+        self.assertEqual(('close', safe), events[-1])
+        self.assertEqual([True, False], [x['excluded_for_robot_partition_collision']
+                                       for x in report['controlled_setup_attempts']])
+
+    def test_exhaustion_is_bounded_and_never_enters_the_fault_body(self):
+        events, report = [], {}
+        with patch.dict(RPO.CANCEL, controlled_products=self.fake(['AAA001'] * 8, events)):
+            with self.assertRaisesRegex(RuntimeError, 'Bounded controlled setup'):
+                with RPO.controlled_products_away_from_robots('run', report, 'fixture', ['AAA001']):
+                    self.fail('A colliding tenant reached the fault body')
+        self.assertEqual(8, len(report['controlled_setup_attempts']))
+        self.assertEqual(8, sum(event == 'close' for event, _ in events))
+
+    def test_fault_body_failure_is_not_retried_as_another_tenant(self):
+        events = []
+        with patch.dict(RPO.CANCEL, controlled_products=self.fake(['BBB002'], events)):
+            with self.assertRaisesRegex(RuntimeError, 'body outcome unknown'):
+                with RPO.controlled_products_away_from_robots('run', {}, 'fixture', []):
+                    raise RuntimeError('body outcome unknown')
+        self.assertEqual([('enter', 'BBB002'), ('close', 'BBB002')], events)
 
 
 if __name__ == '__main__':

@@ -145,7 +145,11 @@ def main():
     parser.add_argument('--rate-per-stream', type=float, default=1)
     parser.add_argument('--seconds', type=int, default=60)
     parser.add_argument('--require-performance-target', action='store_true')
+    parser.add_argument('--diagnostic-only', action='store_true',
+                        help='Retain integrity results but exclude an observed/profiled window from performance acceptance')
     args = parser.parse_args()
+    if args.diagnostic_only and args.require_performance_target:
+        parser.error('A diagnostic window cannot be used for performance acceptance')
     try:
         admission_budget = validate_offered_load(args.streams, args.rate_per_stream, args.seconds)
     except ValueError as error:
@@ -162,6 +166,7 @@ def main():
               'scope': 'Independent funded tenants, distinct Order and Trade partitions, both A/B primaries; original live Robot background',
               'target_streams': args.streams, 'target_orders_per_second': args.streams * args.rate_per_stream,
               'target_seconds': args.seconds, 'streams': [], 'excluded_setup': [],
+              'diagnostic_only': args.diagnostic_only,
               'native_session_admission_budget': admission_budget,
               'measurement_source_sha256': hashlib.sha256(Path(__file__).read_bytes()).hexdigest(),
               'native_wrapper_sha256': hashlib.sha256((HERE / 'mac-demo-native-tcp.py').read_bytes()).hexdigest(),
@@ -309,7 +314,8 @@ def main():
         report.setdefault('failure_stage', report['stage'])
     finally:
         report['phase_one_performance'] = PERFORMANCE['execution_target'](
-            report.get('aggregate', {}), args.seconds, report['passed'])
+            report.get('aggregate', {}), args.seconds, report['passed'],
+            qualified_window=not args.diagnostic_only)
         report['performance_target_required'] = args.require_performance_target
         report['integrity_passed'] = report['passed']
         if args.require_performance_target:
@@ -318,7 +324,8 @@ def main():
         with output.open('x') as evidence:
             json.dump(report, evidence, indent=2)
             evidence.write('\n')
-    print(('PASS' if report['passed'] else 'NO_GO') + ' ' + str(output), flush=True)
+    prefix = 'DIAGNOSTIC_INTEGRITY_PASS' if args.diagnostic_only and report['passed'] else 'PASS' if report['passed'] else 'NO_GO'
+    print(prefix + ' ' + str(output), flush=True)
     return 0 if report['passed'] else 2
 
 

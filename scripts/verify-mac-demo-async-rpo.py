@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """Exercise one real locally acknowledged financial fill before replica catchup."""
 import argparse
+from contextlib import contextmanager
 from datetime import datetime, timezone
 from decimal import Decimal
 import fcntl
@@ -33,6 +34,34 @@ REPLICA_PAUSE_WATCHDOG_SECONDS = 4.0
 
 class IncompleteWalObservation(RuntimeError):
     pass
+
+
+@contextmanager
+def controlled_products_away_from_robots(run_id, record, password, robots, max_attempts=8):
+    """Choose the fault tenant before funding or pausing any real service.
+
+    An excluded setup closes through the normal product helper. Keep the
+    existing collision guard; random tenant placement must not make a safe
+    fault exercise require repeated manual invocations.
+    """
+    if not 1 <= max_attempts <= 8:
+        raise ValueError('Controlled fault setup requires at most eight attempts')
+    excluded = {zlib.crc32(location.encode('utf-8')) % 256 for location in robots}
+    attempts = record.setdefault('controlled_setup_attempts', [])
+    for attempt in range(max_attempts):
+        setup = {}
+        identity = run_id if attempt == 0 else secrets.token_hex(4)
+        with CANCEL['controlled_products'](identity, setup, password) as (location, products):
+            partition = zlib.crc32(location.encode('utf-8')) % 256
+            collision = partition in excluded
+            attempts.append({'location': location, 'trade_partition': 'P%03d' % partition,
+                             'excluded_for_robot_partition_collision': collision})
+            if collision:
+                continue
+            record.update(setup)
+            yield location, products
+            return
+    raise RuntimeError('Bounded controlled setup could not avoid the active Robot Trade partitions')
 
 
 def run(*arguments, **options):
@@ -317,7 +346,7 @@ def main():
         since = datetime.now(timezone.utc)
         save()
         try:
-            with CANCEL["controlled_products"](run_id, record, password) as (location, products):
+            with controlled_products_away_from_robots(run_id, record, password, original_robots) as (location, products):
                 symbol = next(symbol for mode, symbol in products if mode == "TRADE")
                 until(lambda: set(CAPACITY["demo_tenants"]()) == set(original_robots), 60,
                       "Controlled tenant Robot did not stop without changing the original cohort")
