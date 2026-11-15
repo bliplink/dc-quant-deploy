@@ -384,21 +384,31 @@
     "production_deployed": false,
     "new_protocol_performance_claimed": false,
     "formal_runtime_focused_tests_passed": 72,
-    "formal_runtime_full_safety": "293 executed passed; 3 optional external historical fixture tests skipped",
-    "formal_runtime_independent_physical_p0": "RUNNING",
+    "formal_runtime_full_safety": "Previous 8cf143a: 293 executed passed; 3 optional external historical fixture tests skipped. Latest exact candidate selection still pending.",
+    "formal_runtime_independent_physical_p0": "RUNNING; one real two-voter stalled-peer recovery/Home case passed separately; complete 13-case and 256 partitions not yet qualified",
     "bounded_source_pipeline_and_business_batch_integration": "PENDING",
-    "formal_runtime_revision": "8cf143a",
-    "formal_runtime_jar_sha256": "f0deb00ec069119392858c9785a61aaa7bf71af556dd3d3af2b0963322c602bf"
+    "formal_runtime_revision": "fe8a99a",
+    "formal_runtime_jar_sha256": "13f64c663f042ad576df21a30ab5209afbace2007c8472b816617582352998e2",
+    "latest_focused_tests_passed": 20,
+    "latest_focused_tests_skipped": 0,
+    "late_commit_semantics": "Replica can persist a valid cumulative commit after the caller times out. Recovery authenticates the actual stored signed prefix. Timeout alone is not proof of noncommit.",
+    "first_physical_attempt": "NO_GO: live zero-head helper re-acquired existing OS lock; fixed in 670c9c1 with 20 regressions passed.",
+    "second_physical_attempt": "NO_GO: fixture inferred noncommit from timeout. Retained original A index=1 and B index=2; physical data prove the late committed command. Fixture now authenticates exact original prefix; independent naked/partial tail rejection retained."
   },
   "read_only_current_control_recheck": {
     "order": 34,
     "trade": 70,
     "all_256_each_ready_strict": true,
-    "home_distribution_not_rechecked_by_this_check": true,
+    "home_distribution_not_rechecked_by_this_check": false,
     "trade_control_changed_since_clean_capacity_windows": true,
     "agent_business_restart": false,
     "cause": "Real old V1 path timeouts at 13:37 and repeated custody failure at 13:39; physical processes unchanged; exact resource cause not established.",
     "new_stability_pass_claimed": false,
-    "trade_control_change_observed_before_robot_stop": "2026-11-15T13:44:17+08:00"
+    "trade_control_change_observed_before_robot_stop": "2026-11-15T13:44:17+08:00",
+    "independent_home_recheck_passed": true,
+    "order_primary_a": 128,
+    "order_primary_b": 128,
+    "trade_primary_a": 128,
+    "trade_primary_b": 128
   }
 }

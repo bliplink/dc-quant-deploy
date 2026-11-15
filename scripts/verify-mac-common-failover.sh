@@ -80,6 +80,12 @@ public final class VerifyCommonFailover {
         }
         JUnitCore junit = new JUnitCore();
         junit.addListener(new TextListener(System.out));
+        junit.addListener(new org.junit.runner.notification.RunListener() {
+            @Override public void testFailure(Failure failure) {
+                System.err.println("PHYSICAL_P0_CASE_FAILED " + failure.getDescription());
+                System.err.println(failure.getTrace());
+            }
+        });
         if (!junit.run(CommonCertifiedLivePoisonRecoveryTest.class).wasSuccessful()) {
             System.err.println("FAIL live poisoned writer recovery and physical voter restarts");
             System.exit(1);
