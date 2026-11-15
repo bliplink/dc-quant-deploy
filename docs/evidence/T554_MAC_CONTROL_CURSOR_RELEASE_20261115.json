@@ -1,0 +1,149 @@
+{
+  "observed_at": "2026-11-15T09:06:25.230551",
+  "status": "EXACT_COMMON_AND_RETAINED_DATA_FUNCTIONAL_PASS_NATIVE_PERFORMANCE_AND_BUSINESS_HA_PENDING",
+  "production_acceptance": "NO_GO",
+  "generation": "mac-demo-20261115-065831",
+  "original_volumes_preserved": true,
+  "client_ack_policy": "STRICT_QUORUM",
+  "common": {
+    "revision": "99a91b9bd9039bdc40f11bc87192a5e4f25f28b9",
+    "jar_sha256": "60ede5a9bf142b3fcdd8b2420d3cdcd37ead0912b40bc2dbeeb581fb05e55d98",
+    "verification_run": "20261115-081811",
+    "safety_tests": 252,
+    "native_physical_cases": 13,
+    "cold_restart_cases": 4,
+    "complete_256_home_both_directions_and_repeat": true,
+    "interrupted_signed_return": true,
+    "equal_wal_pairs_per_verification": 256,
+    "equal_snapshot_pairs_per_verification": 256,
+    "controlled_fixture_phase_observations_ms": {
+      "a_takeover": 167675,
+      "a_home": 310313,
+      "b_takeover": 164815,
+      "b_home": 239668
+    },
+    "phase_timing_scope": "Functional fixture observations under independent test load. Distinct phases, not whole production RTO or a production SLO."
+  },
+  "sources": {
+    "shared": {
+      "revision": "010038a35967acbd8c9af45c0e5930564e1ebfc6",
+      "tests": {
+        "tests": 52,
+        "failures": 0,
+        "errors": 0,
+        "skipped": 0
+      }
+    },
+    "order": {
+      "revision": "e497510f28853cbcd0e287cc6988f0a525b64297",
+      "tests": {
+        "tests": 213,
+        "failures": 0,
+        "errors": 0,
+        "skipped": 2
+      }
+    },
+    "trade": {
+      "revision": "8b9c31d485649602d2e49e2c8db52dc6cdd1f708",
+      "tests": {
+        "tests": 261,
+        "failures": 0,
+        "errors": 0,
+        "skipped": 0
+      }
+    },
+    "md": {
+      "revision": "578ed2f22882b1a20b9d9c63c9333a3417956201",
+      "tests": {
+        "tests": 207,
+        "failures": 0,
+        "errors": 0,
+        "skipped": 0
+      }
+    },
+    "notification_fanout": {
+      "revision": "1a95b80c4570ab6d829da94daa7d53fe53d132a1",
+      "class_sha256": "fc2944a86c2e6cf7054e474f456a2a0dbfb9ce209ae18786f93bc07c5ff5d725"
+    },
+    "projection": {
+      "revision": "17eaa313759d5607ae767d81c8b1d8df2556a9b0",
+      "tests": 29
+    }
+  },
+  "images": [
+    {
+      "name": "mac-demo-20261115-065831-order-a-hostready",
+      "image_id": "sha256:9fc5c46354a300350c1079584a0c90a091f2fe8488e2a41707bd8b70136c656d",
+      "container_id": "62261697b0f318e9f41c3bf139f11b3383cc1647f78dfafcf5fe5ff37fba0e74",
+      "common_sha256": "60ede5a9bf142b3fcdd8b2420d3cdcd37ead0912b40bc2dbeeb581fb05e55d98",
+      "restart_count_at_observation": 0
+    },
+    {
+      "name": "mac-demo-20261115-065831-order-b-hostready",
+      "image_id": "sha256:9fc5c46354a300350c1079584a0c90a091f2fe8488e2a41707bd8b70136c656d",
+      "container_id": "8a6e9d5835dfefdcf55731251eaf20f06ad8803b3f4035c1be591897e0ce4fb6",
+      "common_sha256": "60ede5a9bf142b3fcdd8b2420d3cdcd37ead0912b40bc2dbeeb581fb05e55d98",
+      "restart_count_at_observation": 0
+    },
+    {
+      "name": "mac-demo-20261115-065831-trade-a-hostready",
+      "image_id": "sha256:fb262926fd497770ee3679ec548864684d437ece677ae927a1d64c722f60c3b2",
+      "container_id": "2508c594cfe9aac3448064fd38e7de41b15efbbe0a860a04d6789e85d4efc614",
+      "common_sha256": "60ede5a9bf142b3fcdd8b2420d3cdcd37ead0912b40bc2dbeeb581fb05e55d98",
+      "restart_count_at_observation": 0
+    },
+    {
+      "name": "mac-demo-20261115-065831-trade-b-hostready",
+      "image_id": "sha256:fb262926fd497770ee3679ec548864684d437ece677ae927a1d64c722f60c3b2",
+      "container_id": "a333a18b2d5858446a7b594f672241cc5ec126f970b8525b7ed9e04d71d3bb02",
+      "common_sha256": "60ede5a9bf142b3fcdd8b2420d3cdcd37ead0912b40bc2dbeeb581fb05e55d98",
+      "restart_count_at_observation": 0
+    },
+    {
+      "name": "mac-demo-20261115-065831-order-witness",
+      "image_id": "sha256:9fc5c46354a300350c1079584a0c90a091f2fe8488e2a41707bd8b70136c656d",
+      "container_id": "a9df9e09d3167c372e9cb87b13863dfdc0bac7aaf8b73051890f25a10c8d288b",
+      "common_sha256": "60ede5a9bf142b3fcdd8b2420d3cdcd37ead0912b40bc2dbeeb581fb05e55d98",
+      "restart_count_at_observation": 0
+    },
+    {
+      "name": "mac-demo-20261115-065831-trade-witness",
+      "image_id": "sha256:fb262926fd497770ee3679ec548864684d437ece677ae927a1d64c722f60c3b2",
+      "container_id": "d6a9281ddd924947c16b4a4f3f9713957abb10cc85573062d9bb5855f2f437b1",
+      "common_sha256": "60ede5a9bf142b3fcdd8b2420d3cdcd37ead0912b40bc2dbeeb581fb05e55d98",
+      "restart_count_at_observation": 0
+    },
+    {
+      "name": "dc-saas-gateway",
+      "image_id": "sha256:a97a4f82e8020a81a6be8174fad9ccd2b3984ee36b6f1dd353ee7194e388eeb8",
+      "container_id": "310a9aaa865b7b3f67fcc0db3d47fb12df75572b7b6b042d04343eb9fe923dad",
+      "common_sha256": "60ede5a9bf142b3fcdd8b2420d3cdcd37ead0912b40bc2dbeeb581fb05e55d98",
+      "restart_count_at_observation": 0
+    },
+    {
+      "name": "dc-saas-mdsvr",
+      "image_id": "sha256:f4432931b2e7b03111760a438333b617f297638a6c2cbc0af8c9bc24d189675d",
+      "container_id": "324cb083c3c4190ff5fd3ffa8439e644c7b653cb569d2c32b9f7bf14a86734a8",
+      "common_sha256": "60ede5a9bf142b3fcdd8b2420d3cdcd37ead0912b40bc2dbeeb581fb05e55d98",
+      "restart_count_at_observation": 0
+    }
+  ],
+  "functional": {
+    "multi_maker_report": "multi-maker-addfc9a1.json",
+    "cases": 12,
+    "actual_physical_roles": 256,
+    "actual_primary_writers_per_node": 128,
+    "original_cohort_count": 10,
+    "original_cohort_financial_unsettled_before_resume": 0,
+    "original_cohort_local_final_pending_before_resume": 0,
+    "financial_cursor_before_resume": "PASS",
+    "original_robots_normally_restarted": true
+  },
+  "open_findings": [
+    "Earlier formal native cancel window triggered strict replica receipt-ledger timeouts on P190/P233; a new formal load result is still required.",
+    "Serialized persistence and one outstanding asynchronous copy per partition still bound hotspot throughput.",
+    "Full-partition takeover and return remain minutes.",
+    "Original retired generation GG2803 unsettled matches remain separate retained evidence."
+  ],
+  "application_data_or_credentials_included": false
+}
