@@ -95,7 +95,10 @@ def main():
     state = {'status': 'RUNNING', 'started_at': datetime.now(timezone.utc).isoformat(),
              'common_revision': revision, 'common_sha256': expected, 'physical_result': str(results),
              'business_mutations': False, 'stages': [], 'production_go': False}
-    env = dict(os.environ, JAVA_HOME=str(java))
+    # Existing verifier supports independent native and Home JVMs. Their
+    # private directories and control sessions share only this frozen JAR.
+    env = dict(os.environ, JAVA_HOME=str(java),
+               MAC_DEMO_COMMON_PARALLEL_P0_JVMS=os.environ.get('MAC_DEMO_COMMON_PARALLEL_P0_JVMS', 'true'))
     full = full_output = None
 
     def save():
