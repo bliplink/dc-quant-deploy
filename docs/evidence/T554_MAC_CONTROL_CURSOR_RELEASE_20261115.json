@@ -380,7 +380,7 @@
     "protocol_component_revision": "b0d48b2",
     "protocol_component_tests_passed": 34,
     "formal_runtime_integrated": true,
-    "full_new_protocol_p0_passed": false,
+    "full_new_protocol_p0_passed": true,
     "production_deployed": false,
     "new_protocol_performance_claimed": false,
     "formal_runtime_focused_tests_passed": 72,
@@ -391,7 +391,7 @@
       "optional_external_historical_skipped": 3,
       "jar_sha256": "a60aea73b59658ff6d5ec1cd63bf7671be21aee847f9daceb3ce969137e545cb"
     },
-    "formal_runtime_independent_physical_p0": "RUNNING fresh 14 native cases and 256 Home bidirectional/third/repeated/interrupted return; same a60aea73 production JAR. Previous failed run retained.",
+    "formal_runtime_independent_physical_p0": "PASS: fresh fourteen native cases and complete 256 Home bidirectional/third/repeated/interrupted return sealed 20261115-170232; exact same a60aea73 production JAR.",
     "bounded_source_pipeline_and_business_batch_integration": "STRICT COMMON BATCH CONNECTED; NORMAL ASYNC ONE OUTSTANDING AND BUSINESS BATCH CONNECTION REMAIN",
     "formal_runtime_revision": "2546687",
     "formal_runtime_jar_sha256": "a60aea73b59658ff6d5ec1cd63bf7671be21aee847f9daceb3ce969137e545cb",
@@ -439,13 +439,28 @@
       "production_source_unchanged_from": "25466872e798376057f5021961efd85094bd9946",
       "selected_regression": "PASS 1 test, zero failures/errors/skips",
       "current_full_verification": "/Users/kong/.opentradingcore/t554-common-verifications/20261115-170232",
-      "current_full_status": "RUNNING_NOT_SEALED",
+      "current_full_status": "SEALED_PASS",
       "current_full_native_tests": {
         "executed_passed": 14,
         "failures": 0,
-        "full_256_home_still_running": true
+        "full_256_home_still_running": false
       }
-    }
+    },
+    "sealed_result": "/Users/kong/.opentradingcore/t554-common-verifications/20261115-170232",
+    "seal_sha256": "977847e1814e2ed2220edc734138d1c5e38ce2840ef6ede51c1568cabedcd771",
+    "actual_cumulative_runtime_evidence": {
+      "model": "CUMULATIVE_V2",
+      "nodes": [
+        "DemoSvrA",
+        "DemoSvrB"
+      ],
+      "nonempty_indexes": 8,
+      "original_epoch2_indexes": 512,
+      "raw_wal_prefixes_matched": true,
+      "scope": "Actual process artifacts; RSA/role/fencing proof remains the preceding real Java drill.",
+      "verified_metadata_records": 8210
+    },
+    "business_integration_status": "BUILDING_SAME_TESTED_COMMON_JAR_NOT_YET_DEPLOYED"
   },
   "read_only_current_control_recheck": {
     "order": 34,
