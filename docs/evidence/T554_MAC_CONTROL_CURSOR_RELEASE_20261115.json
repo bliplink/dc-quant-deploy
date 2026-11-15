@@ -1162,5 +1162,87 @@
     "first_full_attempt_evidence": "/Users/kong/.opentradingcore/t554-common-candidates/20261116-bounded-async-recovery-waits/qualification/state.json",
     "native_fixture_revision": "c308774f253b8efc02d51756a5c35de6ea69b3ed",
     "native_backup_outage_retry_focused_passed": true
+  },
+  "synthetic_storage_diagnostic": {
+    "observed_at": "2026-11-16T01:36:21.884747+08:00",
+    "status": "SYNTHETIC_IO_DIAGNOSTIC_ONLY_NOT_TRADING_PERFORMANCE_ACCEPTANCE",
+    "production_go": false,
+    "scope": "New private Docker local ext4 volume,4KiB buffers,real FileChannel.force(true),no business volumes or financial data. No ACK/signing/network simulation asserted.",
+    "concurrent_work": "Common safety/cold/native fixtures and failed old Demo were active; not an isolated storage capacity measurement.",
+    "cpu_quota": 1,
+    "memory_limit_mib": 256,
+    "cpu_throttle_counters_observed": false,
+    "image": "sha256:cf78f2d3f6c56028cac051e0d3cbda5f2ec7a37aad37a6c0e7a22aa47da87926",
+    "source_sha256": "f011b2d55e3ef9b57d9b9235b28abeae018c742caf103055602c86a6605791c1",
+    "data_volume": "t554-raw-force-diagnostic-20261116",
+    "measurements": [
+      {
+        "scenario": "append-force-1-barriers",
+        "synthetic_io_only_no_signing_or_network_or_ack": true,
+        "commands_per_sample": 1,
+        "samples": 500,
+        "mean_ms": 0.811553,
+        "p50_ms": 0.70225,
+        "p99_ms": 3.001459,
+        "max_ms": 5.2635
+      },
+      {
+        "scenario": "append-force-4-barriers",
+        "synthetic_io_only_no_signing_or_network_or_ack": true,
+        "commands_per_sample": 1,
+        "samples": 500,
+        "mean_ms": 8.269923,
+        "p50_ms": 5.207125,
+        "p99_ms": 53.454958,
+        "max_ms": 101.328209
+      },
+      {
+        "scenario": "append-force-1-barriers",
+        "synthetic_io_only_no_signing_or_network_or_ack": true,
+        "commands_per_sample": 64,
+        "samples": 100,
+        "mean_ms": 2.84532,
+        "p50_ms": 2.686917,
+        "p99_ms": 6.358541,
+        "max_ms": 6.526375
+      },
+      {
+        "scenario": "append-force-4-barriers",
+        "synthetic_io_only_no_signing_or_network_or_ack": true,
+        "commands_per_sample": 64,
+        "samples": 100,
+        "mean_ms": 14.80555,
+        "p50_ms": 13.013125,
+        "p99_ms": 38.258542,
+        "max_ms": 51.443041
+      },
+      {
+        "scenario": "local-wal-head-rename-directory",
+        "synthetic_io_only_no_signing_or_network_or_ack": true,
+        "commands_per_sample": 1,
+        "samples": 500,
+        "mean_ms": 3.009406,
+        "p50_ms": 1.967417,
+        "p99_ms": 15.286333,
+        "max_ms": 24.561542
+      }
+    ],
+    "limitations": [
+      "Four sequential same-volume files differ from actual two-node strict networking and payload sizes.",
+      "LOCAL head probe uses a4KiB buffer and no RSA; it is an I/O pattern comparison, not the Common commit implementation.",
+      "No inference that raw storage is the sole cause of1.84s business tail or that trading targets have passed."
+    ]
+  },
+  "matched_lost_reservation_test": {
+    "status": "TEST_DRIVER_AND9_REGRESSIONS_READY_LIVE_CASE_NOT_RUN",
+    "entry": "verify-async-recovery now runs true settlement loss, lost-reservation cancel, then lost-reservation matched readmission sequentially",
+    "driver": "scripts/verify-mac-demo-async-reservation-loss.py --after-loss match",
+    "requirements": [
+      "Original reservation genuinely absent from surviving certified old prefix after SIGKILL",
+      "Normal counter-order matches the original resting Order",
+      "One actual new-epoch four-domain reservation commit with original order identity and risk-marked LOCAL coordinate",
+      "Exact both-account balances and execution fees, zero frozen funds, correct paired positions and used margin",
+      "Original primary return,512 raw WAL/snapshot pairs,exact financial cursor and continuous Robot"
+    ]
   }
 }
