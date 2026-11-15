@@ -17,9 +17,12 @@ class QualificationResultTest(unittest.TestCase):
             return QUALIFY['checked_result'](log, safety)
 
     def test_actual_execution_is_separate_from_optional_skips(self):
-        row = self.parse('COMMON_QUALIFICATION_RESULT discovered=311 executed=308 failures=0 '
+        row = self.parse('COMMON_QUALIFICATION_RESULT discovered=317 executed=314 failures=0 '
                          'ignored=0 skipped=3 passed=true\n', True)
-        self.assertEqual((308, 3), (row['executed'], row['optional_external_historical_skips']))
+        self.assertEqual((314, 3), (row['executed'], row['optional_external_historical_skips']))
+        with self.assertRaises(ValueError):
+            self.parse('COMMON_QUALIFICATION_RESULT discovered=311 executed=308 failures=0 '
+                       'ignored=0 skipped=3 passed=true\n', True)
 
     def test_empty_partial_ignored_failed_and_duplicate_results_are_not_passes(self):
         valid = 'COMMON_QUALIFICATION_RESULT discovered=1 executed=1 failures=0 ignored=0 skipped=0 passed=true\n'

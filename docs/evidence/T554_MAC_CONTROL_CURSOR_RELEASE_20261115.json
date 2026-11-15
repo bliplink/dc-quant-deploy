@@ -389,5 +389,31 @@
       6
     ],
     "evidence": "/Users/kong/.opentradingcore/t554-common-point-seek-20261116/scope.json"
+  },
+  "closed_local_owner_candidate": {
+    "status": "PRIVATE_COMMON_TESTING_NOT_QUALIFIED_NOT_DEPLOYED",
+    "business_jar_unchanged": "3c56fdda4cef4c345dd0ac369e44edbc21be234d84eaa88277b5245940421352",
+    "deployed_jar_regression": {
+      "executed": 1,
+      "failed": 1,
+      "skipped": 0,
+      "reason": "Closed LOCAL owner did not recover in same runtime after durable callback failure",
+      "log": "/Users/kong/.opentradingcore/t554-common-live-local-owner-old-jar-20261116.log"
+    },
+    "related_unit_checks": {
+      "executed": 73,
+      "failed": 0,
+      "errors": 0,
+      "skipped": 0,
+      "proof": "/Users/kong/.opentradingcore/t554-common-live-local-owner-unit-evidence-20261116/proof.json"
+    },
+    "full_physical_qualification_passed": false,
+    "production_go": false
+  },
+  "github_recovery_branch_update_20261116": {
+    "branch": "t554-mac-recovery-20261115",
+    "common": "95ed51d",
+    "deploy": "a967d2c",
+    "verified_push": true
   }
 }

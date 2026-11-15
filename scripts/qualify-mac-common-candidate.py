@@ -27,6 +27,12 @@ COLD = (
     ('unpublished-local-tail', 'localOwnerColdRestartRetainsItsUnpublishedTailAndContinuesFromTheSignedHead'),
     ('mixed-cold-full-home', 'localOwnerColdRestartAfterPartialTakeoverKeepsAcknowledgedCommands'),
 )
+LIVE_LOCAL = (
+    ('live-local-published-head', 'poisonedLocalOwnerReplaysItsPublishedHeadWithoutRestartOrPeer'),
+    ('live-local-private-tail', 'poisonedLocalOwnerExcludesItsUnpublishedTailWithoutRestartOrPeer'),
+    ('live-local-permanent-fence', 'poisonedLocalOwnerReplayCannotReopenAPermanentlyFencedEpoch'),
+    ('live-local-repeated-heads', 'poisonedLocalOwnerReplaysRepeatedPublishedHeadsInTheSameEpoch'),
+)
 
 
 def sha(path):
@@ -39,7 +45,7 @@ def checked_result(path, safety=False):
         raise ValueError('Exactly one complete qualification result is required: ' + str(path))
     discovered, executed, failures, ignored, skipped = map(int, matches[0][:5])
     if (matches[0][5] != 'true' or failures or ignored or discovered != executed + skipped
-            or executed < (308 if safety else 1) or (safety and skipped > 3)
+            or executed < (314 if safety else 1) or (safety and skipped > 3)
             or (not safety and skipped)):
         raise ValueError('Incomplete or unsuccessful qualification: ' + str(path))
     return dict(discovered=discovered, executed=executed, failures=failures,
@@ -160,6 +166,19 @@ def main():
             'com.app.common.replication.CommonHistoricalCertifiedPrefixWithTailTest',
             'com.app.common.replication.CommonCertifiedOpaqueHistoricalReplayTest',
             'com.app.common.replication.CommonCertifiedE2LargeColdHistoryTest']))
+        state['live_local'] = {}
+        for name, method in LIVE_LOCAL:
+            live_command = command[:]
+            live_command.insert(1, '-Dt554.fixture.evidence.directory=' + str(work / (name + '-evidence')))
+            log = phase(name, live_command + ['--method',
+                        'com.app.common.replication.CommonCertifiedFirstReadyE2AutomaticRecoveryTest', method])
+            state['live_local'][name] = checked_result(log)
+            marker = ('T554_LIVE_LOCAL_POISON_PERMANENT_FENCE_REJECTED_HEALTHY_SHARD_CONTINUES'
+                      if name == 'live-local-permanent-fence' else
+                      'T554_LIVE_LOCAL_POISON_AUTHENTICATED_REPLAY_SAME_RUNTIME_NO_PEER_AND_EXPORT_PASS')
+            if marker not in log.read_text():
+                raise ValueError('Missing live LOCAL recovery evidence: ' + name)
+            save()
         # Private fixture directories and independent ZK sessions; the same
         # immutable JAR remains first in every parent and child classpath.
         full_output = (work / 'full-physical.log').open('x')
