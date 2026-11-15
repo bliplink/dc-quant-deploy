@@ -1,4 +1,5 @@
 from datetime import datetime, timezone
+import json
 from pathlib import Path
 import runpy
 import unittest
@@ -11,6 +12,30 @@ ZERO = '0001-01-01T00:00:00Z'
 
 
 class RobotMeasureLifecycleTest(unittest.TestCase):
+    def test_old_and_caller_free_log_layouts_measure_the_same_real_ingress(self):
+        ingress = dict(Location='TENANT', ClOrdID='order1', Terminal='RobotSvr-Tape',
+                       TimeInForce='IOC', ExecType='Newing')
+        filled = dict(ingress, ExecType='Trade', OrdStatus='Filled', ExecID='execution1')
+        since = datetime(2026, 11, 13, 6, 30, tzinfo=timezone.utc)
+        until = datetime(2026, 11, 13, 6, 35, tzinfo=timezone.utc)
+        for logger in ('UpdateOrderHandler:123', 'UpdateOrderHandler'):
+            with self.subTest(logger=logger):
+                lines = {
+                    'trade': ['2026-11-13T06:31:00Z INFO sid:test (' + logger + ') '
+                              + json.dumps(ingress, separators=(',', ':'))],
+                    'order': ['2026-11-13T06:31:00.125Z INFO '
+                              + json.dumps([filled], separators=(',', ':'))]}
+                globals_ = MEASURE['measure'].__globals__
+                with patch.object(MEASURE['subprocess'], 'check_output', return_value=GENERATION), \
+                        patch.dict(globals_, {
+                            'voter_containers': lambda *a: ({'trade': ['trade'], 'order': ['order']}, []),
+                            'resources': lambda *a: {}}), \
+                        patch.dict(MEASURE['ROBOT'], {'logs': lambda container, *a: lines[container]}):
+                    sample = MEASURE['measure'](GENERATION, since, until, {'TENANT'})
+                self.assertEqual(1, sample['tape_requests'])
+                self.assertEqual({'TENANT': 1}, sample['paired_tape_executions_by_tenant'])
+                self.assertEqual(125, sample['tape_trade_ingress_to_order_filled_publish_ms']['p99'])
+
     def voter(self, ident, service, **overrides):
         row = dict(ident=ident, name=f'{GENERATION}-{service}-a-hostready',
                    created='2026-11-13T05:44:00Z', started='2026-11-13T06:29:00Z',

@@ -19,6 +19,7 @@ ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT / "tests"))
 ROBOT = runpy.run_path(str(ROOT / "scripts/mac-demo-robot-traffic.py"))
 DECODER = json.JSONDecoder()
+TRADE_INGRESS_LOGGER = re.compile(r"\(UpdateOrderHandler(?::\d+)?\)")
 
 
 def reports(line, offset):
@@ -147,7 +148,7 @@ def measure(generation, since, until, locations=()):
     start, finish, quotes = {}, {}, set()
     for container in voters["trade"]:
         for line in ROBOT["logs"](container, since, until):
-            if '"ExecType":"Newing"' not in line or "UpdateOrderHandler:" not in line:
+            if '"ExecType":"Newing"' not in line or not TRADE_INGRESS_LOGGER.search(line):
                 continue
             for report in reports(line, line.find("{", max(0, line.find("INFO sid:")))):
                 key = (report.get("Location"), report.get("ClOrdID"))
@@ -175,6 +176,12 @@ def measure(generation, since, until, locations=()):
     samples = sorted((stamp - start[key]).total_seconds() * 1000
                      for key, executions in finish.items() if key in start
                      for stamp in executions.values() if stamp >= start[key])
+    paired_by_tenant = {}
+    for key, executions in finish.items():
+        if key in start:
+            count = sum(stamp >= start[key] for stamp in executions.values())
+            if count:
+                paired_by_tenant[key[0]] = paired_by_tenant.get(key[0], 0) + count
     tape = sum(len(executions) for executions in finish.values())
     seconds = (until - since).total_seconds()
     tenants = {location for location, _ in quotes | set(start) | set(finish)}
@@ -193,6 +200,7 @@ def measure(generation, since, until, locations=()):
             "active_tenants_in_window": len(tenants),
             "quote_requests": len(quotes), "tape_requests": len(start), "filled_tape_executions": tape,
             "tape_requests_with_fill_in_window": len(set(start) & set(finish)),
+            "paired_tape_executions_by_tenant": paired_by_tenant,
             "tape_requests_without_fill_in_window": len(set(start) - set(finish)),
             "filled_tape_orders_without_ingress_in_window": len(set(finish) - set(start)),
             "filled_tape_executions_per_second": round(tape / seconds, 3),

@@ -4,6 +4,7 @@ import argparse
 from datetime import datetime, timedelta, timezone
 import fcntl
 import json
+import math
 from pathlib import Path
 import re
 import runpy
@@ -39,6 +40,19 @@ def demo_tenants():
     if any(not re.fullmatch(r"[A-Z0-9]{6}", location) for location in rows):
         raise RuntimeError("Unexpected active tenant in this Demo generation")
     return rows
+
+
+def complete_latency_observation(sample, locations):
+    """A healthy business audit cannot qualify an absent latency measurement."""
+    latency = sample.get("tape_trade_ingress_to_order_filled_publish_ms", {})
+    pairs = sample.get("paired_tape_executions_by_tenant", {})
+    return (sample.get("quote_requests", 0) > 0 and sample.get("tape_requests", 0) > 0
+            and latency.get("paired_samples", 0) > 0
+            and set(pairs) == set(locations) and all(count > 0 for count in pairs.values())
+            and sum(pairs.values()) == latency["paired_samples"]
+            and all(isinstance(latency.get(key), (int, float))
+                    and math.isfinite(latency[key]) and latency[key] >= 0
+                    for key in ("p50", "p95", "p99", "p99_9")))
 
 
 def common_release_identity(root):
@@ -296,8 +310,10 @@ def main():
         sample["financial_cursor_checks"] = financial_checks
         sample["tape_terminal_audit"] = audit_tape_immediate_terminals(locations)
         sample["settlement_backlog_audit"] = audit_settlement_backlog(root,locations)
+        sample["latency_observation_complete"] = complete_latency_observation(sample, locations)
         posting = sample["posting_window"]
         sample["passed"] = (sample["runtime_status"].keys() == locations
+                            and sample["latency_observation_complete"]
                             and control_before == control_after
                             and all(state == "RUNNING" for state in sample["runtime_status"].values())
                             and all(gap < 300 for gap in sample["largest_tape_fill_gap_seconds_by_tenant"].values())

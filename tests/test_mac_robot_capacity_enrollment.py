@@ -11,6 +11,21 @@ SPEC.loader.exec_module(CAPACITY)
 
 
 class RobotCapacityEnrollmentTest(unittest.TestCase):
+    def test_absent_ingress_cannot_qualify_successful_business_fills(self):
+        sample = {'quote_requests': 0, 'tape_requests': 0, 'filled_tape_executions': 772,
+                  'tape_trade_ingress_to_order_filled_publish_ms': {'paired_samples': 0, 'p99': None}}
+        self.assertFalse(CAPACITY.complete_latency_observation(sample, {'TENANT'}))
+
+    def test_every_requested_tenant_needs_finite_paired_latency(self):
+        sample = {'quote_requests': 2, 'tape_requests': 2,
+                  'paired_tape_executions_by_tenant': {'TENANT': 2},
+                  'tape_trade_ingress_to_order_filled_publish_ms': {
+                      'paired_samples': 2, 'p50': 1, 'p95': 2, 'p99': 2, 'p99_9': 2}}
+        self.assertTrue(CAPACITY.complete_latency_observation(sample, {'TENANT'}))
+        self.assertFalse(CAPACITY.complete_latency_observation(sample, {'TENANT', 'MISSING'}))
+        sample['tape_trade_ingress_to_order_filled_publish_ms']['p99'] = float('nan')
+        self.assertFalse(CAPACITY.complete_latency_observation(sample, {'TENANT'}))
+
     def test_approved_robot_may_appear_after_the_approval_response(self):
         original = {'OLD123': 'ERROR'}
         complete = dict(original, NEW123='WAITING_MARKET_DATA')
