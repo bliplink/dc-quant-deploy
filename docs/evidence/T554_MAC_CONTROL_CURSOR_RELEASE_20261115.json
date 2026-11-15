@@ -1,6 +1,6 @@
 {
-  "observed_at": "2026-11-16T01:06:17.638387+08:00",
-  "status": "TRUE_BUSINESS_RPO_NO_GO_BOUNDED_WAIT_FIX_52_TESTS_PASS_FULL_COMMON_P0_RUNNING",
+  "observed_at": "2026-11-16T01:27:00.436605+08:00",
+  "status": "COMMON_BOUNDED_WAIT_SAME_JAR_REQUALIFICATION_RUNNING_BUSINESS_NO_GO",
   "production_acceptance": "NO_GO",
   "generation": "/Users/kong/.opentradingcore/mac-demo-20261115-232443",
   "client_ack_policy": "LOCAL_DURABLE_ASYNC",
@@ -1151,10 +1151,16 @@
   "bounded_async_wait_candidate": {
     "revision": "a02bd2b",
     "sha256": "3c56fdda4cef4c345dd0ac369e44edbc21be234d84eaa88277b5245940421352",
-    "candidate": "/Users/kong/.opentradingcore/t554-common-candidates/20261116-bounded-async-recovery-waits",
+    "candidate": "/Users/kong/.opentradingcore/t554-common-candidates/20261116-bounded-async-recovery-waits-native-retry",
     "focused_actual_tests_passed": 52,
     "focused_skipped": 0,
-    "status": "FULL_P0_RUNNING_NOT_DEPLOYED",
-    "scope": "Reuse existing two-second admission budget; recheck grant/fencing while waiting; reject before encoding/append or strict snapshot publication. Existing signed LOCAL64 and real physical catchup unchanged."
+    "status": "REQUALIFYING_SAME_PRODUCTION_JAR_WITH_BOUNDED_STRICT_READ_RETRY_FIXTURE",
+    "scope": "Reuse existing two-second admission budget; recheck grant/fencing while waiting; reject before encoding/append or strict snapshot publication. Existing signed LOCAL64 and real physical catchup unchanged.",
+    "first_full_attempt_status": "NO_GO_NATIVE_BACKUP_OUTAGE_FIXTURE_EXITED_ON_NEW_BOUNDED_STRICT_READ_ERROR",
+    "first_full_attempt_safety_executed": 308,
+    "first_full_attempt_cold_cases_passed": 4,
+    "first_full_attempt_evidence": "/Users/kong/.opentradingcore/t554-common-candidates/20261116-bounded-async-recovery-waits/qualification/state.json",
+    "native_fixture_revision": "c308774f253b8efc02d51756a5c35de6ea69b3ed",
+    "native_backup_outage_retry_focused_passed": true
   }
 }
