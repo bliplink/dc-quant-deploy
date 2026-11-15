@@ -1,6 +1,6 @@
 {
-  "observed_at": "2026-11-15T04:02:49.144259+00:00",
-  "status": "EXACT_COMMON_FUNCTIONAL_PASS_PERFORMANCE_NO_GO_NATIVE_RETEST_STARTED",
+  "observed_at": "2026-11-15T13:54:51.316730",
+  "status": "CURRENT_STRICT_CANCEL_BASELINE_PASS_PERFORMANCE_NO_GO_APPROVED_CUMULATIVE_REDESIGN_COMPONENTS_ONLY",
   "production_acceptance": "NO_GO",
   "generation": "mac-demo-20261115-065831",
   "original_volumes_preserved": true,
@@ -138,7 +138,7 @@
     "original_cohort_local_final_pending_before_resume": 0,
     "financial_cursor_before_resume": "PASS_FINANCIAL_CURSOR",
     "original_robots_normally_restarted": true,
-    "original_robots_current_state": "RUNNING",
+    "original_robots_current_state": "NORMALLY_STOPPED_FOR_COMMON_DEVELOPMENT",
     "post_recovery_financial_cursor": "PASS",
     "post_recovery_original_cohort_financial_unsettled": 0,
     "post_recovery_original_cohort_local_final_pending": 0,
@@ -157,7 +157,7 @@
     "Normal strict Common path is serial: three peer request/response exchanges; source has seven file/directory force calls and replica five, per singleton Common commit. Physical writer does not yet implement real multi-command group commit. This is a structural performance limit, not a measured production throughput formula."
   ],
   "application_data_or_credentials_included": false,
-  "current_maintenance": "Verified closed/inactive MySQL binlog archiving complete; ten original Robots resuming by authenticated Manager. No archive or directory scan overlaps new native windows.",
+  "current_maintenance": "Verified lossless SQL/stdout rotation archiving and discard complete. Original ten Robots normally stopped with financial reconciliation after clean strict cancel baseline; current business containers/data retained.",
   "ordinary_logging_layout": {
     "deploy_source_revision": "b9c800d",
     "four_voter_files_installed": true,
@@ -225,7 +225,15 @@
     "all_current_and_rollback_business_volumes_retained": true,
     "closed_active_mysql_binary_logs_full_gzip_readback_then_normal_purge": 4,
     "retired_mysql_binary_logs_losslessly_archived": 3,
-    "host_free_after_maintenance_approx_gib": 6.0
+    "host_free_after_maintenance_approx_gib": 6.0,
+    "retired_sql_original_gib": 10.099,
+    "retired_sql_archive_gib": 1.894,
+    "retired_stdout_rotation_files": 232,
+    "retired_stdout_rotation_original_gib": 10.804,
+    "retired_stdout_rotation_archive_gib": 0.918,
+    "all_containers_and_business_volumes_retained": true,
+    "measured_host_free_after_discard_approx_gib": 18,
+    "measured_guest_free_after_discard_approx_gib": 13
   },
   "previous_version_measurements_99a91b9": {
     "background": "Original ten Robots; same volumes and images. Observations are not isolated causal before/after comparisons.",
@@ -285,7 +293,7 @@
     }
   },
   "current_version_measurements": {
-    "status": "STRICT_NATIVE_BASELINE_AND_CANCEL_RETEST_IN_PROGRESS",
+    "status": "FIVE_CLEAN_STRICT_CANCEL_WINDOWS_PASS_NO_HIGH_PERFORMANCE_ACCEPTANCE",
     "common_revision": "4f28c95245387a2e18f0afe6d2b1bc816f6484ba",
     "native_capacity_or_latency_improvement_claimed": false,
     "original_steady_report_latency_invalidated": true,
@@ -310,6 +318,70 @@
       "max_completed_jvm_stop_ms": 149.3985
     },
     "first_native_attempt": "ADMISSION_NO_GO_BEFORE_ANY_SETUP_OR_PRESSURE_LOW_HOST_DISK",
-    "measurement_regression_tests_passed": 10
+    "measurement_regression_tests_passed": 10,
+    "strict_cancel_clean_windows": [
+      {
+        "mode": "ORDER_ONLY",
+        "concurrency": 4,
+        "cycles": 805,
+        "cycles_per_second": 13.265,
+        "new_p99_ms": 742.949,
+        "cancelled_p99_ms": 475.327,
+        "cycle_p99_ms": 1036.718
+      },
+      {
+        "mode": "ORDER_ONLY",
+        "concurrency": 8,
+        "cycles": 760,
+        "cycles_per_second": 12.537,
+        "new_p99_ms": 2008.509,
+        "cancelled_p99_ms": 714.958,
+        "cycle_p99_ms": 2486.617
+      },
+      {
+        "mode": "TRADE",
+        "concurrency": 1,
+        "cycles": 544,
+        "cycles_per_second": 9.052,
+        "new_p99_ms": 136.875,
+        "cancelled_p99_ms": 184.965,
+        "cycle_p99_ms": 294.391
+      },
+      {
+        "mode": "TRADE",
+        "concurrency": 4,
+        "cycles": 640,
+        "cycles_per_second": 10.609,
+        "new_p99_ms": 938.717,
+        "cancelled_p99_ms": 465.287,
+        "cycle_p99_ms": 1496.571
+      },
+      {
+        "mode": "TRADE",
+        "concurrency": 8,
+        "cycles": 760,
+        "cycles_per_second": 12.511,
+        "new_p99_ms": 980.151,
+        "cancelled_p99_ms": 636.933,
+        "cycle_p99_ms": 1833.559
+      }
+    ],
+    "strict_cancel_control_generation": {
+      "order": 34,
+      "trade": 58
+    },
+    "async_same_version": "PENDING"
+  },
+  "cumulative_commit_redesign": {
+    "owner_approved": true,
+    "implementation": "Original business WAL frame format retained; existing CommitIndex becomes one cumulative append stream, replaces repeated normal custody/ledger writes. Independent V2 signature domain; source and replica real force and Epoch/Fencing retained.",
+    "physical_group_primitive_revision": "e2b746e",
+    "primitive_tests_passed": 47,
+    "protocol_component_revision": "b0d48b2",
+    "protocol_component_tests_passed": 34,
+    "formal_runtime_integrated": false,
+    "full_new_protocol_p0_passed": false,
+    "production_deployed": false,
+    "new_protocol_performance_claimed": false
   }
 }
