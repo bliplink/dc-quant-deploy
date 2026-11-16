@@ -3639,6 +3639,20 @@
     "source_tests_executed": 224,
     "source_tests_skipped": 2,
     "source_tests_failures": 0,
-    "source_tests_errors": 0
+    "source_tests_errors": 0,
+    "candidate_order_revision": "ace430e92fa6a26f099ba076be9ba1f7cf51eb63",
+    "business_build_actual_tests": 744,
+    "pushed_to_github": true,
+    "installation_generation": "mac-demo-20261116-112333",
+    "installation_status": "IN_PROGRESS_NOT_BUSINESS_PASS",
+    "followthrough_journal": "/Users/kong/.opentradingcore/t554-initial-batch-followthrough-20261116.json"
+  },
+  "retired_ready_space_maintenance_20261116_1123": {
+    "status": "PASS_NO_ACTIVE_PROCESS_CHANGE",
+    "proof": "/Users/kong/.opentradingcore/t554-retired-ready-archive-20261116-1120-yhi3nnb9/proof.json",
+    "full_archives_compared": 2,
+    "active_volumes_deleted": false,
+    "guest_free_after_approx_gib": 15,
+    "production_go": false
   }
 }
