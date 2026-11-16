@@ -299,6 +299,20 @@ def bounded_application_logging(content):
             "log4j.appender.file.MaxBackupIndex=5\n")
 
 
+def configured_core_logging(image_content, deployment_content):
+    # Physical voters mount config-hostready, rather than the application's
+    # control/overrides directory. Carry over its explicit logger policies;
+    # keep the image's file paths and the Common lifecycle messages intact.
+    content = bounded_application_logging(image_content)
+    for line in deployment_content.splitlines():
+        match = re.fullmatch(r"\s*(log4j\.logger\.[^=\s]+)\s*=\s*(\S.*?)\s*", line)
+        if match:
+            key, value = match.groups()
+            content = re.sub(rf"^{re.escape(key)}\s*=.*(?:\n|$)", "", content, flags=re.M)
+            content = content.rstrip("\n") + f"\n{key}={value}\n"
+    return content
+
+
 def public_pins(node):
     paths = [m["Source"] for m in node["Mounts"] if m["Destination"] == "/read-only-original-rsa/public"
              and m["Type"] == "bind" and not m["RW"]]
@@ -578,9 +592,11 @@ def main():
     if not zk_port.isdigit():
         raise RuntimeError("Invalid ZooKeeper port")
     config_root = out / "common"
-    logging_config = {kind: bounded_application_logging(read(
+    logging_config = {kind: configured_core_logging(read(
         "docker", "run", "--rm", "--network", "none", "--entrypoint", "cat", image_ids[kind],
-        f"/srv/dc/dc/{service}/config/log4j.ini")) for kind, service in SERVICES.items()}
+        f"/srv/dc/dc/{service}/config/log4j.ini"),
+        (runtime / "control" / "overrides" / service / "config" / "log4j.ini").read_text())
+        for kind, service in SERVICES.items()}
     for phase in ("birth", "home", "install", "stage", "hostready"):
         for kind, slot in (pairs if phase != "stage" else [(kind, "A") for kind in SERVICES]):
             target = config_root / f"config-{phase}" / kind / slot / "application.properties"

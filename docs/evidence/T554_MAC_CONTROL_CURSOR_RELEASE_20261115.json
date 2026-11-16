@@ -1,9 +1,9 @@
 {
-  "observed_at": "2026-11-16T08:58:54.849939+08:00",
+  "observed_at": "2026-11-16T09:07:12.561176+08:00",
   "status": "NO_GO_STRICT_1000_SEVERE_BACKLOG_POST_PRESSURE_CONSISTENCY_PASS_DIAGNOSTIC_JFR_RUNNING_ASYNC_PENDING",
   "production_acceptance": "NO_GO",
-  "generation": "mac-demo-20261116-073439",
-  "client_ack_policy": "STRICT_QUORUM",
+  "generation": "mac-demo-20261116-085710",
+  "client_ack_policy": "LOCAL_DURABLE_ASYNC",
   "owner_confirmed_phase_one_performance_target": {
     "owner_confirmed_at": "2026-11-15T20:15:14.936622+08:00",
     "status": "OWNER_CONFIRMED_TARGET_CURRENT_RELEASE_NO_GO",
@@ -161,66 +161,68 @@
         "skipped_names": [],
         "actual_executed_passed": 207
       }
-    }
+    },
+    "actual_async_identity_evidence": "/Users/kong/.opentradingcore/t554-queued-immediate-async-deployed-identity-20261116.json"
   },
   "actual_core_nodes": [
     {
-      "node": "mac-demo-20261116-073439-order-a-hostready",
-      "id": "5663ab764078bac3cf42a299b9316f8f3b0dc1a30d098a525e66ac2a1cc6988c",
-      "image": "sha256:1f914d1de0b4c84e4779c6618ad8b8a756e3757d8ea76857132d5e4e689fdcac",
-      "started_at": "2026-11-15T23:40:09.07729142Z",
+      "node": "mac-demo-20261116-085710-order-a-hostready",
+      "id": "069abb03be736c4903dc2c3ef82a2ed9d6aca298c69524f81cd865f7f7c2c056",
+      "image": "sha256:d516aef62bc20585792ccabeb198e080b839d6c64713f9a782b8a6127476ea4b",
+      "started_at": "2026-11-16T01:03:16.807382381Z",
       "restart_count": 0,
       "actual_common_jar_sha256": "4a966ced261fe2105cda18782c140717dc1ab0c773ee788a7948243713e1747c",
+      "client_ack_policy": "LOCAL_DURABLE_ASYNC",
       "actual_OrderFacade_class_sha256": "6603588dbe9561a5d158753253d4f46b877e0c68fc5b47eef0cbd11647b630e9"
     },
     {
-      "node": "mac-demo-20261116-073439-order-b-hostready",
-      "id": "48d1de0f150a8b3d46af5b6677e0078bd939ac6a53f0c482ab9c6f247fe4ae63",
-      "image": "sha256:1f914d1de0b4c84e4779c6618ad8b8a756e3757d8ea76857132d5e4e689fdcac",
-      "started_at": "2026-11-15T23:40:09.080595628Z",
+      "node": "mac-demo-20261116-085710-order-b-hostready",
+      "id": "c6979125e50acee92a4cf6607a642663c063de9def31b8ee1eeaf2ebbb43a9e0",
+      "image": "sha256:d516aef62bc20585792ccabeb198e080b839d6c64713f9a782b8a6127476ea4b",
+      "started_at": "2026-11-16T01:03:16.809548673Z",
       "restart_count": 0,
       "actual_common_jar_sha256": "4a966ced261fe2105cda18782c140717dc1ab0c773ee788a7948243713e1747c",
+      "client_ack_policy": "LOCAL_DURABLE_ASYNC",
       "actual_OrderFacade_class_sha256": "6603588dbe9561a5d158753253d4f46b877e0c68fc5b47eef0cbd11647b630e9"
     },
     {
-      "node": "mac-demo-20261116-073439-trade-a-hostready",
-      "id": "7ea4f47ba9046d4e4f28f4468ceb7b8145e05f1cb401bd5703a9078ecd2f08ec",
-      "image": "sha256:3b915c60c7ead3785cd96da7e3117e4b34c572266e7a8fe7aa62d3d0e2781203",
-      "started_at": "2026-11-15T23:40:09.081561086Z",
+      "node": "mac-demo-20261116-085710-trade-a-hostready",
+      "id": "5291b49fb403c1fa4c26ed405ab1d061b36ee981f106ab3d35a5aadf187b2707",
+      "image": "sha256:706a606331b6ad13f104d19d0d54ff05bfd384f42a4086683a8a495d392af62c",
+      "started_at": "2026-11-16T01:03:16.80771234Z",
       "restart_count": 0,
-      "actual_common_jar_sha256": "4a966ced261fe2105cda18782c140717dc1ab0c773ee788a7948243713e1747c"
+      "actual_common_jar_sha256": "4a966ced261fe2105cda18782c140717dc1ab0c773ee788a7948243713e1747c",
+      "client_ack_policy": "LOCAL_DURABLE_ASYNC"
     },
     {
-      "node": "mac-demo-20261116-073439-trade-b-hostready",
-      "id": "f89fb9a60333418f4d1d21f9eca28c0c2c81996d4df32ef1462b23d32037e514",
-      "image": "sha256:3b915c60c7ead3785cd96da7e3117e4b34c572266e7a8fe7aa62d3d0e2781203",
-      "started_at": "2026-11-15T23:40:09.080968128Z",
+      "node": "mac-demo-20261116-085710-trade-b-hostready",
+      "id": "d86d002410aef61564fad267f1433aba3d973a525b4e4177883eacd098d55419",
+      "image": "sha256:706a606331b6ad13f104d19d0d54ff05bfd384f42a4086683a8a495d392af62c",
+      "started_at": "2026-11-16T01:03:16.809573756Z",
       "restart_count": 0,
-      "actual_common_jar_sha256": "4a966ced261fe2105cda18782c140717dc1ab0c773ee788a7948243713e1747c"
+      "actual_common_jar_sha256": "4a966ced261fe2105cda18782c140717dc1ab0c773ee788a7948243713e1747c",
+      "client_ack_policy": "LOCAL_DURABLE_ASYNC"
     }
   ],
-  "order_delivery8_actual_class_evidence": "/Users/kong/.opentradingcore/mac-demo-20261116-020105/actual-order-delivery8-classes-20261116.json",
   "runtime_gc": {
-    "actual_all_four_G1": true,
+    "status": "CURRENT_FOUR_VM_FLAGS_NOT_YET_RECHECKED",
+    "requested_collector": "G1",
     "requested_max_pause_ms": 10,
-    "actual_flag_evidence": "/Users/kong/.opentradingcore/t554-queued-immediate-actual-gc-flags-20261116.json",
     "actual_pause_sla_passed": false,
-    "source": "G1 default for new core voters; explicit operator collector and pause budget preserved"
+    "previous_generation_actual_flags": "/Users/kong/.opentradingcore/t554-queued-immediate-actual-gc-flags-20261116.json"
   },
   "functional": {
     "fresh_real_business_passed": true,
-    "fresh_verification": "/Users/kong/.opentradingcore/t554-queued-immediate-strict-fresh-20261116.log",
+    "fresh_verification": "/Users/kong/.opentradingcore/t554-queued-immediate-async-fresh-20261116.log",
     "order_only_and_trade_real_fills_passed": true,
     "each_customer_execution_unique_public_trade_passed": true,
     "initial_exact_financial_cursor_passed": true,
     "actual_all_four_256_partition_role_runtime_passed": true,
-    "ten_robot_steady_status": "PASS_REAL_FIVE_MINUTE_WINDOW",
     "current_same_jar_four_way_robot_sigkill_pending": true,
     "current_trade_single_node_pending": true,
     "current_true_async_settlement_loss_pending": true,
     "old_failed_generations_auto_recovered": false,
-    "ten_robot_steady_evidence": "/Users/kong/.opentradingcore/mac-demo-20261116-073439/robot-steady-10-234808.json",
-    "ten_robot_real_tape_executions": 1285
+    "ten_robot_steady_status": "RUNNING_NOT_YET_COMPLETE"
   },
   "current_performance": {
     "status": "STRICT_1000_FAILED_WITH_CENSORED_RECEIPTS_POST_PRESSURE_CONSISTENCY_PASS_JFR_DIAGNOSTIC_RUNNING",
@@ -576,13 +578,15 @@
     "strict_1000_log_metadata_before": "/Users/kong/.opentradingcore/t554-strict1000-log-metadata-before-20261116.json",
     "strict_1000_log_metadata_after": "/Users/kong/.opentradingcore/t554-strict1000-log-metadata-after-20261116.json",
     "async_followthrough": {
-      "status": "SAME_QUALIFIED_JAR_SEQUENTIAL_FRESH_RUNNING",
+      "status": "BASIC_BUSINESS_PASS_TEN_ROBOTS_STEADY_RUNNING",
       "fresh_log": "/Users/kong/.opentradingcore/t554-queued-immediate-async-fresh-20261116.log",
       "controller": "/Users/kong/.opentradingcore/t554-queued-immediate-async-matrices-v2-20261116.py",
       "journal": "/Users/kong/.opentradingcore/t554-queued-immediate-async-matrices-v2-20261116.json",
       "planned_policy": "LOCAL_DURABLE_ASYNC",
-      "no_parallel_business_environment": true
-    }
+      "no_parallel_business_environment": true,
+      "generation": "mac-demo-20261116-085710"
+    },
+    "strict_baseline_generation": "mac-demo-20261116-073439"
   },
   "last_completed_business_performance": {
     "status": "HOTBOOK_FAILED_32_PERSISTED_IOC_CANCELS_AND_SEVERE_BACKLOG_NEW_ORDER_RETEST_PENDING",
@@ -2959,5 +2963,79 @@
     "old_status_reason_group_update_time_is_actual_cancel_commit_time": false,
     "existing_client_socket_latency_measurements_changed": false,
     "requires_original_WAL_event_timestamp_for_actual_cancel_time": true
+  },
+  "core_logging_policy_finding": {
+    "cause": "Physical voter logging generated from image omits explicit logger policies in deployment control/overrides",
+    "retained_trade_node_UpdateOrderHandler_line_counts": [
+      54784,
+      52591
+    ],
+    "baseline_actual_logging_evidence": "/Users/kong/.opentradingcore/t554-async-baseline-actual-logging-20261116.json",
+    "prepared_fix": "/Users/kong/.opentradingcore/t554-core-logging-policy-candidate-20261116/proof.json",
+    "candidate_applied_to_running_baseline": false,
+    "existing_storage_checks_passed": 19,
+    "common_root_logger_file_path_rotation_preserved": true,
+    "performance_benefit_unmeasured": true
+  },
+  "strict_073439_retained_identity_and_functional": {
+    "actual_core_nodes": [
+      {
+        "node": "mac-demo-20261116-073439-order-a-hostready",
+        "id": "5663ab764078bac3cf42a299b9316f8f3b0dc1a30d098a525e66ac2a1cc6988c",
+        "image": "sha256:1f914d1de0b4c84e4779c6618ad8b8a756e3757d8ea76857132d5e4e689fdcac",
+        "started_at": "2026-11-15T23:40:09.07729142Z",
+        "restart_count": 0,
+        "actual_common_jar_sha256": "4a966ced261fe2105cda18782c140717dc1ab0c773ee788a7948243713e1747c",
+        "actual_OrderFacade_class_sha256": "6603588dbe9561a5d158753253d4f46b877e0c68fc5b47eef0cbd11647b630e9"
+      },
+      {
+        "node": "mac-demo-20261116-073439-order-b-hostready",
+        "id": "48d1de0f150a8b3d46af5b6677e0078bd939ac6a53f0c482ab9c6f247fe4ae63",
+        "image": "sha256:1f914d1de0b4c84e4779c6618ad8b8a756e3757d8ea76857132d5e4e689fdcac",
+        "started_at": "2026-11-15T23:40:09.080595628Z",
+        "restart_count": 0,
+        "actual_common_jar_sha256": "4a966ced261fe2105cda18782c140717dc1ab0c773ee788a7948243713e1747c",
+        "actual_OrderFacade_class_sha256": "6603588dbe9561a5d158753253d4f46b877e0c68fc5b47eef0cbd11647b630e9"
+      },
+      {
+        "node": "mac-demo-20261116-073439-trade-a-hostready",
+        "id": "7ea4f47ba9046d4e4f28f4468ceb7b8145e05f1cb401bd5703a9078ecd2f08ec",
+        "image": "sha256:3b915c60c7ead3785cd96da7e3117e4b34c572266e7a8fe7aa62d3d0e2781203",
+        "started_at": "2026-11-15T23:40:09.081561086Z",
+        "restart_count": 0,
+        "actual_common_jar_sha256": "4a966ced261fe2105cda18782c140717dc1ab0c773ee788a7948243713e1747c"
+      },
+      {
+        "node": "mac-demo-20261116-073439-trade-b-hostready",
+        "id": "f89fb9a60333418f4d1d21f9eca28c0c2c81996d4df32ef1462b23d32037e514",
+        "image": "sha256:3b915c60c7ead3785cd96da7e3117e4b34c572266e7a8fe7aa62d3d0e2781203",
+        "started_at": "2026-11-15T23:40:09.080968128Z",
+        "restart_count": 0,
+        "actual_common_jar_sha256": "4a966ced261fe2105cda18782c140717dc1ab0c773ee788a7948243713e1747c"
+      }
+    ],
+    "functional": {
+      "fresh_real_business_passed": true,
+      "fresh_verification": "/Users/kong/.opentradingcore/t554-queued-immediate-strict-fresh-20261116.log",
+      "order_only_and_trade_real_fills_passed": true,
+      "each_customer_execution_unique_public_trade_passed": true,
+      "initial_exact_financial_cursor_passed": true,
+      "actual_all_four_256_partition_role_runtime_passed": true,
+      "ten_robot_steady_status": "PASS_REAL_FIVE_MINUTE_WINDOW",
+      "current_same_jar_four_way_robot_sigkill_pending": true,
+      "current_trade_single_node_pending": true,
+      "current_true_async_settlement_loss_pending": true,
+      "old_failed_generations_auto_recovered": false,
+      "ten_robot_steady_evidence": "/Users/kong/.opentradingcore/mac-demo-20261116-073439/robot-steady-10-234808.json",
+      "ten_robot_real_tape_executions": 1285
+    },
+    "runtime_gc": {
+      "actual_all_four_G1": true,
+      "requested_max_pause_ms": 10,
+      "actual_flag_evidence": "/Users/kong/.opentradingcore/t554-queued-immediate-actual-gc-flags-20261116.json",
+      "actual_pause_sla_passed": false,
+      "source": "G1 default for new core voters; explicit operator collector and pause budget preserved"
+    },
+    "historical_delivery8_class_evidence": "/Users/kong/.opentradingcore/mac-demo-20261116-020105/actual-order-delivery8-classes-20261116.json"
   }
 }
