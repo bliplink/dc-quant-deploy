@@ -310,6 +310,16 @@ def configured_core_logging(image_content, deployment_content):
             key, value = match.groups()
             content = re.sub(rf"^{re.escape(key)}\s*=.*(?:\n|$)", "", content, flags=re.M)
             content = content.rstrip("\n") + f"\n{key}={value}\n"
+    # Order publications use GwServerResource's runtime CGLIB subclass name,
+    # so its package (not only its bare class name) must remain observable.
+    # Trade ingress supplies the other half of the existing Robot pairing.
+    for name,level in (('com.app.dc.handler.UpdateOrderHandler','INFO'),
+                       ('com.gw.common.utils','INFO'),
+                       ('com.gw.common.utils.GwServerResource','INFO'),
+                       ('com.gw.common.utils.BaseApi','WARN')):
+        key='log4j.logger.'+name
+        content=re.sub(rf"^{re.escape(key)}\s*=.*(?:\n|$)","",content,flags=re.M)
+        content=content.rstrip('\n')+f'\n{key}={level}\n'
     return content
 
 

@@ -14,12 +14,31 @@ SPACE = FRESH['require_docker_space']
 RESTORE = FRESH['restore_container_restart_policy']
 PREPARE_RUNTIME = FRESH['prepare_voter_runtime_storage']
 BOUNDED_LOGGING = FRESH['bounded_application_logging']
+CORE_LOGGING = FRESH['configured_core_logging']
 CAPACITY = runpy.run_path(str(Path(__file__).resolve().parents[1] / 'scripts/verify-mac-demo-robot-capacity.py'))
 CONTROL = CAPACITY['require_strict_demo']
 GIB = 1024 ** 3
 
 
 class StorageLifecycleTest(unittest.TestCase):
+    def test_core_overrides_keep_robot_ingress_and_publication_evidence(self):
+        image=('log4j.rootLogger=INFO,file,stdout\n'
+               'log4j.appender.file=org.apache.log4j.FileAppender\n'
+               'log4j.appender.file.File=../../log/Trade2Svr.log\n')
+        override=('log4j.logger.com.app.dc.handler.UpdateOrderHandler=WARN\n'
+                  'log4j.logger.com.gateway.connector.tcp.client.GateWayApi=ERROR\n'
+                  'log4j.logger.com.app.dc.service.check.ProcessOrder=WARN\n')
+        configured=CORE_LOGGING(image,override)
+        values=dict(line.split('=',1) for line in configured.splitlines() if '=' in line)
+        self.assertEqual('INFO',values['log4j.logger.com.app.dc.handler.UpdateOrderHandler'])
+        self.assertEqual('ERROR',values['log4j.logger.com.gateway.connector.tcp.client.GateWayApi'])
+        self.assertEqual('INFO',values['log4j.logger.com.gw.common.utils'])
+        self.assertEqual('INFO',values['log4j.logger.com.gw.common.utils.GwServerResource'])
+        self.assertEqual('WARN',values['log4j.logger.com.gw.common.utils.BaseApi'])
+        self.assertEqual('WARN',values['log4j.logger.com.app.dc.service.check.ProcessOrder'])
+        self.assertEqual('../../log/Trade2Svr.log',values['log4j.appender.file.File'])
+        self.assertEqual(configured,CORE_LOGGING(configured,override))
+
     def test_application_log_rotation_keeps_levels_and_file_path(self):
         original = ('log4j.rootLogger=INFO,file,stdout\n'
                     'log4j.appender.file=org.apache.log4j.DailyRollingFileAppender\n'
