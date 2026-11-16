@@ -1,6 +1,6 @@
 {
-  "observed_at": "2026-11-16T07:44:04.052074+08:00",
-  "status": "NO_GO_ORDER_QUEUE_FIX_DEPLOYED_BASELINE_BUSINESS_PASS_REAL_MATRIX_AND_HA_PENDING",
+  "observed_at": "2026-11-16T08:09:07.520843+08:00",
+  "status": "NO_GO_STRICT_MATRIX_COMPLETE_INTEGRITY_PASS_PERFORMANCE_FAIL_ASYNC_AND_BUSINESS_HA_PENDING",
   "production_acceptance": "NO_GO",
   "generation": "mac-demo-20261116-073439",
   "client_ack_policy": "STRICT_QUORUM",
@@ -214,18 +214,232 @@
     "each_customer_execution_unique_public_trade_passed": true,
     "initial_exact_financial_cursor_passed": true,
     "actual_all_four_256_partition_role_runtime_passed": true,
-    "ten_robot_steady_status": "ENROLLING_THEN_FIVE_MINUTE_WINDOW",
+    "ten_robot_steady_status": "PASS_REAL_FIVE_MINUTE_WINDOW",
     "current_same_jar_four_way_robot_sigkill_pending": true,
     "current_trade_single_node_pending": true,
     "current_true_async_settlement_loss_pending": true,
-    "old_failed_generations_auto_recovered": false
+    "old_failed_generations_auto_recovered": false,
+    "ten_robot_steady_evidence": "/Users/kong/.opentradingcore/mac-demo-20261116-073439/robot-steady-10-234808.json",
+    "ten_robot_real_tape_executions": 1285
   },
   "current_performance": {
-    "status": "NEW_ORDER_FIX_INITIAL_BUSINESS_PASS_TEN_ROBOTS_AND_REAL_MATRIX_PENDING",
-    "strict_measured_on_this_release": false,
+    "status": "STRICT_FOUR_LAYOUTS_COMPLETE_INTEGRITY_PASS_SLO_FAIL_COMMANDS_AND_1000_WINDOW_CONTINUE",
+    "strict_measured_on_this_release": true,
     "async_measured_on_this_release": false,
     "followthrough_controller": "/Users/kong/.opentradingcore/t554-queued-immediate-matrices-v1-20261116.json",
-    "qualified_windows_cannot_overlap_faults_or_diagnostic_attach": true
+    "qualified_windows_cannot_overlap_faults_or_diagnostic_attach": true,
+    "functional_multi_symbol": {
+      "evidence": "/Users/kong/.opentradingcore/mac-demo-20261116-073439/distributed-execution-capacity-354b0486.json",
+      "integrity_passed": true,
+      "actual_final_inside_window": 120,
+      "actual_rate": 2,
+      "client_fill_p99_ms": 132.727,
+      "owner_performance_passed": false
+    },
+    "strict_queue_matrix_summary": "/Users/kong/.opentradingcore/t554-strict-actual-queue-matrix-summary-20261116.json",
+    "strict_queue_matrix_rows": [
+      {
+        "case": "strict-hotbook-native40",
+        "tenants": 1,
+        "symbols_per_tenant": 1,
+        "queues": 1,
+        "sessions": 16,
+        "actual_in_window_per_second": 37.833333333333336,
+        "final_p50_ms": 468.547,
+        "final_p99_ms": 5164.728,
+        "tail_final_receipts": 130,
+        "missing_final_receipts": 0,
+        "integrity_passed": true,
+        "owner_performance_passed": false,
+        "evidence": "/Users/kong/.opentradingcore/mac-demo-20261116-073439/distributed-execution-capacity-78411385.json",
+        "order_partition_distribution": {
+          "P003": 1
+        },
+        "trade_partition_distribution": {
+          "P021": 1
+        },
+        "per_queue_p99_ms": {
+          "Y1UEPY/BTC004USDT": 5164.728
+        }
+      },
+      {
+        "case": "strict-native40-distributed",
+        "tenants": 8,
+        "symbols_per_tenant": 1,
+        "queues": 8,
+        "sessions": 8,
+        "actual_in_window_per_second": 40.0,
+        "final_p50_ms": 81.931,
+        "final_p99_ms": 284.529,
+        "tail_final_receipts": 0,
+        "missing_final_receipts": 0,
+        "integrity_passed": true,
+        "owner_performance_passed": false,
+        "evidence": "/Users/kong/.opentradingcore/mac-demo-20261116-073439/distributed-execution-capacity-0227e8cb.json",
+        "order_partition_distribution": {
+          "P002": 1,
+          "P222": 1,
+          "P159": 1,
+          "P186": 1,
+          "P250": 1,
+          "P241": 1,
+          "P039": 1,
+          "P164": 1
+        },
+        "trade_partition_distribution": {
+          "P179": 1,
+          "P001": 1,
+          "P186": 1,
+          "P231": 1,
+          "P012": 1,
+          "P072": 1,
+          "P076": 1,
+          "P045": 1
+        },
+        "per_queue_p99_ms": {
+          "AH35MM/BTC004USDT": 240.814,
+          "CEF0WL/BTC004USDT": 213.722,
+          "G02QAH/BTC004USDT": 340.753,
+          "GT94EB/BTC004USDT": 349.772,
+          "LL8EPV/BTC004USDT": 271.204,
+          "PS2KHO/BTC004USDT": 284.092,
+          "PZTV34/BTC004USDT": 230.505,
+          "VLDBPB/BTC004USDT": 327.528
+        }
+      },
+      {
+        "case": "strict-native40-tenants1-symbols4",
+        "tenants": 1,
+        "symbols_per_tenant": 4,
+        "queues": 4,
+        "sessions": 16,
+        "actual_in_window_per_second": 40.0,
+        "final_p50_ms": 231.945,
+        "final_p99_ms": 3903.727,
+        "tail_final_receipts": 0,
+        "missing_final_receipts": 0,
+        "integrity_passed": true,
+        "owner_performance_passed": false,
+        "evidence": "/Users/kong/.opentradingcore/mac-demo-20261116-073439/distributed-execution-capacity-e7850291.json",
+        "order_partition_distribution": {
+          "P028": 1,
+          "P172": 1,
+          "P124": 1,
+          "P204": 1
+        },
+        "trade_partition_distribution": {
+          "P035": 4
+        },
+        "per_queue_p99_ms": {
+          "QI0TN0/BTC004USDT": 3544.739,
+          "QI0TN0/BTC005USDT": 3880.822,
+          "QI0TN0/BTC006USDT": 4026.621,
+          "QI0TN0/BTC007USDT": 3851.048
+        }
+      },
+      {
+        "case": "strict-native40-tenants4-symbols1",
+        "tenants": 4,
+        "symbols_per_tenant": 1,
+        "queues": 4,
+        "sessions": 16,
+        "actual_in_window_per_second": 40.0,
+        "final_p50_ms": 158.948,
+        "final_p99_ms": 1171.916,
+        "tail_final_receipts": 0,
+        "missing_final_receipts": 0,
+        "integrity_passed": true,
+        "owner_performance_passed": false,
+        "evidence": "/Users/kong/.opentradingcore/mac-demo-20261116-073439/distributed-execution-capacity-d01992b8.json",
+        "order_partition_distribution": {
+          "P249": 1,
+          "P236": 1,
+          "P055": 1,
+          "P003": 1
+        },
+        "trade_partition_distribution": {
+          "P142": 1,
+          "P055": 1,
+          "P095": 1,
+          "P162": 1
+        },
+        "per_queue_p99_ms": {
+          "CV91LO/BTC004USDT": 1130.917,
+          "DI2LEK/BTC004USDT": 1156.078,
+          "P4V9DM/BTC004USDT": 1309.394,
+          "VQ9V3D/BTC004USDT": 1084.664
+        }
+      },
+      {
+        "case": "strict-native40-tenants4-symbols4",
+        "tenants": 4,
+        "symbols_per_tenant": 4,
+        "queues": 16,
+        "sessions": 16,
+        "actual_in_window_per_second": 40.0,
+        "final_p50_ms": 127.509,
+        "final_p99_ms": 666.038,
+        "tail_final_receipts": 0,
+        "missing_final_receipts": 0,
+        "integrity_passed": true,
+        "owner_performance_passed": false,
+        "evidence": "/Users/kong/.opentradingcore/mac-demo-20261116-073439/distributed-execution-capacity-7946005c.json",
+        "order_partition_distribution": {
+          "P007": 1,
+          "P183": 1,
+          "P103": 1,
+          "P215": 1,
+          "P134": 1,
+          "P054": 1,
+          "P230": 1,
+          "P086": 1,
+          "P222": 1,
+          "P110": 1,
+          "P190": 1,
+          "P014": 1,
+          "P158": 1,
+          "P046": 1,
+          "P254": 1,
+          "P078": 1
+        },
+        "trade_partition_distribution": {
+          "P193": 4,
+          "P139": 4,
+          "P107": 4,
+          "P242": 4
+        },
+        "per_queue_p99_ms": {
+          "CBOIRU/BTC004USDT": 538.139,
+          "CBOIRU/BTC005USDT": 564.916,
+          "CBOIRU/BTC006USDT": 564.508,
+          "CBOIRU/BTC007USDT": 650.876,
+          "MP2H4P/BTC004USDT": 624.318,
+          "MP2H4P/BTC005USDT": 660.858,
+          "MP2H4P/BTC006USDT": 548.757,
+          "MP2H4P/BTC007USDT": 501.632,
+          "RWREJQ/BTC004USDT": 578.842,
+          "RWREJQ/BTC005USDT": 596.343,
+          "RWREJQ/BTC006USDT": 691.856,
+          "RWREJQ/BTC007USDT": 666.952,
+          "T1DT91/BTC004USDT": 1001.393,
+          "T1DT91/BTC005USDT": 596.732,
+          "T1DT91/BTC006USDT": 942.915,
+          "T1DT91/BTC007USDT": 669.102
+        }
+      }
+    ],
+    "matrix_actual_acceptance_pending": false,
+    "new_hotbook_pause_observation_status": "NO_GO_INCOMPLETE_PAUSE_OBSERVATION_NO_ZERO_PAUSE_INFERENCE",
+    "new_hotbook_pause_observation_last_proof": "/Users/kong/.opentradingcore/mac-demo-20261116-073439/jvm-pauses-cpszfguz/proof.json",
+    "default_singlebook_order_cancel_concurrency_scope": [
+      1,
+      4,
+      8
+    ],
+    "existing_explicit_singlebook_order_cancel_larger_concurrency_options": [
+      16,
+      32
+    ]
   },
   "last_completed_business_performance": {
     "status": "HOTBOOK_FAILED_32_PERSISTED_IOC_CANCELS_AND_SEVERE_BACKLOG_NEW_ORDER_RETEST_PENDING",
@@ -1080,14 +1294,15 @@
     "async_match_readmission_driver_regressions_passed": 9
   },
   "open_findings": [
-    "Real hotbook strict40 test cancels32 acknowledged IOC orders while contra quantity remains; existing15s scanner bypasses first matching opportunity. Order1829560 unit regression fixed; new actual retest pending.",
+    "Real hotbook strict40 test cancels32 acknowledged IOC orders while contra quantity remains; existing15s scanner bypasses first matching opportunity. Order1829560 actual same-layout retest fills all2400, zero cancellations; remaining performance failure is retained.",
     "New strict native40/s completes all2400 inside60s with financial and ten-Robot integrity, but client finalP99=1320.248ms; both strict and async1000/s and20ms remain unaccepted.",
     "Same-JAR business four-direction SIGKILL, Trade single-node, and async accepted-loss regressions remain pending; old020105 P135 failure was retained and replaced sequentially, not automatically recovered.",
     "Common all256-partition takeover and Home remain minutes in the private fixture; no recovery-speed qualification claimed.",
     "Common bounded strict batch exists; business requests still commit singleton transitions. Do not relax real physicalACK or fencing to reduce latency.",
     "Tenant-symbol matching queues share Order Common partition and Trade tenant partition; explicit natural-hash matrix now running, scale result pending.",
     "Host compression churn and guestIO pressure observed in strict40 window, without Order/Trade cgroupCPU throttling; causality requires diagnostic evidence.",
-    "Historical async settlement and reservation-loss composite audits retain original harnessNO_GO evidence and cannot replace thisJAR business acceptance."
+    "Historical async settlement and reservation-loss composite audits retain original harnessNO_GO evidence and cannot replace thisJAR business acceptance.",
+    "Cancel after-state retains earlier UpdateTime and projection preserves it. Do not use projected order update_time as actual cancel commit time; business metadata correction remains pending."
   ],
   "historical_evidence": "archive/T554_MAC_CONTROL_CURSOR_RELEASE_PRE_20261116_0210.json",
   "raw_storage_diagnostic": {
@@ -2550,7 +2765,7 @@
     "fixed_targeted_checks": 11,
     "targeted_skips": 0,
     "proof": "/Users/kong/.opentradingcore/t554-order-queued-immediate-regression-20261116/proof.json",
-    "business_fix_actual_retest_passed": false,
+    "business_fix_actual_retest_passed": true,
     "same_qualified_common_jar": true,
     "build": "/Users/kong/.opentradingcore/mac-demo-build-20261116-073439",
     "sequential_fresh_log": "/Users/kong/.opentradingcore/t554-queued-immediate-strict-fresh-20261116.log",
@@ -2560,7 +2775,12 @@
     "full_business_optional_external_material_skips": 2,
     "baseline_business_passed": true,
     "physical_and_basic_business_seconds": 329,
-    "baseline_business_seconds": 111
+    "baseline_business_seconds": 111,
+    "actual_retest": "/Users/kong/.opentradingcore/mac-demo-20261116-073439/distributed-execution-capacity-78411385.json",
+    "prior_cancelled_orders": 32,
+    "retest_cancelled_orders": 0,
+    "actual_retest_final_fills": 2400,
+    "owner_performance_passed": false
   },
   "previous_completed_business_performance_before_065052": {
     "generation": "mac-demo-20261115-232443",
@@ -2588,5 +2808,12 @@
     },
     "original_evidence": "/Users/kong/dc-quant-deploy/docs/evidence/archive/T554_MAC_CONTROL_CURSOR_RELEASE_PRE_20261116_0210.json",
     "performance_accepted": false
+  },
+  "cancel_timestamp_finding": {
+    "status": "PENDING_BUSINESS_METADATA_FIX",
+    "source": "OrderCertifiedCancelSaga copies prior UpdateTime into pending and terminal after-state; OrderProjectionService writes this payload value",
+    "old_status_reason_group_update_time_is_actual_cancel_commit_time": false,
+    "existing_client_socket_latency_measurements_changed": false,
+    "requires_original_WAL_event_timestamp_for_actual_cancel_time": true
   }
 }
