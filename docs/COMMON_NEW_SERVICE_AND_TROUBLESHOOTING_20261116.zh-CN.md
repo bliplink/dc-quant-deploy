@@ -230,6 +230,8 @@ python3 scripts/verify-mac-demo-settlement-backlog.py --help
 python3 tests/check_certified_trade_financial_cursor.py --help
 ```
 
+多品种核验可使用结算待办工具的`--all-symbols`，扫描全部256个实际Primary分区；默认模式只观察所选租户的BTCUSDT分区。新版会单列Order-only保留重放记录，并以源码版本命名观察类、核对实际输出版本，避免JVM复用旧诊断类造成误判。
+
 这些工具分别检查当前Order/Trade物理接入、真实Primary的结算待办、资金持仓与认证游标。它们带有现有业务假设，不能不改参数和对账逻辑就用于任意新服务。诊断工具版本也要保留；旧工具不支持新证明格式时，不能把工具报错直接当成数据坏了。
 
 ### 常见现象及下一步

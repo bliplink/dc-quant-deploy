@@ -1,6 +1,6 @@
 {
-  "observed_at": "2026-11-16T09:07:12.561176+08:00",
-  "status": "NO_GO_STRICT_1000_SEVERE_BACKLOG_POST_PRESSURE_CONSISTENCY_PASS_DIAGNOSTIC_JFR_RUNNING_ASYNC_PENDING",
+  "observed_at": "2026-11-16T10:10:27.988833+08:00",
+  "status": "NO_GO_BOTH_1000_FAILED_POST_PRESSURE_FINANCIAL_CONSISTENCY_PASS_LIVE_LOGGING_REMEASUREMENT_RUNNING",
   "production_acceptance": "NO_GO",
   "generation": "mac-demo-20261116-085710",
   "client_ack_policy": "LOCAL_DURABLE_ASYNC",
@@ -205,11 +205,11 @@
     }
   ],
   "runtime_gc": {
-    "status": "CURRENT_FOUR_VM_FLAGS_NOT_YET_RECHECKED",
-    "requested_collector": "G1",
+    "actual_all_four_G1": true,
     "requested_max_pause_ms": 10,
+    "actual_flag_evidence": "/Users/kong/.opentradingcore/t554-async-actual-gc-and-crypto-flags-20261116.json",
     "actual_pause_sla_passed": false,
-    "previous_generation_actual_flags": "/Users/kong/.opentradingcore/t554-queued-immediate-actual-gc-flags-20261116.json"
+    "crypto_montgomery_intrinsics_enabled_all_four": true
   },
   "functional": {
     "fresh_real_business_passed": true,
@@ -222,12 +222,14 @@
     "current_trade_single_node_pending": true,
     "current_true_async_settlement_loss_pending": true,
     "old_failed_generations_auto_recovered": false,
-    "ten_robot_steady_status": "RUNNING_NOT_YET_COMPLETE"
+    "ten_robot_steady_status": "PASS_REAL_FIVE_MINUTE_WINDOW",
+    "ten_robot_steady_evidence": "/Users/kong/.opentradingcore/mac-demo-20261116-085710/robot-steady-10-011136.json",
+    "ten_robot_real_tape_executions": 1045
   },
   "current_performance": {
     "status": "STRICT_1000_FAILED_WITH_CENSORED_RECEIPTS_POST_PRESSURE_CONSISTENCY_PASS_JFR_DIAGNOSTIC_RUNNING",
     "strict_measured_on_this_release": true,
-    "async_measured_on_this_release": false,
+    "async_measured_on_this_release": true,
     "followthrough_controller": "/Users/kong/.opentradingcore/t554-queued-immediate-matrices-v1-20261116.json",
     "qualified_windows_cannot_overlap_faults_or_diagnostic_attach": true,
     "functional_multi_symbol": {
@@ -578,15 +580,557 @@
     "strict_1000_log_metadata_before": "/Users/kong/.opentradingcore/t554-strict1000-log-metadata-before-20261116.json",
     "strict_1000_log_metadata_after": "/Users/kong/.opentradingcore/t554-strict1000-log-metadata-after-20261116.json",
     "async_followthrough": {
-      "status": "BASIC_BUSINESS_PASS_TEN_ROBOTS_STEADY_RUNNING",
+      "status": "NO_GO_REQUIRES_INSPECTION",
       "fresh_log": "/Users/kong/.opentradingcore/t554-queued-immediate-async-fresh-20261116.log",
       "controller": "/Users/kong/.opentradingcore/t554-queued-immediate-async-matrices-v2-20261116.py",
       "journal": "/Users/kong/.opentradingcore/t554-queued-immediate-async-matrices-v2-20261116.json",
       "planned_policy": "LOCAL_DURABLE_ASYNC",
       "no_parallel_business_environment": true,
-      "generation": "mac-demo-20261116-085710"
+      "generation": "mac-demo-20261116-085710",
+      "current_stage": "async-native1000-distinct-sixteen-tenants",
+      "original_failure": "RuntimeError: async-native1000-distinct-sixteen-tenants failed; inspect before later dependent stages"
     },
-    "strict_baseline_generation": "mac-demo-20261116-073439"
+    "strict_baseline_generation": "mac-demo-20261116-073439",
+    "async_queue_windows_so_far": [
+      {
+        "name": "async-functional-two-symbols",
+        "evidence": "/Users/kong/.opentradingcore/mac-demo-20261116-085710/distributed-execution-capacity-b19cef14.json",
+        "integrity_passed": true,
+        "performance_passed": false,
+        "queue_layout": {
+          "explicit_matrix": true,
+          "tenants": 1,
+          "symbols_per_tenant": 2,
+          "sessions_per_queue": 2,
+          "matching_queues": 2,
+          "native_sessions": 4,
+          "placement": "NATURAL_HASH_MATRIX"
+        },
+        "planned_orders": 120,
+        "sent_orders": 120,
+        "final_executions": 120,
+        "fills_inside_offered_window": 120,
+        "scheduler_drops": 0,
+        "missing_final_receipts": 0,
+        "tail_final_receipts_after_window": 0,
+        "observed_window_execution_rate": 2.0,
+        "client_fill_ms": {
+          "samples": 120,
+          "p50": 65.162,
+          "p95": 350.592,
+          "p99": 557.812,
+          "p99_9": 676.127
+        },
+        "scheduled_fill_ms": {
+          "samples": 120,
+          "p50": 66.983,
+          "p95": 362.538,
+          "p99": 577.112,
+          "p99_9": 683.188
+        },
+        "queues_by_order_partition": {
+          "P134": 1,
+          "P054": 1
+        },
+        "queues_by_trade_partition": {
+          "P028": 2
+        }
+      },
+      {
+        "name": "async-hotbook-native40",
+        "evidence": "/Users/kong/.opentradingcore/mac-demo-20261116-085710/distributed-execution-capacity-270c6519.json",
+        "integrity_passed": true,
+        "performance_passed": false,
+        "queue_layout": {
+          "explicit_matrix": true,
+          "tenants": 1,
+          "symbols_per_tenant": 1,
+          "sessions_per_queue": 16,
+          "matching_queues": 1,
+          "native_sessions": 16,
+          "placement": "NATURAL_HASH_MATRIX"
+        },
+        "planned_orders": 2400,
+        "sent_orders": 2400,
+        "final_executions": 2400,
+        "fills_inside_offered_window": 1799,
+        "scheduler_drops": 0,
+        "missing_final_receipts": 0,
+        "tail_final_receipts_after_window": 601,
+        "observed_window_execution_rate": 29.983333333333334,
+        "client_fill_ms": {
+          "samples": 2400,
+          "p50": 10921.243,
+          "p95": 14912.434,
+          "p99": 15381.781,
+          "p99_9": 15539.869
+        },
+        "scheduled_fill_ms": {
+          "samples": 2400,
+          "p50": 10925.902,
+          "p95": 14913.438,
+          "p99": 15384.276,
+          "p99_9": 15540.633
+        },
+        "queues_by_order_partition": {
+          "P204": 1
+        },
+        "queues_by_trade_partition": {
+          "P029": 1
+        }
+      },
+      {
+        "name": "async-native2",
+        "evidence": "/Users/kong/.opentradingcore/mac-demo-20261116-085710/distributed-execution-capacity-fcc9b385.json",
+        "integrity_passed": true,
+        "performance_passed": false,
+        "queue_layout": {
+          "explicit_matrix": false,
+          "tenants": 2,
+          "symbols_per_tenant": 1,
+          "sessions_per_queue": 1,
+          "matching_queues": 2,
+          "native_sessions": 2,
+          "placement": "DISTINCT_PARTITIONS_BALANCED"
+        },
+        "planned_orders": 120,
+        "sent_orders": 120,
+        "final_executions": 120,
+        "fills_inside_offered_window": 120,
+        "scheduler_drops": 0,
+        "missing_final_receipts": 0,
+        "tail_final_receipts_after_window": 0,
+        "observed_window_execution_rate": 2.0,
+        "client_fill_ms": {
+          "samples": 120,
+          "p50": 53.975,
+          "p95": 223.378,
+          "p99": 646.274,
+          "p99_9": 671.673
+        },
+        "scheduled_fill_ms": {
+          "samples": 120,
+          "p50": 56.191,
+          "p95": 225.31,
+          "p99": 650.074,
+          "p99_9": 686.519
+        },
+        "queues_by_order_partition": {
+          "P068": 1,
+          "P171": 1
+        },
+        "queues_by_trade_partition": {
+          "P207": 1,
+          "P015": 1
+        }
+      },
+      {
+        "name": "async-native40-distributed",
+        "evidence": "/Users/kong/.opentradingcore/mac-demo-20261116-085710/distributed-execution-capacity-c728dd1a.json",
+        "integrity_passed": true,
+        "performance_passed": false,
+        "queue_layout": {
+          "explicit_matrix": false,
+          "tenants": 8,
+          "symbols_per_tenant": 1,
+          "sessions_per_queue": 1,
+          "matching_queues": 8,
+          "native_sessions": 8,
+          "placement": "DISTINCT_PARTITIONS_BALANCED"
+        },
+        "planned_orders": 2400,
+        "sent_orders": 2400,
+        "final_executions": 2400,
+        "fills_inside_offered_window": 2398,
+        "scheduler_drops": 0,
+        "missing_final_receipts": 0,
+        "tail_final_receipts_after_window": 2,
+        "observed_window_execution_rate": 39.96666666666667,
+        "client_fill_ms": {
+          "samples": 2400,
+          "p50": 88.826,
+          "p95": 215.845,
+          "p99": 350.718,
+          "p99_9": 519.887
+        },
+        "scheduled_fill_ms": {
+          "samples": 2400,
+          "p50": 90.647,
+          "p95": 218.763,
+          "p99": 353.194,
+          "p99_9": 520.215
+        },
+        "queues_by_order_partition": {
+          "P244": 1,
+          "P090": 1,
+          "P126": 1,
+          "P188": 1,
+          "P035": 1,
+          "P033": 1,
+          "P140": 1,
+          "P110": 1
+        },
+        "queues_by_trade_partition": {
+          "P212": 1,
+          "P104": 1,
+          "P031": 1,
+          "P101": 1,
+          "P103": 1,
+          "P200": 1,
+          "P193": 1,
+          "P203": 1
+        }
+      },
+      {
+        "name": "async-native40-tenants1-symbols4",
+        "evidence": "/Users/kong/.opentradingcore/mac-demo-20261116-085710/distributed-execution-capacity-80ebd652.json",
+        "integrity_passed": true,
+        "performance_passed": false,
+        "queue_layout": {
+          "explicit_matrix": true,
+          "tenants": 1,
+          "symbols_per_tenant": 4,
+          "sessions_per_queue": 4,
+          "matching_queues": 4,
+          "native_sessions": 16,
+          "placement": "NATURAL_HASH_MATRIX"
+        },
+        "planned_orders": 2400,
+        "sent_orders": 2400,
+        "final_executions": 2400,
+        "fills_inside_offered_window": 2234,
+        "scheduler_drops": 0,
+        "missing_final_receipts": 0,
+        "tail_final_receipts_after_window": 166,
+        "observed_window_execution_rate": 37.233333333333334,
+        "client_fill_ms": {
+          "samples": 2400,
+          "p50": 2514.278,
+          "p95": 7578.923,
+          "p99": 8305.154,
+          "p99_9": 8597.291
+        },
+        "scheduled_fill_ms": {
+          "samples": 2400,
+          "p50": 2516.539,
+          "p95": 7596.029,
+          "p99": 8308.783,
+          "p99_9": 8599.2
+        },
+        "queues_by_order_partition": {
+          "P050": 1,
+          "P130": 1,
+          "P082": 1,
+          "P226": 1
+        },
+        "queues_by_trade_partition": {
+          "P223": 4
+        }
+      },
+      {
+        "name": "async-native40-tenants4-symbols1",
+        "evidence": "/Users/kong/.opentradingcore/mac-demo-20261116-085710/distributed-execution-capacity-84c15313.json",
+        "integrity_passed": true,
+        "performance_passed": false,
+        "queue_layout": {
+          "explicit_matrix": true,
+          "tenants": 4,
+          "symbols_per_tenant": 1,
+          "sessions_per_queue": 4,
+          "matching_queues": 4,
+          "native_sessions": 16,
+          "placement": "NATURAL_HASH_MATRIX"
+        },
+        "planned_orders": 2400,
+        "sent_orders": 2400,
+        "final_executions": 2400,
+        "fills_inside_offered_window": 2399,
+        "scheduler_drops": 0,
+        "missing_final_receipts": 0,
+        "tail_final_receipts_after_window": 1,
+        "observed_window_execution_rate": 39.983333333333334,
+        "client_fill_ms": {
+          "samples": 2400,
+          "p50": 184.228,
+          "p95": 1818.935,
+          "p99": 2605.3,
+          "p99_9": 3230.908
+        },
+        "scheduled_fill_ms": {
+          "samples": 2400,
+          "p50": 187.152,
+          "p95": 1824.375,
+          "p99": 2620.322,
+          "p99_9": 3291.568
+        },
+        "queues_by_order_partition": {
+          "P191": 1,
+          "P166": 1,
+          "P221": 1,
+          "P104": 1
+        },
+        "queues_by_trade_partition": {
+          "P209": 1,
+          "P231": 1,
+          "P009": 1,
+          "P017": 1
+        }
+      },
+      {
+        "name": "async-native40-tenants4-symbols4",
+        "evidence": "/Users/kong/.opentradingcore/mac-demo-20261116-085710/distributed-execution-capacity-d81cc95b.json",
+        "integrity_passed": true,
+        "performance_passed": false,
+        "queue_layout": {
+          "explicit_matrix": true,
+          "tenants": 4,
+          "symbols_per_tenant": 4,
+          "sessions_per_queue": 1,
+          "matching_queues": 16,
+          "native_sessions": 16,
+          "placement": "NATURAL_HASH_MATRIX"
+        },
+        "planned_orders": 2400,
+        "sent_orders": 2400,
+        "final_executions": 2400,
+        "fills_inside_offered_window": 2317,
+        "scheduler_drops": 0,
+        "missing_final_receipts": 0,
+        "tail_final_receipts_after_window": 83,
+        "observed_window_execution_rate": 38.61666666666667,
+        "client_fill_ms": {
+          "samples": 2400,
+          "p50": 166.391,
+          "p95": 1746.036,
+          "p99": 2541.787,
+          "p99_9": 3052.135
+        },
+        "scheduled_fill_ms": {
+          "samples": 2400,
+          "p50": 168.679,
+          "p95": 1747.313,
+          "p99": 2550.661,
+          "p99_9": 3060.499
+        },
+        "queues_by_order_partition": {
+          "P017": 1,
+          "P161": 1,
+          "P113": 1,
+          "P193": 1,
+          "P219": 1,
+          "P107": 1,
+          "P187": 1,
+          "P011": 1,
+          "P217": 1,
+          "P105": 1,
+          "P185": 1,
+          "P009": 1,
+          "P143": 1,
+          "P063": 1,
+          "P239": 1,
+          "P095": 1
+        },
+        "queues_by_trade_partition": {
+          "P213": 4,
+          "P242": 4,
+          "P182": 4,
+          "P176": 4
+        }
+      }
+    ],
+    "async_local_head_io_observation": {
+      "source_revision": "f7bb1e4f87ade75449a370738374c8bcaae3aab6",
+      "source_class": "DurableWalLocalCommitHead.persist",
+      "per_local_head_publication": [
+        "sign and self-verify exact local boundary",
+        "write pending head and FileChannel.force(true)",
+        "atomic move replacing head",
+        "force parent directory"
+      ],
+      "background_cumulative_replication_preserved": true,
+      "not_an_os_flush_trace_or_causal_percentage": true,
+      "synthetic_diagnostic_prepared_not_run": "/Users/kong/.opentradingcore/t554-runtime-cost-probe-20261116/T554RuntimeCostProbe.java"
+    },
+    "async_1000": {
+      "measurement": "/Users/kong/.opentradingcore/mac-demo-20261116-085710/distributed-execution-capacity-6d19500b.json",
+      "integrity_passed": false,
+      "performance_passed": false,
+      "aggregate": {
+        "planned_orders": 60000,
+        "sent_orders": 11848,
+        "final_executions": 5046,
+        "fills_inside_offered_window": 2673,
+        "scheduler_drops": 48152,
+        "missing_final_receipts": 6802,
+        "tail_final_receipts_after_window": 2373,
+        "responses": {
+          "ACKNOWLEDGED": 11848
+        },
+        "stream_errors": [],
+        "start_spread_ms": 13.0,
+        "generator_accounting_pass": true,
+        "observed_window_execution_rate": 44.55,
+        "window_delivery_fraction": 0.04455,
+        "all_accepted_final_receipts_pass": false,
+        "window_capacity_pass": false,
+        "ack_ms": {
+          "samples": 11848,
+          "p50": 1186.927,
+          "p95": 2248.63,
+          "p99": 3524.423,
+          "p99_9": 3996.726
+        },
+        "client_fill_ms": {
+          "samples": 5046,
+          "p50": 45824.194,
+          "p95": 64458.099,
+          "p99": 71880.244,
+          "p99_9": 74659.321
+        },
+        "scheduled_fill_ms": {
+          "samples": 5046,
+          "p50": 45827.516,
+          "p95": 64460.425,
+          "p99": 71882.422,
+          "p99_9": 74662.002
+        },
+        "dispatch_delay_ms": {
+          "samples": 11848,
+          "p50": 2.913,
+          "p95": 7.225,
+          "p99": 8.93,
+          "p99_9": 46.489
+        },
+        "matching_queue_count": 16,
+        "tenant_count": 16,
+        "queue_layout": {
+          "explicit_matrix": false,
+          "tenants": 16,
+          "symbols_per_tenant": 1,
+          "sessions_per_queue": 1,
+          "matching_queues": 16,
+          "native_sessions": 16,
+          "placement": "DISTINCT_PARTITIONS_BALANCED"
+        },
+        "queues_by_order_partition": {
+          "P173": 1,
+          "P162": 1,
+          "P191": 1,
+          "P046": 1,
+          "P052": 1,
+          "P032": 1,
+          "P188": 1,
+          "P128": 1,
+          "P079": 1,
+          "P186": 1,
+          "P027": 1,
+          "P095": 1,
+          "P159": 1,
+          "P089": 1,
+          "P165": 1,
+          "P227": 1
+        },
+        "queues_by_trade_partition": {
+          "P199": 1,
+          "P059": 1,
+          "P173": 1,
+          "P064": 1,
+          "P196": 1,
+          "P242": 1,
+          "P040": 1,
+          "P066": 1,
+          "P083": 1,
+          "P134": 1,
+          "P126": 1,
+          "P246": 1,
+          "P008": 1,
+          "P120": 1,
+          "P198": 1,
+          "P113": 1
+        }
+      },
+      "p99_only_received_5046_not_complete_request_population": true,
+      "financial_cursor_at_report": {
+        "ACCOUNT_BALANCE": [
+          296,
+          0,
+          296
+        ],
+        "EXTRA_BALANCE": [
+          10,
+          0,
+          0
+        ],
+        "EXTRA_POSITION": [
+          0,
+          0,
+          0
+        ],
+        "POSITION": [
+          296,
+          0,
+          296
+        ],
+        "extra_cursors": [
+          0
+        ],
+        "min_epoch": 2,
+        "missing_source_heads": [
+          0
+        ],
+        "predecessor_links": [
+          148757,
+          0
+        ],
+        "reasons": [],
+        "source_epoch_ranges": [
+          47,
+          0,
+          0
+        ],
+        "status": "PASS_FINANCIAL_CURSOR",
+        "watermarks": [
+          47,
+          0,
+          47
+        ]
+      },
+      "control_stable": true,
+      "robots": {
+        "B4SSPJ": "RUNNING",
+        "GEBZ1F": "RUNNING",
+        "GWX2V9": "RUNNING",
+        "ISLLO5": "RUNNING",
+        "KEX6WQ": "RUNNING",
+        "OLHRIE": "RUNNING",
+        "OQYK0X": "RUNNING",
+        "W1N9ND": "RUNNING",
+        "XQ8407": "RUNNING",
+        "ZH4TS4": "RUNNING"
+      },
+      "bounded_retained_logs": "/Users/kong/.opentradingcore/t554-async1000-retained-logs-glwvghk5/proof.json",
+      "resource_interval": "/Users/kong/.opentradingcore/t554-async1000-resource-interval-20261116.json",
+      "post_pressure_evidence": "/Users/kong/.opentradingcore/t554-async1000-post-all-symbol-consistency-v3-20261116.json",
+      "post_pressure_financial_and_sent_terminal_accounting_passed": true,
+      "all_symbols_and_48_locations_covered": true,
+      "order_only_retained_replay_record_separately_visible": true
+    },
+    "logging_remeasurement": {
+      "status": "RUNNING",
+      "journal": "/Users/kong/.opentradingcore/t554-logging-optimized-async-windows-v1-20261116.json",
+      "same_common_and_business_bytes": true,
+      "ordinary_windows_exclude_diagnostic_attach": true
+    },
+    "primitive_cost_diagnostic": {
+      "excluded_from_business_performance": true,
+      "proof": "/Users/kong/.opentradingcore/t554-runtime-cost-probe-20261116/proof.json",
+      "runtime": "1.8.0_392 aarch64 4 available CPUs",
+      "rsa2048_sign_and_self_verify_mean_us": 779.43,
+      "append_1k_and_force_mean_us": 386.398,
+      "head_replace_file_force_rename_directory_force_mean_us": 692.752,
+      "append_1k_commit_frame_and_force_mean_us": 315.327,
+      "not_a_protocol_change_or_causal_latency_percentage": true
+    }
   },
   "last_completed_business_performance": {
     "status": "HOTBOOK_FAILED_32_PERSISTED_IOC_CANCELS_AND_SEVERE_BACKLOG_NEW_ORDER_RETEST_PENDING",
@@ -2972,10 +3516,14 @@
     ],
     "baseline_actual_logging_evidence": "/Users/kong/.opentradingcore/t554-async-baseline-actual-logging-20261116.json",
     "prepared_fix": "/Users/kong/.opentradingcore/t554-core-logging-policy-candidate-20261116/proof.json",
-    "candidate_applied_to_running_baseline": false,
+    "candidate_applied_to_running_baseline": true,
     "existing_storage_checks_passed": 19,
     "common_root_logger_file_path_rotation_preserved": true,
-    "performance_benefit_unmeasured": true
+    "performance_benefit_unmeasured": true,
+    "current_baseline_unchanged_rechecked_at": "2026-11-16T09:26:27.345737+08:00",
+    "applied_after_original_baseline_windows_complete": true,
+    "effective_levels_proof": "/Users/kong/.opentradingcore/t554-live-core-logger-policy-20261116/proof.json",
+    "no_process_restart": true
   },
   "strict_073439_retained_identity_and_functional": {
     "actual_core_nodes": [
@@ -3037,5 +3585,37 @@
       "source": "G1 default for new core voters; explicit operator collector and pause budget preserved"
     },
     "historical_delivery8_class_evidence": "/Users/kong/.opentradingcore/mac-demo-20261116-020105/actual-order-delivery8-classes-20261116.json"
+  },
+  "new_service_learning_guide": "docs/COMMON_NEW_SERVICE_AND_TROUBLESHOOTING_20261116.zh-CN.md",
+  "all_symbol_pending_observer": {
+    "scope": "READ_ONLY_OBSERVER_NOT_A_NEW_RECOVERY_GATE",
+    "existing_default_scope": "BTCUSDT_partition_only",
+    "additional_mode": "--all-symbols",
+    "new_scope": "All 256 actual Primary partitions for selected cohort",
+    "six_unit_checks_passed": true,
+    "actual_live_read_not_yet_run": false,
+    "synthetic_java_old_vs_new_regression_prepared_not_yet_run": "/Users/kong/.opentradingcore/t554-all-symbol-observer-regression-20261116/run.py",
+    "actual_live_partitions": 256,
+    "actual_live_cohort": 48,
+    "initial_result": "NO_GO_ONE_AGED_NON_BTC_OUTBOX_ENTRY",
+    "initial_retained_example": "/Users/kong/.opentradingcore/mac-demo-20261116-085710/settlement-backlog-c296f643/proof.json",
+    "java_old_vs_new_regression": "/Users/kong/.opentradingcore/t554-all-symbol-observer-regression-20261116/proof.json",
+    "mode_classification_finding": "OrderSignedMatchDeliveryWorker deliberately retains ORDER_ONLY match frames for failover replay; must report separately from Trade financial settlements; actual mode read pending",
+    "seven_unit_checks_passed": true,
+    "loaded_observer_versioning": "Exact source hash in generated class name plus transcript header; source-only hash cannot identify previously cached same-name agent bytecode",
+    "prior_v1_v2_misclassifications_retained": true,
+    "actual_loaded_class_scope_verified": "/Users/kong/.opentradingcore/mac-demo-20261116-085710/settlement-backlog-21345439/proof.json",
+    "actual_order_only_mode_read": "/Users/kong/.opentradingcore/t554-pending-mode-readonly-20261116",
+    "order_only_retained_delivery_records": [
+      {
+        "location": "OQYK0X",
+        "partition": "P053",
+        "symbol": "BTC003USDT",
+        "epoch": 2,
+        "sequence": 6
+      }
+    ],
+    "order_only_replay_HA_and_retention_endurance_still_pending": true,
+    "additional_mode_live_verified": true
   }
 }
