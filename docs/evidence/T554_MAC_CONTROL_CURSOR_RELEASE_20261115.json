@@ -3816,7 +3816,7 @@
     "retained_after_release": "P162 E3 LOCAL same surviving process",
     "candidate_revision": "e962efac2c9030a2e277b69100fb0f59871b00ec",
     "candidate_sha256": "46664d1696927344613ce10f487cbf1cb11f2ea1b5e1ac84d1e01bfdc107113c",
-    "qualification": "RUNNING",
+    "qualification": "NO_GO_FIRST_ATTEMPT_SAME_BINARY_REQUALIFYING",
     "fresh_scope_acl_checks": "PASS on private ZooKeeper including anonymous, witness, cross-service, namespace reuse",
     "original_mac_business_modified": false,
     "new_business_ha_verified": false,
@@ -3842,6 +3842,20 @@
       "exclusive_bytes_before_sharing": 972058624,
       "content_sha256_verified": true,
       "scope": "old unmounted staging libraries only"
+    },
+    "fixture_revision": "85a0346",
+    "qualified_retry_path": "/Users/kong/.opentradingcore/t554-common-candidates/20261121-partition-independent-v2-mixed/qualification/state.json",
+    "safety_first_attempt": {
+      "executed": 316,
+      "skipped_external": 3,
+      "failures": 0
+    },
+    "third_diagnostic_full_home": true,
+    "retired_vm_compaction": {
+      "files": 57,
+      "raw_bytes": 4004322669,
+      "verified_gzip_bytes": 585658148,
+      "live_volumes_modified": false
     }
   }
 }
