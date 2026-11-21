@@ -1,10 +1,14 @@
 # OpenTradingCore 当前集群机制审阅
 
-**截至 2026-11-21，原 Mac 异步 Order A 接管演练失败。已用现场文件复现并修复 P162 的恢复阻塞，该修复已通过 Common 完整回归。分区独立恢复已通过严格双副本和整节点故障的两项定向演练。新命名空间权限已独立验证。多分区中断回归暴露了节点重新入群的租约冲突，业务发布已暂停。严格与异步性能均未达标。**
+**2026-11-21，Common `f90d8f3` 已通过完整 P0。** 覆盖原 Mac 暴露的 P162、分区独立恢复、返回过程中再次宕机，以及见证会话过期。已开始在原 Mac 把同一构件接入 Order 和 Trade。新业务部署、Robot 持续流量下的切换及两种模式的性能仍分别验收。现有严格和异步业务基线均低于持续 1,000 笔／秒、端到端 P99 不超过 20 毫秒的目标。
 
 学习接入与排障可先阅读[新服务接入Common与集群排障指南](/Users/kong/dc-quant-deploy/docs/COMMON_NEW_SERVICE_AND_TROUBLESHOOTING_20261116.zh-CN.md)。
 
 ## 2026-11-21 返回节点先只读等待
+
+同一 JAR 的常规实体演练中，A 故障后的全量接管和回主分别用时 186.623 秒、507.785 秒，B 方向分别为 195.994 秒、507.889 秒。第三次强制终止后，幸存节点完成 256 分区单副本接管，返回节点再次追平并回主。17 项原生故障测试、四项进程内恢复、四项冷启动和两项分区隔离均通过。[完整资格记录](/Users/kong/.opentradingcore/t554-common-candidates/20261121-reconnect-f90d8f3/qualification/state.json) · [双向与重复回主](/Users/kong/.opentradingcore/t554-common-verifications/20261121-reconnect-f90d8f3/failover.log)
+
+反向切换另有约两秒一次的只读观察。从首次观察到 B 的租约消失起，A 上 1、64、128、192、256 个分区进入单副本 READY，分别用时约 14、50、68、98、147 秒。B 返回后，约 199 秒首次观察到原属 B 的分区在 A 上恢复严格双副本，约 367 秒看到最后一个单副本分区离开 LOCAL，同时才看到 B 首次开始取回主分区。当前 Common 调度器优先处理单副本追平，再发起严格分区回主。这些数值是控制清单观测，首笔客户回执需要另行计时。[原始采样统计](/Users/kong/.opentradingcore/t554-order-a-stall-20261121-LSxSMI/readonly-join/normal-reverse-control-latencies.json)
 
 **本次双重故障场景已通过。** 在 `f90d8f3` 上，返回的 A 在 P000 的 E4 已签名重建阶段再次被终止。独立见证进程暂停至旧会话过期。P130 的离线证明仍未完成时，测试确认第二次返回的 A 存活、没有写租约。原见证恢复后签出 128 份 E5 证明，同一 A 自动领租约并取得认证清单。当时 P000 仍在 E4 恢复，另有 121 个 E4 严格 READY、128 个 E5 单副本 READY、6 个 E3 单副本 READY。最终 A/B 各 128 主，全部 256 分区严格 READY，对比 256 对 WAL、256 对快照全部一致，恢复后的写入通过真实双副本确认。[实体进程验收](/Users/kong/.opentradingcore/t554-common-verifications/20261121-reconnect-f90d8f3/home-faults.log) · [入群清单](/Users/kong/.opentradingcore/t554-common-verifications/20261121-reconnect-f90d8f3/process-evidence-interrupted/admitted-return-manifest.txt) · [回主清单](/Users/kong/.opentradingcore/t554-common-verifications/20261121-reconnect-f90d8f3/process-evidence-interrupted/final-manifest.txt)
 
