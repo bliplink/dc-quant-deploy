@@ -10,9 +10,11 @@
 
 在新增的 Common 双进程故障用例中，P000 的 E3 已签名并进入 RECOVERING。测试使该分区的物理安装持续失败，同时释放 P001 的真实故障通知。45 秒内 P001 没有给出回主后的双副本写入回执。结束时 P000 仍在 E3 等待，P001 仍留在 E2。两分区共享清单的约束已在业务环境之外复现。[故障用例记录](/Users/kong/.opentradingcore/t554-order-a-stall-20261121-LSxSMI/isolation-red.log)
 
-控制层原型 `71254f8` 把全局路由清单和每个分区最近一次变更的版本、前后清单摘要写入同一个 ZooKeeper 事务。分区恢复时从原 RSA 签名文件核对这次变更，再核验当前路由和 ZooKeeper 事务身份。独立测试已验证两个未就绪分区的签名仍能各自核验、竞争更新完整回滚、错误会话和单边重写被拒绝。新索引只记录控制变更，业务 WAL、物理 ACK、隔离和恢复重放仍由原流程负责。物理用例还需证明 P001 能在 P000 等待时接管、回主并写入，以及 P000 随后能够恢复。[受认证控制事务测试](/Users/kong/.opentradingcore/t554-order-a-stall-20261121-LSxSMI/index-protected-test2.log)
+控制层原型 `71254f8` 把全局路由清单和每个分区最近一次变更的版本、前后清单摘要写入同一个 ZooKeeper 事务。分区恢复时从原 RSA 签名文件核对这次变更，再核验当前路由和 ZooKeeper 事务身份。独立测试已验证两个未就绪分区的签名仍能各自核验、竞争更新完整回滚、错误会话和单边重写被拒绝。新索引只记录控制变更，业务 WAL、物理 ACK、隔离和恢复重放仍由原流程负责。后续严格模式物理演练已经取得这两项证据。[受认证控制事务测试](/Users/kong/.opentradingcore/t554-order-a-stall-20261121-LSxSMI/index-protected-test2.log)
 
-只读核查发现，原 Mac 的 Order、Trade 清单与 Order 父目录均授予匿名客户端全部 ZooKeeper 权限。受保护的独立测试拒绝匿名写入和开放权限命名空间。原业务环境维持原权限，两个等待中的业务部署任务已撤下。当前性能结论沿用下面的原生 TCP 实测。
+在 256 分区、两个独立 JVM 和真实 TCP 复制上，故意让 P000 的 E3 恢复持续失败。P001 在此期间独立切换到 B、再回到 A 的 E4 严格主节点，一笔新写入取得双副本 ACK。两侧 E4 WAL 均为 31 字节，SHA256 同为 `2d953a09b8c83191b5a978f8ce6f7c88d6f46988d455b9f2ad4dbab10c34e833`。解除故障后 P000 也自动回到 E4 严格模式。该次定向测试共执行 45 项，全部通过。同批控制机制的安全用例执行 316 项，3 项依赖外部历史材料的用例跳过。整节点失联时的单副本路径另行验证。[严格模式物理证据](/Users/kong/.opentradingcore/t554-order-a-stall-20261121-LSxSMI/physical-strict-index-live-poison/held-signed-stage/held-stage-physical-proof.txt) · [安全用例日志](/Users/kong/.opentradingcore/t554-order-a-stall-20261121-LSxSMI/strict-index-safety.log)
+
+只读核查发现，原 Mac 的 Order、Trade 清单与 Order 父目录均授予匿名客户端全部 ZooKeeper 权限。受保护的独立测试拒绝匿名写入和开放权限命名空间。已获准仅在下一次全新部署的新 Demo 命名空间配置受认证的控制写入身份。原业务环境维持原权限，两个等待中的业务部署任务已撤下。当前性能结论沿用下面的原生 TCP 实测。
 
 ## 2026-11-21 原 Mac 的 Order A 接管失败与单队列延迟
 
