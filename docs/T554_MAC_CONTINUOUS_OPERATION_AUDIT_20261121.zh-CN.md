@@ -32,4 +32,12 @@
 4. **修结算热路径与可见回执。** 按独立资金分区并行，在单分区内保序批量提交，分别量锁等待、本地刷盘、备端 ACK、最终通知与 SQL 投影延迟。保持真实盘口、较冷品种、主改备、单节点和 Robot 持续报单覆盖，按严格和异步各跑到最终回执。
 5. **完成故障域与业务验收。** 在独立节点与存储上验证备份恢复和 A/B 自动追平，补齐平仓、出金、旧订单和客户端最终回执。独立 Common 故障验证仍在原 Mac 运行，以跟踪已验证的故障场景。
 
+## Common 现役版本的镜像和归档
+
+23:31 复核现役 Common `f90d8f3`。库已经有 `JournalArchiveRotationPolicy`、`JournalArchiveSealCoordinator`、持久封存账本、`JournalArchiveRetirementCoordinator` 和 `SnapshotRetentionFence`。代码中构造并执行封存协调器的入口在测试里。当前 Order、Trade 的认证运行接入了 Common 签名镜像周期任务，仍按节点、分区和 Epoch 打开原 `business.wal`。未发现现役启动入口把该物理 WAL 接到自动切段及回收流程。需求 C33–C35 的约两天是 Demo 的设计保留期。
+
+现有镜像带分区、Epoch、提交序号和哈希，当前指针文件叫 `opaque-v2-current.pin`。Common 发现同一认证水位已有可读镜像时会跳过重建。水位推进后，新镜像会生成独立文件。23:31 时，Trade B 的 P181 主镜像目录留存 **114 份镜像文件，合计 514.2 MiB**，单份最大 8.76 MiB。全 READY 卷当次逻辑文件大小约为 **6.73 GiB WAL、6.60 GiB 主备镜像目录、3.32 GiB 其他文件**。
+
+接入时优先复用已有封存与回收判据。当前运行时、见证、历史回放、回主和投影读取须能连续访问已确认历史。先独立验证新写入段切换、旧段重开重放和断电续办，再以主备可恢复镜像、认证提交水位、消费进度及恢复引用判定何时回收 WAL 段和旧镜像。拿持续写入、多次滚动、重启、接管和回主检验磁盘空间是否稳定在上限以内。23:31 盘点只读取现役卷，原 10 个 Robot 持续运行。
+
 本机分钟采样为 `~/.opentradingcore/mac-demo-20261121-205353/growth-60s-passive-2255.json`。行情复查为 `t554-order-a-stall-20261121-LSxSMI/readonly-join/public-demo-storage-audit-market.json`。部署与浏览器证据见 [T554 原 Mac 公网 Demo 验收](T554_MAC_PUBLIC_DEMO_ACCEPTANCE_20261121.zh-CN.md)。
