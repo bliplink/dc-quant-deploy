@@ -51,3 +51,9 @@
 Common `91f138b` 把空 WAL 和签名零水位的持久化移到 LOCAL READY 之前。仍要求独立见证、原持久化证明及当前租约，并对新 WAL 已有尾部的情况拒绝发布。Common `1a36ecf` 把现有的对端离线校验移到 LOCAL 接管者关闭旧备盘之前，使在线严格角色切换由严格恢复路径处理。两项改动已各自通过定向回归，其中包括独立 JVM、真实 ZooKeeper 与物理 WAL。完整门禁按最终 JAR 重新运行，原 Demo 继续保留现役数据。
 
 此次额外归档了已关闭的 MySQL binlog、11 月 16 日退役实例的两份 Trade 快照目录，以及 11 月 14 日退役实例的三个投影表文件。逐包比较或逐文件 SHA-256 比较通过后才释放原位置的旧副本。00:13 Mac 可用约 11.35 GiB。现役 Common WAL 与快照归档闭环仍待接入和验证。
+
+00:17 原 10 个 Robot 均转入 ERROR。随后在同一 Mac 先停故障实例，再用已通过完整 Common 故障门禁的 `f90d8f3` 严格版建立 `mac-demo-20261122-002050`。原容器、租户数据库及 Common 运行卷保留，可按 `retired-containers.json` 回退和取证。新实例启用了新的控制命名空间和租户数据，共补齐 10 个 Robot。
+
+新实例验证了 Order-only 与资金模式的成交、未成交撤单、公开成交匹配及资金和持仓游标；Order、Trade 各 256 分区均为严格 READY，四个 JVM 各有 128 个可写主分区。00:25:31–00:30:31 的 10 Robot 样本完成 4,268 次报价请求、1,128 笔成交，成交发布延迟 P99 为 59.31 毫秒，资金过账差错为 0。十个租户的公开行情均通过。公网主站桌面与移动端入口均到达当前活跃租户，渲染历史 K 线并收到实时 WebSocket 更新。证据为新实例的 `physical-runtime-8dt8116v/proof.json`、`verification.ef6Irp/`、`robot-steady-10-163031.json` 和审计目录的 `restored-public-demo-browser-20261122/observations.jsonl`。
+
+本次恢复保留的是已验收的严格基线。Common `1a36ecf` 的定向回归已通过，最终 JAR 的独立完整物理门禁仍在运行。上述 10 Robot 实盘采样不代表每秒 1,000 笔、P99 不超过 20 毫秒的性能验收。
