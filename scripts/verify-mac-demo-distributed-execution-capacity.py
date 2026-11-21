@@ -16,6 +16,7 @@ import re
 import runpy
 import secrets
 import signal
+import subprocess
 import sys
 import time
 import zlib
@@ -192,6 +193,20 @@ def projected_stream(stream):
                     and row[5] == '4' for row in rows)}
 
 
+def verify_stream_projections(streams):
+    deadline = time.monotonic() + 45
+    while True:
+        for stream in streams:
+            try:
+                stream['projection'] = projected_stream(stream)
+            except subprocess.TimeoutExpired as error:
+                # Retain earlier observations and still run the independent financial and Robot checks.
+                return {'complete': False, 'timed_out_run': stream['run'], 'timeout_seconds': error.timeout}
+        if all(s['projection']['consistent'] for s in streams) or time.monotonic() >= deadline:
+            return {'complete': True}
+        time.sleep(.5)
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('generation', type=Path)
@@ -366,13 +381,7 @@ def main():
                         report['streams'], args.seconds, report['common_release']['client_ack_policy'], queue_layout)
                     report['control_generation_after'] = CAPACITY['require_strict_demo'](root, check_space=False)
                     report['control_stable'] = report['control_generation_after'] == before
-                    deadline = time.monotonic() + 45
-                    while True:
-                        for stream in report['streams']:
-                            stream['projection'] = projected_stream(stream)
-                        if all(s['projection']['consistent'] for s in report['streams']) or time.monotonic() >= deadline:
-                            break
-                        time.sleep(.5)
+                    report['projection_verification'] = verify_stream_projections(report['streams'])
                 finally:
                     if sys.exc_info()[0] is not None:
                         report['failure_stage'] = report['stage']
@@ -396,6 +405,7 @@ def main():
                                 and report['background_robots_after'] == baseline
                                 and report['background_real_fills_all_tenants']
                                 and report['background_tape_terminal_audit']['passed']
+                                and report['projection_verification']['complete']
                                 and all(s['projection']['consistent'] and not s.get('cleanup_errors')
                                         and not s['price_source']['errors']
                                         for s in report['streams']))

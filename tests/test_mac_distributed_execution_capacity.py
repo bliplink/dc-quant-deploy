@@ -11,6 +11,17 @@ DRIVER = runpy.run_path(str(Path(__file__).resolve().parents[1] /
 
 
 class DistributedReceiptTest(unittest.TestCase):
+    def test_projection_timeout_preserves_native_and_prior_stream_observations(self):
+        verify = DRIVER['verify_stream_projections']
+        streams = [{'run': 'a'}, {'run': 'b', 'measurement': {'final_executions': 1}}]
+        observed = {'consistent': True}
+        with patch.dict(verify.__globals__, projected_stream=unittest.mock.Mock(
+                side_effect=[observed, subprocess.TimeoutExpired('readonly query', 15)])):
+            result = verify(streams)
+        self.assertEqual({'complete': False, 'timed_out_run': 'b', 'timeout_seconds': 15}, result)
+        self.assertEqual(observed, streams[0]['projection'])
+        self.assertEqual({'final_executions': 1}, streams[1]['measurement'])
+
     def test_owner_thousand_target_uses_sufficient_normal_sessions(self):
         budget = DRIVER['validate_offered_load'](16, 65, 60)
         self.assertEqual(1040, budget['total_offered_executions_per_second'])
