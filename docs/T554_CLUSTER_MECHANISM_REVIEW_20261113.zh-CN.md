@@ -1,8 +1,34 @@
 # OpenTradingCore 当前集群机制审阅
 
-**2026-11-21，Common `f90d8f3` 已通过完整 P0。** 覆盖原 Mac 暴露的 P162、分区独立恢复、返回过程中再次宕机，以及见证会话过期。已开始在原 Mac 把同一构件接入 Order 和 Trade。新业务部署、Robot 持续流量下的切换及两种模式的性能仍分别验收。现有严格和异步业务基线均低于持续 1,000 笔／秒、端到端 P99 不超过 20 毫秒的目标。
+**2026-11-21，Common `f90d8f3` 已通过完整 P0。** 覆盖原 Mac 暴露的 P162、分区独立恢复、返回过程中再次宕机，以及见证会话过期。原 Mac 上的 Order 和 Trade 已用同一构件恢复基础交易，持续 Robot 流量下的双向切换及两种模式的性能仍在验收。现有严格和异步业务基线均低于持续 1,000 笔／秒、端到端 P99 不超过 20 毫秒的目标。
 
 学习接入与排障可先阅读[新服务接入Common与集群排障指南](/Users/kong/dc-quant-deploy/docs/COMMON_NEW_SERVICE_AND_TROUBLESHOOTING_20261116.zh-CN.md)。
+
+## 2026-11-21 架构审阅与容量差距
+
+同一代 Demo 运行十个 Robot，原生 TCP 客户端在异步本地落盘模式下测得以下结果。下撤单使用 16 个闭环会话，按窗口内实际收到的 New 和 Cancelled 计数。成交使用 16 路定速流，单租户单品种共送入 2,400 个吃单，按窗口内最终成交回执计数。命令数和成交笔数分别报告。
+
+| 60 秒场景 | 窗口内吞吐 | 下单至 New／最终成交 P99 | 撤单至 Cancelled P99 |
+| --- | ---: | ---: | ---: |
+| Order-only 下撤 | 163.82 条命令／秒 | 317.065 ms | 48.581 ms |
+| 有资金校验的下撤 | 94.93 条命令／秒 | 515.822 ms | 218.730 ms |
+| 有资金校验的真实成交，送入 40 笔／秒 | 36.30 笔／秒 | 7,944.373 ms | — |
+
+2,178 笔成交在窗口内完成，222 笔在窗口后完成。最终 2,400 笔全部对账。Order-only 的下单 RPC 回包 P99 为 317.041 ms，几乎等同于收到 New 的 P99。四个投票节点在下撤窗口中的 CPU 配额限流增量为零。磁盘同步、队列等待的贡献还需分开计时。[下撤单](/Users/kong/.opentradingcore/mac-demo-20261121-154659/order-cancel-capacity-5f6ace62.json) · [最终成交](/Users/kong/.opentradingcore/mac-demo-20261121-154659/distributed-execution-capacity-021bee9d.json) · [资源计数](/Users/kong/.opentradingcore/t554-order-a-stall-20261121-LSxSMI/readonly-join/async-16-cancel-resource-deltas.json)
+
+| 架构环节 | 实际约束与处理 |
+| --- | --- |
+| Order 撮合 → Trade 结算 → Order 最终回执 | 同一 Order 分区一次只发送一笔初次结算，直到前一笔 Trade 回执写入 Order WAL。旧窗口 2,399 对相邻成交中有 2,276 对已形成排队。由成交编码到 Trade 结算编码这段累计时间，97.6% 消耗在前一笔 Order 回执编码之前。2,261 对排队成交复用了尚待确认的原订单，任意并发会破坏累计成交量次序。改造重点是有序发送一段已提交成交，逐条沿用原签名、资金去重和回执；故障后仅重试未取得可验证回执的部分。必须覆盖同一挂单连续部分成交、批中断及重启重试。该改造尚未通过业务验收。[排队分析](/Users/kong/.opentradingcore/t554-order-a-stall-20261121-LSxSMI/readonly-join/hotbook-predecessor-queue.json) · [订单身份重叠](/Users/kong/.opentradingcore/t554-order-a-stall-20261121-LSxSMI/readonly-join/hotbook-unconfirmed-identity-overlap.json) |
+| Order 待结算查询与编码 | 签发一笔原始成交时，旧实现复制整分区待办并扫描唯一键。发送和完成回调还各自复制一份查队首。Order `9e00ea5` 复用已有键索引，在原有有序表中取队首，同时移除重复校验与逐字节格式化。对同一 7,200 条旧 WAL 重放，待办峰值均为 494、结尾均为零，抽样快照摘要一致。热身后的最后一轮线程分配约从 834 MB 降至 755 MB，CPU 时间从 463 到 466 ms。该结果仅证明分配下降；端到端改善须在实体环境另测。 |
+| 普通业务日志 | 单个幸存 Order 的约 7 分钟采样中，网关发布日志约 40.0 MB，其中完整盘口约 14.9 MB。部署同时启用文件和标准输出。现有 Robot 故障验收从这些日志提取最终 IOC 的 ExecID，并用 Trade 财务投影逐笔核对。应让验收只读取所需的成交身份与实际业务记录，移除为此开启的整包 INFO 日志。WAL、资金流水与普通日志有不同用途。[故障现场](/Users/kong/.opentradingcore/mac-demo-20261121-154659/ha-order-a-kill-195svw7e/evidence.json) |
+| Common 回主调度 | 每轮推进一个分区，仍有见证后的单副本分区时，其他已恢复双副本的分区也会等待回主。实测首次可写、恢复双副本、归还全部主分区是三个不同的时间。优化应让每个已满足原物理条件的分区自行推进，并覆盖一个分区长期失败时的其余分区。原始主备落盘 ACK、写租约和旧主隔离是持久化与资金安全边界。[分阶段时间](/Users/kong/.opentradingcore/t554-order-a-stall-20261121-LSxSMI/readonly-join/normal-reverse-control-latencies.json) |
+| Order-only 待办寿命 | 成功发布后保留进程内标记，原始待办继续留在索引里供恢复。单分区上限是 20,000 条，旧重试扫描最多取所有分区合计的前 32,768 条。长时间运行时，已发布的积累可能影响新成交或遮住其他分区的重试。需要用超过上限的持续测试验证，再决定持久退休条件。 |
+
+首版改造已进入业务候选镜像。Order `9bb3c0f` 和 Trade `a1b9514` 沿用现有 TCP 接口，一次最多携带同一租户、品种及 Order Epoch 的 8 笔已提交成交，总请求控制在 64 KiB 以内；单笔沿用原路径与原上限。Trade 顺序独立验签和结算，首个失败即停，返回前面实际落盘的原始回执。Order 逐项验签并写入自己的 WAL 后通知客户。旧版 Trade 只接收首笔时，后续成交仍保留并重试。该版本减少跨服务往返，每笔资金与回执仍各有持久化操作。Order 执行 231 项测试，其中 2 项历史材料用例跳过；Trade 263 项全部通过。测试包括复用同一挂单连续成交、第二笔回执错配、批中第三项失败及回包丢失后的原件重试。实体吞吐需另测。[Order 改动](https://github.com/bliplink/com.app.dc.ordersvr/commit/9bb3c0f) · [Trade 改动](https://github.com/bliplink/com.app.dc.tradesvr/commit/a1b9514)
+
+旧版业务在 Robot 持续报价期间实际终止 Order A。B 用 214.896 秒完成全部 256 分区接管，A 启动后 716.449 秒完成全部回主。业务脚本核对了故障前挂单、故障期间成交、恢复后客户端回读和资金游标。Robot 在接管及回归阶段分别运行 7 和 24 轮，最长轮次间隔 35.113 秒和 30.164 秒。Trade A 故障时，B 用 203.484 秒完成全部接管，并在 A 返回前核验两个账户及同一笔成交的双侧单副本回执，坐标为 P050/E3/243。[Order A 演练](/Users/kong/.opentradingcore/mac-demo-20261121-154659/ha-order-a-kill-195svw7e/evidence.json) · [Trade A 演练](/Users/kong/.opentradingcore/mac-demo-20261121-154659/ha-trade-a-kill-w3g0ohfu/evidence.json)
+
+分别用同一版代码测严格和异步策略，固定 Robot 数、租户品种数与客户端并发。单品种反映每个撮合队列的延迟，多租户多品种反映独立队列能否横向扩展。验收目标为持续 1,000 笔／秒且端到端 P99 ≤ 20 ms，两项同时满足，并核验资金、持仓、成交身份及窗口后积压。
 
 ## 2026-11-21 原 Mac 已恢复基础交易
 
