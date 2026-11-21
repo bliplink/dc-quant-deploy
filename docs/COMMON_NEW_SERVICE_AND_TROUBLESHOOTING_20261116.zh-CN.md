@@ -8,6 +8,8 @@
 
 当前参考源码为 Common `f7bb1e4f87ade75449a370738374c8bcaae3aab6`，已验证 JAR SHA256 为 `4a966ced261fe2105cda18782c140717dc1ab0c773ee788a7948243713e1747c`。该版本已通过 Common 完整 P0；Order/Trade 的同版完整业务故障验收和性能目标仍未全部通过。新服务也必须独立验收。
 
+新服务设计时还要单独确认入口路由。现有 Gateway 路由发布器只接受 `OrderSvr` 和 `TradeSvr`，T554 的一键部署器也只为这两个服务创建命名空间。若 `AuditSvr` 需要接受 Gateway 请求，接入范围应包含它的服务发现、路由和故障后的请求验证；仅接入 WAL 和复制接口只能覆盖服务内部持久化。订单和成交所在撮合队列扩容，与增加一个新的 Common 服务是两项不同的验证。[Gateway 路由发布入口](/Users/kong/.opentradingcore/t525-common-latest-20261106/src/main/java/com/app/common/replication/CommonCertifiedGatewayRoutingProjection.java:68) · [新 Demo 部署器](../scripts/mac-demo-fresh.py)
+
 ## 一 先理解 Common 与业务的分工
 
 | 工作 | Common | 新服务 |
