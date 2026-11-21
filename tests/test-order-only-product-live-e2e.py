@@ -12,9 +12,11 @@ from pathlib import Path
 import re
 import secrets
 import subprocess
+import tempfile
 import time
 import sys
 import threading
+import zlib
 
 HELPERS = Path(__file__).with_name('test-custom-product-live-e2e.py')
 spec = importlib.util.spec_from_file_location('otc_custom_e2e_helpers', str(HELPERS))
@@ -24,41 +26,76 @@ spec.loader.exec_module(h)
 def sql(statement):
     return h.readonly_sql(statement)
 
-def witnessed_order_only_fills(phase, location, order_ids):
+def witnessed_order_only_fills(phase, location, order_ids, evidence, *, rearmed=False):
     survivor=phase['survivor_id']
     if phase['service']!='OrderSvr' or not re.fullmatch(r'[0-9a-f]{64}',survivor):
         raise AssertionError('Missing exact surviving Order process')
-    expected=set(order_ids)
-    decoder=json.JSONDecoder()
-    for _ in range(30):
-        logs=subprocess.run(['docker','logs','--since',phase['business_local_started_at'],survivor],
-                            capture_output=True,text=True,errors='replace',check=True,timeout=20)
-        observed={}
-        for line in (logs.stdout+'\n'+logs.stderr).splitlines():
-            if '"OrdStatus":"Filled"' not in line or not any(order in line for order in expected):
-                continue
-            offset=line.find('[{')
-            if offset<0:
-                continue
-            try:
-                reports,_=decoder.raw_decode(line[offset:])
-            except ValueError:
-                continue
-            for report in reports:
-                if (report.get('Location')!=location or report.get('SecurityID')!='BTC003USDT'
-                        or report.get('ExecType')!='Trade' or report.get('OrdStatus')!='Filled'
-                        or report.get('ClOrdID') not in expected or not report.get('ExecID')):
-                    continue
-                observed.setdefault(report['ClOrdID'],set()).add(report['ExecID'])
-        if any(len(executions)!=1 for executions in observed.values()):
-            raise AssertionError('Duplicate execution for one of the controlled orders during LOCAL')
-        if observed.keys()==expected:
-            execution_ids=sorted({eid for executions in observed.values() for eid in executions})
-            if len(execution_ids)==2:
-                return execution_ids
-            raise AssertionError('Both Order-only orders reused one execution identity')
-        time.sleep(2)
-    raise AssertionError('Surviving Order did not publish both exact Filled reports during LOCAL')
+    route=f"{location}\x1f4\x1fBTC003USDT".encode()
+    partition=f"P{zlib.crc32(route)%256:03d}"
+    position=phase['business_local_ready'][partition]
+    sha=phase['common_sha256']
+    if (position['policy']!='LOCAL_DURABLE_ASYNC' or position['state']!='READY'
+            or position['primary']==phase['service']+phase['slot']
+            or not re.fullmatch(r'[a-f0-9]{64}',sha)):
+        raise AssertionError('Expected the authenticated LOCAL survivor for this Order-only partition')
+    epoch=position['epoch']
+    fixture=Path(__file__).with_name('fixtures')/'async-rpo'
+    agent='T554OrderOnlyLocalMatchReadAgent'
+    java=Path(subprocess.check_output(['/usr/libexec/java_home','-v','1.8'],text=True).strip())
+    remote='/tmp/t554-order-only-local-'+secrets.token_hex(8)
+    docker=['docker','exec',survivor]
+
+    def checked(command):
+        return subprocess.run(command,capture_output=True,text=True,check=True,timeout=25).stdout
+
+    with tempfile.TemporaryDirectory(prefix='t554-order-only-local-',dir=evidence) as temp:
+        work=Path(temp)
+        checked([java/'bin/javac','-cp',java/'lib/tools.jar','-d',work,
+                 fixture/(agent+'.java'),fixture/'T554RpoAttach.java'])
+        manifest=work/'MANIFEST.MF'
+        manifest.write_text('Manifest-Version: 1.0\nAgent-Class: '+agent+'\n\n')
+        checked([java/'bin/jar','cfm',work/'observer.jar',manifest,'-C',work,agent+'.class'])
+        checked([*docker,'mkdir','-m','700',remote])
+        try:
+            checked(['docker','cp',str(work)+'/.',survivor+':'+remote])
+            jvms=checked([*docker,'jps','-l']).splitlines()
+            pids=[line.split()[0] for line in jvms if len(line.split())==2 and line.split()[1]=='OrderSvr']
+            if len(pids)!=1 or not pids[0].isdigit():
+                raise AssertionError('Expected one surviving Order JVM')
+            deadline=time.monotonic()+65
+            attempt=0
+            while time.monotonic()<deadline:
+                attempt+=1
+                candidate=f'{remote}/read-{attempt}.txt'
+                arguments=(candidate,partition,str(epoch),location,*order_ids,sha)
+                if rearmed:
+                    arguments+=('rearmed',)
+                observed=subprocess.run(
+                    [*docker,'java','-Xmx64m','-cp','/opt/java/openjdk/lib/tools.jar:'+remote,
+                     'T554RpoAttach',pids[0],remote+'/observer.jar',
+                     ','.join(arguments)],
+                    capture_output=True,text=True,timeout=20)
+                if observed.returncode==0:
+                    line=checked([*docker,'cat',candidate]).strip()
+                    if line!='NO_MATCH':
+                        fields=line.split()
+                        mode='REARMED_MATCH' if rearmed else 'LOCAL_MATCH'
+                        if (len(fields)!=7 or fields[:3]!=[mode,partition,str(epoch)]
+                                or not fields[3].isdigit() or int(fields[3])<=0
+                                or not re.fullmatch(r'[a-f0-9]{64}',fields[4])
+                                or len(set(fields[5:]))!=2
+                                or any(not re.fullmatch(r'E[a-f0-9]{30}',value) for value in fields[5:])):
+                            raise AssertionError('Invalid authenticated LOCAL match observation')
+                        stem='order-only-rearmed-wal-match' if rearmed else 'order-only-local-wal-match'
+                        with (evidence/(stem+'.json')).open('x') as proof:
+                            json.dump({'common_sha256':sha,'partition':partition,'epoch':epoch,
+                                       'sequence':int(fields[3]),'frame_sha256':fields[4],
+                                       'execution_ids':fields[5:]},proof,indent=2)
+                        return fields[5:]
+                time.sleep(2)
+        finally:
+            subprocess.run([*docker,'rm','-r','--',remote],capture_output=True,timeout=15)
+    raise AssertionError('Surviving Order did not certify both exact fills in its LOCAL WAL')
 
 def run(endpoint,verify_streams=False,ha_evidence=None,ha_timeout=1900):
     suffix=secrets.token_hex(5).upper()
@@ -244,8 +281,10 @@ def run(endpoint,verify_streams=False,ha_evidence=None,ha_timeout=1900):
         taker_id=place(taker,'Buy','TAKER')
         checkpoint('taker_submitted',order=taker_id)
         if ha_evidence:
-            local_exec_ids=witnessed_order_only_fills(phase,location,[maker_id,taker_id])
+            local_exec_ids=witnessed_order_only_fills(phase,location,[maker_id,taker_id],ha_evidence)
             md_entry_id=h.verify_ha_market(endpoint,location)
+            if md_entry_id not in local_exec_ids:
+                raise AssertionError('Public trade does not identify either authenticated LOCAL execution')
             if sql(balance_query)!=before or sql(position_query)!=before_positions:
                 raise AssertionError('Order-only trading changed funds or positions during LOCAL')
             h.ha_marker(ha_evidence,'business-local',location=location,client_order_id=taker_id,
