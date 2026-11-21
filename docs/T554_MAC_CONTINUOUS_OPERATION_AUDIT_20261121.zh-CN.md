@@ -122,3 +122,19 @@ Robot `e8602dd` 复用现有有限退避，仅为带路由键的挂单查询识�
 双副本恢复后，Colima 回收文件系统中已空闲的存储块，系统报告处理约 13.1 GiB 空闲块。随后宿主可用空间约 19 GiB，Colima Docker 数据盘可用空间约 12 GiB。证据为 `post-trade-a-colima-free-block-trim-full.log`。
 
 持续每秒 1,000 笔及最终回执 P99 不超过 20 毫秒的性能门禁仍待通过。现役 Common WAL 和镜像的自动归档与安全回收也待实装验证。
+
+## 06:43–06:54 现役容量与归档复查
+
+现役实例仍为 `mac-demo-20261122-020700`。Order 和 Trade 各 256 个分区保持严格双副本，10 个 Robot 运行。最近五分钟读回 1,423 笔独立成交，过账差错为 0。资金游标在第二次读取时与认证源水位一致。相关证据为 `archive-stage-20261122-robots.json` 和 `archive-stage-20261122-live-finance.json`。
+
+当班将 MySQL 的三个已关闭 binlog 压缩、解压复核 SHA-256 后，通过 MySQL 原生操作释放源文件，保留正在写的 binlog。另将 11 月 21 日 20:12 退役实例的四份历史数据目录压缩复核。退役目录原始文件约 3.15 GiB，压缩约 0.77 GiB。Colima 回收这些空闲块后，Mac 可用约 12 GiB，Colima 数据盘约 9.3 GiB。证据为 `archive-qualified-demo-binlogs-000006.log`、`old-20261121-201216-certified-data-archive/checksums.jsonl` 与 `archive-stage-201216-colima-trim.log`。
+
+最新现役 Common 卷的分配空间中，业务主／本地 WAL 约 5.71 GiB，主备镜像目录约 1.19 GiB，其他文件约 3.79 GiB。四个投票节点的 `commit-index/commits.wal` 合计约 2.33 GiB。备节点追平、见证和投影读取均依赖原逻辑地址与认证证明，后续切段须把业务 WAL 和对应提交索引作为同一历史范围验证。容量证据为 `archive-stage-current-common-volume-20261122.json` 和 `archive-stage-current-common-other-volume-20261122.json`。
+
+## 退役 Epoch 归档路径验证
+
+Common `c3107db` 新增经过认证的退役 Epoch WAL 压缩导出。它从已有签名历史读取提交边界，按原始 WAL 帧和坐标写出，回读校验压缩内容，再发布完整文件。当前 Epoch 拒绝导出。写入中断可以重试，已有归档若损坏会报错。定向测试覆盖带未提交尾部的原文件、损坏压缩件、发布前被强制终止。候选 JAR SHA-256 为 `1f129666b9ebe5a5b914f6cc6719fda05b419ac83e09900cee6a17a80230931c`。
+
+06:50 独立进程首轮成功写出归档，测试随后用低于普通历史读接口规定的字节上限读回，失败记录仍保留。修正验收脚本后以原 JAR 重跑。07:18，在独立进程强制退出后实际重开严格 Epoch 2 的两条和 LOCAL Epoch 3 的一条记录。镜像与 WAL 的隔离组合恢复也通过。恢复目录只复制压缩镜像、压缩 WAL、公开密钥及已有签名证明，重开时从严格的双 RSA 提交索引、原签名单副本水位和认证镜像重放原始数据。证据为 `archive-detached-signed-readback/proof.log`、`archive-detached-signed-readback/snapshot-and-wal-proof.log`。同一候选包的 319 项安全检查通过，另有 3 项依赖外部历史样本的用例跳过。
+
+07:14，新的 MySQL 关闭段也在 SHA-256 校验后完成归档并释放源文件。另对 332 份字节相同的退役构建依赖做 APFS 写时复制去重。现场没有启用运行中的 WAL 自动切段、镜像保留回收或现役文件删除。后续需要把自动切段、归档回读和回收水位接入正式运行时，并验证各类恢复路径和投影持续读取。
