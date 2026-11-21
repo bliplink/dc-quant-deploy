@@ -3820,6 +3820,28 @@
     "fresh_scope_acl_checks": "PASS on private ZooKeeper including anonymous, witness, cross-service, namespace reuse",
     "original_mac_business_modified": false,
     "new_business_ha_verified": false,
-    "new_slo_verified": false
+    "new_slo_verified": false,
+    "exact_candidate_held_retained_other": "P094",
+    "exact_candidate_strict_isolation": "PASS",
+    "exact_candidate_retained_isolation": "PASS",
+    "diagnostic_both_directions": {
+      "takeover_ms": [
+        179319,
+        200988
+      ],
+      "home_ms": [
+        508470,
+        485049
+      ],
+      "equal_wal_pairs": 256,
+      "equal_snapshot_pairs": 256
+    },
+    "diagnostic_third_crash_256_local": "PASS",
+    "retired_build_cleanup": {
+      "files": 1838,
+      "exclusive_bytes_before_sharing": 972058624,
+      "content_sha256_verified": true,
+      "scope": "old unmounted staging libraries only"
+    }
   }
 }

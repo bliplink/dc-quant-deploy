@@ -22,6 +22,12 @@
 
 包含新租约权限的冻结构件为 Common `e962efa`，SHA256 为 `46664d1696927344613ce10f487cbf1cb11f2ea1b5e1ac84d1e01bfdc107113c`。此构件正在完成全量故障验证。当前 Mac 业务接管和两种模式的性能验收均未通过。[该构件验收记录](/Users/kong/.opentradingcore/t554-common-candidates/20261121-partition-independent-v2/qualification/state.json)
 
+同一个冻结构件 `e962efa` 已分别重跑两项分区独立场景。当 P162 保持阻塞时，这次由 P094 在 B 完成了真实本机落盘确认，随后 P162 恢复。P000 阻塞时，P001 再次完成带双副本 ACK 的回主写入。[冻结构件的两项验收及原始证据摘要](/Users/kong/.opentradingcore/t554-common-candidates/20261121-partition-independent-v2/qualification/state.json)
+
+在全量控制演练中，A、B 先后退出后的 256 分区接管分别耗时 179.319 秒和 200.988 秒，回主分别为 508.470 秒和 485.049 秒。两侧的 256 对 WAL 和 256 对快照均一致。第三次终止后 B 也已取得全部 256 个单副本授权。该次为独立诊断演练，完整发布验证另用冻结构件执行。[全量演练日志](/Users/kong/.opentradingcore/t554-order-a-stall-20261121-LSxSMI/indexed-home-1.log)
+
+从 256 份分区签名阶段文件及见证签名文件的时间看，首次接管时每分区经过这段的中位数为 37.814 秒，P99 为 80.035 秒。第三次故障对应 49.002 秒和 92.823 秒。见证线程每轮最多处理一个分区，轮次之间固定等待 250 毫秒。256 个分区同时需要签署时，仅轮次间隔就至少占 63.75 秒。文件时间包含等待上游物理前置条件的时间。现在用相同的物理演练测量分批处理积压能减少多少等待。[分区签名时间](/Users/kong/.opentradingcore/t554-order-a-stall-20261121-LSxSMI/protected-home-recovery-spans.json)
+
 ## 2026-11-21 原 Mac 的 Order A 接管失败与单队列延迟
 
 11 月 16 日的异步演练在 Robot 运行中终止 Order A。30 分钟后演练超时退出，后续三个方向没有执行。11 月 21 日重新读取原命名空间时，256 个 Order 分区中，3 个完成了 E3 单副本接管，P162 留在 E3 RECOVERING，252 个仍是 E2。存活 Order B 的容器 ID、启动时间与演练一致，重启计数为 0。P094 等待另一分区完成安装，P162 则反复报告 `no cumulative committed head`。业务侧的异步写入背压不足以解释这次恢复停滞。
