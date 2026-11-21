@@ -1,8 +1,8 @@
 {
-  "observed_at": "2026-11-16T10:10:27.988833+08:00",
-  "status": "NO_GO_BOTH_1000_FAILED_POST_PRESSURE_FINANCIAL_CONSISTENCY_PASS_LIVE_LOGGING_REMEASUREMENT_RUNNING",
+  "observed_at": "2026-11-21T10:26:25.362495+08:00",
+  "status": "NO_GO_ORDER_A_TAKEOVER_TIMED_OUT_CANDIDATE_IN_P0",
   "production_acceptance": "NO_GO",
-  "generation": "mac-demo-20261116-085710",
+  "generation": "mac-demo-20261116-112333",
   "client_ack_policy": "LOCAL_DURABLE_ASYNC",
   "owner_confirmed_phase_one_performance_target": {
     "owner_confirmed_at": "2026-11-15T20:15:14.936622+08:00",
@@ -3655,7 +3655,7 @@
     "native_hotbook_final_p99_ms": 3788.238,
     "actual_accepted_prefix_batch_count": 38,
     "actual_accepted_prefix_grouped_orders": 374,
-    "four_directions_status": "ORDER_A_RUNNING_OTHERS_PENDING",
+    "four_directions_status": "ORDER_A_TIMEOUT_REMAINING_THREE_NOT_STARTED",
     "four_directions_journal": "/Users/kong/.opentradingcore/t554-initial-batch-business-faults-20261116.json"
   },
   "retired_ready_space_maintenance_20261116_1123": {
@@ -3664,6 +3664,131 @@
     "full_archives_compared": 2,
     "active_volumes_deleted": false,
     "guest_free_after_approx_gib": 15,
+    "production_go": false
+  },
+  "retained_first_local_20261121": {
+    "diagnostic_directory": "/Users/kong/.opentradingcore/t554-order-a-stall-20261121-LSxSMI",
+    "old_generation": "mac-demo-20261116-112333",
+    "candidate_revision": "ff8dd77c98d934c28152d0bf2edf1aff2a02b4be",
+    "candidate_sha256": "4fff92cec7c0f37b942e602eaff85bd272191cdbaf1bdc6818f4d9f5c1f854c0",
+    "old_reader_error": "no cumulative committed head",
+    "same_original_files_verified_frames": 64,
+    "retained_partition": "P162",
+    "measured_hotbook_segments": {
+      "scope": "diagnostic intervals between recorded journal encode times in authenticated same-VM original WAL prefixes",
+      "n": 2400,
+      "segments_ms": {
+        "initial_to_reserve": {
+          "all_clients": {
+            "count": 2400,
+            "min": 2,
+            "p50": 41.0,
+            "p95": 112,
+            "p99": 172,
+            "max": 252
+          },
+          "slowest_24_by_E2E": {
+            "count": 24,
+            "min": 67,
+            "p50": 121.0,
+            "p95": 179,
+            "p99": 193,
+            "max": 193
+          }
+        },
+        "reserve_to_order_risk_accepted": {
+          "all_clients": {
+            "count": 2400,
+            "min": 3,
+            "p50": 27.0,
+            "p95": 113,
+            "p99": 257,
+            "max": 679
+          },
+          "slowest_24_by_E2E": {
+            "count": 24,
+            "min": 18,
+            "p50": 64.5,
+            "p95": 650,
+            "p99": 679,
+            "max": 679
+          }
+        },
+        "order_risk_accepted_to_match": {
+          "all_clients": {
+            "count": 2400,
+            "min": 3,
+            "p50": 78.5,
+            "p95": 1787,
+            "p99": 2269,
+            "max": 2564
+          },
+          "slowest_24_by_E2E": {
+            "count": 24,
+            "min": 1541,
+            "p50": 1987.0,
+            "p95": 2203,
+            "p99": 2224,
+            "max": 2224
+          }
+        },
+        "match_to_settlement": {
+          "all_clients": {
+            "count": 2400,
+            "min": 3,
+            "p50": 78.0,
+            "p95": 1694,
+            "p99": 1982,
+            "max": 2022
+          },
+          "slowest_24_by_E2E": {
+            "count": 24,
+            "min": 917,
+            "p50": 1506.5,
+            "p95": 1631,
+            "p99": 1637,
+            "max": 1637
+          }
+        },
+        "settlement_to_local": {
+          "all_clients": {
+            "count": 2400,
+            "min": 3,
+            "p50": 6.0,
+            "p95": 22,
+            "p99": 82,
+            "max": 318
+          },
+          "slowest_24_by_E2E": {
+            "count": 24,
+            "min": 5,
+            "p50": 8.0,
+            "p95": 23,
+            "p99": 232,
+            "max": 232
+          }
+        },
+        "local_to_replicated": {
+          "all_clients": {
+            "count": 2400,
+            "min": 3070,
+            "p50": 5975.5,
+            "p95": 21657,
+            "p99": 22785,
+            "max": 28949
+          },
+          "slowest_24_by_E2E": {
+            "count": 24,
+            "min": 4861,
+            "p50": 15278.5,
+            "p95": 15689,
+            "p99": 15739,
+            "max": 15739
+          }
+        }
+      },
+      "hotbook_segments_not_additive_quantiles": true
+    },
     "production_go": false
   }
 }
