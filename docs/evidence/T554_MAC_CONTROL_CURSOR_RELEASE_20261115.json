@@ -3789,6 +3789,21 @@
       },
       "hotbook_segments_not_additive_quantiles": true
     },
-    "production_go": false
+    "production_go": false,
+    "candidate_order": {
+      "revision": "9a40874",
+      "actual_tests": 227,
+      "historical_skips": 2,
+      "old_order_b_lock_count": 4085,
+      "old_order_b_pending_observed": 7,
+      "historical_frames": 7200,
+      "peak_pending": 494,
+      "old_copied_pending_entries": 2221040,
+      "checkpoint_count": 80,
+      "combined_checkpoint_sha256": "47f8d71d72286d68b65c0401adb525de33e64b029d617fec6a6d7979ba3d91aa",
+      "old_third_pass_allocated_bytes": 953767816,
+      "candidate_third_pass_allocated_bytes": 833708664,
+      "scope": "offline signed historical business frames, not end-to-end throughput"
+    }
   }
 }
