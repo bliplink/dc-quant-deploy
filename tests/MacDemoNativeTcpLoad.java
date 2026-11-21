@@ -67,6 +67,61 @@ public final class MacDemoNativeTcpLoad {
         }
     }
 
+    private final Map<String,Object> cancelProbe = new LinkedHashMap<>();
+    private long lastBusyNs;
+
+    private void cancelStatus(Object payload) {
+        if (payload instanceof JSONArray) {
+            for (Object entry : (JSONArray) payload) cancelStatus(entry);
+            return;
+        }
+        if (!(payload instanceof JSONObject)) return;
+        JSONObject event = (JSONObject) payload;
+        if (!config.getString("probe_client_id").equals(event.getString("ClOrdID"))) return;
+        synchronized (guard) {
+            if (!config.getString("location").equals(event.getString("Location"))
+                    || !config.getString("user_id").equals(event.getString("UserID"))
+                    || !config.getString("symbol").equals(event.getString("SecurityID"))
+                    || !config.getString("probe_order_id").equals(event.getString("OrderID"))) {
+                streamErrors.add("CANCEL_PROBE_IDENTITY_MISMATCH");
+                return;
+            }
+            String status = event.getString("OrdStatus");
+            if ("Pending_Cancel".equals(status) && cancelProbe.containsKey("sent_ns") && !cancelProbe.containsKey("final_ns")) {
+                cancelProbe.putIfAbsent("pending_ns", System.nanoTime());
+            } else if (("Cancelled".equals(status) || "Canceled".equals(status)) && cancelProbe.containsKey("pending_ns")) {
+                cancelProbe.putIfAbsent("final_ns", System.nanoTime());
+            } else {
+                streamErrors.add("CANCEL_PROBE_UNEXPECTED_STATUS");
+            }
+            guard.notifyAll();
+        }
+    }
+
+    private void cancelAfterBusy(GateWayApi gateway) {
+        synchronized (guard) {
+            lastBusyNs = System.nanoTime();
+            if (!config.containsKey("probe_order_id") || cancelProbe.containsKey("sent_ns")) return;
+            cancelProbe.put("sent_ns", lastBusyNs);
+        }
+        JSONObject body = new JSONObject();
+        body.put("Location", config.getString("location"));
+        body.put("UserID", config.getString("user_id"));
+        body.put("MarketIndicator", "4");
+        body.put("SecurityID", config.getString("symbol"));
+        body.put("OrderID", config.getString("probe_order_id"));
+        body.put("ClOrdID", config.getString("probe_client_id"));
+        body.put("AlgoName", "cross");
+        String routing = body.getString("Location") + '\u001f' + "4" + '\u001f' + body.getString("SecurityID");
+        try {
+            String raw = gateway.requestSyncWithKey(routing, "OrderSvr", "cancelOrder", body.toJSONString(), String.class, 8000L);
+            String code = raw == null ? null : JSON.parseObject(raw).getString("code");
+            synchronized (guard) { cancelProbe.put("rpc_code", code); }
+        } catch (Exception error) {
+            synchronized (guard) { cancelProbe.put("rpc_error", error.getClass().getSimpleName()); }
+        }
+    }
+
     private void submit(GateWayApi gateway, String clientId, long scheduled) {
         JSONObject content = new JSONObject();
         content.put("Location", config.getString("location"));
@@ -99,8 +154,11 @@ public final class MacDemoNativeTcpLoad {
             String routing = config.getString("location") + '\u001f' + "4" + '\u001f' + config.getString("symbol");
             String response = gateway.requestSyncWithKey(routing, "OrderSvr", "placeOrder", encoded, String.class, 8000L);
             if (response != null && !response.trim().isEmpty()) {
-                code = JSON.parseObject(response).getString("code");
+                JSONObject reply = JSON.parseObject(response);
+                code = reply.getString("code");
                 outcome = "0".equals(code) ? "ACKNOWLEDGED" : "BUSINESS_REJECTED";
+                if ("429".equals(code) && "ORDER_BUSY_RETRYABLE".equals(reply.getString("msg")))
+                    outcome = "ORDER_BUSY_RETRYABLE";
             }
         } catch (Exception error) {
             outcome = error.getClass().getSimpleName();
@@ -111,6 +169,7 @@ public final class MacDemoNativeTcpLoad {
             row.put("error_code", "0".equals(code) ? null : code);
             row.put("ack_ms", milliseconds(finished - started));
         }
+        if ("ORDER_BUSY_RETRYABLE".equals(outcome)) cancelAfterBusy(gateway);
     }
 
     private Map<String, Object> run() throws Exception {
@@ -149,6 +208,18 @@ public final class MacDemoNativeTcpLoad {
                     }
                 }
             }, String.class)) throw new IllegalStateException("Native execution subscription failed");
+            if (config.containsKey("probe_order_id")) {
+                String statusTopic = "dc.order.status." + config.getString("symbol") + "."
+                        + config.getString("user_id") + "." + config.getString("location");
+                if (!gateway.subscribe(statusTopic, new IMessage<String>() {
+                    @Override public void onMessage(String ignored, String value) {
+                        try { cancelStatus(JSON.parse(value)); }
+                        catch (RuntimeException error) {
+                            synchronized (guard) { streamErrors.add("CANCEL_PROBE_PARSE_ERROR"); }
+                        }
+                    }
+                }, String.class)) throw new IllegalStateException("Native cancel status subscription failed");
+            }
             int seconds = config.getIntValue("seconds");
             double rate = config.getDoubleValue("rate");
             int planned = (int) (rate * seconds);
@@ -187,9 +258,19 @@ public final class MacDemoNativeTcpLoad {
             long deadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(30);
             synchronized (guard) {
                 while (System.nanoTime() < deadline && streamErrors.isEmpty()
-                        && orders.values().stream().anyMatch(row -> !row.containsKey("execution_id"))) guard.wait(100);
+                        && orders.values().stream().anyMatch(row -> !row.containsKey("execution_id")
+                                && !"ORDER_BUSY_RETRYABLE".equals(row.get("outcome")))) guard.wait(100);
                 List<Map<String, Object>> measured = new ArrayList<>();
                 for (Map<String, Object> row : orders.values()) measured.add(new LinkedHashMap<>(row));
+                if (config.containsKey("probe_order_id")) {
+                    Long sent = (Long) cancelProbe.get("sent_ns"), pending = (Long) cancelProbe.get("pending_ns");
+                    Long done = (Long) cancelProbe.get("final_ns");
+                    if (pending != null && sent != null) cancelProbe.put("pending_ms", milliseconds(pending - sent));
+                    if (done != null && sent != null) cancelProbe.put("final_ms", milliseconds(done - sent));
+                    cancelProbe.put("passed", "0".equals(cancelProbe.get("rpc_code")) && sent != null && pending != null
+                            && done != null && sent <= pending && pending <= done && done <= end && lastBusyNs > done);
+                    result.put("cancel_under_load", new LinkedHashMap<>(cancelProbe));
+                }
                 result.put("orders", measured);
                 result.put("stream_errors", new ArrayList<>(streamErrors));
                 result.put("fills_inside_offered_window", orders.values().stream()

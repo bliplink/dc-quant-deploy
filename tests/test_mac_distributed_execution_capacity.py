@@ -71,6 +71,31 @@ class DistributedReceiptTest(unittest.TestCase):
         self.assertFalse(result['all_accepted_final_receipts_pass'])
         self.assertEqual(1, result['missing_final_receipts'])
 
+    def test_busy_is_separate_from_missing_work_and_never_meets_window_target(self):
+        streams = self.streams()
+        stream = streams[1]['measurement']
+        row = stream['orders'][0]
+        row.update(outcome='ORDER_BUSY_RETRYABLE', error_code='429')
+        del row['execution_id']
+        stream['fills_inside_offered_window'] = 0
+        result = DRIVER['summarize_streams'](streams, 60)
+        self.assertEqual((1, 1, 0), (result['acknowledged_orders'], result['pre_admission_busy'],
+                                     result['missing_final_receipts']))
+        self.assertTrue(result['all_accepted_final_receipts_pass'])
+        self.assertFalse(result['window_capacity_pass'])
+        row['execution_id'] = 'unexpected'
+        self.assertIn('EXECUTION_AFTER_PRE_ADMISSION_BUSY', DRIVER['summarize_streams'](streams, 60)['stream_errors'])
+
+    def test_busy_must_be_absent_and_probe_must_have_only_one_cancelled_order(self):
+        stream = {'run': 'fixture', 'location': 'TEST01', 'symbol': 'BTC005USDT',
+                  'cancel_probe_client_id': 'probe',
+                  'measurement': {'orders': [{'client_order_id': 'busy', 'outcome': 'ORDER_BUSY_RETRYABLE'}]}}
+        cancelled = ['probe', 'Cancelled', '0', '0', stream['symbol'], '4']
+        for rows, passed in [([cancelled], True), ([], False), ([cancelled, cancelled], False),
+                             ([cancelled, ['busy', 'Cancelled', '0', '0', stream['symbol'], '4']], False)]:
+            with self.subTest(rows=rows), patch.dict(DRIVER['CANCEL']['PRODUCT'], readonly_sql=lambda sql: rows):
+                self.assertIs(DRIVER['projected_stream'](stream)['consistent'], passed)
+
     def test_ioc_cancellation_is_visible_and_never_becomes_a_final_fill(self):
         stream = {'run': 'fixture', 'location': 'TEST01', 'symbol': 'BTC005USDT',
                   'measurement': {'orders': [{'client_order_id': 'cancelled-order'}]}}

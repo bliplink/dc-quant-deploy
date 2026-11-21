@@ -156,11 +156,18 @@ def _summarize_receipts(streams, seconds, expected_policy=None):
     spread = 1000 * (max(starts) - min(starts))
     responses = dict(Counter(row.get('outcome', 'NO_RESPONSE') for row in rows))
     accounted = len(rows) + drops == planned
+    busy = [row for row in rows if row.get('outcome') == 'ORDER_BUSY_RETRYABLE']
+    accepted = [row for row in rows if row.get('outcome') == 'ACKNOWLEDGED']
+    if any(row.get('execution_id') for row in busy):
+        protocol.append('EXECUTION_AFTER_PRE_ADMISSION_BUSY')
+    missing_accepted = sum(not row.get('execution_id') for row in accepted)
     semantic_pass = (complete and spread <= 250 and accounted and len(rows) > 0
-                     and responses == {'ACKNOWLEDGED': len(rows)} and len(fills) == len(rows) and not protocol)
+                     and len(accepted) > 0 and len(accepted) + len(busy) == len(rows)
+                     and missing_accepted == 0 and not protocol)
     result = {'planned_orders': planned, 'sent_orders': len(rows), 'final_executions': len(fills),
               'fills_inside_offered_window': count_inside, 'scheduler_drops': drops,
-              'missing_final_receipts': len(rows) - len(fills),
+              'missing_final_receipts': missing_accepted, 'pre_admission_busy': len(busy),
+              'acknowledged_orders': len(accepted),
               'tail_final_receipts_after_window': len(fills) - count_inside,
               'responses': responses, 'stream_errors': protocol, 'start_spread_ms': round(spread, 3),
               'generator_accounting_pass': accounted,
@@ -169,12 +176,15 @@ def _summarize_receipts(streams, seconds, expected_policy=None):
               'all_accepted_final_receipts_pass': semantic_pass,
               'window_capacity_pass': semantic_pass and drops == 0 and count_inside == planned}
     for field in ('ack_ms', 'client_fill_ms', 'scheduled_fill_ms', 'dispatch_delay_ms'):
-        result[field] = EXEC['summary_ms'](rows, field)
+        result[field] = EXEC['summary_ms'](accepted if field == 'ack_ms' else rows, field)
+    result['busy_response_ms'] = EXEC['summary_ms'](busy, 'ack_ms')
     return result
 
 
 def projected_stream(stream):
-    expected = {row['client_order_id'] for row in stream['measurement']['orders']}
+    busy = {row['client_order_id'] for row in stream['measurement']['orders']
+            if row.get('outcome') == 'ORDER_BUSY_RETRYABLE'}
+    expected = {row['client_order_id'] for row in stream['measurement']['orders']} - busy
     run = stream['run']
     rows = CANCEL['PRODUCT']['readonly_sql'](
         'SELECT o.clord_id,o.ord_status,COUNT(e.exec_id),COALESCE(SUM(e.last_qty),0),o.security_id,o.market_indicator '
@@ -182,12 +192,20 @@ def projected_stream(stream):
         'ON e.location=o.location AND e.order_id=o.order_id '
         f"WHERE o.location='{stream['location']}' AND o.clord_id LIKE 'T554EXEC-{run}-%' "
         f"AND o.clord_id<>'T554EXEC-{run}-MAKER' GROUP BY o.clord_id,o.order_id,o.ord_status,o.security_id,o.market_indicator")
-    return {'rows': len(rows), 'expected_rows': len(expected),
+    probe = stream.get('cancel_probe_client_id')
+    probe_rows = [row for row in rows if probe and row[0] == probe]
+    probe_pass = not probe or (len(probe_rows) == 1 and probe_rows[0][1] == 'Cancelled'
+                               and int(probe_rows[0][2]) == 0 and Decimal(probe_rows[0][3]) == 0
+                               and probe_rows[0][4:] == [stream['symbol'], '4'])
+    if probe:
+        rows = [row for row in rows if row[0] != probe]
+    return {'rows': len(rows), 'expected_rows': len(expected), 'cancel_probe_projection_pass': probe_pass,
+            'busy_client_ids_with_projected_orders': sorted(busy.intersection(row[0] for row in rows)),
             'order_status_counts': dict(Counter(row[1] for row in rows)),
             'execution_count_distribution': dict(Counter(str(int(row[2])) for row in rows)),
             'nonfilled_client_order_ids': sorted(row[0] for row in rows if row[1] != 'Filled'),
             'observed_symbols': sorted({row[4] for row in rows}), 'consistent':
-            len(rows) == len(expected) and {row[0] for row in rows} == expected
+            probe_pass and len(rows) == len(expected) and {row[0] for row in rows} == expected
             and all(row[1] == 'Filled' and int(row[2]) == 1
                     and Decimal(row[3]) == EXEC['QUANTITY'] and row[4] == stream['symbol']
                     and row[5] == '4' for row in rows)}
@@ -216,6 +234,8 @@ def main():
     parser.add_argument('--symbols-per-tenant', type=int, help='Matching books per tenant; sessions may share a book')
     parser.add_argument('--rate-per-stream', type=float, default=1)
     parser.add_argument('--seconds', type=int, default=60)
+    parser.add_argument('--cancel-under-load', action='store_true',
+                        help='Cancel one pre-existing order on the same native session/book after its first busy reply')
     parser.add_argument('--require-performance-target', action='store_true')
     parser.add_argument('--diagnostic-only', action='store_true',
                         help='Retain integrity results but exclude an observed/profiled window from performance acceptance')
@@ -343,6 +363,14 @@ def main():
                                   'quantity': str(EXEC['QUANTITY']), 'price': EXEC['PRICE'],
                                   'port': int(CAPACITY['FRESH']['env_pairs'](root / 'demo.env')['GW_TCP_PORT']),
                                   'run': run, 'rate': args.rate_per_stream, 'seconds': args.seconds}
+                        if args.cancel_under_load and len(private) == 1:
+                            probe_id = 'T554EXEC-' + run + '-CANCELPROBE'
+                            accounts[1]['order_attempted'] = True
+                            taker.place_limit_order(symbol, 'BUY', str(EXEC['QUANTITY']), '89000', clord_id=probe_id)
+                            config['probe_order_id'] = CANCEL['await_order'](
+                                (location, taker.session.user_id, taker.session.token), symbol, probe_id, True)
+                            config['probe_client_id'] = probe_id
+                            stream['cancel_probe_client_id'] = probe_id
                         private[-1] = (stream, accounts, config)
                     if len(private) != args.streams:
                         raise RuntimeError('Bounded setup did not complete the declared native session layout')
@@ -401,6 +429,8 @@ def main():
             report['background_tape_terminal_audit'] = CAPACITY['audit_tape_immediate_terminals'](baseline)
             report['background_robots_after'] = CAPACITY['demo_tenants']()
             report['passed'] = (report.get('aggregate', {}).get('all_accepted_final_receipts_pass') is True
+                                and (not args.cancel_under_load or any(
+                                    s['measurement'].get('cancel_under_load', {}).get('passed') for s in report['streams']))
                                 and report['control_stable'] and code == 0
                                 and report['background_robots_after'] == baseline
                                 and report['background_real_fills_all_tenants']
