@@ -4,6 +4,19 @@
 
 学习接入与排障可先阅读[新服务接入Common与集群排障指南](/Users/kong/dc-quant-deploy/docs/COMMON_NEW_SERVICE_AND_TROUBLESHOOTING_20261116.zh-CN.md)。
 
+## 精简日志后的同负载对照
+
+原 Mac 顺序部署 Order `0eb59c0`、Trade `dd4d230`，Common 保持 `f90d8f3`。四个投票节点的物理运行检查、Order-only、资金成交、公开成交与财务游标通过。10 个 Robot 连续 5 分钟发出 3,734 次报价、1,200 次 Tape 请求，所有窗内 Tape 请求都匹配到成交。[物理运行证据](/Users/kong/.opentradingcore/mac-demo-20261121-171543/physical-runtime-pd_0tfbm/proof.json) · [五分钟 Robot 实测](/Users/kong/.opentradingcore/mac-demo-20261121-171543/robot-steady-10-092726.json)
+
+两代都用异步本地落盘，4 租户 × 4 品种，16 路 TCP 共送入 40 笔／秒。两个 60 秒窗口均在窗内收到全部 2,400 笔最终成交。日志字节数来自四个投票容器在各自同一压测时间窗的标准输出和错误输出；文件日志与存储设备写入另计。新旧代的租户、Robot 成交数及队列分布会波动。
+
+| 60 秒窗口 | 四节点容器日志 | 下单 RPC P99 | 客户端最终成交 P99 | 计划发送至最终成交 P99 |
+| --- | ---: | ---: | ---: | ---: |
+| 通用传输日志 | 23,960,113 B | 66.853 ms | 235.974 ms | 239.229 ms |
+| 仅保留专用 Tape 发布审计及服务必要日志 | 4,915,079 B | 47.872 ms | 227.814 ms | 231.848 ms |
+
+容器日志量下降 79.5%。当前负载的最终成交 P99 仍是目标的 11.4 倍，磁盘日志减量只能解释部分成本。对比只覆盖单次配对窗口，不能据此推算 1,000 笔／秒的表现。[新版本原生 TCP 回执](/Users/kong/.opentradingcore/mac-demo-20261121-171543/distributed-execution-capacity-ad16654d.json) · [改造前日志计数](/Users/kong/.opentradingcore/t554-order-a-stall-20261121-LSxSMI/readonly-join/voter-log-before-4x4.json) · [改造后日志计数](/Users/kong/.opentradingcore/t554-order-a-stall-20261121-LSxSMI/readonly-join/voter-log-after-4x4.json)
+
 ## 原 Mac 有序结算窗口与双撤单通知实测（11 月 21 日 17 时）
 
 原 Mac 依次运行两个版本。两次均用相同 Common 构件、异步本地落盘、10 个后台 Robot、16 路原生 TCP 和 60 秒观察窗。Order `9bb3c0f` 可以把同队列中已经排好的相邻成交一并发往 Trade `a1b9514`。Trade 逐笔核对原签名、按序结算，Order 收到各笔对应的签名回执后落盘并推送。两次使用不同代的租户和业务数据，后台负载也会波动。
