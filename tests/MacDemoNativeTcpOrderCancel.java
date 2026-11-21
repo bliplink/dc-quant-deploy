@@ -182,7 +182,9 @@ public final class MacDemoNativeTcpOrderCancel {
             while (System.currentTimeMillis() < target) Thread.sleep(Math.max(1, Math.min(10, target - System.currentTimeMillis())));
             if (System.currentTimeMillis() - target > 250) throw new IllegalStateException("NATIVE_START_BARRIER_MISSED");
             report.put("actual_start", Instant.now().toString());
-            long begun = System.nanoTime(), end = begun + TimeUnit.SECONDS.toNanos(config.getIntValue("seconds"));
+            long begun = System.nanoTime();
+            long windowStart = begun - TimeUnit.MILLISECONDS.toNanos(System.currentTimeMillis() - target);
+            long end = windowStart + TimeUnit.SECONDS.toNanos(config.getIntValue("seconds"));
             while (System.nanoTime() < end) {
                 String id = config.getString("prefix") + "-" + orders.size();
                 Map<String,Object> row = new LinkedHashMap<>();orders.add(row);
@@ -203,9 +205,11 @@ public final class MacDemoNativeTcpOrderCancel {
                     synchronized (guard) { orderId = (String) observation.get("order_id"); }
                     row.put("order_id", orderId);
                     row.put("place_new_ms", between(newAt, start));
+                    row.put("new_inside_window", newAt >= windowStart && newAt < end);
                     long cancelStart = System.nanoTime();cancel(id, orderId);row.put("cancel_ack_ms", ms(cancelStart));
                     long cancelledAt = awaitStatus(observation, "cancel_received_ns");
                     row.put("cancel_terminal_ms", between(cancelledAt, cancelStart));row.put("cycle_ms", ms(start));
+                    row.put("cancel_inside_window", cancelledAt >= windowStart && cancelledAt < end);
                     row.put("passed", true);
                 } catch (Exception failure) {
                     row.put("failure", failure.getClass().getSimpleName());
@@ -289,6 +293,7 @@ public final class MacDemoNativeTcpOrderCancel {
             Map<String,Object> record=new LinkedHashMap<>();
             record.put("client_order_id",id);record.put("location","TEST01");record.put("user_id","u1");
             record.put("order_id",update.getString("OrderID"));record.put("passed",true);
+            record.put("new_inside_window",true);record.put("cancel_inside_window",true);
             for(String field:new String[]{"place_ack_ms","place_new_ms","cancel_ack_ms","cancel_terminal_ms","cycle_ms"})
                 record.put(field,1.0);
             retained.add(record);

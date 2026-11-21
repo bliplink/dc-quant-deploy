@@ -41,12 +41,16 @@ def execution_target(aggregate, seconds, integrity_passed, qualified_window=True
 def order_cancel_target(phase, transport):
     rows = phase.get('records', [])
     samples = len(rows)
-    elapsed = phase.get('elapsed_seconds', 0)
-    rate = 2 * sum(row.get('passed') is True for row in rows) / elapsed if elapsed > 0 else 0
+    seconds = phase.get('window_seconds', 0)
+    fields = ('new_inside_window', 'cancel_inside_window')
+    counted = bool(rows) and all(isinstance(row.get(key), bool) for row in rows for key in fields)
+    inside = sum(row.get(key) is True for row in rows for key in fields)
+    rate = inside / seconds if seconds > 0 and counted else 0
     checks = {
         'native_tcp': transport == 'tcp',
         'integrity': phase.get('passed') is True,
-        'sustained_window': elapsed >= 60,
+        'sustained_window': seconds >= 60,
+        'native_window_statuses_observed': counted,
         'all_operations_completed': bool(rows) and all(row.get('passed') is True for row in rows),
         'successful_command_rate': math.isfinite(rate) and rate >= OPERATIONS_PER_SECOND,
         'new_status_p99': complete_latency(phase.get('place_new_ms', {}), samples),
@@ -55,4 +59,6 @@ def order_cancel_target(phase, transport):
     return {'passed': all(checks.values()), 'target_per_second': OPERATIONS_PER_SECOND,
             'target_p99_ms': P99_MILLISECONDS, 'unit': 'Place plus cancel commands per second',
             'observed_per_second': rate, 'checks': checks,
+            'window_commands': inside if counted else None,
+            'late_commands': sum(row.get(key) is False for row in rows for key in fields) if counted else None,
             'note': 'A complete place/cancel cycle is two commands, not an actual trade.'}

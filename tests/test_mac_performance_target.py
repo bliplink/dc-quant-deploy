@@ -50,14 +50,19 @@ class PerformanceAcceptanceTest(unittest.TestCase):
         self.assertFalse(TARGET['execution_target'](self.aggregate(), 60, False)['passed'])
 
     def test_cycles_are_two_commands_and_each_terminal_distribution_is_required(self):
-        phase = {'passed': True, 'elapsed_seconds': 60, 'records': [{'passed': True}] * 30000,
+        pair = {'passed': True, 'new_inside_window': True, 'cancel_inside_window': True}
+        phase = {'passed': True, 'elapsed_seconds': 60.2, 'window_seconds': 60, 'records': [pair] * 30000,
                  'place_new_ms': {'samples': 30000, 'p99': 20},
                  'cancel_terminal_ms': {'samples': 30000, 'p99': 20}}
         result = TARGET['order_cancel_target'](phase, 'tcp')
         self.assertTrue(result['passed'])
         self.assertEqual(1000, result['observed_per_second'])
         self.assertFalse(TARGET['order_cancel_target'](phase, 'http')['passed'])
-        for key, value in (('elapsed_seconds', 61), ('passed', False),
+        late = dict(phase, records=[*phase['records'][:-1], dict(pair, cancel_inside_window=False)])
+        observed = TARGET['order_cancel_target'](late, 'tcp')
+        self.assertFalse(observed['passed'])
+        self.assertEqual((59999, 1), (observed['window_commands'], observed['late_commands']))
+        for key, value in (('window_seconds', 61), ('passed', False), ('records', [{'passed': True}] * 30000),
                            ('cancel_terminal_ms', {'samples': 29999, 'p99': 1}),
                            ('place_new_ms', {'samples': 30000, 'p99': 21})):
             with self.subTest(key=key):

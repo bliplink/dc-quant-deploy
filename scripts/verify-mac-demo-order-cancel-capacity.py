@@ -329,11 +329,18 @@ def main():
     parser.add_argument("--seconds", type=int, default=60)
     parser.add_argument("--mode", choices=("ORDER_ONLY", "TRADE"))
     parser.add_argument("--concurrency", choices=(1, 4, 8, 16, 32), type=int)
-    parser.add_argument("--transport", choices=("http", "tcp"), default="http")
+    parser.add_argument("--transport", choices=("http", "tcp"))
     parser.add_argument("--require-performance-target", action="store_true")
     args = parser.parse_args()
+    if args.transport is None:
+        args.transport = "tcp" if args.require_performance_target else "http"
     if not 30 <= args.seconds <= 300:
         parser.error("Use a 30 to 300 second window per concurrency level")
+    if args.require_performance_target and args.transport != "tcp":
+        parser.error("The performance target requires native TCP terminal statuses")
+    levels = (16,) if args.require_performance_target else (1, 4, 8)
+    if args.concurrency:
+        levels = (args.concurrency,)
     root = args.generation.resolve(strict=True)
     run = secrets.token_hex(4)
     report = {"generation": root.name, "common_release": CAPACITY["common_release_identity"](root),
@@ -381,9 +388,9 @@ def main():
                     if actual != [[mode]]:
                         raise RuntimeError("Actual product mode differs from the controlled test")
                     traders = [new_trader(location, symbol, mode, run, mode.lower() + str(i))
-                               for i in range(max(8, args.concurrency or 8))]
+                               for i in range(max(8, max(levels)))]
                     before = {user: balances(loc, user) for loc, user, _ in traders}
-                    for concurrency in ((args.concurrency,) if args.concurrency is not None else (1, 4, 8)):
+                    for concurrency in levels:
                         # TOKEN resume consumes the signed session. Keep the
                         # independent WEB session for post-window reconciliation,
                         # and obtain fresh native sessions for every window.
@@ -420,6 +427,7 @@ def main():
                                     ThreadPoolExecutor(max_workers=concurrency) as clients:
                                 if args.transport == "tcp":
                                     common_start = int(time.time() * 1000) + 8000
+                                    phase.update(window_start_epoch_ms=common_start, window_seconds=args.seconds)
                                     port = int(CAPACITY["FRESH"]["env_pairs"](root / "demo.env")["GW_TCP_PORT"])
                                     tasks = [clients.submit(NATIVE["run"], native_work, {
                                         "location": loc, "user_id": user, "token": token, "symbol": symbol,
