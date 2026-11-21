@@ -68,6 +68,36 @@ def error_status(error):
     return {'type': type(error).__name__, 'code': code[1] if code else None}
 
 
+def cancel_remaining_benchmark_orders(client, trader, symbol, run):
+    deadline = time.monotonic() + 90
+    prefix = 'T554EXEC-' + run + '-'
+    while True:
+        try:
+            rows = CANCEL['open_orders'](trader, symbol)
+            if not rows:
+                return
+            orders = [(row.get('ClOrdID') or row.get('ClOrderID') or row.get('clOrdID'), row)
+                      for row in rows]
+            if any(not isinstance(key, str) or not key.startswith(prefix) for key, row in orders):
+                raise ValueError('Unexpected order outside this benchmark run')
+            for key, row in orders:
+                if row.get('OrdStatus') != 'Pending_Cancel':
+                    client.cancel_order(symbol, row['OrderID'], clord_id=key + '-CANCEL')
+                CANCEL['await_order'](trader, symbol, key, False)
+        except ValueError:
+            raise
+        except Exception:
+            if time.monotonic() >= deadline:
+                raise
+            # A timeout may follow a durable cancellation. Read the live book before resubmitting.
+            time.sleep(1)
+            continue
+        if time.monotonic() >= deadline:
+            if CANCEL['open_orders'](trader, symbol):
+                raise RuntimeError('Remaining own orders after normal cancellation')
+            return
+
+
 def cleanup_accounts(accounts, location, run, report, refresh_credentials=False):
     for account in accounts:
         client, trader = account['client'], account['trader']
@@ -85,15 +115,7 @@ def cleanup_accounts(accounts, location, run, report, refresh_credentials=False)
             if account['order_attempted']:
                 try:
                     scoped_trader = (location, trader[1], client.session.token)
-                    for order in CANCEL['open_orders'](scoped_trader, symbol):
-                        client_id = order.get('ClOrdID') or order.get('ClOrderID')
-                        if not client_id or not client_id.startswith('T554EXEC-' + run + '-'):
-                            raise RuntimeError('Unexpected order outside this benchmark run')
-                        client.cancel_order(symbol, order['OrderID'],
-                                            clord_id=client_id + '-CANCEL')
-                        CANCEL['await_order'](scoped_trader, symbol, client_id, False)
-                    if CANCEL['open_orders'](scoped_trader, symbol):
-                        report.setdefault('cleanup_errors', []).append('REMAINING_OWN_ORDERS')
+                    cancel_remaining_benchmark_orders(client, scoped_trader, symbol, run)
                 except Exception as error:
                     report.setdefault('cleanup_errors', []).append(error_status(error))
         try:

@@ -11,6 +11,28 @@ CAPACITY = runpy.run_path(str(Path(__file__).resolve().parents[1]
 
 
 class ExecutionCapacityTest(unittest.TestCase):
+    def test_ambiguous_cancel_is_rechecked_before_retry(self):
+        from types import SimpleNamespace
+        cancel = CAPACITY['cancel_remaining_benchmark_orders']
+        attempts = []
+        def timeout_after_send(*args, **kwargs):
+            attempts.append(args)
+            raise TimeoutError()
+        snapshots = iter([[{'ClOrdID': 'T554EXEC-run-MAKER', 'OrderID': 'm'}], []])
+        with patch.dict(CAPACITY['CANCEL'], open_orders=lambda *args: next(snapshots)), \
+                patch.object(cancel.__globals__['time'], 'sleep'):
+            cancel(SimpleNamespace(cancel_order=timeout_after_send), ('tenant', 'user', 'token'), 'BTC', 'run')
+        self.assertEqual([('BTC', 'm')], attempts)
+
+    def test_cleanup_checks_entire_page_before_cancelling(self):
+        from types import SimpleNamespace
+        rows = [{'ClOrdID': 'T554EXEC-run-MAKER', 'OrderID': 'own'},
+                {'ClOrdID': 'outside', 'OrderID': 'other'}]
+        with patch.dict(CAPACITY['CANCEL'], open_orders=lambda *args: rows):
+            with self.assertRaisesRegex(ValueError, 'outside'):
+                CAPACITY['cancel_remaining_benchmark_orders'](
+                    SimpleNamespace(cancel_order=lambda *a, **k: self.fail()), ('tenant', 'user', 'token'), 'BTC', 'run')
+
     def test_offered_load_is_bounded_by_funded_single_maker_capacity(self):
         source = Path(__file__).resolve().parents[1] / 'scripts/verify-mac-demo-execution-capacity.py'
         tree = ast.parse(source.read_text())
