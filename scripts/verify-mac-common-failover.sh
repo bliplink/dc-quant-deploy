@@ -92,6 +92,20 @@ public final class VerifyCommonFailover {
         }
         if (nativeOnly) System.exit(0);
         }
+        if (Boolean.getBoolean("t554.verify.split.interrupted") && Boolean.getBoolean("t554.verify.interrupted.return")) {
+            String evidence = System.getProperty("t554.fixture.evidence.directory");
+            System.setProperty("t554.fixture.evidence.directory", evidence + "-interrupted");
+            System.setProperty("t554.verify.interrupted.return.only", "true");
+            Result overlap = new JUnitCore().run(Request.method(CommonCertifiedFirstReadyE2AutomaticRecoveryTest.class,
+                    "independentVotersSurviveBothPhysicalCrashesAndReturnHome"));
+            if (!overlap.wasSuccessful()) {
+                for (Failure failure : overlap.getFailures()) System.err.println(failure.getTrace());
+                System.exit(1);
+            }
+            System.setProperty("t554.fixture.evidence.directory", evidence);
+            System.clearProperty("t554.verify.interrupted.return.only");
+            System.setProperty("t554.verify.interrupted.return", "false");
+        }
         JUnitCore junit = new JUnitCore();
         junit.addListener(new TextListener(System.out));
         System.exit(junit.run(Request.method(CommonCertifiedFirstReadyE2AutomaticRecoveryTest.class,
@@ -99,6 +113,10 @@ public final class VerifyCommonFailover {
     }
 }
 JAVA
+split_interrupted=false
+if grep -q T554_READ_ONLY_RETURN_WITNESSED_LOSS_AND_256_HOME_PASS "$out/source/src/test/java/com/app/common/replication/CommonCertifiedFirstReadyE2AutomaticRecoveryTest.java"; then
+  split_interrupted=true
+fi
 # Only the candidate provides production classes in the parent and every voter/witness JVM.
 classpath="$out/common.jar:$out/source/target/test-classes:$(cat "$out/dependencies.classpath"):$out/runner"
 "$JAVA_HOME/bin/javac" -cp "$classpath" -d "$out/runner" "$out/runner/VerifyCommonFailover.java"
@@ -114,7 +132,7 @@ if [[ "${MAC_DEMO_COMMON_PARALLEL_P0_JVMS:-false}" == true ]]; then
   "$JAVA_HOME/bin/java" "-Djava.io.tmpdir=$out/tmp/home" -Dcommon.node.control.debug=true \
     "-Dt554.fixture.evidence.directory=$out/process-evidence" \
     -Dt554.verify.protected.manifest=true -Dt554.verify.third.crash=true -Dt554.verify.repeated.return=true \
-    "-Dt554.verify.interrupted.return=${MAC_DEMO_REQUIRE_INTERRUPTED_RETURN:-false}" \
+    "-Dt554.verify.split.interrupted=$split_interrupted" "-Dt554.verify.interrupted.return=${MAC_DEMO_REQUIRE_INTERRUPTED_RETURN:-false}" \
     -cp "$classpath" VerifyCommonFailover home > "$out/home-faults.log" 2>&1 &
   home_pid=$!
   native_exit=0
@@ -139,7 +157,7 @@ else
 "$JAVA_HOME/bin/java" "-Djava.io.tmpdir=$out/tmp" -Dcommon.node.control.debug=true \
   "-Dt554.fixture.evidence.directory=$out/process-evidence" \
   -Dt554.verify.protected.manifest=true -Dt554.verify.third.crash=true -Dt554.verify.repeated.return=true \
-  "-Dt554.verify.interrupted.return=${MAC_DEMO_REQUIRE_INTERRUPTED_RETURN:-false}" \
+  "-Dt554.verify.split.interrupted=$split_interrupted" "-Dt554.verify.interrupted.return=${MAC_DEMO_REQUIRE_INTERRUPTED_RETURN:-false}" \
   -cp "$classpath" VerifyCommonFailover 2>&1 | tee "$out/failover.log"
 fi
 python3 "$repo/scripts/finalize-mac-common-failover.py" "$candidate" "$expected_sha" "$out"

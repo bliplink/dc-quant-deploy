@@ -531,6 +531,29 @@ def main():
     interrupted = lines.count(INTERRUPTED) == 1 and log.find(INTERRUPTED) < both[0].start()
     if os.environ.get("MAC_DEMO_REQUIRE_INTERRUPTED_RETURN") == "true" and not interrupted:
         raise ValueError("Common physical test is missing the interrupted signed Stage recovery")
+    overlap_evidence = {}
+    if interrupted and "T554_READ_ONLY_RETURN_WITNESSED_LOSS_AND_256_HOME_PASS" in full_source.read_text():
+        matches = re.findall(r"^T554_READ_ONLY_RETURN_WITNESSED_LOSS_AND_256_HOME_PASS held=(P[0-9]{3}) "
+                             r"interrupted=P000 equalWal=256 equalSnapshot=256$", log, re.M)
+        directory = result / "process-evidence-interrupted"
+        if len(matches) != 1 or matches[0] == "P000":
+            raise ValueError("Missing physical overlap of two distinct signed recovery stages")
+        before = (directory / "admitted-return-manifest.txt").read_text().splitlines()
+        after = (directory / "final-manifest.txt").read_text().splitlines()
+        waiting = (directory / "return-a.log").read_text()
+        if ("COMMON_RETURN_WAITING_WITHOUT_WRITE_LEASE node=DemoSvrA" not in waiting
+                or "P000|4|DemoSvrB|DemoSvrA|STRICT_QUORUM|RECOVERING" not in before
+                or len(before) != 257 or len(after) != 257
+                or not any(row.startswith(matches[0] + "|") and row.endswith("|LOCAL_DURABLE_ASYNC|READY")
+                           for row in before[1:])):
+            raise ValueError("Interrupted return lacks the held P000 and completed witnessed loss")
+        for number, (source, target) in enumerate(zip(sorted(before[1:]), sorted(after[1:]))):
+            partition, epoch, primary, replica, policy, state = source.split("|")
+            home, buddy = ("DemoSvrA", "DemoSvrB") if number < 128 else ("DemoSvrB", "DemoSvrA")
+            expected = int(epoch) + int(policy == "LOCAL_DURABLE_ASYNC") + int(primary != home)
+            if partition != f"P{number:03d}" or target != f"{partition}|{expected}|{home}|{buddy}|STRICT_QUORUM|READY":
+                raise ValueError("Interrupted partition failed its exact individual Home transition")
+        overlap_evidence = evidence_hashes(directory)
     cumulative_model = None
     if (result / "source/src/main/java/com/app/common/replication/DurableWalCumulativeCommitProtocol.java").is_file():
         cumulative_model = verify_cumulative_runtime_evidence(result / "process-evidence")
@@ -550,6 +573,7 @@ def main():
             "normal_dual_async_recovery_head": "backup_certified_committed",
             "live_poison_recovery_evidence": poison_evidence,
             "full_recovery_physical_evidence": recovery_evidence,
+            "read_only_rejoin_physical_evidence": overlap_evidence,
             "actual_cumulative_runtime_evidence": cumulative_model}
     if (result / "status").read_text().strip() not in {"NO_GO", "PASS"}:
         raise ValueError("Unexpected initial Common verification status")
