@@ -17,6 +17,10 @@
 
 高负载两行存在大量未返回最终成交的请求。完整请求总体的端到端 P99 未能测得。较低负载下严格模式在这次单窗对比中更快，不能由此推断两种模式的普遍性能排序。将资金结算路径改为异步复制，未解决这版系统的过载问题。[严格 40](/Users/kong/.opentradingcore/mac-demo-20261121-174139/distributed-execution-capacity-6dfbd0a6.json) · [异步 40](/Users/kong/.opentradingcore/mac-demo-20261121-171543/distributed-execution-capacity-ad16654d.json) · [严格 1,000](/Users/kong/.opentradingcore/mac-demo-20261121-174139/distributed-execution-capacity-aa527e6b.json) · [异步 1,000](/Users/kong/.opentradingcore/mac-demo-20261121-171543/distributed-execution-capacity-f973d31a.json)
 
+严格模式停止加压后，35,085 笔吃单全部查到终态，其中 18,247 笔 Filled、16,838 笔 Cancelled。财务核对通过。另有 16 笔事先挂入的做市单，其中 3 笔在清理请求超时后仍是 Partially_Filled。测试清理未通过；这些真实挂单及其剩余量有独立记录。压测驱动现已在撤单回包不确定时，通过原账户重新查询自己的挂单后重试，再吊销临时测试密钥。[严格模式事后核对](/Users/kong/.opentradingcore/t554-order-a-stall-20261121-LSxSMI/readonly-join/compact-strict-multi1000-consistency-followup.json) · [做市订单与挂载清单](/Users/kong/.opentradingcore/t554-order-a-stall-20261121-LSxSMI/readonly-join/colima-maintenance-before.json)
+
+原 Colima 数据盘由 150 GiB 扩至 180 GiB。维护后原 27 个容器的 ID、镜像、重启策略与挂载一致，同一代全部测试吃单和 16 笔做市单的状态、累计量及剩余量与维护前一致。冷启动早期的 JVM 观察器未能完成初始化，稍后重新执行四节点物理写资格检查通过。该记录覆盖整机维护后的冷启动。[维护后核对](/Users/kong/.opentradingcore/t554-order-a-stall-20261121-LSxSMI/readonly-join/colima-maintenance-after.json) · [首次物理观察](/Users/kong/.opentradingcore/mac-demo-20261121-174139/physical-runtime-h515it8_/proof.json) · [恢复后的物理检查](/Users/kong/.opentradingcore/mac-demo-20261121-174139/physical-runtime-fwkvu45o/proof.json)
+
 ## 异步模式在计划每秒 1,000 笔时的失效表现
 
 原 Mac 保持 10 个后台 Robot、4 租户 × 4 个品种，用 16 条原生 TCP 会话定速 60 秒。每会话最多允许 16 个下单 RPC 同时在途。计划送入 60,000 笔，实际发出 36,192 笔，23,808 个计划发送时点因客户端并发上限等原因跳过。36,192 笔均收到 RPC 回包，回包 P99 为 1,009 ms。**窗内只有 350 笔收到最终成交，合 5.83 笔／秒**。在客户端后续有界观察期内，取得最终回执的样本仍为 350 笔，这部分样本的 P99 为 44,019 ms。全部请求的最终成交 P99 无法从不完整回执计算。256 分区控制视图保持稳定。四个投票容器的 CPU 配额限流次数增量均为零。[原生 TCP 千笔报告](/Users/kong/.opentradingcore/mac-demo-20261121-171543/distributed-execution-capacity-f973d31a.json)
