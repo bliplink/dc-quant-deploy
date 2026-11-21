@@ -500,8 +500,14 @@ def main():
     automatic_common = verified_common_release(images)
     if automatic_common:
         seal = Path(images["common_fault_result"]) / "verification.seal.json"
-        if json.loads(seal.read_text()).get("protected_partition_recovery") is not True:
+        verified = json.loads(seal.read_text())
+        if verified.get("protected_partition_recovery") is not True:
             raise RuntimeError("Fresh protected deployment requires the verified partition-level Home recovery")
+        overlap = verified.get("read_only_rejoin_physical_evidence", {})
+        for name in ("admitted-return-manifest.txt", "final-manifest.txt", "return-a.log"):
+            proof = seal.parent / "process-evidence-interrupted" / name
+            if not proof.is_file() or hashlib.sha256(proof.read_bytes()).hexdigest() != overlap.get(name):
+                raise RuntimeError("Fresh protected deployment requires the verified read-only return")
     if automatic_common and not re.fullmatch(r"mac-demo-[0-9]{8}-[0-9]{6}", generation):
         raise ValueError("Protected deployment requires a new timestamped Mac Demo generation")
     client_ack_policy = selected_client_ack_policy(images, os.environ.get("MAC_DEMO_CLIENT_ACK_POLICY", "STRICT_QUORUM"))
