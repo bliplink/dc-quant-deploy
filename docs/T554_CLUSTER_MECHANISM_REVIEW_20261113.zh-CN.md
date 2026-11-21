@@ -4,6 +4,14 @@
 
 学习接入与排障可先阅读[新服务接入Common与集群排障指南](/Users/kong/dc-quant-deploy/docs/COMMON_NEW_SERVICE_AND_TROUBLESHOOTING_20261116.zh-CN.md)。
 
+## 异步模式在计划每秒 1,000 笔时的失效表现
+
+原 Mac 保持 10 个后台 Robot、4 租户 × 4 个品种，用 16 条原生 TCP 会话定速 60 秒。每会话最多允许 16 个下单 RPC 同时在途。计划送入 60,000 笔，实际发出 36,192 笔，23,808 个计划发送时点因客户端并发上限等原因跳过。36,192 笔均收到 RPC 回包，回包 P99 为 1,009 ms。**窗内只有 350 笔收到最终成交，合 5.83 笔／秒**。在客户端后续有界观察期内，取得最终回执的样本仍为 350 笔，这部分样本的 P99 为 44,019 ms。全部请求的最终成交 P99 无法从不完整回执计算。256 分区控制视图保持稳定。四个投票容器的 CPU 配额限流次数增量均为零。[原生 TCP 千笔报告](/Users/kong/.opentradingcore/mac-demo-20261121-171543/distributed-execution-capacity-f973d31a.json)
+
+压测末期的逐流 SQL 快照合计有 25,886 笔订单处于 Suspended、10,303 笔为 Filled、3 笔为 New；各流的采集时刻不同。Order 的 Filled 状态还需经 Trade 资金结算及 Order 最终回执。首次全品种事后核查仍有请求待处理，随后在 17:39 的独立复核中，全部 36,192 个实发请求均能计入订单终态，测试队列无待结算，财务游标通过。测试结束时驱动按现有流程撤销自己的剩余挂单；被撤的订单不能改计为成交。验收仍然失败。[首次核对](/Users/kong/.opentradingcore/t554-order-a-stall-20261121-LSxSMI/readonly-join/compact-async-multi1000-consistency.json) · [后续终态与财务核对](/Users/kong/.opentradingcore/t554-order-a-stall-20261121-LSxSMI/readonly-join/compact-async-multi1000-consistency-followup.json)
+
+积压消化期间采到的四个进程栈中，Order、Trade 均出现 WAL 强制落盘，多个线程同时在持久化本地提交边界或同步目录。一次栈采样只能定位候选热点。现有单笔路径逐命令落 WAL 并持久化已签名的本地提交边界；当前有序结算 RPC 合并了跨服务发送，底层单笔强制落盘次数仍需通过真实物理批提交降低。保留本机落盘确认、严格模式备机物理 ACK、Epoch 和 Fencing，成交逐笔保留原始身份与去重。[Order 进程栈](/Users/kong/.opentradingcore/t554-order-a-stall-20261121-LSxSMI/readonly-join/order-a-1000-drain-threads.txt) · [Trade 进程栈](/Users/kong/.opentradingcore/t554-order-a-stall-20261121-LSxSMI/readonly-join/trade-a-1000-drain-threads.txt)
+
 ## 精简日志后的同负载对照
 
 原 Mac 顺序部署 Order `0eb59c0`、Trade `dd4d230`，Common 保持 `f90d8f3`。四个投票节点的物理运行检查、Order-only、资金成交、公开成交与财务游标通过。10 个 Robot 连续 5 分钟发出 3,734 次报价、1,200 次 Tape 请求，所有窗内 Tape 请求都匹配到成交。[物理运行证据](/Users/kong/.opentradingcore/mac-demo-20261121-171543/physical-runtime-pd_0tfbm/proof.json) · [五分钟 Robot 实测](/Users/kong/.opentradingcore/mac-demo-20261121-171543/robot-steady-10-092726.json)
