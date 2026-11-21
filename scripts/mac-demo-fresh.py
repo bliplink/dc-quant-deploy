@@ -381,7 +381,7 @@ def rotate_recovery_rsa_keys(configuration_root):
 def provision_control_identities(out):
     keys = {name: secrets.token_hex(32) for name in
             ("bootstrap", "order", "trade", "order-reader", "trade-reader")}
-    with (out / "install-control.properties").open("x", opener=lambda path, flags: os.open(path, flags, 0o600)) as f:
+    with open(out / "install-control.properties", "x", opener=lambda path, flags: os.open(path, flags, 0o600)) as f:
         f.writelines(f"{key}={value}\n" for key, value in keys.items())
     return keys
 
@@ -393,6 +393,7 @@ def bind_witness_origins(output, roots):
     for kind, origin in rows:
         file = roots[kind] / "witness.properties"
         file.write_text(update_properties(file.read_text(), {"zk.manifestCreationZxid": origin}))
+    return {kind: int(origin) for kind, origin in rows}
 
 
 def configure_common_witness(config_root, kind, namespace, zk_port, reader_secret=None):
@@ -969,7 +970,16 @@ def main():
         if automatic_common:
             installed = tool(installer, f"127.0.0.1:{zk_port}", namespace, "/run/t554-install.properties",
                              *manifests, provision=True)
-            bind_witness_origins(installed.stdout, witness_roots)
+            origins = bind_witness_origins(installed.stdout, witness_roots)
+            (out / "protected-control-installation.json").write_text(json.dumps({
+                "namespace": namespace, "common_sha256": images["common_sha256"],
+                "installer_sha256": hashlib.sha256((tools / (installer + ".class")).read_bytes()).hexdigest(),
+                "manifest_creation_zxid": origins,
+                "verified_denied_writers": ["anonymous", "read_only_witness", "other_service"],
+                "initial_manifest_sha256": {kind: hashlib.sha256(
+                    (tools / "manifests" / f"{kind}-e1-recovering.manifest").read_bytes()).hexdigest()
+                    for kind in SERVICES},
+            }, indent=2, sort_keys=True) + "\n")
         else:
             tool(installer, f"127.0.0.1:{zk_port}", *manifests)
         birth = start_phase("birth")

@@ -10,6 +10,28 @@ ROOT = Path(__file__).resolve().parents[1]
 QUALIFY = runpy.run_path(str(ROOT / 'scripts/qualify-mac-common-candidate.py'))
 
 
+class ProtectedInstallEvidenceTest(unittest.TestCase):
+    def test_each_witness_receives_only_its_own_observed_creation_identity(self):
+        fresh = runpy.run_path(str(ROOT / "scripts/mac-demo-fresh.py"))
+        with tempfile.TemporaryDirectory() as folder:
+            root = Path(folder)
+            keys = fresh["provision_control_identities"](root)
+            self.assertEqual(5, len(set(keys.values())))
+            self.assertEqual(0o600, (root / "install-control.properties").stat().st_mode & 0o777)
+            roots = {kind: root / kind for kind in ("order", "trade")}
+            for kind, path in roots.items():
+                path.mkdir()
+                (path / "witness.properties").write_text("zk.username=t554-" + kind + "-reader\n")
+            out = "T554_PROTECTED_COMMON_ORIGIN order 72\nT554_PROTECTED_COMMON_ORIGIN trade 83\n"
+            self.assertEqual({"order": 72, "trade": 83}, fresh["bind_witness_origins"](out, roots))
+            for kind, origin in (("order", 72), ("trade", 83)):
+                self.assertEqual("zk.username=t554-" + kind + "-reader\nzk.manifestCreationZxid="
+                                 + str(origin) + "\n", (roots[kind] / "witness.properties").read_text())
+            for bad in (out.replace("trade", "order"), out.replace(" 72", " 0"), out + out):
+                with self.subTest(bad=bad), self.assertRaises(RuntimeError):
+                    fresh["bind_witness_origins"](bad, roots)
+
+
 class QualificationResultTest(unittest.TestCase):
     def parse(self, text, safety=False):
         with tempfile.TemporaryDirectory() as directory:
