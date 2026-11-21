@@ -1,6 +1,6 @@
 # 新服务接入 Common 与集群排障指南
 
-更新日期：2026年11月16日。适用于当前 OpenTradingCore 的 Common A/B 自动接管、追平和 Home 自动回主实现。
+更新于 2026 年 11 月 21 日。适用于当前 OpenTradingCore 的 Common A/B 自动接管、追平和 Home 自动回主实现。
 
 新服务接入的核心是：**你实现业务状态机，把准备好的状态变化交给 Common 持久化；Common 确认后，你才更新业务状态并返回成功。** Common 负责选主、隔离、WAL、复制、提交水位及恢复，新服务负责业务规则、幂等和业务数据对账。
 
@@ -308,3 +308,9 @@ bash mac-colima-saas.sh fresh-verified <已通过候选目录> <对应完整资�
 7. [当前集群机制及性能审阅](/Users/kong/dc-quant-deploy/docs/T554_CLUSTER_MECHANISM_REVIEW_20261113.zh-CN.md)
 8. [Common业务边界约束](/Users/kong/dc-quant-deploy/docs/ARCHITECTURE_SIMPLE_COMMON_BOUNDARY_20261029.zh-CN.md)
 9. [A/B自动回主架构](/Users/kong/dc-quant-deploy/docs/COMMON_AB_HOME_PRIMARY_AUTO_FAILBACK_ARCHITECTURE_20261031.zh-CN.md)
+
+### 新 Demo 的控制写入身份和分区核查
+
+新的 T554 部署为每个服务分别生成控制写入身份。Order 通过 `order.common.control.zkUser`、`order.common.control.zkPassword` 读取，Trade 使用对应的 `trade.common.control.*`。每个业务节点只挂载自己的配置。新服务可以采用相同注入方式，将 `OTC_PROTECTED_CONTROL_NAMESPACE` 设为该服务实际的 ZooKeeper 根路径，使新建的临时租约和持久控制节点沿用该服务的写入权限。见证进程读取自己的只读凭据和 `zk.manifestCreationZxid`。部署器从新建清单的实际创建事务号填入该值。请勿将密码、私钥或整份配置复制到工单或日志。
+
+排障时先读取受影响分区及另一条待接管分区的 Epoch、角色和状态。在 `NPC2` 清单中，核对清单和 `manifest/partition-revisions` 的最近修改事务号是否一致，保留对应分区原始签名阶段文件及两侧回执。出现 `NoAuth` 时，分别核实服务名、命名空间、配置文件挂载与当前部署身份。若只有某个分区持续等待物理安装，记录其它原主已宕机分区能否取得新的真实业务回执；回执中的 `quorumDurable` 和 `rpoRisk` 区分双副本确认与单副本确认。[分区演练与结果](T554_CLUSTER_MECHANISM_REVIEW_20261113.zh-CN.md)

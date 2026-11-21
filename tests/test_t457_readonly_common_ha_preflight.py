@@ -48,6 +48,14 @@ class CertifiedHaPreflightTests(unittest.TestCase):
         self.assertEqual(summary["partitions"], 256)
         self.assertEqual(summary["policies"], {"STRICT_QUORUM": 256})
 
+    def test_indexed_manifest_requires_both_generation_and_incarnation(self):
+        text = self.fixture().replace("NPC1|2", "NPC2|5|17")
+        self.assertEqual(5, ha.manifest_generation(text))
+        self.assertEqual(256, len(ha.parse_manifest(text)))
+        for header in ("NPC2|5", "NPC2|5|00", "NPC1|5|17", "NPC2|5|17\nNPC1|5", "NPC3|5"):
+            with self.subTest(header=header), self.assertRaises(ha.ProbeError):
+                ha.parse_manifest(text.replace("NPC2|5|17", header))
+
     def test_incomplete_manifest_rejected(self):
         with self.assertRaises(ha.ProbeError):
             ha.parse_manifest(self.fixture(drop=60))

@@ -20,7 +20,7 @@ sys.path.insert(0, str(HERE.parent / "tests"))
 FRESH = runpy.run_path(str(HERE / "mac-demo-fresh.py"))
 PRODUCT = runpy.run_path(str(HERE.parent / "tests/test-custom-product-live-e2e.py"))
 MEASURE = runpy.run_path(str(HERE / "measure-mac-demo-robot.py"))
-from t457_readonly_common_ha_preflight import parse_manifest  # noqa: E402
+from t457_readonly_common_ha_preflight import manifest_generation, parse_manifest  # noqa: E402
 from check_trial_robot_trade_e2_readonly import query_counts  # noqa: E402
 
 
@@ -111,10 +111,7 @@ def require_strict_demo(root, check_space=True):
             ["docker", "exec", "-i", "dc-saas-zookeeper", "zkCli.sh", "-server", f"127.0.0.1:{port}"],
             input=command, capture_output=True, text=True, check=True, timeout=30)
         manifest = parse_manifest(transcript.stdout)
-        serials = re.findall(r"^NPC1\|([1-9][0-9]*)$", transcript.stdout, re.M)
-        if len(serials) != 1:
-            raise RuntimeError("Expected one actual Common manifest generation")
-        generations[service] = int(serials[0])
+        generations[service] = manifest_generation(transcript.stdout)
         if len(manifest) != 256 or any(row["state"] != "READY" or row["policy"] != "STRICT_QUORUM"
                                        for row in manifest.values()):
             raise RuntimeError(f"Expected all {service} partitions to be strict before increasing load")

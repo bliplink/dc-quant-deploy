@@ -57,6 +57,7 @@ class CompleteReleaseCheckTest(unittest.TestCase):
                      production_go=False, stages=[], cold={}, live_local={},
                      physical_seal_sha256=QUALIFY['sha'](results / 'verification.seal.json'))
         names = ['compile-fixtures', 'compile-runner', 'safety', 'large-genesis-96m', 'historical-prefix']
+        names.extend(name for name, _, _ in QUALIFY['PARTITION_ISOLATION'])
         names.extend(name for name, _ in QUALIFY['COLD'] + QUALIFY['LIVE_LOCAL'])
         for name in names:
             log = work / (name + '.log')
@@ -67,6 +68,21 @@ class CompleteReleaseCheckTest(unittest.TestCase):
             log.write_text(text)
             state['stages'].append(dict(name=name, log=str(log), exit_code=0,
                                         finished_at='unit-test-finished', log_sha256=QUALIFY['sha'](log)))
+        strict = work / 'strict-partition-isolation-evidence-live-poison/held-signed-stage'
+        for side in ('A', 'B'):
+            wal = strict / ('data-' + side.lower()) / 'DemoSvr' / ('DemoSvr' + side) / 'P001/epoch-4/business.wal'
+            wal.parent.mkdir(parents=True)
+            wal.write_bytes(b'unit')
+        (strict / 'held-stage-physical-proof.txt').write_text(
+            'held=P000 epoch=3 ready=false\nhome=P001 epoch=4 quorumAck=true\nequalWalBytes=4\nsha256='
+            + QUALIFY['sha'](wal) + '\n')
+        local = work / 'retained-partition-isolation-evidence'
+        local.mkdir()
+        (local / 'probe-later-takeover').write_text('P094')
+        for marker, partition in [('independent-local-risk-ack', 'P094'), ('retained-162-local-risk-ack', 'P162')]:
+            (local / marker).write_text('partition=' + partition + '\nepoch=3\nsequence=1\nquorumDurable=false\nrpoRisk=true\n')
+        state['partition_isolation'] = {name: QUALIFY['isolation_result'](work, name)
+                                        for name, _, _ in QUALIFY['PARTITION_ISOLATION']}
         state['safety'] = QUALIFY['checked_result'](work / 'safety.log', True)
         for group, cases in [('cold', QUALIFY['COLD']), ('live_local', QUALIFY['LIVE_LOCAL'])]:
             state[group] = {name: QUALIFY['checked_result'](work / (name + '.log')) for name, _ in cases}
@@ -74,12 +90,17 @@ class CompleteReleaseCheckTest(unittest.TestCase):
         return candidate, results, state
 
     def test_complete_record_is_required_and_old_partial_or_changed_artifacts_fail_closed(self):
-        for change in ('none', 'running', 'missing-live', 'missing-stage', 'duplicate-stage',
+        for change in ('none', 'running', 'missing-physical-local', 'different-replica-wal', 'missing-live', 'missing-stage', 'duplicate-stage',
                        'log-changed', 'jar-changed', 'seal-changed', 'safety-too-small'):
             with self.subTest(change=change), tempfile.TemporaryDirectory() as temporary:
                 candidate, results, state = self.fixture(Path(temporary))
                 work = candidate / 'qualification'
                 if change == 'running': state['status'] = 'RUNNING'
+                elif change == 'missing-physical-local':
+                    (work / 'retained-partition-isolation-evidence/independent-local-risk-ack').write_text('pending')
+                elif change == 'different-replica-wal':
+                    (work / 'strict-partition-isolation-evidence-live-poison/held-signed-stage/data-b/DemoSvr/'
+                     'DemoSvrB/P001/epoch-4/business.wal').write_bytes(b'fake')
                 elif change == 'missing-live': state['live_local'].pop(QUALIFY['LIVE_LOCAL'][0][0])
                 elif change == 'missing-stage': state['stages'].pop()
                 elif change == 'duplicate-stage': state['stages'].append(state['stages'][0])

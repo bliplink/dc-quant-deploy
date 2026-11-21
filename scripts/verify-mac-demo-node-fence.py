@@ -74,10 +74,7 @@ def exercise(root, kind, slot, timeout):
 
     def census():
         value = query("get " + namespace + "/manifest")
-        generations = re.findall(r"^NPC1\|([1-9][0-9]*)$", value, re.M)
-        if len(generations) != 1:
-            raise RuntimeError("Expected one exact Common manifest generation")
-        return int(generations[0]), ROLL["parse_manifest"](value)
+        return ROLL["manifest_generation"](value), ROLL["parse_manifest"](value)
 
     def lease(member):
         path = namespace + "/leases/" + member

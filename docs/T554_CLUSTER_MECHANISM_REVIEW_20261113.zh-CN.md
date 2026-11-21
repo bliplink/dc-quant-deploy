@@ -1,6 +1,6 @@
 # OpenTradingCore 当前集群机制审阅
 
-**截至 2026-11-21，原 Mac 异步 Order A 接管演练失败。已用现场文件复现并修复 P162 的恢复阻塞，该修复已通过 Common 完整回归。分区独立恢复仍在验证。严格与异步性能均未达标。**
+**截至 2026-11-21，原 Mac 异步 Order A 接管演练失败。已用现场文件复现并修复 P162 的恢复阻塞，该修复已通过 Common 完整回归。分区独立恢复已通过严格双副本和整节点故障的两项定向演练。含新命名空间权限的最终构件正在跑完整回归。严格与异步性能均未达标。**
 
 学习接入与排障可先阅读[新服务接入Common与集群排障指南](/Users/kong/dc-quant-deploy/docs/COMMON_NEW_SERVICE_AND_TROUBLESHOOTING_20261116.zh-CN.md)。
 
@@ -15,6 +15,12 @@
 在 256 分区、两个独立 JVM 和真实 TCP 复制上，故意让 P000 的 E3 恢复持续失败。P001 在此期间独立切换到 B、再回到 A 的 E4 严格主节点，一笔新写入取得双副本 ACK。两侧 E4 WAL 均为 31 字节，SHA256 同为 `2d953a09b8c83191b5a978f8ce6f7c88d6f46988d455b9f2ad4dbab10c34e833`。解除故障后 P000 也自动回到 E4 严格模式。该次定向测试共执行 45 项，全部通过。同批控制机制的安全用例执行 316 项，3 项依赖外部历史材料的用例跳过。整节点失联时的单副本路径另行验证。[严格模式物理证据](/Users/kong/.opentradingcore/t554-order-a-stall-20261121-LSxSMI/physical-strict-index-live-poison/held-signed-stage/held-stage-physical-proof.txt) · [安全用例日志](/Users/kong/.opentradingcore/t554-order-a-stall-20261121-LSxSMI/strict-index-safety.log)
 
 只读核查发现，原 Mac 的 Order、Trade 清单与 Order 父目录均授予匿名客户端全部 ZooKeeper 权限。受保护的独立测试拒绝匿名写入和开放权限命名空间。已获准仅在下一次全新部署的新 Demo 命名空间配置受认证的控制写入身份。原业务环境维持原权限，两个等待中的业务部署任务已撤下。当前性能结论沿用下面的原生 TCP 实测。
+
+整节点演练中，终止原 A 后，让原 B 的 P162 在 E3 重放时持续失败。P127 原属 A，随后由 B 独立接管并完成一笔写入。解除故障后，同一个 B 进程又在 P162 完成一笔。两份真实回执均为 E3、sequence 1、quorumDurable=false、rpoRisk=true。该场景验证了单副本写入可用性。它的 218.4 秒包含建站、注入和清理，不能用作接管时延。[P127 回执](/Users/kong/.opentradingcore/t554-order-a-stall-20261121-LSxSMI/retained-physical-3/independent-local-risk-ack) · [P162 回执](/Users/kong/.opentradingcore/t554-order-a-stall-20261121-LSxSMI/retained-physical-3/retained-162-local-risk-ack)
+
+新部署为 Order、Trade 分别生成写入身份，为见证进程下发只读身份及本次清单的创建事务号。独立 ZooKeeper 演练使用真实的 E1 清单，两个服务各有 256 个 RECOVERING 分区。安装器验证匿名、只读见证和跨服务写入均被拒绝，重复部署同一名称也被拒绝。新服务子节点沿用经核验的父节点权限，包括临时租约。原 Mac 现有业务命名空间仍沿用原来的权限。[安装器独立演练](/Users/kong/.opentradingcore/t554-order-a-stall-20261121-LSxSMI/provision-check/verify.log) · [临时租约回归](/Users/kong/.opentradingcore/t554-order-a-stall-20261121-LSxSMI/v2-scoped-child.log)
+
+包含新租约权限的冻结构件为 Common `e962efa`，SHA256 为 `46664d1696927344613ce10f487cbf1cb11f2ea1b5e1ac84d1e01bfdc107113c`。此构件正在完成全量故障验证。当前 Mac 业务接管和两种模式的性能验收均未通过。[该构件验收记录](/Users/kong/.opentradingcore/t554-common-candidates/20261121-partition-independent-v2/qualification/state.json)
 
 ## 2026-11-21 原 Mac 的 Order A 接管失败与单队列延迟
 

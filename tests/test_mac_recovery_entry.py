@@ -16,14 +16,15 @@ class RecoveryEntryTest(unittest.TestCase):
             calls = root / 'calls.jsonl'
             config = root / 'ssh.config'
             config.write_text('fixture\n')
-            for name, body in {'uname': 'echo Darwin', 'ssh': 'exit 0', 'curl': 'exit 0'}.items():
+            for name, body in {'uname': 'echo Darwin', 'ssh': 'exit 0', 'curl': 'exit 0',
+                               'docker': 'echo sha256:fixture'}.items():
                 command = root / name
                 command.write_text('#!/bin/sh\n' + body + '\n')
                 command.chmod(0o700)
             python = root / 'python3'
             python.write_text('#!/usr/bin/env python3-real\nimport json,os,sys\n'
                               'with open(os.environ["ENTRY_CALLS"],"a") as f:f.write(json.dumps(sys.argv[1:])+"\\n")\n'
-                              'sys.exit(23 if os.environ.get("ENTRY_FAIL_FIRST")=="yes" else 0)\n')
+                              'sys.exit(23 if os.environ.get("ENTRY_FAIL_FIRST")=="yes" and sys.argv[1].endswith("async-rpo.py") else 0)\n')
             # Use the current interpreter directly in the stub, avoiding recursive PATH lookup.
             import sys
             python.write_text(python.read_text().replace('/usr/bin/env python3-real', sys.executable))
@@ -36,17 +37,28 @@ class RecoveryEntryTest(unittest.TestCase):
             observed = [json.loads(line) for line in calls.read_text().splitlines()] if calls.exists() else []
             return result, observed
 
-    def test_async_entry_runs_both_real_cases_in_order_and_preserves_the_path(self):
-        path = '/tmp/fixture generation'
-        result, calls = self.entry(['verify-async-recovery', path])
+    def test_async_entry_runs_all_real_cases_in_order_and_preserves_the_path(self):
+        with tempfile.TemporaryDirectory(prefix='fixture generation ') as folder:
+            generation = Path(folder) / 'mac-demo-20261115-183021'
+            generation.mkdir()
+            path = str(generation)
+            result, calls = self.entry(['verify-async-recovery', path])
         self.assertEqual(0, result.returncode, result.stderr)
-        self.assertEqual([[str(REPO / 'scripts' / script), path] for script in (
-            'verify-mac-demo-async-rpo.py', 'verify-mac-demo-async-reservation-loss.py')], calls)
+        tools = calls[0][1]
+        self.assertEqual(Path(path), Path(tools).parent)
+        self.assertEqual([str(REPO / 'scripts/build-mac-demo-rpo-fault-tools.py'), tools,
+                          '--linux-image', 'sha256:fixture'], calls[0])
+        recovery = [str(REPO / 'scripts/verify-mac-demo-async-reservation-loss.py'), path, '--tools', tools]
+        self.assertEqual([[str(REPO / 'scripts/verify-mac-demo-async-rpo.py'), path, '--tools', tools],
+                          recovery, recovery + ['--after-loss', 'match']], calls[1:])
 
     def test_failed_first_async_case_prevents_a_second_fault(self):
-        result, calls = self.entry(['verify-async-recovery', '/tmp/fixture'], fail_first=True)
+        with tempfile.TemporaryDirectory() as folder:
+            generation = Path(folder) / 'mac-demo-20261115-183021'
+            generation.mkdir()
+            result, calls = self.entry(['verify-async-recovery', str(generation)], fail_first=True)
         self.assertEqual(23, result.returncode)
-        self.assertEqual(1, len(calls))
+        self.assertEqual(2, len(calls))
 
     def test_native_entry_passes_exact_transport_and_load_parameters(self):
         arguments = ['/tmp/fixture generation', '--transport', 'tcp', '--rate', '15', '--seconds', '60']

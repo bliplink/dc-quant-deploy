@@ -113,7 +113,7 @@ if [[ "${MAC_DEMO_COMMON_PARALLEL_P0_JVMS:-false}" == true ]]; then
   native_pid=$!
   "$JAVA_HOME/bin/java" "-Djava.io.tmpdir=$out/tmp/home" -Dcommon.node.control.debug=true \
     "-Dt554.fixture.evidence.directory=$out/process-evidence" \
-    -Dt554.verify.third.crash=true -Dt554.verify.repeated.return=true \
+    -Dt554.verify.protected.manifest=true -Dt554.verify.third.crash=true -Dt554.verify.repeated.return=true \
     "-Dt554.verify.interrupted.return=${MAC_DEMO_REQUIRE_INTERRUPTED_RETURN:-false}" \
     -cp "$classpath" VerifyCommonFailover home > "$out/home-faults.log" 2>&1 &
   home_pid=$!
@@ -138,7 +138,7 @@ PY
 else
 "$JAVA_HOME/bin/java" "-Djava.io.tmpdir=$out/tmp" -Dcommon.node.control.debug=true \
   "-Dt554.fixture.evidence.directory=$out/process-evidence" \
-  -Dt554.verify.third.crash=true -Dt554.verify.repeated.return=true \
+  -Dt554.verify.protected.manifest=true -Dt554.verify.third.crash=true -Dt554.verify.repeated.return=true \
   "-Dt554.verify.interrupted.return=${MAC_DEMO_REQUIRE_INTERRUPTED_RETURN:-false}" \
   -cp "$classpath" VerifyCommonFailover 2>&1 | tee "$out/failover.log"
 fi

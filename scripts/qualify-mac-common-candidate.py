@@ -34,6 +34,13 @@ LIVE_LOCAL = (
     ('live-local-private-tail', 'poisonedLocalOwnerExcludesItsUnpublishedTailWithoutRestartOrPeer'),
 )
 
+PARTITION_ISOLATION = (
+    ('strict-partition-isolation', 'CommonCertifiedLivePoisonRecoveryTest',
+     'signedRecoveringPartitionCannotBlockAnotherPhysicalTakeoverAndReturn'),
+    ('retained-partition-isolation', 'CommonCertifiedFirstReadyE2AutomaticRecoveryTest',
+     'heldRetainedOwnerDoesNotBlockAnotherTakeoverAfterPrimaryDies'),
+)
+
 
 def sha(path):
     return hashlib.sha256(path.read_bytes()).hexdigest()
@@ -73,6 +80,7 @@ def require_complete_qualification(candidate, results):
         raise ValueError('Complete exact-JAR Common qualification is required before business build')
     required = {'compile-fixtures', 'compile-runner', 'safety', 'large-genesis-96m', 'historical-prefix'}
     required.update(name for name, _ in COLD + LIVE_LOCAL)
+    required.update(name for name, _, _ in PARTITION_ISOLATION)
     stages = state.get('stages', [])
     names = [row.get('name') for row in stages]
     if len(names) != len(set(names)) or not required.issubset(names):
@@ -94,7 +102,44 @@ def require_complete_qualification(candidate, results):
         for name, _ in cases:
             if state.get(group, {}).get(name) != checked_result(work / (name + '.log')):
                 raise ValueError('Common ' + name + ' result is incomplete')
+    for name, _, _ in PARTITION_ISOLATION:
+        if state.get('partition_isolation', {}).get(name) != isolation_result(work, name):
+            raise ValueError('Incomplete physical partition isolation evidence: ' + name)
     return state
+
+
+def isolation_result(work, name):
+    proof = checked_result(work / (name + '.log'))
+    if proof['executed'] != 1:
+        raise ValueError('Expected one independently executed partition fault')
+    if name == 'strict-partition-isolation':
+        evidence = work / (name + '-evidence-live-poison') / 'held-signed-stage'
+        marker = (evidence / 'held-stage-physical-proof.txt').read_text().splitlines()
+        wals = [evidence / ('data-' + side.lower()) / 'DemoSvr' / ('DemoSvr' + side)
+                / 'P001/epoch-4/business.wal' for side in ('A', 'B')]
+        size = wals[0].stat().st_size
+        digest = sha(wals[0])
+        if (size <= 0 or wals[1].stat().st_size != size or sha(wals[1]) != digest
+                or marker != ['held=P000 epoch=3 ready=false', 'home=P001 epoch=4 quorumAck=true',
+                              'equalWalBytes=' + str(size), 'sha256=' + digest]):
+            raise ValueError('Missing independent physical quorum commit while the other Stage is held')
+        proof['equal_wal_sha256'] = digest
+    else:
+        evidence = work / (name + '-evidence')
+        selected = (evidence / 'probe-later-takeover').read_text().strip()
+        if not re.fullmatch(r'P[0-9]{3}', selected) or int(selected[1:]) >= 128:
+            raise ValueError('Invalid original failed-owner partition in recovery proof')
+        hashes = []
+        for marker, partition in [('independent-local-risk-ack', selected), ('retained-162-local-risk-ack', 'P162')]:
+            path = evidence / marker
+            fields = path.read_text().splitlines()
+            if (len(fields) != 5 or fields[:2] != ['partition=' + partition, 'epoch=3']
+                    or not re.fullmatch('sequence=[1-9][0-9]*', fields[2])
+                    or fields[3:] != ['quorumDurable=false', 'rpoRisk=true']):
+                raise ValueError('Missing recovered physical LOCAL acknowledgement: ' + marker)
+            hashes.append(sha(path))
+        proof['local_receipts_sha256'] = hashes
+    return proof
 
 
 def stop(process):
@@ -213,6 +258,13 @@ def main():
                       'T554_LIVE_LOCAL_POISON_AUTHENTICATED_REPLAY_SAME_RUNTIME_NO_PEER_AND_EXPORT_PASS')
             if marker not in log.read_text():
                 raise ValueError('Missing live LOCAL recovery evidence: ' + name)
+            save()
+        state['partition_isolation'] = {}
+        for name, test_class, method in PARTITION_ISOLATION:
+            isolated = command[:]
+            isolated.insert(1, '-Dt554.fixture.evidence.directory=' + str(work / (name + '-evidence')))
+            phase(name, isolated + ['--method', 'com.app.common.replication.' + test_class, method])
+            state['partition_isolation'][name] = isolation_result(work, name)
             save()
         classes = (work / 'safety-tests.list').read_text().splitlines()
         state['safety'] = checked_result(phase('safety', command + ['--safety', *classes]), safety=True)

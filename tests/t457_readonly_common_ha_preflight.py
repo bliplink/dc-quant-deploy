@@ -39,10 +39,19 @@ def execute(args, input_text=None, timeout=35):
     return proc.stdout
 
 
+def manifest_generation(output):
+    headers = [line for line in output.splitlines() if line.startswith("NPC")]
+    if len(headers) == 1:
+        fields = headers[0].split("|")
+        if ((fields[0] == "NPC1" and len(fields) == 2 or fields[0] == "NPC2" and len(fields) == 3)
+                and all(re.fullmatch(r"[1-9][0-9]*", field) for field in fields[1:])):
+            return int(fields[1])
+    raise ProbeError("Expected exactly one valid Common service manifest header")
+
+
 def parse_manifest(output):
-    """Extract the actual NPC1 service manifest, not a separate ZK status line."""
-    if "NPC1|" not in output:
-        raise ProbeError("NPC1 service manifest header absent")
+    """Extract the original or indexed Common service manifest from the CLI response."""
+    manifest_generation(output)
     rows = {}
     for raw in output.splitlines():
         match = PARTITION.fullmatch(raw.strip())

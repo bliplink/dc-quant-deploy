@@ -20,7 +20,7 @@ import zlib
 
 HERE = Path(__file__).resolve().parent
 sys.path.insert(0, str(HERE.parent / "tests"))
-from t457_readonly_common_ha_preflight import common_sha, parse_manifest  # noqa: E402
+from t457_readonly_common_ha_preflight import common_sha, manifest_generation, parse_manifest  # noqa: E402
 
 FRESH = runpy.run_path(str(HERE / "mac-demo-fresh.py"))
 ROBOT_TRAFFIC = runpy.run_path(str(HERE / "mac-demo-robot-traffic.py"))
@@ -260,10 +260,7 @@ def exercise(root, generation, kind, slot, args):
 
     def manifest():
         result = zk("get " + ns + "/manifest")
-        serials = re.findall(r"^NPC1\|([1-9][0-9]*)$", result, re.M)
-        if len(serials) != 1:
-            raise RuntimeError("Expected one authenticated manifest generation")
-        return int(serials[0]), parse_manifest(result)
+        return manifest_generation(result), parse_manifest(result)
 
     def census():
         return manifest()[1]

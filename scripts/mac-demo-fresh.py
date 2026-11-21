@@ -378,7 +378,24 @@ def rotate_recovery_rsa_keys(configuration_root):
             for previous, pair in sorted(rotations.items())]
 
 
-def configure_common_witness(config_root, kind, namespace, zk_port):
+def provision_control_identities(out):
+    keys = {name: secrets.token_hex(32) for name in
+            ("bootstrap", "order", "trade", "order-reader", "trade-reader")}
+    with (out / "install-control.properties").open("x", opener=lambda path, flags: os.open(path, flags, 0o600)) as f:
+        f.writelines(f"{key}={value}\n" for key, value in keys.items())
+    return keys
+
+
+def bind_witness_origins(output, roots):
+    rows = re.findall(r"^T554_PROTECTED_COMMON_ORIGIN (order|trade) ([1-9][0-9]*)$", output, re.M)
+    if len(rows) != len(SERVICES) or set(dict(rows)) != set(SERVICES):
+        raise RuntimeError("Fresh installation did not attest both original manifests")
+    for kind, origin in rows:
+        file = roots[kind] / "witness.properties"
+        file.write_text(update_properties(file.read_text(), {"zk.manifestCreationZxid": origin}))
+
+
+def configure_common_witness(config_root, kind, namespace, zk_port, reader_secret=None):
     service = SERVICES[kind]
     runtime_key = f"{kind}.common.nodeRuntime."
     properties = [dict(line.split("=", 1) for line in
@@ -415,6 +432,8 @@ def configure_common_witness(config_root, kind, namespace, zk_port):
         "witness.publicKey": f"{HA_WITNESS}/witness.pub.der", "receipt.root": f"{HA_WITNESS}/receipts",
         "zk.hosts": f"127.0.0.1:{zk_port}", "wal.maxBytes": 8 * 1024 ** 3, "pollMillis": 250,
     }
+    if reader_secret is not None:
+        values.update({"zk.username": "t554-" + kind + "-reader", "zk.password": reader_secret})
     for slot, props in zip(SLOTS, properties):
         node = service + slot
         prefix = f"voter.{slot.lower()}."
@@ -478,6 +497,12 @@ def main():
     bootstrap = args.template / "common-bootstrap"
     images = env_pairs(args.build / "images.env")
     automatic_common = verified_common_release(images)
+    if automatic_common:
+        seal = Path(images["common_fault_result"]) / "verification.seal.json"
+        if json.loads(seal.read_text()).get("protected_partition_recovery") is not True:
+            raise RuntimeError("Fresh protected deployment requires the verified partition-level Home recovery")
+    if automatic_common and not re.fullmatch(r"mac-demo-[0-9]{8}-[0-9]{6}", generation):
+        raise ValueError("Protected deployment requires a new timestamped Mac Demo generation")
     client_ack_policy = selected_client_ack_policy(images, os.environ.get("MAC_DEMO_CLIENT_ACK_POLICY", "STRICT_QUORUM"))
     recovery_watch_ms = os.environ.get("MAC_DEMO_RECOVERY_WATCH_MS", "200")
     if not re.fullmatch(r"[0-9]{3,4}", recovery_watch_ms) or not 100 <= int(recovery_watch_ms) <= 5000:
@@ -602,6 +627,7 @@ def main():
     if not zk_port.isdigit():
         raise RuntimeError("Invalid ZooKeeper port")
     config_root = out / "common"
+    control_keys = provision_control_identities(out) if automatic_common else {}
     logging_config = {kind: configured_core_logging(read(
         "docker", "run", "--rm", "--network", "none", "--entrypoint", "cat", image_ids[kind],
         f"/srv/dc/dc/{service}/config/log4j.ini"),
@@ -616,6 +642,11 @@ def main():
             if f"/otc/{PREVIOUS}/{kind}" not in content:
                 raise RuntimeError(f"Template is missing the expected signed Common namespace: {source}")
             content = update_properties(content, common_replication_settings(kind, slot, phase))
+            if automatic_common:
+                content = update_properties(content, {
+                    f"{kind}.common.control.zkUser": "t554-" + kind,
+                    f"{kind}.common.control.zkPassword": control_keys[kind],
+                })
             if phase == "hostready" and kind == "order":
                 # Enable the certified Default execution delivery only in
                 # this disposable development generation so its real smoke
@@ -636,7 +667,7 @@ def main():
             target.with_name("log4j.ini").write_text(logging_config[kind])
     rotations = rotate_recovery_rsa_keys(out)
     (out / "recovery-rsa-rotation.json").write_text(json.dumps(rotations, indent=2) + "\n")
-    witness_roots = {kind: configure_common_witness(config_root, kind, namespace, zk_port)
+    witness_roots = {kind: configure_common_witness(config_root, kind, namespace, zk_port, control_keys[kind + "-reader"])
                      for kind in SERVICES} if automatic_common else {}
     witness_pins = {}
     for kind, root in witness_roots.items():
@@ -663,9 +694,11 @@ def main():
     tools.mkdir()
     shutil.copytree(bootstrap / "manifests", tools / "manifests")
     sources = []
-    for name in ("T530VirginZkManifestInstaller.java", "T530OriginalE1DualPhysicalGenesisSeal.java"):
+    installer = "T554ProtectedNamespaceInstaller" if automatic_common else "T530VirginZkManifestInstaller"
+    for name in (installer + ".java", "T530OriginalE1DualPhysicalGenesisSeal.java"):
         source = tools / name
-        source.write_text((bootstrap / "tools" / name).read_text().replace(PREVIOUS, generation))
+        template = (REPO / "scripts/java" if name == "T554ProtectedNamespaceInstaller.java" else bootstrap / "tools") / name
+        source.write_text(template.read_text().replace(PREVIOUS, generation))
         sources.append(str(source))
     java_home = Path(read("/usr/libexec/java_home", "-v", "1.8"))
     image_libraries = args.build / "order/image/lib"
@@ -749,6 +782,8 @@ def main():
         for entry in low_pause_gc_environment(gc_observation_environment(
                 client_ack_environment(old_node["Config"]["Env"], phase_policy))):
             flags.extend(["-e", entry])
+        if automatic_common:
+            flags.extend(["-e", f"OTC_PROTECTED_CONTROL_NAMESPACE={namespace}/{kind}"])
         flags.extend(["--label", f"otc.common.client_ack_policy={phase_policy}"])
         flags.extend(voter_runtime_mounts[kind, slot])
         for mount in old_node["Mounts"]:
@@ -878,16 +913,18 @@ def main():
         if running_support:
             run("docker", "start", *running_support, capture=True)
 
-    def tool(class_name, *arguments, native_volume=False):
+    def tool(class_name, *arguments, native_volume=False, provision=False):
         old_a = old[old_core["order", "A"]]
         public = next(m["Source"] for m in old_a["Mounts"] if m["Destination"] == "/read-only-original-rsa/public")
         flags = ["--network", "host", "-v", f"{tools}:/tools:ro", "-v",
                  f"{runtime}/control:/control:ro", "-v", f"{public}:/public:ro"]
         if native_volume:
             flags.extend(["-v", f"{generation}-born:{VOLUMES['born']}"])
-        run("docker", "run", "--rm", *flags, "--entrypoint", "java", image_refs["order"],
+        if provision:
+            flags.extend(["-v", f"{out}/install-control.properties:/run/t554-install.properties:ro"])
+        return run("docker", "run", "--rm", *flags, "--entrypoint", "java", image_refs["order"],
             "-Djava.security.auth.login.config=/control/jaas.ini", "-cp",
-            "/tools:/srv/dc/dc/OrderSvr/lib/*", class_name, *arguments)
+            "/tools:/srv/dc/dc/OrderSvr/lib/*", class_name, *arguments, capture=provision)
 
     try:
         report("Taking the old Mac Demo offline. Its containers and data remain available for rollback.")
@@ -928,8 +965,13 @@ def main():
                 f"{generation}-{key}", capture=True)
         voter_runtime_mounts = {(kind, slot): prepare_voter_runtime_storage(generation, kind, slot, image_ids[kind])
                                 for kind, slot in pairs}
-        tool("T530VirginZkManifestInstaller", f"127.0.0.1:{zk_port}",
-             "/tools/manifests/order-e1-recovering.manifest", "/tools/manifests/trade-e1-recovering.manifest")
+        manifests = [f"/tools/manifests/{kind}-e1-recovering.manifest" for kind in SERVICES]
+        if automatic_common:
+            installed = tool(installer, f"127.0.0.1:{zk_port}", namespace, "/run/t554-install.properties",
+                             *manifests, provision=True)
+            bind_witness_origins(installed.stdout, witness_roots)
+        else:
+            tool(installer, f"127.0.0.1:{zk_port}", *manifests)
         birth = start_phase("birth")
         wait_log(birth, "COMMON_FIRST_BOOT_ONLY_LOCAL_RSA_E1_VOTER_FLEET_FSYNC_PASS")
         until(lambda: all(read("docker", "inspect", "-f",

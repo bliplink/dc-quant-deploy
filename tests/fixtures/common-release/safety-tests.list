@@ -44,3 +44,4 @@ com.app.common.replication.CommonCumulativeCommitIndexTest
 com.app.common.replication.CertifiedSignedWalEvidenceVerifierTest
 com.app.common.replication.CommonCertifiedStrictCrashPrefixTest
 com.app.common.replication.CommonCertifiedE2LargeColdHistoryTest
+com.app.common.replication.CommonPartitionRecoveryIndexTest

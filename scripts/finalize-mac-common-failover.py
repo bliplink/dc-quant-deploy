@@ -397,6 +397,23 @@ def main():
             raise ValueError("Common live poison and interrupted physical voter recovery tests are incomplete")
         evidence_root = result / "process-evidence-live-poison"
         scenarios = ["single", "repeated", "successor-restart-e3", "successor-restart-e5", "owner-restart-e3"]
+        if "signedRecoveringPartitionCannotBlockAnotherPhysicalTakeoverAndReturn" in poison_source.read_text():
+            scenarios.append("held-signed-stage")
+            home = result / "process-evidence"
+            manifest = (home / "final-manifest.txt").read_text().splitlines()
+            header = re.fullmatch(r"NPC2\|([1-9][0-9]*)\|([1-9][0-9]*)", manifest[0]) if manifest else None
+            stats = dict(line.split("=", 1) for line in (home / "final-control-stats.txt").read_text().splitlines())
+            revisions = (home / "final-partition-revisions.txt").read_text().splitlines()
+            if (not header or len(manifest) != 257 or len(revisions) != 257
+                    or [row.split("|", 1)[0] for row in revisions[1:]] != [f"P{i:03d}" for i in range(256)]
+                    or len({row.split("|", 1)[0] for row in manifest[1:]}) != 256
+                    or int(header.group(1)) != int(stats["manifestVersion"]) + 1
+                    or stats["origin"] != header.group(2)
+                    or stats["publication"] != stats["indexPublication"]
+                    or int(stats["manifestVersion"]) != int(stats["indexVersion"]) + 2
+                    or revisions[0] != "PCR2|" + stats["origin"] + "|" + stats["manifestVersion"]):
+                raise ValueError("Full physical Home gate requires the protected manifest and its actual partition revisions")
+
         if "simultaneousPoisonedPartitions" in poison_source.read_text():
             scenarios.append("multiple")
         if "expiredWholeNodeExits" in poison_source.read_text():
@@ -521,6 +538,7 @@ def main():
             "fixture_revision": identity_lines[2].split("=", 1)[1],
             "transcript_sha256": hashlib.sha256(log_bytes).hexdigest(),
             "equal_wal_pairs_per_verification": 256, "equal_snapshot_pairs_per_verification": 256,
+            "protected_partition_recovery": "held-signed-stage" in poison_evidence,
             "both_directions_and_repeated_home": True, "interrupted_local_rearm": interrupted,
             "normal_dual_async": {"normal-dual-async", "normal-dual-async-primary-kill",
                                   "normal-dual-async-backup-expiry"}.issubset(poison_evidence),

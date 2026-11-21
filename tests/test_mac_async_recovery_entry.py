@@ -24,8 +24,8 @@ class AsyncRecoveryEntryTest(unittest.TestCase):
                 p.write_text(text)
                 p.chmod(0o700)
             names = ['build-mac-demo-rpo-fault-tools.py', 'verify-mac-demo-async-rpo.py',
-                     'verify-mac-demo-async-reservation-loss.py']
-            for failed in ('', *names):
+                     'verify-mac-demo-async-reservation-loss.py', 'verify-mac-demo-async-reservation-loss.py']
+            for failed in ('', *dict.fromkeys(names)):
                 with self.subTest(failed=failed):
                     calls = root / 'calls'
                     calls.write_text('')
@@ -41,8 +41,9 @@ class AsyncRecoveryEntryTest(unittest.TestCase):
                     if len(rows) > 1:
                         tools = rows[0].split()[1]
                         self.assertTrue(tools.startswith(str(generation / 'async-recovery-tools-')))
-                        for row in rows[1:]:
-                            self.assertTrue(row.endswith('--tools ' + tools))
+                        for index, row in enumerate(rows[1:], 1):
+                            suffix = ' --after-loss match' if index == 3 else ''
+                            self.assertTrue(row.endswith('--tools ' + tools + suffix))
 
 
 if __name__ == '__main__':
