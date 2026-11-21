@@ -32,6 +32,13 @@ class DistributedReceiptTest(unittest.TestCase):
             with self.subTest(rate=rate), self.assertRaises(ValueError):
                 DRIVER['validate_offered_load'](8, rate, 60)
 
+    def test_steady_thousand_schedule_spans_common_window_without_coincident_bursts(self):
+        offset = DRIVER['arrival_offset_ns']
+        phases = [offset('staggered', i, 16, 62.5) for i in range(16)]
+        self.assertEqual(list(range(0, 16000000, 1000000)), phases)
+        self.assertEqual(59999000000, phases[-1] + 3749 * 16000000)
+        self.assertTrue(all(offset('synchronized', i, 16, 62.5) == 0 for i in range(16)))
+
     def streams(self):
         streams = []
         for i, side in enumerate('AB'):

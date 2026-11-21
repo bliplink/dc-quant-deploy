@@ -47,6 +47,12 @@ def validate_offered_load(streams, rate, seconds):
             'total_offered_executions_per_second': streams * rate}
 
 
+def arrival_offset_ns(pattern, index, streams, rate):
+    # All clients retain the same 60s window. Offset only the first request
+    # within one stream period so a steady comparison keeps the same count.
+    return round(1e9 * index / (rate * streams)) if pattern == 'staggered' else 0
+
+
 def reviewed_replication_lanes(root):
     """Describe only the lane formula present in this release's verified source."""
     release = CAPACITY['FRESH']['env_pairs'](root / 'common-release.env')
@@ -234,6 +240,8 @@ def main():
     parser.add_argument('--symbols-per-tenant', type=int, help='Matching books per tenant; sessions may share a book')
     parser.add_argument('--rate-per-stream', type=float, default=1)
     parser.add_argument('--seconds', type=int, default=60)
+    parser.add_argument('--arrival-pattern', choices=('synchronized', 'staggered'), default='synchronized',
+                        help='Offer all streams together or space their requests evenly inside each period')
     parser.add_argument('--cancel-under-load', action='store_true',
                         help='Cancel one pre-existing order on the same native session/book after its first busy reply')
     parser.add_argument('--require-performance-target', action='store_true')
@@ -262,7 +270,7 @@ def main():
               'stage': 'ADMISSION',
               'scope': 'Independent funded tenants, distinct Order and Trade partitions, both A/B primaries; original live Robot background',
               'target_streams': args.streams, 'target_orders_per_second': args.streams * args.rate_per_stream,
-              'matching_queue_layout': queue_layout,
+              'matching_queue_layout': queue_layout, 'arrival_pattern': args.arrival_pattern,
               'target_seconds': args.seconds, 'streams': [], 'excluded_setup': [],
               'diagnostic_only': args.diagnostic_only,
               'native_session_admission_budget': admission_budget,
@@ -390,8 +398,11 @@ def main():
                         samples = diagnostics.enter_context(MEASURE['sample_resources'](root.name))
                         with ThreadPoolExecutor(max_workers=args.streams) as pool:
                             jobs = {}
-                            for stream, accounts, config in private:
+                            for index, (stream, accounts, config) in enumerate(private):
                                 config['start_at_epoch_ms'] = start
+                                config['arrival_offset_ns'] = arrival_offset_ns(
+                                    args.arrival_pattern, index, args.streams, args.rate_per_stream)
+                                stream['arrival_offset_ns'] = config['arrival_offset_ns']
                                 accounts[1]['order_attempted'] = True
                                 jobs[pool.submit(NATIVE['run'], work, config)] = stream
                             failures = []

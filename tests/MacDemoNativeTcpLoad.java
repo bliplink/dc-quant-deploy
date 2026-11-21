@@ -243,8 +243,11 @@ public final class MacDemoNativeTcpLoad {
             result.put("from", offeredStart.toString());
             long end = begun + TimeUnit.SECONDS.toNanos(seconds);
             int dropped = 0;
+            long arrivalOffset = config.getLongValue("arrival_offset_ns");
+            if (arrivalOffset < 0 || arrivalOffset >= 1e9 / rate)
+                throw new IllegalArgumentException("Stream phase must be inside one arrival period");
             for (int index = 0; index < planned; index++) {
-                long scheduled = begun + Math.round(index / rate * 1e9);
+                long scheduled = begun + arrivalOffset + Math.round(index / rate * 1e9);
                 while (System.nanoTime() < scheduled) LockSupport.parkNanos(scheduled - System.nanoTime());
                 if (System.nanoTime() >= end || !available.tryAcquire()) {
                     dropped++;
