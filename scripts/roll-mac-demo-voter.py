@@ -386,11 +386,17 @@ def exercise(root, generation, kind, slot, args):
                     if not active or not active["State"]["Running"]:
                         code = None if not active else active["State"]["ExitCode"]
                         raise RuntimeError(f"Replacement exited during {stage} (exit {code}); signed recovery left in place")
-                rows = census()
+                serial, rows = manifest()
             except subprocess.TimeoutExpired:
                 time.sleep(2)
                 continue
             passed = sum(predicate(partition, row) for partition, row in rows.items())
+            # Preserve the last successful read even if later polls time out or
+            # the returning voter exits. This field has no admission authority.
+            record["last_partial_observation"] = {
+                "stage": stage, "observed_at": utc_now().isoformat(), "manifest_generation": serial,
+                "matching_partitions": passed, "partitions": rows,
+            }
             if (observed_shard and "robot_partition_local" not in record
                     and predicate(observed_shard, rows[observed_shard])):
                 record["robot_partition_local"] = {
@@ -399,6 +405,7 @@ def exercise(root, generation, kind, slot, args):
                 }
                 publish("robot_partition_local")
             if passed == 256:
+                record.pop("last_partial_observation", None)
                 record[stage] = rows
                 record[stage + "_seconds"] = round(time.monotonic() - start, 3)
                 publish(stage)
