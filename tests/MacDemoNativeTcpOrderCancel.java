@@ -121,9 +121,13 @@ public final class MacDemoNativeTcpOrderCancel {
                 if (row.containsKey("cancel_received_ns"))
                     throw new IllegalStateException("NATIVE_NEW_AFTER_CANCELLED");
                 if (!row.containsKey("new_received_ns")) row.put("new_received_ns", received);
+            } else if ("Pending_Cancel".equals(status)) {
+                if (!row.containsKey("new_received_ns") || row.containsKey("cancel_received_ns"))
+                    throw new IllegalStateException("NATIVE_PENDING_CANCEL_OUT_OF_ORDER");
+                if (!row.containsKey("pending_cancel_received_ns")) row.put("pending_cancel_received_ns", received);
             } else if ("Cancelled".equals(status) || "Canceled".equals(status)) {
-                if (!row.containsKey("new_received_ns"))
-                    throw new IllegalStateException("NATIVE_CANCELLED_WITHOUT_NEW");
+                if (!row.containsKey("pending_cancel_received_ns"))
+                    throw new IllegalStateException("NATIVE_CANCELLED_WITHOUT_PENDING_CANCEL");
                 if (!row.containsKey("cancel_received_ns")) row.put("cancel_received_ns", received);
             } else if ("Rejected".equals(status) || "Filled".equals(status) || "Partially_Filled".equals(status)) {
                 throw new IllegalStateException("NATIVE_UNEXPECTED_ORDER_TERMINAL_STATE");
@@ -208,6 +212,9 @@ public final class MacDemoNativeTcpOrderCancel {
                     row.put("new_inside_window", newAt >= windowStart && newAt < end);
                     long cancelStart = System.nanoTime();cancel(id, orderId);row.put("cancel_ack_ms", ms(cancelStart));
                     long cancelledAt = awaitStatus(observation, "cancel_received_ns");
+                    long pendingAt = awaitStatus(observation, "pending_cancel_received_ns");
+                    row.put("cancel_pending_ms", between(pendingAt, cancelStart));
+                    row.put("pending_to_terminal_ms", between(cancelledAt, pendingAt));
                     row.put("cancel_terminal_ms", between(cancelledAt, cancelStart));row.put("cycle_ms", ms(start));
                     row.put("cancel_inside_window", cancelledAt >= windowStart && cancelledAt < end);
                     row.put("passed", true);
@@ -268,7 +275,14 @@ public final class MacDemoNativeTcpOrderCancel {
                 + "\"UserID\":\"u1\",\"SecurityID\":\"BTC004USDT\",\"OrdStatus\":\"New\"}");
         client.observe(event);
         if (!observation.containsKey("new_received_ns")) throw new AssertionError("New push not observed");
+        event.put("OrdStatus", "Cancelled");
+        try { client.observe(event);throw new AssertionError("Skipped Pending_Cancel accepted"); }
+        catch (IllegalStateException expected) { }
+        event.put("OrdStatus", "Pending_Cancel");client.observe(event);
         event.put("OrdStatus", "Cancelled");client.observe(event);
+        event.put("OrdStatus", "Pending_Cancel");
+        try { client.observe(event);throw new AssertionError("Late Pending_Cancel accepted"); }
+        catch (IllegalStateException expected) { }
         if (!observation.containsKey("cancel_received_ns")) throw new AssertionError("Cancelled push not observed");
         event.put("OrdStatus", "New");
         try { client.observe(event);throw new AssertionError("New after cancellation accepted"); }
@@ -287,14 +301,15 @@ public final class MacDemoNativeTcpOrderCancel {
             JSONObject update=JSON.parseObject("{\"Location\":\"TEST01\",\"UserID\":\"u1\","
                     +"\"SecurityID\":\"BTC004USDT\",\"OrdStatus\":\"New\"}");
             update.put("ClOrdID",id);update.put("OrderID",String.valueOf(100000000L+index));
-            client.observe(update);update.put("OrdStatus","Cancelled");client.observe(update);
+            client.observe(update);update.put("OrdStatus","Pending_Cancel");client.observe(update);
+            update.put("OrdStatus","Cancelled");client.observe(update);
             if(!status.containsKey("new_received_ns") ||!status.containsKey("cancel_received_ns"))
                 throw new AssertionError("Bounded client lost an actual terminal status");
             Map<String,Object> record=new LinkedHashMap<>();
             record.put("client_order_id",id);record.put("location","TEST01");record.put("user_id","u1");
             record.put("order_id",update.getString("OrderID"));record.put("passed",true);
             record.put("new_inside_window",true);record.put("cancel_inside_window",true);
-            for(String field:new String[]{"place_ack_ms","place_new_ms","cancel_ack_ms","cancel_terminal_ms","cycle_ms"})
+            for(String field:new String[]{"place_ack_ms","place_new_ms","cancel_ack_ms","cancel_pending_ms","pending_to_terminal_ms","cancel_terminal_ms","cycle_ms"})
                 record.put(field,1.0);
             retained.add(record);
         }

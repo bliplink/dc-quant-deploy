@@ -356,7 +356,7 @@ def main():
                   "state_query_retry_seconds": 0.05,
               }}
     if args.transport == "tcp":
-        report["scope"] = "Closed-loop native TCP place/New-status-push/cancel/Cancelled-status-push; SQL and balances checked after the window"
+        report["scope"] = "Closed-loop native TCP place/New-status-push/cancel/Pending_Cancel/Cancelled-status-push; SQL and balances checked after the window"
         report["latency_measurement"]["place_ack_ms"] = "Native TCP request to success response"
         report["latency_measurement"]["place_new_ms"] = "Request to authenticated native New status push"
         report["latency_measurement"]["cancel_ack_ms"] = "Native TCP cancel to success response"
@@ -478,6 +478,8 @@ def main():
                                          cycle_ms=distribution(records, "cycle_ms"))
                             if args.transport == "tcp":
                                 phase.pop("cancel_absent_ms")
+                                phase["cancel_pending_ms"] = distribution(records, "cancel_pending_ms")
+                                phase["pending_to_terminal_ms"] = distribution(records, "pending_to_terminal_ms")
                                 phase["cancel_terminal_ms"] = distribution(records, "cancel_terminal_ms")
                             # An asynchronous maker publication can follow an earlier
                             # absent query. Recheck after the clients have drained.

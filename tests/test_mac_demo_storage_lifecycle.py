@@ -39,6 +39,17 @@ class StorageLifecycleTest(unittest.TestCase):
         self.assertEqual('../../log/Trade2Svr.log',values['log4j.appender.file.File'])
         self.assertEqual(configured,CORE_LOGGING(configured,override))
 
+    def test_compact_tape_observer_disables_transport_payloads_on_both_appenders(self):
+        image = ('log4j.rootLogger=INFO,file,stdout\n'
+                 'log4j.appender.file=org.apache.log4j.FileAppender\n')
+        current = CORE_LOGGING(image, '', tape_audit=True)
+        values = dict(line.split('=',1) for line in current.splitlines() if '=' in line)
+        self.assertEqual('WARN', values['log4j.logger.com.gw.common.utils'])
+        self.assertEqual('WARN', values['log4j.logger.com.gw.common.utils.GwServerResource'])
+        self.assertEqual('DEBUG', values['log4j.logger.com.app.dc.service.publish.TapeExecution'])
+        self.assertEqual('INFO', values['log4j.logger.com.app.dc.handler.UpdateOrderHandler'])
+        self.assertEqual(current, CORE_LOGGING(current, '', tape_audit=True))
+
     def test_application_log_rotation_keeps_levels_and_file_path(self):
         original = ('log4j.rootLogger=INFO,file,stdout\n'
                     'log4j.appender.file=org.apache.log4j.DailyRollingFileAppender\n'

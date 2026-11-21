@@ -267,6 +267,9 @@ fi
   fi
   printf 'shared_revision=%s\nshared_sha256=%s\n' "$(cat "$out/shared/revision")" "$shared_sha"
   printf 'business_unit_tests=PASS\n'
+  if LC_ALL=C rg -aFq 'com.app.dc.service.publish.TapeExecution' "$out/order/target/classes/com/app/dc/service/publish/PublishOrder.class"; then
+    printf 'order_compact_tape_publication=true\n'
+  fi
   cat "$out/order.result" "$out/trade.result"
   if [[ -n "$md" ]]; then cat "$out/md.result"; fi
   if [[ -n "$projection" ]]; then cat "$out/projection/projection.env"; fi

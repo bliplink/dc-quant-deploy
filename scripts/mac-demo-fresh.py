@@ -299,7 +299,7 @@ def bounded_application_logging(content):
             "log4j.appender.file.MaxBackupIndex=5\n")
 
 
-def configured_core_logging(image_content, deployment_content):
+def configured_core_logging(image_content, deployment_content, tape_audit=False):
     # Physical voters mount config-hostready, rather than the application's
     # control/overrides directory. Carry over its explicit logger policies;
     # keep the image's file paths and the Common lifecycle messages intact.
@@ -310,13 +310,14 @@ def configured_core_logging(image_content, deployment_content):
             key, value = match.groups()
             content = re.sub(rf"^{re.escape(key)}\s*=.*(?:\n|$)", "", content, flags=re.M)
             content = content.rstrip("\n") + f"\n{key}={value}\n"
-    # Order publications use GwServerResource's runtime CGLIB subclass name,
-    # so its package (not only its bare class name) must remain observable.
-    # Trade ingress supplies the other half of the existing Robot pairing.
+    # Old Order images supply Tape evidence through the general transport.
+    # New ones emit only the observed IOC execution under a dedicated logger.
+    transport_level = 'WARN' if tape_audit else 'INFO'
     for name,level in (('com.app.dc.handler.UpdateOrderHandler','INFO'),
-                       ('com.gw.common.utils','INFO'),
-                       ('com.gw.common.utils.GwServerResource','INFO'),
-                       ('com.gw.common.utils.BaseApi','WARN')):
+                       ('com.gw.common.utils',transport_level),
+                       ('com.gw.common.utils.GwServerResource',transport_level),
+                       ('com.gw.common.utils.BaseApi','WARN'),
+                       ('com.app.dc.service.publish.TapeExecution','DEBUG' if tape_audit else 'OFF')):
         key='log4j.logger.'+name
         content=re.sub(rf"^{re.escape(key)}\s*=.*(?:\n|$)","",content,flags=re.M)
         content=content.rstrip('\n')+f'\n{key}={level}\n'
@@ -638,7 +639,8 @@ def main():
     logging_config = {kind: configured_core_logging(read(
         "docker", "run", "--rm", "--network", "none", "--entrypoint", "cat", image_ids[kind],
         f"/srv/dc/dc/{service}/config/log4j.ini"),
-        (runtime / "control" / "overrides" / service / "config" / "log4j.ini").read_text())
+        (runtime / "control" / "overrides" / service / "config" / "log4j.ini").read_text(),
+        tape_audit=images.get("order_compact_tape_publication") == "true")
         for kind, service in SERVICES.items()}
     for phase in ("birth", "home", "install", "stage", "hostready"):
         for kind, slot in (pairs if phase != "stage" else [(kind, "A") for kind in SERVICES]):
