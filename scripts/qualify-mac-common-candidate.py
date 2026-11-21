@@ -225,6 +225,20 @@ def main():
             raise RuntimeError(name + ' failed; original log retained')
         return log
 
+    def launch_physical():
+        nonlocal full, full_output
+        # Private fixture directories and independent ZK sessions; the same
+        # immutable JAR remains first in every parent and child classpath.
+        full_output = (work / 'full-physical.log').open('x')
+        state['physical_fixture_revision'] = env.get('MAC_DEMO_COMMON_P0_FIXTURE_REVISION', revision)
+        full = subprocess.Popen(['bash', str(REPO / 'scripts/verify-mac-common-failover.sh'),
+                                 str(candidate), expected, str(results)], cwd=REPO,
+            env=dict(env, MAC_DEMO_REQUIRE_INTERRUPTED_RETURN='true',
+                     MAC_DEMO_COMMON_P0_FIXTURE_REVISION=env.get('MAC_DEMO_COMMON_P0_FIXTURE_REVISION', revision)),
+            stdout=full_output, stderr=subprocess.STDOUT, start_new_session=True)
+        state['physical_pid'] = full.pid
+        save()
+
     def terminate(signum, frame):
         raise KeyboardInterrupt('Qualification interrupted; retain every original result')
 
@@ -253,16 +267,8 @@ def main():
             phase(name, isolated + ['--method', 'com.app.common.replication.' + test_class, method])
             state['partition_isolation'][name] = isolation_result(work, name)
             save()
-        # Private fixture directories and independent ZK sessions; the same
-        # immutable JAR remains first in every parent and child classpath.
-        full_output = (work / 'full-physical.log').open('x')
-        state['physical_fixture_revision'] = env.get('MAC_DEMO_COMMON_P0_FIXTURE_REVISION', revision)
-        full = subprocess.Popen(['bash', str(REPO / 'scripts/verify-mac-common-failover.sh'),
-                                 str(candidate), expected, str(results)], cwd=REPO,
-            env=dict(env, MAC_DEMO_REQUIRE_INTERRUPTED_RETURN='true',
-                     MAC_DEMO_COMMON_P0_FIXTURE_REVISION=env.get('MAC_DEMO_COMMON_P0_FIXTURE_REVISION', revision)),
-            stdout=full_output, stderr=subprocess.STDOUT, start_new_session=True)
-        state['physical_pid'] = full.pid
+        if env['MAC_DEMO_COMMON_PARALLEL_P0_JVMS'] == 'true':
+            launch_physical()
         state['live_local'] = {}
         for name, method in LIVE_LOCAL:
             live_command = command[:]
@@ -307,6 +313,8 @@ def main():
             save()
         state['current_stage'] = 'full-physical'
         save()
+        if full is None:
+            launch_physical()
         if full.wait(timeout=5400):
             raise RuntimeError('Independent physical failover failed; preserve its original evidence')
         seal = json.loads((results / 'verification.seal.json').read_text())
