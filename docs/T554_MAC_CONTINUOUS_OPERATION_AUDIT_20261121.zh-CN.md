@@ -67,3 +67,11 @@ Common `91f138b` 把空 WAL 和签名零水位的持久化移到 LOCAL READY 之
 下撤单证据在新实例目录的 `order-cancel-capacity-ba4e60d4.json` 与 `order-cancel-capacity-5f9163aa.json`。刷盘证据在审计目录的 `restored-strict-fsync-by-file-20261122-attribution.json`。
 
 01:19:50–01:20:52，两个业务控制清单保持第 2 代，10 个 Robot 均为 RUNNING。运行卷中业务 WAL 增加 25.7 MiB，快照目录增加 27.6 MiB，其他 Common 文件增加 11.6 MiB，MySQL binlog 增加 19.3 MiB，投影表分配增加 24.0 MiB。这是正常报价和成交下的单分钟实测，证据为 `restored-demo-storage-growth-20261122.json`。
+
+## 修复版上线
+
+02:04，Common `1a36ecf` 的最终 JAR 通过完整物理门禁。独立 Demo 的双向掉电、第三次掉电后的降级写入、再次追平与回主均通过，主备各 128 个主分区归位，256 个分区的 WAL 和快照逐一匹配。双向全量接管分别为 182.0 秒和 194.9 秒，全部回主分别为 504.6 秒和 492.4 秒。物理凭据位于 `local-ready-and-live-strict-20261122-0013/verification.seal.json`。这些耗时仍需优化。
+
+02:11，使用同一 SHA-256 的 Common JAR 在原 Mac 启动 `mac-demo-20261122-020700`。当班的上一代容器、数据库和 Common 运行卷保留回退。Order、Trade 的四个 JVM 均通过实际写入器和角色验证；Order-only 与资金模式经真实成交、IOC／FOK 撤单、行情与资金持仓核对。
+
+02:12–02:17，新的 10 个 Robot 五分钟内发出 2,700 次报价请求、完成 1,337 笔成交，资金过账差错为 0，成交发布 P99 为 47.82 毫秒。所有租户公开行情及桌面、移动端从主站进入交易页的 K 线和实时 WebSocket 通过。独立模拟账户初始 10 USDT，同一出金请求以 1 USDT 重复提交两次，最终余额为 9 USDT，认证资金流水只有一条。相关文件为 `robot-steady-10-181746.json`、`qualified-common-1a36ecf-market.json`、`qualified-common-1a36ecf-public-browser/observations.jsonl` 和 `qualified-common-1a36ecf-simulated-cash-out.json`。
