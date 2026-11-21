@@ -3807,7 +3807,7 @@
     }
   },
   "partition_independent_new_scope": {
-    "updated_at": "2026-11-21T12:02:58.034438+08:00",
+    "updated_at": "2026-11-21T12:48:46.527862+08:00",
     "scope": "Common isolated physical recovery and fresh namespace provisioner",
     "strict_held": "P000 E3 RECOVERING",
     "strict_independent": "P001 E4 quorum ACK, both physical WALs equal",
@@ -3816,7 +3816,7 @@
     "retained_after_release": "P162 E3 LOCAL same surviving process",
     "candidate_revision": "e962efac2c9030a2e277b69100fb0f59871b00ec",
     "candidate_sha256": "46664d1696927344613ce10f487cbf1cb11f2ea1b5e1ac84d1e01bfdc107113c",
-    "qualification": "NO_GO_FIRST_ATTEMPT_SAME_BINARY_REQUALIFYING",
+    "qualification": "NO_GO_PHYSICAL_COLD_REJOIN_INTERLOCK",
     "fresh_scope_acl_checks": "PASS on private ZooKeeper including anonymous, witness, cross-service, namespace reuse",
     "original_mac_business_modified": false,
     "new_business_ha_verified": false,
@@ -3856,6 +3856,15 @@
       "raw_bytes": 4004322669,
       "verified_gzip_bytes": 585658148,
       "live_volumes_modified": false
-    }
+    },
+    "business_controller": "SUPERSEDED_BEFORE_BUSINESS_MUTATION",
+    "cold_return_proof": "/Users/kong/.opentradingcore/t554-order-a-stall-20261121-LSxSMI/retry-interrupt/cold-return-blocker.json",
+    "signed_mixed_types": [
+      "P000 E3 LOCAL -> E4 STRICT rearm",
+      "P217 E4 STRICT -> E5 retained primary B"
+    ],
+    "pending_owner_decision": "Observe the signed survivor takeover before admitting the returning write lease; no substitute for physical fencing",
+    "common_partial_revision": "6d92ba7",
+    "common_partial_targeted_tests": 9
   }
 }
