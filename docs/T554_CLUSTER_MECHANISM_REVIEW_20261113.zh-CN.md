@@ -4,6 +4,17 @@
 
 学习接入与排障可先阅读[新服务接入Common与集群排障指南](/Users/kong/dc-quant-deploy/docs/COMMON_NEW_SERVICE_AND_TROUBLESHOOTING_20261116.zh-CN.md)。
 
+## 2026-11-21 原 Mac 已恢复基础交易
+
+本次顺序部署为 `mac-demo-20261121-154659`，使用本机落盘后确认、备节点异步复制策略。Order `0a574b3`、Trade `105c191` 已在实际 Spring 启动入口接入返回节点等待，同一 Common 构件 SHA256 为 `024bfb5de53987eb756e432891ec55a412685bd2c1b0249c4958beba7802af86`。Shared、Order、Trade、MD 分别执行 52、227、261、207 项测试，均通过，另有 2 项 Order 历史材料测试跳过。构建和镜像准备用时 99 秒。新的专用命名空间已核验控制权限，四个业务节点均通过物理运行检查。基础 Order-only 撮合、资金成交、Robot/Tape 和财务核对用时 118 秒。[实体运行核查](/Users/kong/.opentradingcore/mac-demo-20261121-154659/physical-runtime-sk_9h3b_/proof.json) · [财务游标](/Users/kong/.opentradingcore/mac-demo-20261121-154659/verification.q4WTPr/trade-financial-cursor.json) · [受保护的部署记录](/Users/kong/.opentradingcore/mac-demo-20261121-154659/protected-control-installation.json)
+
+下表为新环境的一条原生 TCP 会话，每个模式各持续 60 秒。每笔挂单都收到 New，每笔撤单都收到 Cancelled，随后核对资金余额、剩余挂单和 SQL 终态。命令吞吐分别计算窗口内的两种状态推送；单笔 P99 取完整样本。这是低并发功能基线。[下撤单完整结果](/Users/kong/.opentradingcore/mac-demo-20261121-154659/order-cancel-capacity-022d2520.json)
+
+| 产品模式 | 完整下撤循环 | 窗口内命令／秒 | 下单至 New P99 | 撤单至 Cancelled P99 |
+| --- | ---: | ---: | ---: | ---: |
+| Order-only | 2,074 | 69.10 | 19.097 毫秒 | 21.763 毫秒 |
+| Trade | 2,158 | 71.92 | 20.603 毫秒 | 22.341 毫秒 |
+
 ## 2026-11-21 返回节点先只读等待
 
 同一 JAR 的常规实体演练中，A 故障后的全量接管和回主分别用时 186.623 秒、507.785 秒，B 方向分别为 195.994 秒、507.889 秒。第三次强制终止后，幸存节点完成 256 分区单副本接管，返回节点再次追平并回主。17 项原生故障测试、四项进程内恢复、四项冷启动和两项分区隔离均通过。[完整资格记录](/Users/kong/.opentradingcore/t554-common-candidates/20261121-reconnect-f90d8f3/qualification/state.json) · [双向与重复回主](/Users/kong/.opentradingcore/t554-common-verifications/20261121-reconnect-f90d8f3/failover.log)
