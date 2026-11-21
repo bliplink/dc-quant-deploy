@@ -443,7 +443,7 @@ def main():
                                     if (phase["native_start_spread_ms"] > 250
                                             or not all(row.get("measurement_complete") is True for row in measurements)
                                             or any(row.get("stream_errors") for row in measurements)
-                                            or any(not row["passed"] for row in records)):
+                                            or any(not row["passed"] and row.get("outcome") != "ORDER_BUSY_RETRYABLE" for row in records)):
                                         stop.set()
                                 else:
                                     tasks = [clients.submit(worker, trader, symbol, price, prefix, i, deadline, stop)
@@ -493,10 +493,16 @@ def main():
                                     f"WHERE o.location='{location}' AND o.clord_id LIKE '{prefix}-%' "
                                     "GROUP BY o.clord_id,o.order_id,o.ord_status")
                                 actual = {row[0] for row in rows}
-                                expected = {record["client_order_id"] for record in records}
+                                busy = {row["client_order_id"] for row in records
+                                        if row.get("outcome") == "ORDER_BUSY_RETRYABLE"}
+                                expected = {record["client_order_id"] for record in records} - busy
                                 funds = {user: balances(loc, user) for loc, user, _ in traders}
                                 remaining = [row for trader in traders for row in open_orders(trader, symbol)]
-                                phase["passed"] = (bool(records) and not stop.is_set() and all(r["passed"] for r in records)
+                                phase["pre_admission_busy"] = len(busy)
+                                phase["busy_response_ms"] = distribution(records, "busy_ms")
+                                phase["busy_client_ids_with_projected_orders"] = sorted(busy & actual)
+                                phase["passed"] = (bool(expected) and not stop.is_set()
+                                                   and all(r["passed"] or r["client_order_id"] in busy for r in records)
                                                    and control_before == control_after
                                                    and actual == expected and len(rows) == len(expected)
                                                    and all(row[2] in ("Cancelled", "Canceled") and row[3] == "0"

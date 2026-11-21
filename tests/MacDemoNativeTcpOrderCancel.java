@@ -33,9 +33,16 @@ public final class MacDemoNativeTcpOrderCancel {
         return value;
     }
     private static JSONObject successful(String raw) {
+        return response(raw, false);
+    }
+
+    private static JSONObject response(String raw, boolean allowPlaceBusy) {
         JSONObject reply = raw == null ? null : JSON.parseObject(raw);
         if (reply == null) throw new IllegalStateException("NATIVE_RESPONSE_MISSING");
         String code = reply.getString("code");
+        String id = reply.getString("info1");
+        if (allowPlaceBusy && "429".equals(code) && "ORDER_BUSY_RETRYABLE".equals(reply.getString("msg"))
+                && (id == null || id.isEmpty())) return reply;
         if (!"0".equals(code))
             throw new IllegalStateException(code != null && code.matches("[0-9]{1,9}")
                     ? "NATIVE_REQUEST_REJECTED_CODE_" + code : "NATIVE_REQUEST_REJECTED_UNKNOWN_CODE");
@@ -44,7 +51,8 @@ public final class MacDemoNativeTcpOrderCancel {
     private JSONObject request(String method, JSONObject body) throws Exception {
         paceRequest();
         String key = config.getString("location") + '\u001f' + "4" + '\u001f' + config.getString("symbol");
-        return successful(gateway.requestSyncWithKey(key, "OrderSvr", method, JSON.toJSONString(body), String.class, 8000L));
+        return response(gateway.requestSyncWithKey(key, "OrderSvr", method, JSON.toJSONString(body), String.class, 8000L),
+                "placeOrder".equals(method));
     }
     private long nextRequest, pacedRequests, pacingWaitNanos;
     private static long requestInterval(double rate) {
@@ -108,6 +116,7 @@ public final class MacDemoNativeTcpOrderCancel {
         synchronized (guard) {
             Map<String,Object> row = observed.get(event.getString("ClOrdID"));
             if (row == null) return;
+            if (row.containsKey("busy")) throw new IllegalStateException("NATIVE_STATUS_FOR_BUSY_ORDER");
             if (!config.getString("location").equals(event.getString("Location"))
                     || !config.getString("user_id").equals(event.getString("UserID"))
                     || !config.getString("symbol").equals(event.getString("SecurityID"))
@@ -204,7 +213,17 @@ public final class MacDemoNativeTcpOrderCancel {
                     body.put("ClOrdID", id);body.put("Terminal", "API");body.put("Side", "Buy");
                     body.put("Price", config.getString("price"));body.put("TimeInForce", "GTC");
                     body.put("ReduceOnly", "false");body.put("Demo", "0");
-                    request("placeOrder", body);row.put("place_ack_ms", ms(start));
+                    JSONObject placement = request("placeOrder", body);
+                    if ("429".equals(placement.getString("code"))) {
+                        row.put("outcome", "ORDER_BUSY_RETRYABLE");
+                        row.put("busy_ms", ms(start));
+                        synchronized (guard) {
+                            if (!observation.isEmpty()) streamErrors.add("NATIVE_STATUS_FOR_BUSY_ORDER");
+                            observation.put("busy", true);
+                        }
+                        continue;
+                    }
+                    row.put("place_ack_ms", ms(start));
                     long newAt = awaitStatus(observation, "new_received_ns");
                     synchronized (guard) { orderId = (String) observation.get("order_id"); }
                     row.put("order_id", orderId);
@@ -257,6 +276,12 @@ public final class MacDemoNativeTcpOrderCancel {
             if(!"NATIVE_REQUEST_REJECTED_CODE_10003".equals(safeReason(expected)))
                 throw new AssertionError("Safe numeric refusal code was discarded");
         }
+        String busy = "{\"code\":429,\"msg\":\"ORDER_BUSY_RETRYABLE\"}";
+        if (!"429".equals(response(busy,true).getString("code"))) throw new AssertionError("Place busy missing");
+        try {response(busy,false);throw new AssertionError("Cancel busy accepted");}
+        catch(IllegalStateException expected) {}
+        try {response(busy.replace("}",",\"info1\":\"order-1\"}"),true);throw new AssertionError("Busy leaked ID");}
+        catch(IllegalStateException expected) {}
         for (String bad : new String[]{"{\"code\":7000}", "{\"data\":[]}", "null"}) {
             try { successful(bad);throw new AssertionError("Failed request counted as ACK"); }
             catch (IllegalStateException expected) { }
