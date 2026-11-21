@@ -34,7 +34,9 @@ git -C "$common" archive "$revision" -- pom.xml src | tar -xf - -C "$out/source"
   { find src -type f -print0; printf 'pom.xml\0'; } |
     LC_ALL=C sort -z | xargs -0 shasum -a 256
 ) > "$out/source.sha256"
-if ! (cd "$out/source"; "$maven" -o -B -Dmaven.test.skip=true \
+# Qualification resolves its runtime classpath from the local Maven cache.
+# Packaging the frozen library needs no second copy of those dependencies.
+if ! (cd "$out/source"; "$maven" -o -B -Dmaven.test.skip=true -Dmdep.skip=true \
     "-Dproject.build.outputTimestamp=$source_timestamp" package) > "$out/build.log" 2>&1; then
   printf 'Common candidate build failed: %s\n' "$out/build.log" >&2
   exit 2
