@@ -258,6 +258,14 @@ python3 tests/check_certified_trade_financial_cursor.py --help
 
 在 11 月 16 日的演练中，Order A 退出后，Order B 的业务日志持续报异步写入背压。检查时先按分区统计主节点、Epoch、策略和 READY 状态，再看 RECOVERING 分区的最近一次恢复拒绝原因。P162 是存活的 B 原本负责的分区，它在首次备份复制前已经确认了 64 帧本机数据。旧版本在读取完整空累计提交文件时要求获得一条双副本提交记录，导致这个分区停住。其他分区反复等待该分区完成。
 
+在原 Mac 上可直接读取存活节点最近一次拒绝恢复的原因。最后三个参数分别是服务、存活的 A/B 节点和分区。命令会记录容器身份、实际 JAR 哈希、前后两次分区清单和缓存中的拒绝原因，并输出本机 JSON 路径。即使观察命令正常结束，恢复和可写状态仍须单独验证。
+
+```sh
+cd /Users/kong/dc-quant-deploy
+python3 scripts/inspect-mac-demo-recovery.py \
+  /Users/kong/.opentradingcore/mac-demo-20261116-112333 order B P162
+```
+
 这个场景要分清谁还持有原始数据。原主存活时，在副本上看不到提交记录，仍应核验原主已签名的本机边界、签名退役记录和原 WAL。原主失联且备节点接管时，才适用备节点已复制水位。修复在文件副本上用新旧 JAR 对照重放，再走 Common 和业务演练。原始证据、未确认尾部、Stage 和 Epoch 均保留。完整数据和状态见[集群机制审阅](/Users/kong/dc-quant-deploy/docs/T554_CLUSTER_MECHANISM_REVIEW_20261113.zh-CN.md)。
 
 ## 七 找到问题后如何修复
