@@ -20,7 +20,7 @@
 
 - 新成交在资金结算后还可能等待投影。Y77IE2 的下单和成交已完成，Admin 查询先返回零条，订单成交投影约 11 秒后出现。LUPUCL 通过刷新看到了两侧完整成交。公开入口 A8HE21 的桌面和手机实时图均通过，低流量专项中有一端未在 45 秒内收到本笔实时 K 线。
 - 旧网页留下的个别测试订单仍在 Pending_Cancel。其中为空的订单 Demo 标识在 Trade 中曾以缺省值保存。兼容补丁 `dbc9b05` 的撤单计划和缺失预占回归共 18 项通过，仍待物理集群验证后部署。更早一轮有测试成交被 Trade 拒绝结算，原订单、冻结、签名和证据保留。当前网页发布已使新测试账户的入金、下单和成交使用一致的资金类型。
-- 完整平仓、出金及 A/B 故障自动追平尚未通过本轮验收。出金当前实现仍由旧资金写入入口处理，严格 Trade 会在修改资金前拒绝。
+- 完整平仓、出金及 A/B 故障自动追平尚未通过本轮验收。当前严格 Trade 对测试账号的 1 USDT 出金返回 1003，余额保持 10 USDT。出金候选 `0c917bf` 复用现有认证资金提交路径，Trade 全量 269 项测试通过，仍待真实主备验证与部署。
 - 最新严格模式 4 租户、16 订单簿、每秒发单 1,000 笔的窗口完成 **61.90 笔最终成交／秒**，最终回执 P99 **11.40 秒**。该窗口内受理前繁忙 54,331 笔，已受理的样本最终回执全部收齐。异步的新一轮替换已取消，以保留当前可用的原 Demo。
 - Mac 与 Colima 仍需持续留意磁盘余量。本轮只处理已核验的旧构建重复文件和已关闭日志。正在运行的服务未因本轮网页发布而重启。
 
@@ -30,4 +30,4 @@
 - 主站 `780cc69` 修复目录加载前的入口竞态，并为当前 Demo 配置有持续行情的公开租户。
 - 交易 Web `9f442c3` 包含模拟入金流水编号和资金类型修复。中英文手册随版本发布，保留旧版本静态资源用于回退。
 
-本机证据目录 `~/.opentradingcore/t554-order-a-stall-20261121-LSxSMI/readonly-join/` 中包含 `demo-public-trade-verified-after-cancel.jsonl`、`public-demo-final-market-api.json`、`public-demo-current-original-robots.json`、`browser-demo-write-history-final.log` 和 `public-demo-final-browser-signed-consistency.json`。严格性能原始数据为 `~/.opentradingcore/mac-demo-20261121-205353/distributed-execution-capacity-cc11e5d7.json`。
+本机证据目录 `~/.opentradingcore/t554-order-a-stall-20261121-LSxSMI/readonly-join/` 中包含 `demo-public-trade-verified-after-cancel.jsonl`、`public-demo-final-market-api.json`、`public-demo-current-original-robots.json`、`browser-demo-write-history-final.log`、`public-demo-final-browser-signed-consistency.json` 和 `public-demo-withdrawal-check.json`。严格性能原始数据为 `~/.opentradingcore/mac-demo-20261121-205353/distributed-execution-capacity-cc11e5d7.json`。
