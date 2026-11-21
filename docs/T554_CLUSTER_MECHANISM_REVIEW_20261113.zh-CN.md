@@ -6,6 +6,10 @@
 
 ## 2026-11-21 返回节点先只读等待
 
+**本次双重故障场景已通过。** 在 `f90d8f3` 上，返回的 A 在 P000 的 E4 已签名重建阶段再次被终止。独立见证进程暂停至旧会话过期。P130 的离线证明仍未完成时，测试确认第二次返回的 A 存活、没有写租约。原见证恢复后签出 128 份 E5 证明，同一 A 自动领租约并取得认证清单。当时 P000 仍在 E4 恢复，另有 121 个 E4 严格 READY、128 个 E5 单副本 READY、6 个 E3 单副本 READY。最终 A/B 各 128 主，全部 256 分区严格 READY，对比 256 对 WAL、256 对快照全部一致，恢复后的写入通过真实双副本确认。[实体进程验收](/Users/kong/.opentradingcore/t554-common-verifications/20261121-reconnect-f90d8f3/home-faults.log) · [入群清单](/Users/kong/.opentradingcore/t554-common-verifications/20261121-reconnect-f90d8f3/process-evidence-interrupted/admitted-return-manifest.txt) · [回主清单](/Users/kong/.opentradingcore/t554-common-verifications/20261121-reconnect-f90d8f3/process-evidence-interrupted/final-manifest.txt)
+
+按原 Mac 测试进程的文件时间，第二次返回启动至认证清单落盘为 60.086 秒，再至恢复严格写入并校验存档为 356.367 秒，合计 416.453 秒。这是整组恢复时间，不能代替单笔交易延迟。该构件还实际执行了 318 项安全检查，零失败，另有 3 项依赖外部历史材料的检查跳过。[原始时点](/Users/kong/.opentradingcore/t554-order-a-stall-20261121-LSxSMI/readonly-join/authenticated-return-live-timings.json) · [安全检查结果](/Users/kong/.opentradingcore/t554-common-candidates/20261121-reconnect-f90d8f3/qualification/safety.log)
+
 在冻结包 `c133e2b` 上，第二个返回的 A 已实际打印 `COMMON_RETURN_WAITING_WITHOUT_WRITE_LEASE`。此次演练暂停了独立见证进程，跨过 ZooKeeper 会话到期时间。恢复运行后，见证读取原清单 `/first-ready-test/manifest` 收到 `NoAuth`，无法为 B 完成离线证明。旧客户端只在构造时提交凭据，ZooKeeper 替换底层会话时丢失了身份。真实会话到期的独立回归在旧实现上复现了同一个错误。[旧客户端失败记录](/Users/kong/.opentradingcore/t554-order-a-stall-20261121-LSxSMI/readonly-join/auth-reconnect-red.log) · [物理见证日志](/Users/kong/.opentradingcore/t554-order-a-stall-20261121-LSxSMI/readonly-join/expired-witness-original/witness.log)
 
 Common `f90d8f3` 在每次建立底层连接时使用该进程原先配置的身份。26 项定向检查通过。见证更换会话后可以继续读清单，尝试写入时被 ZooKeeper 拒绝。写节点旧会话的临时租约消失，重新申请的新租约属于新会话，清单版本及创建事务号均保持原值。完整物理验收采用冻结 JAR `024bfb5de53987eb756e432891ec55a412685bd2c1b0249c4958beba7802af86`。[定向检查](/Users/kong/.opentradingcore/t554-order-a-stall-20261121-LSxSMI/readonly-join/auth-reconnect-green.log) · [完整验收运行记录](/Users/kong/.opentradingcore/t554-common-candidates/20261121-reconnect-f90d8f3/qualification/state.json)
@@ -87,6 +91,8 @@ P162 原主是存活的 B。它已经签名确认本机写入，但尚未完成�
 同一窗口的 2,400 笔撮合按 P177/E2 的原始 WAL 序号重算。每次新撮合记录写入时，已经撮合、仍等待首次结算确认的笔数中位数为 6，P99 为 105，最高为 116。在上一笔首次确认时下一笔已经排队的 2,276 对相邻确认中，两条 Order 回执编码时间的间隔平均 18.674 毫秒，中位数 11 毫秒，P99 为 163 毫秒。当前 Order 派发器按分区只允许一笔未确认结算在途，收到 Trade 签名回执并在 Order 侧提交后才释放位置。单簿要持续每秒完成 1,000 笔，繁忙时平均完成间隔需约 1 毫秒。这里的观测间隔覆盖派发、Trade 处理、回程、Order 提交与调度；各项占比需要分别计时。后续可据此验证保序批量结算是否缩短完成间隔，并核对每笔资金、回执顺序与故障重放。[逐笔队列统计](/Users/kong/.opentradingcore/t554-order-a-stall-20261121-LSxSMI/readonly-join/hotbook-first-settlement-queue.json)
 
 2,399 笔有前一笔回执可比。对每笔取“撮合记录编码”至“上一笔 Order 首次结算回执编码”的正间隔，这段等待的 P50 为 72 毫秒，P99 为 1,976 毫秒，占这批交易从撮合编码到 Trade 结算编码累计耗时的 97.62%。剩余一段从两者较晚时刻起计，至 Trade 结算编码 P50 为 5 毫秒，P99 为 108 毫秒。这个比例只适用于该窗口的这一段链路。前一笔回执编码之后还须持久化才会释放在途位置，因此此测法给出排队时间的下界。[逐笔配对统计](/Users/kong/.opentradingcore/t554-order-a-stall-20261121-LSxSMI/readonly-join/hotbook-predecessor-queue.json)
+
+在 2,276 笔有前序结算待确认的成交中，2,261 笔与待确认成交共用至少一个业务订单，2,266 笔共用至少一个租户内账户。若改变派发方式，同一订单的累计成交量以及同一账户的资金、持仓必须按原顺序更新。用多个线程将同一分区的请求任意并发会触及这些相同状态。[使用业务订单号和账户逐笔核对](/Users/kong/.opentradingcore/t554-order-a-stall-20261121-LSxSMI/readonly-join/hotbook-unconfirmed-identity-overlap.json)
 
 Order B 现场另有 4,085 个按撮合键创建的互斥对象，读取时仅有 7 条待结算。旧实现永久保留这些键；每次写入或确认成交还会复制整张该分区的待结算表。按上述 2,400 笔真实成交的 WAL 顺序复算，7,200 条撮合与回执记录触发了 2,221,040 个旧表项复制，待结算峰值为 494 条。
 
