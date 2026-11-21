@@ -458,6 +458,64 @@ def report(message):
     print(f"[mac-demo] {message}", flush=True)
 
 
+def trade_web_upstreams(content, http_port, websocket_port):
+    routes = {"= /api": http_port, "^~ /httpapi": http_port, "^~ /gateway": websocket_port}
+    for route, port in routes.items():
+        if not port.isdecimal() or not 1 <= int(port) <= 65535:
+            raise ValueError("Invalid Mac Demo Gateway port")
+        pattern = (
+            r"(?m)^([ \t]*location " + re.escape(route) + r" \{[^{}]*?"
+            r"\bproxy_pass )http://(?:127\.0\.0\.1:\d+|"
+            r"\$\{GATEWAY_HOST\}:\$\{GATEWAY_(?:HTTP|WS)_PORT\});"
+        )
+        content, count = re.subn(pattern, rf"\g<1>http://127.0.0.1:{port};", content)
+        if count != 1:
+            raise RuntimeError(f"Expected one Trade Web Gateway upstream for {route}")
+    return content
+
+
+def sync_trade_web_gateway(generation, config):
+    if read("docker", "inspect", "-f", '{{index .Config.Labels "com.docker.compose.project"}}',
+            "dc-saas-gateway") != generation:
+        raise RuntimeError("Cannot bind Trade Web to an inactive Mac Demo")
+    web = "dc-saas-trade-web"
+    if web not in read("docker", "ps", "--format", "{{.Names}}").splitlines():
+        return
+    template = "/etc/nginx/templates/default.conf.template"
+    rendered = "/etc/nginx/conf.d/default.conf"
+    http_port, websocket_port = config["GW_HTTP_PORT"], config["GW_WEBSOCKET_PORT"]
+    original = {path: read("docker", "exec", web, "cat", path) + "\n" for path in (template, rendered)}
+    desired = {path: trade_web_upstreams(content, http_port, websocket_port)
+               for path, content in original.items()}
+    # The retained Web container can still carry the previous environment.
+    # Update its template so nginx startup keeps using the active Gateway.
+    env = read("docker", "inspect", "-f", "{{range .Config.Env}}{{println .}}{{end}}", web).splitlines()
+    if all(setting in env for setting in ("GATEWAY_HOST=127.0.0.1",
+           f"GATEWAY_HTTP_PORT={http_port}", f"GATEWAY_WS_PORT={websocket_port}")):
+        desired[template] = original[template]
+
+    def install(path, content):
+        run("docker", "exec", "-i", web, "sh", "-ec",
+            'next=$(mktemp "$1.t554.XXXXXX"); trap \'rm -f "$next"\' EXIT; '
+            'cat > "$next"; chmod 644 "$next"; mv "$next" "$1"',
+            "--", path, input=content, capture=True)
+
+    changed = []
+    try:
+        for path, content in desired.items():
+            if content != original[path]:
+                install(path, content)
+                changed.append(path)
+        if rendered in changed:
+            run("docker", "exec", web, "nginx", "-t", capture=True)
+            run("docker", "exec", web, "nginx", "-s", "reload", capture=True)
+    except (OSError, subprocess.SubprocessError):
+        for path in reversed(changed):
+            install(path, original[path])
+        raise
+    report(f"Trade Web Gateway routes set to {http_port}/{websocket_port}")
+
+
 def until(predicate, description, timeout=180):
     end = time.monotonic() + timeout
     while time.monotonic() < end:
@@ -1081,6 +1139,7 @@ def main():
             started = time.monotonic()
             run("bash", str(REPO / "scripts/verify-mac-demo-fresh.sh"), str(out))
             report(f"Business verification passed in {int(time.monotonic() - started)}s")
+        sync_trade_web_gateway(generation, config)
     except (Exception, KeyboardInterrupt):
         report(f"Fresh startup or baseline verification failed. Rolling back with {old_manifest}")
         try:
