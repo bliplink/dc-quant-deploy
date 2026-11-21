@@ -122,6 +122,16 @@ public final class MacDemoNativeTcpLoad {
         }
     }
 
+    private static String submissionOutcome(JSONObject reply) {
+        String code = reply.getString("code");
+        if ("0".equals(code)) return "ACKNOWLEDGED";
+        if ("429".equals(code) && "ORDER_BUSY_RETRYABLE".equals(reply.getString("msg"))) {
+            String orderId = reply.getString("info1");
+            return orderId == null || orderId.isEmpty() ? "ORDER_BUSY_RETRYABLE" : "BUSY_WITH_ORDER_ID";
+        }
+        return "BUSINESS_REJECTED";
+    }
+
     private void submit(GateWayApi gateway, String clientId, long scheduled) {
         JSONObject content = new JSONObject();
         content.put("Location", config.getString("location"));
@@ -156,9 +166,7 @@ public final class MacDemoNativeTcpLoad {
             if (response != null && !response.trim().isEmpty()) {
                 JSONObject reply = JSON.parseObject(response);
                 code = reply.getString("code");
-                outcome = "0".equals(code) ? "ACKNOWLEDGED" : "BUSINESS_REJECTED";
-                if ("429".equals(code) && "ORDER_BUSY_RETRYABLE".equals(reply.getString("msg")))
-                    outcome = "ORDER_BUSY_RETRYABLE";
+                outcome = submissionOutcome(reply);
             }
         } catch (Exception error) {
             outcome = error.getClass().getSimpleName();
@@ -303,6 +311,14 @@ public final class MacDemoNativeTcpLoad {
     private static void selfTest() {
         JSONObject config = JSON.parseObject("{\"location\":\"TEST01\",\"quantity\":\"0.001\"}");
         MacDemoNativeTcpLoad client = new MacDemoNativeTcpLoad(config);
+        JSONObject busy = new JSONObject();
+        busy.put("code", 429);
+        busy.put("msg", "ORDER_BUSY_RETRYABLE");
+        if (!"ORDER_BUSY_RETRYABLE".equals(submissionOutcome(busy))) throw new AssertionError("Missing busy reply");
+        busy.put("info1", "");
+        if (!"ORDER_BUSY_RETRYABLE".equals(submissionOutcome(busy))) throw new AssertionError("Empty ID required");
+        busy.put("info1", "order-123");
+        if (!"BUSY_WITH_ORDER_ID".equals(submissionOutcome(busy))) throw new AssertionError("Busy leaked order ID");
         client.awaitScheduledStart(); // Existing one-stream clients do not set a barrier.
         for (long invalid : new long[]{System.currentTimeMillis() - 2000L,
                 System.currentTimeMillis() + 60_000L}) {
