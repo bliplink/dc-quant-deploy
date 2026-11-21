@@ -132,6 +132,7 @@ if [[ -n "$md" ]]; then copy_source "$md" "$out/md"; fi
 
 candidate_dependencies() {
   python3 - "$@" <<'PY'
+import os
 import sys
 import xml.etree.ElementTree as ET
 pom, common, *shared = sys.argv[1:]
@@ -145,8 +146,10 @@ for artifact, jar in [('com.app.common', common), *[('com.app.dc', path) for pat
     # Keep the repository dependencies for their transitive libraries.
     # Prepend the candidate for compilation; packaging removes both old JARs.
     dep = ET.Element(f'{{{ns}}}dependency')
+    relative_jar = os.path.relpath(jar, os.path.dirname(pom))
     for key, val in {'groupId': 'io.github.bliplink', 'artifactId': artifact + '-mac-demo-compile',
-                     'version': '0.0.0-local-demo', 'scope': 'system', 'systemPath': jar}.items():
+                     'version': '0.0.0-local-demo', 'scope': 'system',
+                     'systemPath': '${project.basedir}/' + relative_jar}.items():
         ET.SubElement(dep, f'{{{ns}}}{key}').text = val
     deps.insert(0, dep)
 tree.write(pom, encoding='UTF-8', xml_declaration=True)
@@ -154,7 +157,9 @@ PY
 }
 
 candidate_dependencies "$out/shared/pom.xml" "$out/common.jar"
-(cd "$out/shared"; "$maven" -o -B "-Dotc.demo.existing.keys=$test_rsa" package) > "$out/shared.log" 2>&1
+# Voter replacements verify the exact shared JAR, including its ZIP timestamps.
+(cd "$out/shared"; "$maven" -o -B "-Dotc.demo.existing.keys=$test_rsa" \
+    -Dproject.build.outputTimestamp=2000-01-01T00:00:00Z package) > "$out/shared.log" 2>&1
 set -- "$out/shared"/target/com.app.dc-*.jar
 [[ "$#" == 1 && -f "$1" ]]
 cp "$1" "$out/shared.jar"
