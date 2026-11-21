@@ -4,6 +4,25 @@
 
 学习接入与排障可先阅读[新服务接入Common与集群排障指南](/Users/kong/dc-quant-deploy/docs/COMMON_NEW_SERVICE_AND_TROUBLESHOOTING_20261116.zh-CN.md)。
 
+## 原 Mac 有序结算窗口与双撤单通知实测（11 月 21 日 17 时）
+
+原 Mac 依次运行两个版本。两次均用相同 Common 构件、异步本地落盘、10 个后台 Robot、16 路原生 TCP 和 60 秒观察窗。Order `9bb3c0f` 可以把同队列中已经排好的相邻成交一并发往 Trade `a1b9514`。Trade 逐笔核对原签名、按序结算，Order 收到各笔对应的签名回执后落盘并推送。两次使用不同代的租户和业务数据，后台负载也会波动。
+
+| 每秒送入 40 笔真实成交 | 窗内最终回执 | 客户端最终回执 P50 | 客户端最终回执 P99 | 从计划发送时间到最终回执 P99 |
+| --- | ---: | ---: | ---: | ---: |
+| 改造前，单租户单品种 | 2,178 / 2,400 | 5,457.655 ms | 7,944.373 ms | 7,948.013 ms |
+| 改造后，单租户单品种 | 2,400 / 2,400 | 343.381 ms | 1,996.710 ms | 1,997.493 ms |
+| 改造后，4 租户 × 4 品种 | 2,400 / 2,400 | 118.591 ms | 235.974 ms | 239.229 ms |
+
+三个窗口最终都对齐了 2,400 笔。单队列相邻的 2,399 对成交中，有 1,699 对的后一笔 Trade 资金提交记录时间早于前一笔 Order 首次结算回执记录时间。原来的逐笔跨服务等待已在真实负载下被打开。单队列的阶段 P99 分别为 New 到撮合 620 ms、撮合到 Trade 资金提交 1,477 ms、资金提交到 Order 首次回执 317 ms。各段分位数不能相加。后续复制确认与客户端最终成交回执单独计时。多队列仍超过 20 ms 目标；40 笔／秒是本次送入速率，容量上限仍待测量。[改造前单队列](/Users/kong/.opentradingcore/mac-demo-20261121-154659/distributed-execution-capacity-021bee9d.json) · [改造后单队列](/Users/kong/.opentradingcore/mac-demo-20261121-164610/distributed-execution-capacity-da82775b.json) · [改造后多队列](/Users/kong/.opentradingcore/mac-demo-20261121-164610/distributed-execution-capacity-f076291e.json) · [逐笔持久化阶段](/Users/kong/.opentradingcore/t554-order-a-stall-20261121-LSxSMI/readonly-join/candidate-ordered-settlement-stage-ms.json)
+
+同一代环境另用 16 个原生 TCP 会话逐笔校验同一订单的 New → Pending_Cancel → Cancelled。两种撤单都保留中间通知和最终通知。经资金冻结的订单还核对终态、资金及剩余挂单。窗口吞吐按实际收到 New 或 Cancelled 的命令数计算，每个撤单只计一次。下表的各列 P99 独立计算。[原生 TCP 撤单双通知与财务核对](/Users/kong/.opentradingcore/mac-demo-20261121-164610/order-cancel-capacity-c730b79f.json)
+
+| 场景 | 完整通知序列通过数 | 窗内命令／秒 | 下单到 New P99 | 撤单到 Pending_Cancel P99 | Pending_Cancel 到 Cancelled P99 | 撤单到 Cancelled P99 |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: |
+| Order-only | 4,610 / 4,610 | 153.17 | 479.432 ms | 66.738 ms | 10.384 ms | 76.084 ms |
+| 有资金校验 | 2,158 / 2,158 | 71.50 | 760.275 ms | 289.105 ms | 48.474 ms | 314.871 ms |
+
 ## 2026-11-21 架构审阅与容量差距
 
 同一代 Demo 运行十个 Robot，原生 TCP 客户端在异步本地落盘模式下测得以下结果。下撤单使用 16 个闭环会话，按窗口内实际收到的 New 和 Cancelled 计数。成交使用 16 路定速流，单租户单品种共送入 2,400 个吃单，按窗口内最终成交回执计数。命令数和成交笔数分别报告。
