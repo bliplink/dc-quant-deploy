@@ -15,6 +15,8 @@ Order 和 Trade 的现有启动入口都会先启动 Common 节点管理器，�
 | P000 | E3，B 单副本 READY | E4，B 主、A 备，严格 RECOVERING | A 重放并完成本地安装，双方重新确认 |
 | P217 | E4，B 主、A 备，严格 READY | E5，仍由 B 主，严格 RECOVERING | 独立见证核验旧备 A 的租约已经消失，B 在认证边界内完成降级 |
 
+在修订版 `ef2cdf8` 上重复同一真实故障，另一个受影响分区变为 P239。160 个分区处于 E4 严格 READY，94 个处于 E3 单副本 READY。核验 B 的原始公钥及两份已落盘签名后，确认 P000 和 P239 分别处于表中的两类恢复。P239 仅有 E3 见证目录。A 再次退出，B 和见证仍存活。该包的 316 项安全检查通过，3 项外部历史材料用例跳过。独立分区测试通过仍不足以放行业务。[两份原始签名核验结果](/Users/kong/.opentradingcore/t554-order-a-stall-20261121-LSxSMI/legacy-restart-first/ef2cdf8-interrupted-predecessors.txt) · [实体进程失败日志](/Users/kong/.opentradingcore/t554-order-a-stall-20261121-LSxSMI/legacy-restart-first/ef2cdf8-interrupted.log) · [安全检查](/Users/kong/.opentradingcore/t554-order-a-stall-20261121-LSxSMI/legacy-restart-first/ef2cdf8-safety.log)
+
 退出时，170 个分区处于 E4 严格 READY、84 个处于 E3 单副本 READY，另有上表两项处于 RECOVERING。A 入群时申请的租约与 P217 等待离线证明的窗口发生冲突。业务切换任务已撤下，原 Mac 的运行状态和数据保留。简单放宽“只允许一个中断阶段”的旧限制不足以处理这个场景。Common `6d92ba7` 已将旧格式的单阶段判断限制到原协议，并逐项核验本地重建签名；9 项定向单测通过。该修改尚未通过新的物理回归。[原进程失败日志](/Users/kong/.opentradingcore/t554-order-a-stall-20261121-LSxSMI/retry-interrupt/check.log) · [两份签名、清单与原进程状态](/Users/kong/.opentradingcore/t554-order-a-stall-20261121-LSxSMI/retry-interrupt/cold-return-blocker.json)
 
 待决定的加入方式是让返回进程在取得业务写租约前观察当前签名阶段。仅在对端正在完成必须证明旧节点离线的接管时等待，到达可验证的完成边界后，让它通过正常租约、重放和追平流程加入。设计需覆盖读取清单与申请租约之间发生新切换的竞争，以及多个分区中只有一个需要等待离线证明的情况。见证必须亲自核验旧租约消失，已签名阶段不能由脚本改写。该加入方式尚未实施。
