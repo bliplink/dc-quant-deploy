@@ -316,3 +316,16 @@ bash mac-colima-saas.sh fresh-verified <已通过候选目录> <对应完整资�
 新的 T554 部署为每个服务分别生成控制写入身份。Order 通过 `order.common.control.zkUser`、`order.common.control.zkPassword` 读取，Trade 使用对应的 `trade.common.control.*`。每个业务节点只挂载自己的配置。新服务可以采用相同注入方式，将 `OTC_PROTECTED_CONTROL_NAMESPACE` 设为该服务实际的 ZooKeeper 根路径，使新建的临时租约和持久控制节点沿用该服务的写入权限。见证进程读取自己的只读凭据和 `zk.manifestCreationZxid`。部署器从新建清单的实际创建事务号填入该值。请勿将密码、私钥或整份配置复制到工单或日志。
 
 排障时先读取受影响分区及另一条待接管分区的 Epoch、角色和状态。在 `NPC2` 清单中，核对清单和 `manifest/partition-revisions` 的最近修改事务号是否一致，保留对应分区原始签名阶段文件及两侧回执。出现 `NoAuth` 时，分别核实服务名、命名空间、配置文件挂载与当前部署身份。若只有某个分区持续等待物理安装，记录其它原主已宕机分区能否取得新的真实业务回执；回执中的 `quorumDurable` 和 `rpoRisk` 区分双副本确认与单副本确认。[分区演练与结果](T554_CLUSTER_MECHANISM_REVIEW_20261113.zh-CN.md)
+
+### 恢复中返回的进程如何加入
+
+带分区独立恢复的候选版本提供 `ZkNodeScopedControlPlane.awaitReturningLease`。新服务装配时使用服务名、对端节点 ID、只读挂载的对端数据根目录和该对端原始固定公钥。应在启动线程中调用，完成后再启动租约管理器和业务监听。下例的对象来自同一服务命名空间及同一 ZooKeeper 会话。原 Mac 上正在运行的业务版本仍以本文开头的基线为准。
+
+```java
+control.awaitReturningLease(serviceName, peerNodeId, peerDataRoot, pinnedKeys.get(peerNodeId));
+control.attach(manager);
+manager.start();
+manager.awaitInitialCertifiedPartitionCensus(20_000L);
+```
+
+若日志出现 `COMMON_RETURN_WAITING_WITHOUT_WRITE_LEASE`，先查看旧进程的临时租约是否已消失，再查看对端哪些分区仍处于保留原主的严格恢复阶段。返回进程会继续等待对端完成真实离线见证，随后自行领取租约。正常的首份认证清单超时从管理器启动后计算。若一直等待，保留该分区的前序签名、见证进程状态、安装记录和当前清单，用来区分等待旧会话过期、等待物理重放、等待见证三个位置。不要手工删除租约、改清单或签发回执。
