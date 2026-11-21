@@ -246,6 +246,23 @@ def main():
         # Exercise the newly repaired availability boundary first so a
         # regression stops before the longer unchanged physical suite.
         # Every existing safety, cold and native gate remains mandatory.
+        state['partition_isolation'] = {}
+        for name, test_class, method in PARTITION_ISOLATION:
+            isolated = command[:]
+            isolated.insert(1, '-Dt554.fixture.evidence.directory=' + str(work / (name + '-evidence')))
+            phase(name, isolated + ['--method', 'com.app.common.replication.' + test_class, method])
+            state['partition_isolation'][name] = isolation_result(work, name)
+            save()
+        # Private fixture directories and independent ZK sessions; the same
+        # immutable JAR remains first in every parent and child classpath.
+        full_output = (work / 'full-physical.log').open('x')
+        state['physical_fixture_revision'] = env.get('MAC_DEMO_COMMON_P0_FIXTURE_REVISION', revision)
+        full = subprocess.Popen(['bash', str(REPO / 'scripts/verify-mac-common-failover.sh'),
+                                 str(candidate), expected, str(results)], cwd=REPO,
+            env=dict(env, MAC_DEMO_REQUIRE_INTERRUPTED_RETURN='true',
+                     MAC_DEMO_COMMON_P0_FIXTURE_REVISION=env.get('MAC_DEMO_COMMON_P0_FIXTURE_REVISION', revision)),
+            stdout=full_output, stderr=subprocess.STDOUT, start_new_session=True)
+        state['physical_pid'] = full.pid
         state['live_local'] = {}
         for name, method in LIVE_LOCAL:
             live_command = command[:]
@@ -258,13 +275,6 @@ def main():
                       'T554_LIVE_LOCAL_POISON_AUTHENTICATED_REPLAY_SAME_RUNTIME_NO_PEER_AND_EXPORT_PASS')
             if marker not in log.read_text():
                 raise ValueError('Missing live LOCAL recovery evidence: ' + name)
-            save()
-        state['partition_isolation'] = {}
-        for name, test_class, method in PARTITION_ISOLATION:
-            isolated = command[:]
-            isolated.insert(1, '-Dt554.fixture.evidence.directory=' + str(work / (name + '-evidence')))
-            phase(name, isolated + ['--method', 'com.app.common.replication.' + test_class, method])
-            state['partition_isolation'][name] = isolation_result(work, name)
             save()
         classes = (work / 'safety-tests.list').read_text().splitlines()
         state['safety'] = checked_result(phase('safety', command + ['--safety', *classes]), safety=True)
@@ -282,16 +292,6 @@ def main():
             'com.app.common.replication.CommonHistoricalCertifiedPrefixWithTailTest',
             'com.app.common.replication.CommonCertifiedOpaqueHistoricalReplayTest',
             'com.app.common.replication.CommonCertifiedE2LargeColdHistoryTest']))
-        # Private fixture directories and independent ZK sessions; the same
-        # immutable JAR remains first in every parent and child classpath.
-        full_output = (work / 'full-physical.log').open('x')
-        state['physical_fixture_revision'] = env.get('MAC_DEMO_COMMON_P0_FIXTURE_REVISION', revision)
-        full = subprocess.Popen(['bash', str(REPO / 'scripts/verify-mac-common-failover.sh'),
-                                 str(candidate), expected, str(results)], cwd=REPO,
-            env=dict(env, MAC_DEMO_REQUIRE_INTERRUPTED_RETURN='true',
-                     MAC_DEMO_COMMON_P0_FIXTURE_REVISION=env.get('MAC_DEMO_COMMON_P0_FIXTURE_REVISION', revision)),
-            stdout=full_output, stderr=subprocess.STDOUT, start_new_session=True)
-        state['physical_pid'] = full.pid
         state['cold'] = {}
         for name, method in COLD:
             cold_command = command[:]

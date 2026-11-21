@@ -20,7 +20,9 @@ if [[ "$ref" == HEAD && -n "$(git -C "$common" status --porcelain --untracked-fi
   echo 'Common HEAD has uncommitted source or tests. Commit the intended candidate before building HEAD.' >&2
   exit 2
 fi
-source_timestamp="$(git -C "$common" show -s --format=%ct "$revision")"
+# Fixture-only revisions qualify the same production bytes. Keep the JAR
+# timestamp tied to the packaged code while archiving the entire test revision.
+source_timestamp="$(git -C "$common" log -1 --format=%ct "$revision" -- pom.xml src/main)"
 export JAVA_HOME="$(/usr/libexec/java_home -v 1.8)"
 umask 077
 mkdir -p "$(dirname "$out")"
