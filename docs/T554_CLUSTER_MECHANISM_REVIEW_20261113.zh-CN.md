@@ -21,6 +21,8 @@ Order 和 Trade 的现有启动入口都会先启动 Common 节点管理器，�
 
 待决定的加入方式是让返回进程在取得业务写租约前观察当前签名阶段。仅在对端正在完成必须证明旧节点离线的接管时等待，到达可验证的完成边界后，让它通过正常租约、重放和追平流程加入。设计需覆盖读取清单与申请租约之间发生新切换的竞争，以及多个分区中只有一个需要等待离线证明的情况。见证必须亲自核验旧租约消失，已签名阶段不能由脚本改写。该加入方式尚未实施。
 
+同一冻结构件 `ef2cdf8`（JAR SHA256 `f4bd9e5505ac018fabd8e2d858910313bae534b0eb595cfe5f780f8118af1ed0`）另外完成了返回过程中未再次中断的对照演练。A 被实际终止后，全量接管 182.516 秒、追平回主 500.526 秒；B 被终止后分别为 200.287 秒、510.410 秒。最终 256 个分区均为 E7 严格 READY，A/B 各自持有原分配的 128 个主分区，逐分区比对的 256 对 WAL 和 256 对快照均相同。这项演练与部分独立检查同时运行，时间不能作为空载基线。两次相继故障后的成功回主和回归中再次故障的失败均保留。[双向故障实测](/Users/kong/.opentradingcore/t554-order-a-stall-20261121-LSxSMI/legacy-restart-first/ef2cdf8-index-return.log)
+
 ## 2026-11-21 分区独立恢复验证
 
 旧格式清单的另一项故障演练中，P000 停在 E5，B 重启时报告无法确认本地隔离分区。同一冻结包单跑成功。定向测试随后稳定重现了一种会产生同样错误的时序：读取阶段证明期间发生正常续租，清单、角色、隔离状态都没有变化。Common `ef2cdf8` 将核验当前租约的步骤放在这次读取之后，仍逐项核对原清单、监视版本及已隔离的分区。35 项定向测试通过，其中包括清单变更通知、会话断开、恢复中分区申请副本写权限的拒绝测试。修订后的实体进程也在两次故障后完成重启，P000 回到 E6 严格双副本 READY。此项修复仅覆盖续租并发窗口；P000/P217 的离线见证顺序仍单独验收。[修复前的定向复现](/Users/kong/.opentradingcore/t554-order-a-stall-20261121-LSxSMI/legacy-restart-first/renew-race-red.log) · [修复后的定向回归](/Users/kong/.opentradingcore/t554-order-a-stall-20261121-LSxSMI/legacy-restart-first/renew-race-green.log) · [物理重启结果](/Users/kong/.opentradingcore/t554-order-a-stall-20261121-LSxSMI/legacy-restart-first/ef2cdf8-restart.log)
