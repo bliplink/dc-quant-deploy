@@ -65,3 +65,5 @@ Common `91f138b` 把空 WAL 和签名零水位的持久化移到 LOCAL READY 之
 恢复后对四个写入 JVM 进行两次各 20 秒的内核刷盘采样，单次调用耗时 P99 约 1.70 毫秒。一次按稳定文件描述符归类的样本共 5,057 次调用，业务 WAL 和提交／保管证明各归类 2,496 次，余下 65 次未可靠归类。采样范围为四个 JVM，Docker 日志守护进程在范围之外。代码核对显示，Trade 现有的有序结算 RPC 会在窗口内逐条调用资金结算，每条都经过独立的 Common 提交。当前结果支持优先测量和减少每笔交易的独立提交轮次，再用同一负载分别复测严格与本机落盘异步模式。
 
 下撤单证据在新实例目录的 `order-cancel-capacity-ba4e60d4.json` 与 `order-cancel-capacity-5f9163aa.json`。刷盘证据在审计目录的 `restored-strict-fsync-by-file-20261122-attribution.json`。
+
+01:19:50–01:20:52，两个业务控制清单保持第 2 代，10 个 Robot 均为 RUNNING。运行卷中业务 WAL 增加 25.7 MiB，快照目录增加 27.6 MiB，其他 Common 文件增加 11.6 MiB，MySQL binlog 增加 19.3 MiB，投影表分配增加 24.0 MiB。这是正常报价和成交下的单分钟实测，证据为 `restored-demo-storage-growth-20261122.json`。
