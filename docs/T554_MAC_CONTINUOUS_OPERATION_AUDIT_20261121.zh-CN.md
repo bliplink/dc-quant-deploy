@@ -85,8 +85,9 @@ Common `91f138b` 把空 WAL 和签名零水位的持久化移到 LOCAL READY 之
 | Trade B 正常终止 | 142.4 秒 | 647.4 秒 | Trade A 单节点处理资金和持仓。两端均收到带单副本风险标记的最终成交回执，Robot 在降级期间和回主后均有新成交，资金游标一致。 |
 | Order A 正常终止 | 127.8 秒 | 654.4 秒 | 原脚本因普通成交日志已精简而未通过。独立认证重放读回了单节点期间的两条订单成交，核对最终订单状态、公开成交与资金不动。修正后的查询直接核验 Common WAL，代码为部署仓库 `27389cc`。 |
 | Order B 强制退出 | 188.0 秒 | 705.3 秒 | Order A 单节点 WAL 中有两条精确匹配的成交回执，回主后可重读，256 个分区的 WAL 和恢复镜像均一致，资金游标通过。同期外部行情暂停，Robot 降级阶段门禁仍保留失败。 |
+| Trade A 强制退出 | 207.4 秒 | 739.7 秒 | 退出码 137，Trade B 接管 256 个分区。两账户收到明确带单副本风险的最终成交回执。同一 Robot 降级期间成交 7 笔，回主后成交 3 笔，过账逐笔成对。Trade A/B 各归位 128 个主分区，所有分区的物理 WAL 和恢复镜像、资金游标均匹配。 |
 
-对应原始证据位于当班部署目录的 `ha-trade-b-term-4pp12r29/`、`ha-order-a-term-*/` 和 `ha-order-b-kill-et7h73b2/`。Trade A 的强制退出演练待补。
+对应原始证据位于当班部署目录的 `ha-trade-b-term-4pp12r29/`、`ha-order-a-term-*/`、`ha-order-b-kill-et7h73b2/` 和 `ha-trade-a-kill-2jzn7ghq/`。
 
 03:00:01.972 至 03:02:24.004，APSSvr 的 BTC 标记价输入中断约 142 秒，其他已订阅品种也出现断流重连。Robot 按陈旧行情保护暂停报价，连接由 APSSvr 自行重建。仅凭应用日志无法确认是外部行情源还是其网络路径中断。随后 Order B 回主时，在签名路由刷新或分区未就绪的窗口观测到挂单查询拒绝。对照在运行镜像的源版本 `4384fd1`，挂单查询已在分区检查前过滤租户和品种，故障仍受 Common 控制授权可用窗口影响。
 
@@ -109,3 +110,15 @@ Robot `e8602dd` 复用现有有限退避，仅为带路由键的挂单查询识�
 当班主站重建时暴露了镜像仍含旧版入口代码和已停用网关端口的问题。首次覆盖的配置文件也因镜像内权限无法由 Nginx 读取。最终镜像固化主站已审阅的 `780cc69` 页面代码、可读配置和版本化资源，公网目录通过本机的固定交易 Web 入口访问当班网关。当前 Demo 链接选用已验证的 `BB0201`，仍由公开目录核验租户可用性。安装及权限检查均保存在本机运行证据目录。
 
 03:41–03:42，桌面和 iPhone 13 的真实公网浏览器均从主站进入 `BB0201`，加载 19 根 BTCUSDT 五分钟 K 线，并收到实时 K 线更新。两个浏览器均无脚本错误。对照前一代镜像，重建后主站配置、公网目录和新页面资源均由最终运行容器提供。原始网络状态、图表数据和截图见 `public-demo-live-reviewed-entry/`。
+
+## 双副本恢复后的运行状态
+
+04:00，Trade A 演练验证完成并停用当次创建的临时 Robot，既有十个 Robot 继续运行。Trade A 追平时的 35 秒样本中，两个 Trade JVM 均未触发 CPU 限流，ZooKeeper 在 351 个周期中有 72 个被限流。04:00:50 将 ZooKeeper 从 0.75 调整至 1.5 核并写入当班部署配置，运行进程和内存配置保持原样。耗时表使用调整前配额，调整后的完整故障时延待独立复测。证据见 `trade-a-recovery-resource-sample.json`、`trade-a-return-progress-and-robot-health.jsonl` 和 `trade-a-post-test-zookeeper-cpu.json`。
+
+04:02，调整后再次确认 Order 和 Trade 各 256 分区严格双副本、十个既有 Robot 全部运行、资金游标一致。十个租户行情全部通过，04:00 新的一小时 BTCUSDT K 线共十根，均满足开、高、低、收约束。证据见 `operator-final-strict-finance-state.json` 和 `final-after-trade-a-reset-public-market.json`。
+
+另两份 11 月 15 日 18:08 退役 Order 认证数据目录在完整比对及登记 SHA-256 后释放旧副本，源约 3.74 GiB，压缩件约 1.24 GiB。证据为 `old-20261115-180803-certified-data-archive/checksums.jsonl`。当前业务卷和最新回退卷均保留。
+
+双副本恢复后，Colima 回收文件系统中已空闲的存储块，系统报告处理约 13.1 GiB 空闲块。随后宿主可用空间约 19 GiB，Colima Docker 数据盘可用空间约 12 GiB。证据为 `post-trade-a-colima-free-block-trim-full.log`。
+
+持续每秒 1,000 笔及最终回执 P99 不超过 20 毫秒的性能门禁仍待通过。现役 Common WAL 和镜像的自动归档与安全回收也待实装验证。
