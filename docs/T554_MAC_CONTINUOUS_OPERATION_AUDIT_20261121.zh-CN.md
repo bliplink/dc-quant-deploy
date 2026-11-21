@@ -57,3 +57,11 @@ Common `91f138b` 把空 WAL 和签名零水位的持久化移到 LOCAL READY 之
 新实例验证了 Order-only 与资金模式的成交、未成交撤单、公开成交匹配及资金和持仓游标；Order、Trade 各 256 分区均为严格 READY，四个 JVM 各有 128 个可写主分区。00:25:31–00:30:31 的 10 Robot 样本完成 4,268 次报价请求、1,128 笔成交，成交发布延迟 P99 为 59.31 毫秒，资金过账差错为 0。十个租户的公开行情均通过。公网主站桌面与移动端入口均到达当前活跃租户，渲染历史 K 线并收到实时 WebSocket 更新。证据为新实例的 `physical-runtime-8dt8116v/proof.json`、`verification.ef6Irp/`、`robot-steady-10-163031.json` 和审计目录的 `restored-public-demo-browser-20261122/observations.jsonl`。
 
 本次恢复保留的是已验收的严格基线。Common `1a36ecf` 的定向回归已通过，最终 JAR 的独立完整物理门禁仍在运行。上述 10 Robot 实盘采样不代表每秒 1,000 笔、P99 不超过 20 毫秒的性能验收。
+
+## 恢复后的 TCP 下撤单与磁盘复测
+
+10 个 Robot 持续运行时，在原 Mac 的严格基线上分别用一个已认证的 TCP 会话运行 30 秒。两种模式都逐笔核对了 New、Pending_Cancel、Cancelled 和最终余额与挂单。Order-only 完成 1,071 个完整下撤单循环，每秒 35.68 个，New P99 为 21.54 毫秒、Cancelled P99 为 25.54 毫秒。资金模式完成 843 个完整循环，每秒 28.10 个，New P99 为 39.59 毫秒、Cancelled P99 为 38.28 毫秒。
+
+恢复后对四个写入 JVM 进行两次各 20 秒的内核刷盘采样，单次调用耗时 P99 约 1.70 毫秒。一次按稳定文件描述符归类的样本共 5,057 次调用，业务 WAL 和提交／保管证明各归类 2,496 次，余下 65 次未可靠归类。采样范围为四个 JVM，Docker 日志守护进程在范围之外。代码核对显示，Trade 现有的有序结算 RPC 会在窗口内逐条调用资金结算，每条都经过独立的 Common 提交。当前结果支持优先测量和减少每笔交易的独立提交轮次，再用同一负载分别复测严格与本机落盘异步模式。
+
+下撤单证据在新实例目录的 `order-cancel-capacity-ba4e60d4.json` 与 `order-cancel-capacity-5f9163aa.json`。刷盘证据在审计目录的 `restored-strict-fsync-by-file-20261122-attribution.json`。
