@@ -4,6 +4,19 @@
 
 学习接入与排障可先阅读[新服务接入Common与集群排障指南](/Users/kong/dc-quant-deploy/docs/COMMON_NEW_SERVICE_AND_TROUBLESHOOTING_20261116.zh-CN.md)。
 
+## 同一构件的严格与异步容量对照
+
+原 Mac 顺序部署同一组服务镜像，使用 8 CPU、12 GiB 的 Colima、10 个持续报单 Robot、4 租户 × 4 品种、16 路原生 TCP。60 秒内只按客户收到的最终成交回执计算吞吐。不同代使用不同测试租户及真实分区分布。两种模式在计划 1,000 笔／秒时均未通过，且测量期间两者的控制视图都保持稳定。
+
+| 模式及计划成交速率 | 实发／计划 | 窗内最终成交 | 窗内成交／秒 | 下单 RPC P99 | 已收最终回执 P99 |
+| --- | ---: | ---: | ---: | ---: | ---: |
+| 严格，40／秒 | 2,400 / 2,400 | 2,400 | 40.00 | 29.803 ms | 149.695 ms |
+| 异步，40／秒 | 2,400 / 2,400 | 2,400 | 40.00 | 47.872 ms | 227.814 ms |
+| 严格，1,000／秒 | 35,085 / 60,000 | 366 | 6.10 | 662.803 ms | 42,980 ms（仅 366 笔） |
+| 异步，1,000／秒 | 36,192 / 60,000 | 350 | 5.83 | 1,009.156 ms | 44,019 ms（仅 350 笔） |
+
+高负载两行存在大量未返回最终成交的请求。完整请求总体的端到端 P99 未能测得。较低负载下严格模式在这次单窗对比中更快，不能由此推断两种模式的普遍性能排序。将资金结算路径改为异步复制，未解决这版系统的过载问题。[严格 40](/Users/kong/.opentradingcore/mac-demo-20261121-174139/distributed-execution-capacity-6dfbd0a6.json) · [异步 40](/Users/kong/.opentradingcore/mac-demo-20261121-171543/distributed-execution-capacity-ad16654d.json) · [严格 1,000](/Users/kong/.opentradingcore/mac-demo-20261121-174139/distributed-execution-capacity-aa527e6b.json) · [异步 1,000](/Users/kong/.opentradingcore/mac-demo-20261121-171543/distributed-execution-capacity-f973d31a.json)
+
 ## 异步模式在计划每秒 1,000 笔时的失效表现
 
 原 Mac 保持 10 个后台 Robot、4 租户 × 4 个品种，用 16 条原生 TCP 会话定速 60 秒。每会话最多允许 16 个下单 RPC 同时在途。计划送入 60,000 笔，实际发出 36,192 笔，23,808 个计划发送时点因客户端并发上限等原因跳过。36,192 笔均收到 RPC 回包，回包 P99 为 1,009 ms。**窗内只有 350 笔收到最终成交，合 5.83 笔／秒**。在客户端后续有界观察期内，取得最终回执的样本仍为 350 笔，这部分样本的 P99 为 44,019 ms。全部请求的最终成交 P99 无法从不完整回执计算。256 分区控制视图保持稳定。四个投票容器的 CPU 配额限流次数增量均为零。[原生 TCP 千笔报告](/Users/kong/.opentradingcore/mac-demo-20261121-171543/distributed-execution-capacity-f973d31a.json)
