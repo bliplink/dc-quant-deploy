@@ -6,6 +6,10 @@
 
 ## 2026-11-21 返回节点先只读等待
 
+在冻结包 `c133e2b` 上，第二个返回的 A 已实际打印 `COMMON_RETURN_WAITING_WITHOUT_WRITE_LEASE`。此次演练暂停了独立见证进程，跨过 ZooKeeper 会话到期时间。恢复运行后，见证读取原清单 `/first-ready-test/manifest` 收到 `NoAuth`，无法为 B 完成离线证明。旧客户端只在构造时提交凭据，ZooKeeper 替换底层会话时丢失了身份。真实会话到期的独立回归在旧实现上复现了同一个错误。[旧客户端失败记录](/Users/kong/.opentradingcore/t554-order-a-stall-20261121-LSxSMI/readonly-join/auth-reconnect-red.log) · [物理见证日志](/Users/kong/.opentradingcore/t554-order-a-stall-20261121-LSxSMI/readonly-join/expired-witness-original/witness.log)
+
+Common `f90d8f3` 在每次建立底层连接时使用该进程原先配置的身份。26 项定向检查通过。见证更换会话后可以继续读清单，尝试写入时被 ZooKeeper 拒绝。写节点旧会话的临时租约消失，重新申请的新租约属于新会话，清单版本及创建事务号均保持原值。完整物理验收采用冻结 JAR `024bfb5de53987eb756e432891ec55a412685bd2c1b0249c4958beba7802af86`。[定向检查](/Users/kong/.opentradingcore/t554-order-a-stall-20261121-LSxSMI/readonly-join/auth-reconnect-green.log) · [完整验收运行记录](/Users/kong/.opentradingcore/t554-common-candidates/20261121-reconnect-f90d8f3/qualification/state.json)
+
 负责人已批准调整加入顺序。Common 在启动续租线程和打开业务写入口前，以返回进程自己的 ZooKeeper 会话核验对端卷上的原始签名。若对端从严格双副本进入保留原主的恢复阶段，返回节点继续等待，直到对端使用真正的离线见证完成阶段发布。若此前是单副本、现在正在恢复双副本，返回节点需要加入完成追平。两种阶段使用同一份签名清单中的前序、当前角色和分区版本判定。
 
 领取租约时，ZooKeeper 在同一事务内检查清单版本、原样写回现有租约父目录的内容，并创建属于该会话的临时租约。父目录的数据版本记录领取先后。发起依赖对端离线的切换时，幸存者先读取该版本，再核验对端确实离线，并在发布阶段的事务中检查同一版本。这样，两种操作抢先提交时，另一方必须重读。正常业务写入和已有租约续期沿用原路径。
