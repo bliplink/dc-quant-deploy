@@ -43,3 +43,11 @@
 23:35 复查发现 10 个 Robot 中 4 个 RUNNING、6 个 ERROR。22:57 左右 Order A/B 与 Trade A/B 都在约 40 秒未续租后执行隔离退出，配置租约为 15 秒。四个容器均由原策略重新启动，Order B 记录了累计 14 次重启，启动日志显示缺少符合认证要求的 LOCAL 物理分区和 Epoch 目录。Trade 已回到 256 个严格 READY。Order 清单有 249 个 LOCAL READY、3 个严格 READY、4 个 RECOVERING，部分 LOCAL READY 分区也实际拒写。未证实 WAL 增长与这次续租超时之间的因果关系。现役证据保留，独立 Common 候选的完整物理门禁仍在执行。
 
 本机分钟采样为 `~/.opentradingcore/mac-demo-20261121-205353/growth-60s-passive-2255.json`。行情复查为 `t554-order-a-stall-20261121-LSxSMI/readonly-join/public-demo-storage-audit-market.json`。部署与浏览器证据见 [T554 原 Mac 公网 Demo 验收](T554_MAC_PUBLIC_DEMO_ACCEPTANCE_20261121.zh-CN.md)。
+
+## 2026-11-22 凌晨续查
+
+00:05 对原运行卷和授权清单复查时，Order 有 253 个单副本 READY 及 3 个严格 READY，Trade 有 249 个严格 READY 及 7 个 RECOVERING。10 个 Robot 中 1 个 RUNNING、3 个 DEGRADED、6 个 ERROR。Order B 当时已自动重启 47 次。它被指派的 P128 E3 单副本主位缺少本地 Epoch 目录。Common 的冷启动无法据此证明该 Epoch 的已提交边界，拒绝打开写入器。P181 和 P036 的 Trade 缓存诊断分别报物理退役未完成及旧物理证据注册表已关闭；两侧 JVM 仍在线。采样文件为 `post-genesis-fix-live-status-20261122.json`，分区观察记录位于当前部署目录的 `recovery-observation-*`。
+
+Common `91f138b` 把空 WAL 和签名零水位的持久化移到 LOCAL READY 之前。仍要求独立见证、原持久化证明及当前租约，并对新 WAL 已有尾部的情况拒绝发布。Common `1a36ecf` 把现有的对端离线校验移到 LOCAL 接管者关闭旧备盘之前，使在线严格角色切换由严格恢复路径处理。两项改动已各自通过定向回归，其中包括独立 JVM、真实 ZooKeeper 与物理 WAL。完整门禁按最终 JAR 重新运行，原 Demo 继续保留现役数据。
+
+此次额外归档了已关闭的 MySQL binlog、11 月 16 日退役实例的两份 Trade 快照目录，以及 11 月 14 日退役实例的三个投影表文件。逐包比较或逐文件 SHA-256 比较通过后才释放原位置的旧副本。00:13 Mac 可用约 11.35 GiB。现役 Common WAL 与快照归档闭环仍待接入和验证。
