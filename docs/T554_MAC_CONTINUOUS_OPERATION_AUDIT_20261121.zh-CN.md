@@ -504,3 +504,13 @@ Playwright 在公网使用专用模拟账号，不修改用户报告的原账号
 - 原 Trade B 自动重启后，进程在打开写入端口前反复退出。根因栈落在 Common 冷启动的本地已提交状态重放。Common 允许状态机按 64 MiB 预算生成镜像，随后实际持久化的 Genesis 镜像上限为 32 MiB。该路径应由 Trade 编码器选取较小的有效上限。06:08，Order 两路仍各有 128 个严格 READY 分区，Trade A 仍在运行，Trade B 在采样时未绑定物理复制端口。P032 保持 Epoch 21 原签名恢复阶段。
 - Trade `628d6f2` 统一周期快照和恢复镜像的编码上限。在更大的原始镜像超过 32 MiB 时，保留完整业务内容并确定性压缩，原镜像格式依然可以读取。新增的冷启动回归用 32–64 MiB 的完整业务镜像复现旧候选的输出超限，同一用例在修复版通过。与现役 Common/Shared 配套的 64 项回归在源码构建和预置 Docker 镜像均通过。镜像已按原卷预置，两实例均保持停止，原卷替换待维护确认。[故障复现](/Users/kong/.opentradingcore/t554-order-a-stall-20261121-LSxSMI/readonly-join/market-ioc-certified-20261122/trade-cold-snapshot-compression/cold-regression-before.log) [精确镜像回归](/Users/kong/.opentradingcore/t554-order-a-stall-20261121-LSxSMI/readonly-join/market-ioc-certified-20261122/trade-cold-snapshot-compression/exact-stopped-image-regression.log) [原卷预检](/Users/kong/.opentradingcore/t554-order-a-stall-20261121-LSxSMI/readonly-join/market-ioc-certified-20261122/trade-cold-snapshot-compression/original-recovery-dry-run.log)
 - 业务发布仍覆盖市价、限价、止损市价/限价、止盈市价/限价、触发市价/限价和追踪止损市价。最终验证逐项检查入口、持久化、触发或撮合路径。正式网页与原 Order 当前仍是当班版本。
+
+### 06:10–06:15 现役成交观测与订单类型回归
+
+- 原 Robot 进程仍在运行。06:08:31–06:10:31 的被动窗口没有观察到 Trade 接收的 Tape 请求或最终成交。现时控制清单仍列 B 的历史写者分配，实际端口和成交证据显示 Trade 未恢复。原交易网页的规范域名仍返回 HTTP 200。[原 Robot 被动窗口](/Users/kong/.opentradingcore/t554-order-a-stall-20261121-LSxSMI/readonly-join/market-ioc-certified-20261122/trade-cold-snapshot-compression/robot-passive-cold-restart.json)
+- 待发布的 Order 镜像通过 24 组固定条件触发走查。六种固定条件委托分别覆盖买卖方向及 Mark/Last 两种价格来源，核验触发边界、触发一次、原单与子单关联，以及正确派发市价 IOC 或限价子单。两种追踪止损回调另有既有回归。该走查使用真实策略代码和隔离测试的提交回调，公网端到端成交仍待运行。[精确镜像走查](/Users/kong/.opentradingcore/t554-order-a-stall-20261121-LSxSMI/readonly-join/market-ioc-certified-20261122/order-trigger-type-matrix/exact-order-type-matrix.log)
+- 历史 P032 已认证镜像中，执行去重数据约占 99.9%，包括 126,079 条执行结果和 63,021 个终态订单键。快照成本主要随去重数据规模增长。后续评估镜像和保留策略时应覆盖该分区的真实规模，并继续核对重复报单、成交和预占的处理。
+
+### 06:18 Common 原生故障组
+
+- 精确候选 `f309e50` 的 17 项原生故障用例全部通过。异步强杀测试在原主持久水位 65、备节点实存水位 26 时，按水位 26 接管，两边的既有物理 WAL 字节保留。独立的无故障复制测试验证双方均到 65 且业务一次生效。整套发布资格仍在演练同一候选的重复进程失联及正常双向回主。[原生故障日志](/Users/kong/.opentradingcore/t554-order-a-stall-20261121-LSxSMI/readonly-join/market-ioc-certified-20261122/common-home-admission-window-complete-physical/failover.log)
