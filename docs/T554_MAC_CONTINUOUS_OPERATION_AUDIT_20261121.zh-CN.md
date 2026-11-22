@@ -462,3 +462,9 @@ Playwright 在公网使用专用模拟账号，不修改用户报告的原账号
 - Common `d76b339` 允许已恢复严格主节点在候选回主节点的真实租约消失后，继续走现有同主缺副本流程。已发布的回主 Stage 仍由原签名和当前分区版本约束。精确 JAR SHA-256 为 `20e3f9bc1e595eb88d7f30e874633d9b30f23b392d174378c4900168cca5204d`，正在用原故障场景验证。
 - 原 Demo 的物理角色复核通过。Order 2682、Trade 5470 的原 Home 各 256 分区。四个投票进程各实测 128 个写者、256 个打开的分区和 0 个恢复预留。同一个 Robot 容器仍在运行。[物理角色复核](/Users/kong/.opentradingcore/mac-demo-20261122-020700/physical-runtime-2p5z_8u2/proof.json)
 - 核对旧 Demo MySQL 路径未被运行中的任何容器挂载，也无文件打开后，逐个无损压缩三代停止环境的旧投影文件和封闭 binlog。解压内容 SHA-256 与原文件相同后才释放旧原文件。保留恢复路径及文件权限记录，未移动现役库或两个最新回退数据卷。Mac 可用空间从约 1.7 GiB 增至约 11 GiB。
+
+### 03:52–03:57 物理 ACK 门禁与现役行情对照
+
+- 先前的 P001 READY 表明两侧物理存储安装完成，第二次杀进程仍可能早于主节点用真实 TCP 打开写入。测试修订 `34a9e1c` 固定要求 P001 在 Epoch 4 完成一笔真实严格 ACK、核对双方 WAL 和镜像一致，才在 P000 的签名恢复点强杀 A。测试修订前后生产 JAR SHA-256 完全相同。
+- 按新判据确认 P001 实际双副本提交后，第二次失联仍触发独立阻塞。P002 已发布 READY，但仍在等待物理监听器，B 会反复试连已停止的 A，挡住后续缺副本恢复。Common `0996088` 将这类 READY 后打开物理角色的工作也放入既有分区轮转；同分区仍需原 TCP 对端证据才能接收业务。精确 JAR SHA-256 为 `a9c28045e7b1751c9c1671b2efa769db73701123f36d9a7dc8877acc86d69a02`，正在复跑两次真实掉线门禁。
+- 公网 BZ75K5 交易页在原版本下实收 BTCUSDT 171 根历史 K 线和 9 次实时更新，HTTP 200，浏览器异常数为 0。03:51:24 至 03:56:24 的原 10 个 Robot 观测中，1,490 次 Tape 请求全部配对成交推送，P99 为 75.553 毫秒。这是原业务正常流量的被动窗口，未达到性能验收的 20 毫秒目标。[行情证据](/Users/kong/.opentradingcore/t554-order-a-stall-20261121-LSxSMI/readonly-join/market-ioc-certified-20261122/public-chart-before-all-orders/published-chart-smoke.json) [原 Robot 窗口](/Users/kong/.opentradingcore/t554-order-a-stall-20261121-LSxSMI/readonly-join/market-ioc-certified-20261122/robot-passive-before-ready-activation.json)
