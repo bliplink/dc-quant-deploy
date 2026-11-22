@@ -372,3 +372,12 @@ Playwright 在公网使用专用模拟账号，不修改用户报告的原账号
 - 公网 BZ75K5 的新测试账号仍遇到 `Common physically certified partition writer unavailable: P032`。限价和市价开空请求都在 Trade 预检返回 `account balance does not exist`，浏览器未提交实际委托。该租户的充值、提现入账、开空成交及 K 线均须继续单独验收。没有对用户报告的账号进行写操作。
 - Order 的 256 个分区均为严格 READY。Trade 代数 3113，4 个严格 READY、251 个单副本 READY、P062 处于严格 RECOVERING。P062 本轮签名 Stage 记录为 Epoch 9 的 A 严格写者切至 Epoch 10 的 B，当前尚无该轮 READY。现役单副本转严格流程在这一 Stage 完成前等待，P032 的资金写入仍要求物理严格确认。上线验收保持 NO-GO。
 - 原 Common JAR 以只读挂载核验了 P062 的 Stage 签名和 Epoch 9 前序证据。B 有 Epoch 9 退役证据，A 的对应文件缺失，双方均未写出 Epoch 10 安装证据。生产核验函数拒绝继续，报 `Common old Epoch retirement proof file missing/unsafe`。ZooKeeper 显示两侧各有独立活租约，可将排查范围收敛到回归的旧 A 为该 Stage 生成物理退役证据的流程。
+
+### 23:23–23:42 Trade 原盘恢复与市价开空候选
+
+- 现役 Common 原 JAR 核验 P062 Epoch 9 的 B 侧提交与保管凭证，双签确认序号均为 17,792，已确认前缀共 81,087,198 字节，A/B 前缀 SHA-256 一致。A WAL 的第 17,793 帧未获双签，额外 4,685 字节出现 CRC 损坏。
+- 使用损坏 WAL 副本演练后，核对 live ZooKeeper 的原签名 Stage 和 P062 非可写状态，锁定原 A 旧 WAL，原地保存完整损坏文件，并以原 A 本身的已签名正确前缀进行原子置换、刷盘和读回。随后由仍运行的原 A/B 进程自行生成 Epoch 9 退役和 Epoch 10 安装证据。23:30 重新核验了双侧 E10 READY 物理签名。
+- BZ75K5 公网专用 Demo 账号充值、提现、限价开空挂单与撤单成功。WebSocket 回包分别约 485、461、811、770 毫秒。市价开空在旧 Order 版本返回 1003，服务端限制入口为限价单。稳态压力指标和真实市价成交需要另行验收。
+- 23:41，原 Order、Trade 各 256 个分区均为严格 READY，Trade 物理 Home A/B 各 128 个。23:42 开始按原卷滚动替换 Trade A，B 仍在线。高峰期来回追平产生显著磁盘写入，已清理 18 份旧 Demo 归档共 8.46 GB，保留归档凭证和 P062 损坏原件。
+- 市价开仓候选为 Order `d97e782` 和 Trade `29e1a39`。Order 46 项与 Trade 8 项本地测试通过。候选延用 `79a4a96` Common JAR。市价卖出采用 IOC 并保留原订单类型，保证金预占价与成交保护下限分别核验。
+- 订单类型验收继续覆盖全部现有策略和有效组合。限价已有 GTC、DAY、GFD、IOC、FOK 和 PostOnly 语义，市价开仓候选新增签名阶段贯通。条件限价、市价触发和止盈止损还需原子衔接父单和子单，采用可重放的子单标识。平仓已有签名预占及撤单释放，双边结算和投影尚未接通平仓损益。跟踪止损目前可见类型枚举，独立跟踪状态仍需核对。对外完整验收保持 NO-GO。
