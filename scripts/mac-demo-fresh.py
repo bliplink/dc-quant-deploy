@@ -727,7 +727,7 @@ def main():
                     "automaticRecovery": "true", "witnessRoot": HA_WITNESS,
                     "signedSourceHmacDir": HA_SOURCE_AUTH, "peerDataRoot": HA_PEER,
                     "recoveryWatchMs": recovery_watch_ms,
-                    "snapshotSweepMs": "60000",
+                    "snapshotSweepMs": "300000" if kind == "trade" else "60000",
                     "originalHomeLedgerDir": f"{VOLUMES['born']}/{SERVICES[kind]}/original-home",
                 }.items()})
             target.write_text(content.replace(PREVIOUS, generation))
