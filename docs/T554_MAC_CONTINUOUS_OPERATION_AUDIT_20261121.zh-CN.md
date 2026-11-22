@@ -479,3 +479,9 @@ Playwright 在公网使用专用模拟账号，不修改用户报告的原账号
 - 用单名额订单簿复现之前候选的误拒。市价条件单已经持久化为 `Untriggered`，仍因 IOC 被计入待撮合名额，随后提交的合法订单收到 `ORDER_BUSY_RETRYABLE`。相同问题在恢复订单簿时存在。
 - Order 最终候选 `0d2644d` 在正常应用和恢复重放都释放未触发条件单的临时名额。触发后的市价子单继续占用待撮合名额。现有 429 繁忙判据及撤单路径保持。新定向回归在旧二进制失败，在新二进制通过，全部 65 项 Order 用例现已通过。读取兼容候选更新到 `68d0b1b`，并重新核对跟踪止损回调和锚点。两份源代码均已推送。现役 Order 尚未切换。[回归证据](/Users/kong/.opentradingcore/t554-order-a-stall-20261121-LSxSMI/readonly-join/market-ioc-certified-20261122/order-dormant-admission-release/all-order-types-regression.log)
 - 独立 Common 的冷启动组全部通过，其中混合样本实际回主 256 分区并核对 127 个重新安装分区的 WAL 和镜像。正式物理验证进入最后一组。原生异步测试已核对主故障时两侧实际水位，以及单独备机失联时主机的本地落盘确认。
+
+### 04:58–05:02 最终物理门禁与存储维护
+
+- 同一精确 `0996088` JAR 的 17 项原生用例全部通过，耗时 1,264.647 秒。异步带 64 笔待复制数据的强杀场景，原主本地水位 65，备节点水位 3，按备节点水位接管。两个原 WAL 保持原字节。独立的无故障追平场景验证两边都到 65，业务只应用一次。该用例验证的是 RPO 行为，未作为吞吐压测。
+- 完整物理组中的两次强杀场景再次通过。P001 在真实严格 ACK 后经历第二次掉线，P000 曾处于已签名恢复阶段，A 先只读再持租约，最终 256 份 WAL 和 256 份快照均一致。常规 A/B 双向接管和重复回主继续执行。[正式物理日志](/Users/kong/.opentradingcore/t554-order-a-stall-20261121-LSxSMI/readonly-join/market-ioc-certified-20261122/common-ready-activation-fairness-complete-physical/failover.log)
+- 为给恢复和原卷滚动保留盘空间，核对 11 月 21 日 20:53 退役卷无运行容器后，只归档该卷两个 Trade 快照目录。源数据 8,410,863,616 字节，压缩件共 1,581,114,221 字节。逐包与原内容全量对比、记录原路径及 SHA-256 后释放原快照文件。该退役卷的主 WAL、容器和卷保留，使用该退役代前须把两个归档解回原挂载点。较新的 11 月 22 日 00:20 回退卷和现役卷未更改。Mac 与 Colima 数据盘分别约 17 GiB、16 GiB 可用。[归档原路径及校验值](/Users/kong/.opentradingcore/t554-order-a-stall-20261121-LSxSMI/readonly-join/market-ioc-certified-20261122/old-20261121-205353-certified-data-archive/checksums.jsonl)
