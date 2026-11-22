@@ -176,3 +176,13 @@ Common `a3c5b1f` 先获取原分区的物理授权。在业务恢复检查失败
 08:18，沿用 P129 原双签水位，把压缩前段与尾段作为一个顺序流读取。整个恢复输入目录没有合并后的原始 WAL，Common 原帧解析和连续 SHA-256 仍校验了全部 4,100 条记录。该实验验证了直接读归档段的可行性。证据为 `archive-detached-signed-readback/regression/direct-segment-stream.xBQ6KK/result.log`。
 
 08:29，正式门禁中的 322 项安全检查、4 项单副本恢复、4 项冷启动用例、独立原生故障 17 项均通过。3 项外部历史样本仍跳过。带回主中断的 256 分区场景已通过，52 个先发生单副本写入的分区冷启动后也通过了完整归位与副本数据比对。最终双向断电、第三次断电及重复回主仍在运行。
+
+08:46，最终候选通过双向断电接管和归位。A 掉电后 B 接管用时 176.4 秒，A 回主用时 506.3 秒。B 掉电后 A 接管用时 202.6 秒，B 回主用时 488.7 秒。两侧逐一比对 256 套 WAL 和恢复镜像。实际运行中强制退出导出进程后，独立归档恢复回归也通过。原始记录位于 `retired-wal-local-census-formal-20261122-0800/home-faults.log`。
+
+08:47–08:48 现役复查仍是 Order、Trade 各 256 个严格双副本，10 个 Robot 运行。最近五分钟共 1,388 笔成交，过账差错 0。资金游标对齐，核验的 491,611 条前驱关系无差错，十个租户行情及 K 线全部通过。证据为 `post-census-gate-robust-robot-0847.json`、`post-census-gate-strict-finance-0847.json` 和 `post-census-gate-market-0847.json`。
+
+08:59，第三次断电的 256 分区单副本接管、再次追平和回主全部通过。正式资格程序返回 Common PASS，复核实际 JAR SHA-256、各阶段日志和物理凭据均通过。凭据 `retired-wal-local-census-formal-20261122-0800/verification.seal.json` 的 SHA-256 为 `5b1b8bf4ef5f413d9dc0b8f30498c278c8367107dc7297df40d28ea392cbf03e`。
+
+09:01，按现役构建的依赖顺序，将同一份已验收 Common JAR 与现役 Shared JAR 重新固定后，用 Java 8 编译当班源版本。Shared 160 个、Order `4384fd1` 的 125 个、Trade `0c917bf` 的 173 个源码文件均编译成功。首次通用检查从本机依赖缓存选到了旧 Shared，产生符号缺失。改用现役精确依赖后消除。证据为 `local-census-pinned-java8-20261122-0901/`。业务容器继续使用当班原版，新候选的业务故障、严格及异步性能仍待验收。
+
+09:02–09:03，11 月 16 日 08:57 退役实例的四份认证数据目录完成归档。源约 8.51 GiB，压缩件约 2.18 GiB。逐包比对原目录并记录 SHA-256 后释放退役数据，宿主可用空间约 24 GiB，Colima 约 34 GiB。严格双副本及十个 Robot 在维护期间再次通过检查。证据为 `old-20261116-085710-certified-data-archive/checksums.jsonl` 和 `archive-stage-085710-colima-trim.log`。
