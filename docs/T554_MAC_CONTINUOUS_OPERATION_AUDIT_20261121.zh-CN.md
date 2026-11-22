@@ -468,3 +468,8 @@ Playwright 在公网使用专用模拟账号，不修改用户报告的原账号
 - 先前的 P001 READY 表明两侧物理存储安装完成，第二次杀进程仍可能早于主节点用真实 TCP 打开写入。测试修订 `34a9e1c` 固定要求 P001 在 Epoch 4 完成一笔真实严格 ACK、核对双方 WAL 和镜像一致，才在 P000 的签名恢复点强杀 A。测试修订前后生产 JAR SHA-256 完全相同。
 - 按新判据确认 P001 实际双副本提交后，第二次失联仍触发独立阻塞。P002 已发布 READY，但仍在等待物理监听器，B 会反复试连已停止的 A，挡住后续缺副本恢复。Common `0996088` 将这类 READY 后打开物理角色的工作也放入既有分区轮转；同分区仍需原 TCP 对端证据才能接收业务。精确 JAR SHA-256 为 `a9c28045e7b1751c9c1671b2efa769db73701123f36d9a7dc8877acc86d69a02`，正在复跑两次真实掉线门禁。
 - 公网 BZ75K5 交易页在原版本下实收 BTCUSDT 171 根历史 K 线和 9 次实时更新，HTTP 200，浏览器异常数为 0。03:51:24 至 03:56:24 的原 10 个 Robot 观测中，1,490 次 Tape 请求全部配对成交推送，P99 为 75.553 毫秒。这是原业务正常流量的被动窗口，未达到性能验收的 20 毫秒目标。[行情证据](/Users/kong/.opentradingcore/t554-order-a-stall-20261121-LSxSMI/readonly-join/market-ioc-certified-20261122/public-chart-before-all-orders/published-chart-smoke.json) [原 Robot 窗口](/Users/kong/.opentradingcore/t554-order-a-stall-20261121-LSxSMI/readonly-join/market-ioc-certified-20261122/robot-passive-before-ready-activation.json)
+
+### 04:04 两次强杀进程后的完整回主定向验证通过
+
+- 精确 Common `0996088` 的定向用例覆盖两个物理投票进程和独立见证。P001 已完成一笔双副本严格 ACK 后，物理再次强杀 A。P001 在新 Epoch 经见证转为 B 单副本，A 以无写租约进入只读等待。见证签发后才授予返场写租约。P000 保留原签名 Stage，并用原物理证据继续安装。最终各 256 份 WAL 和快照分别在 A/B 完全一致，全部恢复到原 Home。[定向物理演练](/Users/kong/.opentradingcore/t554-order-a-stall-20261121-LSxSMI/readonly-join/market-ioc-certified-20261122/common-ready-activation-fairness-targeted/interrupted-return.log)
+- 同一 JAR 的完整发布验证继续，已通过两个分区隔离场景与同进程永久隔离场景。原 Mac 的 Order、Trade 和交易网页仍在当班版本。准备了保留原卷和原容器身份的分步发布，先升级 Trade，再升级双方 Order 读取能力，最后开放全部九种订单类型。公网端到端脚本覆盖市价开空、减仓平仓、七种条件单及两种追踪回调、行情触发的实际成交和按唯一订单编号核对资金 WAL。
