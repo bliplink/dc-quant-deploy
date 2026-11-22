@@ -371,3 +371,4 @@ Playwright 在公网使用专用模拟账号，不修改用户报告的原账号
 - 公网对照租户 L7IUML 使用独立模拟账号充值 100 USDT、提现 1 USDT，WebSocket 回包分别用时 712 和 443 毫秒。重复两次发送同一提现编号都成功，MySQL 投影为一笔充值、一笔提现和一个提现来源编号。
 - 公网 BZ75K5 的新测试账号仍遇到 `Common physically certified partition writer unavailable: P032`。限价和市价开空请求都在 Trade 预检返回 `account balance does not exist`，浏览器未提交实际委托。该租户的充值、提现入账、开空成交及 K 线均须继续单独验收。没有对用户报告的账号进行写操作。
 - Order 的 256 个分区均为严格 READY。Trade 代数 3113，4 个严格 READY、251 个单副本 READY、P062 处于严格 RECOVERING。P062 本轮签名 Stage 记录为 Epoch 9 的 A 严格写者切至 Epoch 10 的 B，当前尚无该轮 READY。现役单副本转严格流程在这一 Stage 完成前等待，P032 的资金写入仍要求物理严格确认。上线验收保持 NO-GO。
+- 原 Common JAR 以只读挂载核验了 P062 的 Stage 签名和 Epoch 9 前序证据。B 有 Epoch 9 退役证据，A 的对应文件缺失，双方均未写出 Epoch 10 安装证据。生产核验函数拒绝继续，报 `Common old Epoch retirement proof file missing/unsafe`。ZooKeeper 显示两侧各有独立活租约，可将排查范围收敛到回归的旧 A 为该 Stage 生成物理退役证据的流程。
