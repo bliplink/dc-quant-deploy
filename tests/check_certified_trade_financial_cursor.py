@@ -23,12 +23,22 @@ def mismatches(alias, fields, precision):
 
 
 def statement(min_epoch, predecessors=False):
+    # Source range checks in the same snapshot require contiguous sequences.
+    # Only the first frame in each epoch therefore needs an inter-epoch lookup.
     predecessor_query = """
-WITH history AS (
- SELECT source_epoch,journal_seq,previous_epoch,previous_seq,
-   LAG(source_epoch,1,0) OVER (PARTITION BY partition_id ORDER BY source_epoch,journal_seq) AS actual_epoch,
-   LAG(journal_seq,1,0) OVER (PARTITION BY partition_id ORDER BY source_epoch,journal_seq) AS actual_seq
- FROM dc_trade_projection_event
+WITH epoch_ranges AS (
+ SELECT partition_id,source_epoch,MAX(journal_seq) AS last_seq
+ FROM dc_trade_projection_event GROUP BY partition_id,source_epoch
+), epoch_links AS (
+ SELECT partition_id,source_epoch,
+   LAG(source_epoch,1,0) OVER (PARTITION BY partition_id ORDER BY source_epoch) AS prior_epoch,
+   LAG(last_seq,1,0) OVER (PARTITION BY partition_id ORDER BY source_epoch) AS prior_seq
+ FROM epoch_ranges
+), history AS (
+ SELECT e.source_epoch,e.previous_epoch,e.previous_seq,
+   CASE WHEN e.journal_seq=1 THEN l.prior_epoch ELSE e.source_epoch END AS actual_epoch,
+   CASE WHEN e.journal_seq=1 THEN l.prior_seq ELSE e.journal_seq-1 END AS actual_seq
+ FROM dc_trade_projection_event e JOIN epoch_links l USING (partition_id,source_epoch)
 )
 SELECT 'predecessor_links',COUNT(*),COUNT(CASE WHEN NOT(
        (previous_epoch <=> actual_epoch) AND (previous_seq <=> actual_seq)
@@ -36,6 +46,8 @@ SELECT 'predecessor_links',COUNT(*),COUNT(CASE WHEN NOT(
           AND (actual_epoch=2 OR actual_epoch=0 AND actual_seq=0))
     THEN 1 END) FROM history;
 """ if predecessors else ""
+    # Keep one fixed-width coordinate per entity before fetching its payload.
+    # Fixed widths preserve numeric ordering for epoch, sequence and signed index.
     return f"""
 SET TRANSACTION ISOLATION LEVEL REPEATABLE READ;
 START TRANSACTION WITH CONSISTENT SNAPSHOT, READ ONLY;
@@ -60,14 +72,22 @@ SELECT 'missing_source_heads',COUNT(*) FROM dc_trade_projection_watermark w
  AND e.source_epoch=w.source_epoch AND e.journal_seq=w.journal_seq
  WHERE w.journal_seq>0 AND e.partition_id IS NULL;
 {predecessor_query}
-WITH latest AS (
- SELECT m.entity_type,m.entity_key,m.location,m.operation,m.payload,m.source_epoch,
-   ROW_NUMBER() OVER (PARTITION BY m.entity_type,m.entity_key
-       ORDER BY m.source_epoch DESC,m.journal_seq DESC,m.mutation_index DESC) AS rank_at_cursor
+WITH latest_keys AS (
+ SELECT m.entity_type,m.entity_key,MAX(CAST(CONCAT(
+     LPAD(m.source_epoch,20,'0'),LPAD(m.journal_seq,20,'0'),
+     LPAD(m.mutation_index+2147483648,10,'0'),m.partition_id) AS BINARY)) AS coordinate
  FROM dc_trade_projection_mutation m
  JOIN dc_trade_financial_readmodel_cursor c ON c.partition_id=m.partition_id
  WHERE (m.source_epoch<c.source_epoch OR (m.source_epoch=c.source_epoch AND m.journal_seq<=c.journal_seq))
  AND m.entity_type IN ('ACCOUNT_BALANCE','POSITION')
+ GROUP BY m.entity_type,m.entity_key
+), latest AS (
+ SELECT m.entity_type,m.entity_key,m.location,m.operation,m.payload,m.source_epoch
+ FROM latest_keys k JOIN dc_trade_projection_mutation m
+ ON m.partition_id=CONVERT(SUBSTRING(k.coordinate,51) USING utf8mb4) COLLATE utf8mb4_0900_ai_ci
+ AND m.source_epoch=CAST(SUBSTRING(k.coordinate,1,20) AS UNSIGNED)
+ AND m.journal_seq=CAST(SUBSTRING(k.coordinate,21,20) AS UNSIGNED)
+ AND m.mutation_index=CAST(SUBSTRING(k.coordinate,41,10) AS SIGNED)-2147483648
 )
 SELECT m.entity_type,COUNT(*),
   SUM(CASE
@@ -85,20 +105,19 @@ SELECT m.entity_type,COUNT(*),
  LEFT JOIN dc_orders_position p ON m.entity_type='POSITION' AND p.location=m.location
    AND p.user_id=SUBSTRING_INDEX(SUBSTRING_INDEX(m.entity_key,CHAR(31),2),CHAR(31),-1)
    AND p.security_id=SUBSTRING_INDEX(m.entity_key,CHAR(31),-1)
- WHERE rank_at_cursor=1
  GROUP BY m.entity_type
  UNION ALL
  SELECT 'EXTRA_BALANCE',COUNT(*),COUNT(CASE WHEN NOT(b.balance <=> 0 AND b.used_margin <=> 0
     AND b.freezed_margin <=> 0 AND b.freezed_commission <=> 0) THEN 1 END),0
- FROM dc_users_balance b LEFT JOIN latest m ON m.rank_at_cursor=1 AND m.entity_type='ACCOUNT_BALANCE'
+ FROM dc_users_balance b LEFT JOIN latest m ON m.entity_type='ACCOUNT_BALANCE'
     AND b.location=m.location AND b.user_id=SUBSTRING_INDEX(m.entity_key,CHAR(31),-1)
- WHERE m.rank_at_cursor IS NULL
+ WHERE m.entity_type IS NULL
  UNION ALL
  SELECT 'EXTRA_POSITION',COUNT(*),COUNT(*),0
- FROM dc_orders_position p LEFT JOIN latest m ON m.rank_at_cursor=1 AND m.entity_type='POSITION'
+ FROM dc_orders_position p LEFT JOIN latest m ON m.entity_type='POSITION'
     AND p.location=m.location AND p.user_id=SUBSTRING_INDEX(SUBSTRING_INDEX(m.entity_key,CHAR(31),2),CHAR(31),-1)
     AND p.security_id=SUBSTRING_INDEX(m.entity_key,CHAR(31),-1)
- WHERE m.rank_at_cursor IS NULL;
+ WHERE m.entity_type IS NULL;
 COMMIT;
 """
 
