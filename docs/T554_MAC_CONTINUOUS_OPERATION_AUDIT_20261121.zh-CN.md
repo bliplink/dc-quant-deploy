@@ -473,3 +473,9 @@ Playwright 在公网使用专用模拟账号，不修改用户报告的原账号
 
 - 精确 Common `0996088` 的定向用例覆盖两个物理投票进程和独立见证。P001 已完成一笔双副本严格 ACK 后，物理再次强杀 A。P001 在新 Epoch 经见证转为 B 单副本，A 以无写租约进入只读等待。见证签发后才授予返场写租约。P000 保留原签名 Stage，并用原物理证据继续安装。最终各 256 份 WAL 和快照分别在 A/B 完全一致，全部恢复到原 Home。[定向物理演练](/Users/kong/.opentradingcore/t554-order-a-stall-20261121-LSxSMI/readonly-join/market-ioc-certified-20261122/common-ready-activation-fairness-targeted/interrupted-return.log)
 - 同一 JAR 的完整发布验证继续，已通过两个分区隔离场景与同进程永久隔离场景。原 Mac 的 Order、Trade 和交易网页仍在当班版本。准备了保留原卷和原容器身份的分步发布，先升级 Trade，再升级双方 Order 读取能力，最后开放全部九种订单类型。公网端到端脚本覆盖市价开空、减仓平仓、七种条件单及两种追踪回调、行情触发的实际成交和按唯一订单编号核对资金 WAL。
+
+### 04:40 订单过载边界补验
+
+- 用单名额订单簿复现之前候选的误拒。市价条件单已经持久化为 `Untriggered`，仍因 IOC 被计入待撮合名额，随后提交的合法订单收到 `ORDER_BUSY_RETRYABLE`。相同问题在恢复订单簿时存在。
+- Order 最终候选 `0d2644d` 在正常应用和恢复重放都释放未触发条件单的临时名额。触发后的市价子单继续占用待撮合名额。现有 429 繁忙判据及撤单路径保持。新定向回归在旧二进制失败，在新二进制通过，全部 65 项 Order 用例现已通过。读取兼容候选更新到 `68d0b1b`，并重新核对跟踪止损回调和锚点。两份源代码均已推送。现役 Order 尚未切换。[回归证据](/Users/kong/.opentradingcore/t554-order-a-stall-20261121-LSxSMI/readonly-join/market-ioc-certified-20261122/order-dormant-admission-release/all-order-types-regression.log)
+- 独立 Common 的冷启动组全部通过，其中混合样本实际回主 256 分区并核对 127 个重新安装分区的 WAL 和镜像。正式物理验证进入最后一组。原生异步测试已核对主故障时两侧实际水位，以及单独备机失联时主机的本地落盘确认。
