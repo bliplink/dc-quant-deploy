@@ -194,8 +194,8 @@ def main():
              'common_revision': revision, 'common_sha256': expected, 'physical_result': str(results),
              'qualifier_source_sha256': sha(qualifier_source),
              'business_mutations': False, 'stages': [], 'production_go': False}
-    # Existing verifier supports independent native and Home JVMs. Their
-    # private directories and control sessions share only this frozen JAR.
+    # The full verifier can run native and Home faults in separate JVMs.
+    # Start it after the shorter-lease focused probes finish.
     env = dict(os.environ, JAVA_HOME=str(java),
                MAC_DEMO_COMMON_PARALLEL_P0_JVMS=os.environ.get('MAC_DEMO_COMMON_PARALLEL_P0_JVMS', 'true'))
     full = full_output = None
@@ -267,8 +267,6 @@ def main():
             phase(name, isolated + ['--method', 'com.app.common.replication.' + test_class, method])
             state['partition_isolation'][name] = isolation_result(work, name)
             save()
-        if env['MAC_DEMO_COMMON_PARALLEL_P0_JVMS'] == 'true':
-            launch_physical()
         state['live_local'] = {}
         for name, method in LIVE_LOCAL:
             live_command = command[:]
@@ -313,8 +311,7 @@ def main():
             save()
         state['current_stage'] = 'full-physical'
         save()
-        if full is None:
-            launch_physical()
+        launch_physical()
         if full.wait(timeout=5400):
             raise RuntimeError('Independent physical failover failed; preserve its original evidence')
         seal = json.loads((results / 'verification.seal.json').read_text())
