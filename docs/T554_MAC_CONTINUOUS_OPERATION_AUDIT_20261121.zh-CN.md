@@ -595,3 +595,9 @@ Playwright 在公网使用专用模拟账号，不修改用户报告的原账号
 - 完整物理门禁已验证备节点安装不完整时只保留该分区，其他实际分区取得双副本 ACK。异步主节点强杀样本中，本机确认水位为 65，备节点已认证水位为 3，接管按备端水位，两侧原 WAL 和未确认尾部保留；独立的持续追平样本中，两侧最终均达 65 且业务只应用一次。实际容量和时延仍待原机恢复后测试。[物理演练日志](/Users/kong/.opentradingcore/t554-order-a-stall-20261121-LSxSMI/readonly-join/market-ioc-certified-20261122/common-indexed-scoped-strict-serial-complete-physical/failover.log)
 - 10:41 使用公开页面复查主站入口 BB0201 和用户报告的 BZ75K5，两页 HTTP 200，各加载 62 根 BTCUSDT 历史 K 线，浏览器异常数为 0，未观察到实时更新。原 MySQL、ZooKeeper、ClickHouse 健康。10 个原 Robot 的 Trade 分区中，3 个仍在恢复，另外 7 个依赖实际双盘确认。BZ75K5 对应 P032，P074 对应 XJZEOB。当前旧 Trade B 无物理监听，原 Robot 保持维护暂停。[公网巡检](/Users/kong/.opentradingcore/t554-order-a-stall-20261121-LSxSMI/readonly-join/market-ioc-certified-20261122/trade-cold-snapshot-compression/robot-readiness/public-market-hourly-1041.json)
 - 10:47 后原生物理故障测试结束，19 项全部通过，耗时 1,361.462 秒，继续常规双向全量回主门禁。
+
+
+### 10:51–11:05 正式演练取样修正与重复故障验证
+
+- 10:51 的完整演练在读取已暂停分区的控制证据时退出。测试先读清单，再独立读分区索引，期间另一个分区完成 CAS。收尾时读得清单版本 527、索引版本 525，两者的同一次发布 zxid 为 1349。本次失败证据完整保留。测试提交 `3518265` 只在证实同一 ZooKeeper 实例的发布向前推进后重新取样；仍核验原分区签名、完全一致的发布、水位及真实主备角色。生产 Common JAR 的 SHA-256 保持 `42d8a931ef17567fc1aef6122e221b567ebcd3606efa2524cec46c0c05ab6fa8`。[原失败日志](/Users/kong/.opentradingcore/t554-order-a-stall-20261121-LSxSMI/readonly-join/market-ioc-certified-20261122/common-indexed-scoped-strict-serial-complete-physical/failover.log) [控制发布版本](/Users/kong/.opentradingcore/t554-order-a-stall-20261121-LSxSMI/readonly-join/market-ioc-certified-20261122/common-indexed-scoped-strict-serial-complete-physical/process-evidence-interrupted/final-control-stats.txt)
+- 11:04，修正取样的独立复跑通过回主期间再次强杀的场景。P000 保留原签名阶段，P001 原先确认了一笔真实双副本写入并经历第二次掉线。返场节点先只读等待见证完成，之后自动恢复所有 256 个分区，主备 WAL 与快照各 256 份一致。常规正反向演练继续，原卷恢复仍待完整 Common 发布结论和 P074 的既有恢复确认。[同一 JAR 的独立演练](/Users/kong/.opentradingcore/t554-order-a-stall-20261121-LSxSMI/readonly-join/market-ioc-certified-20261122/common-coherent-held-stage-fixture/physical-home.log)
