@@ -20,6 +20,7 @@ Usage:
   ./mac-colima-saas.sh uninstall [uninstall-saas.sh args...]
   ./mac-colima-saas.sh reinstall [install-saas.sh args...]
   ./mac-colima-saas.sh fresh [verified build directory]
+  ./mac-colima-saas.sh fresh-empty VERIFIED_BUILD_DIRECTORY PROTECTED_REFERENCE_JSON [--tenants 10]
   ./mac-colima-saas.sh fresh-verified CANDIDATE_DIRECTORY PHYSICAL_RESULT_DIRECTORY
   ./mac-colima-saas.sh verify-common COMMON_REVISION
   ./mac-colima-saas.sh verify-and-fresh COMMON_REVISION
@@ -177,6 +178,18 @@ main() {
       remote_run_script install-saas.sh "$@"
       ensure_forward
       show_credentials
+      ;;
+    fresh-empty)
+      [[ ( "$#" -eq 2 || ( "$#" -eq 4 && "$3" == --tenants && "$4" == 10 ) ) &&
+         "$1" == /* && "$2" == /* ]] ||
+        die "Usage: ./mac-colima-saas.sh fresh-empty VERIFIED_BUILD_DIRECTORY PROTECTED_REFERENCE_JSON [--tenants 10]"
+      local empty_run="${HOME}/.opentradingcore/mac-demo-$(date +%Y%m%d-%H%M%S)"
+      python3 "${SCRIPT_DIR}/scripts/mac-demo-fresh.py" \
+        "$empty_run" "$1" --apply --verify-business --empty-reference "$2"
+      ensure_forward
+      if [[ "$#" -eq 4 ]]; then
+        python3 "${SCRIPT_DIR}/scripts/verify-mac-demo-robot-capacity.py" "$empty_run" 10
+      fi
       ;;
     fresh|fresh-verified)
       local stamp build_dir run_dir build_seconds active_generation order_base trade_base md_base

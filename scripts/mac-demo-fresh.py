@@ -24,6 +24,9 @@ SERVICES = {"order": "OrderSvr", "trade": "TradeSvr"}
 SLOTS = ("A", "B")
 INFRA = ("mysql", "clickhouse", "zookeeper")
 APPS = ("gateway", "loginsvr", "managersvr", "adminsvr", "mdsvr", "apssvr")
+WEB_CONTAINERS = {"public-web": "dc-saas-public-web", "api-docs": "dc-saas-api-docs",
+                  "web": "dc-saas-trade-web", "platform-web": "dc-saas-platform-web",
+                  "tenant-web": "dc-saas-tenant-web"}
 PROJECTION = "projectionsvr"
 SUPPORT_IMAGES = {
     PROJECTION: ("MAC_DEMO_PROJECTION_IMAGE", "local/otc-t454-projectionsvr:common-zk-rejoin"),
@@ -379,6 +382,24 @@ def rotate_recovery_rsa_keys(configuration_root):
             for previous, pair in sorted(rotations.items())]
 
 
+def new_demo_signers(out):
+    """Create new physical signer material; the Common template supplies only the aliases."""
+    root = out / "common" / "physical-signers"
+    (root / "public").mkdir(parents=True)
+    for slot in (*SLOTS, "C"):
+        private = root / slot.lower()
+        pem = subprocess.run(["openssl", "genpkey", "-algorithm", "RSA", "-pkeyopt", "rsa_keygen_bits:2048"],
+                             check=True, capture_output=True).stdout
+        if slot in SLOTS:
+            private.mkdir()
+            subprocess.run(["openssl", "pkcs8", "-topk8", "-nocrypt", "-outform", "DER",
+                            "-out", str(private / "node.pk8")], input=pem, check=True, capture_output=True)
+        subprocess.run(["openssl", "pkey", "-pubout", "-outform", "DER",
+                        "-out", str(root / "public" / f"CommonHaDemo{slot}.pub.der")],
+                       input=pem, check=True, capture_output=True)
+    return root
+
+
 def provision_control_identities(out):
     keys = {name: secrets.token_hex(32) for name in
             ("bootstrap", "order", "trade", "order-reader", "trade-reader")}
@@ -525,58 +546,7 @@ def until(predicate, description, timeout=180):
     raise RuntimeError(f"Timed out: {description}")
 
 
-def main():
-    parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("run", help="New absolute run directory")
-    parser.add_argument("build", type=Path, help="Directory from build-mac-demo-core.sh")
-    parser.add_argument("--apply", action="store_true")
-    parser.add_argument("--verify-business", action="store_true", help="Verify the new Demo before releasing rollback")
-    parser.add_argument("--template", type=Path, default=LOCAL / "t549-fresh-business-demo")
-    args = parser.parse_args()
-    out = Path(args.run)
-    if (not out.is_absolute() or out.exists() or not re.fullmatch(r"mac-demo-[a-z0-9-]+", out.name)
-            or read("uname", "-s") != "Darwin" or read("docker", "context", "show") != "colima"):
-        raise RuntimeError("Use a new mac-demo-* directory on the local Colima context")
-    generation = out.name
-    namespace = "/otc/" + generation
-    os.umask(0o077)
-    lock = (LOCAL / ".mac-demo-fresh.lock").open("a")
-    try:
-        fcntl.flock(lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
-    except BlockingIOError as exc:
-        raise RuntimeError("Another Mac Demo deployment is in progress") from exc
-    if args.apply:
-        require_docker_space()
-    for key in (*VOLUMES, *(f"{kind}-witness" for kind in SERVICES)):
-        probe = subprocess.run(["docker", "volume", "inspect", f"{generation}-{key}"],
-                               capture_output=True)
-        if probe.returncode == 0:
-            raise RuntimeError(f"Existing storage for {generation}; choose a new generation")
-    if read("docker", "ps", "-aq", "--filter", f"label=com.docker.compose.project={generation}"):
-        raise RuntimeError(f"Existing Compose project for {generation}")
-    bootstrap = args.template / "common-bootstrap"
-    images = env_pairs(args.build / "images.env")
-    automatic_common = verified_common_release(images)
-    if automatic_common:
-        seal = Path(images["common_fault_result"]) / "verification.seal.json"
-        verified = json.loads(seal.read_text())
-        if verified.get("protected_partition_recovery") is not True:
-            raise RuntimeError("Fresh protected deployment requires the verified partition-level Home recovery")
-        overlap = verified.get("read_only_rejoin_physical_evidence", {})
-        for name in ("admitted-return-manifest.txt", "final-manifest.txt", "return-a.log"):
-            proof = seal.parent / "process-evidence-interrupted" / name
-            if not proof.is_file() or hashlib.sha256(proof.read_bytes()).hexdigest() != overlap.get(name):
-                raise RuntimeError("Fresh protected deployment requires the verified read-only return")
-    if automatic_common and not re.fullmatch(r"mac-demo-[0-9]{8}-[0-9]{6}", generation):
-        raise ValueError("Protected deployment requires a new timestamped Mac Demo generation")
-    client_ack_policy = selected_client_ack_policy(images, os.environ.get("MAC_DEMO_CLIENT_ACK_POLICY", "STRICT_QUORUM"))
-    recovery_watch_ms = os.environ.get("MAC_DEMO_RECOVERY_WATCH_MS", "200")
-    if not re.fullmatch(r"[0-9]{3,4}", recovery_watch_ms) or not 100 <= int(recovery_watch_ms) <= 5000:
-        raise RuntimeError("Common recovery watch interval must be 100–5000 milliseconds")
-    image_refs = {kind: images[f"{kind}_IMAGE"] for kind in SERVICES}
-    image_ids = {kind: read("docker", "image", "inspect", "-f", "{{.Id}}", image)
-                 for kind, image in image_refs.items()}
-    pairs = [(kind, slot) for kind in SERVICES for slot in SLOTS]
+def retired_reference(pairs, automatic_common):
     active_projects = read("docker", "inspect", "-f", '{{index .Config.Labels "com.docker.compose.project"}}',
                            "dc-saas-gateway", "dc-saas-mysql").splitlines()
     mac_projects = {project for project in active_projects if re.fullmatch(r"mac-demo-[0-9]{8}-[0-9]{6}", project)}
@@ -632,6 +602,91 @@ def main():
         raise RuntimeError("Expected all reviewed legacy Mac Demo voters to be running")
     running_support = [name for name in support_names if old[name]["State"]["Running"]]
     running_old_witnesses = [name for name in old_witness_names if old[name]["State"]["Running"]]
+    return old, old_core, old_names, running_old_core, running_old_witnesses, running_support
+
+
+def main():
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("run", help="New absolute run directory")
+    parser.add_argument("build", type=Path, help="Directory from build-mac-demo-core.sh")
+    parser.add_argument("--apply", action="store_true")
+    parser.add_argument("--verify-business", action="store_true", help="Verify the new Demo before releasing rollback")
+    parser.add_argument("--template", type=Path, default=LOCAL / "t549-fresh-business-demo")
+    parser.add_argument("--empty-reference", type=Path,
+                        help="Protected image and launch reference captured from the retired local Demo")
+    args = parser.parse_args()
+    out = Path(args.run)
+    if (not out.is_absolute() or out.exists() or not re.fullmatch(r"mac-demo-[a-z0-9-]+", out.name)
+            or read("uname", "-s") != "Darwin" or read("docker", "context", "show") != "colima"):
+        raise RuntimeError("Use a new mac-demo-* directory on the local Colima context")
+    generation = out.name
+    namespace = "/otc/" + generation
+    os.umask(0o077)
+    lock = (LOCAL / ".mac-demo-fresh.lock").open("a")
+    try:
+        fcntl.flock(lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
+    except BlockingIOError as exc:
+        raise RuntimeError("Another Mac Demo deployment is in progress") from exc
+    if args.apply:
+        require_docker_space()
+    for key in (*VOLUMES, *(f"{kind}-witness" for kind in SERVICES)):
+        probe = subprocess.run(["docker", "volume", "inspect", f"{generation}-{key}"],
+                               capture_output=True)
+        if probe.returncode == 0:
+            raise RuntimeError(f"Existing storage for {generation}; choose a new generation")
+    if read("docker", "ps", "-aq", "--filter", f"label=com.docker.compose.project={generation}"):
+        raise RuntimeError(f"Existing Compose project for {generation}")
+    bootstrap = args.template / "common-bootstrap"
+    images = env_pairs(args.build / "images.env")
+    automatic_common = verified_common_release(images)
+    if automatic_common:
+        seal = Path(images["common_fault_result"]) / "verification.seal.json"
+        verified = json.loads(seal.read_text())
+        if verified.get("protected_partition_recovery") is not True:
+            raise RuntimeError("Fresh protected deployment requires the verified partition-level Home recovery")
+        overlap = verified.get("read_only_rejoin_physical_evidence", {})
+        for name in ("admitted-return-manifest.txt", "final-manifest.txt", "return-a.log"):
+            proof = seal.parent / "process-evidence-interrupted" / name
+            if not proof.is_file() or hashlib.sha256(proof.read_bytes()).hexdigest() != overlap.get(name):
+                raise RuntimeError("Fresh protected deployment requires the verified read-only return")
+    if automatic_common and not re.fullmatch(r"mac-demo-[0-9]{8}-[0-9]{6}", generation):
+        raise ValueError("Protected deployment requires a new timestamped Mac Demo generation")
+    client_ack_policy = selected_client_ack_policy(images, os.environ.get("MAC_DEMO_CLIENT_ACK_POLICY", "STRICT_QUORUM"))
+    recovery_watch_ms = os.environ.get("MAC_DEMO_RECOVERY_WATCH_MS", "200")
+    if not re.fullmatch(r"[0-9]{3,4}", recovery_watch_ms) or not 100 <= int(recovery_watch_ms) <= 5000:
+        raise RuntimeError("Common recovery watch interval must be 100–5000 milliseconds")
+    image_refs = {kind: images[f"{kind}_IMAGE"] for kind in SERVICES}
+    image_ids = {kind: read("docker", "image", "inspect", "-f", "{{.Id}}", image)
+                 for kind, image in image_refs.items()}
+    pairs = [(kind, slot) for kind in SERVICES for slot in SLOTS]
+    empty = args.empty_reference is not None
+    if empty and (not automatic_common or not args.apply or not args.verify_business):
+        raise RuntimeError("Empty installation requires protected Common and real business verification")
+    if empty and read("docker", "ps", "-aq"):
+        raise RuntimeError("Empty installation requires an empty local Docker container inventory")
+    if empty:
+        reference = args.empty_reference.resolve(strict=True)
+        if reference.stat().st_mode & 0o077:
+            raise RuntimeError("Empty deployment reference must be private")
+        old = json.loads(reference.read_text())
+        previous = old["dc-saas-gateway"]["Config"]["Labels"]["com.docker.compose.project"]
+        if (not re.fullmatch(r"mac-demo-[0-9]{8}-[0-9]{6}", previous)
+                or old["dc-saas-mysql"]["Config"]["Labels"]["com.docker.compose.project"] != previous):
+            raise RuntimeError("Invalid previous Demo reference")
+        old_core = {(kind, slot): f"{previous}-{kind}-{slot.lower()}-hostready" for kind, slot in pairs}
+        expected = ({f"dc-saas-{name}" for name in (*INFRA, *APPS, *SUPPORT_IMAGES)}
+                    | set(old_core.values()) | set(WEB_CONTAINERS.values()))
+        if set(old) != expected:
+            raise RuntimeError("Incomplete or unexpected empty installation reference")
+        control_mounts = old["dc-saas-gateway"]["Mounts"]
+        if (len(control_mounts) != 1 or control_mounts[0]["Destination"] != "/srv/dc/control"
+                or Path(control_mounts[0]["Source"]).resolve(strict=True)
+                       != (LOCAL / previous / "runtime/control").resolve(strict=True)):
+            raise RuntimeError("Empty installation requires the reviewed Demo control configuration")
+        running_old_core = running_old_witnesses = running_support = old_names = []
+    else:
+        old, old_core, old_names, running_old_core, running_old_witnesses, running_support = retired_reference(
+            pairs, automatic_common)
     embedded_jars = [("Common", "common", "com.app.common-mac-demo.jar")]
     if "shared_sha256" in images:
         embedded_jars.append(("shared business", "shared", "com.app.dc-mac-demo.jar"))
@@ -686,6 +741,10 @@ def main():
         if quota:
             original_env = update_properties(original_env, {key: str(quota / 1e9)})
     env = out / "demo.env"
+    if empty:
+        # Reuse the existing host/tunnel port so Colima can forward it on
+        # every boot; a transient SSH alias is not needed after a restart.
+        original_env = update_properties(original_env, {"WEB_LISTEN_PORT": "18088"})
     env.write_text(re.sub(r"^(?:DEPLOY_ROOT|COMPOSE_PROJECT_NAME)=.*\n", "", original_env, flags=re.M)
                    + f"\nDEPLOY_ROOT={runtime}\nCOMPOSE_PROJECT_NAME={generation}\n")
     config = env_pairs(env)
@@ -733,12 +792,14 @@ def main():
             target.write_text(content.replace(PREVIOUS, generation))
             target.with_name("log4j.ini").write_text(logging_config[kind])
     rotations = rotate_recovery_rsa_keys(out)
+    signer_root = new_demo_signers(out) if empty else None
     (out / "recovery-rsa-rotation.json").write_text(json.dumps(rotations, indent=2) + "\n")
     witness_roots = {kind: configure_common_witness(config_root, kind, namespace, zk_port, control_keys[kind + "-reader"])
                      for kind in SERVICES} if automatic_common else {}
     witness_pins = {}
     for kind, root in witness_roots.items():
-        a, b = (public_pins(old[old_core[kind, slot]]) for slot in SLOTS)
+        a, b = ((signer_root / "public",) * 2 if empty else
+                tuple(public_pins(old[old_core[kind, slot]]) for slot in SLOTS))
         names = re.findall(r"^voter\.[ab]\.publicKey=/public/([A-Za-z0-9_.-]+)$",
                            (root / "witness.properties").read_text(), re.M)
         if len(set(names)) != 2 or any(not (folder / key).is_file()
@@ -815,6 +876,9 @@ def main():
             image = os.environ.get(setting, previous["Image"] if previous else default)
         run("docker", "image", "tag", read("docker", "image", "inspect", "-f", "{{.Id}}", image), reference)
         pinned[name] = {"image": reference}
+    if empty:
+        for service, name in WEB_CONTAINERS.items():
+            pinned[service] = {"image": old[name]["Image"], "container_name": name}
     override.write_text(json.dumps({"services": pinned}))
     compose = ("docker", "compose", "-p", generation, "--env-file", str(env),
                "-f", str(REPO / "compose.yaml"), "-f", str(override))
@@ -853,6 +917,9 @@ def main():
             flags.extend(["-e", f"OTC_PROTECTED_CONTROL_NAMESPACE={namespace}/{kind}"])
         flags.extend(["--label", f"otc.common.client_ack_policy={phase_policy}"])
         flags.extend(voter_runtime_mounts[kind, slot])
+        if empty:
+            for entry in (slot.lower(), "public"):
+                flags.extend(["-v", f"{signer_root / entry}:/read-only-original-rsa/{entry}:ro"])
         for mount in old_node["Mounts"]:
             dest = mount["Destination"]
             if dest.startswith("/read-only-original-rsa/"):
@@ -884,7 +951,7 @@ def main():
     def start_witness(kind):
         service, root = SERVICES[kind], witness_roots[kind]
         name = f"{generation}-{kind}-witness"
-        flags = ["--name", name, "--network", "host", "--restart", "no", *DOCKER_LOG_OPTIONS,
+        flags = ["--name", name, "--network", "host", "--restart", "unless-stopped" if empty else "no", *DOCKER_LOG_OPTIONS,
                  "--memory", "512m", "--label",
                  f"otc.mac.demo.generation={generation}", "-v", f"{generation}-born:{VOLUMES['born']}:ro",
                  "-v", f"{runtime}/control:/control:ro", "-v", f"{witness_pins[kind]}:/public:ro", "-v",
@@ -955,6 +1022,9 @@ def main():
             run("docker", "update", "--restart", "no", *failed_containers, capture=True)
         stop(new_nodes)
         stop(new_services)
+        if empty:
+            report("Failed empty deployment stopped. New containers and evidence retained for diagnosis.")
+            return
         held = {}
         for identifier in new_services:
             name = read("docker", "inspect", "-f", "{{.Name}}", identifier).lstrip("/")
@@ -982,7 +1052,7 @@ def main():
 
     def tool(class_name, *arguments, native_volume=False, provision=False):
         old_a = old[old_core["order", "A"]]
-        public = next(m["Source"] for m in old_a["Mounts"] if m["Destination"] == "/read-only-original-rsa/public")
+        public = signer_root / "public" if empty else public_pins(old_a)
         flags = ["--network", "host", "-v", f"{tools}:/tools:ro", "-v",
                  f"{runtime}/control:/control:ro", "-v", f"{public}:/public:ro"]
         if native_volume:
@@ -994,14 +1064,15 @@ def main():
             "/tools:/srv/dc/dc/OrderSvr/lib/*", class_name, *arguments, capture=provision)
 
     try:
-        report("Taking the old Mac Demo offline. Its containers and data remain available for rollback.")
-        run("docker", "update", "--restart", "no", *(old[name]["Id"] for name in old_names), capture=True)
-        stop(running_old_witnesses)
-        stop([*running_old_core, *(f"dc-saas-{x}" for x in APPS)])
-        stop(running_support)
-        stop([f"dc-saas-{x}" for x in INFRA])
-        for name, retired in rollback_names.items():
-            run("docker", "rename", old[name]["Id"], retired)
+        if not empty:
+            report("Taking the old Mac Demo offline. Its containers and data remain available for rollback.")
+            run("docker", "update", "--restart", "no", *(old[name]["Id"] for name in old_names), capture=True)
+            stop(running_old_witnesses)
+            stop([*running_old_core, *(f"dc-saas-{x}" for x in APPS)])
+            stop(running_support)
+            stop([f"dc-saas-{x}" for x in INFRA])
+            for name, retired in rollback_names.items():
+                run("docker", "rename", old[name]["Id"], retired)
         require_common_replication_ports("birth")
         run(*compose, "up", "-d", "--pull", "never", "--wait", "--wait-timeout", "360", *INFRA)
         if read("docker", "inspect", "-f", '{{index .Config.Labels "com.docker.compose.project"}}',
@@ -1139,12 +1210,16 @@ def main():
             started = time.monotonic()
             run("bash", str(REPO / "scripts/verify-mac-demo-fresh.sh"), str(out))
             report(f"Business verification passed in {int(time.monotonic() - started)}s")
+        if empty:
+            run(*compose, "up", "-d", "--pull", "never", "--no-deps", "--wait",
+                "--wait-timeout", "180", *WEB_CONTAINERS)
         sync_trade_web_gateway(generation, config)
     except (Exception, KeyboardInterrupt):
         report(f"Fresh startup or baseline verification failed. Rolling back with {old_manifest}")
         try:
             rollback()
-            report("Restored the original containers and their recorded running state")
+            if not empty:
+                report("Restored the original containers and their recorded running state")
         except (RuntimeError, subprocess.CalledProcessError):
             report(f"Rollback needs attention. Container IDs and names are recorded in {old_manifest}")
         raise

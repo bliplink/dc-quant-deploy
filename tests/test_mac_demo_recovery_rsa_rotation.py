@@ -25,6 +25,21 @@ def public_of(encoded_private):
 
 
 class RecoveryRsaRotationTest(unittest.TestCase):
+    def test_empty_install_fresh_physical_keys_and_public_only_third_identity(self):
+        with tempfile.TemporaryDirectory() as directory:
+            generations = []
+            for name in ('first', 'second'):
+                root = FRESH['new_demo_signers'](Path(directory) / name)
+                public = {slot: (root / 'public' / f'CommonHaDemo{slot}.pub.der').read_bytes()
+                          for slot in 'ABC'}
+                for slot in 'AB':
+                    private = (root / slot.lower() / 'node.pk8').read_bytes()
+                    self.assertEqual(public[slot], public_of(base64.b64encode(private)))
+                self.assertFalse((root / 'c').exists())
+                self.assertEqual(3, len(set(public.values())))
+                generations.append(set(public.values()))
+            self.assertTrue(generations[0].isdisjoint(generations[1]))
+
     def test_new_generations_rotate_private_keys_and_all_matching_peer_pins(self):
         a, b = keypair(), keypair()
         fingerprints = {hashlib.sha256(base64.b64decode(key[1])).hexdigest() for key in (a, b)}
