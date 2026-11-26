@@ -16,7 +16,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        component: [public-web, trade-web, tenant-web, platform-web, api-docs, trading-core]
+        component: [public-web, trade-web, tenant-web, platform-web, api-docs, trading-core, robot, admin-bootstrap]
     env:
       COMPONENT: ${{ matrix.component }}
     steps:
@@ -30,14 +30,22 @@ jobs:
           paths=("sources/$COMPONENT")
           if [[ "$COMPONENT" == trading-core ]]; then
             paths=(sources/{gateway-api,common,shared,order,trade,market-data})
+          elif [[ "$COMPONENT" == robot || "$COMPONENT" == admin-bootstrap ]]; then
+            paths+=(sources/shared)
+            if [[ "$COMPONENT" == admin-bootstrap ]]; then paths+=(sources/admin-public-stats); fi
           fi
           git -c 'credential.https://github.com.helper=!f() { if test "$1" = get; then echo username=x-access-token; echo "password=$SOURCE_TOKEN"; fi; }; f' \
             submodule update --init --depth 1 --jobs 3 -- "${paths[@]}"
           for path in "${paths[@]}"; do
             test "$(git -C "$path" rev-parse HEAD)" = "$(git rev-parse "HEAD:$path")"
           done
+          if [[ "$COMPONENT" == robot || "$COMPONENT" == admin-bootstrap ]]; then
+            pin=d3fdaf16a6b8d70e9e81647af459ac6cc4090b37
+            if [[ "$COMPONENT" == admin-bootstrap ]]; then pin=2fa804757c561fc9bbd0642a5c2153fca55cf286; fi
+            git -C sources/shared -c 'credential.https://github.com.helper=!f() { if test "$1" = get; then echo username=x-access-token; echo "password=$SOURCE_TOKEN"; fi; }; f' fetch --depth=1 origin "$pin"
+          fi
       - uses: actions/setup-java@v4
-        if: matrix.component == 'trading-core'
+        if: contains(fromJSON('["trading-core","robot","admin-bootstrap"]'), matrix.component)
         with:
           distribution: temurin
           java-version: '8'
@@ -48,6 +56,8 @@ jobs:
           out="$RUNNER_TEMP/candidates"
           if [[ "$COMPONENT" == trading-core ]]; then
             bash scripts/build-public-simulation-core.sh "$out"
+          elif [[ "$COMPONENT" == robot || "$COMPONENT" == admin-bootstrap ]]; then
+            bash scripts/build-public-simulation-maker.sh "$out" "$COMPONENT"
           else
             bash scripts/build-public-simulation-web.sh "$out" "$COMPONENT"
           fi

@@ -174,7 +174,8 @@ async function triggeredClose(session,markPrice){
  if(Number(received.code)!==0||!received.clientOrderId)throw Error('Conditional reduce-only close was denied');
  return received;
 }
-(async()=>{
+module.exports={newPage,place,observeTrade,acknowledged};
+if(require.main===module)(async()=>{
  const browser=await chromium.launch({headless:true,channel:'chrome'});
  const result={location,contract:'BTCUSDT',quantity:'0.001',login:'dedicated simulated accounts'};
  let buyer,seller;

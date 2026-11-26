@@ -488,6 +488,7 @@ services:
       zookeeper:
         condition: service_started
     environment:
+      PUBLIC_SIMULATION_FUNDED_MAKERS: ${PUBLIC_SIMULATION_FUNDED_MAKERS:-false}
       TZ: Asia/Shanghai
       DEPLOY_ROOT: /srv/dc
       SERVICE_NAME: AdminSvr
@@ -526,6 +527,7 @@ services:
       ordersvr:
         condition: service_started
     environment:
+      PUBLIC_SIMULATION_FUNDED_MAKERS: ${PUBLIC_SIMULATION_FUNDED_MAKERS:-false}
       TZ: Asia/Shanghai
       DEPLOY_ROOT: /srv/dc
       SERVICE_NAME: RobotSvr
