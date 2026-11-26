@@ -42,7 +42,7 @@ async function pairProof(customer,clientOrderId,side,reduce) {
     FROM dc_orders o JOIN dc_orders_execorders t ON t.location=o.location AND t.user_id=o.user_id AND t.order_id=o.order_id
     JOIN dc_orders_execorders m ON m.location=t.location AND m.security_id=t.security_id AND m.market_indicator=t.market_indicator
         AND m.last_qty=t.last_qty AND m.last_px=t.last_px AND m.side<>t.side
-        AND m.transact_time=t.transact_time AND m.exec_type='Trade' AND m.maker=1 AND m.user_id='${maker}'
+        AND m.exec_type='Trade' AND m.maker=1 AND m.user_id='${maker}'
     WHERE o.location='${tenant}' AND o.user_id='${customer}' AND o.clord_id='${clientOrderId}'
         AND o.reduce_only=${reduce?1:0} AND o.ord_status='Filled' AND o.cum_qty=0.001 AND o.security_id='BTCUSDT'
         AND t.exec_type='Trade' AND t.side='${side}' AND t.maker=0
