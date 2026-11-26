@@ -68,6 +68,21 @@ jobs:
           fi
           cd "$out"
           sha256sum -- *.oci.tar >> "$GITHUB_STEP_SUMMARY"
+      - name: Seal failed Common diagnostics for review
+        if: failure() && matrix.component == 'trading-core'
+        run: |
+          if [[ -d "$RUNNER_TEMP/common-diagnostics" ]]; then
+            sudo apt-get -o Dir::Etc::sourcelist=sources.list.d/ubuntu.sources -o Dir::Etc::sourceparts=- -o Acquire::Retries=3 update -qq
+            sudo apt-get install -y --no-install-recommends age
+            tar -C "$RUNNER_TEMP" -czf - common-diagnostics | age -R config/public-simulation-candidate-recipient.pub -o "$RUNNER_TEMP/common-diagnostics.tar.gz.age"
+          fi
+      - uses: actions/upload-artifact@v4
+        if: failure() && matrix.component == 'trading-core'
+        with:
+          name: common-diagnostics-${{ github.sha }}
+          path: ${{ runner.temp }}/common-diagnostics.tar.gz.age
+          if-no-files-found: ignore
+          retention-days: 3
       - name: Encrypt candidates for the release owner and the clean acceptance runner
         run: |
           sudo apt-get -o Dir::Etc::sourcelist=sources.list.d/ubuntu.sources -o Dir::Etc::sourceparts=- -o Acquire::Retries=3 update -qq
@@ -88,8 +103,12 @@ jobs:
           compression-level: 0
 
   clean-control:
-    name: Fresh infrastructure and control isolation
-    runs-on: ubuntu-24.04
+    name: Fresh infrastructure and control isolation (${{ matrix.runner }})
+    strategy:
+      fail-fast: false
+      matrix:
+        runner: [ubuntu-24.04, ubuntu-24.04-arm]
+    runs-on: ${{ matrix.runner }}
     timeout-minutes: 15
     steps:
       - uses: actions/checkout@v4
@@ -130,3 +149,12 @@ jobs:
         run: |
           npm install --prefix "$RUNNER_TEMP/browser" --no-save --ignore-scripts playwright@1.58.2
           PLAYWRIGHT_ROOT="$RUNNER_TEMP/browser/node_modules/playwright" python3 tests/verify-clean-simulation-tenants.py
+      - name: Recheck the existing installation after customer trades
+        run: python3 scripts/install-public-simulation.py --state-dir "$RUNNER_TEMP/t554-install"
+      - name: Record the verified image manifest
+        run: sha256sum "$RUNNER_TEMP/simulation-images.json" >> "$GITHUB_STEP_SUMMARY"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: accepted-linux-amd64-images-${{ github.sha }}
+          path: ${{ runner.temp }}/simulation-images.json
+          retention-days: 3

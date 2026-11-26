@@ -24,11 +24,17 @@ APPS = {"web": "trade-web", "public-web": "public-web", "tenant-web": "tenant-we
         "managersvr": "manager", "adminsvr": "admin-bootstrap", "projectionsvr": "projection", "robotsvr": "robot"}
 
 
+class NamespaceAlreadyExists(RuntimeError):
+    pass
+
+
 def call(*args, data=None):
     process = subprocess.run(args, text=True, input=data, stdout=subprocess.PIPE, stderr=subprocess.STDOUT)
     if process.returncode:
         # Container output and the control configuration may contain private values.
         # Print only error types and public build diagnostics in hosted logs.
+        if "java.lang.IllegalStateException: refusing existing Demo namespace" in process.stdout:
+            raise NamespaceAlreadyExists("Existing simulation namespace")
         errors = re.findall(r'(?:[a-zA-Z][\w$]*\.)+[A-Za-z][\w$]*(?:Exception|Error)', process.stdout)
         raise RuntimeError(f"{args[0]} {args[1]} failed ({process.returncode}); {', '.join(dict.fromkeys(errors))}")
     return process.stdout.strip()
@@ -124,20 +130,23 @@ def install(out, control_only):
                     *[f"/tools/manifests/{kind}-e1-recovering.manifest" for kind in common.SERVICES])
     result = tool(*install_args)
     roots = {kind: out / "common/ha" / kind for kind in common.SERVICES}
-    common.bind_witness_origins(result, roots)
+    origins = common.bind_witness_origins(result, roots)
     print("Both protected 256-partition E1 manifests verified, including writer isolation", flush=True)
     if control_only:
         # Re-running the installer must fail without replacing either original manifest.
         try:
             tool(*install_args)
-        except RuntimeError:
+        except NamespaceAlreadyExists:
             pass
         else:
             raise RuntimeError("Existing namespace was accepted for reinstallation")
         for kind, service in common.SERVICES.items():
             actual = call("docker", "exec", "dc-saas-zookeeper", "zkCli.sh", "-server",
-                          "127.0.0.1:49181", "get", f"{namespace}/{kind}/manifest")
-            if setup.manifest(service) not in actual:
+                          "127.0.0.1:49181", "get", "-s", f"{namespace}/{kind}/manifest")
+            origin = re.search(r"^cZxid = (0x[0-9a-fA-F]+)$", actual, re.M)
+            if (setup.manifest(service) not in actual or not origin or int(origin[1], 16) != origins[kind]
+                    or not re.search(r"^dataVersion = 0$", actual, re.M)
+                    or not re.search(r"^aclVersion = 0$", actual, re.M)):
                 raise RuntimeError(f"Refused reinstallation changed {kind}")
         print("Repeated namespace initialization refused; both original manifests intact", flush=True)
         return

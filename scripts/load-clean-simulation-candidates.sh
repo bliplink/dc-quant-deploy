@@ -16,6 +16,7 @@ for job in public-web trade-web tenant-web platform-web api-docs trading-core ro
     age -d -i "$work/key" -o "$work/$name" "$work/artifact/$name.age"
     expected="$(awk -v name="$name" '$2 == name {print $1}' "$work/artifact/SHA256SUMS")"
     [[ "$expected" =~ ^[a-f0-9]{64}$ ]]
+    printf '%s\t%s\n' "$service" "$expected" >> "$work/images.tsv"
     (cd "$work" && printf '%s  %s\n' "$expected" "$name" | sha256sum -c -)
     python3 scripts/verify-simulation-oci.py "$work/$name" "$pin"
     skopeo copy --quiet "oci-archive:$work/$name" "docker-daemon:otc-simulation/$service:$pin"
@@ -23,3 +24,15 @@ for job in public-web trade-web tenant-web platform-web api-docs trading-core ro
   done
   rm -r "$work/artifact"
 done
+
+python3 - "$work/images.tsv" "$RUNNER_TEMP/simulation-images.json" "$GITHUB_SHA" <<'PYLOCK'
+import json
+from pathlib import Path
+import sys
+rows = [line.split("\t") for line in Path(sys.argv[1]).read_text().splitlines()]
+images = dict(rows)
+if len(images) != 16 or len(rows) != len(images):
+    raise ValueError("Expected all sixteen candidate images exactly once")
+Path(sys.argv[2]).write_text(json.dumps({"deploymentRevision": sys.argv[3], "images": images},
+                                       indent=2, sort_keys=True) + "\n")
+PYLOCK

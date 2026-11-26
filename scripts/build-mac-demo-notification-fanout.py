@@ -40,6 +40,46 @@ def instructions(text):
     return methods
 
 
+def compile_notification(source, libraries, java, work, m2):
+    gateways=list(libraries.glob('gateway-api-*.jar'));assert len(gateways)==1
+    gateway=gateways[0]
+    classes=work/'classes';classes.mkdir()
+    src=source/'gateway-api-java/gateway-api/src/main/java'/REL.with_suffix('.java')
+    run(java/'bin/javac','-source','8','-target','8','-encoding','UTF-8','-cp',str(libraries/'*'),'-d',classes,src)
+    # Replace exactly the outer class, preserving the original connector and
+    # all existing anonymous classes. The public/private binary ABI is fixed.
+    expected=classes/REL.with_suffix('.class');assert expected.is_file()
+    for compiled in classes.rglob('*.class'):
+        if compiled!=expected:compiled.unlink()
+    before=read(java/'bin/javap','-p','-classpath',gateway,CLASS)
+    after=read(java/'bin/javap','-p','-classpath',str(classes)+os.pathsep+str(libraries/'*'),CLASS)
+    assert before==after,'Notification overlay changes connector ABI'
+    before_code=instructions(read(java/'bin/javap','-c','-p','-classpath',gateway,CLASS))
+    after_code=instructions(read(java/'bin/javap','-c','-p','-classpath',str(classes)+os.pathsep+str(libraries/'*'),CLASS))
+    changed=[name for name in before_code.keys()|after_code.keys() if before_code.get(name)!=after_code.get(name)]
+    assert changed==['public java.util.List<java.lang.String> notify(java.lang.String, byte[]);'],changed
+    junit=m2/'junit/junit/4.13.2/junit-4.13.2.jar'
+    hamcrest=m2/'org/hamcrest/hamcrest-core/1.3/hamcrest-core-1.3.jar'
+    testroot=source/'gateway-api-java/gateway-api/src/test/java'
+    # Other repository tests exercise client changes absent from the deployed
+    # connector. Test this exact outer-class overlay with the original inner
+    # classes and dependencies, in addition to the full source-repo suite.
+    testfiles=sorted(testroot.rglob('AbstractApiProxy*Test.java'));assert len(testfiles)==2
+    tests=work/'test-classes';tests.mkdir()
+    classpath=os.pathsep.join([str(tests),str(classes),str(libraries/'*'),str(junit),str(hamcrest)])
+    with (work/'test-compile.log').open('x') as log:
+        run(java/'bin/javac','-source','8','-target','8','-encoding','UTF-8','-cp',classpath,'-d',tests,*testfiles,stdout=log,stderr=subprocess.STDOUT)
+    names=[]
+    for file in testfiles:
+        if file.name.endswith('Test.java'):
+            package=re.search(r'^package ([\w.]+);',file.read_text(),re.M);assert package
+            names.append(package[1]+'.'+file.stem)
+    with (work/'tests.log').open('x') as log:
+        run(java/'bin/java','-Xms32m','-Xmx256m','-cp',classpath,'org.junit.runner.JUnitCore',*names,stdout=log,stderr=subprocess.STDOUT)
+    assert 'OK (' in (work/'tests.log').read_text()
+    return expected,src,gateway,changed
+
+
 def main():
     parser=argparse.ArgumentParser(description=__doc__)
     parser.add_argument('verified_build',type=Path)
@@ -65,43 +105,9 @@ def main():
         run('docker','cp',temporary+':/srv/dc/dc/OrderSvr/lib',work/'lib',stdout=subprocess.DEVNULL)
     finally:
         run('docker','rm',temporary,stdout=subprocess.DEVNULL)
-    libraries=work/'lib';gateways=list(libraries.glob('gateway-api-*.jar'));assert len(gateways)==1
-    gateway=gateways[0]
     java=Path(read('/usr/libexec/java_home','-v','1.8'))
-    classes=work/'classes';classes.mkdir()
-    src=source/'gateway-api-java/gateway-api/src/main/java'/REL.with_suffix('.java')
-    run(java/'bin/javac','-source','8','-target','8','-encoding','UTF-8','-cp',str(libraries/'*'),'-d',classes,src)
-    # Replace exactly the outer class, preserving the original connector and
-    # all existing anonymous classes. The public/private binary ABI is fixed.
-    expected=classes/REL.with_suffix('.class');assert expected.is_file()
-    for compiled in classes.rglob('*.class'):
-        if compiled!=expected:compiled.unlink()
-    before=read(java/'bin/javap','-p','-classpath',gateway,CLASS)
-    after=read(java/'bin/javap','-p','-classpath',str(classes)+os.pathsep+str(libraries/'*'),CLASS)
-    assert before==after,'Notification overlay changes connector ABI'
-    before_code=instructions(read(java/'bin/javap','-c','-p','-classpath',gateway,CLASS))
-    after_code=instructions(read(java/'bin/javap','-c','-p','-classpath',str(classes)+os.pathsep+str(libraries/'*'),CLASS))
-    changed=[name for name in before_code.keys()|after_code.keys() if before_code.get(name)!=after_code.get(name)]
-    assert changed==['public java.util.List<java.lang.String> notify(java.lang.String, byte[]);'],changed
-    junit=Path.home()/'.m2/repository/junit/junit/4.13.2/junit-4.13.2.jar'
-    hamcrest=Path.home()/'.m2/repository/org/hamcrest/hamcrest-core/1.3/hamcrest-core-1.3.jar'
-    testroot=source/'gateway-api-java/gateway-api/src/test/java'
-    # Other repository tests exercise client changes absent from the deployed
-    # connector. Test this exact outer-class overlay with the original inner
-    # classes and dependencies, in addition to the full source-repo suite.
-    testfiles=sorted(testroot.rglob('AbstractApiProxy*Test.java'));assert len(testfiles)==2
-    tests=work/'test-classes';tests.mkdir()
-    classpath=os.pathsep.join([str(tests),str(classes),str(libraries/'*'),str(junit),str(hamcrest)])
-    with (work/'test-compile.log').open('x') as log:
-        run(java/'bin/javac','-source','8','-target','8','-encoding','UTF-8','-cp',classpath,'-d',tests,*testfiles,stdout=log,stderr=subprocess.STDOUT)
-    names=[]
-    for file in testfiles:
-        if file.name.endswith('Test.java'):
-            package=re.search(r'^package ([\w.]+);',file.read_text(),re.M);assert package
-            names.append(package[1]+'.'+file.stem)
-    with (work/'tests.log').open('x') as log:
-        run(java/'bin/java','-Xms32m','-Xmx256m','-cp',classpath,'org.junit.runner.JUnitCore',*names,stdout=log,stderr=subprocess.STDOUT)
-    assert 'OK (' in (work/'tests.log').read_text()
+    expected,src,gateway,changed=compile_notification(source,work/'lib',java,work,Path.home()/'.m2/repository')
+    classes=work/'classes'
     compiled=digest(expected)
     proof={'gateway_api_revision':revision,'source_sha256':digest(src),'compiled_class_sha256':compiled,
            'original_gateway_jar_sha256':digest(gateway),'binary_abi_unchanged':True,
