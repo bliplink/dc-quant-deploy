@@ -7,7 +7,7 @@ mkdir -p "$dest"
 dest="$(cd "$dest" && pwd)"
 work="$(mktemp -d "$dest/.core-XXXXXXXX")"
 trap 'rm -rf "$work"' EXIT
-for module in gateway-api common shared order trade market-data; do
+for module in gateway-api common shared order trade market-data gateway; do
   mkdir "$work/$module"
   git -C "$root/sources/$module" archive "$(git -C "$root" rev-parse "HEAD:sources/$module")" | tar -x -C "$work/$module"
 done
@@ -21,7 +21,7 @@ test "${#common[@]}" = 1
 test "${#shared[@]}" = 1
 common_sha="$(shasum -a 256 "${common[0]}" | cut -d' ' -f1)"
 common_ref="$(git -C "$root" rev-parse HEAD:sources/common)"
-for module in order trade market-data; do
+for module in order trade market-data gateway; do
   src="$work/$module"
   "${build[@]}" -f "$src/pom.xml" package dependency:copy-dependencies \
     -DincludeScope=runtime "-DoutputDirectory=$src/target/dependency"

@@ -1,17 +1,14 @@
 #!/usr/bin/env bash
-# Admin and Robot use separate historical shared-library versions.
+# Build each service with the shared library pinned for its runtime.
 set -euo pipefail
 root="$(cd "$(dirname "$0")/.." && pwd)"
 dest="${1:?expected output directory}"
-component="${2:?expected robot or admin-bootstrap}"
-case "$component" in
-  robot) shared_ref=d3fdaf16a6b8d70e9e81647af459ac6cc4090b37 ;;
-  admin-bootstrap) shared_ref=2fa804757c561fc9bbd0642a5c2153fca55cf286 ;;
-  *) exit 2 ;;
-esac
+component="${2:?expected service name}"
+shared_ref="$(awk -v service="$component" '$1 == service {print $2}' "$root/config/public-simulation-service-pins.tsv")"
+[[ "$shared_ref" =~ ^[0-9a-f]{40}$ ]] || { echo "Invalid service pin for $component" >&2; exit 2; }
 mkdir -p "$dest"
 dest="$(cd "$dest" && pwd)"
-work="$(mktemp -d "$dest/.funded-maker-XXXXXXXX")"
+work="$(mktemp -d "$dest/.service-XXXXXXXX")"
 trap 'rm -rf "$work"' EXIT
 mkdir "$work/shared" "$work/service"
 git -C "$root/sources/shared" archive "$shared_ref" | tar -x -C "$work/shared"
@@ -29,8 +26,12 @@ maven=(mvn -B -ntp "-Dmaven.repo.local=$work/m2")
     "-DoutputDirectory=$work/service/target/dependency"
 cmp "$work/shared/target/com.app.dc-0.0.4-SNAPSHOT.jar" "$work/service/target/dependency/com.app.dc-0.0.4-SNAPSHOT.jar"
 archive="$work/$component.oci.tar"
+labels=(--label "dc.simulation.shared-revision=$shared_ref")
+case "$component" in
+  robot|admin-bootstrap) labels+=(--label dc.simulation.funded-maker=1) ;;
+esac
 docker buildx build --platform linux/amd64,linux/arm64 --label "org.opencontainers.image.revision=$pin" \
-    --label "dc.simulation.shared-revision=$shared_ref" --label dc.simulation.funded-maker=1 \
+    "${labels[@]}" \
     --tag "otc-simulation/$component:$pin" --output "type=oci,dest=$archive" "$work/service"
 python3 "$root/scripts/verify-simulation-oci.py" "$archive" "$pin"
 mv "$archive" "$dest/$component-$pin.oci.tar"
