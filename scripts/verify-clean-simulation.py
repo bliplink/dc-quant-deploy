@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 """Exercise the protected first installation on a disposable, clean GitHub Linux host."""
+import hashlib
 import importlib.util
 import json
 import os
@@ -61,11 +62,13 @@ def environment(out, include_apps=True):
                    "ORDERSVR_GW_PORT": "49036", "ORDERSVR_B_GW_PORT": "49041",
                    "TRADESVR_GW_PORT": "49037", "TRADESVR_B_GW_PORT": "49046",
                    "PUBLIC_SIMULATION_FUNDED_MAKERS": "true", "TRIAL_LIQUIDITY_BOOTSTRAP_ENABLED": "true",
-                   "TRIAL_LIQUIDITY_MASTER_KEY": secrets.token_hex(32)})
+                   "TRIAL_LIQUIDITY_TAPE_ENABLED": "true", "TRIAL_LIQUIDITY_MASTER_KEY": secrets.token_hex(32)})
     env = out / "demo.env"
     env.write_text("".join(f"{k}={shlex.quote(v)}\n" for k, v in values.items()))
     call("bash", str(ROOT / "generate-saas-configs.sh"), str(env))
     control = runtime / "control"
+    projection = control / "overrides/ProjectionSvr/config/application.properties"
+    projection.write_text(common.update_properties(projection.read_text(), {"trade.financial.readmodel.enabled": "true"}))
     secret = secrets.token_hex(32)
     client = f'Client {{ org.apache.zookeeper.server.auth.DigestLoginModule required username="demo" password="{secret}"; }};\n'
     server = f'Server {{ org.apache.zookeeper.server.auth.DigestLoginModule required user_demo="{secret}"; }};\n'
@@ -99,7 +102,7 @@ def main():
     entry = "/srv/dc/dc/OrderSvr"
     if control_only:
         container = "dc-saas-zookeeper"
-        zk_lib = call("docker", "exec", container, "sh", "-c", 'cd "$ZOO_HOME/lib" && pwd')
+        zk_lib = call("docker", "exec", container, "sh", "-c", 'cd "$(dirname "$(command -v zkServer.sh)")/../lib" && pwd -P')
         call("docker", "cp", f"{container}:{zk_lib}", str(out / "zk-lib"))
         call("javac", "-cp", str(out / "zk-lib/*"), "-d", str(tools),
              str(ROOT / "scripts/java/T554ProtectedNamespaceInstaller.java"))
@@ -134,6 +137,31 @@ def main():
         print("Repeated namespace initialization refused; both original manifests intact", flush=True)
         return
     refs = {kind: image(kind) for kind in common.SERVICES}
+    values = common.env_pairs(out / "demo.env")
+    admin = values["PLATFORM_ADMIN_USERNAME"]
+    if not re.fullmatch(r"[a-zA-Z0-9_.@-]{3,64}", admin):
+        raise ValueError("Invalid platform administrator")
+    digest = hashlib.sha256(values["PLATFORM_ADMIN_PASSWORD"].encode()).hexdigest()
+    call("docker", "exec", "-i", "dc-saas-mysql", "sh", "-c",
+         'MYSQL_PWD="$MYSQL_ROOT_PASSWORD" exec mysql --protocol=TCP -h127.0.0.1 -P"$MYSQL_TCP_PORT" -uroot dc',
+         data="INSERT INTO dc_users(user_id,user_name,name,password,user_type,enable,remark,create_time,"
+              "update_time,enable_trade,enable_cash_in,enable_cash_out,close_by,location) "
+              f"VALUES('{admin}','{admin}','Platform Administrator','{digest}','1','1','Simulation',"
+              "NOW(3),NOW(3),'0','0','0','sim-demo','PLATFORM') "
+              "ON DUPLICATE KEY UPDATE password=VALUES(password),enable='1',update_time=NOW(3);")
+    call(sys.executable, str(ROOT / "scripts/provision-robot-service-user.py"),
+         "--env-file", str(out / "demo.env"), "--mysql-container", "dc-saas-mysql")
+    call(*compose, "up", "-d", "--no-deps", "--pull", "never", "loginsvr")
+    run_core(out, compose, refs, roots, control, namespace, tool)
+    call(*compose, "up", "-d", "--no-deps", "--pull", "never", "--wait", "--wait-timeout", "300", *APPS)
+    print("Application and web containers started", flush=True)
+    if os.environ.get("GITHUB_ENV"):
+        with open(os.environ["GITHUB_ENV"], "a") as env:
+            env.write(f"SIMULATION_GENERATION={out.name}\n")
+
+
+
+def run_core(out, compose, refs, roots, control, namespace, tool):
     pairs = [(kind, slot) for kind in common.SERVICES for slot in common.SLOTS]
     for key in common.VOLUMES:
         call("docker", "volume", "create", "--label", f"otc.mac.demo.generation={out.name}", f"{out.name}-{key}")
@@ -145,8 +173,20 @@ def main():
         props = out / "common" / f"config-{phase}" / kind / slot / "application.properties"
         flags = [*mounts[kind, slot], "-v", f"{control}:/srv/dc/control:ro", "-v",
                  f"{props}:/srv/dc/dc/{service}/config/application.properties:ro"]
-        for key, path in common.VOLUMES.items():
-            flags += ["-v", f"{out.name}-{key}:{path}"]
+        if phase == "hostready":
+            peer = "B" if slot == "A" else "A"
+            local = service + "/" + service + slot
+            volume = out.name + "-ready"
+            ready = common.VOLUMES["ready"]
+            flags += common.owned_mount(volume, local, ready + "/" + local)
+            flags += common.owned_mount(volume, service + "/" + service + peer, common.HA_PEER, True)
+            flags += ["-v", f"{out.name}-born:{common.VOLUMES['born']}:ro",
+                      "-v", f"{roots[kind]}/public/witness.pub.der:{common.HA_WITNESS}/witness.pub.der:ro",
+                      "-v", f"{out.name}-{kind}-witness:{common.HA_WITNESS}/receipts:ro",
+                      "-v", f"{roots[kind]}/source-auth:{common.HA_SOURCE_AUTH}:ro", "--restart", "on-failure"]
+        else:
+            for key, path in common.VOLUMES.items():
+                flags += ["-v", f"{out.name}-{key}:{path}"]
         for entry in (slot.lower(), "public"):
             flags += ["-v", f"{signers}/{entry}:/read-only-original-rsa/{entry}:ro"]
         call("docker", "run", "-d", "--network", "host", "--name", name, *common.DOCKER_LOG_OPTIONS, *flags,
@@ -172,6 +212,101 @@ def main():
         if f"service={service} phase=1 partitions=256 READY=false" not in result:
             raise RuntimeError(f"Missing verified physical seals for {service}")
     print("Physical genesis passed for both services, two voters and 256 partitions each", flush=True)
+
+    def wait_marker(node, marker, timeout=240):
+        until = time.monotonic() + timeout
+        while time.monotonic() < until:
+            logs = call("docker", "logs", node)
+            if marker in logs:
+                return
+            if call("docker", "inspect", "-f", "{{.State.Running}}", node) != "true":
+                break
+            time.sleep(2)
+        raise RuntimeError(f"{node} did not reach {marker}")
+
+    def await_leases(selected):
+        def clear():
+            for kind in sorted({kind for kind, _ in selected}):
+                listing = call("docker", "exec", "dc-saas-zookeeper", "zkCli.sh", "-server", "127.0.0.1:49181",
+                               "ls", f"{namespace}/{kind}/leases")
+                rows = re.findall(r"^\[([A-Za-z0-9_, .-]*)\]$", listing, re.M)
+                if not rows or any(common.SERVICES[kind] + slot in rows[-1] for k, slot in selected if k == kind):
+                    return False
+            return True
+        common.until(clear, "actual voter leases released", 75)
+
+    def stop(nodes, selected):
+        call("docker", "stop", "--time", "8", *[nodes[pair] for pair in selected])
+        await_leases(selected)
+
+    await_leases(pairs)
+    call("docker", "run", "--rm", "--network", "none", "--entrypoint", "mkdir", "-v",
+         f"{out.name}-born:{born}", refs["order"], "-p",
+         *(f"{born}/{service}/original-home" for service in common.SERVICES.values()),
+         *(f"{born}/{common.SERVICES[kind]}/{common.SERVICES[kind]}{slot}/transactions/P{i:03}"
+           for kind, slot in pairs for i in range(256)))
+    installing = {pair: start("install", *pair) for pair in pairs}
+    def replayed():
+        for (kind, slot), node in installing.items():
+            service = common.SERVICES[kind]
+            directory = f"{born}/{service}/{service}{slot}/transactions"
+            count = call("docker", "exec", node, "sh", "-c",
+                         """find "$1" -name '*.recovery' -exec grep -l '^phase=REPLAY_COMPLETE$' {} + | wc -l""",
+                         "--", directory)
+            if count != "256":
+                return False
+        return True
+    common.until(replayed, "256 durable replay ledgers per voter", 480)
+    stop(installing, pairs)
+    home = {pair: start("home", *pair) for pair in pairs}
+    for node in home.values():
+        wait_marker(node, "COMMON_ORIGINAL_HOME_E1_PHYSICAL_RSA_FSYNC_PASS")
+    a = [pair for pair in pairs if pair[1] == "A"]
+    b = [pair for pair in pairs if pair[1] == "B"]
+    stop(home, a)
+    stage = {pair: start("stage", *pair) for pair in a}
+    for node in stage.values():
+        wait_marker(node, "COMMON_ORIGINAL_FIRST_E2_READY_CAS_PASS")
+    stop({**{p: home[p] for p in b}, **stage}, pairs)
+    ready = common.VOLUMES["ready"]
+    call("docker", "run", "--rm", "--network", "none", "--entrypoint", "mkdir", "-v",
+         f"{out.name}-ready:{ready}", refs["order"], "-p",
+         *(f"{ready}/{common.SERVICES[kind]}/{common.SERVICES[kind]}{slot}/snapshots" for kind, slot in pairs))
+    for kind, service in common.SERVICES.items():
+        root = roots[kind]
+        name = f"{out.name}-{kind}-witness"
+        call("docker", "volume", "create", "--label", f"otc.mac.demo.generation={out.name}", name)
+        flags = []
+        for slot in common.SLOTS:
+            flags += common.owned_mount(out.name + "-ready", f"{service}/{service}{slot}",
+                                        f"/srv/dc/data/t554-voter-{slot.lower()}", True)
+        call("docker", "run", "-d", "--network", "host", "--name", name, "--restart", "unless-stopped",
+             *common.DOCKER_LOG_OPTIONS, *flags, "-v", f"{out.name}-born:{born}:ro",
+             "-v", f"{control}:/control:ro", "-v", f"{signers}/public:/public:ro",
+             "-v", f"{root}/identity:{common.HA_WITNESS_SETTINGS}/identity:ro",
+             "-v", f"{root}/witness.properties:{common.HA_WITNESS_SETTINGS}/witness.properties:ro",
+             "-v", f"{root}/public/witness.pub.der:{common.HA_WITNESS}/witness.pub.der:ro",
+             "-v", f"{name}:{common.HA_WITNESS}/receipts", "--entrypoint", "java", refs[kind],
+             "-Xms32m", "-Xmx384m", "-Djava.security.auth.login.config=/control/jaas.ini",
+             "-cp", f"/srv/dc/dc/{service}/lib/*", "com.app.common.replication.CommonCertifiedFirstReadyE2WitnessProcess",
+             f"{common.HA_WITNESS_SETTINGS}/witness.properties")
+        wait_marker(name, "COMMON_FIRST_READY_E2_WITNESS_STARTED service=" + service)
+    call(*compose, "up", "-d", "--no-deps", "--pull", "never", *common.APPS, common.PROJECTION)
+    nodes = {pair: start("hostready", *pair) for pair in pairs}
+    for (kind, slot), node in nodes.items():
+        service = common.SERVICES[kind]
+        wait_marker(node, f"COMMON_GATEWAY_DISCOVERY_CERTIFIED service={service} node={service}{slot}")
+        directory = f"{ready}/{service}/{service}{slot}/{service}/{service}{slot}"
+        if call("docker", "exec", node, "sh", "-c", 'find "$1" -name business.wal | wc -l', "--", directory) != "256":
+            raise RuntimeError(f"{node} failed to open its physical WALs")
+    for kind, service in common.SERVICES.items():
+        actual = call("docker", "exec", "dc-saas-zookeeper", "zkCli.sh", "-server", "127.0.0.1:49181",
+                      "get", f"{namespace}/{kind}/manifest")
+        rows = [line for line in actual.splitlines() if re.match(r"^P[0-9]{3}\|", line)]
+        expected = setup.manifest(service).splitlines()[1:]
+        if rows != [row.replace("|1|", "|2|").replace("RECOVERING", "READY") for row in expected]:
+            raise RuntimeError(f"{service} failed the signed 256-partition READY check")
+    print("Both signed E2 fleets READY; four voters opened 1,024 business WALs", flush=True)
 
 
 if __name__ == "__main__":
