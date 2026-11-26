@@ -23,7 +23,8 @@ common_sha="$(shasum -a 256 "${common[0]}" | cut -d' ' -f1)"
 common_ref="$(git -C "$root" rev-parse HEAD:sources/common)"
 for module in order trade market-data; do
   src="$work/$module"
-  "${build[@]}" -f "$src/pom.xml" package
+  "${build[@]}" -f "$src/pom.xml" package dependency:copy-dependencies \
+    -DincludeScope=runtime "-DoutputDirectory=$src/target/dependency"
   packaged_common=("$src"/target/dependency/com.app.common-*.jar)
   packaged_shared=("$src"/target/dependency/com.app.dc-[0-9]*.jar)
   test "${#packaged_common[@]}" = 1
