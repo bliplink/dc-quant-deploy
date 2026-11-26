@@ -7,7 +7,7 @@ const tenant = process.env.DEMO_LOCATION;
 const directory = process.env.AUDIT_DIR;
 const origin = new URL(process.env.SIMULATION_ORIGIN || 'https://trade.opentradingcore.com');
 const generation = process.env.SIMULATION_GENERATION;
-if (!/^mac-demo-[0-9]{8}-[0-9]{6}$/.test(generation || '')) throw Error('Specify the active Mac demo generation');
+if (!/^(?:mac|sim)-demo-[0-9]{8}-[0-9]{6}$/.test(generation || '')) throw Error('Specify the active simulation generation');
 const project = execFileSync('docker',['inspect','--format','{{index .Config.Labels "com.docker.compose.project"}}','dc-saas-mysql'],{encoding:'utf8'}).trim();
 if (project !== generation || !['trade.opentradingcore.com','localhost','127.0.0.1'].includes(origin.hostname))
   throw Error('Check the simulation host and deployment');

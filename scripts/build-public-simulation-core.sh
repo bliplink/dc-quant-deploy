@@ -59,7 +59,7 @@ for module in order trade market-data gateway; do
   docker buildx build --platform linux/amd64,linux/arm64 --build-arg "SERVICE_REVISION=$pin" \
     --build-arg "COMMON_REVISION=$common_ref" --build-arg "COMMON_JAR_SHA256=$common_sha" \
     --build-arg "COMMON_GAV=io.github.bliplink:$(basename "${common[0]}" .jar | sed 's/^com.app.common-/com.app.common:/')" \
-    --label "org.opencontainers.image.revision=$pin" --label "dc.common.jar.sha256=$common_sha" \
+    --label "org.opencontainers.image.revision=$pin" --label "dc.common.jar.sha256=$common_sha" --label "dc.common.p0.sha256=$common_sha" \
     --tag "otc-simulation/$module:$pin" --output "type=oci,dest=$archive" "$src"
   python3 "$root/scripts/verify-simulation-oci.py" "$archive" "$pin"
   mv "$archive" "$dest/$module-$pin.oci.tar"

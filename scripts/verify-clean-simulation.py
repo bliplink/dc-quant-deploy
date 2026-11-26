@@ -86,9 +86,14 @@ def main():
     if call("docker", "ps", "-aq") or call("docker", "volume", "ls", "-q"):
         raise RuntimeError("Clean acceptance requires unused Docker storage")
     out = Path(os.environ["RUNNER_TEMP"]) / datetime.now(timezone.utc).strftime("sim-demo-%Y%m%d-%H%M%S")
+    if sys.argv[1:] != ["--check-control"]:
+        raise SystemExit("Run install-public-simulation.py for a full installation")
+    install(out, control_only=True)
+
+
+def install(out, control_only):
     setup.prepare(out, 49181)
     namespace = "/otc/" + out.name
-    control_only = sys.argv[1:] == ["--check-control"]
     compose = environment(out, include_apps=not control_only)
     call(*compose, "up", "-d", "--wait", "--wait-timeout", "360", *common.INFRA)
     print("Clean MySQL, ClickHouse and ZooKeeper healthy", flush=True)

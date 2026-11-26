@@ -70,7 +70,7 @@ jobs:
           sha256sum -- *.oci.tar >> "$GITHUB_STEP_SUMMARY"
       - name: Encrypt candidates for the release owner and the clean acceptance runner
         run: |
-          sudo apt-get update -qq
+          sudo apt-get -o Dir::Etc::sourcelist=sources.list.d/ubuntu.sources -o Dir::Etc::sourceparts=- -o Acquire::Retries=3 update -qq
           sudo apt-get install -y --no-install-recommends age
           mkdir "$RUNNER_TEMP/sealed"
           cd "$RUNNER_TEMP/candidates"
@@ -115,7 +115,7 @@ jobs:
           persist-credentials: false
       - name: Install image verification tools
         run: |
-          sudo apt-get update -qq
+          sudo apt-get -o Dir::Etc::sourcelist=sources.list.d/ubuntu.sources -o Dir::Etc::sourceparts=- -o Acquire::Retries=3 update -qq
           sudo apt-get install -y --no-install-recommends age skopeo
       - name: Load exact candidates from this run
         env:
@@ -123,4 +123,10 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: bash scripts/load-clean-simulation-candidates.sh
       - name: Run protected installation on empty storage
-        run: python3 scripts/verify-clean-simulation.py
+        run: |
+          python3 scripts/install-public-simulation.py --state-dir "$RUNNER_TEMP/t554-install"
+          python3 scripts/install-public-simulation.py --state-dir "$RUNNER_TEMP/t554-install"
+      - name: Verify ten funded tenants through the trading page
+        run: |
+          npm install --prefix "$RUNNER_TEMP/browser" --no-save --ignore-scripts playwright@1.58.2
+          PLAYWRIGHT_ROOT="$RUNNER_TEMP/browser/node_modules/playwright" python3 tests/verify-clean-simulation-tenants.py
