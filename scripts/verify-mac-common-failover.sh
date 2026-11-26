@@ -11,8 +11,8 @@ out="${3:?Provide a new absolute results directory}"
 jar="$candidate/common-tested-class-bytes.jar"
 [[ "$#" == 3 && "$candidate" == /* && "$out" == /* && ! -e "$out" &&
    "$expected_sha" =~ ^[a-f0-9]{64}$ && -f "$jar" && -f "$candidate/commit.sha" &&
-   -f "$candidate/source.sha256" && "$(uname -s)" == Darwin ]] || {
-  echo 'Expected a local Mac, an exact Common candidate and a new absolute results directory' >&2
+   -f "$candidate/source.sha256" ]] || {
+  echo 'Expected an exact Common candidate and a new absolute results directory' >&2
   exit 2
 }
 [[ "$(shasum -a 256 "$jar" | awk '{print $1}')" == "$expected_sha" ]] || {
@@ -27,7 +27,12 @@ git -C "$common" diff --quiet "$revision" "$fixture" -- pom.xml src/main || {
   exit 2
 }
 
-export JAVA_HOME="$(/usr/libexec/java_home -v 1.8)"
+case "$(uname -s)" in
+  Darwin) export JAVA_HOME="$(/usr/libexec/java_home -v 1.8)" ;;
+  Linux) : "${JAVA_HOME:?Select JDK 8 for the Common fault gate}" ;;
+  *) echo "Unsupported Common verification host" >&2; exit 2 ;;
+esac
+"$JAVA_HOME/bin/javac" -version 2>&1 | grep -q '^javac 1\.8\.'
 umask 077
 mkdir -p "$out/source" "$out/runner" "$out/tmp"
 printf 'NO_GO\n' > "$out/status"

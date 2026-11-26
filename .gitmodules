@@ -58,3 +58,6 @@
 [submodule "platform-web"]
 	path = sources/platform-web
 	url = https://github.com/bliplink/dc-saas-platform-web.git
+[submodule "futures-connector"]
+	path = sources/futures-connector
+	url = https://github.com/bliplink/binance-futures-connector.git

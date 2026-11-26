@@ -12,7 +12,7 @@ jobs:
   build:
     name: Candidate ${{ matrix.component }}
     runs-on: ubuntu-24.04
-    timeout-minutes: 60
+    timeout-minutes: 120
     strategy:
       fail-fast: false
       matrix:
@@ -32,6 +32,8 @@ jobs:
             paths=(sources/{gateway-api,common,shared,order,trade,market-data,gateway})
           elif [[ "$COMPONENT" == admin-bootstrap ]]; then
             paths+=(sources/admin-public-stats)
+          elif [[ "$COMPONENT" == price-feed ]]; then
+            paths+=(sources/futures-connector)
           fi
           git -c 'credential.https://github.com.helper=!f() { if test "$1" = get; then echo username=x-access-token; echo "password=$SOURCE_TOKEN"; fi; }; f' \
             submodule update --init --depth 1 --jobs 3 -- "${paths[@]}"
@@ -85,9 +87,23 @@ jobs:
           retention-days: 3
           compression-level: 0
 
+  clean-control:
+    name: Fresh infrastructure and control isolation
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '8'
+      - run: python3 scripts/verify-clean-simulation.py --check-control
+
   clean-linux:
     name: Clean Linux installation
-    needs: build
+    needs: [build, clean-control]
     runs-on: ubuntu-24.04
     timeout-minutes: 60
     permissions:

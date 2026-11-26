@@ -21,6 +21,11 @@ if [[ "$component" == admin-bootstrap ]]; then
   done
 fi
 maven=(mvn -B -ntp "-Dmaven.repo.local=$work/m2")
+if [[ "$component" == price-feed ]]; then
+  mkdir "$work/futures"
+  git -C "$root/sources/futures-connector" archive "$(git -C "$root" rev-parse HEAD:sources/futures-connector)" | tar -x -C "$work/futures"
+  "${maven[@]}" -f "$work/futures/pom.xml" install
+fi
 "${maven[@]}" -f "$work/shared/pom.xml" -Dmaven.test.skip=true install
 "${maven[@]}" -f "$work/service/pom.xml" package dependency:copy-dependencies -DincludeScope=runtime \
     "-DoutputDirectory=$work/service/target/dependency"

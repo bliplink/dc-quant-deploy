@@ -42,9 +42,15 @@ def image(kind):
     return ref
 
 
-def environment(out):
+def environment(out, include_apps=True):
     runtime = out / "runtime"
     values = common.env_pairs(ROOT / ".env.example")
+    for key, value in values.items():
+        if value.startswith(('"', "'")):
+            parsed = shlex.split(value)
+            if len(parsed) != 1:
+                raise ValueError(f"Invalid example setting {key}")
+            values[key] = parsed[0]
     for key in values:
         if key.endswith(("_PASSWORD", "_SECRET", "_MASTER_KEY", "_API_KEY")):
             values[key] = secrets.token_hex(32)
@@ -66,7 +72,7 @@ def environment(out):
     (control / "jaas.ini").write_text(client)
     (control / "zookeeper-jaas.ini").write_text(server)
     override = out / "compose.images.json"
-    override.write_text(json.dumps({"services": {service: {"image": image(kind)} for service, kind in APPS.items()}}))
+    override.write_text(json.dumps({"services": {service: {"image": image(kind)} for service, kind in APPS.items() if include_apps}}))
     return ["docker", "compose", "-p", out.name, "--env-file", str(env), "-f", str(ROOT / "compose.yaml"),
             "-f", str(override)]
 
@@ -79,7 +85,8 @@ def main():
     out = Path(os.environ["RUNNER_TEMP"]) / datetime.now(timezone.utc).strftime("sim-demo-%Y%m%d-%H%M%S")
     setup.prepare(out, 49181)
     namespace = "/otc/" + out.name
-    compose = environment(out)
+    control_only = sys.argv[1:] == ["--check-control"]
+    compose = environment(out, include_apps=not control_only)
     call(*compose, "up", "-d", "--wait", "--wait-timeout", "360", *common.INFRA)
     print("Clean MySQL, ClickHouse and ZooKeeper healthy", flush=True)
     for file in sorted((ROOT / "mysql/migrations").glob("*.sql")):
@@ -87,12 +94,22 @@ def main():
              'MYSQL_PWD="$MYSQL_ROOT_PASSWORD" exec mysql --protocol=TCP -h127.0.0.1 -P"$MYSQL_TCP_PORT" -uroot dc',
              data=file.read_text())
     tools = out / "common/tools"
-    refs = {kind: image(kind) for kind in common.SERVICES}
     control = out / "runtime/control"
     tool_flags = ["--network", "host", "-v", f"{tools}:/tools:ro", "-v", f"{control}:/control:ro"]
-    tool_classpath = "/srv/dc/dc/OrderSvr/classes:/srv/dc/dc/OrderSvr/lib/*"
+    entry = "/srv/dc/dc/OrderSvr"
+    if control_only:
+        container = "dc-saas-zookeeper"
+        zk_lib = call("docker", "exec", container, "sh", "-c", 'cd "$ZOO_HOME/lib" && pwd')
+        call("docker", "cp", f"{container}:{zk_lib}", str(out / "zk-lib"))
+        call("javac", "-cp", str(out / "zk-lib/*"), "-d", str(tools),
+             str(ROOT / "scripts/java/T554ProtectedNamespaceInstaller.java"))
+        tool_classpath = "/tools:" + zk_lib + "/*"
+        tool_image = call("docker", "inspect", "-f", "{{.Image}}", container)
+    else:
+        tool_image = image("order")
+        tool_classpath = entry + "/classes:" + entry + "/lib/*"
     def tool(flags, java_class, *args):
-        return call("docker", "run", "--rm", *tool_flags, *flags, "--entrypoint", "java", refs["order"],
+        return call("docker", "run", "--rm", *tool_flags, *flags, "--entrypoint", "java", tool_image,
                     "-Djava.security.auth.login.config=/control/jaas.ini", "-cp", tool_classpath, java_class, *args)
     install_args = (["-v", f"{out}/install-control.properties:/run/install.properties:ro"],
                     "T554ProtectedNamespaceInstaller", "127.0.0.1:49181", namespace, "/run/install.properties",
@@ -101,6 +118,22 @@ def main():
     roots = {kind: out / "common/ha" / kind for kind in common.SERVICES}
     common.bind_witness_origins(result, roots)
     print("Both protected 256-partition E1 manifests verified, including writer isolation", flush=True)
+    if control_only:
+        # Re-running the installer must fail without replacing either original manifest.
+        try:
+            tool(*install_args)
+        except RuntimeError:
+            pass
+        else:
+            raise RuntimeError("Existing namespace was accepted for reinstallation")
+        for kind, service in common.SERVICES.items():
+            actual = call("docker", "exec", "dc-saas-zookeeper", "zkCli.sh", "-server",
+                          "127.0.0.1:49181", "get", f"{namespace}/{kind}/manifest")
+            if setup.manifest(service) not in actual:
+                raise RuntimeError(f"Refused reinstallation changed {kind}")
+        print("Repeated namespace initialization refused; both original manifests intact", flush=True)
+        return
+    refs = {kind: image(kind) for kind in common.SERVICES}
     pairs = [(kind, slot) for kind in common.SERVICES for slot in common.SLOTS]
     for key in common.VOLUMES:
         call("docker", "volume", "create", "--label", f"otc.mac.demo.generation={out.name}", f"{out.name}-{key}")

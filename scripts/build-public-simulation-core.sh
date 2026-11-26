@@ -21,6 +21,24 @@ test "${#common[@]}" = 1
 test "${#shared[@]}" = 1
 common_sha="$(shasum -a 256 "${common[0]}" | cut -d' ' -f1)"
 common_ref="$(git -C "$root" rev-parse HEAD:sources/common)"
+# Run the existing two-direction physical crash gate against the JAR packaged below.
+candidate="$work/qualification-input"
+mkdir "$candidate"
+cp "${common[0]}" "$candidate/common-tested-class-bytes.jar"
+printf '%s\n' "$common_ref" > "$candidate/commit.sha"
+(cd "$work/common" && { find src -type f -print0; printf 'pom.xml\0'; } |
+  LC_ALL=C sort -z | xargs -0 shasum -a 256) > "$candidate/source.sha256"
+mvn -B -ntp "-Dmaven.repo.local=$work/m2" -f "$work/common/pom.xml" -DskipTests test-compile dependency:build-classpath
+if ! MAC_DEMO_COMMON_SOURCE="$root/sources/common" MAC_DEMO_MAVEN="$(command -v mvn)" \
+    MAC_DEMO_REQUIRE_INTERRUPTED_RETURN=true MAVEN_ARGS="${MAVEN_ARGS:-} -Dmaven.repo.local=$work/m2" \
+    bash "$root/scripts/verify-mac-common-failover.sh" "$candidate" "$common_sha" "$work/fault-results" \
+    > "$work/fault-gate.log" 2>&1; then
+  echo "Common physical crash qualification failed for $common_sha" >&2
+  grep -E 'PHYSICAL_P0_CASE_FAILED|^FAIL |^ValueError:|^Common fixture build failed' "$work/fault-gate.log" | tail -8 >&2 || true
+  exit 1
+fi
+test "$(cat "$work/fault-results/status")" = PASS
+echo "Common physical fault qualification passed: $common_sha"
 for module in order trade market-data gateway; do
   src="$work/$module"
   "${build[@]}" -f "$src/pom.xml" package dependency:copy-dependencies \
