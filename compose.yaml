@@ -76,6 +76,8 @@ services:
       - ${DEPLOY_ROOT}/log/clickhouse:/var/log/clickhouse-server
       - ./clickhouse/saas-init:/docker-entrypoint-initdb.d:ro
       - ./clickhouse/users.d/20-saas-memory.xml:/etc/clickhouse-server/users.d/20-saas-memory.xml:ro
+      # T543: disable unneeded internal high-volume system logs; preserve business dc.* and error/query logs.
+      - ./clickhouse/config.d/30-saas-disable-heavy-system-logs.xml:/etc/clickhouse-server/config.d/30-saas-disable-heavy-system-logs.xml:ro
       - ${DEPLOY_ROOT}/control/clickhouse-ports.xml:/etc/clickhouse-server/config.d/10-saas-ports.xml:ro
       - ${DEPLOY_ROOT}/control/clickhouse-client.xml:/etc/clickhouse-client/config.xml:ro
       - ${DEPLOY_ROOT}/control/clickhouse-docker-related.xml:/etc/clickhouse-server/config.d/docker_related_config.xml:ro
@@ -85,7 +87,8 @@ services:
       timeout: 5s
       retries: 30
       start_period: 30s
-    mem_limit: ${CLICKHOUSE_MEMORY_LIMIT:-2048m}
+    # T542: 1.5 GiB isolated Demo ClickHouse was OOMKilled (137), breaking K-line history.
+    mem_limit: ${CLICKHOUSE_MEMORY_LIMIT:-3072m}
     cpus: ${CLICKHOUSE_CPU_LIMIT:-0.75}
 
   zookeeper:
@@ -262,6 +265,9 @@ services:
       MAIN_CLASS: APSSvr
       JAVA_OPTS: ${APSSVR_JAVA_OPTS:--server -Xms64m -Xmx448m -Xmn112m -Djava.security.auth.login.config=../../control/jaas.ini}
       JAVA_TOOL_OPTIONS: ${APSSVR_EXTRA_JAVA_OPTS:-}
+      # Binance Futures only: use the host's SOCKS5 VPN without proxying GW/ZK.
+      APSSVR_BINANCE_SOCKS_HOST: ${APSSVR_BINANCE_SOCKS_HOST:-}
+      APSSVR_BINANCE_SOCKS_PORT: ${APSSVR_BINANCE_SOCKS_PORT:-}
     volumes:
       - ${DEPLOY_ROOT}/control:/srv/dc/control:ro
       - ${DEPLOY_ROOT}/data:/srv/dc/data
@@ -412,15 +418,15 @@ services:
       SERVICE_NAME: TradeSvr
       MAIN_CLASS: TradeSvr
       MALLOC_ARENA_MAX: ${TRADESVR_MALLOC_ARENA_MAX:-2}
-      JAVA_OPTS: ${TRADESVR_B_JAVA_OPTS:--server -Xms32m -Xmx192m -Xmn48m -Xss256k -XX:MaxDirectMemorySize=64m -XX:+ExitOnOutOfMemoryError -Dgateway.api.workerThreads=16 -Dgateway.api.workerQueueCapacity=2000 -Djava.security.auth.login.config=../../control/jaas.ini}
+      JAVA_OPTS: ${TRADESVR_B_JAVA_OPTS:--server -Xms64m -Xmx384m -Xmn96m -Xss256k -XX:MaxDirectMemorySize=128m -XX:+ExitOnOutOfMemoryError -Dgateway.api.workerThreads=32 -Dgateway.api.workerQueueCapacity=10000 -Djava.security.auth.login.config=../../control/jaas.ini}
     volumes:
       - ${DEPLOY_ROOT}/control:/srv/dc/control:ro
       - ${DEPLOY_ROOT}/data:/srv/dc/data
       - ${DEPLOY_ROOT}/log:/srv/dc/log
       - ${DEPLOY_ROOT}/control/overrides/TradeSvrB/config/application.properties:/srv/dc/dc/TradeSvr/config/application.properties:ro
       - ${DEPLOY_ROOT}/control/overrides/TradeSvrB/config/log4j.ini:/srv/dc/dc/TradeSvr/config/log4j.ini:ro
-    mem_limit: ${TRADESVR_B_MEMORY_LIMIT:-512m}
-    cpus: ${TRADESVR_B_CPU_LIMIT:-0.25}
+    mem_limit: ${TRADESVR_B_MEMORY_LIMIT:-896m}
+    cpus: ${TRADESVR_B_CPU_LIMIT:-0.50}
 
   liqsvr:
     <<: *java-service-base
@@ -547,6 +553,46 @@ services:
     mem_limit: ${ROBOTSVR_MEMORY_LIMIT:-384m}
     cpus: ${ROBOTSVR_CPU_LIMIT:-0.20}
 
+  # Public landing and API documentation Nginx images listen on 18094/18096.
+  # Cloudflare Tunnel is a host process and connects to 127.0.0.1 at those
+  # ports. A bridge-network container with un-published ports healthchecks
+  # green internally but makes the public hostname return 502.
+  public-web:
+    image: ${PUBLIC_WEB_IMAGE_REPOSITORY:-ghcr.io/bliplink/opentradingcore-web}:${PUBLIC_WEB_TAG:-saas-crypto}
+    network_mode: host
+    restart: unless-stopped
+    logging: *default-logging
+    volumes:
+      - ./config/frontend-proxies/public-web.conf.template:/etc/nginx/templates/default.conf.template:ro
+    environment:
+      TZ: Asia/Shanghai
+      GATEWAY_HOST: 127.0.0.1
+      GATEWAY_HTTP_PORT: ${GW_HTTP_PORT:-33002}
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://127.0.0.1:18094/healthz | grep -q '^ok$'"]
+      interval: 15s
+      timeout: 5s
+      retries: 10
+      start_period: 10s
+    mem_limit: ${PUBLIC_WEB_MEMORY_LIMIT:-128m}
+    cpus: ${PUBLIC_WEB_CPU_LIMIT:-0.05}
+
+  api-docs:
+    image: ${API_DOCS_IMAGE_REPOSITORY:-ghcr.io/bliplink/opentradingcore-api-docs-web}:${API_DOCS_TAG:-saas-crypto}
+    network_mode: host
+    restart: unless-stopped
+    logging: *default-logging
+    environment:
+      TZ: Asia/Shanghai
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://127.0.0.1:18096/healthz | grep -q '^ok$'"]
+      interval: 15s
+      timeout: 5s
+      retries: 10
+      start_period: 10s
+    mem_limit: ${API_DOCS_MEMORY_LIMIT:-128m}
+    cpus: ${API_DOCS_CPU_LIMIT:-0.05}
+
   web:
     image: ${TRADE_WEB_IMAGE_REPOSITORY:-ghcr.io/bliplink/dc-saas-trade-web}:${TRADE_WEB_TAG:-saas-crypto}
     container_name: dc-saas-trade-web
@@ -579,6 +625,8 @@ services:
     network_mode: host
     restart: unless-stopped
     logging: *default-logging
+    volumes:
+      - ./config/frontend-proxies/tenant-web.conf.template:/etc/nginx/templates/default.conf.template:ro
     depends_on:
       gateway:
         condition: service_started
@@ -586,6 +634,8 @@ services:
         condition: service_started
     environment:
       TZ: Asia/Shanghai
+      GATEWAY_HOST: 127.0.0.1
+      GATEWAY_HTTP_PORT: ${GW_HTTP_PORT:-33002}
     healthcheck:
       test: ["CMD-SHELL", "wget -qO- http://127.0.0.1:18092/healthz | grep -q '^ok$'"]
       interval: 15s
@@ -601,6 +651,8 @@ services:
     network_mode: host
     restart: unless-stopped
     logging: *default-logging
+    volumes:
+      - ./config/frontend-proxies/platform-web.conf.template:/etc/nginx/templates/default.conf.template:ro
     depends_on:
       gateway:
         condition: service_started
@@ -608,6 +660,8 @@ services:
         condition: service_started
     environment:
       TZ: Asia/Shanghai
+      GATEWAY_HOST: 127.0.0.1
+      GATEWAY_HTTP_PORT: ${GW_HTTP_PORT:-33002}
     healthcheck:
       test: ["CMD-SHELL", "wget -qO- http://127.0.0.1:18090/healthz | grep -q '^ok$'"]
       interval: 15s

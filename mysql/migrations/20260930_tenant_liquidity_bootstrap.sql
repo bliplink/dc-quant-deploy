@@ -60,4 +60,20 @@ CALL dc_liquidity_bootstrap_add_column('funding_confirmed',
 CALL dc_liquidity_bootstrap_add_column('complete_time',
   'complete_time datetime(3) DEFAULT NULL AFTER funding_confirmed');
 
+-- TrialLiquidityBootstrapWorker's independent Tape identity and no-retry cash
+-- ledger. Without these columns its polling SELECT fails before CREATE_MAKER.
+-- ADD is conditional through the procedure above for idempotent redeployment.
+CALL dc_liquidity_bootstrap_add_column('tape_enabled',
+  'tape_enabled tinyint(1) NOT NULL DEFAULT 0 AFTER complete_time');
+CALL dc_liquidity_bootstrap_add_column('tape_user_id',
+  'tape_user_id varchar(64) COLLATE utf8mb4_bin DEFAULT NULL AFTER tape_enabled');
+CALL dc_liquidity_bootstrap_add_column('tape_api_key',
+  'tape_api_key varchar(255) COLLATE utf8mb4_bin DEFAULT NULL AFTER tape_user_id');
+CALL dc_liquidity_bootstrap_add_column('tape_funding_amount',
+  'tape_funding_amount decimal(35,16) DEFAULT NULL AFTER tape_api_key');
+CALL dc_liquidity_bootstrap_add_column('tape_funding_request_id',
+  'tape_funding_request_id varchar(128) COLLATE utf8mb4_bin DEFAULT NULL AFTER tape_funding_amount');
+CALL dc_liquidity_bootstrap_add_column('tape_funding_confirmed',
+  'tape_funding_confirmed tinyint(1) NOT NULL DEFAULT 0 AFTER tape_funding_request_id');
+
 DROP PROCEDURE dc_liquidity_bootstrap_add_column;

@@ -49,3 +49,12 @@
 [submodule "projection"]
 	path = sources/projection
 	url = https://github.com/bliplink/com.app.dc.projectionsvr.git
+[submodule "liquidation"]
+	path = sources/liquidation
+	url = https://github.com/bliplink/com.app.dc.liqsvr.git
+[submodule "tenant-web"]
+	path = sources/tenant-web
+	url = https://github.com/bliplink/dc-saas-tenant-web.git
+[submodule "platform-web"]
+	path = sources/platform-web
+	url = https://github.com/bliplink/dc-saas-platform-web.git

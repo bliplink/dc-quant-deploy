@@ -1,0 +1,11 @@
+<?xml version="1.0"?>
+<!-- T543: small Mac Demo; internal ClickHouse trace/metric/text system logs
+     produced 28M+ rows and caused MergeTree background merge Code 241/OOM.
+     Keep query_log, error_log, part_log, filesystem log and ALL dc.* business
+     tables untouched. This does not DROP/TRUNCATE existing log tables. -->
+<clickhouse>
+    <trace_log remove="1"/>
+    <metric_log remove="1"/>
+    <asynchronous_metric_log remove="1"/>
+    <text_log remove="1"/>
+</clickhouse>
