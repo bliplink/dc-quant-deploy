@@ -53,3 +53,21 @@ jobs:
           fi
           cd "$out"
           sha256sum -- *.oci.tar >> "$GITHUB_STEP_SUMMARY"
+      - name: Seal verified candidates for acceptance on the original Mac
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y --no-install-recommends age
+          mkdir "$RUNNER_TEMP/sealed"
+          cd "$RUNNER_TEMP/candidates"
+          sha256sum -- *.oci.tar > "$RUNNER_TEMP/sealed/SHA256SUMS"
+          for archive in *.oci.tar; do
+            age -R "$GITHUB_WORKSPACE/config/public-simulation-candidate-recipient.pub" \
+              -o "$RUNNER_TEMP/sealed/$archive.age" "$archive"
+          done
+      - uses: actions/upload-artifact@v4
+        with:
+          name: candidate-${{ matrix.component }}-${{ github.sha }}
+          path: ${{ runner.temp }}/sealed/
+          if-no-files-found: error
+          retention-days: 3
+          compression-level: 0
