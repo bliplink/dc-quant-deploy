@@ -25,11 +25,11 @@ const maker = select(`SELECT j.maker_user_id FROM dc_tenant_liquidity_bootstrap 
  AND JSON_EXTRACT(r.strategy_config,'$.public_simulation_maker')=true`);
 if (!/^\d{1,32}$/.test(maker)) throw Error('No active, funded customer-facing maker for this tenant');
 const pause = ms=>new Promise(resolve=>setTimeout(resolve,ms));
-async function waitForProof(query) {
+async function waitForProof(query, complete = Boolean) {
   const end=Date.now()+45000;
   do {
     const rows=select(query);
-    if (rows) return rows;
+    if (rows && complete(rows)) return rows;
     await pause(500);
   } while(Date.now()<end);
   throw Error('Settlement or projection proof did not arrive within 45 seconds');
@@ -47,11 +47,14 @@ async function pairProof(customer,clientOrderId,side,reduce) {
         AND o.reduce_only=${reduce?1:0} AND o.ord_status='Filled' AND o.cum_qty=0.001 AND o.security_id='BTCUSDT'
         AND t.exec_type='Trade' AND t.side='${side}' AND t.maker=0
         AND t.exec_id=CONCAT('E',LEFT(SHA2(${base}'taker'),256),30))
-        AND m.exec_id=CONCAT('E',LEFT(SHA2(${base}'maker'),256),30))`);
+        AND m.exec_id=CONCAT('E',LEFT(SHA2(${base}'maker'),256),30))`, text => {
+      // Order and Trade project independently. A fully filled order may have
+      // only the first few execution legs or pending fee fields visible yet.
+      const legs = text.split('\n').map(row => row.split('\t'));
+      return legs.every(row => row.slice(2).every(value => Number.isFinite(Number(value)))) &&
+        Math.abs(legs.reduce((sum, row) => sum + Number(row[2]), 0) - 0.001) <= 1e-12;
+    });
   const legs=rows.split('\n').map(row=>row.split('\t'));
-  if (legs.some(row=>row.slice(2).some(value=>!Number.isFinite(Number(value)))) ||
-      Math.abs(legs.reduce((sum,row)=>sum+Number(row[2]),0)-0.001)>1e-12)
-    throw Error('Executed quantity, price, fee or realized P&L did not reconcile');
   return legs;
 }
 (async()=>{
