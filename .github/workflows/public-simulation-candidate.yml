@@ -52,6 +52,8 @@ jobs:
       - uses: docker/setup-qemu-action@v3
       - uses: docker/setup-buildx-action@v3
       - name: Build and verify both runtime architectures
+        env:
+          MAVEN_ARGS: --settings ${{ github.workspace }}/config/public-simulation-maven-settings.xml
         run: |
           out="$RUNNER_TEMP/candidates"
           if [[ "$COMPONENT" == trading-core ]]; then
