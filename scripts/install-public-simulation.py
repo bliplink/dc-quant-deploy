@@ -13,6 +13,8 @@ import shutil
 import subprocess
 import sys
 
+import simulation_tenants
+
 SCRIPTS = Path(__file__).resolve().parent
 spec = importlib.util.spec_from_file_location("simulation", SCRIPTS / "verify-clean-simulation.py")
 simulation = importlib.util.module_from_spec(spec)
@@ -104,8 +106,9 @@ def main():
                        check=True)
         revision = call("git", "-C", str(SCRIPTS.parent), "rev-parse", "HEAD")
         receipt = base / "installation.json"
-        if receipt.exists():
-            state = json.loads(receipt.read_text())
+        checkpoint = base / "cluster-ready.json"
+        if receipt.exists() or checkpoint.exists():
+            state = json.loads((receipt if receipt.exists() else checkpoint).read_text())
             if state["deploymentRevision"] != revision:
                 raise RuntimeError("Existing installation has another deployment revision")
             generation = state["generation"]
@@ -113,7 +116,12 @@ def main():
                 raise ValueError("Invalid installation receipt")
             if inventory(generation) != state["runningImages"]:
                 raise RuntimeError("Running images differ from the original installation receipt")
-            print(f"{generation} verified from its existing storage")
+            if receipt.exists() and "tenants" in state:
+                if simulation_tenants.funded(state["tenants"]) != 10:
+                    raise RuntimeError("The installation exists; fewer than ten funded makers are actively quoting")
+                print(f"{generation} verified from existing storage with ten funded tenants")
+                return
+            finish_tenants(base, state)
             return
         if set(p.name for p in base.iterdir()) != {".installation.lock"}:
             raise RuntimeError("Incomplete or foreign installation directory; keeping its evidence and data")
@@ -134,10 +142,25 @@ def main():
         out = base / datetime.now(timezone.utc).strftime("sim-demo-%Y%m%d-%H%M%S")
         simulation.install(out, control_only=False)
         state = {"generation": out.name, "deploymentRevision": revision, "runningImages": inventory(out.name)}
-        tmp = base / ".installation.json.tmp"
-        tmp.write_text(json.dumps(state, indent=2) + "\n")
-        os.replace(tmp, receipt)
-        print(f"{out.name} installed with verified Order and Trade membership")
+        write_receipt(checkpoint, state)
+        finish_tenants(base, state)
+
+
+def write_receipt(path, state):
+    tmp = path.with_suffix(".tmp")
+    with tmp.open("w") as stream:
+        json.dump(state, stream, indent=2)
+        stream.write("\n")
+        stream.flush()
+        os.fsync(stream.fileno())
+    os.replace(tmp, path)
+
+
+def finish_tenants(base, state):
+    generation = state["generation"]
+    state["tenants"] = simulation_tenants.enroll(base / generation)
+    write_receipt(base / "installation.json", state)
+    print(f"{generation} installed with verified Order and Trade membership and ten funded makers")
 
 
 if __name__ == "__main__":

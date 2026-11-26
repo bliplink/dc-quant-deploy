@@ -142,6 +142,8 @@ jobs:
       - uses: actions/checkout@v4
         with:
           persist-credentials: false
+      - name: Verify interrupted tenant enrollment
+        run: python3 tests/test_simulation_tenant_retry.py
       - name: Install image verification tools
         run: |
           sudo apt-get -o Dir::Etc::sourcelist=sources.list.d/ubuntu.sources -o Dir::Etc::sourceparts=- -o Acquire::Retries=3 update -qq
@@ -153,6 +155,7 @@ jobs:
           CANDIDATE_RUN_ID: ${{ inputs.candidate_run }}
         run: bash scripts/load-clean-simulation-candidates.sh
       - name: Run protected installation on empty storage
+        id: install
         run: |
           python3 scripts/install-public-simulation.py --state-dir "$RUNNER_TEMP/t554-install"
           python3 scripts/install-public-simulation.py --state-dir "$RUNNER_TEMP/t554-install"
@@ -170,4 +173,26 @@ jobs:
         with:
           name: accepted-linux-amd64-images-${{ github.sha }}
           path: ${{ runner.temp }}/simulation-images.json
+          retention-days: 3
+      - name: Preserve scoped logs if the fresh installation fails
+        if: failure() && steps.install.outcome != 'skipped'
+        run: |
+          umask 077
+          generation="$(find "$RUNNER_TEMP/t554-install" -maxdepth 1 -type d -name 'sim-demo-*' -printf '%f' 2>/dev/null || true)"
+          if [[ ! "$generation" =~ ^sim-demo-[0-9]{8}-[0-9]{6}$ ]]; then exit 0; fi
+          mkdir "$RUNNER_TEMP/simulation-diagnostics"
+          while IFS= read -r node; do
+            project="$(docker inspect -f '{{index .Config.Labels "com.docker.compose.project"}}' "$node")"
+            if [[ "$project" == "$generation" || "$node" == "$generation"-* ]]; then
+              docker inspect -f '{{.State.Status}} exit={{.State.ExitCode}} oom={{.State.OOMKilled}}' "$node" > "$RUNNER_TEMP/simulation-diagnostics/$node.log"
+              docker logs --tail 800 "$node" >> "$RUNNER_TEMP/simulation-diagnostics/$node.log" 2>&1 || true
+            fi
+          done < <(docker ps -a --format '{{.Names}}')
+          tar -C "$RUNNER_TEMP" -czf - simulation-diagnostics | age -R config/public-simulation-candidate-recipient.pub -o "$RUNNER_TEMP/simulation-diagnostics.tar.gz.age"
+      - uses: actions/upload-artifact@v4
+        if: failure() && steps.install.outcome != 'skipped'
+        with:
+          name: installation-diagnostics-${{ github.run_id }}-${{ github.run_attempt }}
+          path: ${{ runner.temp }}/simulation-diagnostics.tar.gz.age
+          if-no-files-found: ignore
           retention-days: 3

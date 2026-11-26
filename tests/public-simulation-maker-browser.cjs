@@ -65,6 +65,7 @@ async function pairProof(customer,clientOrderId,side,reduce) {
     try {
       await directoryPage.route(/^https?:/, route => new URL(route.request().url()).hostname === '127.0.0.1' ? route.continue() : route.abort());
       await directoryPage.goto('http://127.0.0.1:18094/', {waitUntil:'domcontentloaded'});
+      await directoryPage.locator('#tenantSearch').fill(tenant);
       const href = origin.origin + '/#/trade?location=' + tenant;
       // Wait for the directory API to render this exact tenant before navigating.
       await directoryPage.waitForFunction(expected => [...document.links].some(a => a.href === expected), href, {timeout:45000});
