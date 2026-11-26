@@ -11,12 +11,33 @@ def verify(archive, revision):
     if not re.fullmatch(r"[0-9a-f]{40}", revision):
         raise ValueError("An exact source revision is required")
     with tarfile.open(archive) as bundle:
-        def read_blob(descriptor):
-            alg, digest = descriptor["digest"].split(":", 1)
-            if alg != "sha256" or not re.fullmatch(r"[0-9a-f]{64}", digest):
+        verified_layers = {}
+        def blob_path(descriptor):
+            digest = descriptor["digest"]
+            if not re.fullmatch(r"sha256:[0-9a-f]{64}", digest):
                 raise ValueError("Invalid OCI digest")
-            data = bundle.extractfile("blobs/sha256/" + digest).read()
-            if len(data) != descriptor["size"] or hashlib.sha256(data).hexdigest() != digest:
+            return "blobs/sha256/" + digest[7:]
+
+        def verify_layer(layer):
+            digest = layer["digest"]
+            if digest in verified_layers:
+                if verified_layers[digest] != layer["size"]:
+                    raise ValueError("Inconsistent layer size")
+                return
+            size = 0
+            check = hashlib.sha256()
+            with bundle.extractfile(blob_path(layer)) as stream:
+                for block in iter(lambda: stream.read(1024 * 1024), b""):
+                    size += len(block)
+                    check.update(block)
+            if size != layer["size"] or "sha256:" + check.hexdigest() != digest:
+                raise ValueError("Invalid runtime layer")
+            verified_layers[digest] = size
+
+        def read_blob(descriptor):
+            with bundle.extractfile(blob_path(descriptor)) as stream:
+                data = stream.read()
+            if len(data) != descriptor["size"] or "sha256:" + hashlib.sha256(data).hexdigest() != descriptor["digest"]:
                 raise ValueError("OCI blob mismatch")
             return json.loads(data)
 
@@ -31,12 +52,17 @@ def verify(archive, revision):
                 return
             config = read_blob(node["config"])
             platform = (config["os"], config["architecture"])
+            advertised = descriptor.get("platform", {})
+            if advertised and (advertised.get("os"), advertised.get("architecture")) != platform:
+                raise ValueError("Manifest platform differs from image configuration")
             if platform in seen:
                 raise ValueError("Duplicate architecture")
             if config["config"]["Labels"].get("org.opencontainers.image.revision") != revision:
                 raise ValueError("Image source differs from release commit")
             if not node["layers"]:
                 raise ValueError("Image has no runtime layers")
+            for layer in node["layers"]:
+                verify_layer(layer)
             seen.add(platform)
 
         index = json.load(bundle.extractfile("index.json"))

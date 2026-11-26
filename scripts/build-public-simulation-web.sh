@@ -30,10 +30,27 @@ for service in "$@"; do
       if [[ -n "${SIMULATION_NGINX_LAYOUT:-}" ]]; then
         extra=(--build-context "webbase=oci-layout://${SIMULATION_NGINX_LAYOUT}:base" --build-arg NGINX_IMAGE=webbase)
       fi
+    elif [[ "$service" == tenant-web || "$service" == platform-web ]]; then
+      context="$work"
+      file="$root/docker/public-simulation-portal.Dockerfile"
+      cp "$root/config/frontend-proxies/$service.conf.template" "$context/default.conf.template"
+      mkdir "$context/help"
+      if [[ "$service" == tenant-web ]]; then
+        extra=(--build-arg PORT=18092)
+        for lang in en zh; do
+          upper="$(echo "$lang" | tr '[:lower:]' '[:upper:]')"
+          cp "$work/source/public/help/OpenTradingCore_Tenant_Management_User_Guide_$upper.pdf" \
+            "$context/help/tenant-management-guide-$lang.pdf"
+        done
+      else
+        extra=(--build-arg PORT=18090)
+        cp "$work/source/docs/user-manual/"*.pdf "$context/help/"
+      fi
     elif [[ "$service" == api-docs ]]; then
       context="$work/context"
       bash "$work/source/scripts/prepare-public-api-docs-context.sh" "$context"
       file="$work/source/docs/public-api/Dockerfile"
+      extra=(--build-arg PYTHON_IMAGE=python:3.12-slim)
     fi
     docker buildx build --platform linux/amd64,linux/arm64 \
       --label "org.opencontainers.image.revision=$pin" \
