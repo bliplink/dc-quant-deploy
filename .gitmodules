@@ -1,0 +1,51 @@
+[submodule "common"]
+	path = sources/common
+	url = https://github.com/bliplink/com.app.common.git
+[submodule "shared"]
+	path = sources/shared
+	url = https://github.com/bliplink/com.app.dc.git
+[submodule "order"]
+	path = sources/order
+	url = https://github.com/bliplink/com.app.dc.ordersvr.git
+[submodule "trade"]
+	path = sources/trade
+	url = https://github.com/bliplink/com.app.dc.tradesvr.git
+[submodule "market-data"]
+	path = sources/market-data
+	url = https://github.com/bliplink/com.app.dc.mdsvr.git
+[submodule "gateway-api"]
+	path = sources/gateway-api
+	url = https://github.com/bliplink/gateway-api.git
+[submodule "gateway"]
+	path = sources/gateway
+	url = https://github.com/bliplink/gw.git
+[submodule "trade-web"]
+	path = sources/trade-web
+	url = https://github.com/bliplink/dc-trade-web.git
+[submodule "price-feed"]
+	path = sources/price-feed
+	url = https://github.com/bliplink/com.app.dc.apssvr.git
+[submodule "manager"]
+	path = sources/manager
+	url = https://github.com/bliplink/com.app.dc.managersvr.git
+[submodule "login"]
+	path = sources/login
+	url = https://github.com/bliplink/com.app.dc.loginsvr.git
+[submodule "admin-bootstrap"]
+	path = sources/admin-bootstrap
+	url = https://github.com/bliplink/com.app.dc.adminsvr.git
+[submodule "admin-public-stats"]
+	path = sources/admin-public-stats
+	url = https://github.com/bliplink/com.app.dc.adminsvr.git
+[submodule "public-web"]
+	path = sources/public-web
+	url = https://github.com/bliplink/opentradingcore-web.git
+[submodule "api-docs"]
+	path = sources/api-docs
+	url = https://github.com/bliplink/opentradingcore-api-docs.git
+[submodule "robot"]
+	path = sources/robot
+	url = https://github.com/bliplink/com.app.dc.robotsvr.git
+[submodule "projection"]
+	path = sources/projection
+	url = https://github.com/bliplink/com.app.dc.projectionsvr.git

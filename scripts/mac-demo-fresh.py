@@ -382,6 +382,22 @@ def rotate_recovery_rsa_keys(configuration_root):
             for previous, pair in sorted(rotations.items())]
 
 
+def verified_trading_web_image(reference):
+    """Use the same immutable image for the restore check and Compose."""
+    image = read("docker", "image", "inspect", "--format", "{{.Id}}", reference)
+    revision = read("docker", "image", "inspect", "--format",
+                    '{{index .Config.Labels "org.opencontainers.image.revision"}}', image)
+    locks = json.loads((REPO / "config/public-simulation-web.json").read_text())
+    if revision != locks["revision"]:
+        raise RuntimeError("Trading Web is missing the reviewed release; set trade_web_IMAGE in images.env")
+    for name, expected in locks["manuals"].items():
+        result = read("docker", "run", "--rm", "--network", "none", "--entrypoint", "sha256sum",
+                      image, "/usr/share/nginx/html/help/" + name)
+        if result.split()[0] != expected:
+            raise RuntimeError("Trading Web guide differs from the reviewed release: " + name)
+    return image
+
+
 def new_demo_signers(out):
     """Create new physical signer material; the Common template supplies only the aliases."""
     root = out / "common" / "physical-signers"
@@ -687,6 +703,8 @@ def main():
     else:
         old, old_core, old_names, running_old_core, running_old_witnesses, running_support = retired_reference(
             pairs, automatic_common)
+    if empty:
+        web_image = verified_trading_web_image(images.get("trade_web_IMAGE", old[WEB_CONTAINERS["web"]]["Image"]))
     embedded_jars = [("Common", "common", "com.app.common-mac-demo.jar")]
     if "shared_sha256" in images:
         embedded_jars.append(("shared business", "shared", "com.app.dc-mac-demo.jar"))
@@ -878,7 +896,7 @@ def main():
         pinned[name] = {"image": reference}
     if empty:
         for service, name in WEB_CONTAINERS.items():
-            pinned[service] = {"image": old[name]["Image"], "container_name": name}
+            pinned[service] = {"image": web_image if service == "web" else old[name]["Image"], "container_name": name}
     override.write_text(json.dumps({"services": pinned}))
     compose = ("docker", "compose", "-p", generation, "--env-file", str(env),
                "-f", str(REPO / "compose.yaml"), "-f", str(override))
