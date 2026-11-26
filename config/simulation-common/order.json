@@ -1,0 +1,429 @@
+{
+  "common": {
+    "bookTickerPublishIntervalMs": "0",
+    "bookTickerPublishOnQtyChange": "true",
+    "dbType": "rockdb",
+    "dbpool.cfg": "../../control/DBPoolConfig.ini",
+    "dbpool.default": "MYSQL0",
+    "depthDiffPublishIntervalMs": "0",
+    "enableDepthDiff": "true",
+    "enableFullOrderBookOnChange": "true",
+    "enableMarketPrice": "true",
+    "enablePerfStats": "true",
+    "enableSaveDBDemo": "false",
+    "execOrderType": "trade",
+    "fullOrderBookPublishIntervalMs": "1000",
+    "log4j.async": "true",
+    "log4j.file": "./config/log4j.ini",
+    "log4j.thread": "1",
+    "log4j.writeTime": "true",
+    "order.cluster.commit.enabled": "true",
+    "order.cluster.commit.required": "true",
+    "order.cluster.defaultMarketIndicator": "4",
+    "order.cluster.failover.enabled": "false",
+    "order.cluster.failover.minimumLiveSynchronizedReplicas": "2",
+    "order.cluster.failover.nodes": "OrderSvrA,OrderSvrB,OrderSvrC",
+    "order.cluster.failover.replicaRepairPollMillis": "5000",
+    "order.cluster.failover.safetyPollMillis": "1000",
+    "order.cluster.journal.enabled": "true",
+    "order.cluster.journal.required": "true",
+    "order.cluster.lifecycle.bootstrap.enabled": "true",
+    "order.cluster.lifecycle.enabled": "false",
+    "order.cluster.lifecycle.pollMillis": "1000",
+    "order.cluster.lifecycle.retryMillis": "5000",
+    "order.cluster.lifecycle.sameEpochRestart.enabled": "true",
+    "order.cluster.mdCheckpointHeadReview.enabled": "false",
+    "order.cluster.mdCheckpointHeadReview.minIntervalMillis": "60000",
+    "order.cluster.perfProbe.enabled": "false",
+    "order.cluster.recovery.rollbackUncommittedTail.enabled": "true",
+    "order.cluster.replication.async.maxPendingRecords": "8192",
+    "order.cluster.replication.async.retryMillis": "100",
+    "order.cluster.replication.batch.maxRecords": "64",
+    "order.cluster.replication.batch.maxWaitMicros": "1000",
+    "order.cluster.replication.batch.threads": "2",
+    "order.cluster.replication.bindHost": "127.0.0.1",
+    "order.cluster.replication.catchupBatchRecords": "256",
+    "order.cluster.replication.consistencyMode": "SYNC_PER_RECORD",
+    "order.cluster.replication.crossEpochSnapshotRebase.enabled": "true",
+    "order.cluster.replication.enabled": "false",
+    "order.cluster.replication.peers": "OrderSvrA=127.0.0.1:19121,OrderSvrB=127.0.0.1:19122,OrderSvrC=127.0.0.1:19123",
+    "order.cluster.replication.requestTimeoutMs": "10000",
+    "order.cluster.replication.required": "true",
+    "order.cluster.replication.sameEpochSnapshotRebase.enabled": "false",
+    "order.cluster.serviceName": "SERVER.OrderSvr",
+    "order.cluster.snapshot.barrier.acquireTimeoutMillis": "10000",
+    "order.cluster.snapshot.barrier.enabled": "true",
+    "order.cluster.snapshot.barrier.required": "true",
+    "order.cluster.snapshot.enabled": "true",
+    "order.cluster.snapshot.periodic.enabled": "true",
+    "order.cluster.snapshot.periodic.maxAgeMillis": "300000",
+    "order.cluster.snapshot.periodic.maxPartitionsPerRun": "4",
+    "order.cluster.snapshot.periodic.minCommittedMutations": "10000",
+    "order.cluster.snapshot.periodic.pollMillis": "5000",
+    "order.cluster.snapshot.promotionBarrier.required": "true",
+    "order.cluster.state.enabled": "true",
+    "order.cluster.state.replication.required": "true",
+    "order.cluster.state.required": "true",
+    "order.common.certifiedCancel.enabled": "true",
+    "order.common.cluster.required": "true",
+    "order.common.control.enabled": "true",
+    "order.common.control.leaseTtlMs": "15000",
+    "order.common.control.manifestPath": "@NAMESPACE@/order/manifest",
+    "order.common.control.ownerToken": "@OWNER_TOKEN@",
+    "order.common.control.renewMillis": "1000",
+    "order.common.control.zkHosts": "@ZK_ADDRESS@",
+    "order.common.durableHandoff.enabled": "false",
+    "order.common.existingRsa.enabled": "true",
+    "order.common.existingRsa.trustedPublicDir": "/read-only-original-rsa/public",
+    "order.common.gatewayDiscovery.host": "127.0.0.1",
+    "order.common.nodeRuntime.activateFirstReady": "false",
+    "order.common.nodeRuntime.automaticRecovery": "false",
+    "order.common.nodeRuntime.bindHost": "0.0.0.0",
+    "order.common.nodeRuntime.enabled": "true",
+    "order.common.nodeRuntime.freshE1.birthAliasA": "CommonHaDemoA",
+    "order.common.nodeRuntime.freshE1.birthAliasB": "CommonHaDemoB",
+    "order.common.nodeRuntime.freshE1.birthHostA": "MacDockerSlotA",
+    "order.common.nodeRuntime.freshE1.birthHostB": "MacDockerSlotB",
+    "order.common.nodeRuntime.freshE1.birthRoot": "/srv/dc/data/t549-born",
+    "order.common.nodeRuntime.freshE1.namespace": "@NAMESPACE@/order",
+    "order.common.nodeRuntime.originalSealedImageDir": "/srv/dc/data/t549-born/OrderSvr/sealed",
+    "order.common.nodeRuntime.physicalHosts": "OrderSvrA@MacDockerSlotA,OrderSvrB@MacDockerSlotB",
+    "order.common.nodeRuntime.rsaAliases": "OrderSvrA@CommonHaDemoA,OrderSvrB@CommonHaDemoB",
+    "order.common.nodeRuntime.service": "OrderSvr",
+    "order.common.physicalEvidence.enabled": "true",
+    "order.projection.binary.enabled": "true",
+    "order.projection.binary.maxBatchBytes": "16777216",
+    "order.projection.binary.publishBatchSize": "64",
+    "order.projection.enabled": "false",
+    "order.projection.serverKey": "SERVER.ProjectionSvr",
+    "order.selfTradePreventionMode": "CANCEL_TAKER",
+    "order.tenantSymbolRules.enabled": "true",
+    "order.trade.signedMatch.delivery.enabled": "true",
+    "order.trade.signedMatch.enabled": "true",
+    "order.trade.signedMatch.scanMs": "1000",
+    "perfStatsPeriodSeconds": "10",
+    "tradeServerKey": "SERVER.TradeSvr"
+  },
+  "slots": {
+    "A": {
+      "common": {
+        "order.cluster.journalDir": "../../data/t530-business-v1/OrderSvrA/journal",
+        "order.cluster.replication.port": "49121",
+        "order.cluster.snapshotDir": "../../data/t530-business-v1/OrderSvrA/snapshot",
+        "order.common.control.leasePath": "@NAMESPACE@/order/leases/OrderSvrA",
+        "order.common.control.nodeId": "OrderSvrA",
+        "order.common.existingRsa.localPrivateDir": "/read-only-original-rsa/a",
+        "order.common.existingRsa.nodeId": "CommonHaDemoA",
+        "order.common.gatewayDiscovery.port": "49036",
+        "order.common.nodeRuntime.dataRoot": "/srv/dc/data/t549-ready-v1/OrderSvr/OrderSvrA",
+        "orderStorePath": "../../data/t530-business-v1/OrderSvrA/store",
+        "serverKey": "SERVER.OrderSvrA"
+      },
+      "phases": {
+        "birth": {
+          "properties": {
+            "order.common.freshBootstrap.enabled": "false",
+            "order.common.gatewayDiscovery.enabled": "false",
+            "order.common.nodeRuntime.bindPort": "48322",
+            "order.common.nodeRuntime.inspectFencedBusiness": "false",
+            "order.common.nodeRuntime.installFencedFreshGenesis": "false",
+            "order.common.nodeRuntime.nettyPeers": "OrderSvrA@127.0.0.1:48322,OrderSvrB@127.0.0.1:48323",
+            "order.common.nodeRuntime.phase": "RECOVERING",
+            "order.common.nodeRuntime.provisionOriginalBirth": "true",
+            "order.common.nodeRuntime.stageOriginalFleet": "false"
+          }
+        },
+        "home": {
+          "partitions": {
+            "first": {
+              "durableTransactionRoot": "/srv/dc/data/t549-born/OrderSvr/OrderSvrA/transactions/@PARTITION@",
+              "localDurableGenesis": "/srv/dc/data/t549-born/OrderSvr/OrderSvrA/@PARTITION@/node-voter",
+              "originalSignedQuorum": "/srv/dc/data/t549-born/OrderSvr/sealed/@PARTITION@",
+              "primary": "OrderSvrA",
+              "primaryDurableTransactionRoot": "/srv/dc/data/t549-born/OrderSvr/OrderSvrA/transactions/@PARTITION@",
+              "primaryOriginalGenesisRoot": "/srv/dc/data/t549-born/OrderSvr/OrderSvrA/@PARTITION@/node-voter",
+              "primaryOriginalWalRoot": "/srv/dc/data/t549-born/OrderSvr/OrderSvrA/original-wal/@PARTITION@",
+              "primaryPhysicalHost": "MacDockerSlotA",
+              "primaryRsaAlias": "CommonHaDemoA",
+              "replica": "OrderSvrB",
+              "replicaDurableTransactionRoot": "/srv/dc/data/t549-born/OrderSvr/OrderSvrB/transactions/@PARTITION@",
+              "replicaOriginalGenesisRoot": "/srv/dc/data/t549-born/OrderSvr/OrderSvrB/@PARTITION@/node-voter",
+              "replicaOriginalWalRoot": "/srv/dc/data/t549-born/OrderSvr/OrderSvrB/original-wal/@PARTITION@",
+              "replicaPhysicalHost": "MacDockerSlotB",
+              "replicaRsaAlias": "CommonHaDemoB",
+              "requireBothOriginalReplay": "false"
+            },
+            "second": {
+              "durableTransactionRoot": "/srv/dc/data/t549-born/OrderSvr/OrderSvrA/transactions/@PARTITION@",
+              "localDurableGenesis": "/srv/dc/data/t549-born/OrderSvr/OrderSvrA/@PARTITION@/node-voter",
+              "originalSignedQuorum": "/srv/dc/data/t549-born/OrderSvr/sealed/@PARTITION@",
+              "primary": "OrderSvrB",
+              "primaryDurableTransactionRoot": "/srv/dc/data/t549-born/OrderSvr/OrderSvrB/transactions/@PARTITION@",
+              "primaryOriginalGenesisRoot": "/srv/dc/data/t549-born/OrderSvr/OrderSvrB/@PARTITION@/node-voter",
+              "primaryOriginalWalRoot": "/srv/dc/data/t549-born/OrderSvr/OrderSvrB/original-wal/@PARTITION@",
+              "primaryPhysicalHost": "MacDockerSlotB",
+              "primaryRsaAlias": "CommonHaDemoB",
+              "replica": "OrderSvrA",
+              "replicaDurableTransactionRoot": "/srv/dc/data/t549-born/OrderSvr/OrderSvrA/transactions/@PARTITION@",
+              "replicaOriginalGenesisRoot": "/srv/dc/data/t549-born/OrderSvr/OrderSvrA/@PARTITION@/node-voter",
+              "replicaOriginalWalRoot": "/srv/dc/data/t549-born/OrderSvr/OrderSvrA/original-wal/@PARTITION@",
+              "replicaPhysicalHost": "MacDockerSlotA",
+              "replicaRsaAlias": "CommonHaDemoA",
+              "requireBothOriginalReplay": "false"
+            }
+          },
+          "properties": {
+            "order.common.freshBootstrap.enabled": "false",
+            "order.common.gatewayDiscovery.enabled": "false",
+            "order.common.nodeRuntime.bindPort": "48322",
+            "order.common.nodeRuntime.inspectFencedBusiness": "false",
+            "order.common.nodeRuntime.installFencedFreshGenesis": "false",
+            "order.common.nodeRuntime.nettyPeers": "OrderSvrA@127.0.0.1:48322,OrderSvrB@127.0.0.1:48323",
+            "order.common.nodeRuntime.originalHomeLedgerDir": "/srv/dc/data/t549-born/OrderSvr/original-home",
+            "order.common.nodeRuntime.phase": "RECOVERING",
+            "order.common.nodeRuntime.provisionOriginalBirth": "false",
+            "order.common.nodeRuntime.provisionOriginalHome": "true",
+            "order.common.nodeRuntime.stageOriginalFleet": "false"
+          }
+        },
+        "hostready": {
+          "properties": {
+            "order.common.freshBootstrap.enabled": "true",
+            "order.common.gatewayDiscovery.enabled": "true",
+            "order.common.nodeRuntime.bindPort": "48522",
+            "order.common.nodeRuntime.inspectFencedBusiness": "false",
+            "order.common.nodeRuntime.installFencedFreshGenesis": "false",
+            "order.common.nodeRuntime.nettyPeers": "OrderSvrA@127.0.0.1:48522,OrderSvrB@127.0.0.1:48523",
+            "order.common.nodeRuntime.phase": "READY",
+            "order.common.nodeRuntime.provisionOriginalBirth": "false",
+            "order.common.nodeRuntime.snapshotRoot": "/srv/dc/data/t549-ready-v1/OrderSvr/OrderSvrA/snapshots",
+            "order.common.nodeRuntime.stageOriginalFleet": "false"
+          }
+        },
+        "install": {
+          "partitions": {
+            "first": {
+              "durableTransactionRoot": "/srv/dc/data/t549-born/OrderSvr/OrderSvrA/transactions/@PARTITION@",
+              "localDurableGenesis": "/srv/dc/data/t549-born/OrderSvr/OrderSvrA/@PARTITION@/node-voter",
+              "originalSignedQuorum": "/srv/dc/data/t549-born/OrderSvr/sealed/@PARTITION@",
+              "primary": "OrderSvrA",
+              "primaryOriginalWalRoot": "/srv/dc/data/t549-born/OrderSvr/OrderSvrA/original-wal/@PARTITION@",
+              "primaryPhysicalHost": "MacDockerSlotA",
+              "primaryRsaAlias": "CommonHaDemoA",
+              "replica": "OrderSvrB",
+              "replicaOriginalWalRoot": "/srv/dc/data/t549-born/OrderSvr/OrderSvrB/original-wal/@PARTITION@",
+              "replicaPhysicalHost": "MacDockerSlotB",
+              "replicaRsaAlias": "CommonHaDemoB",
+              "requireBothOriginalReplay": "false"
+            },
+            "second": {
+              "durableTransactionRoot": "/srv/dc/data/t549-born/OrderSvr/OrderSvrA/transactions/@PARTITION@",
+              "localDurableGenesis": "/srv/dc/data/t549-born/OrderSvr/OrderSvrA/@PARTITION@/node-voter",
+              "originalSignedQuorum": "/srv/dc/data/t549-born/OrderSvr/sealed/@PARTITION@",
+              "primary": "OrderSvrB",
+              "primaryOriginalWalRoot": "/srv/dc/data/t549-born/OrderSvr/OrderSvrB/original-wal/@PARTITION@",
+              "primaryPhysicalHost": "MacDockerSlotB",
+              "primaryRsaAlias": "CommonHaDemoB",
+              "replica": "OrderSvrA",
+              "replicaOriginalWalRoot": "/srv/dc/data/t549-born/OrderSvr/OrderSvrA/original-wal/@PARTITION@",
+              "replicaPhysicalHost": "MacDockerSlotA",
+              "replicaRsaAlias": "CommonHaDemoA",
+              "requireBothOriginalReplay": "false"
+            }
+          },
+          "properties": {
+            "order.common.freshBootstrap.enabled": "false",
+            "order.common.gatewayDiscovery.enabled": "false",
+            "order.common.nodeRuntime.bindPort": "48322",
+            "order.common.nodeRuntime.inspectFencedBusiness": "true",
+            "order.common.nodeRuntime.installFencedFreshGenesis": "true",
+            "order.common.nodeRuntime.nettyPeers": "OrderSvrA@127.0.0.1:48322,OrderSvrB@127.0.0.1:48323",
+            "order.common.nodeRuntime.phase": "RECOVERING",
+            "order.common.nodeRuntime.provisionOriginalBirth": "false",
+            "order.common.nodeRuntime.stageOriginalFleet": "false"
+          }
+        },
+        "stage": {
+          "partitions": {
+            "first": {
+              "durableTransactionRoot": "/srv/dc/data/t549-born/OrderSvr/OrderSvrA/transactions/@PARTITION@",
+              "localDurableGenesis": "/srv/dc/data/t549-born/OrderSvr/OrderSvrA/@PARTITION@/node-voter",
+              "originalSignedQuorum": "/srv/dc/data/t549-born/OrderSvr/sealed/@PARTITION@",
+              "primary": "OrderSvrA",
+              "primaryOriginalWalRoot": "/srv/dc/data/t549-born/OrderSvr/OrderSvrA/original-wal/@PARTITION@",
+              "primaryPhysicalHost": "MacDockerSlotA",
+              "primaryRsaAlias": "CommonHaDemoA",
+              "replica": "OrderSvrB",
+              "replicaOriginalWalRoot": "/srv/dc/data/t549-born/OrderSvr/OrderSvrB/original-wal/@PARTITION@",
+              "replicaPhysicalHost": "MacDockerSlotB",
+              "replicaRsaAlias": "CommonHaDemoB",
+              "requireBothOriginalReplay": "false"
+            },
+            "second": {
+              "durableTransactionRoot": "/srv/dc/data/t549-born/OrderSvr/OrderSvrA/transactions/@PARTITION@",
+              "localDurableGenesis": "/srv/dc/data/t549-born/OrderSvr/OrderSvrA/@PARTITION@/node-voter",
+              "originalSignedQuorum": "/srv/dc/data/t549-born/OrderSvr/sealed/@PARTITION@",
+              "primary": "OrderSvrB",
+              "primaryOriginalWalRoot": "/srv/dc/data/t549-born/OrderSvr/OrderSvrB/original-wal/@PARTITION@",
+              "primaryPhysicalHost": "MacDockerSlotB",
+              "primaryRsaAlias": "CommonHaDemoB",
+              "replica": "OrderSvrA",
+              "replicaOriginalWalRoot": "/srv/dc/data/t549-born/OrderSvr/OrderSvrA/original-wal/@PARTITION@",
+              "replicaPhysicalHost": "MacDockerSlotA",
+              "replicaRsaAlias": "CommonHaDemoA",
+              "requireBothOriginalReplay": "false"
+            }
+          },
+          "properties": {
+            "order.common.freshBootstrap.enabled": "false",
+            "order.common.gatewayDiscovery.enabled": "false",
+            "order.common.nodeRuntime.bindPort": "48322",
+            "order.common.nodeRuntime.inspectFencedBusiness": "true",
+            "order.common.nodeRuntime.installFencedFreshGenesis": "true",
+            "order.common.nodeRuntime.nettyPeers": "OrderSvrA@127.0.0.1:48322,OrderSvrB@127.0.0.1:48323",
+            "order.common.nodeRuntime.phase": "RECOVERING",
+            "order.common.nodeRuntime.provisionOriginalBirth": "false",
+            "order.common.nodeRuntime.stageOriginalFleet": "true"
+          }
+        }
+      }
+    },
+    "B": {
+      "common": {
+        "order.cluster.journalDir": "../../data/t530-business-v1/OrderSvrB/journal",
+        "order.cluster.replication.port": "49122",
+        "order.cluster.snapshotDir": "../../data/t530-business-v1/OrderSvrB/snapshot",
+        "order.common.control.leasePath": "@NAMESPACE@/order/leases/OrderSvrB",
+        "order.common.control.nodeId": "OrderSvrB",
+        "order.common.existingRsa.localPrivateDir": "/read-only-original-rsa/b",
+        "order.common.existingRsa.nodeId": "CommonHaDemoB",
+        "order.common.gatewayDiscovery.port": "49041",
+        "order.common.nodeRuntime.dataRoot": "/srv/dc/data/t549-ready-v1/OrderSvr/OrderSvrB",
+        "order.common.nodeRuntime.stageOriginalFleet": "false",
+        "orderStorePath": "../../data/t530-business-v1/OrderSvrB/store",
+        "serverKey": "SERVER.OrderSvrB"
+      },
+      "phases": {
+        "birth": {
+          "properties": {
+            "order.common.freshBootstrap.enabled": "false",
+            "order.common.gatewayDiscovery.enabled": "false",
+            "order.common.nodeRuntime.bindPort": "48323",
+            "order.common.nodeRuntime.inspectFencedBusiness": "false",
+            "order.common.nodeRuntime.installFencedFreshGenesis": "false",
+            "order.common.nodeRuntime.nettyPeers": "OrderSvrA@127.0.0.1:48322,OrderSvrB@127.0.0.1:48323",
+            "order.common.nodeRuntime.phase": "RECOVERING",
+            "order.common.nodeRuntime.provisionOriginalBirth": "true"
+          }
+        },
+        "home": {
+          "partitions": {
+            "first": {
+              "durableTransactionRoot": "/srv/dc/data/t549-born/OrderSvr/OrderSvrB/transactions/@PARTITION@",
+              "localDurableGenesis": "/srv/dc/data/t549-born/OrderSvr/OrderSvrB/@PARTITION@/node-voter",
+              "originalSignedQuorum": "/srv/dc/data/t549-born/OrderSvr/sealed/@PARTITION@",
+              "primary": "OrderSvrA",
+              "primaryDurableTransactionRoot": "/srv/dc/data/t549-born/OrderSvr/OrderSvrA/transactions/@PARTITION@",
+              "primaryOriginalGenesisRoot": "/srv/dc/data/t549-born/OrderSvr/OrderSvrA/@PARTITION@/node-voter",
+              "primaryOriginalWalRoot": "/srv/dc/data/t549-born/OrderSvr/OrderSvrA/original-wal/@PARTITION@",
+              "primaryPhysicalHost": "MacDockerSlotA",
+              "primaryRsaAlias": "CommonHaDemoA",
+              "replica": "OrderSvrB",
+              "replicaDurableTransactionRoot": "/srv/dc/data/t549-born/OrderSvr/OrderSvrB/transactions/@PARTITION@",
+              "replicaOriginalGenesisRoot": "/srv/dc/data/t549-born/OrderSvr/OrderSvrB/@PARTITION@/node-voter",
+              "replicaOriginalWalRoot": "/srv/dc/data/t549-born/OrderSvr/OrderSvrB/original-wal/@PARTITION@",
+              "replicaPhysicalHost": "MacDockerSlotB",
+              "replicaRsaAlias": "CommonHaDemoB",
+              "requireBothOriginalReplay": "false"
+            },
+            "second": {
+              "durableTransactionRoot": "/srv/dc/data/t549-born/OrderSvr/OrderSvrB/transactions/@PARTITION@",
+              "localDurableGenesis": "/srv/dc/data/t549-born/OrderSvr/OrderSvrB/@PARTITION@/node-voter",
+              "originalSignedQuorum": "/srv/dc/data/t549-born/OrderSvr/sealed/@PARTITION@",
+              "primary": "OrderSvrB",
+              "primaryDurableTransactionRoot": "/srv/dc/data/t549-born/OrderSvr/OrderSvrB/transactions/@PARTITION@",
+              "primaryOriginalGenesisRoot": "/srv/dc/data/t549-born/OrderSvr/OrderSvrB/@PARTITION@/node-voter",
+              "primaryOriginalWalRoot": "/srv/dc/data/t549-born/OrderSvr/OrderSvrB/original-wal/@PARTITION@",
+              "primaryPhysicalHost": "MacDockerSlotB",
+              "primaryRsaAlias": "CommonHaDemoB",
+              "replica": "OrderSvrA",
+              "replicaDurableTransactionRoot": "/srv/dc/data/t549-born/OrderSvr/OrderSvrA/transactions/@PARTITION@",
+              "replicaOriginalGenesisRoot": "/srv/dc/data/t549-born/OrderSvr/OrderSvrA/@PARTITION@/node-voter",
+              "replicaOriginalWalRoot": "/srv/dc/data/t549-born/OrderSvr/OrderSvrA/original-wal/@PARTITION@",
+              "replicaPhysicalHost": "MacDockerSlotA",
+              "replicaRsaAlias": "CommonHaDemoA",
+              "requireBothOriginalReplay": "false"
+            }
+          },
+          "properties": {
+            "order.common.freshBootstrap.enabled": "false",
+            "order.common.gatewayDiscovery.enabled": "false",
+            "order.common.nodeRuntime.bindPort": "48323",
+            "order.common.nodeRuntime.inspectFencedBusiness": "false",
+            "order.common.nodeRuntime.installFencedFreshGenesis": "false",
+            "order.common.nodeRuntime.nettyPeers": "OrderSvrA@127.0.0.1:48322,OrderSvrB@127.0.0.1:48323",
+            "order.common.nodeRuntime.originalHomeLedgerDir": "/srv/dc/data/t549-born/OrderSvr/original-home",
+            "order.common.nodeRuntime.phase": "RECOVERING",
+            "order.common.nodeRuntime.provisionOriginalBirth": "false",
+            "order.common.nodeRuntime.provisionOriginalHome": "true"
+          }
+        },
+        "hostready": {
+          "properties": {
+            "order.common.freshBootstrap.enabled": "true",
+            "order.common.gatewayDiscovery.enabled": "true",
+            "order.common.nodeRuntime.bindPort": "48523",
+            "order.common.nodeRuntime.inspectFencedBusiness": "false",
+            "order.common.nodeRuntime.installFencedFreshGenesis": "false",
+            "order.common.nodeRuntime.nettyPeers": "OrderSvrA@127.0.0.1:48522,OrderSvrB@127.0.0.1:48523",
+            "order.common.nodeRuntime.phase": "READY",
+            "order.common.nodeRuntime.provisionOriginalBirth": "false",
+            "order.common.nodeRuntime.snapshotRoot": "/srv/dc/data/t549-ready-v1/OrderSvr/OrderSvrB/snapshots"
+          }
+        },
+        "install": {
+          "partitions": {
+            "first": {
+              "durableTransactionRoot": "/srv/dc/data/t549-born/OrderSvr/OrderSvrB/transactions/@PARTITION@",
+              "localDurableGenesis": "/srv/dc/data/t549-born/OrderSvr/OrderSvrB/@PARTITION@/node-voter",
+              "originalSignedQuorum": "/srv/dc/data/t549-born/OrderSvr/sealed/@PARTITION@",
+              "primary": "OrderSvrA",
+              "primaryOriginalWalRoot": "/srv/dc/data/t549-born/OrderSvr/OrderSvrA/original-wal/@PARTITION@",
+              "primaryPhysicalHost": "MacDockerSlotA",
+              "primaryRsaAlias": "CommonHaDemoA",
+              "replica": "OrderSvrB",
+              "replicaOriginalWalRoot": "/srv/dc/data/t549-born/OrderSvr/OrderSvrB/original-wal/@PARTITION@",
+              "replicaPhysicalHost": "MacDockerSlotB",
+              "replicaRsaAlias": "CommonHaDemoB",
+              "requireBothOriginalReplay": "false"
+            },
+            "second": {
+              "durableTransactionRoot": "/srv/dc/data/t549-born/OrderSvr/OrderSvrB/transactions/@PARTITION@",
+              "localDurableGenesis": "/srv/dc/data/t549-born/OrderSvr/OrderSvrB/@PARTITION@/node-voter",
+              "originalSignedQuorum": "/srv/dc/data/t549-born/OrderSvr/sealed/@PARTITION@",
+              "primary": "OrderSvrB",
+              "primaryOriginalWalRoot": "/srv/dc/data/t549-born/OrderSvr/OrderSvrB/original-wal/@PARTITION@",
+              "primaryPhysicalHost": "MacDockerSlotB",
+              "primaryRsaAlias": "CommonHaDemoB",
+              "replica": "OrderSvrA",
+              "replicaOriginalWalRoot": "/srv/dc/data/t549-born/OrderSvr/OrderSvrA/original-wal/@PARTITION@",
+              "replicaPhysicalHost": "MacDockerSlotA",
+              "replicaRsaAlias": "CommonHaDemoA",
+              "requireBothOriginalReplay": "false"
+            }
+          },
+          "properties": {
+            "order.common.freshBootstrap.enabled": "false",
+            "order.common.gatewayDiscovery.enabled": "false",
+            "order.common.nodeRuntime.bindPort": "48323",
+            "order.common.nodeRuntime.inspectFencedBusiness": "true",
+            "order.common.nodeRuntime.installFencedFreshGenesis": "true",
+            "order.common.nodeRuntime.nettyPeers": "OrderSvrA@127.0.0.1:48322,OrderSvrB@127.0.0.1:48323",
+            "order.common.nodeRuntime.phase": "RECOVERING",
+            "order.common.nodeRuntime.provisionOriginalBirth": "false"
+          }
+        }
+      }
+    }
+  }
+}

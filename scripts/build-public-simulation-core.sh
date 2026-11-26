@@ -25,6 +25,11 @@ for module in order trade market-data gateway; do
   src="$work/$module"
   "${build[@]}" -f "$src/pom.xml" package dependency:copy-dependencies \
     -DincludeScope=runtime "-DoutputDirectory=$src/target/dependency"
+  if [[ "$module" == order ]]; then
+    javac -cp "$src/target/dependency/*" -d "$src/target/classes" \
+      "$root/scripts/java/T554ProtectedNamespaceInstaller.java" \
+      "$root/scripts/java/T530OriginalE1DualPhysicalGenesisSeal.java"
+  fi
   packaged_common=("$src"/target/dependency/com.app.common-*.jar)
   packaged_shared=("$src"/target/dependency/com.app.dc-[0-9]*.jar)
   test "${#packaged_common[@]}" = 1

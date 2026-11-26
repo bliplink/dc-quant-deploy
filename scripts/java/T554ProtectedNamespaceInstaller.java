@@ -19,7 +19,7 @@ import org.apache.zookeeper.data.Id;
 import org.apache.zookeeper.data.Stat;
 import org.apache.zookeeper.server.auth.DigestAuthenticationProvider;
 
-/** Fresh Mac Demo installation only. Creates two non-routable E1 manifests. */
+/** Fresh simulation installation only. Creates two non-routable E1 manifests. */
 public final class T554ProtectedNamespaceInstaller {
     private static final List<String> SERVICES = Arrays.asList("order", "trade");
 
@@ -82,7 +82,7 @@ public final class T554ProtectedNamespaceInstaller {
     }
 
     public static void main(String[] args) throws Exception {
-        if (args.length != 5 || !args[1].matches("/otc/mac-demo-[0-9]{8}-[0-9]{6}"))
+        if (args.length != 5 || !args[1].matches("/otc/(?:mac|sim)-demo-[0-9]{8}-[0-9]{6}"))
             throw new IllegalArgumentException("fresh T554 namespace and credential file required");
         String hosts=args[0], root=args[1];
         Properties secrets=new Properties();
