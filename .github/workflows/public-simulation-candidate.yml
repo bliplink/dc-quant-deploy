@@ -4,12 +4,18 @@ on:
   push:
     branches: [release/public-simulation-20261126]
   workflow_dispatch:
+    inputs:
+      candidate_run:
+        description: Optional prior candidate run for installer-only diagnostics
+        required: false
+        type: string
 
 permissions:
   contents: read
 
 jobs:
   build:
+    if: github.event_name != 'workflow_dispatch' || inputs.candidate_run == ''
     name: Candidate ${{ matrix.component }}
     runs-on: ubuntu-24.04
     timeout-minutes: 120
@@ -123,6 +129,10 @@ jobs:
   clean-linux:
     name: Clean Linux installation
     needs: [build, clean-control]
+    if: >-
+      always() && !cancelled() && needs.clean-control.result == 'success' &&
+      (needs.build.result == 'success' ||
+      (needs.build.result == 'skipped' && github.event_name == 'workflow_dispatch' && inputs.candidate_run != ''))
     runs-on: ubuntu-24.04
     timeout-minutes: 60
     permissions:
@@ -140,6 +150,7 @@ jobs:
         env:
           SIMULATION_ACCEPTANCE_AGE_KEY: ${{ secrets.SIMULATION_ACCEPTANCE_AGE_KEY }}
           GH_TOKEN: ${{ github.token }}
+          CANDIDATE_RUN_ID: ${{ inputs.candidate_run }}
         run: bash scripts/load-clean-simulation-candidates.sh
       - name: Run protected installation on empty storage
         run: |
@@ -152,8 +163,10 @@ jobs:
       - name: Recheck the existing installation after customer trades
         run: python3 scripts/install-public-simulation.py --state-dir "$RUNNER_TEMP/t554-install"
       - name: Record the verified image manifest
+        if: needs.build.result == 'success'
         run: sha256sum "$RUNNER_TEMP/simulation-images.json" >> "$GITHUB_STEP_SUMMARY"
       - uses: actions/upload-artifact@v4
+        if: needs.build.result == 'success'
         with:
           name: accepted-linux-amd64-images-${{ github.sha }}
           path: ${{ runner.temp }}/simulation-images.json

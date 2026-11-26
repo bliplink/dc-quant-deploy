@@ -39,8 +39,8 @@ git submodule update --init -- sources/trade-web sources/public-web sources/api-
 | --- | --- |
 | macOS / Apple Silicon | 原 Mac 已从空 Docker 存储恢复；在缺少历史目录的新 Mac 上仍待验收 |
 | macOS / Intel | 待验收 |
-| Linux / ARM64 | 待在全新 Linux 宿主机验收 |
-| Linux / x86_64 | 待在全新 Linux 宿主机验收 |
+| Linux / ARM64 | 全新 ARM64 宿主机的基础设施、数据库迁移、分区权限与重复初始化已通过，完整交易待验收 |
+| Linux / x86_64 | 全新 x86_64 宿主机的基础设施、数据库迁移、分区权限与重复初始化已通过，完整交易待验收 |
 
 ## 整体发布标准
 
@@ -114,3 +114,22 @@ GitHub 临时 Ubuntu x86_64 主机已从空 Docker 存储启动 MySQL、ClickHou
 候选流程从固定提交编译 16 个服务镜像，为每个镜像检查 Linux amd64 与 arm64 两个平台的配置、内容摘要和源码版本。临时验收机使用独立的候选制品解密身份。原 Mac 的签名私钥、数据库和用户资料不参与此流程。
 
 完整安装的验收还要求同一 Common JAR 通过双向强制终止与追平演练，四个业务节点实际写出并核验签名，Order、Trade 各 256 个分区进入 READY。随后在相同磁盘上重复执行安装命令，核对现役镜像、清单和服务健康，再申请十个租户，逐租户通过浏览器执行市价开多、平多、开空、平空和账务核对。候选构建、安装和交易分别记录结果。整体发布仍待这些检查通过。
+
+同一提交随后在原生 Linux x86_64 和 ARM64 的独立主机上通过了控制层验收。两次均核验了每份清单的创建事务编号、数据版本和权限版本，重复操作未创建或修改清单。[x86_64 验收](https://github.com/bliplink/dc-quant-deploy/actions/runs/45910096322/job/140216104255) · [ARM64 验收](https://github.com/bliplink/dc-quant-deploy/actions/runs/45910096322/job/140216104035)
+
+### 候选安装入口
+
+安装器位于 `scripts/install-public-simulation.py`。它接受一个由当前账户独占的持久目录，首次安装要求 Docker 引擎没有容器和数据卷。它在该目录生成新的服务身份和 A/B 密钥。完成首次安装后，再次执行相同命令会核对现有服务、镜像和 512 个分区，保留现有数据库和签名。遇到不完整的安装目录时会停止并保留现场。
+
+带到新机的离线包应包含 16 个 OCI 归档文件和 `simulation-images.json`。发布时另行提供该清单的 SHA256 和部署提交号。Linux 使用本地 Docker 引擎，macOS 的候选流程使用 Colima。安装机还需 Compose、Git、Python 3、OpenSSL 和 Skopeo。首次启动还需能获取数据库、ClickHouse 和 ZooKeeper 基础镜像。在对应部署提交下使用以下命令，变量分别指向实际交付的目录与校验值。
+
+```sh
+python3 scripts/install-public-simulation.py \
+  --state-dir "$HOME/.opentradingcore/simulation" \
+  --image-bundle "$RELEASE_IMAGE_DIRECTORY" \
+  --bundle-sha256 "$RELEASE_MANIFEST_SHA256"
+```
+
+单机默认主站端口为 18094，交易页为 18088。主站的租户交易入口使用访问者当前的主机名。如果通过独立域名反向代理交易页，首次安装前可设置 `T554_TRADE_ORIGIN`，例如 `https://trade.example.com`。线上 DNS、证书和对外端口须与目标服务器部署对应。正式制品和校验值以通过整套验收的发布记录为准。
+
+仅调整安装脚本时，在 Actions 手动运行候选工作流并填写 `candidate_run`，可以用上一轮已通过构建的原始加密镜像重做新机诊断。流程核对工作流身份、全部服务的构建结果及镜像构建输入；服务、依赖或 Common 门禁发生变化都需要重新构建。跨提交诊断只记录验证结果。正式交付包由完整成功的同一提交生成，导出命令为 `bash scripts/package-accepted-simulation.sh RUN_ID OWNER_IDENTITY OUTPUT_DIRECTORY`。解密身份仅由发布人保管，目标服务器接收 OCI 文件和已验收的校验清单。

@@ -10,6 +10,7 @@ import shlex
 import subprocess
 import sys
 import time
+from urllib.parse import urlsplit
 from datetime import datetime, timezone
 from pathlib import Path
 
@@ -81,7 +82,28 @@ def environment(out, include_apps=True):
     (control / "jaas.ini").write_text(client)
     (control / "zookeeper-jaas.ini").write_text(server)
     override = out / "compose.images.json"
-    override.write_text(json.dumps({"services": {service: {"image": image(kind)} for service, kind in APPS.items() if include_apps}}))
+    services = {service: {"image": image(kind)} for service, kind in APPS.items() if include_apps}
+    if include_apps:
+        path = "/usr/share/nginx/html/assets/js/config.js"
+        original = call("docker", "run", "--rm", "--network", "none", "--entrypoint", "cat",
+                        services["public-web"]["image"], path)
+        default = '"https://trade.opentradingcore.com/#/trade?location="'
+        if original.count(default) != 1:
+            raise RuntimeError("Public website trading link configuration changed")
+        origin = os.environ.get("T554_TRADE_ORIGIN", "")
+        if origin:
+            url = urlsplit(origin)
+            if (url.scheme not in {"http", "https"} or not url.hostname or url.username or url.password
+                    or url.path not in {"", "/"} or url.query or url.fragment):
+                raise ValueError("Expected a trading website origin")
+            trade = json.dumps(origin.rstrip("/") + "/#/trade?location=")
+        else:
+            trade = 'window.location.protocol+"//"+window.location.hostname+":18088/#/trade?location="'
+        public_config = control / "public-site.js"
+        public_config.write_text(original.replace(default, trade) + "\n")
+        public_config.chmod(0o644)
+        services["public-web"]["volumes"] = [f"{public_config}:{path}:ro"]
+    override.write_text(json.dumps({"services": services}))
     return ["docker", "compose", "-p", out.name, "--env-file", str(env), "-f", str(ROOT / "compose.yaml"),
             "-f", str(override)]
 
@@ -98,6 +120,9 @@ def main():
 
 
 def install(out, control_only):
+    if not control_only:
+        common.require_common_replication_ports("birth")
+        common.require_common_replication_ports("hostready")
     setup.prepare(out, 49181)
     namespace = "/otc/" + out.name
     compose = environment(out, include_apps=not control_only)
@@ -305,11 +330,21 @@ def run_core(out, compose, refs, roots, control, namespace, tool):
              "-cp", f"/srv/dc/dc/{service}/lib/*", "com.app.common.replication.CommonCertifiedFirstReadyE2WitnessProcess",
              f"{common.HA_WITNESS_SETTINGS}/witness.properties")
         wait_marker(name, "COMMON_FIRST_READY_E2_WITNESS_STARTED service=" + service)
+    common_sha = call("docker", "image", "inspect", "-f", '{{index .Config.Labels "dc.common.p0.sha256"}}',
+                      refs["order"])
+    if not re.fullmatch(r"[0-9a-f]{64}", common_sha):
+        raise RuntimeError("Missing qualified Common identity")
+    common.require_witness_runtime_storage(out, common_sha)
     call(*compose, "up", "-d", "--no-deps", "--pull", "never", *common.APPS, common.PROJECTION)
     nodes = {pair: start("hostready", *pair) for pair in pairs}
     for (kind, slot), node in nodes.items():
         service = common.SERVICES[kind]
         wait_marker(node, f"COMMON_GATEWAY_DISCOVERY_CERTIFIED service={service} node={service}{slot}")
+        checksum = call("docker", "exec", node, "sh", "-c",
+                        'set -- "$1"/com.app.common-*.jar; test "$#" -eq 1 && sha256sum "$1"',
+                        "--", f"/srv/dc/dc/{service}/lib").split()[0]
+        if checksum != common_sha:
+            raise RuntimeError(f"{node} runs a different Common JAR from physical qualification")
         directory = f"{ready}/{service}/{service}{slot}/{service}/{service}{slot}"
         if call("docker", "exec", node, "sh", "-c", 'find "$1" -name business.wal | wc -l', "--", directory) != "256":
             raise RuntimeError(f"{node} failed to open its physical WALs")

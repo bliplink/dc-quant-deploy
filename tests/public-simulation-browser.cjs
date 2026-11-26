@@ -27,6 +27,15 @@ function decoded(payload){
 
 async function newPage(browser,label){
  const ctx=await browser.newContext({locale:'en-US',viewport:{width:1440,height:930}});
+ if (process.env.GITHUB_ACTIONS === 'true') {
+  const allowed = url => ['localhost','127.0.0.1','[::1]'].includes(new URL(url).hostname);
+  if (!allowed(origin)) throw Error('The fresh installation test requires a local trading page');
+  await ctx.route(/^https?:/, route => allowed(route.request().url()) ? route.continue() : route.abort());
+  await ctx.routeWebSocket(/^wss?:/, socket => {
+   if (allowed(socket.url())) socket.connectToServer();
+   else socket.close({code:1008,reason:'Local simulation only'});
+  });
+ }
  await ctx.addInitScript(()=>localStorage.setItem('dc-trade-language','en'));
  const page=await ctx.newPage(), frames=[];
  const notices=new Set();

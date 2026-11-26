@@ -5,9 +5,36 @@ work="$(mktemp -d)"
 trap 'rm -rf "$work"' EXIT
 printf '%s\n' "${SIMULATION_ACCEPTANCE_AGE_KEY:?missing candidate identity}" > "$work/key"
 unset SIMULATION_ACCEPTANCE_AGE_KEY
+source_run="$GITHUB_RUN_ID"
+source_revision="$GITHUB_SHA"
+if [[ -n "${CANDIDATE_RUN_ID:-}" ]]; then
+  [[ "$CANDIDATE_RUN_ID" =~ ^[0-9]+$ ]]
+  source_run="$CANDIDATE_RUN_ID"
+  gh run view "$source_run" --json workflowDatabaseId,headBranch,headSha,jobs > "$work/source-run.json"
+  workflow_id="$(gh run view "$GITHUB_RUN_ID" --json workflowDatabaseId --jq .workflowDatabaseId)"
+  source_revision="$(python3 - "$work/source-run.json" "$workflow_id" <<'PYSOURCE'
+import json
+import re
+import sys
+run = json.load(open(sys.argv[1]))
+groups = "public-web trade-web tenant-web platform-web api-docs trading-core robot admin-bootstrap login manager liquidation price-feed projection".split()
+success = {job["name"] for job in run["jobs"] if job["conclusion"] == "success"}
+if (str(run["workflowDatabaseId"]) != sys.argv[2] or run["headBranch"] != "release/public-simulation-20261126"
+        or not re.fullmatch("[a-f0-9]{40}", run["headSha"])
+        or not all("Candidate " + name in success for name in groups)):
+    raise SystemExit("Expected every candidate build to pass in the release repository")
+print(run["headSha"])
+PYSOURCE
+)"
+  git fetch --quiet --depth=1 origin "$source_revision"
+  git diff --quiet "$source_revision" "$GITHUB_SHA" -- sources .gitmodules config/public-simulation-service-pins.tsv \
+    config/public-simulation-maven-settings.xml scripts/java scripts/build-public-simulation-\* \
+    scripts/build-mac-demo-notification-fanout.py scripts/verify-mac-common-failover.sh scripts/finalize-mac-common-failover.py
+  echo "Installer diagnostic at $GITHUB_SHA using verified candidate artifacts from $source_revision" >> "$GITHUB_STEP_SUMMARY"
+fi
 for job in public-web trade-web tenant-web platform-web api-docs trading-core robot admin-bootstrap login manager liquidation price-feed projection; do
   mkdir "$work/artifact"
-  gh run download "$GITHUB_RUN_ID" --name "candidate-$job-$GITHUB_SHA" --dir "$work/artifact"
+  gh run download "$source_run" --name "candidate-$job-$source_revision" --dir "$work/artifact"
   components=("$job")
   if [[ "$job" == trading-core ]]; then components=(order trade market-data gateway); fi
   for service in "${components[@]}"; do

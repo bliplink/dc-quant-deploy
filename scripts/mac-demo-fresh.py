@@ -233,7 +233,12 @@ finally:
         probe.close()
 print('COMMON_INTERNAL_ENDPOINTS_AVAILABLE ' + ','.join(map(str, ports)))
 """
-    run("colima", "ssh", "--", "python3", "-", input=script, capture=True)
+    if sys.platform.startswith("linux"):
+        run(sys.executable, "-", input=script, capture=True)
+    elif read("docker", "context", "show") == "colima":
+        run("colima", "ssh", "--", "python3", "-", input=script, capture=True)
+    else:
+        raise RuntimeError("Select the local Colima Docker context to verify macOS voter ports")
 
 
 def owned_mount(volume, subpath, target, read_only=False):

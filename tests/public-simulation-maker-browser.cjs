@@ -60,6 +60,22 @@ async function pairProof(customer,clientOrderId,side,reduce) {
 (async()=>{
   const result={tenant,maker,legs:[]};
   const browser=await chromium.launch({headless:true,channel:'chrome'});
+  if (process.env.GITHUB_ACTIONS === 'true') {
+    const directoryPage = await browser.newPage();
+    try {
+      await directoryPage.route(/^https?:/, route => new URL(route.request().url()).hostname === '127.0.0.1' ? route.continue() : route.abort());
+      await directoryPage.goto('http://127.0.0.1:18094/', {waitUntil:'domcontentloaded'});
+      const href = origin.origin + '/#/trade?location=' + tenant;
+      // Wait for the directory API to render this exact tenant before navigating.
+      await directoryPage.waitForFunction(expected => [...document.links].some(a => a.href === expected), href, {timeout:45000});
+      const entry = directoryPage.locator('a[href="' + href + '"]').first();
+      const target = await entry.getAttribute('href');
+      await directoryPage.goto(target, {waitUntil:'domcontentloaded'});
+      if (new URL(directoryPage.url()).origin !== origin.origin) throw Error('Public directory points outside the installed trading site');
+    } finally {
+      await directoryPage.close();
+    }
+  }
   try {
     const session=await newPage(browser,'single');
     const user=await session.page.evaluate(()=>JSON.parse(sessionStorage.getItem('loginData')).user_id);
