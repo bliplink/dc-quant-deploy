@@ -12,13 +12,16 @@ revision="$(git -C "$root" rev-parse HEAD)"
 verified="$(gh run view "$run_id" --repo "$repository" --json conclusion,headSha,headBranch,workflowName,jobs --jq '
   select(.conclusion=="success" and .headBranch=="release/public-simulation-20261126" and
          .workflowName=="Public simulation candidate images" and
-         any(.jobs[]; .name=="Clean Linux installation" and .conclusion=="success")) | .headSha')"
+         any(.jobs[]; .name=="Clean Linux installation" and .conclusion=="success") and
+         any(.jobs[]; .name=="Clean Linux ARM64 installation" and .conclusion=="success")) | .headSha')"
 [[ "$revision" == "$verified" ]] || { echo "Use the exact checkout for the accepted Linux run" >&2; exit 1; }
 mkdir -p "$(dirname "$destination")"
 mkdir -m 700 "$destination"
 work="$(mktemp -d "$destination/.export-XXXXXXXX")"
 trap 'rm -rf "$work"' EXIT
 gh run download "$run_id" --repo "$repository" --name "accepted-linux-amd64-images-$revision" --dir "$work/accepted"
+gh run download "$run_id" --repo "$repository" --name "accepted-linux-arm64-images-$revision" --dir "$work/accepted-arm"
+cmp "$work/accepted/simulation-images.json" "$work/accepted-arm/simulation-images.json"
 for group in public-web trade-web tenant-web platform-web api-docs trading-core robot admin-bootstrap login manager liquidation price-feed projection; do
   gh run download "$run_id" --repo "$repository" --name "candidate-$group-$revision" --dir "$work/artifact"
   components=("$group")

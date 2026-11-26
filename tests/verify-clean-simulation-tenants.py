@@ -37,7 +37,8 @@ def main():
         audit = Path(os.environ["RUNNER_TEMP"]) / ("simulation-browser-" + location)
         audit.mkdir(mode=0o700)
         env = {**os.environ, "SIMULATION_ORIGIN": "http://127.0.0.1:18088",
-               "DEMO_LOCATION": location, "AUDIT_DIR": str(audit)}
+               "DEMO_LOCATION": location, "AUDIT_DIR": str(audit),
+               "SIMULATION_TEST_ORDER_TYPES": "true" if i == 0 else "false"}
         subprocess.run(["node", str(ROOT / "tests/public-simulation-maker-browser.cjs")],
                        env=env, check=True, timeout=420)
         print(f"{i+1}/10 tenants settled market open and close in both directions", flush=True)

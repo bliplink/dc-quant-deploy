@@ -36,10 +36,12 @@ def funded(locations):
     sql = f"""SELECT COUNT(DISTINCT j.location) FROM dc_tenant_liquidity_bootstrap j
       JOIN dc_tenant_robot r ON r.location=j.location AND r.api_user_id=j.maker_user_id
       WHERE j.location IN ({items}) AND j.status='COMPLETE' AND j.step='DONE' AND j.funding_confirmed=1
-      AND j.tape_enabled=1 AND j.tape_funding_confirmed=1
+      AND j.tape_enabled=1 AND j.tape_funding_confirmed=1 AND j.tape_user_id<>j.maker_user_id
       AND j.funding_request_id=CONCAT('PUBLIC_SIM_MAKER_',LOWER(j.application_id))
       AND r.security_id='BTCUSDT' AND r.enabled=1 AND r.runtime_status='RUNNING'
-      AND r.hedge_enabled=0 AND r.open_order_count>=2 AND r.last_heartbeat_time>=NOW()-INTERVAL 30 SECOND"""
+      AND r.hedge_enabled=0 AND r.open_order_count>=2 AND r.last_heartbeat_time>=NOW()-INTERVAL 30 SECOND
+      AND EXISTS (SELECT 1 FROM dc_orders_execorders e WHERE e.location=j.location AND e.user_id=j.tape_user_id
+                  AND e.security_id=r.security_id AND e.exec_type='Trade' AND e.maker=0 AND e.last_qty>0 AND e.last_px>0)"""
     p = subprocess.run(["docker", "exec", "-i", "dc-saas-mysql", "sh", "-c",
                         'MYSQL_PWD="$MYSQL_ROOT_PASSWORD" exec mysql -uroot -BN dc'],
                        input=sql, text=True, capture_output=True, check=True)

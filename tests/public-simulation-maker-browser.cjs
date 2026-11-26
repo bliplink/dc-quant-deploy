@@ -2,7 +2,7 @@
 const {execFileSync} = require('node:child_process');
 const fs = require('node:fs');
 const {chromium} = require(process.env.PLAYWRIGHT_ROOT || 'playwright');
-const {newPage, place, observeTrade, acknowledged} = require('./public-simulation-browser.cjs');
+const {newPage, place, observeTrade, acknowledged, funding, cleanResting, dormantOrder} = require('./public-simulation-browser.cjs');
 const tenant = process.env.DEMO_LOCATION;
 const directory = process.env.AUDIT_DIR;
 const origin = new URL(process.env.SIMULATION_ORIGIN || 'https://trade.opentradingcore.com');
@@ -59,7 +59,7 @@ async function pairProof(customer,clientOrderId,side,reduce) {
 }
 (async()=>{
   const result={tenant,maker,legs:[]};
-  const browser=await chromium.launch({headless:true,channel:'chrome'});
+  const browser=await chromium.launch({headless:true,channel:process.env.PLAYWRIGHT_BUNDLED_CHROMIUM === 'true' ? undefined : 'chrome'});
   if (process.env.GITHUB_ACTIONS === 'true') {
     const directoryPage = await browser.newPage();
     try {
@@ -102,6 +102,27 @@ async function pairProof(customer,clientOrderId,side,reduce) {
       AND p.long_position=0 AND p.short_position=0 AND b.used_margin=0 AND b.freezed_margin=0 AND b.freezed_commission=0
       AND b.balance=100+(SELECT SUM(e.fee+e.realized_Pnl) FROM dc_orders_execorders e
           WHERE e.location=b.location AND e.user_id=b.user_id AND e.exec_type='Trade')`);
+    if (process.env.GITHUB_ACTIONS === 'true') {
+      const balance = result.closingBalance;
+      if (!/^\d+(\.\d+)?$/.test(balance)) throw Error('Invalid closing balance');
+      const withdrawal = await funding(session,'cashOut','1');
+      await funding(session,'cashOut','1',withdrawal.fundingRequest);
+      result.balanceAfterWithdrawal = await waitForProof(`SELECT balance FROM dc_users_balance
+        WHERE location='${tenant}' AND user_id='${user}' AND balance=CAST('${balance}' AS DECIMAL(36,12))-1`);
+      if (process.env.SIMULATION_TEST_ORDER_TYPES === 'true') {
+        const mark = Number((await session.page.locator('.marketMetricMark span:last-child').innerText()).replace(/,/g,''));
+        if (!Number.isFinite(mark) || mark <= 0) throw Error('No live mark price for order-type checks');
+        const resting = await place(session,'buy',Math.floor(mark*0.99),'Limit');
+        if (!acknowledged(resting) || !/^[A-Za-z0-9_.:-]{1,128}$/.test(resting.clientOrderId || '')) throw Error('Resting limit order rejected');
+        if (!(await cleanResting(session)).canceled) throw Error('Limit cancellation did not clear the order');
+        await waitForProof(`SELECT clord_id FROM dc_orders WHERE location='${tenant}' AND user_id='${user}'
+          AND clord_id='${resting.clientOrderId}' AND ord_status IN ('Canceled','Cancelled')`);
+        for (const type of ['TriggerLimit','TriggerMarket','Stop','StopMarket','TakeProfit','TakeProfitMarket']) {
+          await dormantOrder(session,type,mark);
+        }
+        for (const mode of ['Percent','Distance']) await dormantOrder(session,'TrailingStopMarket',mark,mode);
+      }
+    }
     await session.page.screenshot({path:directory+'/funded-maker-settled.png'});
   } catch(error) {
     result.error=error.message;

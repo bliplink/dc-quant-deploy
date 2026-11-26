@@ -127,6 +127,8 @@ def main():
             raise RuntimeError("Incomplete or foreign installation directory; keeping its evidence and data")
         if call("docker", "ps", "-aq") or call("docker", "volume", "ls", "-q"):
             raise RuntimeError("First installation requires an unused local Docker engine")
+        if not args.image_bundle and os.environ.get("GITHUB_ACTIONS") != "true":
+            raise RuntimeError("First server installation requires the accepted image bundle and its trusted manifest checksum")
         if args.image_bundle:
             import_bundle(args.image_bundle.resolve(strict=True), args.bundle_sha256)
         images = {kind: simulation.image(kind) for kind in sorted(set(simulation.APPS.values()) | {"order", "trade"})}

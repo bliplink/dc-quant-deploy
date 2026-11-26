@@ -127,13 +127,19 @@ jobs:
       - run: python3 scripts/verify-clean-simulation.py --check-control
 
   clean-linux:
-    name: Clean Linux installation
+    name: ${{ matrix.name }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - {runner: ubuntu-24.04, arch: amd64, name: Clean Linux installation}
+          - {runner: ubuntu-24.04-arm, arch: arm64, name: Clean Linux ARM64 installation}
     needs: [build, clean-control]
     if: >-
       always() && !cancelled() && needs.clean-control.result == 'success' &&
       (needs.build.result == 'success' ||
       (needs.build.result == 'skipped' && github.event_name == 'workflow_dispatch' && inputs.candidate_run != ''))
-    runs-on: ubuntu-24.04
+    runs-on: ${{ matrix.runner }}
     timeout-minutes: 60
     permissions:
       contents: read
@@ -162,7 +168,12 @@ jobs:
       - name: Verify ten funded tenants through the trading page
         run: |
           npm install --prefix "$RUNNER_TEMP/browser" --no-save --ignore-scripts playwright@1.58.2
-          PLAYWRIGHT_ROOT="$RUNNER_TEMP/browser/node_modules/playwright" python3 tests/verify-clean-simulation-tenants.py
+          export PLAYWRIGHT_ROOT="$RUNNER_TEMP/browser/node_modules/playwright"
+          if [[ "$RUNNER_ARCH" == ARM64 ]]; then
+            node "$PLAYWRIGHT_ROOT/cli.js" install chromium
+            export PLAYWRIGHT_BUNDLED_CHROMIUM=true
+          fi
+          python3 tests/verify-clean-simulation-tenants.py
       - name: Recheck the existing installation after customer trades
         run: python3 scripts/install-public-simulation.py --state-dir "$RUNNER_TEMP/t554-install"
       - name: Record the verified image manifest
@@ -171,7 +182,7 @@ jobs:
       - uses: actions/upload-artifact@v4
         if: needs.build.result == 'success'
         with:
-          name: accepted-linux-amd64-images-${{ github.sha }}
+          name: accepted-linux-${{ matrix.arch }}-images-${{ github.sha }}
           path: ${{ runner.temp }}/simulation-images.json
           retention-days: 3
       - name: Preserve scoped logs if the fresh installation fails
@@ -192,7 +203,7 @@ jobs:
       - uses: actions/upload-artifact@v4
         if: failure() && steps.install.outcome != 'skipped'
         with:
-          name: installation-diagnostics-${{ github.run_id }}-${{ github.run_attempt }}
+          name: installation-diagnostics-${{ matrix.arch }}-${{ github.run_id }}-${{ github.run_attempt }}
           path: ${{ runner.temp }}/simulation-diagnostics.tar.gz.age
           if-no-files-found: ignore
           retention-days: 3
