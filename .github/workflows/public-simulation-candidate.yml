@@ -30,9 +30,8 @@ jobs:
           paths=("sources/$COMPONENT")
           if [[ "$COMPONENT" == trading-core ]]; then
             paths=(sources/{gateway-api,common,shared,order,trade,market-data})
-          elif [[ "$COMPONENT" == robot || "$COMPONENT" == admin-bootstrap ]]; then
-            paths+=(sources/shared)
-            if [[ "$COMPONENT" == admin-bootstrap ]]; then paths+=(sources/admin-public-stats); fi
+          elif [[ "$COMPONENT" == admin-bootstrap ]]; then
+            paths+=(sources/admin-public-stats)
           fi
           git -c 'credential.https://github.com.helper=!f() { if test "$1" = get; then echo username=x-access-token; echo "password=$SOURCE_TOKEN"; fi; }; f' \
             submodule update --init --depth 1 --jobs 3 -- "${paths[@]}"
@@ -42,6 +41,8 @@ jobs:
           if [[ "$COMPONENT" == robot || "$COMPONENT" == admin-bootstrap ]]; then
             pin=d3fdaf16a6b8d70e9e81647af459ac6cc4090b37
             if [[ "$COMPONENT" == admin-bootstrap ]]; then pin=2fa804757c561fc9bbd0642a5c2153fca55cf286; fi
+            git init -q sources/shared
+            git -C sources/shared remote add origin "$(git config -f .gitmodules submodule.shared.url)"
             git -C sources/shared -c 'credential.https://github.com.helper=!f() { if test "$1" = get; then echo username=x-access-token; echo "password=$SOURCE_TOKEN"; fi; }; f' fetch --depth=1 origin "$pin"
           fi
       - uses: actions/setup-java@v4
