@@ -59,7 +59,11 @@ PYKEYS
 )"
 for module in order trade market-data gateway; do
   src="$work/$module"
-  "${build[@]}" -f "$src/pom.xml" "-Dotc.demo.existing.keys=$test_keys" package dependency:copy-dependencies \
+  test_options=("-Dotc.demo.existing.keys=$test_keys")
+  if [[ "$module" == gateway ]]; then
+    test_options+=("-Ddc.gw.anonymousRoutes=$root/config/gateway-publicMethodWhitelist.csv")
+  fi
+  "${build[@]}" -f "$src/pom.xml" "${test_options[@]}" package dependency:copy-dependencies \
     -DincludeScope=runtime "-DoutputDirectory=$src/target/dependency"
   if [[ "$module" == order ]]; then
     javac -cp "$src/target/dependency/*" -d "$src/target/classes" \

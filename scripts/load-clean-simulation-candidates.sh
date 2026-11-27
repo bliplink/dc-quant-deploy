@@ -28,7 +28,7 @@ PYSOURCE
 )"
   git fetch --quiet --depth=1 origin "$source_revision"
   git diff --quiet "$source_revision" "$GITHUB_SHA" -- sources .gitmodules config/public-simulation-service-pins.tsv \
-    config/public-simulation-maven-settings.xml scripts/java scripts/build-public-simulation-\* \
+    config/public-simulation-maven-settings.xml config/gateway-publicMethodWhitelist.csv scripts/java scripts/build-public-simulation-\* \
     scripts/build-mac-demo-notification-fanout.py scripts/verify-mac-common-failover.sh scripts/finalize-mac-common-failover.py
   echo "Installer diagnostic at $GITHUB_SHA using verified candidate artifacts from $source_revision" >> "$GITHUB_STEP_SUMMARY"
 fi
