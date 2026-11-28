@@ -96,6 +96,12 @@ async function pairProof(customer,clientOrderId,side,reduce) {
       result.legs.push({side,reduce,displayedBest:side==='buy'?Math.min(...prices):Math.max(...prices),
         clientOrderId:reply.clientOrderId,executions:legs,historyVisible:visible.visible});
       if (!visible.visible) throw Error('Trade history did not update automatically');
+      if (process.env.GITHUB_ACTIONS === 'true' && !reduce) {
+        await session.page.getByRole('tab',{name:'Positions',exact:true}).first().click();
+        const position = session.page.locator('.orderPositionWrap:visible tr[data-row-key="BTCUSDT-'
+          + (side === 'buy' ? 'Long' : 'Short') + '"]');
+        await position.filter({hasText:/0\.001(?:0*\b)/}).waitFor({timeout:20000});
+      }
     }
     result.closingBalance=await waitForProof(`SELECT b.balance FROM dc_users_balance b JOIN dc_orders_position p
       ON p.location=b.location AND p.user_id=b.user_id
@@ -104,6 +110,17 @@ async function pairProof(customer,clientOrderId,side,reduce) {
       AND b.balance=100+(SELECT SUM(e.fee+e.realized_Pnl) FROM dc_orders_execorders e
           WHERE e.location=b.location AND e.user_id=b.user_id AND e.exec_type='Trade')`);
     if (process.env.GITHUB_ACTIONS === 'true' || process.env.SIMULATION_TEST_WITHDRAWAL === 'true') {
+      // A correct closing balance alone does not prove that the customer's funds history is complete.
+      await waitForProof(`SELECT COUNT(*) FROM dc_orders_execorders e
+        WHERE e.location='${tenant}' AND e.user_id='${user}' AND e.exec_type='Trade'
+        HAVING COUNT(*)>0 AND SUM(NOT EXISTS (
+          SELECT 1 FROM dc_users_posting p WHERE p.id=CONCAT('E2TRADE-',SHA2(CONCAT_WS(CHAR(31),e.location,e.user_id,e.exec_id),256))
+          AND p.location=e.location AND p.user_id=e.user_id AND p.source_id=e.exec_id AND p.type=3 AND CAST(p.amount AS DECIMAL(36,12))=e.fee))=0
+        AND SUM(e.realized_Pnl<>0 AND NOT EXISTS (
+          SELECT 1 FROM dc_users_posting p WHERE p.id=CONCAT('E2TRADE-',SHA2(CONCAT_WS(CHAR(31),e.location,e.user_id,'PNL',e.exec_id),256))
+          AND p.location=e.location AND p.user_id=e.user_id AND p.source_id=e.exec_id AND p.type=4 AND CAST(p.amount AS DECIMAL(36,12))=e.realized_Pnl))=0`);
+      await session.page.getByRole('tab',{name:'Funds',exact:true}).first().click();
+      await session.page.locator('.fundsWrap:visible tr').filter({hasText:'Trade Fee'}).first().waitFor({timeout:15000});
       const balance = result.closingBalance;
       if (!/^\d+(\.\d+)?$/.test(balance)) throw Error('Invalid closing balance');
       const withdrawal = await funding(session,'cashOut','1');
