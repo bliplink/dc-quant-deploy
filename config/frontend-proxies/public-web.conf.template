@@ -1,3 +1,4 @@
+proxy_cache_path /var/cache/nginx/markets keys_zone=public_markets:1m inactive=2m max_size=4m;
 server {
   listen 18094;
   server_name _;
@@ -11,6 +12,26 @@ server {
     return 200 'ok';
   }
 
+  # Cache only the fixed anonymous directory request. Ignore all client credentials and bodies.
+  location = /market-directory.json {
+    limit_except GET { deny all; }
+    subrequest_output_buffer_size 512k;
+    proxy_method POST;
+    proxy_pass_request_headers off;
+    proxy_set_header Host $host;
+    proxy_set_header Content-Type application/json;
+    proxy_set_body '{"serverName":"AdminSvr","method":"publicTenantDirectory","content":{"page_num":0,"page_size":1000}}';
+    proxy_pass http://${GATEWAY_HOST}:${GATEWAY_HTTP_PORT}/httpapi/;
+    proxy_cache public_markets;
+    proxy_cache_key public_directory;
+    proxy_cache_valid 200 5s;
+    proxy_cache_lock on;
+    proxy_hide_header Cache-Control;
+    proxy_ignore_headers Cache-Control Expires;
+    proxy_read_timeout 2s;
+    add_header Cache-Control "public, max-age=5";
+  }
+
   location ^~ /httpapi {
     proxy_pass http://${GATEWAY_HOST}:${GATEWAY_HTTP_PORT};
     proxy_http_version 1.1;
@@ -22,6 +43,10 @@ server {
   }
 
   location / {
+    index accelerated.html index.html;
+    ssi on;
+    ssi_silent_errors on;
+    add_header Cache-Control "public, max-age=0, s-maxage=5, stale-while-revalidate=10";
     root /usr/share/nginx/html;
     try_files $uri $uri/ /index.html;
   }

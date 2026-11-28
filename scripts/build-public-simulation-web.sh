@@ -25,6 +25,7 @@ for service in "$@"; do
       context="$work/context"
       mkdir -p "$context/site"
       cp -R "$work/source/assets" "$work/source/index.html" "$work/source/robots.txt" "$work/source/sitemap.xml" "$context/site/"
+      (cd "$context/site" && awk -f "$work/source/scripts/build-fast-home.awk" index.html > accelerated.html)
       cp "$root/config/frontend-proxies/public-web.conf.template" "$context/default.conf.template"
       file="$root/docker/public-simulation-site.Dockerfile"
       if [[ -n "${SIMULATION_NGINX_LAYOUT:-}" ]]; then
