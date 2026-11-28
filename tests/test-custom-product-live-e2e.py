@@ -35,6 +35,8 @@ def call(url, service, method, content, session=None, timeout=28, route_location
     location=content.get('Location') or content.get('location') or route_location
     if location:
         envelope['key']=str(location)
+        if service=='MDSvr' and method=='queryPublicMarket':
+            envelope['key']+='\x1f4\x1f'+str(content['securityID'])
         if service=='OrderSvr':
             envelope['key']+='\x1f'+str(content.get('MarketIndicator','4'))+'\x1f'+str(content.get('SecurityID','BTC003USDT'))
     payload=json.dumps(envelope).encode()
