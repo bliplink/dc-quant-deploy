@@ -119,6 +119,18 @@ def main():
     install(out, control_only=True)
 
 
+def wait_marker(node, marker, timeout=240):
+    until = time.monotonic() + timeout
+    while time.monotonic() < until:
+        logs = call("docker", "logs", node)
+        if marker in logs:
+            return
+        if call("docker", "inspect", "-f", "{{.State.Running}}", node) != "true":
+            break
+        time.sleep(2)
+    raise RuntimeError(f"{node} did not reach {marker}")
+
+
 def install(out, control_only):
     if not control_only:
         common.require_common_replication_ports("birth")
@@ -193,7 +205,10 @@ def install(out, control_only):
     call(*compose, "up", "-d", "--no-deps", "--pull", "never", "loginsvr")
     run_core(out, compose, refs, roots, control, namespace, tool)
     call(*compose, "up", "-d", "--no-deps", "--pull", "never", "--wait", "--wait-timeout", "300", *APPS)
-    print("Application and web containers started", flush=True)
+    for marker in ("Started ProjectionSvr", "CERTIFIED_TRADE_FINANCIAL_READMODEL_STARTED",
+                   "Projection binary consumer started", "Trade projection binary consumer started"):
+        wait_marker("dc-saas-projectionsvr", marker, 180)
+    print("Application services started with Order and Trade projection readers ready", flush=True)
     if os.environ.get("GITHUB_ENV"):
         with open(os.environ["GITHUB_ENV"], "a") as env:
             env.write(f"SIMULATION_GENERATION={out.name}\n")
@@ -261,17 +276,6 @@ def run_core(out, compose, refs, roots, control, namespace, tool):
         if f"service={service} phase=1 partitions=256 READY=false" not in result:
             raise RuntimeError(f"Missing verified physical seals for {service}")
     print("Physical genesis passed for both services, two voters and 256 partitions each", flush=True)
-
-    def wait_marker(node, marker, timeout=240):
-        until = time.monotonic() + timeout
-        while time.monotonic() < until:
-            logs = call("docker", "logs", node)
-            if marker in logs:
-                return
-            if call("docker", "inspect", "-f", "{{.State.Running}}", node) != "true":
-                break
-            time.sleep(2)
-        raise RuntimeError(f"{node} did not reach {marker}")
 
     def await_leases(selected):
         def clear():
