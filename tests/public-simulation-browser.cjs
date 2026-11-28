@@ -129,14 +129,16 @@ async function observeTrade(session,expectedCount=1){
 }
 async function cleanResting(session){
  const {page}=session;
- await page.locator('.orderWrap').getByText('Open Orders',{exact:true}).click({force:true});
- const rows=page.locator('.orderWrap .ant-tabs-tabpane-active .ant-table-tbody tr').filter({hasText:'BTCUSDT'});
+ await page.locator('.orderWrap').getByRole('tab',{name:'Open Orders',exact:true}).click();
+ const rows=page.locator('.openOrderWrap:visible tr[data-row-key]').filter({hasText:'BTCUSDT'});
  const row=rows.first();
  if(!await row.isVisible())return {restingOrder:false};
  const c=row.getByText('Cancel',{exact:true});
  if(!await c.count())return {restingOrder:true,cancelControl:false};
+ const key=await row.getAttribute('data-row-key');
+ const selected=page.locator('.openOrderWrap:visible tr[data-row-key='+JSON.stringify(key)+']');
  await c.click();
- return {restingOrder:true,canceled:await row.waitFor({state:'hidden',timeout:12000}).then(()=>true,()=>false)};
+ return {restingOrder:true,canceled:await selected.waitFor({state:'hidden',timeout:12000}).then(()=>true,()=>false)};
 }
 async function dormantOrder(session,type,markPrice,callbackMode){
  const {page,frames}=session;
@@ -158,7 +160,7 @@ async function dormantOrder(session,type,markPrice,callbackMode){
  await panel.getByRole('button',{name:/Open Long|Buy\s*\/\s*Long/i}).click();
  const received=await orderReply(session,start);
  if(received.code==null||Number(received.code)!==0)throw Error(`Conditional ${type} rejected: ${JSON.stringify(received)}`);
- await page.locator('.orderWrap').getByText('Open Orders',{exact:true}).click({force:true});
+ await page.locator('.orderWrap').getByRole('tab',{name:'Open Orders',exact:true}).click();
  const row=page.locator('.orderWrap .ant-tabs-tabpane-active .ant-table-tbody tr')
   .filter({hasText:'BTCUSDT'}).filter({hasText:'Untriggered'});
  await row.first().waitFor({timeout:12000});
@@ -220,7 +222,7 @@ if(require.main===module)(async()=>{
     ? Math.ceil(base+1):Math.floor(base)));
   result.buyLimit=await place(buyer,'buy',result.price,'Limit',{postOnly:true});
   if(!acknowledged(result.buyLimit))throw Error('Controlled maker bid was denied');
-  await buyer.page.locator('.orderWrap').getByText('Open Orders',{exact:true}).click({force:true});
+  await buyer.page.locator('.orderWrap').getByRole('tab',{name:'Open Orders',exact:true}).click();
   await buyer.page.locator('.orderWrap .ant-tabs-tabpane-active .ant-table-tbody tr')
     .filter({hasText:'BTCUSDT'}).first().waitFor({timeout:12000});
   result.makerWasResting=true;
@@ -235,7 +237,7 @@ if(require.main===module)(async()=>{
    result.closePrice=String(prices.length?Math.min(...prices):Number(result.price));
    result.closeLongLimit=await place(buyer,'sell',result.closePrice,'Limit',{reduceOnly:true,postOnly:true});
    if(!acknowledged(result.closeLongLimit))throw Error('Reduce-only maker ask was denied');
-   await buyer.page.locator('.orderWrap').getByText('Open Orders',{exact:true}).click({force:true});
+   await buyer.page.locator('.orderWrap').getByRole('tab',{name:'Open Orders',exact:true}).click();
    await buyer.page.locator('.orderWrap .ant-tabs-tabpane-active .ant-table-tbody tr')
     .filter({hasText:'BTCUSDT'}).first().waitFor({timeout:12000});
    result.closeShortMarket=await place(seller,'buy',null,'Market',{reduceOnly:true});
@@ -245,7 +247,7 @@ if(require.main===module)(async()=>{
     throw Error('Both sides of the reduce-only execution are required');
    result.triggerOpeningMaker=await place(buyer,'buy',result.price,'Limit',{reduceOnly:false,postOnly:true});
    if(!acknowledged(result.triggerOpeningMaker))throw Error('Second controlled maker bid was denied');
-   await buyer.page.locator('.orderWrap').getByText('Open Orders',{exact:true}).click({force:true});
+   await buyer.page.locator('.orderWrap').getByRole('tab',{name:'Open Orders',exact:true}).click();
    await buyer.page.locator('.orderWrap .ant-tabs-tabpane-active .ant-table-tbody tr')
     .filter({hasText:'BTCUSDT'}).first().waitFor({timeout:12000});
    result.triggerOpeningTaker=await place(seller,'sell',null,'Market',{reduceOnly:false});
@@ -256,7 +258,7 @@ if(require.main===module)(async()=>{
     throw Error('Both positions must open before the conditional close');
    result.triggerClosingMaker=await place(buyer,'sell',result.closePrice,'Limit',{reduceOnly:true,postOnly:true});
    if(!acknowledged(result.triggerClosingMaker))throw Error('Controlled conditional-close maker ask was denied');
-   await buyer.page.locator('.orderWrap').getByText('Open Orders',{exact:true}).click({force:true});
+   await buyer.page.locator('.orderWrap').getByRole('tab',{name:'Open Orders',exact:true}).click();
    await buyer.page.locator('.orderWrap .ant-tabs-tabpane-active .ant-table-tbody tr')
     .filter({hasText:'BTCUSDT'}).first().waitFor({timeout:12000});
    result.triggerClosingParent=await triggeredClose(seller,market.markPrice);

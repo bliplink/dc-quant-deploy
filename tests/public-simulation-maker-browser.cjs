@@ -77,8 +77,9 @@ async function pairProof(customer,clientOrderId,side,reduce) {
       await directoryPage.close();
     }
   }
+  let session;
   try {
-    const session=await newPage(browser,'single');
+    session=await newPage(browser,'single');
     const user=await session.page.evaluate(()=>JSON.parse(sessionStorage.getItem('loginData')).user_id);
     if (!/^\d{1,32}$/.test(user) || user===maker) throw Error('Customer and maker identities must be independent');
     result.customer=user;
@@ -112,20 +113,34 @@ async function pairProof(customer,clientOrderId,side,reduce) {
       if (process.env.SIMULATION_TEST_ORDER_TYPES === 'true') {
         const mark = Number((await session.page.locator('.marketMetricMark span:last-child').innerText()).replace(/,/g,''));
         if (!Number.isFinite(mark) || mark <= 0) throw Error('No live mark price for order-type checks');
-        const resting = await place(session,'buy',Math.floor(mark*0.99),'Limit');
+        const resting = await place(session,'buy',String(Math.floor(mark*0.99)),'Limit',{reduceOnly:false});
         if (!acknowledged(resting) || !/^[A-Za-z0-9_.:-]{1,128}$/.test(resting.clientOrderId || '')) throw Error('Resting limit order rejected');
-        if (!(await cleanResting(session)).canceled) throw Error('Limit cancellation did not clear the order');
+        await session.page.locator('.orderWrap').getByRole('tab',{name:'Open Orders',exact:true}).click();
+        await session.page.locator('.openOrderWrap:visible tr[data-row-key]')
+          .filter({hasText:'BTCUSDT'}).first().waitFor({state:'visible',timeout:12000});
+        const cancel = await cleanResting(session);
+        if (!cancel.canceled) throw Error('Limit cancellation did not clear the order: '+JSON.stringify(cancel));
         await waitForProof(`SELECT clord_id FROM dc_orders WHERE location='${tenant}' AND user_id='${user}'
           AND clord_id='${resting.clientOrderId}' AND ord_status IN ('Canceled','Cancelled')`);
+        result.restingLimitCanceled = true;
+        result.conditionalCancellations = [];
         for (const type of ['TriggerLimit','TriggerMarket','Stop','StopMarket','TakeProfit','TakeProfitMarket']) {
-          await dormantOrder(session,type,mark);
+          const order = await dormantOrder(session,type,mark);
+          result.conditionalCancellations.push({type,canceled:order.canceled});
         }
-        for (const mode of ['Percent','Distance']) await dormantOrder(session,'TrailingStopMarket',mark,mode);
+        for (const mode of ['Percent','Distance']) {
+          const order = await dormantOrder(session,'TrailingStopMarket',mark,mode);
+          result.conditionalCancellations.push({type:'TrailingStopMarket',mode,canceled:order.canceled});
+        }
       }
     }
     await session.page.screenshot({path:directory+'/funded-maker-settled.png'});
   } catch(error) {
     result.error=error.message;
+    if (session) {
+      result.openOrderView=await session.page.locator('.openOrderWrap:visible').allInnerTexts();
+      result.cancelReplies=session.frames.filter(frame=>frame.method==='cancelOrder').slice(-4);
+    }
     process.exitCode=1;
   } finally {
     fs.writeFileSync(directory+'/funded-maker-acceptance.json',JSON.stringify(result,null,2),{mode:0o600});
