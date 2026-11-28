@@ -191,6 +191,14 @@ jobs:
           generation="$(find "$RUNNER_TEMP/t554-install" -maxdepth 1 -type d -name 'sim-demo-*' -printf '%f' 2>/dev/null || true)"
           if [[ ! "$generation" =~ ^sim-demo-[0-9]{8}-[0-9]{6}$ ]]; then exit 0; fi
           mkdir "$RUNNER_TEMP/simulation-diagnostics"
+          if [[ "$(docker inspect -f '{{index .Config.Labels "com.docker.compose.project"}}' dc-saas-mysql 2>/dev/null)" == "$generation" ]]; then
+            # Aggregate states only. Never export user identities, requests or credentials.
+            docker exec -i dc-saas-mysql sh -c 'MYSQL_PWD="$MYSQL_ROOT_PASSWORD" exec mysql -uroot -NB dc' \
+              > "$RUNNER_TEMP/simulation-diagnostics/tenant-status.tsv" <<'SQL' || true
+          SELECT status,step,COUNT(*) FROM dc_tenant_liquidity_bootstrap GROUP BY status,step;
+          SELECT runtime_status,COUNT(*),SUM(open_order_count) FROM dc_tenant_robot GROUP BY runtime_status;
+          SQL
+          fi
           while IFS= read -r node; do
             project="$(docker inspect -f '{{index .Config.Labels "com.docker.compose.project"}}' "$node")"
             if [[ "$project" == "$generation" || "$node" == "$generation"-* ]]; then

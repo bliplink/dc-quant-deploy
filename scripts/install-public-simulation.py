@@ -67,6 +67,15 @@ def import_bundle(bundle, digest):
         raise RuntimeError("Image bundle does not match the deployment checkout")
     if not shutil.which("skopeo"):
         raise RuntimeError("Install skopeo to import the OCI image bundle")
+    context = call("docker", "context", "show")
+    endpoint = call("docker", "context", "inspect", context, "-f", "{{.Endpoints.docker.Host}}")
+    if os.environ.get("DOCKER_HOST") and not os.environ.get("DOCKER_CONTEXT"):
+        endpoint = os.environ["DOCKER_HOST"]
+    if not endpoint.startswith("unix://"):
+        raise RuntimeError("The release must be imported into the local Docker engine")
+    platform = call("docker", "version", "-f", "{{.Server.Arch}}")
+    if platform not in {"amd64", "arm64"}:
+        raise ValueError("Unsupported Docker engine architecture")
     for kind in sorted(kinds):
         pin = call("git", "-C", str(SCRIPTS.parent), "rev-parse", "HEAD:sources/" + kind)
         archive = bundle / f"{kind}-{pin}.oci.tar"
@@ -80,10 +89,7 @@ def import_bundle(bundle, digest):
         if checksum.hexdigest() != expected:
             raise RuntimeError(f"Damaged {kind} archive")
         subprocess.run([sys.executable, str(SCRIPTS / "verify-simulation-oci.py"), str(archive), pin], check=True)
-        platform = call("docker", "version", "-f", "{{.Server.Arch}}")
-        if platform not in {"amd64", "arm64"}:
-            raise ValueError("Unsupported Docker engine architecture")
-        subprocess.run(["skopeo", "--override-os", "linux", "--override-arch", platform, "copy",
+        subprocess.run(["skopeo", "--override-os", "linux", "--override-arch", platform, "copy", "--dest-daemon-host", endpoint,
                         "oci-archive:" + str(archive), f"docker-daemon:otc-simulation/{kind}:{pin}"], check=True)
 
 
