@@ -120,7 +120,9 @@ def measure_target(harness, work, cancel_work, locations, port, policy):
     symbol = 'BTCUSDT'
     sessions, cancel_configs, fill_configs = [], [], []
     rate = 65
-    run = secrets.token_hex(4)
+    # Account registration accepts at most twenty characters in the generated
+    # cancelcap_<stream>_<leg> name, so keep every per-stream identifier short.
+    run = secrets.token_hex(3)
     with ExitStack() as owned:
         for index in range(16):
             location = locations[index % len(locations)]
