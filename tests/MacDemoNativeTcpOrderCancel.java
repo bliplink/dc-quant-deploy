@@ -139,7 +139,10 @@ public final class MacDemoNativeTcpOrderCancel {
                     throw new IllegalStateException("NATIVE_CANCELLED_WITHOUT_PENDING_CANCEL");
                 if (!row.containsKey("cancel_received_ns")) row.put("cancel_received_ns", received);
             } else if ("Rejected".equals(status) || "Filled".equals(status) || "Partially_Filled".equals(status)) {
-                throw new IllegalStateException("NATIVE_UNEXPECTED_ORDER_TERMINAL_STATE");
+                String kind = status.toUpperCase(java.util.Locale.ROOT);
+                String reason = event.getString("OrdRejReason");
+                if (reason != null && reason.matches("[0-9]{1,8}")) kind += "_CODE_" + reason;
+                throw new IllegalStateException("NATIVE_UNEXPECTED_ORDER_" + kind);
             }
             guard.notifyAll();
         }

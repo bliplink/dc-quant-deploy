@@ -146,8 +146,8 @@ def measure_target(harness, work, cancel_work, locations, port, policy):
             'sessions': len(sessions), 'tenants': len(set(locations)), 'cycles': len(rows),
             'new': phase['place_new_ms'], 'pending': phase['cancel_pending_ms'],
             'cancelled': phase['cancel_terminal_ms'], 'acceptance': cancel_target})
-        if not phase['passed']:
-            raise RuntimeError('Multi-tenant place and cancel receipts failed to reconcile')
+        if any(row.get('failure') and row.get('cleanup_confirmed') is not True for row in rows):
+            raise RuntimeError('A failed cancellation left unverified resting orders')
 
         def retire_cover(maker, client_id):
             resting = cancel['own_order'](cancel['open_orders'](maker, symbol), client_id)
@@ -242,13 +242,15 @@ def main():
     completed = bool(rows) and all(row.get('passed') is True for row in rows)
     commands = sum(int(row.get(k) is True) for row in rows for k in ('new_inside_window','cancel_inside_window'))
     publish(f'{policy} TCP place and cancel, one funded session', {
-        'seconds': SECONDS, 'attempted_cycles': len(rows), 'commands_per_second': commands / SECONDS,
+        'seconds': SECONDS, 'elapsed_seconds': measured.get('elapsed_seconds'),
+        'attempted_cycles': len(rows), 'commands_per_second': commands / SECONDS,
         'failures': dict(Counter(row.get('failure_reason', row.get('outcome', 'MISSING')) for row in rows if not row.get('passed'))),
         'successful_cycles': sum(row.get('passed') is True for row in rows),
         'new_ms': execution['summary_ms'](rows, 'place_new_ms'), 'cancel_ms': execution['summary_ms'](rows, 'cancel_terminal_ms'),
         'stream_errors': measured['stream_errors']})
-    if not completed or measured['stream_errors'] or not measured['measurement_complete']:
-        raise RuntimeError('Native place and cancel did not reconcile')
+    if any(row.get('failure') and row.get('cleanup_confirmed') is not True for row in rows):
+        raise RuntimeError('Single-session cancellation left unverified resting orders')
+    baseline_pass = completed and not measured['stream_errors'] and measured['measurement_complete']
     for rate in (4, 16):
         window = secrets.token_hex(4)
         _, cover_price = book_prices(cancel, location, symbol)
@@ -268,8 +270,7 @@ def main():
             consistent = row.get('projection', {}).get('consistent') is True
             publish(f'{policy} TCP final execution receipts at {rate}/s', {
                     'aggregate': aggregate, 'projection_consistent': consistent, 'offered_seconds': SECONDS})
-            if not consistent or not aggregate['all_accepted_final_receipts_pass']:
-                raise RuntimeError('Native final receipts or projected fills did not reconcile')
+            baseline_pass = baseline_pass and consistent and aggregate['all_accepted_final_receipts_pass']
         finally:
             if cancel['own_order'](cancel['open_orders'](maker, symbol), client_id):
                 cancel['cancel'](maker, symbol, dict(order_id=order_id, client_order_id=client_id))
@@ -279,6 +280,8 @@ def main():
         target_passed = measure_target(harness, work, cancel_work, receipt['tenants'], port, policy)
     if baseline != cancel['CAPACITY']['demo_tenants']() or install['inventory'](generation) != inventory:
         raise RuntimeError('A background Robot or runtime changed during measurement')
+    if not baseline_pass:
+        raise RuntimeError('Native baseline receipts or projected fills did not reconcile')
     if not target_passed:
         raise RuntimeError('Funded multi-tenant throughput or tail latency missed the target')
 
