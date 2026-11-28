@@ -230,14 +230,18 @@ def run_core(out, compose, refs, roots, control, namespace, tool):
                 flags += ["-v", f"{out.name}-{key}:{path}"]
         for entry in (slot.lower(), "public"):
             flags += ["-v", f"{signers}/{entry}:/read-only-original-rsa/{entry}:ro"]
-        heap = "-Xmx2g -XX:MaxDirectMemorySize=512m" if kind == "trade" else "-Xmx1g"
+        heap = "-Xmx1g"
+        memory = "2g"
+        if kind == "trade":
+            heap, memory = ("-Xmx3g", "4g") if phase == "hostready" else ("-Xmx2g", "3g")
+            heap += " -XX:MaxDirectMemorySize=512m"
         java = common.client_ack_environment(
             [f"JAVA_OPTS=-Xms128m {heap} -Djava.security.auth.login.config=/srv/dc/control/jaas.ini"],
             "STRICT_QUORUM")
         for setting in common.low_pause_gc_environment(common.gc_observation_environment(java)):
             flags.extend(["-e", setting])
         call("docker", "run", "-d", "--network", "host", "--name", name, *common.DOCKER_LOG_OPTIONS,
-             "--cpus", str(cpus), "--memory", "3g" if kind == "trade" else "2g", *flags,
+             "--cpus", str(cpus), "--memory", memory, *flags,
              "-e", f"OTC_PROTECTED_CONTROL_NAMESPACE={namespace}/{kind}", refs[kind])
         return name
     nodes = [start("birth", kind, slot) for kind, slot in pairs]

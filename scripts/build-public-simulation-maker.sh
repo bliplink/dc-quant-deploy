@@ -14,12 +14,6 @@ mkdir "$work/shared" "$work/service"
 git -C "$root/sources/shared" archive "$shared_ref" | tar -x -C "$work/shared"
 pin="$(git -C "$root" rev-parse "HEAD:sources/$component")"
 git -C "$root/sources/$component" archive "$pin" | tar -x -C "$work/service"
-if [[ "$component" == admin-bootstrap ]]; then
-  stats="$(git -C "$root" rev-parse HEAD:sources/admin-public-stats)"
-  for path in src/main/java/com/app/dc/service/PublicTenantDirectoryService.java src/test/java/com/app/dc/service/PublicTenantDirectoryServiceTest.java; do
-    git -C "$root/sources/admin-public-stats" show "$stats:$path" > "$work/service/$path"
-  done
-fi
 maven=(mvn -B -ntp "-Dmaven.repo.local=$work/m2")
 if [[ "$component" == price-feed ]]; then
   mkdir "$work/futures"

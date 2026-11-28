@@ -39,6 +39,9 @@ for group in public-web trade-web tenant-web platform-web api-docs trading-core 
   done
   rm -r "$work/artifact"
 done
+# Carry the pinned installer and its Git tree (including source revision links).
+# A new server needs neither repository credentials nor a mutable branch checkout.
+bash "$root/scripts/stage-simulation-installer.sh" "$destination"
 # This manifest is the completion marker. A partial export has no installable manifest.
 mv "$work/accepted/simulation-images.json" "$destination/"
 shasum -a 256 "$destination/simulation-images.json"

@@ -5,6 +5,8 @@ work="$(mktemp -d)"
 trap 'rm -rf "$work"' EXIT
 printf '%s\n' "${SIMULATION_ACCEPTANCE_AGE_KEY:?missing candidate identity}" > "$work/key"
 unset SIMULATION_ACCEPTANCE_AGE_KEY
+bundle="$RUNNER_TEMP/simulation-release"
+mkdir "$bundle"
 source_run="$GITHUB_RUN_ID"
 source_revision="$GITHUB_SHA"
 if [[ -n "${CANDIDATE_RUN_ID:-}" ]]; then
@@ -45,9 +47,8 @@ for job in public-web trade-web tenant-web platform-web api-docs trading-core ro
     [[ "$expected" =~ ^[a-f0-9]{64}$ ]]
     printf '%s\t%s\n' "$service" "$expected" >> "$work/images.tsv"
     (cd "$work" && printf '%s  %s\n' "$expected" "$name" | sha256sum -c -)
-    python3 scripts/verify-simulation-oci.py "$work/$name" "$pin"
-    skopeo copy --quiet "oci-archive:$work/$name" "docker-daemon:otc-simulation/$service:$pin"
-    rm "$work/$name" "$work/artifact/$name.age"
+    mv "$work/$name" "$bundle/$name"
+    rm "$work/artifact/$name.age"
   done
   rm -r "$work/artifact"
 done
@@ -63,3 +64,5 @@ if len(images) != 16 or len(rows) != len(images):
 Path(sys.argv[2]).write_text(json.dumps({"deploymentRevision": sys.argv[3], "images": images},
                                        indent=2, sort_keys=True) + "\n")
 PYLOCK
+cp "$RUNNER_TEMP/simulation-images.json" "$bundle/simulation-images.json"
+bash "$GITHUB_WORKSPACE/scripts/stage-simulation-installer.sh" "$bundle"

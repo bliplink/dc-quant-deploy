@@ -135,3 +135,13 @@ python3 scripts/install-public-simulation.py \
 仅调整安装脚本时，在 Actions 手动运行候选工作流并填写 `candidate_run`，可以用上一轮已通过构建的原始加密镜像重做新机诊断。流程核对工作流身份、全部服务的构建结果及镜像构建输入；服务、依赖或 Common 门禁发生变化都需要重新构建。跨提交诊断只记录验证结果。正式交付包由完整成功的同一提交生成，导出命令为 `bash scripts/package-accepted-simulation.sh RUN_ID OWNER_IDENTITY OUTPUT_DIRECTORY`。解密身份仅由发布人保管，目标服务器接收 OCI 文件和已验收的校验清单。
 
 全量 Linux 发布验收分别在原生 amd64 和 arm64 上启动同一批候选镜像。除逐租户市价开平仓外，浏览器还提交模拟出金并重发同一请求，核对余额只扣一次。首个租户另测限价挂单撤销、六种条件委托及两种跟踪止损回调方式。两个平台的完整作业均成功且归档清单一致后，发布人才能导出该批镜像。
+
+### 使用完整交付目录
+
+发布人从同一次双架构验收成功的运行导出交付目录。目录内的 `install.sh`、固定版本的 `deployment/`、16 个镜像归档及 `simulation-images.json` 应一起复制到新机。服务器无需登录 GitHub。确认 Docker、Compose、Python 3、Git、OpenSSL、Skopeo 可用后，从交付目录运行以下命令，把变量换成发布记录提供的校验值。
+
+```sh
+./install.sh "$RELEASE_MANIFEST_SHA256"
+```
+
+默认状态目录为 `~/.opentradingcore/simulation`，也可作为第二个参数传入。安装成功后在浏览器打开该机的 18094 端口，选择租户注册体验。重复执行同一命令会核验原代次和十个做市账户。首次安装需要能拉取基础镜像。

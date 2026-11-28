@@ -36,8 +36,6 @@ jobs:
           paths=("sources/$COMPONENT")
           if [[ "$COMPONENT" == trading-core ]]; then
             paths=(sources/{gateway-api,common,shared,order,trade,market-data,gateway})
-          elif [[ "$COMPONENT" == admin-bootstrap ]]; then
-            paths+=(sources/admin-public-stats)
           elif [[ "$COMPONENT" == price-feed ]]; then
             paths+=(sources/futures-connector)
           fi
@@ -163,8 +161,9 @@ jobs:
       - name: Run protected installation on empty storage
         id: install
         run: |
-          python3 scripts/install-public-simulation.py --state-dir "$RUNNER_TEMP/t554-install"
-          python3 scripts/install-public-simulation.py --state-dir "$RUNNER_TEMP/t554-install"
+          digest="$(sha256sum "$RUNNER_TEMP/simulation-images.json" | cut -d' ' -f1)"
+          "$RUNNER_TEMP/simulation-release/install.sh" "$digest" "$RUNNER_TEMP/t554-install"
+          "$RUNNER_TEMP/simulation-release/install.sh" "$digest" "$RUNNER_TEMP/t554-install"
       - name: Verify ten funded tenants through the trading page
         run: |
           npm install --prefix "$RUNNER_TEMP/browser" --no-save --ignore-scripts playwright@1.58.2
