@@ -214,11 +214,11 @@ public final class MacDemoNativeTcpLoad {
             JSONObject login = JSON.parseObject(gateway.connect("127.0.0.1", config.getIntValue("port"),
                     config.getString("user_id"), config.getString("token"), false, 1, metadata));
             if (login == null || !"0".equals(login.getString("code")) || !gateway.isLogin())
-                throw new IllegalStateException("Native TCP authentication failed");
+                throw new IllegalStateException("NATIVE_TCP_AUTHENTICATION_FAILED");
             JSONObject identity = login.getJSONObject("data");
             if (identity == null || !config.getString("user_id").equals(identity.getString("user_id"))
                     || !config.getString("location").equals(identity.getString("location")))
-                throw new IllegalStateException("Native TCP authenticated identity differs");
+                throw new IllegalStateException("NATIVE_TCP_IDENTITY_DIFFERS");
             String topic = "dc.order.trade." + config.getString("symbol") + ".*."
                     + config.getString("user_id") + "." + config.getString("location");
             if (!gateway.subscribe(topic, new IMessage<String>() {
@@ -231,7 +231,7 @@ public final class MacDemoNativeTcpLoad {
                         }
                     }
                 }
-            }, String.class)) throw new IllegalStateException("Native execution subscription failed");
+            }, String.class)) throw new IllegalStateException("NATIVE_EXECUTION_SUBSCRIPTION_FAILED");
             if (config.containsKey("probe_order_id")) {
                 String statusTopic = "dc.order.status." + config.getString("symbol") + "."
                         + config.getString("user_id") + "." + config.getString("location");
@@ -242,7 +242,7 @@ public final class MacDemoNativeTcpLoad {
                             synchronized (guard) { streamErrors.add("CANCEL_PROBE_PARSE_ERROR"); }
                         }
                     }
-                }, String.class)) throw new IllegalStateException("Native cancel status subscription failed");
+                }, String.class)) throw new IllegalStateException("NATIVE_CANCEL_SUBSCRIPTION_FAILED");
             }
             int seconds = config.getIntValue("seconds");
             double rate = config.getDoubleValue("rate");
@@ -277,7 +277,7 @@ public final class MacDemoNativeTcpLoad {
             }
             clients.shutdown();
             if (!clients.awaitTermination(15, TimeUnit.SECONDS))
-                throw new IllegalStateException("Native request pool exceeded bounded completion");
+                throw new IllegalStateException("NATIVE_REQUEST_POOL_INCOMPLETE");
             while (System.nanoTime() < end) LockSupport.parkNanos(end - System.nanoTime());
             result.put("until", Instant.now().toString());
             result.put("offered_until", Instant.parse((String) result.get("from")).plusSeconds(seconds).toString());
@@ -318,13 +318,13 @@ public final class MacDemoNativeTcpLoad {
         if (target == 0L) return;
         long delay = target - System.currentTimeMillis();
         if (delay < 0L || delay > 30_000L)
-            throw new IllegalArgumentException("Native synchronized start is late or unbounded");
+            throw new IllegalArgumentException("NATIVE_SCHEDULED_START_LATE_OR_UNBOUNDED");
         while (System.currentTimeMillis() < target) {
             LockSupport.parkNanos(TimeUnit.MILLISECONDS.toNanos(
                     Math.min(20L, target - System.currentTimeMillis())));
         }
         if (System.currentTimeMillis() - target > 250L)
-            throw new IllegalStateException("Native synchronized start missed its bound");
+            throw new IllegalStateException("NATIVE_SCHEDULED_START_MISSED");
     }
 
     private static void selfTest() {
@@ -422,7 +422,9 @@ public final class MacDemoNativeTcpLoad {
             System.out.println("T554_NATIVE_TCP_REPORT " + JSON.toJSONString(new MacDemoNativeTcpLoad(input).run()));
             System.exit(0);
         } catch (Exception error) {
-            System.out.println("T554_NATIVE_TCP_FAILURE " + error.getClass().getSimpleName());
+            String reason = error.getMessage();
+            if (reason == null || !reason.matches("NATIVE_[A-Z0-9_]+")) reason = error.getClass().getSimpleName();
+            System.out.println("T554_NATIVE_TCP_FAILURE " + reason);
             System.exit(2);
         }
     }

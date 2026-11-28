@@ -106,7 +106,19 @@ def synchronized_clients(native, work, configs, phase):
         observation = clients.submit(runner_observation, os.environ['SIMULATION_GENERATION'], barrier, stop)
         jobs = [clients.submit(native['run'], work, dict(c, start_at_epoch_ms=barrier)) for c in configs]
         try:
-            return [job.result() for job in jobs]
+            reports = []
+            failures = Counter()
+            for job in jobs:
+                try:
+                    reports.append(job.result())
+                except RuntimeError as error:
+                    match = re.search(r'T554_NATIVE_TCP_FAILURE ([A-Z][A-Z0-9_]+)', str(error))
+                    failures[match.group(1) if match else 'CLIENT_PROCESS_FAILED'] += 1
+            if failures:
+                publish(phase+' load-generator errors', {'failed_sessions': sum(failures.values()),
+                    'completed_sessions': len(reports), 'errors': dict(failures)})
+                raise RuntimeError('At least one native session failed to run the complete load window')
+            return reports
         finally:
             stop.set()
             try:
@@ -146,19 +158,20 @@ def measure_target(harness, work, cancel_work, locations, port, policy):
     # Account registration accepts at most twenty characters in the generated
     # cancelcap_<stream>_<leg> name, so keep every per-stream identifier short.
     run = secrets.token_hex(3)
-    with ExitStack() as owned:
+    with ExitStack() as owned, ExitStack() as cancellation_keys:
         for index in range(16):
             location = locations[index % len(locations)]
             stream = run + format(index, '02x')
             maker = cancel['new_trader'](location, symbol, 'TRADE', stream, 0, funding_amount=100000)
             trader = cancel['new_trader'](location, symbol, 'TRADE', stream, 1, funding_amount=100000)
-            _, _, token = owned.enter_context(cancel['native_trader_session'](trader, stream, index))
+            _, _, token = cancellation_keys.enter_context(cancel['native_trader_session'](trader, stream, index))
             passive, _ = book_prices(cancel, location, symbol)
             config = dict(location=location, user_id=trader[1], symbol=symbol, port=port, seconds=SECONDS, token=token)
             cancel_configs.append(dict(config, prefix='T554CC-'+stream, price=passive, max_requests_per_second=80))
-            sessions.append((maker, stream, config))
+            sessions.append((maker, trader, stream, config))
 
         responses = synchronized_clients(native, cancel_work, cancel_configs, policy+' cancel')
+        cancellation_keys.close()
         rows = [row for response in responses for row in response['orders']]
         phase = dict(records=rows, window_seconds=SECONDS,
                      passed=all(r['orders'] and r['measurement_complete'] and not r['stream_errors'] for r in responses)
@@ -174,13 +187,25 @@ def measure_target(harness, work, cancel_work, locations, port, policy):
         if any(row.get('failure') and row.get('cleanup_confirmed') is not True for row in rows):
             raise RuntimeError('A failed cancellation left unverified resting orders')
 
+        # Robot quote reconciliation backs off after an overloaded window.
+        # Start the next independent phase only after the same funded fleet resumes.
+        recovery_deadline = time.monotonic() + 180
+        while True:
+            robot_states = cancel['CAPACITY']['demo_tenants']()
+            if set(robot_states) == set(locations) and set(robot_states.values()) == {'RUNNING'}:
+                break
+            if time.monotonic() >= recovery_deadline:
+                publish(policy+' background Robot recovery', {'states':dict(Counter(robot_states.values()))})
+                raise RuntimeError('The funded Robot fleet did not recover after cancellation pressure')
+            time.sleep(2)
+
         def retire_cover(maker, client_id):
             resting = cancel['own_order'](cancel['open_orders'](maker, symbol), client_id)
             if resting:
                 cancel['cancel'](maker, symbol, dict(order_id=resting[0]['OrderID'], client_order_id=client_id))
             cancel['await_order'](maker, symbol, client_id, False)
 
-        for index, (maker, stream, config) in enumerate(sessions):
+        for index, (maker, trader, stream, config) in enumerate(sessions):
             location = config['location']
             _, cover = book_prices(cancel, location, symbol)
             client_id = 'T554EXEC-' + stream + '-MAKER'
@@ -190,7 +215,8 @@ def measure_target(harness, work, cancel_work, locations, port, policy):
                 AlgoName='cross', Demo='0', ReduceOnly='false'), maker[2])
             owned.callback(retire_cover, maker, client_id)
             cancel['await_order'](maker, symbol, client_id, True)
-            fill_configs.append(dict(config, price=cover, rate=rate, quantity=str(execution['QUANTITY']),
+            _, _, token = owned.enter_context(cancel['native_trader_session'](trader, stream, 'trade'))
+            fill_configs.append(dict(config, token=token, price=cover, rate=rate, quantity=str(execution['QUANTITY']),
                 run=stream, arrival_offset_ns=harness['arrival_offset_ns']('staggered', index, len(sessions), rate)))
         responses = synchronized_clients(native, work, fill_configs, policy+' trade')
         streams = [dict(measurement=response, location=config['location'], symbol=symbol, run=config['run'])
