@@ -85,7 +85,34 @@ async function pairProof(customer,clientOrderId,side,reduce) {
     result.customer=user;
     for (const [side,reduce] of [['buy',false],['sell',true],['sell',false],['buy',true]]) {
       const quote = side==='buy'?'.order-book-row--ask .ask-price':'.order-book-row--bid .bid-price';
-      await session.page.locator(quote).first().waitFor({timeout:15000});
+      try {
+        await session.page.locator(quote).first().waitFor({timeout:15000});
+      } catch (error) {
+        if (process.env.GITHUB_ACTIONS === 'true') {
+          const snapshot = await session.page.evaluate(async tenant => {
+            const response = await fetch('/httpapi/', {
+              method: 'POST',
+              headers: {'Content-Type': 'application/json'},
+              body: JSON.stringify({serverName:'MDSvr', method:'queryPublicMarket',
+                key:tenant+'\x1f4\x1fBTCUSDT', content:{location:tenant,securityID:'BTCUSDT'}}),
+              signal:AbortSignal.timeout(5000)
+            });
+            const result = await response.json();
+            const book = result.data?.orderBook;
+            const depth = {};
+            for (const row of book?.NoMDEntries || []) {
+              const side = String(row.MDEntryType);
+              if (side === '0' || side === '1') depth[side] = (depth[side] || 0)+1;
+            }
+            return {status:response.status,code:result.code,hasBook:!!book,
+              snapshotTenantMatches:book?.Location===tenant,snapshotSymbolMatches:book?.SecurityID==='BTCUSDT',depth,
+              renderedBids:document.querySelectorAll('.order-book-row--bid .bid-price').length,
+              renderedAsks:document.querySelectorAll('.order-book-row--ask .ask-price').length};
+          }, tenant).catch(() => ({snapshotUnavailable:true}));
+          console.log('MARKET_DEPTH_DIAGNOSTICS '+JSON.stringify(snapshot));
+        }
+        throw error;
+      }
       const displayed=await session.page.locator(quote).allTextContents();
       const prices=displayed.map(x=>Number(x.replace(/,/g,''))).filter(x=>Number.isFinite(x)&&x>0);
       if (!prices.length) throw Error('No executable prices displayed');
