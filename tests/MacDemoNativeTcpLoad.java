@@ -10,8 +10,10 @@ import java.math.BigDecimal;
 import java.time.Instant;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.Semaphore;
@@ -40,24 +42,38 @@ public final class MacDemoNativeTcpLoad {
         }
         if (!(payload instanceof JSONObject)) return;
         JSONObject event = (JSONObject) payload;
+        String status = event.getString("OrdStatus");
+        boolean finalFill = "Filled".equals(status);
+        String executionId = event.getString("ExecID");
         if (!"Trade".equals(event.getString("ExecType"))
-                || !"Filled".equals(event.getString("OrdStatus"))
-                || event.getString("ExecID") == null) return;
+                || !(finalFill || "Partially_Filled".equals(status)) || executionId == null) return;
         long received = System.nanoTime();
         synchronized (guard) {
             Map<String, Object> row = orders.get(event.getString("ClOrdID"));
             if (row == null) return;
+            BigDecimal expected = new BigDecimal(config.getString("quantity"));
+            BigDecimal lastQuantity = event.getBigDecimal("LastQty");
             if (!config.getString("location").equals(event.getString("Location"))
-                    || new BigDecimal(config.getString("quantity")).compareTo(
-                            event.getBigDecimal("LastQty")) != 0) {
+                    || !config.getString("user_id").equals(event.getString("UserID"))
+                    || !config.getString("symbol").equals(event.getString("SecurityID"))
+                    || lastQuantity == null || lastQuantity.signum() <= 0) {
                 streamErrors.add("EXECUTION_IDENTITY_OR_QUANTITY_MISMATCH");
                 return;
             }
-            if (row.containsKey("execution_id")) {
+            @SuppressWarnings("unchecked")
+            Set<String> executionIds = (Set<String>) row.computeIfAbsent("execution_ids", k -> new LinkedHashSet<>());
+            if (!executionIds.add(executionId) || row.containsKey("execution_id")) {
                 streamErrors.add("DUPLICATE_FINAL_EXECUTION");
                 return;
             }
-            row.put("execution_id", event.getString("ExecID"));
+            BigDecimal total = ((BigDecimal) row.getOrDefault("filled_quantity", BigDecimal.ZERO)).add(lastQuantity);
+            row.put("filled_quantity", total);
+            if (total.compareTo(expected) > 0 || (total.compareTo(expected) == 0) != finalFill) {
+                streamErrors.add("EXECUTION_IDENTITY_OR_QUANTITY_MISMATCH");
+                return;
+            }
+            if (!finalFill) return;
+            row.put("execution_id", executionId);
             row.put("received_ns", received);
             row.put("client_fill_ms", milliseconds(received - (Long) row.get("started_ns")));
             row.put("scheduled_fill_ms", milliseconds(received - (Long) row.get("scheduled_ns")));
@@ -312,7 +328,7 @@ public final class MacDemoNativeTcpLoad {
     }
 
     private static void selfTest() {
-        JSONObject config = JSON.parseObject("{\"location\":\"TEST01\",\"quantity\":\"0.001\"}");
+        JSONObject config = JSON.parseObject("{\"location\":\"TEST01\",\"quantity\":\"0.001\",\"user_id\":\"22\",\"symbol\":\"BTCUSDT\"}");
         MacDemoNativeTcpLoad client = new MacDemoNativeTcpLoad(config);
         JSONObject busy = new JSONObject();
         busy.put("code", 429);
@@ -341,7 +357,7 @@ public final class MacDemoNativeTcpLoad {
         row.put("scheduled_ns", row.get("started_ns"));
         client.orders.put("test-order", row);
         JSONObject event = JSON.parseObject("{\"ExecType\":\"Trade\",\"OrdStatus\":\"Filled\","
-                + "\"ExecID\":\"real-exec\",\"ClOrdID\":\"test-order\",\"Location\":\"TEST01\",\"LastQty\":\"0.001\"}");
+                + "\"ExecID\":\"real-exec\",\"ClOrdID\":\"test-order\",\"Location\":\"TEST01\",\"UserID\":\"22\",\"SecurityID\":\"BTCUSDT\",\"LastQty\":\"0.001\"}");
         client.execution(JSON.parse("[{\"code\":0}]"));
         if (row.containsKey("execution_id")) throw new AssertionError("RPC reply counted as execution");
         client.execution(event);
@@ -349,6 +365,22 @@ public final class MacDemoNativeTcpLoad {
             throw new AssertionError("Native final execution timing missing");
         client.execution(event);
         if (!client.streamErrors.contains("DUPLICATE_FINAL_EXECUTION")) throw new AssertionError("Duplicate hidden");
+        client.orders.clear();
+        client.streamErrors.clear();
+        row.clear();
+        row.put("started_ns", System.nanoTime());
+        row.put("scheduled_ns", row.get("started_ns"));
+        client.orders.put("test-order", row);
+        event.put("OrdStatus", "Partially_Filled");
+        event.put("LastQty", "0.0004");
+        client.execution(event);
+        if (row.containsKey("execution_id")) throw new AssertionError("Partial fill counted as completion");
+        event.put("ExecID", "second-leg");
+        event.put("OrdStatus", "Filled");
+        event.put("LastQty", "0.0006");
+        client.execution(event);
+        if (!"second-leg".equals(row.get("execution_id")) || !client.streamErrors.isEmpty())
+            throw new AssertionError("Split fill did not complete");
         event.put("Location", "WRONG1");
         client.execution(event);
         if (!client.streamErrors.contains("EXECUTION_IDENTITY_OR_QUANTITY_MISMATCH"))
@@ -366,7 +398,7 @@ public final class MacDemoNativeTcpLoad {
             retained.put("ack_ms",1.0);retained.put("outcome","ACKNOWLEDGED");
             client.orders.put(id,retained);
             JSONObject fill=JSON.parseObject("{\"ExecType\":\"Trade\",\"OrdStatus\":\"Filled\","
-                    +"\"Location\":\"TEST01\",\"LastQty\":\"0.001\"}");
+                    +"\"Location\":\"TEST01\",\"UserID\":\"22\",\"SecurityID\":\"BTCUSDT\",\"LastQty\":\"0.001\"}");
             fill.put("ClOrdID",id);fill.put("ExecID","memory-execution-"+index);
             client.execution(fill);
         }

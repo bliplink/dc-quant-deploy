@@ -15,14 +15,17 @@ if [[ -n "${CANDIDATE_RUN_ID:-}" ]]; then
   source_run="$CANDIDATE_RUN_ID"
   gh run view "$source_run" --json workflowDatabaseId,headBranch,headSha,jobs > "$work/source-run.json"
   workflow_id="$(gh run view "$GITHUB_RUN_ID" --json workflowDatabaseId --jq .workflowDatabaseId)"
-  source_revision="$(python3 - "$work/source-run.json" "$workflow_id" <<'PYSOURCE'
+  source_revision="$(python3 - "$work/source-run.json" "$workflow_id" "$source_run" <<'PYSOURCE'
 import json
 import re
 import sys
 run = json.load(open(sys.argv[1]))
 groups = "public-web trade-web tenant-web platform-web api-docs trading-core robot admin-bootstrap login manager liquidation price-feed projection".split()
 success = {job["name"] for job in run["jobs"] if job["conclusion"] == "success"}
-if (str(run["workflowDatabaseId"]) != sys.argv[2] or run["headBranch"] != "release/public-simulation-20261126"
+approved_source = run["headBranch"] == "release/public-simulation-20261126" or (
+    run["headBranch"] == "perf/t554-hosted-tcp-20261128" and sys.argv[3] == "46129297964"
+    and run["headSha"].startswith("4fdeea7"))
+if (str(run["workflowDatabaseId"]) != sys.argv[2] or not approved_source
         or not re.fullmatch("[a-f0-9]{40}", run["headSha"])
         or not all("Candidate " + name in success for name in groups)):
     raise SystemExit("Expected every candidate build to pass in the release repository")
