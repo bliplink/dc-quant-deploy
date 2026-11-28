@@ -132,7 +132,7 @@ jobs:
       fail-fast: false
       matrix:
         arch: [amd64, arm64]
-        policy: ${{ fromJSON(github.ref == 'refs/heads/perf/t554-hosted-tcp-20261128' && inputs.candidate_run == '' && '["STRICT_QUORUM","LOCAL_DURABLE_ASYNC"]' || '["STRICT_QUORUM"]') }}
+        policy: ${{ fromJSON(github.ref == 'refs/heads/perf/t554-hosted-tcp-20261128' && '["STRICT_QUORUM","LOCAL_DURABLE_ASYNC"]' || '["STRICT_QUORUM"]') }}
         exclude:
           - {arch: arm64, policy: LOCAL_DURABLE_ASYNC}
         include:
