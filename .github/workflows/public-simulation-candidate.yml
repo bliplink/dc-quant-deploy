@@ -164,6 +164,14 @@ jobs:
           digest="$(sha256sum "$RUNNER_TEMP/simulation-images.json" | cut -d' ' -f1)"
           "$RUNNER_TEMP/simulation-release/install.sh" "$digest" "$RUNNER_TEMP/t554-install"
           "$RUNNER_TEMP/simulation-release/install.sh" "$digest" "$RUNNER_TEMP/t554-install"
+      - uses: actions/setup-java@v4
+        if: github.ref == 'refs/heads/perf/t554-hosted-tcp-20261128' && matrix.arch == 'amd64'
+        with:
+          distribution: temurin
+          java-version: '8'
+      - name: Measure native TCP final receipts on the installed simulation
+        if: github.ref == 'refs/heads/perf/t554-hosted-tcp-20261128' && matrix.arch == 'amd64'
+        run: python3 tests/measure-hosted-simulation-tcp.py
       - name: Verify ten funded tenants through the trading page
         run: |
           npm install --prefix "$RUNNER_TEMP/browser" --no-save --ignore-scripts playwright@1.58.2

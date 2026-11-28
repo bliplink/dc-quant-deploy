@@ -7,6 +7,7 @@ from datetime import datetime, timezone
 from decimal import Decimal, ROUND_DOWN
 import fcntl
 import json
+import os
 import re
 from pathlib import Path
 import runpy
@@ -21,7 +22,7 @@ PRODUCT = CAPACITY["PRODUCT"]
 MEASURE = CAPACITY["MEASURE"]
 NATIVE = runpy.run_path(str(HERE / "mac-demo-native-tcp.py"))
 PERFORMANCE = runpy.run_path(str(HERE / "mac-demo-performance-target.py"))
-URL = "http://127.0.0.1:49502/httpapi/"
+URL = f"http://127.0.0.1:{int(os.environ.get('OTC_CAPACITY_GATEWAY_HTTP_PORT', 49502))}/httpapi/"
 
 
 def api(service, method, content, token=None):
