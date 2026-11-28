@@ -988,7 +988,7 @@ def main():
     def start_witness(kind):
         service, root = SERVICES[kind], witness_roots[kind]
         name = f"{generation}-{kind}-witness"
-        flags = ["--name", name, "--network", "host", "--restart", "unless-stopped" if empty else "no", *DOCKER_LOG_OPTIONS,
+        flags = ["--name", name, "--network", "host", "--restart", "unless-stopped", *DOCKER_LOG_OPTIONS,
                  "--memory", "512m", "--label",
                  f"otc.mac.demo.generation={generation}", "-v", f"{generation}-born:{VOLUMES['born']}:ro",
                  "-v", f"{runtime}/control:/control:ro", "-v", f"{witness_pins[kind]}:/public:ro", "-v",
