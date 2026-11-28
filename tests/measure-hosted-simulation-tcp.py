@@ -9,8 +9,10 @@ from pathlib import Path
 import re
 import runpy
 import secrets
+import subprocess
 import sys
 import time
+from threading import Event
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / 'scripts'))
@@ -38,11 +40,66 @@ def book_prices(cancel, location, symbol):
             str((ask * Decimal('1.005')).to_integral_value(rounding=ROUND_UP)))
 
 
-def synchronized_clients(native, work, configs):
+def runner_observation(generation, barrier, stop):
+    groups = {}
+    for kind in ('order', 'trade'):
+        for slot in ('a', 'b'):
+            node = f'{generation}-{kind}-{slot}-hostready'
+            pid = subprocess.check_output(['docker', 'inspect', '-f', '{{.State.Pid}}', node], text=True, timeout=5).strip()
+            for line in Path(f'/proc/{pid}/cgroup').read_text().splitlines():
+                if line.startswith('0::/'):
+                    groups[kind+'-'+slot] = Path('/sys/fs/cgroup') / line[4:]
+
+    def counters():
+        values = {}
+        for name in ('cpu', 'memory', 'io'):
+            path = Path('/proc/pressure') / name
+            if path.is_file():
+                for line in path.read_text().splitlines():
+                    scope, *fields = line.split()
+                    values[name+'_'+scope+'_stall_us'] = int(dict(f.split('=') for f in fields)['total'])
+        for name, group in groups.items():
+            cpu = group / 'cpu.stat'
+            if cpu.is_file():
+                for line in cpu.read_text().splitlines():
+                    key, value = line.split()
+                    if key in ('usage_usec', 'throttled_usec', 'nr_throttled'):
+                        values[name+'_'+key] = int(value)
+            io = group / 'io.stat'
+            if io.is_file():
+                for line in io.read_text().splitlines():
+                    for field in line.split()[1:]:
+                        key, value = field.split('=')
+                        if key in ('wbytes', 'wios'):
+                            metric = name+'_'+key
+                            values[metric] = values.get(metric, 0) + int(value)
+        return values
+
+    if stop.wait(max(0, barrier / 1000 - time.time())):
+        return {'interrupted': True}
+    start = time.monotonic()
+    before = counters()
+    stop.wait(max(0, barrier / 1000 + SECONDS - time.time()))
+    after = counters()
+    return {'measured_seconds': round(time.monotonic()-start, 3),
+            'available_logical_cpus': len(os.sched_getaffinity(0)),
+            'counter_deltas': {k: after[k]-v for k, v in before.items() if k in after}}
+
+
+def synchronized_clients(native, work, configs, phase):
     barrier = int(time.time() * 1000) + 20000
-    with ThreadPoolExecutor(max_workers=len(configs)) as clients:
+    stop = Event()
+    with ThreadPoolExecutor(max_workers=len(configs)+1) as clients:
+        observation = clients.submit(runner_observation, os.environ['SIMULATION_GENERATION'], barrier, stop)
         jobs = [clients.submit(native['run'], work, dict(c, start_at_epoch_ms=barrier)) for c in configs]
-        return [job.result() for job in jobs]
+        try:
+            return [job.result() for job in jobs]
+        finally:
+            stop.set()
+            try:
+                publish(phase+' Linux CPU, disk and stalls', observation.result())
+            except (OSError, ValueError, subprocess.SubprocessError) as unavailable:
+                publish(phase+' Linux telemetry', {'error': type(unavailable).__name__})
 
 
 def measure_target(harness, work, cancel_work, locations, port, policy):
@@ -63,7 +120,7 @@ def measure_target(harness, work, cancel_work, locations, port, policy):
             cancel_configs.append(dict(config, prefix='T554CC-'+stream, price=passive, max_requests_per_second=80))
             sessions.append((maker, stream, config))
 
-        responses = synchronized_clients(native, cancel_work, cancel_configs)
+        responses = synchronized_clients(native, cancel_work, cancel_configs, policy+' cancel')
         rows = [row for response in responses for row in response['orders']]
         phase = dict(records=rows, window_seconds=SECONDS,
                      passed=all(r['orders'] and r['measurement_complete'] and not r['stream_errors'] for r in responses)
@@ -97,7 +154,7 @@ def measure_target(harness, work, cancel_work, locations, port, policy):
             cancel['await_order'](maker, symbol, client_id, True)
             fill_configs.append(dict(config, price=cover, rate=rate, quantity=str(execution['QUANTITY']),
                 run=stream, arrival_offset_ns=harness['arrival_offset_ns']('staggered', index, len(sessions), rate)))
-        responses = synchronized_clients(native, work, fill_configs)
+        responses = synchronized_clients(native, work, fill_configs, policy+' trade')
         streams = [dict(measurement=response, location=config['location'], symbol=symbol, run=config['run'])
                    for response, config in zip(responses, fill_configs)]
         aggregate = harness['_summarize_receipts'](streams, SECONDS, policy)
