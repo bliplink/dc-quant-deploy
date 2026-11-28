@@ -23,13 +23,26 @@ def publish(title, summary):
 
 
 def book_prices(cancel, location, symbol):
-    market = cancel['api']('MDSvr', 'queryPublicMarket', {'location': location, 'securityID': symbol})
-    entries = market['orderBook']['NoMDEntries']
-    sides = {side: [Decimal(str(row['MDEntryPx'])) for row in entries
-                    if str(row['MDEntryType']) == side and Decimal(str(row['MDEntrySize'])) > 0] for side in ('0', '1')}
-    bid, ask = max(sides['0']), min(sides['1'])
-    if not 0 < bid < ask:
-        raise ValueError('Expected a two-sided live BTCUSDT book')
+    if not re.fullmatch('[A-Z0-9]{6}', location) or symbol != 'BTCUSDT':
+        raise ValueError('Expected an installed public BTCUSDT maker')
+    query = ("SELECT MAX(CASE WHEN o.side='Buy' THEN o.price END), "
+             "MIN(CASE WHEN o.side='Sell' THEN o.price END) FROM dc_orders o "
+             "JOIN dc_tenant_liquidity_bootstrap j ON o.location=j.location AND o.user_id=j.maker_user_id "
+             "JOIN dc_tenant_robot r ON r.location=j.location AND r.api_user_id=j.maker_user_id "
+             f"WHERE o.location='{location}' AND o.security_id='BTCUSDT' AND o.market_indicator='4' "
+             "AND j.status='COMPLETE' AND j.funding_confirmed=1 AND r.enabled=1 AND r.runtime_status='RUNNING' "
+             "AND r.last_heartbeat_time>=NOW()-INTERVAL 30 SECOND "
+             "AND o.ord_status IN ('New','Partially_Filled') AND o.leaves_qty>0 AND o.price>0")
+    until = time.monotonic() + 30
+    while True:
+        rows = cancel['PRODUCT']['readonly_sql'](query)
+        if len(rows) == 1 and len(rows[0]) == 2 and 'NULL' not in rows[0]:
+            bid, ask = map(Decimal, rows[0])
+            if 0 < bid < ask:
+                break
+        if time.monotonic() >= until:
+            raise RuntimeError('No fresh two-sided funded maker quotes in the installed order projection')
+        time.sleep(0.5)
     # Keep GTC cancel orders off the touch. Provide a funded sell limit behind
     # the public maker to cover the complete IOC window even if its quote moves.
     return (str((bid * Decimal('0.95')).to_integral_value(rounding=ROUND_DOWN)),
