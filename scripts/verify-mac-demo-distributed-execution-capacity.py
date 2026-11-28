@@ -154,7 +154,13 @@ def _summarize_receipts(streams, seconds, expected_policy=None):
                or row.get('settlement_rpo_risk') is not asynchronous) for row in rows):
             protocol.append('SETTLEMENT_DURABILITY_POLICY_MISMATCH')
     fills = [row['execution_id'] for row in rows if row.get('execution_id')]
-    if len(fills) != len(set(fills)):
+    legs = []
+    for row in rows:
+        if 'execution_ids' in row:
+            legs.extend(row['execution_ids'])
+        elif row.get('execution_id'):
+            legs.append(row['execution_id'])
+    if len(legs) != len(set(legs)):
         protocol.append('DUPLICATE_FINAL_EXECUTION_ACROSS_STREAMS')
     identities = [(row['location'], row['client_order_id']) for row in rows]
     if len(identities) != len(set(identities)):
@@ -190,12 +196,13 @@ def _summarize_receipts(streams, seconds, expected_policy=None):
 def projected_stream(stream):
     busy = {row['client_order_id'] for row in stream['measurement']['orders']
             if row.get('outcome') == 'ORDER_BUSY_RETRYABLE'}
-    expected = {row['client_order_id'] for row in stream['measurement']['orders']} - busy
+    expected = {row['client_order_id']: len(row.get('execution_ids', [row.get('execution_id')]))
+                for row in stream['measurement']['orders'] if row['client_order_id'] not in busy}
     run = stream['run']
     rows = CANCEL['PRODUCT']['readonly_sql'](
         'SELECT o.clord_id,o.ord_status,COUNT(e.exec_id),COALESCE(SUM(e.last_qty),0),o.security_id,o.market_indicator '
         'FROM dc_orders o LEFT JOIN dc_orders_execorders e '
-        'ON e.location=o.location AND e.order_id=o.order_id '
+        'ON e.location=o.location AND e.user_id=o.user_id AND e.order_id=o.order_id '
         f"WHERE o.location='{stream['location']}' AND o.clord_id LIKE 'T554EXEC-{run}-%' "
         f"AND o.clord_id<>'T554EXEC-{run}-MAKER' GROUP BY o.clord_id,o.order_id,o.ord_status,o.security_id,o.market_indicator")
     probe = stream.get('cancel_probe_client_id')
@@ -211,8 +218,8 @@ def projected_stream(stream):
             'execution_count_distribution': dict(Counter(str(int(row[2])) for row in rows)),
             'nonfilled_client_order_ids': sorted(row[0] for row in rows if row[1] != 'Filled'),
             'observed_symbols': sorted({row[4] for row in rows}), 'consistent':
-            probe_pass and len(rows) == len(expected) and {row[0] for row in rows} == expected
-            and all(row[1] == 'Filled' and int(row[2]) == 1
+            probe_pass and len(rows) == len(expected) and {row[0] for row in rows} == set(expected)
+            and all(row[1] == 'Filled' and int(row[2]) == expected[row[0]]
                     and Decimal(row[3]) == EXEC['QUANTITY'] and row[4] == stream['symbol']
                     and row[5] == '4' for row in rows)}
 

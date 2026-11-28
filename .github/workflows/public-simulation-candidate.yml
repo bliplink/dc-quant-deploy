@@ -5,6 +5,10 @@ on:
     branches: [release/public-simulation-20261126]
   workflow_dispatch:
     inputs:
+      accepted_load:
+        description: Run the TCP benchmark from a fully accepted release run specified in candidate_run
+        type: boolean
+        default: false
       candidate_run:
         description: Optional prior candidate run for installer-only diagnostics
         required: false
@@ -107,6 +111,7 @@ jobs:
           compression-level: 0
 
   clean-control:
+    if: ${{ !inputs.accepted_load }}
     name: Fresh infrastructure and control isolation (${{ matrix.runner }})
     strategy:
       fail-fast: false
@@ -134,7 +139,7 @@ jobs:
           - {runner: ubuntu-24.04-arm, arch: arm64, name: Clean Linux ARM64 installation}
     needs: [build, clean-control]
     if: >-
-      always() && !cancelled() && needs.clean-control.result == 'success' &&
+      always() && !cancelled() && !inputs.accepted_load && needs.clean-control.result == 'success' &&
       (needs.build.result == 'success' ||
       (needs.build.result == 'skipped' && github.event_name == 'workflow_dispatch' && inputs.candidate_run != ''))
     runs-on: ${{ matrix.runner }}
@@ -263,3 +268,67 @@ jobs:
           compression-level: 0
           if-no-files-found: error
           retention-days: 3
+
+  installed-tcp-load:
+    name: Pressure test the accepted Linux installer over TCP
+    if: github.event_name == 'workflow_dispatch' && inputs.accepted_load && inputs.candidate_run != ''
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
+    permissions:
+      contents: read
+      actions: read
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Resolve the exact successful installation and package run
+        id: release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          ACCEPTED_RUN: ${{ inputs.candidate_run }}
+        run: |
+          [[ "$ACCEPTED_RUN" =~ ^[0-9]+$ ]]
+          revision="$(gh run view "$ACCEPTED_RUN" --json headSha,headBranch,event,conclusion,workflowName,jobs --jq '
+            select(.headBranch == "release/public-simulation-20261126" and .event == "push"
+              and .conclusion == "success" and .workflowName == "Public simulation candidate images"
+              and any(.jobs[]; .name == "Package accepted one-command installer" and .conclusion == "success")
+              and any(.jobs[]; .name == "Clean Linux installation" and .conclusion == "success")
+              and any(.jobs[]; .name == "Clean Linux ARM64 installation" and .conclusion == "success")) | .headSha')"
+          [[ "$revision" =~ ^[a-f0-9]{40}$ ]]
+          echo "revision=$revision" >> "$GITHUB_OUTPUT"
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ steps.release.outputs.revision }}
+          path: accepted-deployment
+          persist-credentials: false
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '8'
+      - name: Install image verification tools
+        run: |
+          sudo apt-get -o Dir::Etc::sourcelist=sources.list.d/ubuntu.sources -o Dir::Etc::sourceparts=- -o Acquire::Retries=3 update -qq
+          sudo apt-get install -y --no-install-recommends age skopeo
+      - name: Reassemble the verified release images and installer
+        working-directory: accepted-deployment
+        env:
+          SIMULATION_ACCEPTANCE_AGE_KEY: ${{ secrets.SIMULATION_ACCEPTANCE_AGE_KEY }}
+          GH_TOKEN: ${{ github.token }}
+          CANDIDATE_RUN_ID: ${{ inputs.candidate_run }}
+          ACCEPTED_REVISION: ${{ steps.release.outputs.revision }}
+        run: |
+          GITHUB_SHA="$ACCEPTED_REVISION" GITHUB_WORKSPACE="$PWD" bash scripts/load-clean-simulation-candidates.sh
+          for arch in amd64 arm64; do
+            gh run download "$CANDIDATE_RUN_ID" --name "accepted-linux-$arch-images-$ACCEPTED_REVISION" --dir "$RUNNER_TEMP/accepted-$arch"
+            cmp "$RUNNER_TEMP/accepted-$arch/simulation-images.json" "$RUNNER_TEMP/simulation-images.json"
+          done
+          sha256sum "$RUNNER_TEMP/simulation-images.json" >> "$GITHUB_STEP_SUMMARY"
+      - name: Run the accepted one-command installation on empty storage
+        run: |
+          digest="$(sha256sum "$RUNNER_TEMP/simulation-images.json" | cut -d' ' -f1)"
+          "$RUNNER_TEMP/simulation-release/install.sh" "$digest" "$RUNNER_TEMP/t554-install"
+          "$RUNNER_TEMP/simulation-release/install.sh" "$digest" "$RUNNER_TEMP/t554-install"
+      - name: Measure funded TCP place, cancel and final settlement
+        env:
+          T554_HOSTED_TARGET_LOAD: 'true'
+        run: python3 tests/measure-hosted-simulation-tcp.py

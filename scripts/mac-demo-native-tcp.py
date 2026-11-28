@@ -43,7 +43,13 @@ def prepare(root, source=SOURCE, class_name='MacDemoNativeTcpLoad'):
     work.mkdir(mode=0o700)
     subprocess.run(['docker', 'cp', 'dc-saas-robotsvr:/srv/dc/dc/RobotSvr/lib', str(work / 'lib')], check=True,
                    stdout=subprocess.DEVNULL)
-    java_home = subprocess.check_output(['/usr/libexec/java_home', '-v', '1.8'], text=True).strip()
+    if os.uname().sysname == 'Linux':
+        java_home = os.environ['JAVA_HOME']
+        version = subprocess.check_output([java_home + '/bin/javac', '-version'], stderr=subprocess.STDOUT, text=True)
+        if not version.strip().startswith('javac 1.8.'):
+            raise ValueError('Native load client requires JDK 8')
+    else:
+        java_home = subprocess.check_output(['/usr/libexec/java_home', '-v', '1.8'], text=True).strip()
     subprocess.run([java_home + '/bin/javac', '-cp', str(work / 'lib' / '*'), '-d', str(work), str(source)], check=True)
     dependencies = {jar.name: hashlib.sha256(jar.read_bytes()).hexdigest() for jar in sorted((work / 'lib').glob('*.jar'))}
     classes = {file.name: hashlib.sha256(file.read_bytes()).hexdigest() for file in sorted(work.glob('*.class'))}
