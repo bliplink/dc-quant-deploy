@@ -96,11 +96,22 @@ async function pairProof(customer,clientOrderId,side,reduce) {
       result.legs.push({side,reduce,displayedBest:side==='buy'?Math.min(...prices):Math.max(...prices),
         clientOrderId:reply.clientOrderId,executions:legs,historyVisible:visible.visible});
       if (!visible.visible) throw Error('Trade history did not update automatically');
-      if (process.env.GITHUB_ACTIONS === 'true' && !reduce) {
-        await session.page.getByRole('tab',{name:'Positions',exact:true}).first().click();
-        const position = session.page.locator('.orderPositionWrap:visible tr[data-row-key="BTCUSDT-'
-          + (side === 'buy' ? 'Long' : 'Short') + '"]');
-        await position.filter({hasText:/0\.001(?:0*\b)/}).waitFor({timeout:20000});
+      if (process.env.GITHUB_ACTIONS === 'true') {
+        const positionsTab = session.page.locator('.orderWrap').getByRole('tab',{name:'Positions',exact:true});
+        await positionsTab.click();
+        const direction = (side === 'buy') !== reduce ? 'Long' : 'Short';
+        const position = session.page.locator('.orderPositionWrap:visible tr[data-row-key="BTCUSDT-'+direction+'"]');
+        if (reduce) {
+          await position.waitFor({state:'hidden',timeout:25000});
+        } else {
+          const filled = position.filter({hasText:/0\.0010*\b/});
+          await filled.waitFor({timeout:25000});
+          if (process.env.SIMULATION_TEST_ORDER_TYPES === 'true') {
+            await session.page.reload({waitUntil:'domcontentloaded'});
+            await positionsTab.click();
+            await filled.waitFor({timeout:25000});
+          }
+        }
       }
     }
     result.closingBalance=await waitForProof(`SELECT b.balance FROM dc_users_balance b JOIN dc_orders_position p
