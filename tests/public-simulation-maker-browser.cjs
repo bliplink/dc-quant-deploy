@@ -96,7 +96,7 @@ async function pairProof(customer,clientOrderId,side,reduce) {
       result.legs.push({side,reduce,displayedBest:side==='buy'?Math.min(...prices):Math.max(...prices),
         clientOrderId:reply.clientOrderId,executions:legs,historyVisible:visible.visible});
       if (!visible.visible) throw Error('Trade history did not update automatically');
-      if (process.env.GITHUB_ACTIONS === 'true') {
+      if (process.env.GITHUB_ACTIONS === 'true' || process.env.SIMULATION_TEST_POSITIONS === 'true') {
         const positionsTab = session.page.locator('.orderWrap').getByRole('tab',{name:'Positions',exact:true});
         await positionsTab.click();
         const direction = (side === 'buy') !== reduce ? 'Long' : 'Short';
