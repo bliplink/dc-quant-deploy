@@ -20,6 +20,24 @@ setup = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(setup)
 common = setup.common
 GATEWAY_PORTS = {"GW_TCP_PORT": "23000", "GW_WEBSOCKET_PORT": "23001", "GW_HTTP_PORT": "23002"}
+LOGIN_PORTS = {"LOGINSVR_GW_PORT": "23034", "LOGINSVR_HTTP_PORT": "23990"}
+VOTER_SERVICE_PORTS = {
+    ("order", "A"): 23036, ("order", "B"): 23041,
+    ("trade", "A"): 23037, ("trade", "B"): 23046,
+}
+INFRA_PORTS = {"MYSQL_PORT": "23306", "CLICKHOUSE_HTTP_PORT": "23123",
+               "CLICKHOUSE_NATIVE_PORT": "23900", "ZOOKEEPER_PORT": "23181"}
+ZK_ADDRESS = "127.0.0.1:" + INFRA_PORTS["ZOOKEEPER_PORT"]
+ZK_PEER_PORTS = (22888, 23888)
+SERVICE_PORTS = {**GATEWAY_PORTS, **LOGIN_PORTS, **INFRA_PORTS, "MDSVR_GW_PORT": "23028",
+                 "APSSVR_GW_PORT": "23035", "LIQSVR_GW_PORT": "23038", "MANAGERSVR_GW_PORT": "23039",
+                 "ADMINSVR_GW_PORT": "23040", "PROJECTIONSVR_GW_PORT": "23042",
+                 "ORDERSVR_GW_PORT": str(VOTER_SERVICE_PORTS["order", "A"]),
+                 "ORDERSVR_B_GW_PORT": str(VOTER_SERVICE_PORTS["order", "B"]),
+                 "TRADESVR_GW_PORT": str(VOTER_SERVICE_PORTS["trade", "A"]),
+                 "TRADESVR_B_GW_PORT": str(VOTER_SERVICE_PORTS["trade", "B"])}
+WEB_PORTS = (18088, 18090, 18092, 18094, 18096)
+
 APPS = {"web": "trade-web", "public-web": "public-web", "tenant-web": "tenant-web",
         "platform-web": "platform-web", "api-docs": "api-docs", "gateway": "gateway",
         "mdsvr": "market-data", "apssvr": "price-feed", "loginsvr": "login", "liqsvr": "liquidation",
@@ -63,13 +81,11 @@ def environment(out, include_apps=True):
     for key in values:
         if key.endswith(("_PASSWORD", "_SECRET", "_MASTER_KEY", "_API_KEY")):
             values[key] = secrets.token_hex(32)
-    values.update(GATEWAY_PORTS)
+    values.update(SERVICE_PORTS)
     values.update({"DEPLOY_ROOT": str(runtime), "COMPOSE_PROJECT_NAME": out.name,
                    "MYSQL_IMAGE_REPOSITORY": "mysql", "CLICKHOUSE_IMAGE_REPOSITORY": "clickhouse/clickhouse-server",
                    "ZOOKEEPER_IMAGE_REPOSITORY": "zookeeper", "ORDER_CLUSTER_ENABLED": "true",
-                   "TRADE_CLUSTER_ENABLED": "true", "ZOOKEEPER_PORT": "49181",
-                   "ORDERSVR_GW_PORT": "49036", "ORDERSVR_B_GW_PORT": "49041",
-                   "TRADESVR_GW_PORT": "49037", "TRADESVR_B_GW_PORT": "49046",
+                   "TRADE_CLUSTER_ENABLED": "true",
                    "PUBLIC_SIMULATION_FUNDED_MAKERS": "true", "TRIAL_LIQUIDITY_BOOTSTRAP_ENABLED": "true",
                    "TRIAL_LIQUIDITY_TAPE_ENABLED": "true", "TRIAL_LIQUIDITY_MASTER_KEY": secrets.token_hex(32)})
     env = out / "demo.env"
@@ -85,13 +101,15 @@ def environment(out, include_apps=True):
     (control / "zookeeper-jaas.ini").write_text(server)
     override = out / "compose.images.json"
     services = {service: {"image": image(kind)} for service, kind in APPS.items() if include_apps}
+    first, second = ZK_PEER_PORTS
+    services["zookeeper"] = {"environment": {"ZOO_SERVERS": f"server.1=localhost:{first}:{second}"}}
     if include_apps:
-        # Compose waits for all three actual listeners before tenant provisioning.
-        probe = " && ".join("(: > /dev/tcp/127.0.0.1/" + port + ")" for port in GATEWAY_PORTS.values())
-        services["gateway"]["healthcheck"] = {
-            "test": ["CMD", "bash", "-ec", probe], "interval": "30s", "timeout": "3s",
-            "start_period": "30s", "retries": 3,
-        }
+        for service, ports in (("gateway", GATEWAY_PORTS), ("loginsvr", LOGIN_PORTS)):
+            probe = " && ".join("(: > /dev/tcp/127.0.0.1/" + port + ")" for port in ports.values())
+            services[service]["healthcheck"] = {
+                "test": ["CMD", "bash", "-ec", probe], "interval": "15s", "timeout": "3s",
+                "start_period": "30s", "retries": 3,
+            }
         path = "/usr/share/nginx/html/assets/js/config.js"
         original = call("docker", "run", "--rm", "--network", "none", "--entrypoint", "cat",
                         services["public-web"]["image"], path)
@@ -141,9 +159,10 @@ def wait_marker(node, marker, timeout=240):
 
 def install(out, control_only):
     if not control_only:
-        common.require_common_replication_ports("birth", [int(port) for port in GATEWAY_PORTS.values()])
+        listeners = [*map(int, SERVICE_PORTS.values()), *ZK_PEER_PORTS, *WEB_PORTS]
+        common.require_common_replication_ports("birth", listeners)
         common.require_common_replication_ports("hostready")
-    setup.prepare(out, 49181)
+    setup.prepare(out, int(INFRA_PORTS["ZOOKEEPER_PORT"]), VOTER_SERVICE_PORTS)
     namespace = "/otc/" + out.name
     compose = environment(out, include_apps=not control_only)
     call(*compose, "up", "-d", "--wait", "--wait-timeout", "360", *common.INFRA)
@@ -171,7 +190,7 @@ def install(out, control_only):
         return call("docker", "run", "--rm", *tool_flags, *flags, "--entrypoint", "java", tool_image,
                     "-Djava.security.auth.login.config=/control/jaas.ini", "-cp", tool_classpath, java_class, *args)
     install_args = (["-v", f"{out}/install-control.properties:/run/install.properties:ro"],
-                    "T554ProtectedNamespaceInstaller", "127.0.0.1:49181", namespace, "/run/install.properties",
+                    "T554ProtectedNamespaceInstaller", ZK_ADDRESS, namespace, "/run/install.properties",
                     *[f"/tools/manifests/{kind}-e1-recovering.manifest" for kind in common.SERVICES])
     result = tool(*install_args)
     roots = {kind: out / "common/ha" / kind for kind in common.SERVICES}
@@ -187,7 +206,7 @@ def install(out, control_only):
             raise RuntimeError("Existing namespace was accepted for reinstallation")
         for kind, service in common.SERVICES.items():
             actual = call("docker", "exec", "dc-saas-zookeeper", "zkCli.sh", "-server",
-                          "127.0.0.1:49181", "get", "-s", f"{namespace}/{kind}/manifest")
+                          ZK_ADDRESS, "get", "-s", f"{namespace}/{kind}/manifest")
             origin = re.search(r"^cZxid = (0x[0-9a-fA-F]+)$", actual, re.M)
             if (setup.manifest(service) not in actual or not origin or int(origin[1], 16) != origins[kind]
                     or not re.search(r"^dataVersion = 0$", actual, re.M)
@@ -210,7 +229,7 @@ def install(out, control_only):
               "ON DUPLICATE KEY UPDATE password=VALUES(password),enable='1',update_time=NOW(3);")
     call(sys.executable, str(ROOT / "scripts/provision-robot-service-user.py"),
          "--env-file", str(out / "demo.env"), "--mysql-container", "dc-saas-mysql")
-    call(*compose, "up", "-d", "--no-deps", "--pull", "never", "loginsvr")
+    call(*compose, "up", "-d", "--no-deps", "--pull", "never", "--wait", "--wait-timeout", "120", "loginsvr")
     run_core(out, compose, refs, roots, control, namespace, tool)
     call(*compose, "up", "-d", "--no-deps", "--pull", "never", "--wait", "--wait-timeout", "300", *APPS)
     for marker in ("Started ProjectionSvr", "CERTIFIED_TRADE_FINANCIAL_READMODEL_STARTED",
@@ -288,7 +307,7 @@ def run_core(out, compose, refs, roots, control, namespace, tool):
     def await_leases(selected):
         def clear():
             for kind in sorted({kind for kind, _ in selected}):
-                listing = call("docker", "exec", "dc-saas-zookeeper", "zkCli.sh", "-server", "127.0.0.1:49181",
+                listing = call("docker", "exec", "dc-saas-zookeeper", "zkCli.sh", "-server", ZK_ADDRESS,
                                "ls", f"{namespace}/{kind}/leases")
                 rows = re.findall(r"^\[([A-Za-z0-9_, .-]*)\]$", listing, re.M)
                 if not rows or any(common.SERVICES[kind] + slot in rows[-1] for k, slot in selected if k == kind):
@@ -374,7 +393,7 @@ def run_core(out, compose, refs, roots, control, namespace, tool):
         if call("docker", "exec", node, "sh", "-c", 'find "$1" -name business.wal | wc -l', "--", directory) != "256":
             raise RuntimeError(f"{node} failed to open its physical WALs")
     for kind, service in common.SERVICES.items():
-        actual = call("docker", "exec", "dc-saas-zookeeper", "zkCli.sh", "-server", "127.0.0.1:49181",
+        actual = call("docker", "exec", "dc-saas-zookeeper", "zkCli.sh", "-server", ZK_ADDRESS,
                       "get", f"{namespace}/{kind}/manifest")
         rows = [line for line in actual.splitlines() if re.match(r"^P[0-9]{3}\|", line)]
         expected = setup.manifest(service).splitlines()[1:]

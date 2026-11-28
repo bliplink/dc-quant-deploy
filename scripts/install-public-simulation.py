@@ -40,8 +40,12 @@ def inventory(generation):
         if not state["Running"] or state.get("Health", {}).get("Status", "healthy") != "healthy":
             raise RuntimeError(f"{row['Name']} is unavailable")
         result[row["Name"]] = row["Image"]
+    zk_ports = [port for entry in apps["zookeeper"]["Config"]["Env"] if entry.startswith("ZOO_CFG_EXTRA=")
+                for port in re.findall(r"\bclientPort=([0-9]{1,5})\b", entry)]
+    if len(zk_ports) != 1 or not 1 <= int(zk_ports[0]) <= 65535:
+        raise RuntimeError("Installed ZooKeeper client port is unavailable")
     for kind, service in simulation.common.SERVICES.items():
-        output = call("docker", "exec", "dc-saas-zookeeper", "zkCli.sh", "-server", "127.0.0.1:49181",
+        output = call("docker", "exec", "dc-saas-zookeeper", "zkCli.sh", "-server", "127.0.0.1:" + zk_ports[0],
                       "get", f"/otc/{generation}/{kind}/manifest")
         partitions = set()
         for row in output.splitlines():

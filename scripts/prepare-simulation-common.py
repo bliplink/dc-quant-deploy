@@ -52,7 +52,7 @@ def expand(template, slot, phase, kind, substitutions):
     return values
 
 
-def prepare(out, zk_port):
+def prepare(out, zk_port, voter_service_ports=None):
     if not re.fullmatch(r"sim-demo-[0-9]{8}-[0-9]{6}", out.name):
         raise ValueError("Expected a new sim-demo-YYYYMMDD-HHMMSS directory")
     if not 1 <= zk_port <= 65535:
@@ -77,6 +77,9 @@ def prepare(out, zk_port):
             for phase in template["slots"][slot]["phases"]:
                 properties = expand(template, slot, phase, kind, subs)
                 properties.update(common.common_replication_settings(kind, slot, phase))
+                discovery_port = f"{kind}.common.gatewayDiscovery.port"
+                if voter_service_ports is not None and discovery_port in properties:
+                    properties[discovery_port] = str(voter_service_ports[kind, slot])
                 properties.update({f"{kind}.common.control.zkUser": f"t554-{kind}",
                                    f"{kind}.common.control.zkPassword": credentials[kind]})
                 if phase == "hostready":
