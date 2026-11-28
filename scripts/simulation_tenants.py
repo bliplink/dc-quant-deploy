@@ -50,7 +50,7 @@ def funded(locations):
 
 def enroll(generation_dir):
     generation = generation_dir.name
-    if not re.fullmatch(r"sim-demo-\d{8}-\d{6}", generation):
+    if not re.fullmatch(r"(?:mac|sim)-demo-\d{8}-\d{6}", generation):
         raise ValueError("Expected the installed simulation generation")
     actual = subprocess.check_output(["docker", "inspect", "-f",
                                       '{{index .Config.Labels "com.docker.compose.project"}}',
