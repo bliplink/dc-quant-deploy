@@ -1,0 +1,51 @@
+name: Qualify Common for the original Mac volumes
+on:
+  push:
+    branches: [qualification/t554-mac-long-wal]
+permissions:
+  contents: read
+jobs:
+  physical:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 160
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Read pinned Common and gateway dependencies
+        env:
+          SOURCE_TOKEN: ${{ secrets.GH_REPO_TOKEN }}
+        run: |
+          git -c 'credential.https://github.com.helper=!f() { if test "$1" = get; then echo username=x-access-token; echo "password=$SOURCE_TOKEN"; fi; }; f' submodule update --init --depth 1 -- sources/common sources/gateway-api
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '8'
+      - name: Build and test the exact recovery JAR
+        env:
+          MAVEN_ARGS: --settings ${{ github.workspace }}/config/public-simulation-maven-settings.xml
+          MAC_DEMO_REQUIRE_INTERRUPTED_RETURN: 'true'
+        run: |
+          set -euo pipefail
+          ref=$(git rev-parse HEAD:sources/common)
+          test "$(git -C sources/common rev-parse HEAD)" = "$ref"
+          candidate="$RUNNER_TEMP/candidate"
+          proof="$RUNNER_TEMP/qualification"
+          mkdir "$candidate"
+          mvn -B -ntp -f sources/gateway-api/gateway-api-java/gateway-api/pom.xml -Dmaven.test.skip=true install
+          mvn -B -ntp -f sources/common/pom.xml -Dproject.build.outputTimestamp=2000-01-01T00:00:00Z -Dmaven.test.skip=true package
+          mvn -B -ntp -f sources/common/pom.xml -Dtest=CommonCertifiedE2LargeColdHistoryTest test dependency:build-classpath
+          cp sources/common/target/com.app.common-*.jar "$candidate/common-tested-class-bytes.jar"
+          echo "$ref" > "$candidate/commit.sha"
+          (cd sources/common && { find src -type f -print0; printf 'pom.xml\0'; } | LC_ALL=C sort -z | xargs -0 shasum -a 256) > "$candidate/source.sha256"
+          sha=$(sha256sum "$candidate/common-tested-class-bytes.jar" | cut -d' ' -f1)
+          MAC_DEMO_COMMON_SOURCE="$PWD/sources/common" MAC_DEMO_MAVEN="$(command -v mvn)" bash scripts/verify-mac-common-failover.sh "$candidate" "$sha" "$proof"
+          test "$(cat "$proof/status")" = PASS
+          sudo apt-get -qq update && sudo apt-get -qq install -y age
+          tar -C "$proof" -czf - candidate.env status verification.seal.json failover.log common.jar | age -R config/public-simulation-candidate-recipient.pub -o "$RUNNER_TEMP/qualified-common.tar.gz.age"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: original-volume-common
+          path: ${{ runner.temp }}/qualified-common.tar.gz.age
+          if-no-files-found: error
+          retention-days: 3
