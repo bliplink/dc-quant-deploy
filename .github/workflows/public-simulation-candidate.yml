@@ -8,7 +8,7 @@ on:
       target_load:
         description: Measure the funded 16-session trading target on disposable AMD64 performance runners
         type: boolean
-        default: false
+        default: true
       candidate_run:
         description: Optional prior candidate run for installer-only diagnostics
         required: false
