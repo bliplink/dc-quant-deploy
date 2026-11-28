@@ -196,7 +196,10 @@ jobs:
             docker exec -i dc-saas-mysql sh -c 'MYSQL_PWD="$MYSQL_ROOT_PASSWORD" exec mysql -uroot -NB dc' \
               > "$RUNNER_TEMP/simulation-diagnostics/tenant-status.tsv" <<'SQL' || true
           SELECT status,step,COUNT(*) FROM dc_tenant_liquidity_bootstrap GROUP BY status,step;
-          SELECT runtime_status,COUNT(*),SUM(open_order_count) FROM dc_tenant_robot GROUP BY runtime_status;
+          SELECT runtime_status,last_error_code,COUNT(*),SUM(open_order_count) FROM dc_tenant_robot GROUP BY runtime_status,last_error_code;
+          SELECT COUNT(DISTINCT j.location) AS tenants_with_tape_fills FROM dc_tenant_liquidity_bootstrap j
+            JOIN dc_orders_execorders e ON e.location=j.location AND e.user_id=j.tape_user_id
+            WHERE e.exec_type='Trade' AND e.maker=0 AND e.last_qty>0 AND e.last_px>0;
           SQL
           fi
           while IFS= read -r node; do
