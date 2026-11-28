@@ -217,3 +217,49 @@ jobs:
           path: ${{ runner.temp }}/simulation-diagnostics.tar.gz.age
           if-no-files-found: ignore
           retention-days: 3
+
+  package-installer:
+    name: Package accepted one-command installer
+    needs: [build, clean-linux]
+    if: github.event_name == 'push' && needs.build.result == 'success' && needs.clean-linux.result == 'success'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    permissions:
+      contents: read
+      actions: read
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Install delivery encryption tool
+        run: |
+          sudo apt-get -o Dir::Etc::sourcelist=sources.list.d/ubuntu.sources -o Dir::Etc::sourceparts=- -o Acquire::Retries=3 update -qq
+          sudo apt-get install -y --no-install-recommends age
+      - name: Assemble the same sixteen images verified on both hosts
+        env:
+          SIMULATION_ACCEPTANCE_AGE_KEY: ${{ secrets.SIMULATION_ACCEPTANCE_AGE_KEY }}
+          GH_TOKEN: ${{ github.token }}
+        run: bash scripts/load-clean-simulation-candidates.sh
+      - name: Verify both acceptance manifests and seal the installer
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          umask 077
+          for arch in amd64 arm64; do
+            gh run download "$GITHUB_RUN_ID" --name "accepted-linux-$arch-images-$GITHUB_SHA" --dir "$RUNNER_TEMP/accepted-$arch"
+            cmp "$RUNNER_TEMP/accepted-$arch/simulation-images.json" "$RUNNER_TEMP/simulation-release/simulation-images.json"
+          done
+          output="$RUNNER_TEMP/accepted-installer"
+          mkdir "$output"
+          tar -C "$RUNNER_TEMP" -cf - simulation-release | age -R config/public-simulation-candidate-recipient.pub -o "$output/simulation-release.tar.age"
+          cp "$RUNNER_TEMP/simulation-release/simulation-images.json" "$output/"
+          (cd "$output" && sha256sum simulation-release.tar.age simulation-images.json > SHA256SUMS)
+          cat "$output/SHA256SUMS" >> "$GITHUB_STEP_SUMMARY"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: accepted-installer-${{ github.sha }}
+          path: ${{ runner.temp }}/accepted-installer/
+          compression-level: 0
+          if-no-files-found: error
+          retention-days: 3
