@@ -19,6 +19,7 @@ spec = importlib.util.spec_from_file_location("prepare_simulation", ROOT / "scri
 setup = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(setup)
 common = setup.common
+GATEWAY_PORTS = {"GW_TCP_PORT": "23000", "GW_WEBSOCKET_PORT": "23001", "GW_HTTP_PORT": "23002"}
 APPS = {"web": "trade-web", "public-web": "public-web", "tenant-web": "tenant-web",
         "platform-web": "platform-web", "api-docs": "api-docs", "gateway": "gateway",
         "mdsvr": "market-data", "apssvr": "price-feed", "loginsvr": "login", "liqsvr": "liquidation",
@@ -62,6 +63,7 @@ def environment(out, include_apps=True):
     for key in values:
         if key.endswith(("_PASSWORD", "_SECRET", "_MASTER_KEY", "_API_KEY")):
             values[key] = secrets.token_hex(32)
+    values.update(GATEWAY_PORTS)
     values.update({"DEPLOY_ROOT": str(runtime), "COMPOSE_PROJECT_NAME": out.name,
                    "MYSQL_IMAGE_REPOSITORY": "mysql", "CLICKHOUSE_IMAGE_REPOSITORY": "clickhouse/clickhouse-server",
                    "ZOOKEEPER_IMAGE_REPOSITORY": "zookeeper", "ORDER_CLUSTER_ENABLED": "true",
@@ -84,6 +86,12 @@ def environment(out, include_apps=True):
     override = out / "compose.images.json"
     services = {service: {"image": image(kind)} for service, kind in APPS.items() if include_apps}
     if include_apps:
+        # Compose waits for all three actual listeners before tenant provisioning.
+        probe = " && ".join("(: > /dev/tcp/127.0.0.1/" + port + ")" for port in GATEWAY_PORTS.values())
+        services["gateway"]["healthcheck"] = {
+            "test": ["CMD", "bash", "-ec", probe], "interval": "30s", "timeout": "3s",
+            "start_period": "30s", "retries": 3,
+        }
         path = "/usr/share/nginx/html/assets/js/config.js"
         original = call("docker", "run", "--rm", "--network", "none", "--entrypoint", "cat",
                         services["public-web"]["image"], path)
@@ -133,7 +141,7 @@ def wait_marker(node, marker, timeout=240):
 
 def install(out, control_only):
     if not control_only:
-        common.require_common_replication_ports("birth")
+        common.require_common_replication_ports("birth", [int(port) for port in GATEWAY_PORTS.values()])
         common.require_common_replication_ports("hostready")
     setup.prepare(out, 49181)
     namespace = "/otc/" + out.name

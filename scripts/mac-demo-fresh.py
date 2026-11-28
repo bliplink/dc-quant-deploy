@@ -210,9 +210,10 @@ def common_replication_settings(kind, slot, phase):
     }
 
 
-def require_common_replication_ports(phase):
+def require_common_replication_ports(phase, additional_ports=()):
     ports = sorted(int(common_replication_settings(kind, slot, phase)[kind + ".common.nodeRuntime.bindPort"])
                    for kind in SERVICES for slot in SLOTS)
+    ports.extend(additional_ports)
     # Probe in the same VM network namespace as the physical voters. The
     # bootstrap and runtime endpoints stay below the VM ephemeral range.
     script = "import pathlib, socket\nports = " + repr(ports) + "\n" + """
@@ -221,13 +222,13 @@ sockets = []
 try:
     for port in ports:
         if low <= port <= high:
-            raise RuntimeError('Common port overlaps the VM ephemeral range: ' + str(port))
+            raise RuntimeError('Listener port overlaps the VM ephemeral range: ' + str(port))
         probe = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
         sockets.append(probe)
         try:
             probe.bind(('0.0.0.0', port))
         except OSError as error:
-            raise RuntimeError('Common replication endpoint is occupied: ' + str(port)) from error
+            raise RuntimeError('Listener endpoint is occupied: ' + str(port)) from error
 finally:
     for probe in sockets:
         probe.close()
