@@ -5,6 +5,10 @@ on:
     branches: [release/public-simulation-20261126]
   workflow_dispatch:
     inputs:
+      amd64_pass_only:
+        description: Test an individually accepted x86_64 installation while dual-architecture packaging is still pending
+        type: boolean
+        default: false
       accepted_load:
         description: Run the TCP benchmark from a fully accepted release run specified in candidate_run
         type: boolean
@@ -286,14 +290,16 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
           ACCEPTED_RUN: ${{ inputs.candidate_run }}
+          AMD64_PASS_ONLY: ${{ inputs.amd64_pass_only }}
         run: |
           [[ "$ACCEPTED_RUN" =~ ^[0-9]+$ ]]
-          revision="$(gh run view "$ACCEPTED_RUN" --json headSha,headBranch,event,conclusion,workflowName,jobs --jq '
+          revision="$(gh run view "$ACCEPTED_RUN" --json headSha,headBranch,event,conclusion,workflowName,jobs | jq -r --arg amd64 "$AMD64_PASS_ONLY" '
             select(.headBranch == "release/public-simulation-20261126" and .event == "push"
-              and .conclusion == "success" and .workflowName == "Public simulation candidate images"
-              and any(.jobs[]; .name == "Package accepted one-command installer" and .conclusion == "success")
+              and .workflowName == "Public simulation candidate images"
               and any(.jobs[]; .name == "Clean Linux installation" and .conclusion == "success")
-              and any(.jobs[]; .name == "Clean Linux ARM64 installation" and .conclusion == "success")) | .headSha')"
+              and ($amd64 == "true" or (.conclusion == "success"
+                and any(.jobs[]; .name == "Clean Linux ARM64 installation" and .conclusion == "success")
+                and any(.jobs[]; .name == "Package accepted one-command installer" and .conclusion == "success")))) | .headSha')"
           [[ "$revision" =~ ^[a-f0-9]{40}$ ]]
           echo "revision=$revision" >> "$GITHUB_OUTPUT"
       - uses: actions/checkout@v4
@@ -316,9 +322,12 @@ jobs:
           GH_TOKEN: ${{ github.token }}
           CANDIDATE_RUN_ID: ${{ inputs.candidate_run }}
           ACCEPTED_REVISION: ${{ steps.release.outputs.revision }}
+          AMD64_PASS_ONLY: ${{ inputs.amd64_pass_only }}
         run: |
           GITHUB_SHA="$ACCEPTED_REVISION" GITHUB_WORKSPACE="$PWD" bash scripts/load-clean-simulation-candidates.sh
-          for arch in amd64 arm64; do
+          architectures=(amd64)
+          if [[ "$AMD64_PASS_ONLY" != true ]]; then architectures+=(arm64); fi
+          for arch in "${architectures[@]}"; do
             gh run download "$CANDIDATE_RUN_ID" --name "accepted-linux-$arch-images-$ACCEPTED_REVISION" --dir "$RUNNER_TEMP/accepted-$arch"
             cmp "$RUNNER_TEMP/accepted-$arch/simulation-images.json" "$RUNNER_TEMP/simulation-images.json"
           done
