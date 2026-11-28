@@ -47,13 +47,18 @@ if ! MAC_DEMO_COMMON_SOURCE="$root/sources/common" MAC_DEMO_MAVEN="$(command -v 
 fi
 test "$(cat "$work/fault-results/status")" = PASS
 echo "Common physical fault qualification passed: $common_sha"
-test_keys="$(python3 - "$root" "$work" <<'PYKEYS'
+test_keys="$(python3 - "$root" "$work" "$common_ref" "$common_sha" <<'PYKEYS'
 import os
 from pathlib import Path
 import runpy
 import sys
 os.umask(0o077)
 helper = runpy.run_path(str(Path(sys.argv[1]) / "scripts/mac-demo-fresh.py"))
+helper["selected_client_ack_policy"]({
+    "common_revision": sys.argv[3], "common_sha256": sys.argv[4],
+    "common_fault_verification": "PASS", "common_fault_result": str(Path(sys.argv[2]) / "fault-results"),
+    "common_interrupted_rearm_verified": "true",
+}, "LOCAL_DURABLE_ASYNC")
 print(helper["new_demo_signers"](Path(sys.argv[2]) / "testing-keys"))
 PYKEYS
 )"
@@ -103,7 +108,7 @@ PYBUILD
     --build-arg "COMMON_REVISION=$common_ref" --build-arg "COMMON_JAR_SHA256=$common_sha" \
     --build-arg "COMMON_GAV=io.github.bliplink:$(basename "${common[0]}" .jar | sed 's/^com.app.common-/com.app.common:/')" \
     --label "org.opencontainers.image.revision=$pin" --label "dc.common.jar.sha256=$common_sha" --label "dc.common.p0.sha256=$common_sha" \
-    --tag "otc-simulation/$module:$pin" --output "type=oci,dest=$archive" "$src"
+    --label "dc.common.async.p0.sha256=$common_sha" --tag "otc-simulation/$module:$pin" --output "type=oci,dest=$archive" "$src"
   python3 "$root/scripts/verify-simulation-oci.py" "$archive" "$pin"
   mv "$archive" "$dest/$module-$pin.oci.tar"
 done

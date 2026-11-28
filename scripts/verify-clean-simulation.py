@@ -216,6 +216,17 @@ def install(out, control_only):
 
 
 def run_core(out, compose, refs, roots, control, namespace, tool):
+    policy = os.environ.get("T554_HOSTED_ACK_POLICY", "STRICT_QUORUM")
+    if policy != "STRICT_QUORUM":
+        if (policy != "LOCAL_DURABLE_ASYNC" or os.environ.get("GITHUB_ACTIONS") != "true"
+                or os.environ.get("RUNNER_OS") != "Linux"):
+            raise ValueError("Asynchronous measurements require a fresh hosted Linux installation")
+        for kind in common.SERVICES:
+            labels = json.loads(call("docker", "image", "inspect", "-f", "{{json .Config.Labels}}", refs[kind]))
+            digest = labels.get("dc.common.async.p0.sha256", "")
+            if (not re.fullmatch("[a-f0-9]{64}", digest) or labels.get("dc.common.jar.sha256") != digest
+                    or labels.get("dc.common.p0.sha256") != digest):
+                raise RuntimeError(f"{kind} image lacks matching asynchronous recovery qualification")
     pairs = [(kind, slot) for kind in common.SERVICES for slot in common.SLOTS]
     for key in common.VOLUMES:
         call("docker", "volume", "create", "--label", f"otc.mac.demo.generation={out.name}", f"{out.name}-{key}")
@@ -252,7 +263,7 @@ def run_core(out, compose, refs, roots, control, namespace, tool):
             heap += " -XX:MaxDirectMemorySize=512m"
         java = common.client_ack_environment(
             [f"JAVA_OPTS=-Xms128m {heap} -Djava.security.auth.login.config=/srv/dc/control/jaas.ini"],
-            "STRICT_QUORUM")
+            policy if phase == "hostready" else "STRICT_QUORUM")
         for setting in common.low_pause_gc_environment(common.gc_observation_environment(java)):
             flags.extend(["-e", setting])
         call("docker", "run", "-d", "--network", "host", "--name", name, *common.DOCKER_LOG_OPTIONS,
@@ -363,6 +374,11 @@ def run_core(out, compose, refs, roots, control, namespace, tool):
         if call("docker", "exec", node, "sh", "-c", 'find "$1" -name business.wal | wc -l', "--", directory) != "256":
             raise RuntimeError(f"{node} failed to open its physical WALs")
     for kind, service in common.SERVICES.items():
+        if policy == "LOCAL_DURABLE_ASYNC":
+            pin = call("docker", "exec", "dc-saas-zookeeper", "zkCli.sh", "-server", "127.0.0.1:49181",
+                       "get", "-s", f"{namespace}/{kind}/client-ack-policy").splitlines()
+            if policy not in pin or "dataVersion = 0" not in pin or "ephemeralOwner = 0x0" not in pin:
+                raise RuntimeError(f"{service} failed the immutable asynchronous confirmation policy check")
         actual = call("docker", "exec", "dc-saas-zookeeper", "zkCli.sh", "-server", "127.0.0.1:49181",
                       "get", f"{namespace}/{kind}/manifest")
         rows = [line for line in actual.splitlines() if re.match(r"^P[0-9]{3}\|", line)]

@@ -23,6 +23,7 @@ def publish(title, summary):
 def main():
     if os.environ.get('GITHUB_ACTIONS') != 'true' or os.environ.get('RUNNER_OS') != 'Linux':
         raise RuntimeError('This measurement requires a disposable hosted Linux installation')
+    policy = os.environ.get('T554_HOSTED_ACK_POLICY', 'STRICT_QUORUM')
     os.umask(0o077)
     base = Path(os.environ['RUNNER_TEMP']) / 't554-install'
     receipt = json.loads((base / 'installation.json').read_text())
@@ -56,7 +57,7 @@ def main():
         rows = measured['orders']
         completed = bool(rows) and all(row.get('passed') is True for row in rows)
         commands = sum(int(row.get(k) is True) for row in rows for k in ('new_inside_window','cancel_inside_window'))
-        publish('Strict TCP place and cancel, one funded session', {
+        publish(f'{policy} TCP place and cancel, one funded session', {
             'seconds': SECONDS, 'attempted_cycles': len(rows), 'commands_per_second': commands / SECONDS,
             'successful_cycles': sum(row.get('passed') is True for row in rows),
             'new_ms': execution['summary_ms'](rows, 'place_new_ms'), 'cancel_ms': execution['summary_ms'](rows, 'cancel_terminal_ms'),
@@ -76,10 +77,10 @@ def main():
                     measured = native['run'](work, dict(config, token=token, rate=rate, run=window,
                             quantity=str(execution['QUANTITY']), price=execution['PRICE'], start_at_epoch_ms=int(time.time()*1000)+5000))
                 row = dict(measurement=measured, location=location, symbol=symbol, run=window)
-                aggregate = harness['_summarize_receipts']([row], SECONDS, 'STRICT_QUORUM')
+                aggregate = harness['_summarize_receipts']([row], SECONDS, policy)
                 harness['verify_stream_projections']([row])
                 consistent = row.get('projection', {}).get('consistent') is True
-                publish(f'Strict TCP final execution receipts at {rate}/s', {
+                publish(f'{policy} TCP final execution receipts at {rate}/s', {
                         'aggregate': aggregate, 'projection_consistent': consistent, 'offered_seconds': SECONDS})
                 if not consistent or not aggregate['all_accepted_final_receipts_pass']:
                     raise RuntimeError('Native final receipts or projected fills did not reconcile')

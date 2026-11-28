@@ -125,13 +125,19 @@ jobs:
       - run: python3 scripts/verify-clean-simulation.py --check-control
 
   clean-linux:
-    name: ${{ matrix.name }}
+    name: ${{ matrix.name }} (${{ matrix.policy }})
+    env:
+      T554_HOSTED_ACK_POLICY: ${{ matrix.policy }}
     strategy:
       fail-fast: false
       matrix:
+        arch: [amd64, arm64]
+        policy: ${{ fromJSON(github.ref == 'refs/heads/perf/t554-hosted-tcp-20261128' && inputs.candidate_run == '' && '["STRICT_QUORUM","LOCAL_DURABLE_ASYNC"]' || '["STRICT_QUORUM"]') }}
+        exclude:
+          - {arch: arm64, policy: LOCAL_DURABLE_ASYNC}
         include:
-          - {runner: ubuntu-24.04, arch: amd64, name: Clean Linux installation}
-          - {runner: ubuntu-24.04-arm, arch: arm64, name: Clean Linux ARM64 installation}
+          - {arch: amd64, runner: ubuntu-24.04, name: Clean Linux installation}
+          - {arch: arm64, runner: ubuntu-24.04-arm, name: Clean Linux ARM64 installation}
     needs: [build, clean-control]
     if: >-
       always() && !cancelled() && needs.clean-control.result == 'success' &&
@@ -184,10 +190,10 @@ jobs:
       - name: Recheck the existing installation after customer trades
         run: python3 scripts/install-public-simulation.py --state-dir "$RUNNER_TEMP/t554-install"
       - name: Record the verified image manifest
-        if: needs.build.result == 'success'
+        if: needs.build.result == 'success' && matrix.policy == 'STRICT_QUORUM'
         run: sha256sum "$RUNNER_TEMP/simulation-images.json" >> "$GITHUB_STEP_SUMMARY"
       - uses: actions/upload-artifact@v4
-        if: needs.build.result == 'success'
+        if: needs.build.result == 'success' && matrix.policy == 'STRICT_QUORUM'
         with:
           name: accepted-linux-${{ matrix.arch }}-images-${{ github.sha }}
           path: ${{ runner.temp }}/simulation-images.json
@@ -221,7 +227,7 @@ jobs:
       - uses: actions/upload-artifact@v4
         if: failure() && steps.install.outcome != 'skipped'
         with:
-          name: installation-diagnostics-${{ matrix.arch }}-${{ github.run_id }}-${{ github.run_attempt }}
+          name: installation-diagnostics-${{ matrix.arch }}-${{ matrix.policy }}-${{ github.run_id }}-${{ github.run_attempt }}
           path: ${{ runner.temp }}/simulation-diagnostics.tar.gz.age
           if-no-files-found: ignore
           retention-days: 3
