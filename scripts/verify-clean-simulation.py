@@ -357,7 +357,10 @@ def run_core(out, compose, refs, roots, control, namespace, tool):
     if not re.fullmatch(r"[0-9a-f]{64}", common_sha):
         raise RuntimeError("Missing qualified Common identity")
     common.require_witness_runtime_storage(out, common_sha)
-    call(*compose, "up", "-d", "--no-deps", "--pull", "never", *common.APPS, common.PROJECTION)
+    # The MD process installs its Order subscriptions during startup. Both
+    # physical Order publishers must be registered before the first subscribe.
+    core_dependencies = [service for service in common.APPS if service != "mdsvr"]
+    call(*compose, "up", "-d", "--no-deps", "--pull", "never", *core_dependencies, common.PROJECTION)
     nodes = {pair: start("hostready", *pair) for pair in pairs}
     for (kind, slot), node in nodes.items():
         service = common.SERVICES[kind]
