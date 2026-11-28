@@ -632,10 +632,14 @@ def main():
     parser.add_argument("build", type=Path, help="Directory from build-mac-demo-core.sh")
     parser.add_argument("--apply", action="store_true")
     parser.add_argument("--verify-business", action="store_true", help="Verify the new Demo before releasing rollback")
+    parser.add_argument("--trade-memory-mib", nargs=2, type=int, metavar=("HEAP", "CONTAINER"),
+                        help="Trade runtime Java heap and container limit in MiB")
     parser.add_argument("--template", type=Path, default=LOCAL / "t549-fresh-business-demo")
     parser.add_argument("--empty-reference", type=Path,
                         help="Protected image and launch reference captured from the retired local Demo")
     args = parser.parse_args()
+    if args.trade_memory_mib and not 0 < args.trade_memory_mib[0] < args.trade_memory_mib[1]:
+        parser.error("Trade container memory must exceed the positive Java heap size")
     out = Path(args.run)
     if (not out.is_absolute() or out.exists() or not re.fullmatch(r"mac-demo-[a-z0-9-]+", out.name)
             or read("uname", "-s") != "Darwin" or read("docker", "context", "show") != "colima"):
@@ -928,13 +932,22 @@ def main():
         restart_policy = "on-failure" if phase == "hostready" and automatic_common else "no"
         flags = ["--name", name, "--network", "host", "--restart", restart_policy, *DOCKER_LOG_OPTIONS, "--label",
                  f"otc.mac.demo.generation={generation}"]
-        for key, flag in (("Memory", "--memory"), ("NanoCpus", "--cpus")):
-            value = old_node["HostConfig"][key]
+        environment = old_node["Config"]["Env"]
+        memory = old_node["HostConfig"]["Memory"]
+        if kind == "trade" and phase == "hostready" and args.trade_memory_mib:
+            heap, container = args.trade_memory_mib
+            options = next(entry for entry in environment if entry.startswith("JAVA_OPTS="))
+            updated, count = re.subn(r"(?<!\S)-Xmx\d+[kKmMgG]?(?=\s|$)", f"-Xmx{heap}m", options)
+            if count != 1:
+                raise RuntimeError("Expected one explicit Trade Java heap size")
+            environment = [updated if entry == options else entry for entry in environment]
+            memory = container * 1024**2
+        for value, flag in ((memory, "--memory"), (old_node["HostConfig"]["NanoCpus"], "--cpus")):
             if value:
-                flags.extend([flag, str(value if key == "Memory" else value / 1e9)])
+                flags.extend([flag, str(value if flag == "--memory" else value / 1e9)])
         phase_policy = client_ack_policy if phase == "hostready" and automatic_common else "STRICT_QUORUM"
         for entry in low_pause_gc_environment(gc_observation_environment(
-                client_ack_environment(old_node["Config"]["Env"], phase_policy))):
+                client_ack_environment(environment, phase_policy))):
             flags.extend(["-e", entry])
         if automatic_common:
             flags.extend(["-e", f"OTC_PROTECTED_CONTROL_NAMESPACE={namespace}/{kind}"])

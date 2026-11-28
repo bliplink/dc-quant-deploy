@@ -102,7 +102,7 @@ async function pairProof(customer,clientOrderId,side,reduce) {
       AND p.long_position=0 AND p.short_position=0 AND b.used_margin=0 AND b.freezed_margin=0 AND b.freezed_commission=0
       AND b.balance=100+(SELECT SUM(e.fee+e.realized_Pnl) FROM dc_orders_execorders e
           WHERE e.location=b.location AND e.user_id=b.user_id AND e.exec_type='Trade')`);
-    if (process.env.GITHUB_ACTIONS === 'true') {
+    if (process.env.GITHUB_ACTIONS === 'true' || process.env.SIMULATION_TEST_WITHDRAWAL === 'true') {
       const balance = result.closingBalance;
       if (!/^\d+(\.\d+)?$/.test(balance)) throw Error('Invalid closing balance');
       const withdrawal = await funding(session,'cashOut','1');
