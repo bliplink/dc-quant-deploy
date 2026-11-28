@@ -1,5 +1,7 @@
-"""Measure one funded matching book on the clean hosted installation, with ten background Robots."""
+"""Measure native TCP final receipts on a clean installation with ten funded Robots."""
 from collections import Counter
+from concurrent.futures import ThreadPoolExecutor
+from contextlib import ExitStack
 from decimal import Decimal, ROUND_DOWN, ROUND_UP
 import json
 import os
@@ -34,6 +36,101 @@ def book_prices(cancel, location, symbol):
     # the public maker to cover the complete IOC window even if its quote moves.
     return (str((bid * Decimal('0.95')).to_integral_value(rounding=ROUND_DOWN)),
             str((ask * Decimal('1.005')).to_integral_value(rounding=ROUND_UP)))
+
+
+def synchronized_clients(native, work, configs):
+    barrier = int(time.time() * 1000) + 20000
+    with ThreadPoolExecutor(max_workers=len(configs)) as clients:
+        jobs = [clients.submit(native['run'], work, dict(c, start_at_epoch_ms=barrier)) for c in configs]
+        return [job.result() for job in jobs]
+
+
+def measure_target(harness, work, cancel_work, locations, port, policy):
+    cancel, native, execution = harness['CANCEL'], harness['NATIVE'], harness['EXEC']
+    symbol = 'BTCUSDT'
+    sessions, cancel_configs, fill_configs = [], [], []
+    rate = 65
+    run = secrets.token_hex(4)
+    with ExitStack() as owned:
+        for index in range(16):
+            location = locations[index % len(locations)]
+            stream = run + format(index, '02x')
+            maker = cancel['new_trader'](location, symbol, 'TRADE', stream, 0, funding_amount=100000)
+            trader = cancel['new_trader'](location, symbol, 'TRADE', stream, 1, funding_amount=100000)
+            _, _, token = owned.enter_context(cancel['native_trader_session'](trader, stream, index))
+            passive, _ = book_prices(cancel, location, symbol)
+            config = dict(location=location, user_id=trader[1], symbol=symbol, port=port, seconds=SECONDS, token=token)
+            cancel_configs.append(dict(config, prefix='T554CC-'+stream, price=passive, max_requests_per_second=80))
+            sessions.append((maker, stream, config))
+
+        responses = synchronized_clients(native, cancel_work, cancel_configs)
+        rows = [row for response in responses for row in response['orders']]
+        phase = dict(records=rows, window_seconds=SECONDS,
+                     passed=all(r['orders'] and r['measurement_complete'] and not r['stream_errors'] for r in responses)
+                     and all(r.get('passed') is True for r in rows)
+                     and len({r['client_order_id'] for r in rows}) == len(rows))
+        for field in ('place_new_ms', 'cancel_terminal_ms', 'cancel_pending_ms'):
+            phase[field] = execution['summary_ms'](rows, field)
+        cancel_target = cancel['PERFORMANCE']['order_cancel_target'](phase, 'tcp')
+        publish(f'{policy} funded multi-tenant place and cancel', {
+            'sessions': len(sessions), 'tenants': len(set(locations)), 'cycles': len(rows),
+            'new': phase['place_new_ms'], 'pending': phase['cancel_pending_ms'],
+            'cancelled': phase['cancel_terminal_ms'], 'acceptance': cancel_target})
+        if not phase['passed']:
+            raise RuntimeError('Multi-tenant place and cancel receipts failed to reconcile')
+
+        def retire_cover(maker, client_id):
+            resting = cancel['own_order'](cancel['open_orders'](maker, symbol), client_id)
+            if resting:
+                cancel['cancel'](maker, symbol, dict(order_id=resting[0]['OrderID'], client_order_id=client_id))
+            cancel['await_order'](maker, symbol, client_id, False)
+
+        for index, (maker, stream, config) in enumerate(sessions):
+            location = config['location']
+            _, cover = book_prices(cancel, location, symbol)
+            client_id = 'T554EXEC-' + stream + '-MAKER'
+            cancel['api']('OrderSvr', 'placeOrder', dict(Location=location, SecurityID=symbol, MarketIndicator='4',
+                UserID=maker[1], Side='Sell', Price=cover, OrderQty=str(execution['QUANTITY']*(rate*SECONDS+1)),
+                OCType='OPEN', OrdType='Limit', TimeInForce='GTC', ClOrdID=client_id, Terminal='API',
+                AlgoName='cross', Demo='0', ReduceOnly='false'), maker[2])
+            owned.callback(retire_cover, maker, client_id)
+            cancel['await_order'](maker, symbol, client_id, True)
+            fill_configs.append(dict(config, price=cover, rate=rate, quantity=str(execution['QUANTITY']),
+                run=stream, arrival_offset_ns=harness['arrival_offset_ns']('staggered', index, len(sessions), rate)))
+        responses = synchronized_clients(native, work, fill_configs)
+        streams = [dict(measurement=response, location=config['location'], symbol=symbol, run=config['run'])
+                   for response, config in zip(responses, fill_configs)]
+        aggregate = harness['_summarize_receipts'](streams, SECONDS, policy)
+        harness['verify_stream_projections'](streams)
+        consistent = all(s.get('projection', {}).get('consistent') is True for s in streams)
+        cursor_code, _, _ = cancel['CAPACITY']['reconcile_financial_cursor']()
+        accounts_match = True
+        for stream, config in zip(streams, fill_configs):
+            user, location = config['user_id'], config['location']
+            if not re.fullmatch(r'[0-9]{1,32}', user) or not re.fullmatch(r'[A-Z0-9]{6}', location):
+                raise ValueError('Invalid funded test identity')
+            expected = sum(bool(row.get('execution_id')) for row in stream['measurement']['orders'])
+            rows = cancel['PRODUCT']['readonly_sql'](
+                "SELECT t.fills FROM dc_users_balance b JOIN dc_orders_position p "
+                "ON p.location=b.location AND p.user_id=b.user_id AND p.security_id='BTCUSDT' "
+                "JOIN (SELECT e.location,e.user_id,COUNT(*) fills,SUM(e.last_qty) qty,SUM(e.fee) fees, "
+                "COUNT(f.id) posted FROM dc_orders_execorders e LEFT JOIN dc_users_posting f "
+                "ON f.id=CONCAT('E2TRADE-',SHA2(CONCAT_WS(CHAR(31),e.location,e.user_id,e.exec_id),256)) "
+                "AND f.location=e.location AND f.user_id=e.user_id AND f.source_id=e.exec_id "
+                "AND f.type=3 AND CAST(f.amount AS DECIMAL(36,12))=e.fee "
+                f"WHERE e.location='{location}' AND e.user_id='{user}' AND e.exec_type='Trade' "
+                "AND e.security_id='BTCUSDT' GROUP BY e.location,e.user_id) t "
+                "ON t.location=b.location AND t.user_id=b.user_id WHERE "
+                "t.fills=t.posted AND b.balance=100000+t.fees AND p.long_position=t.qty "
+                "AND p.short_position=0 AND b.freezed_margin=0 AND b.freezed_commission=0")
+            accounts_match = accounts_match and expected > 0 and rows == [[str(expected)]]
+        target = cancel['PERFORMANCE']['execution_target'](
+            aggregate, SECONDS, consistent and cursor_code == 0 and accounts_match)
+        publish(f'{policy} funded multi-tenant final trade receipts', {
+            'sessions': len(sessions), 'tenants': len(set(locations)), 'offered_per_second': rate * len(sessions),
+            'aggregate': aggregate, 'projection_consistent': consistent, 'financial_cursor_reconciled': cursor_code == 0,
+            'funded_accounts_reconciled': accounts_match, 'acceptance': target})
+    return cancel_target['passed'] and target['passed']
 
 
 def main():
@@ -107,8 +204,13 @@ def main():
             if cancel['own_order'](cancel['open_orders'](maker, symbol), client_id):
                 cancel['cancel'](maker, symbol, dict(order_id=order_id, client_order_id=client_id))
             cancel['await_order'](maker, symbol, client_id, False)
+    target_passed = True
+    if os.environ.get('T554_HOSTED_TARGET_LOAD') == 'true':
+        target_passed = measure_target(harness, work, cancel_work, receipt['tenants'], port, policy)
     if baseline != cancel['CAPACITY']['demo_tenants']() or install['inventory'](generation) != inventory:
         raise RuntimeError('A background Robot or runtime changed during measurement')
+    if not target_passed:
+        raise RuntimeError('Funded multi-tenant throughput or tail latency missed the target')
 
 
 if __name__ == '__main__':
