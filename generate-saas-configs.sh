@@ -258,6 +258,7 @@ EOF
   fi
 else
   append_server MDSvr MDSvr "${MDSVR_GW_PORT}" MDSvr
+  echo "Cluster.MDSvr.Enabled=false" >> "${CONTROL_ROOT}/ATSConfig.ini"
 fi
 append_server LoginSvr LoginSvr "${LOGINSVR_GW_PORT}" LoginSvr
 append_server AdminSvr AdminSvr "${ADMINSVR_GW_PORT}" AdminSvr
