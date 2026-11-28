@@ -115,6 +115,29 @@ def synchronized_clients(native, work, configs, phase):
                 publish(phase+' Linux telemetry', {'error': type(unavailable).__name__})
 
 
+def reserve_test_accounts(cancel, locations, settings):
+    # These are the just-installed disposable tenants. Use the platform's
+    # normal authorization and audit path to allow the 16 funded pairs.
+    admin = settings['PLATFORM_ADMIN_USERNAME']
+    login = cancel['api']('LoginSvr', 'SYS.ATS.LOGIN', {
+        'method': 'login', 'cid': 'TCP_QUOTA_LOGIN', 'user_id': admin, 'user_name': admin,
+        'password': settings['PLATFORM_ADMIN_PASSWORD'], 'client_type': 'manage', 'Location': 'PLATFORM',
+    })
+    token = login['token']
+    for location in locations:
+        change = 'TCP_TEST_QUOTA_' + location
+        data = cancel['api']('ManagerSvr', 'tenantApproval', {
+            'action': 'UPDATE_TENANT', 'cid': change, 'request_id': change,
+            'location': location, 'max_registered_users': 8,
+        }, token)
+        if data.get('location') != location or int(data.get('max_registered_users', -1)) != 8:
+            quotas = data.get('quotas', {})
+            if isinstance(quotas, str):
+                quotas = json.loads(quotas)
+            if data.get('location') != location or int(quotas.get('max_registered_users', -1)) != 8:
+                raise RuntimeError('The temporary tenant capacity change could not be verified')
+
+
 def measure_target(harness, work, cancel_work, locations, port, policy):
     cancel, native, execution = harness['CANCEL'], harness['NATIVE'], harness['EXEC']
     symbol = 'BTCUSDT'
@@ -279,6 +302,7 @@ def main():
             cancel['await_order'](maker, symbol, client_id, False)
     target_passed = True
     if os.environ.get('T554_HOSTED_TARGET_LOAD') == 'true':
+        reserve_test_accounts(cancel, receipt['tenants'], ports)
         target_passed = measure_target(harness, work, cancel_work, receipt['tenants'], port, policy)
     if baseline != cancel['CAPACITY']['demo_tenants']() or install['inventory'](generation) != inventory:
         raise RuntimeError('A background Robot or runtime changed during measurement')
