@@ -429,6 +429,12 @@ def main():
             scenarios.append("cold-strict-tails")
             if len(COLD_TAIL_ACK.findall(log)) != 1:
                 raise ValueError("Common cold strict tail recovery lacks genuine Home business ACK evidence")
+        if "mixedColdOriginalReplicaRetainsItsLastQuorumCertificate" in poison_source.read_text():
+            scenarios.append("cold-original-replica-ahead")
+            for marker in ("T554_MIXED_COLD_ORIGINAL_E2_REPLICA_AHEAD_QUORUM_HOME_PASS",
+                           "T554_BOTH_COLD_REPLICA_AHEAD_SIGNED_PREFIX_HOME_AND_BUSINESS_ACK_PASS"):
+                if len(re.findall(r"^[.]*" + marker + "$", log, re.M)) != 1:
+                    raise ValueError("Missing physical recovery proof for the replica-ahead case")
         if "bothColdVotersKeepAnUncertifiedSixtyFourCommandGroupOutsideReplay" in poison_source.read_text():
             scenarios.append("cold-strict-batch-tails")
             if len(COLD_BATCH_TAIL_ACK.findall(log)) != 1:
@@ -471,6 +477,11 @@ def main():
                 if (not events or events[0] != "attempt=0 exit=78"
                         or "FATAL_COMMON_NODE_EPOCH_FENCED exiting JVM (78)" not in original):
                     raise ValueError("Common expired node did not exit through the physical process lifecycle")
+            if scenario == "cold-original-replica-ahead":
+                for side in ("a", "b"):
+                    for proof in ("original-tail-home-ack", "cold-home-business-proof"):
+                        if not (directory / f"{side}-{proof}").is_file():
+                            raise ValueError("Missing physical voter evidence for replica-ahead recovery")
             if scenario == "cold-strict-batch-tails":
                 verify_cold_batch_prefixes(directory)
             if scenario == "graceful-shutdown":
