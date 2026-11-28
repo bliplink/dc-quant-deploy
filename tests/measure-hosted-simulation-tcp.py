@@ -121,7 +121,7 @@ def reserve_test_accounts(cancel, locations, settings):
     admin = settings['PLATFORM_ADMIN_USERNAME']
     login = cancel['api']('LoginSvr', 'SYS.ATS.LOGIN', {
         'method': 'login', 'cid': 'TCP_QUOTA_LOGIN', 'user_id': admin, 'user_name': admin,
-        'password': settings['PLATFORM_ADMIN_PASSWORD'], 'client_type': 'manage', 'Location': 'PLATFORM',
+        'password': settings['PLATFORM_ADMIN_PASSWORD'], 'client_type': 'Manager', 'Location': 'PLATFORM',
     })
     token = login['token']
     for location in locations:
