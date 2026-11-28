@@ -5,6 +5,10 @@ on:
     branches: [release/public-simulation-20261126]
   workflow_dispatch:
     inputs:
+      trade_only:
+        description: Measure the funded high-load fill window immediately after a fresh installation
+        type: boolean
+        default: false
       amd64_pass_only:
         description: Test an individually accepted x86_64 installation while dual-architecture packaging is still pending
         type: boolean
@@ -340,4 +344,5 @@ jobs:
       - name: Measure funded TCP place, cancel and final settlement
         env:
           T554_HOSTED_TARGET_LOAD: 'true'
+          T554_HOSTED_TRADE_ONLY: ${{ inputs.trade_only && 'true' || 'false' }}
         run: python3 tests/measure-hosted-simulation-tcp.py

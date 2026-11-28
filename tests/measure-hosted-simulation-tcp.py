@@ -150,7 +150,7 @@ def reserve_test_accounts(cancel, locations, settings):
                 raise RuntimeError('The temporary tenant capacity change could not be verified')
 
 
-def measure_target(harness, work, cancel_work, locations, port, policy):
+def measure_target(harness, work, cancel_work, locations, port, policy, *, trade_only=False):
     cancel, native, execution = harness['CANCEL'], harness['NATIVE'], harness['EXEC']
     symbol = 'BTCUSDT'
     sessions, cancel_configs, fill_configs = [], [], []
@@ -164,28 +164,34 @@ def measure_target(harness, work, cancel_work, locations, port, policy):
             stream = run + format(index, '02x')
             maker = cancel['new_trader'](location, symbol, 'TRADE', stream, 0, funding_amount=100000)
             trader = cancel['new_trader'](location, symbol, 'TRADE', stream, 1, funding_amount=100000)
-            _, _, token = cancellation_keys.enter_context(cancel['native_trader_session'](trader, stream, index))
-            passive, _ = book_prices(cancel, location, symbol)
-            config = dict(location=location, user_id=trader[1], symbol=symbol, port=port, seconds=SECONDS, token=token)
-            cancel_configs.append(dict(config, prefix='T554CC-'+stream, price=passive, max_requests_per_second=80))
+            config = dict(location=location, user_id=trader[1], symbol=symbol, port=port, seconds=SECONDS)
+            if not trade_only:
+                _, _, token = cancellation_keys.enter_context(cancel['native_trader_session'](trader, stream, index))
+                passive, _ = book_prices(cancel, location, symbol)
+                cancel_configs.append(dict(config, token=token, prefix='T554CC-'+stream, price=passive,
+                                           max_requests_per_second=80))
             sessions.append((maker, trader, stream, config))
 
-        responses = synchronized_clients(native, cancel_work, cancel_configs, policy+' cancel')
-        cancellation_keys.close()
-        rows = [row for response in responses for row in response['orders']]
-        phase = dict(records=rows, window_seconds=SECONDS,
-                     passed=all(r['orders'] and r['measurement_complete'] and not r['stream_errors'] for r in responses)
-                     and all(r.get('passed') is True for r in rows)
-                     and len({r['client_order_id'] for r in rows}) == len(rows))
-        for field in ('place_new_ms', 'cancel_terminal_ms', 'cancel_pending_ms'):
-            phase[field] = execution['summary_ms'](rows, field)
-        cancel_target = cancel['PERFORMANCE']['order_cancel_target'](phase, 'tcp')
-        publish(f'{policy} funded multi-tenant place and cancel', {
-            'sessions': len(sessions), 'tenants': len(set(locations)), 'cycles': len(rows),
-            'new': phase['place_new_ms'], 'pending': phase['cancel_pending_ms'],
-            'cancelled': phase['cancel_terminal_ms'], 'acceptance': cancel_target})
-        if any(row.get('failure') and row.get('cleanup_confirmed') is not True for row in rows):
-            raise RuntimeError('A failed cancellation left unverified resting orders')
+        cancel_passed = True
+        if not trade_only:
+            responses = synchronized_clients(native, cancel_work, cancel_configs, policy+' cancel')
+            cancellation_keys.close()
+            rows = [row for response in responses for row in response['orders']]
+            phase = dict(records=rows, window_seconds=SECONDS,
+                         passed=all(r['orders'] and r['measurement_complete'] and not r['stream_errors'] for r in responses)
+                         and all(r.get('passed') is True for r in rows)
+                         and len({r['client_order_id'] for r in rows}) == len(rows))
+            for field in ('place_new_ms', 'cancel_terminal_ms', 'cancel_pending_ms'):
+                phase[field] = execution['summary_ms'](rows, field)
+            cancel_target = cancel['PERFORMANCE']['order_cancel_target'](phase, 'tcp')
+            publish(f'{policy} funded multi-tenant place and cancel', {
+                'sessions': len(sessions), 'tenants': len(set(locations)), 'cycles': len(rows),
+                'new': phase['place_new_ms'], 'pending': phase['cancel_pending_ms'],
+                'cancelled': phase['cancel_terminal_ms'], 'acceptance': cancel_target})
+            if any(row.get('failure') and row.get('cleanup_confirmed') is not True for row in rows):
+                raise RuntimeError('A failed cancellation left unverified resting orders')
+
+            cancel_passed = cancel_target['passed']
 
         def retire_cover(maker, client_id):
             resting = cancel['own_order'](cancel['open_orders'](maker, symbol), client_id)
@@ -239,7 +245,7 @@ def measure_target(harness, work, cancel_work, locations, port, policy):
             'sessions': len(sessions), 'tenants': len(set(locations)), 'offered_per_second': rate * len(sessions),
             'aggregate': aggregate, 'projection_consistent': consistent, 'financial_cursor_reconciled': cursor_code == 0,
             'funded_accounts_reconciled': accounts_match, 'acceptance': target})
-    return cancel_target['passed'] and target['passed']
+    return cancel_passed and target['passed']
 
 
 def main():
@@ -268,6 +274,14 @@ def main():
     port = int(ports['GW_TCP_PORT'])
     work = native['prepare'](directory)
     cancel_work = native['prepare'](directory, ROOT / 'tests/MacDemoNativeTcpOrderCancel.java', 'MacDemoNativeTcpOrderCancel')
+    if os.environ.get('T554_HOSTED_TRADE_ONLY') == 'true':
+        reserve_test_accounts(cancel, receipt['tenants'], ports)
+        target_passed = measure_target(harness, work, cancel_work, receipt['tenants'], port, policy, trade_only=True)
+        if baseline != cancel['CAPACITY']['demo_tenants']() or install['inventory'](generation) != inventory:
+            raise RuntimeError('A background Robot or runtime changed during measurement')
+        if not target_passed:
+            raise RuntimeError('Funded multi-tenant throughput or tail latency missed the target')
+        return
     run = secrets.token_hex(4)
     location = receipt['tenants'][0]
     maker = cancel['new_trader'](location, symbol, 'TRADE', run, 0, funding_amount=100000)
